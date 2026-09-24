@@ -248,3 +248,40 @@ test("a pack whose scan did not finish is in force as context, and mounts nothin
   await service.enableReceived(USER, pack.id, { projectId: "project_1" });
   assert.equal(calls, 2);
 });
+
+test("what a document yielded is recalled in its own project only, and is not listed among the researcher's memories", async () => {
+  // 2026-09-24: one product-test PDF put thirty 「据资料《…》」 rows on the
+  // capsule page, under 项目 and — for a method draft — under 关于你, and every
+  // project of the account recalled them. A document belongs to its project,
+  // like a file in a ChatGPT project or a NotebookLM notebook.
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const capsule = await service.ownCapsule(USER, { create: true });
+  const source = `src_${"c".repeat(32)}`;
+  const approve = async (/** @type {any} */ entry) => service.updateEntry(USER, capsule.id, entry.id, { status: "approved", expectedRevision: entry.revision });
+  const stated = await service.addEntry(USER, capsule.id, { factKind: "preference", layer: "profile", content: "抗凝证据先看指南" });
+  const fromDocument = await approve(await service.addEntry(USER, capsule.id, { factKind: "project_fact", layer: "sources", origin: "inferred",
+    content: "据资料《抗凝指南》：利伐沙班推荐 20 mg", provenance: [{ type: "source", id: `${source}#10-26`, excerpt: "20 mg once daily" }],
+    derivedFrom: { sourceId: source, projectId: "project_1" } }));
+  assert.equal(fromDocument.payload.sourceId, source);
+  assert.equal(fromDocument.payload.projectId, "project_1");
+  // Published before entries carried their project, and nothing here to place
+  // it by (the double has no publication ledger): it belongs to no project.
+  const unplaced = await approve(await service.addEntry(USER, capsule.id, { factKind: "project_fact", layer: "sources", origin: "inferred",
+    content: "据资料《旧指南》：抗凝前查肾功能" }));
+
+  const mine = await service.mine(USER);
+  assert.deepEqual(mine.entries.map((entry) => entry.id), [stated.id], "the page lists the researcher's own, and counts only those");
+
+  const recalled = async (/** @type {string | null} */ projectId) => (await service.recall(USER, { query: "抗凝", projectId })).items.map((item) => item.id).sort();
+  assert.deepEqual(await recalled("project_1"), [fromDocument.id, stated.id].sort(), "in the document's project, its facts are recalled");
+  assert.deepEqual(await recalled("project_2"), [stated.id], "in another project, they are not");
+  assert.deepEqual(await recalled(null), [stated.id], "a recall that names no project reaches no document's facts");
+  assert.ok(!(await recalled("project_1")).includes(unplaced.id));
+
+  // Only a document's layer carries a document's stamp, and only a document id.
+  await assert.rejects(service.addEntry(USER, capsule.id, { factKind: "project_fact", layer: "knowledge", content: "x",
+    derivedFrom: { sourceId: source, projectId: "project_1" } }), { code: "capsule_payload_invalid" });
+  await assert.rejects(service.addEntry(USER, capsule.id, { factKind: "project_fact", layer: "sources", content: "x",
+    derivedFrom: { sourceId: "not-a-source", projectId: "project_1" } }), { code: "capsule_payload_invalid" });
+});

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Cloud, CornerLeftUp, FileText, Folder, FolderSync, Image as ImageIcon, Link2, Loader2, RefreshCw, Search, Sheet, Upload, XCircle } from "lucide-react";
+import { Cloud, CornerLeftUp, FileText, Folder, FolderSync, Image as ImageIcon, Link2, RefreshCw, Search, Sheet, Upload, XCircle } from "lucide-react";
 import { getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { addToLibrary, browseOpenList, cancelSource, decideDuplicateGroup, getSourceFamily, importOpenListSource, listDuplicateCandidates,
   listLibrary, listSourceFolders, listSources, overrideSource, registerSourceFolder, removeFromLibrary, removeSource, retrySource,
   setSourceFolderStatus, sourceFailureMessage, syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily,
-  type SourceFolderRecord, type SourceMetadata, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
+  type SourceFolderRecord, type SourceListState, type SourceMetadata, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { baseName, formatClock, formatDay, humanSize } from "@/lib/format";
 import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
@@ -35,11 +35,34 @@ import { PageShell } from "@/components/layout/PageShell";
 import { SourceUnderstandingPanel } from "@/components/sources/SourceUnderstandingPanel";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "./FilesPage";
 
-/** A version's state, where a list of versions has to say it. */
-const STATUS: Record<string, string> = {
-  queued: "等待分析", parsing: "分析中", complete: "已完成", needs_attention: "部分未能解析",
-  failed: "解析失败", missing: "原件已移除", canceled: "已取消",
-};
+/** Whether the assistant can use a document now: the server's `readable`,
+ *  true as soon as the text is read, whatever the pipeline still does with it
+ *  after that. A record from before the field existed answers by its status. */
+function isUsable(source: SourceRecord): boolean {
+  return source.readable ?? (source.payload.status === "complete" || source.payload.status === "needs_attention");
+}
+
+/** Whether a document cannot be used yet because it is still being read. */
+function isReading(source: SourceRecord): boolean {
+  return !isUsable(source) && (source.payload.status === "queued" || source.payload.status === "parsing");
+}
+
+/**
+ * A document's state in the words a row says it, or "" when there is nothing
+ * to say — a usable document shows its type and date, and no internal state
+ * (2026-09-24: no 「分析中」 or 「理解中」; the understanding that runs after
+ * the reading is not the researcher's concern).
+ */
+function stateLabel(source: SourceRecord): string {
+  const status = source.payload.status;
+  if (status === "needs_attention") return "部分没能读取";
+  if (isUsable(source)) return "";
+  if (status === "queued" || status === "parsing") return "读取中";
+  if (status === "failed") return "没能读取";
+  if (status === "missing") return "原件已移除";
+  if (status === "canceled") return "已取消";
+  return "";
+}
 const TYPE_OPTIONS = [
   ["published-paper", "已发表论文"], ["preprint-manuscript", "手稿或预印本"], ["review-guideline", "综述或指南"],
   ["book-chapter", "书籍章节"], ["conference-material", "会议材料"], ["grant-proposal", "标书或课题申请"],
@@ -60,7 +83,12 @@ const FORMAT_LABEL: Record<string, string> = {
   txt: "文本", md: "文本", json: "文本", yaml: "文本", yml: "文本", r: "代码", py: "代码", sql: "代码",
 };
 
-/** The states from which a document can be analysed again. */
+/** @param name a file name */
+function formatLabel(name: string): string {
+  return FORMAT_LABEL[extOf(name)] ?? (extOf(name) ? extOf(name).toUpperCase() : "文件");
+}
+
+/** The states from which a document can be read again. */
 const RETRYABLE = ["failed", "needs_attention", "complete", "canceled"];
 
 /** Where an upload lands, and the folder the list is of. */
@@ -72,29 +100,33 @@ function displayPath(path: string) {
   return path.replace(/^\/tenants\/[^/]+/, "") || "/";
 }
 
-type Filter = "all" | "needs_attention" | "parsing" | "complete" | "duplicates";
+/** The filters, in the words the rows say (`SourceListState` on the server). */
+type Filter = "all" | SourceListState | "duplicates";
 
 const STATUS_FILTERS: readonly FilterOption<Filter>[] = [
   { value: "all", label: "全部" },
-  { value: "needs_attention", label: "需要处理" },
-  { value: "parsing", label: "分析中" },
-  { value: "complete", label: "已完成" },
+  { value: "attention", label: "需要处理" },
+  { value: "reading", label: "读取中" },
+  { value: "ready", label: "已读取" },
 ];
 
 /**
- * 知识库: one list of the documents the researcher put in, with search, the
- * cloud drive and upload in the header, and everything else behind the row.
+ * 知识库: the project's documents, which the assistant reads and cites in this
+ * project — one list, with search, the cloud drive and upload in the header,
+ * and everything else behind the row.
  *
  * A row is what a file browser shows — the file, its format and length, the
- * day it arrived — and says a state only when something went wrong
- * (「解析失败 · 重试」). Until 2026-09-23 every row also carried the pipeline's
- * bookkeeping (「深度分析 · 第 2 版 · 已解析 90% · 理解遗漏尚未审计」), a
- * classification rationale and a paragraph per failure; a researcher could act
- * on none of it (plan §5.5). What was read about a document — the
- * understanding, the audit, its versions — is one click away, under 「查看理解」.
+ * day it arrived — and says a state only while the document cannot be used
+ * yet (「读取中…」, a few seconds) or when it could not be read (「没能读取 ·
+ * 重试」). A document is usable as soon as its text is read; the understanding
+ * that follows runs behind it and is never a state on the row (2026-09-24:
+ * every stage used to be the same spinner, for minutes). Until 2026-09-23
+ * every row also carried the pipeline's bookkeeping (plan §5.5). The
+ * document's summary opens with its preview; the rest of what was read about
+ * it is one click away, under 「查看理解」.
  *
- * The status filters appear once there is something to filter, and a
- * duplicate is a tag on its row (09-22), resolved from the row's menu.
+ * The filters appear once there is something to filter, and a duplicate is a
+ * tag on its row (09-22), resolved from the row's menu.
  */
 export function SourcesPage() {
   // Store fallback repairs do not reload the document. Subscribe to those
@@ -126,7 +158,7 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
     loadingRequest.current = current;
     if (!background) { setSources(null); setError(null); }
     try {
-      const page = await listSources(projectId, { status: filter === "all" || filter === "duplicates" ? "" : filter });
+      const page = await listSources(projectId, filter === "all" || filter === "duplicates" ? {} : { state: filter });
       if (generation.current !== current || getWebProjectId() !== projectId) return;
       if (page.items.some(source => source.projectId !== projectId)) throw new Error("Source project changed.");
       setSources(page.items); setError(null);
@@ -138,7 +170,8 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
     } finally { if (loadingRequest.current === current) loadingRequest.current = null; }
   }, [filter, projectId]);
   useEffect(() => { void load(); return () => { generation.current += 1; }; }, [load]);
-  const processing = sources?.some(source => ["queued", "parsing"].includes(source.payload.status)) ?? false;
+  // Polled while a row is still being read: that is the one change a row shows.
+  const processing = sources?.some(isReading) ?? false;
   useEffect(() => {
     if (!processing || error) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -212,7 +245,9 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
       }
       const names = accepted.length > 0 ? await uploadFilesToWorkspace(accepted, KNOWLEDGE_ROOT, "base") : [];
       if (names.length > 0) {
-        toast.success(`已上传 ${names.length} 个文件，正在解析。`);
+        // The row says 「读取中…」 until the document can be used; the toast
+        // says only what happened.
+        toast.success(`已上传 ${names.length} 个文件。`);
         await load(true);
       }
     } catch (e) {
@@ -285,6 +320,8 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
               artifact: extToKind(extOf(previewing.payload.paths[0] ?? previewing.id)),
               root: "base",
             }}
+            kindLabel={formatLabel(baseName(previewing.payload.paths[0] ?? previewing.id))}
+            lead={documentSummary(previewing)}
             onClose={() => setPreviewing(null)}
           />
         </Drawer>
@@ -329,6 +366,22 @@ function matches(source: SourceRecord, needle: string): boolean {
     .some((text) => text.toLowerCase().includes(needle));
 }
 
+/**
+ * The document's summary, shown above its preview: what the understanding
+ * says the document is and says. Undefined while there is no understanding
+ * yet — the parser's opening lines are the document's own text, not a summary
+ * of it — and then the preview has nothing above it.
+ */
+function documentSummary(source: SourceRecord) {
+  const summary = source.payload.currentUnderstandingId ? source.payload.outputs?.summary?.trim() : "";
+  if (!summary) return undefined;
+  return (
+    <Disclosure summary="摘要" defaultOpen>
+      <p className="max-h-40 max-w-measure-body overflow-auto whitespace-pre-wrap text-ui text-text">{summary}</p>
+    </Disclosure>
+  );
+}
+
 function SourceIcon({ name }: { name: string }) {
   const kind = previewKindForName(name);
   const Icon = kind === "image" ? ImageIcon : kind === "table" || kind === "xlsx" ? Sheet : FileText;
@@ -347,14 +400,14 @@ function SourceRow({ source, busy, shared, duplicate, onPreview, onDetails, onDu
 }) {
   const name = baseName(source.payload.paths[0] ?? source.id);
   const status = source.payload.status;
-  const working = status === "queued" || status === "parsing";
+  const reading = isReading(source);
   const items: MenuEntry[] = [
     ...(duplicate ? [{ label: "处理疑似重复", onSelect: onDuplicates }] : []),
     ...(shared === true ? [{ label: "改为仅本项目", onSelect: onShare }] : []),
-    ...(shared === false && ["complete", "needs_attention"].includes(status) ? [{ label: "所有项目可用", onSelect: onShare }] : []),
+    ...(shared === false && isUsable(source) ? [{ label: "所有项目可用", onSelect: onShare }] : []),
     { label: "调整分析", onSelect: onEdit },
-    ...(RETRYABLE.includes(status) ? [{ label: "重新分析", onSelect: onRetry }] : []),
-    ...(working ? [{ label: "取消分析", onSelect: onCancel }] : []),
+    ...(RETRYABLE.includes(status) ? [{ label: "重新读取", onSelect: onRetry }] : []),
+    ...(reading ? [{ label: "取消读取", onSelect: onCancel }] : []),
     { label: "查看理解", onSelect: onDetails },
     "separator",
     { label: "删除", onSelect: onDelete, destructive: true },
@@ -378,7 +431,7 @@ function SourceMeta({ source, name, shared, duplicate }: { source: SourceRecord;
   const title = source.payload.metadata?.title?.trim();
   const stem = name.replace(/\.[^.]+$/, "");
   const parts = [
-    FORMAT_LABEL[extOf(name)] ?? (extOf(name) ? extOf(name).toUpperCase() : "文件"),
+    formatLabel(name),
     pages ? `${pages} 页` : humanSize(source.payload.fingerprint?.size),
     title && title !== stem && title !== name ? `《${title}》` : "",
   ].filter(Boolean);
@@ -392,27 +445,22 @@ function SourceMeta({ source, name, shared, duplicate }: { source: SourceRecord;
 }
 
 /**
- * The end of a row: the day the document arrived, a spinner while it is being
- * read, and words only when something needs the researcher — a parse that
- * failed, or one that left parts unread, each with 「重试」 beside it. The
- * reason a parse failed is the words' tooltip and the first line of
- * 「查看理解」.
+ * The end of a row: the day the document arrived once it can be used, and
+ * words while it cannot — 「读取中…」 for the few seconds its text is read,
+ * 「没能读取」 when it could not be, 「部分没能读取」 when parts of it could
+ * not, the last two with 「重试」 beside them. The reason a reading failed is
+ * the words' tooltip and the first line of 「查看理解」. An understanding that
+ * failed after the text was read leaves a usable document, and the row says
+ * nothing about it.
  */
 function SourceState({ source, name, busy, onRetry }: { source: SourceRecord; name: string; busy: boolean; onRetry: () => void }) {
   // `/api/me` is read once and shared, so a row asking costs nothing more —
   // and an empty library asks nothing at all.
   const operator = useOperator();
-  const status = source.payload.status;
-  if (status === "queued" || status === "parsing") {
-    return (
-      <span className="inline-flex items-center" title="分析中">
-        <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-        <span className="sr-only">分析中</span>
-      </span>
-    );
-  }
-  if (status === "failed" || status === "needs_attention") {
-    const failed = status === "failed";
+  const label = stateLabel(source);
+  if (isReading(source)) return <span className="text-text-3">读取中…</span>;
+  if (label === "没能读取" || label === "部分没能读取") {
+    const failed = label === "没能读取";
     const failure = source.payload.error;
     // The code is the handle support searches on: an operator gets it after
     // the sentence, a researcher only the sentence.
@@ -420,14 +468,13 @@ function SourceState({ source, name, busy, onRetry }: { source: SourceRecord; na
     const tooltip = reason && operator && failure ? `${reason}（${failure.code}）` : reason ?? undefined;
     return (
       <span className={cn("inline-flex items-center gap-1", failed ? "text-danger" : "text-warn")}>
-        <span title={tooltip}>{failed ? "解析失败" : "部分未能解析"}</span>
+        <span title={tooltip}>{label}</span>
         <span aria-hidden="true">·</span>
-        <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新分析「${name}」`} onClick={onRetry} className="px-1 text-caption">重试</Button>
+        <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新读取「${name}」`} onClick={onRetry} className="px-1 text-caption">重试</Button>
       </span>
     );
   }
-  if (status === "missing") return <span>原件已移除</span>;
-  if (status === "canceled") return <span>已取消</span>;
+  if (label) return <span>{label}</span>;
   return <span className="tabular-nums">{formatDay(source.createdAt)}</span>;
 }
 
@@ -515,7 +562,7 @@ function VersionChain({ sourceId }: { sourceId: string }) {
           <ListRow
             key={item.id}
             title={`第 ${item.payload.version} 版`}
-            meta={[formatDay(item.updatedAt), item.payload.status === "complete" ? "" : labelFor(STATUS, item.payload.status)].filter(Boolean).join(" · ")}
+            meta={[formatDay(item.updatedAt), stateLabel(item)].filter(Boolean).join(" · ")}
             trailing={item.id === sourceId ? <Tag>当前</Tag> : undefined}
           />
         ))}

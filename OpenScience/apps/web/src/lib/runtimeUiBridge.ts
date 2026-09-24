@@ -351,11 +351,12 @@ export interface FrameKnowledgeItem {
 const KNOWLEDGE_CACHE_MS = 30_000;
 const knowledgeCache = new Map<string, { at: number; items: Promise<SourceRecord[]> }>();
 
-/** The project's parsed sources, fetched at most every 30 s: the `@` menu asks on every keystroke. */
+/** The project's readable sources, fetched at most every 30 s: the `@` menu asks on every keystroke.
+ *  Readable, not understood: a document can be named as soon as its text is read (2026-09-24). */
 function parsedSources(projectId: string): Promise<SourceRecord[]> {
   const cached = knowledgeCache.get(projectId);
   if (cached && Date.now() - cached.at < KNOWLEDGE_CACHE_MS) return cached.items;
-  const items = listSources(projectId, { status: "complete" }).then((page) => page.items.filter((item) => !item.deletedAt));
+  const items = listSources(projectId, { state: "ready" }).then((page) => page.items.filter((item) => !item.deletedAt));
   knowledgeCache.set(projectId, { at: Date.now(), items });
   items.catch(() => { if (knowledgeCache.get(projectId)?.items === items) knowledgeCache.delete(projectId); });
   return items;

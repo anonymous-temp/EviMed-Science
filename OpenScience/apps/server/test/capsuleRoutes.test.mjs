@@ -54,6 +54,12 @@ test("clients cannot impersonate an entry origin or change its account", async (
   assert.equal(response.status, 201);
   assert.equal(calls[0].body.origin, "explicit");
   assert.deepEqual(calls[0].body.provenance, [{ type: "user", id: "owner" }]);
+  // Only a document's publication writes the document layer; an entry the
+  // researcher put there would be recalled nowhere and listed nowhere.
+  const document = await request({ factKind: "project_fact", content: "据资料《指南》：…", layer: "sources" });
+  assert.equal(document.status, 400);
+  assert.equal((await document.json()).code, "capsule_payload_invalid");
+  assert.equal(calls.length, 1, "the service never saw it");
 });
 
 test("activation and recall reject projects the account does not own", async (t) => {

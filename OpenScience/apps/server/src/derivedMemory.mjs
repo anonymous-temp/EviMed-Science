@@ -50,12 +50,64 @@ export const SOURCE_PUBLICATION_RECORD_TYPE = "source-publication";
 export const RUNTIME_PROJECT_PROVENANCE_PREFIX = "runtime-project:";
 
 /**
- * Why a memory was withdrawn: its document or project was deleted just now, or
- * the orphan sweep found it pointing at one that no longer exists.
+ * Why a memory was withdrawn: its document or project was deleted just now,
+ * the orphan sweep found it pointing at one that no longer exists, or its
+ * document was published again under a newer rule
+ * (`scripts/ops/republish-source-memory.mjs`).
  */
 export const DERIVED_MEMORY_WITHDRAWAL_REASONS = Object.freeze([
-  "source_deleted", "project_deleted", "source_missing", "project_missing",
+  "source_deleted", "project_deleted", "source_missing", "project_missing", "source_republished",
 ]);
+
+/**
+ * The capsule layer only a document's publication writes
+ * (`LibraryService.publishSourceUnderstanding`). The capsule's own routes
+ * refuse it, a share never carries it (`NEVER_SHARED_LAYERS`) and no method
+ * mount reads it, so an entry in it is one a document yielded.
+ */
+export const DOCUMENT_MEMORY_LAYER = "sources";
+
+/**
+ * The project each of these document-derived capsule entries belongs to,
+ * for the entries that do not say so themselves.
+ *
+ * An entry published since 2026-09-24 carries its document and project
+ * (`payload.sourceId`, `payload.projectId`). One published before names its
+ * document only through the publication ledger that lists it, or through the
+ * anchors in its provenance; its project is that document's. Read here at
+ * recall time rather than written back, so there is no migration to run and
+ * nothing to get out of step: the ledger is already the record the withdrawal
+ * keys on. An entry no ledger and no anchor names is absent from the answer,
+ * and its caller treats it as belonging to no project.
+ *
+ * @param {{ query: (text: string, values?: unknown[]) => Promise<any> } | null | undefined} database
+ * @param {string} userId @param {readonly string[]} entryIds
+ * @returns {Promise<Map<string, string>>} entry id → project id
+ */
+export async function documentEntryProjects(database, userId, entryIds) {
+  /** @type {Map<string, string>} */
+  const projects = new Map();
+  const ids = [...new Set((entryIds ?? []).map(String))];
+  if (!database || ids.length === 0) return projects;
+  const result = await database.query(`WITH named AS (
+      SELECT e.value AS entry_id, l.payload->>'sourceId' AS source_id, 0 AS rank
+        FROM evimed_product.documents l
+        CROSS JOIN LATERAL jsonb_each_text(CASE WHEN jsonb_typeof(l.payload->'entries')='object' THEN l.payload->'entries' ELSE '{}'::jsonb END) e
+       WHERE l.user_id=$1 AND l.kind='preferences' AND l.deleted_at IS NULL AND l.payload->>'recordType'=$3::text
+         AND e.value=ANY($2::text[])
+      UNION ALL
+      SELECT d.id, split_part(p->>'id','#',1), 1
+        FROM evimed_product.documents d
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(d.payload->'provenance')='array' THEN d.payload->'provenance' ELSE '[]'::jsonb END) p
+       WHERE d.user_id=$1 AND d.kind='fact' AND d.id=ANY($2::text[]) AND p->>'type'='source' AND p->>'id' ~ '^src_[a-f0-9]{32}#'
+    )
+    SELECT DISTINCT ON (n.entry_id) n.entry_id, s.project_id
+      FROM named n JOIN evimed_product.documents s ON s.user_id=$1 AND s.kind='source' AND s.id=n.source_id
+     WHERE s.project_id IS NOT NULL
+     ORDER BY n.entry_id, n.rank, s.deleted_at NULLS FIRST`, [userId, ids, SOURCE_PUBLICATION_RECORD_TYPE]);
+  for (const row of result.rows ?? []) projects.set(String(row.entry_id), String(row.project_id));
+  return projects;
+}
 
 const SOURCE_ID = /^src_[a-f0-9]{32}$/;
 const PROJECT_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { CAPSULE_FACT_KINDS, CAPSULE_FACT_ORIGINS, CAPSULE_FACT_STATES, CAPSULE_LAYERS, capsuleActivationMode } from "@evimed/domain";
 import { CapsuleScanner } from "./capsuleScan.mjs";
+import { DOCUMENT_MEMORY_LAYER, documentEntryProjects } from "./derivedMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -113,6 +114,14 @@ export class CapsuleService {
    * the notes each project's runs wrote, and any capsule made by hand before
    * there was only one. Borrowed capsules are not in it — they are the
    * received shelf. Entries in force only; a retired one is on the timeline.
+   *
+   * What a knowledge-base document yielded is not a memory the page lists
+   * (2026-09-24): it belongs to its document and is shown there, and it is
+   * recalled in the document's project only (`recall`). It was listed until
+   * then — under 「项目」 or, for a method draft, under 「关于你」 — and one
+   * PDF put thirty rows on the page, crowding the researcher's own out of the
+   * hundred each capsule showed. So the page reads every other layer, each
+   * newest first, and never the document layer.
    * @param {string} userId @param {{ limit?: number }} [options]
    */
   async mine(userId, { limit = 300 } = {}) {
@@ -123,8 +132,15 @@ export class CapsuleService {
     const entries = [];
     for (const item of own) {
       if (entries.length >= limit) break;
-      const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: item.id, status: "approved" } });
-      entries.push(...page.items);
+      /** @type {any[]} */
+      const found = [];
+      for (const layer of CAPSULE_LAYERS) {
+        if (layer === DOCUMENT_MEMORY_LAYER) continue;
+        const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: item.id, status: "approved", layer } });
+        found.push(...page.items);
+      }
+      found.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)));
+      entries.push(...found.slice(0, 100));
     }
     return {
       capsule,
@@ -162,16 +178,30 @@ export class CapsuleService {
   }
 
   /** Generated/inferred entries are candidates; the user approves them explicitly.
+   *
+   * `derivedFrom` names the knowledge-base document an entry was read out of
+   * and that document's project (`LibraryService.publishSourceUnderstanding`):
+   * such an entry is recalled only in that project (`recall`) and is not one
+   * of the memories the capsule page lists (`mine`).
    * @param {string} userId @param {string} capsuleId @param {Record<string,any>} input */
   async addEntry(userId, capsuleId, input) {
     await this.get(userId, capsuleId);
     const origin = member(input.origin ?? "explicit", CAPSULE_FACT_ORIGINS, "origin");
+    const layer = member(input.layer ?? "knowledge", CAPSULE_LAYERS, "layer");
+    const derived = input.derivedFrom == null ? null : {
+      sourceId: text(input.derivedFrom.sourceId, "source", 64),
+      projectId: productId(input.derivedFrom.projectId, "projectId"),
+    };
+    if (derived && (!/^src_[a-f0-9]{32}$/.test(derived.sourceId) || layer !== DOCUMENT_MEMORY_LAYER)) {
+      throw new HttpError(400, "capsule_payload_invalid", "Invalid document origin.");
+    }
     return this.documents.put(userId, "fact", randomUUID(), {
       capsuleId, factKind: member(input.factKind, CAPSULE_FACT_KINDS, "fact kind"),
-      layer: member(input.layer ?? "knowledge", CAPSULE_LAYERS, "layer"),
+      layer,
       content: text(input.content, "content", 20_000), origin,
       status: origin === "explicit" ? "approved" : "candidate",
       provenance: provenance(input.provenance), contextOnly: true,
+      ...(derived ? { sourceId: derived.sourceId, projectId: derived.projectId } : {}),
     }, { expectedRevision: 0 });
   }
 
@@ -588,7 +618,12 @@ export class CapsuleService {
     for (const selection of active) {
       const capsule = await this.documents.get(userId, "capsule", selection.capsuleId);
       if (!capsule) continue;
-      const entries = await this.documents.search(userId, "fact", needle, { limit, filter: { capsuleId: capsule.id, status: "approved" }, since, any: { field: "factKind", values: factKinds } });
+      // Asked for more than the limit, because another project's documents
+      // may take some of the places (`#inProject`).
+      const found = await this.documents.search(userId, "fact", needle, { limit: Math.min(100, limit * 3),
+        filter: { capsuleId: capsule.id, status: "approved" }, since, any: { field: "factKind", values: factKinds } });
+      /** @type {any[]} */
+      const entries = await this.#inProject(userId, projectId, /** @type {any[]} */ (found));
       for (const entry of entries) matches.push({
         id: entry.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: selection.mode,
         factKind: entry.payload.factKind, layer: entry.payload.layer, content: entry.payload.content,
@@ -598,11 +633,38 @@ export class CapsuleService {
     return { items: matches.slice(0, limit), mode: "lexical", contextOnly: true };
   }
 
+  /**
+   * The entries a recall in `projectId` may hand over: every entry the
+   * researcher or a run wrote, and of what a knowledge-base document yielded
+   * only what came from a document of that project.
+   *
+   * A document belongs to the project it was put in, like a file in a
+   * ChatGPT project or a NotebookLM notebook; until 2026-09-24 its facts were
+   * recalled in every project of the account. A recall that names no project
+   * reaches no document's facts. An entry published before the entries
+   * carried their project is placed by its publication ledger
+   * (`documentEntryProjects`); one nothing places belongs to no project.
+   * @template {{ id: string, payload: any }} T
+   * @param {string} userId @param {string | null} projectId @param {T[]} rows
+   * @returns {Promise<T[]>}
+   */
+  async #inProject(userId, projectId, rows) {
+    const derived = rows.filter((row) => row.payload?.layer === DOCUMENT_MEMORY_LAYER);
+    if (derived.length === 0) return rows;
+    if (projectId == null) return rows.filter((row) => row.payload?.layer !== DOCUMENT_MEMORY_LAYER);
+    const unplaced = derived.filter((row) => typeof row.payload.projectId !== "string").map((row) => row.id);
+    const placed = unplaced.length ? await documentEntryProjects(this.documents.database, userId, unplaced) : new Map();
+    return rows.filter((row) => row.payload?.layer !== DOCUMENT_MEMORY_LAYER
+      || (typeof row.payload.projectId === "string" ? row.payload.projectId : placed.get(row.id)) === projectId);
+  }
+
   /** @param {string} userId @param {Record<string,any>} input */
   async #semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt }) {
     const generation = accountCreatedAt ?? await this.indexing.accountGeneration(userId);
     if (!generation) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
-    const ranked = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4), projectId);
+    const nominated = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4), projectId);
+    const kept = new Set((await this.#inProject(userId, projectId, nominated.map((/** @type {any} */ match) => match.row))).map((row) => row.id));
+    const ranked = nominated.filter((/** @type {any} */ match) => kept.has(match.row.id));
     const items = [];
     for (const match of ranked) {
       const payload = match.row.payload;

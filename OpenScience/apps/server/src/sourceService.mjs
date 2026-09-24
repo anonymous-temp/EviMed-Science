@@ -11,6 +11,50 @@ import { normalizeSourcePageMap, renderSourcePageMarkers, sourceFormatRoute } fr
 import { openListSourceInput } from "./openListSourceConnector.mjs";
 import { estimateTokens } from "./kbChunker.mjs";
 
+/**
+ * Whether a document can be used — searched by `kb_search`, named with
+ * 「@知识库」, read by a conversation — which is the one question the
+ * knowledge base page answers about it.
+ *
+ * Hidden knowledge: until 2026-09-24 only `complete` and `needs_attention`
+ * counted, and a PDF stayed `parsing` for the whole understanding run that
+ * follows its parse (one to four minutes, one document at a time per account).
+ * The text a run reads was already captured after the first few seconds; it
+ * was only written out, and so only searchable, once the understanding ended.
+ * The text is written as soon as it is captured now, and the source records
+ * that moment as `analysis.readAt` for the generation it read. `status` keeps
+ * describing the pipeline — `parsing` while the understanding runs, `failed`
+ * when the understanding (not the reading) failed — and `complete` still
+ * means the understanding is in. A generation the source has moved past
+ * (retry, override, cancel) is not readable until it is read again.
+ * @param {any} payload a source record's payload
+ */
+export function sourceReadable(payload) {
+  const status = payload?.status;
+  if (status === "complete" || status === "needs_attention") return true;
+  return (status === "parsing" || status === "failed") && typeof payload?.analysis?.readAt === "string"
+    && payload.analysis.generation === payload.generation;
+}
+
+/** The SQL twin of `sourceReadable`, over a source row aliased `d`. */
+export const SOURCE_READABLE_SQL = `(d.payload->>'status' IN ('complete','needs_attention')
+  OR (d.payload->>'status' IN ('parsing','failed') AND jsonb_typeof(d.payload->'analysis'->'readAt')='string'
+    AND d.payload->'analysis'->'generation'=d.payload->'generation'))`;
+
+/**
+ * What the knowledge base page filters by, in the words a row says it:
+ * `reading` (「读取中」 — not usable yet), `ready` (usable), and `attention`
+ * (「需要处理」 — not read, or read only in part). The pipeline's own statuses
+ * stay filterable by `status`.
+ */
+export const SOURCE_STATES = Object.freeze(["reading", "ready", "attention"]);
+/** @type {Readonly<Record<string, string>>} */
+const SOURCE_STATE_SQL = Object.freeze({
+  reading: `(d.payload->>'status' IN ('queued','parsing') AND NOT ${SOURCE_READABLE_SQL})`,
+  ready: SOURCE_READABLE_SQL,
+  attention: `(d.payload->>'status'='needs_attention' OR (d.payload->>'status'='failed' AND NOT ${SOURCE_READABLE_SQL}))`,
+});
+
 function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
 function projectUnit(unit) { return { id: unit.id, unitType: unit.unitType, start: unit.start, end: unit.end,
   ...(typeof unit.text === "string" ? { text: unit.text } : {}), status: unit.status,
@@ -23,7 +67,9 @@ export function projectSourceManifestRecord(row) {
   // card states the verdict, and a page of fifty cards must not carry fifty
   // sample lists to say it.
   const verdict = omissionAudit ? { status: omissionAudit.status, reason: omissionAudit.reason, omissionRate: omissionAudit.omissionRate ?? null } : null;
-  return { ...row, payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
+  // `readable` is derived, never stored: the page says 「读取中」 until it is
+  // true, whatever the pipeline is still doing behind it.
+  return { ...row, readable: sourceReadable(row.payload), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
     ...(Number.isSafeInteger(analysis.pageCount) ? { pageCount: analysis.pageCount } : {}),
     run: projectRun(analysis.run),
@@ -359,6 +405,14 @@ export function sourceOmissionRecord(projected, delivered, input) {
 
 function isConflict(error) { return error?.code === "product_revision_conflict"; }
 
+/** The text this generation of a source was already written out to, when it
+ *  was (`recordReadable`); null while it has not been. @param {any} source */
+export function readCopyOf(source) {
+  const payload = source?.payload;
+  return typeof payload?.analysis?.readAt === "string" && payload.analysis.generation === payload.generation
+    && typeof payload.outputs?.artifactPath === "string" ? payload.outputs.artifactPath : null;
+}
+
 function retiredSourceRun(payload) {
   const pending = [...(payload.pendingRunCancellations ?? [])];
   const run = payload.analysis?.run?.id ? payload.analysis.run
@@ -619,6 +673,28 @@ export class SourceService {
     const payload = result.rows[0]?.payload;
     if (!payload || payload.textSha256 !== analysis.textSha256 || !Array.isArray(payload.pages)) return null;
     return payload.pages.map(([page, start, end, status]) => ({ page, start, end, status }));
+  }
+
+  /**
+   * The document can be used: its captured text is written out at
+   * `artifactPath` for the generation being read, so search, 「@知识库」 and a
+   * conversation can read it while its understanding still runs. Recorded
+   * once per generation; a second call for the same generation keeps the
+   * first path (`readCopyOf`).
+   * @param {any} job @param {string} artifactPath
+   */
+  async recordReadable(job, artifactPath) {
+    const file = sourcePath(artifactPath);
+    return this.withSourceLease(job, async (source, client) => {
+      if (source.payload.status !== "parsing") throw new HttpError(409, "source_state_conflict", "The source is no longer being read.");
+      if (source.payload.analysis?.generation !== source.payload.generation) throw new HttpError(409, "source_capture_invalid", "A readable source requires its frozen capture.");
+      if (readCopyOf(source)) return source;
+      const at = this.now().toISOString();
+      return this.documents.put(job.userId, "source", source.id, { ...source.payload,
+        analysis: { ...source.payload.analysis, readAt: at },
+        outputs: { ...(source.payload.outputs ?? {}), artifactPath: file }, updatedAt: at },
+      { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
+    });
   }
 
   /** Waiting for a bounded runtime is not a failed parse or a retry attempt. */
@@ -919,14 +995,55 @@ export class SourceService {
     });
   }
 
-  /** @param {string} userId @param {{projectId:string,status?:string|null,familyId?:string|null,limit?:number,cursor?:string|null}} options */
-  async list(userId, { projectId, status = null, familyId = null, limit = 50, cursor = null }) {
+  /** `state` filters by what the page says about a document (`SOURCE_STATES`);
+   *  `status` by the pipeline's own word. One or the other.
+   * @param {string} userId @param {{projectId:string,status?:string|null,state?:string|null,familyId?:string|null,limit?:number,cursor?:string|null}} options */
+  async list(userId, { projectId, status = null, state = null, familyId = null, limit = 50, cursor = null }) {
+    if (state != null && state !== "") {
+      if (!SOURCE_STATES.includes(String(state))) throw new HttpError(400, "source_payload_invalid", "source state is invalid.");
+      if ((status != null && status !== "") || (familyId != null && familyId !== "")) {
+        throw new HttpError(400, "source_payload_invalid", "A source list filters by state or by status, not both.");
+      }
+      return this.listByState(userId, { projectId: text(projectId, "project id", 160), state: String(state), limit, cursor });
+    }
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
     const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
     return this.documents.list(userId, "source", {
       projectId: text(projectId, "project id", 160), limit, cursor,
       filter: { ...(selectedStatus ? { status: selectedStatus } : {}), ...(selectedFamily ? { familyId: selectedFamily } : {}) },
     });
+  }
+
+  /**
+   * One page of a project's sources in one page state, newest first, with the
+   * product store's cursor (`ProductDocuments.list`): a state is a predicate
+   * over two fields, which a containment filter cannot say.
+   * @param {string} userId @param {{projectId:string,state:string,limit?:number,cursor?:string|null}} options
+   */
+  async listByState(userId, { projectId, state, limit = 50, cursor = null }) {
+    const database = this.documents.database;
+    if (!database) throw new HttpError(503, "source_state_unavailable", "Filtering sources by state requires durable shared storage.");
+    const predicate = SOURCE_STATE_SQL[state];
+    if (!predicate) throw new HttpError(400, "source_payload_invalid", "source state is invalid.");
+    const bounded = productInteger(limit, 1, 100);
+    let after = null;
+    if (cursor) {
+      try {
+        if (cursor.length > 1024) throw new Error("cursor too long");
+        after = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+        if (!Array.isArray(after) || after.length !== 2 || typeof after[0] !== "string" || !Number.isFinite(Date.parse(after[0]))
+          || typeof after[1] !== "string" || !after[1]) throw new Error("cursor shape");
+      } catch { throw new HttpError(400, "product_cursor_invalid", "Invalid page cursor."); }
+    }
+    await migrateProductStore(database);
+    const result = await database.query(`SELECT * FROM evimed_product.documents d
+      WHERE d.user_id=$1 AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=$2
+        AND ($3::timestamptz IS NULL OR (d.created_at,d.id)<($3::timestamptz,$4::text)) AND ${predicate}
+      ORDER BY d.created_at DESC, d.id DESC LIMIT $5`, [userId, projectId, after?.[0] ?? null, after?.[1] ?? null, bounded + 1]);
+    const items = result.rows.slice(0, bounded).map(sourceRecord);
+    const last = items.at(-1);
+    return { items, nextCursor: result.rows.length > bounded && last
+      ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") : null };
   }
 
   /** The version chain a source belongs to: same project, same connector, same

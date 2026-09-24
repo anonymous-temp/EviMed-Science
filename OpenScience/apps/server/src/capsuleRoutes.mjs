@@ -1,5 +1,6 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { CAPSULE_TRANSFER_MAX_BYTES } from "./capsuleTransferService.mjs";
+import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
 async function bodyOf(req, limit, allowed) {
@@ -139,6 +140,9 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       if (method === "GET") return reply(await service.entries(user.id, capsuleId, pageOptions(url)));
       if (method === "POST") {
         const body = await bodyOf(req, maxJsonBytes, ["factKind", "layer", "content"]);
+        // Only a document's publication writes the document layer: an entry in
+        // it is recalled in its document's project alone and never listed.
+        if (body.layer === DOCUMENT_MEMORY_LAYER) throw new HttpError(400, "capsule_payload_invalid", "Invalid layer.");
         return reply(await service.addEntry(user.id, capsuleId, { ...body, origin: "explicit", provenance: [{ type: "user", id: user.id }] }), 201);
       }
     }

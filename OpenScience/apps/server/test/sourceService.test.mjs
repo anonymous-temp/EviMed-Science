@@ -4,7 +4,8 @@ import test from "node:test";
 import { HttpError } from "../src/security.mjs";
 import { normalizeSourceText, projectSourceUnderstandingOutput, sourceUnderstandingAuditSample, sourceUnderstandingSchema,
   validateSourceUnderstanding } from "@evimed/domain";
-import { projectSourceManifestRecord, sourceIndexDocument, sourceOmissionRecord, SOURCE_DEPTHS, SOURCE_TYPES, SourceService } from "../src/sourceService.mjs";
+import { projectSourceManifestRecord, readCopyOf, sourceIndexDocument, sourceOmissionRecord, sourceReadable, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
+  SourceService } from "../src/sourceService.mjs";
 
 // The lease, replay and account-generation fences need a real database, so they
 // live in `sourceFolderSync.integration.test.mjs` — the only shape the durable
@@ -1004,4 +1005,32 @@ test("the source card carries the audit verdict without the units it sampled", (
   assert.deepEqual(card.payload.omissionAudit, { status: "audited", reason: "Sampled units were checked.", omissionRate: 0.5 });
   assert.equal(card.payload.omissionAudit.samples, undefined,
     "fifty cards on one page must not each carry a sample list to state one verdict");
+});
+
+test("a document is usable once its text is written out for the generation it is on, whatever its understanding does", () => {
+  // 2026-09-24: a PDF stayed `parsing`, and unsearchable, for the whole
+  // understanding run that follows its few-second parse.
+  const artifactPath = "knowledge-base/.evimed-derived/src_one/read-2-job-one-abc/index.md";
+  const read = { status: "parsing", generation: 2, analysis: { generation: 2, readAt: "2026-09-24T00:00:00.000Z" }, outputs: { artifactPath } };
+  assert.equal(sourceReadable(read), true, "read, while its understanding still runs");
+  assert.equal(sourceReadable({ ...read, status: "failed" }), true, "an understanding that failed does not unread the text");
+  assert.equal(sourceReadable({ ...read, status: "queued", generation: 3 }), false, "a retried generation is read again first");
+  assert.equal(sourceReadable({ ...read, generation: 3 }), false);
+  assert.equal(sourceReadable({ ...read, status: "canceled" }), false);
+  assert.equal(sourceReadable({ status: "parsing", generation: 1, analysis: { generation: 1, phase: "indexed" } }), false, "captured, not yet written out");
+  for (const status of ["complete", "needs_attention"]) assert.equal(sourceReadable({ status }), true, "an understood document, as before");
+  assert.equal(readCopyOf({ payload: read }), artifactPath);
+  assert.equal(readCopyOf({ payload: { ...read, generation: 3 } }), null, "another generation's copy is not this one's");
+  const card = projectSourceManifestRecord({ id: "src_one", revision: 3, payload: { ...read, paths: ["knowledge-base/a.pdf"], reasons: [] } });
+  assert.equal(card.readable, true, "what the page reads to say 「读取中」 or not");
+  assert.equal(projectSourceManifestRecord({ id: "src_one", revision: 1, payload: { status: "queued", paths: [], reasons: [] } }).readable, false);
+});
+
+test("a list filters by what the page says or by the pipeline's status, never both", async () => {
+  const service = new SourceService(new MemoryDocuments(), new MemoryJobs());
+  assert.deepEqual([...SOURCE_STATES], ["reading", "ready", "attention"]);
+  await assert.rejects(service.list("user", { projectId: "project", state: "understanding" }), { code: "source_payload_invalid" });
+  await assert.rejects(service.list("user", { projectId: "project", state: "reading", status: "parsing" }), { code: "source_payload_invalid" });
+  // A state is a predicate over two fields; the durable store answers it.
+  await assert.rejects(service.list("user", { projectId: "project", state: "reading" }), { code: "source_state_unavailable" });
 });

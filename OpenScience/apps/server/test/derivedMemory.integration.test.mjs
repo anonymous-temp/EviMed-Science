@@ -22,7 +22,8 @@ import { promisify } from "node:util";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { findOrphanedDerivedMemory, withdrawDerivedMemory, withdrawOrphanedDerivedMemory } from "../src/derivedMemory.mjs";
-import { LibraryService, PUBLICATION_RECORD_TYPE } from "../src/libraryService.mjs";
+import { LibraryService, PUBLICATION_RECORD_TYPE, PUBLICATION_RULE } from "../src/libraryService.mjs";
+import { republishSourceMemory } from "../../../scripts/ops/republish-source-memory.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { createWebApiApp } from "../src/server.mjs";
@@ -36,16 +37,19 @@ if (databaseUrl) {
 }
 const options = { timeout: 60_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/ops/withdraw-orphan-memory.mjs");
+const republishScript = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/ops/republish-source-memory.mjs");
 
 /**
- * What the source-understanding capability yields for one document: a slot
- * whose evidence carries no position — so its capsule entry has no provenance
- * and only the publication ledger knows where it came from — and a claim
- * anchored to a span, whose entry names `src_…#10-26`.
+ * What the source-understanding capability yields for one document: a
+ * summary — whose capsule entry has no provenance, so only the publication
+ * ledger knows where it came from — and a claim anchored to a span, whose
+ * entry names `src_…#10-26`. The slot is a column of the understanding and is
+ * not published (2026-09-24).
  * @param {string} label
  */
 const understandingFor = (label) => ({
   generation: 1,
+  summary: `${label}：一项随机对照试验的结论。`,
   slots: { design: { state: "known", value: `${label}随机对照试验`, evidence: [{ quote: "randomised controlled trial" }] } },
   claims: [{ id: "c1", statement: `${label}推荐 20 mg 每日一次`, evidence: [{ quote: "20 mg once daily", start: 10, end: 26 }] }],
   methods: [],
@@ -115,7 +119,8 @@ test("deleting a document withdraws every memory it yielded, in the same transac
   assert.match(provenances.find((items) => items.length)[0].id, new RegExp(`^${guideline.id}#10-26$`), "the other names a span, not the document");
   const kept = [...await publishedEntries(f.documents, f.owner, protocol.id), stated.id, note.id];
   const theirsKept = await publishedEntries(f.documents, f.other, theirs.id);
-  assert.equal((await f.capsules.recall(f.owner, { query: "抗凝指南推荐" })).items.length, 1, "recalled before the deletion");
+  // A document's facts are recalled in its own project (2026-09-24).
+  assert.equal((await f.capsules.recall(f.owner, { query: "抗凝指南推荐", projectId: "default" })).items.length, 1, "recalled before the deletion");
 
   const current = await f.sources.get(f.owner, guideline.id);
   await f.sources.remove(f.owner, guideline.id, { expectedRevision: current.revision });
@@ -147,8 +152,8 @@ test("deleting a document withdraws every memory it yielded, in the same transac
   for (const id of kept) assert.equal((await entry(f.documents, f.owner, id)).deletedAt, null, `${id} was not derived from the deleted document`);
   for (const id of theirsKept) assert.equal((await entry(f.documents, f.other, id)).payload.status, "approved", "another account's memory is untouched");
   assert.equal((await f.capsules.mine(f.owner)).entries.some((item) => withdrawn.includes(item.id)), false);
-  assert.equal((await f.capsules.recall(f.owner, { query: "抗凝指南推荐" })).items.length, 0, "no longer recalled");
-  assert.equal((await f.capsules.recall(f.owner, { query: "研究方案推荐" })).items.length, 1);
+  assert.equal((await f.capsules.recall(f.owner, { query: "抗凝指南推荐", projectId: "default" })).items.length, 0, "no longer recalled");
+  assert.equal((await f.capsules.recall(f.owner, { query: "研究方案推荐", projectId: "default" })).items.length, 1);
 
   // Idempotent: a second withdrawal finds nothing.
   assert.deepEqual(await f.database.transaction((client) => withdrawDerivedMemory(client, f.owner,
@@ -334,4 +339,98 @@ test("the real routes: deleting a document, then a project, withdraws what each 
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+/**
+ * An entry the way the library wrote it before 2026-09-24: in the document
+ * layer, listed on the document's ledger, and saying nothing of its project.
+ * @param {any} f @param {any} capsule @param {any} source @param {Record<string, string>} contents key → content
+ */
+async function publishedTheOldWay(f, capsule, source, contents) {
+  /** @type {Record<string, string>} */
+  const entries = {};
+  for (const [key, content] of Object.entries(contents)) {
+    const written = await f.capsules.addEntry(f.owner, capsule.id, { factKind: "project_fact", layer: "sources", origin: "inferred", content });
+    entries[key] = (await f.capsules.updateEntry(f.owner, capsule.id, written.id, { status: "approved", expectedRevision: written.revision })).id;
+  }
+  await f.documents.put(f.owner, "preferences", `source-publication:${source.id}`, { recordType: PUBLICATION_RECORD_TYPE, sourceId: source.id,
+    capsuleId: capsule.id, generation: 1, facts: Object.keys(entries).length, methods: 0, entries }, { expectedRevision: 0 });
+  return Object.values(entries);
+}
+
+test("a document's facts are recalled in its own project, those published before they carried it placed by their ledger", options, async (t) => {
+  const f = await fixture(t);
+  const capsule = await f.capsules.ownCapsule(f.owner, { create: true });
+  const inDefault = await register(f.sources, f.owner, "default", "7".repeat(64));
+  const inTrial = await register(f.sources, f.owner, "trial", "8".repeat(64));
+  await f.publish(f.owner, inTrial, "试验方案");
+  const [old] = await publishedTheOldWay(f, capsule, inDefault, { k1: "据资料《旧指南》，研究设计：抗凝随机对照" });
+  const stated = await f.capsules.addEntry(f.owner, capsule.id, { factKind: "preference", content: "抗凝证据先看指南", origin: "explicit" });
+  const recalled = async (/** @type {string | null} */ projectId) => (await f.capsules.recall(f.owner, { query: "抗凝", projectId })).items.map((item) => item.id).sort();
+  assert.deepEqual(await recalled("default"), [old, stated.id].sort(), "the old entry is placed by its ledger in its document's project");
+  assert.deepEqual(await recalled("trial"), [stated.id], "and is not recalled in another");
+  assert.deepEqual(await recalled(null), [stated.id]);
+  const trialEntries = await publishedEntries(f.documents, f.owner, inTrial.id);
+  const trialRecall = (await f.capsules.recall(f.owner, { query: "试验方案", projectId: "trial" })).items.map((item) => item.id);
+  assert.deepEqual(trialRecall.sort(), [...trialEntries].sort(), "a stamped entry is placed by its own stamp");
+  assert.deepEqual((await f.capsules.recall(f.owner, { query: "试验方案", projectId: "default" })).items, []);
+  // Neither is a memory the capsule page lists.
+  assert.deepEqual((await f.capsules.mine(f.owner)).entries.map((item) => item.id), [stated.id]);
+});
+
+test("the republication script reports, publishes every understood document again under the current rule, and then finds nothing", options, async (t) => {
+  const f = await fixture(t);
+  const capsule = await f.capsules.ownCapsule(f.owner, { create: true });
+  const source = await register(f.sources, f.owner, "default", "6".repeat(64));
+  // Its current understanding, as the source service reads it back.
+  const id = `understanding:${source.id}:g1`;
+  const output = { schemaVersion: 1, sourceId: source.id, generation: 1, docType: source.payload.docType, depth: "structured",
+    summary: "产品测评记录：记录了一次医学问答产品的测试。",
+    slots: { purpose: { state: "unknown", reason: "原文未涉及" }, keyInformation: { state: "unknown", reason: "原文未涉及" }, limitations: { state: "unknown", reason: "原文未涉及" } },
+    claims: [{ id: "c1", statement: "测试覆盖 30 个问题", evidence: [{ sourceId: source.id, generation: 1, unitId: `${source.id}:g1:u1`, start: 0, end: 4, quote: "测试覆盖" }] }],
+    methods: [], omissionAudit: { status: "not_run", reason: "fixture", omissionRate: null } };
+  await f.documents.put(f.owner, "knowledge", id, { recordType: "source-understanding", sourceId: source.id, generation: 1, status: "current",
+    output, run: null, usage: null, units: [] }, { expectedRevision: 0, projectId: "default" });
+  const current = await f.sources.get(f.owner, source.id);
+  await f.documents.put(f.owner, "source", source.id, { ...current.payload, currentUnderstandingId: id }, { expectedRevision: current.revision, projectId: "default" });
+  // What the library published before: a template field per entry, unstamped.
+  const old = await publishedTheOldWay(f, capsule, source, {
+    k1: "据资料《8.11医学测评.pdf》，研究设计：本文档没有研究设计——它不是研究报告",
+    k2: "据资料《8.11医学测评.pdf》，效应估计：文档没有报告效应量",
+  });
+  const corrected = await f.capsules.updateEntry(f.owner, capsule.id, old[1], { content: "我改过的一句", expectedRevision: (await entry(f.documents, f.owner, old[1])).revision });
+  assert.ok(corrected.payload.correctedAt);
+
+  const report = await republishSourceMemory(f.database, { apply: false, userId: f.owner, limit: 100 });
+  assert.deepEqual({ documents: report.documents, withdrawn: report.withdrawn, corrected: report.corrected, published: report.published, failed: report.failed },
+    { documents: 1, withdrawn: 2, corrected: 1, published: 2, failed: 0 }, "the summary and the one anchored claim, and the correction it would take");
+  for (const entryId of old) assert.equal((await entry(f.documents, f.owner, entryId)).deletedAt, null, "a report changes nothing");
+
+  const applied = await republishSourceMemory(f.database, { apply: true, userId: f.owner, limit: 100 });
+  assert.deepEqual({ documents: applied.documents, withdrawn: applied.withdrawn, published: applied.published, failed: applied.failed },
+    { documents: 1, withdrawn: 2, published: 2, failed: 0 });
+  for (const entryId of old) {
+    const row = await entry(f.documents, f.owner, entryId);
+    assert.ok(row.deletedAt);
+    assert.equal(row.payload.withdrawn.reason, "source_republished");
+  }
+  const ledger = await f.documents.get(f.owner, "preferences", `source-publication:${source.id}`);
+  assert.equal(ledger.payload.rule, PUBLICATION_RULE);
+  assert.equal(ledger.payload.projectId, "default");
+  const fresh = await Promise.all(Object.values(ledger.payload.entries).map((entryId) => entry(f.documents, f.owner, String(entryId))));
+  assert.deepEqual(fresh.map((row) => row.payload.content).sort(), [
+    "据资料《66666666.txt》：测试覆盖 30 个问题", "资料《66666666.txt》的摘要：产品测评记录：记录了一次医学问答产品的测试。"].sort());
+  for (const row of fresh) {
+    assert.equal(row.payload.sourceId, source.id);
+    assert.equal(row.payload.projectId, "default");
+    assert.equal(row.payload.status, "approved");
+  }
+
+  const again = await republishSourceMemory(f.database, { apply: true, userId: f.owner, limit: 100 });
+  assert.equal(again.documents, 0, "a document already under the current rule is left alone");
+  // The command line an operator runs: a report by default.
+  const cli = JSON.parse((await promisify(execFile)(process.execPath, [republishScript, "--user", f.owner], {
+    env: { ...process.env, OPEN_SCIENCE_DATABASE_URL: databaseUrl, OPEN_SCIENCE_DATABASE_URL_FILE: "" },
+  })).stdout);
+  assert.deepEqual({ applied: cli.applied, documents: cli.documents }, { applied: false, documents: 0 });
 });

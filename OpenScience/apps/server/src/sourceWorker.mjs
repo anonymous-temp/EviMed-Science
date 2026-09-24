@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readCopyOf } from "./sourceService.mjs";
 
 /** Codes that mean no runtime or budget was available yet, and how long a
  *  document waits before asking again. */
@@ -25,8 +26,8 @@ const TERMINAL_ERRORS = new Set([
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,onReadable?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, onReadable = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -40,6 +41,7 @@ export class SourceIngestionWorker {
     this.releaseResolved = releaseResolved;
     this.verifyMetadata = verifyMetadata;
     this.onPublished = onPublished;
+    this.onReadable = onReadable;
     this.materialize = materialize;
     this.discardMaterialized = discardMaterialized;
     this.cleanupSource = cleanupSource;
@@ -128,7 +130,8 @@ export class SourceIngestionWorker {
     renewal.unref();
     let processing = null;
     let resolvedFile = null;
-    let artifactPath = null;
+    /** A copy this attempt wrote and has not recorded on the source yet. */
+    let materialized = null;
     let extractionRecorded = false;
     try {
       if (job.payload?.action === "source-run-cancel") {
@@ -197,8 +200,29 @@ export class SourceIngestionWorker {
         const metadata = result.metadata ? await this.verifyMetadata(result.metadata).catch(() => null) : null;
         parsed = await this.sources.freezeCapture(job, { ...result, metadata });
       }
+      const understands = ["structured", "deep"].includes(processing.payload.depth);
+      const result = { ...parsed, text: parsed.input.text, units: parsed.input.units, facts: [], methods: [] };
+      // The document is usable once its text is written out, before and
+      // whatever its understanding does: a PDF used to stay unsearchable for
+      // the one to four minutes the understanding run takes (2026-09-24). A
+      // generation already written out — a deferred or retried attempt — is
+      // not written again.
+      let artifactPath = readCopyOf(await this.#assertCurrent(job.userId, processing.id, actualGeneration));
+      if (!artifactPath) {
+        await this.#renewOrThrow(job, () => leaseLost, "before materialization");
+        artifactPath = await this.sources.withIngestionLease(job, () => this.materialize(job, processing, result));
+        materialized = artifactPath;
+        await this.#renewOrThrow(job, () => leaseLost, "before commit");
+        await this.#assertCurrent(job.userId, processing.id, actualGeneration);
+        if (understands) {
+          await this.sources.recordReadable(job, artifactPath);
+          // Recorded: the copy is the source's now, not this attempt's to discard.
+          materialized = null;
+          this.#readable(job);
+        }
+      }
       let completed = null;
-      if (["structured", "deep"].includes(processing.payload.depth)) {
+      if (understands) {
         if (!this.understandingRuns) throw Object.assign(new Error("Source understanding is unavailable."), { code: "source_understanding_unconfigured" });
         completed = await this.understandingRuns.execute({ job, source: processing, parsed });
         if (completed.state === "pending") {
@@ -206,17 +230,9 @@ export class SourceIngestionWorker {
           this.lastError = null;
           return { deferred: true, runId: completed.runId };
         }
+        await this.#renewOrThrow(job, () => leaseLost, "before commit");
+        await this.#assertCurrent(job.userId, processing.id, actualGeneration);
       }
-      const result = { ...parsed, text: parsed.input.text, units: parsed.input.units, facts: [], methods: [] };
-      if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
-        const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Source ingestion lease was lost before materialization."), { code: "product_job_lease_lost" })); throw error;
-      }
-      await this.#assertCurrent(job.userId, processing.id, actualGeneration);
-      artifactPath = await this.sources.withIngestionLease(job, () => this.materialize(job, processing, result));
-      if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
-        const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Source ingestion lease was lost before commit."), { code: "product_job_lease_lost" })); throw error;
-      }
-      await this.#assertCurrent(job.userId, processing.id, actualGeneration);
       const finished = await this.sources.publishUnderstanding(job, parsed, completed, artifactPath);
       extractionRecorded = true;
       this.#published(job);
@@ -244,8 +260,9 @@ export class SourceIngestionWorker {
       if (job.payload?.action === "source-delete" && !leaseLost && code !== "product_job_lease_lost") {
         await this.sources.recordDeletionFailure(job, code).catch(() => {});
       }
-      if (artifactPath && !extractionRecorded) {
-        await this.sources.withAttemptCleanup(job, () => this.discardMaterialized(job, processing, artifactPath)).catch(() => {});
+      if (materialized && !extractionRecorded) {
+        const discarded = materialized;
+        await this.sources.withAttemptCleanup(job, () => this.discardMaterialized(job, processing, discarded)).catch(() => {});
       }
       if (processing && code !== "source_generation_stale" && code !== "product_job_lease_lost") {
         await this.sources.recordFailure(job.userId, processing.id, {
@@ -269,10 +286,24 @@ export class SourceIngestionWorker {
     }
   }
 
-  /** A source became readable: tell whoever keeps a derivation of it (the
-   *  knowledge-base index) without letting its failure touch this job. @param {any} job */
+  /** A source's understanding was published: tell whoever keeps a derivation
+   *  of it (the knowledge-base index, the library, the capsule) without letting
+   *  its failure touch this job. @param {any} job */
   #published(job) {
     try { this.onPublished(job); } catch { /* the index converges on its own timer */ }
+  }
+
+  /** A source's text was written out ahead of its understanding: the index
+   *  can take it now. Never able to fail the job. @param {any} job */
+  #readable(job) {
+    try { this.onReadable(job); } catch { /* the index converges on its own timer */ }
+  }
+
+  /** @param {any} job @param {() => boolean} lost @param {string} when */
+  async #renewOrThrow(job, lost, when) {
+    if (lost() || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
+      throw Object.assign(new Error(`Source ingestion lease was lost ${when}.`), { code: "product_job_lease_lost" });
+    }
   }
 
   async #assertCurrent(userId, sourceId, generation) {

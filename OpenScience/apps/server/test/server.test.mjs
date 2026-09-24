@@ -320,16 +320,19 @@ test("specialty agent catalog requires authentication and exposes only public me
 });
 
 test("background source sessions remain readable but public binding and dispatch cannot restart them", async () => {
+  // The version the image ships, read rather than pinned: a capability edit
+  // bumps it, and a literal here would fail for that alone.
+  const agentVersion = JSON.parse(await readFile(new URL("../../../deploy/runtime-dsh/capabilities/source-understanding.json", import.meta.url), "utf8")).version;
   await withAuthApp(async ({ app, base }) => {
     const auth = await login(base);
     const headers = { ...auth.auth, "Content-Type": "application/json" };
     const denied = await fetch(`${base}/api/research-sessions/source-private`, { method: "PUT", headers,
-      body: JSON.stringify({ mode: "specialist", agentId: "source-understanding", agentVersion: "1.0.0" }) });
+      body: JSON.stringify({ mode: "specialist", agentId: "source-understanding", agentVersion }) });
     assert.equal(denied.status, 403);
     assert.equal((await denied.json()).code, "agent_background_only");
     const user = await app.store.userById("alice");
     const project = await app.store.requireProject(user, "default");
-    await app.researchSessions.put(project, "source-private", { mode: "specialist", agentId: "source-understanding", agentVersion: "1.0.0" });
+    await app.researchSessions.put(project, "source-private", { mode: "specialist", agentId: "source-understanding", agentVersion });
     const listed = await fetch(`${base}/api/research-sessions`, { headers });
     assert.equal((await listed.json()).data.some(session => session.sessionId === "source-private"), true);
     const prompted = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers,
@@ -491,7 +494,7 @@ test("the origin the shell frames is also an origin it may ask about", async () 
   await withAuthApp(
     async ({ base }) => {
       const csp = (await fetch(`${base}/api/health`)).headers.get("content-security-policy") ?? "";
-      assert.match(csp, /frame-src https:\/\/science\.example\.com:8443/);
+      assert.match(csp, /frame-src 'self' https:\/\/science\.example\.com:8443/);
       assert.match(csp, /connect-src 'self' https:\/\/science\.example\.com:8443/);
     },
     {
@@ -516,7 +519,9 @@ test("production security headers do not allow browser-local runtime connections
       assert.equal(csp.includes("localhost"), false);
       assert.equal(csp.includes("ws:"), false);
       assert.equal(csp.includes("wss:"), false);
-      assert.match(csp, /frame-src 'none'/);
+      // Framing this origin's own file previews and nothing else.
+      assert.match(csp, /frame-src 'self'(;|$)/);
+      assert.match(csp, /frame-ancestors 'none'/, "the shell itself is still never framed");
       assert.equal(res.headers.get("strict-transport-security"), "max-age=31536000");
     },
     {
@@ -5183,6 +5188,9 @@ test("workspace previews are sandboxed and downloads sanitize filenames", async 
     assert.match(csp, /sandbox/);
     assert.match(csp, /script-src 'none'/);
     assert.match(csp, /connect-src 'none'/);
+    // Framed by the shell, and by nothing else.
+    assert.match(csp, /frame-ancestors 'self'/);
+    assert.equal(preview.headers.get("x-frame-options"), "SAMEORIGIN");
 
     const unsafeName = "bad\"\nname.txt";
     out = await command(base, "write_workspace_file", {
@@ -5196,6 +5204,30 @@ test("workspace previews are sandboxed and downloads sanitize filenames", async 
     assert.equal(download.headers.get("cache-control"), "no-store");
     assert.equal(download.headers.get("content-disposition"), 'attachment; filename="bad__name.txt"');
     assert.equal(await download.text(), "download me");
+  });
+});
+
+test("a PDF preview is framed by the shell and drawn by the browser's own viewer", async () => {
+  // 2026-09-24: every PDF preview in the product showed Chrome's
+  // 「该内容被屏蔽了」. The shell's policy allowed no frame of its own origin,
+  // the preview answered `X-Frame-Options: DENY`, and its sandbox policy
+  // refuses the plugin the browser draws a PDF with.
+  await withApp(async ({ base }) => {
+    const out = await command(base, "write_workspace_file", { path: "papers/guideline.pdf", content: "%PDF-1.4\n%%EOF\n" });
+    assert.equal(out.res.status, 200);
+    const shell = (await fetch(`${base}/api/health`)).headers.get("content-security-policy") ?? "";
+    assert.match(shell, /frame-src 'self'/, "the shell may frame a preview of its own origin");
+
+    const preview = await fetch(`${base}/api/files/preview/${encodeURIComponent("papers/guideline.pdf")}`);
+    assert.equal(preview.status, 200);
+    assert.match(preview.headers.get("content-type") ?? "", /^application\/pdf/);
+    assert.equal(preview.headers.get("x-frame-options"), "SAMEORIGIN");
+    assert.equal(preview.headers.get("x-content-type-options"), "nosniff", "never read as anything but a PDF");
+    const csp = preview.headers.get("content-security-policy") ?? "";
+    assert.equal(csp, "frame-ancestors 'self'");
+    assert.doesNotMatch(csp, /sandbox/, "a sandboxed document cannot load the PDF viewer");
+    assert.doesNotMatch(csp, /object-src|default-src/, "a policy refusing plugins shows an empty frame");
+    assert.equal(await preview.text(), "%PDF-1.4\n%%EOF\n");
   });
 });
 

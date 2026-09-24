@@ -1,6 +1,6 @@
 {
   "id": "source-understanding",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Source Understanding",
   "description": "Distill one immutable source into typed known or unknown slots, precisely anchored claims and optional method drafts.",
   "whenToUse": "Use for an ingestion job that supplies a frozen source-understanding-input.json and an explicit structured or deep analysis depth.",

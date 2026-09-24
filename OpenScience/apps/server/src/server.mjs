@@ -107,7 +107,7 @@ import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
 import { MethodDescriber } from "./methodDisplay.mjs";
-import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
+import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createWebRenderer } from "./agentbay/browser.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
@@ -383,7 +383,12 @@ function applySecurityHeaders(res, config) {
       "object-src 'none'",
       "base-uri 'none'",
       "frame-ancestors 'none'",
-      uiOrigin ? `frame-src ${uiOrigin}` : "frame-src 'none'",
+      // `'self'` is the file preview: a PDF or a page is shown in a frame of
+      // `/api/files/preview/…` on this origin. Without it every preview drawer
+      // in the product showed Chrome's 「该内容被屏蔽了」 (2026-09-24). What
+      // that frame may do is the preview response's own policy
+      // (`previewContentSecurityPolicy`); the shell itself stays unframeable.
+      ["frame-src 'self'", uiOrigin].filter(Boolean).join(" "),
     ].join("; "),
   );
 }
@@ -1172,6 +1177,13 @@ export function createWebApiApp(overrides = {}) {
       void libraryService?.publishSourceUnderstanding(job.userId, job.payload?.sourceId)
         .catch(() => securityAudit(config, "library.publish.failed", "failed", { target: job.payload?.sourceId }));
     },
+    // The document's text is written out ahead of its understanding: the
+    // index and the library's copy can take it now, so it is searchable and
+    // readable while the understanding still runs.
+    onReadable: (job) => {
+      kbIndex?.wake();
+      void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+    },
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
       if (!["upload", "internal", "openlist"].includes(connectorType)) {
@@ -1218,7 +1230,9 @@ export function createWebApiApp(overrides = {}) {
       const project = job.sourceProject ?? await sourceProject(job);
       const generation = Number(source.payload?.generation);
       if (!Number.isSafeInteger(generation) || generation < 1) throw new HttpError(409, "source_generation_stale", "Source generation is invalid.");
-      const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}-${sourceAttemptId(job)}/index.md`;
+      // Beside the attempt's run directory, never in it: the run's cleanup
+      // removes that one, and this text is read while the run still works.
+      const relative = `${sourceReadCopyDirectory({ sourceId: source.id, generation, jobId: job.id, attemptId: sourceAttemptId(job) })}/index.md`;
       const full = resolveScopedPath(project.baseDir, relative);
       const value = sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint.sha256,
         extractor: result.extractor, text: result.text, pageMap: result.pageMap, metadata: result.metadata });
@@ -1231,7 +1245,7 @@ export function createWebApiApp(overrides = {}) {
     discardMaterialized: async (job, source, _artifactPath) => {
       const project = job.sourceProject ?? await sourceProject(job);
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job) }));
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), readCopy: true }));
     },
     prepareCleanup: sourceProject,
     cleanupSource: async (_job, source, jobIds, project) => {
@@ -5282,7 +5296,10 @@ async function sendWorkspaceFile(req, res, ctx, rel, download) {
     if (download) {
       headers["Content-Disposition"] = `attachment; filename="${safeDownloadFilename(path.basename(full))}"`;
     } else {
-      headers["Content-Security-Policy"] = previewSandboxCsp();
+      // A preview is shown in a frame of the shell, and only there: framed by
+      // this origin and no other.
+      headers["X-Frame-Options"] = "SAMEORIGIN";
+      headers["Content-Security-Policy"] = previewContentSecurityPolicy(headers["Content-Type"]);
     }
     // The audit used to say "completed" here, before a single byte had moved,
     // and a read error further down answered with a bare res.destroy(). The
@@ -5325,7 +5342,21 @@ async function sendWorkspaceFile(req, res, ctx, rel, download) {
   }
 }
 
-function previewSandboxCsp() {
+/**
+ * The policy a previewed file is served under.
+ *
+ * Everything but a PDF is sandboxed with no scripts, no requests and no
+ * plugins: an uploaded or generated page renders as inert markup. A PDF
+ * cannot be: the browser draws it with its own viewer, a plugin, and a
+ * sandboxed document or one whose policy refuses plugins (`object-src`,
+ * falling back to `default-src`) shows an empty frame instead — which is what
+ * every PDF preview did until 2026-09-24. Its bytes are served as
+ * `application/pdf` with `nosniff`, so it is never read as a page, and its
+ * viewer runs outside this origin's documents.
+ * @param {string} contentType
+ */
+function previewContentSecurityPolicy(contentType) {
+  if (/^application\/pdf\b/i.test(String(contentType))) return "frame-ancestors 'self'";
   return [
     "sandbox",
     "default-src 'none'",
@@ -5338,6 +5369,7 @@ function previewSandboxCsp() {
     "media-src data: blob:",
     "font-src data:",
     "style-src 'unsafe-inline'",
+    "frame-ancestors 'self'",
   ].join("; ");
 }
 

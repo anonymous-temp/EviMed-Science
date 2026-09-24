@@ -7,13 +7,14 @@ import pg from "pg";
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { CAPSULE_WORK_STYLE_FACT_KINDS } from "../src/capsuleMethods.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { LibraryService, createLibraryRoutes, describeLibrarySource, libraryCapsuleEntries, userLibraryDir } from "../src/libraryService.mjs";
+import { DOCUMENT_MEMORY_MAX_ENTRIES, LibraryService, createLibraryRoutes, describeLibrarySource, libraryCapsuleEntries, userLibraryDir } from "../src/libraryService.mjs";
 
 const SOURCE = `src_${"a".repeat(32)}`;
 const anchor = (quote, start = 10) => ({ sourceId: SOURCE, generation: 1, unitId: `${SOURCE}:g1:u1`, start, end: start + quote.length, quote });
 
 const understanding = {
   generation: 1,
+  summary: "非瓣膜性房颤患者口服抗凝的临床指南。",
   slots: {
     design: { state: "known", value: "多中心随机对照试验", evidence: [anchor("随机对照", 3)] },
     population: { state: "unknown", reason: "文中没有写" },
@@ -21,18 +22,24 @@ const understanding = {
   claims: [
     { id: "c1", statement: "利伐沙班推荐剂量为 20 mg 每日一次", evidence: [anchor("推荐剂量为20 mg", 40), anchor("每日一次", 52)] },
     { id: "c2", statement: "利伐沙班推荐剂量为 20 mg 每日一次", evidence: [anchor("推荐剂量为20 mg", 40)] },
+    { id: "c3", statement: "文中没有给出锚点的说法", evidence: [] },
   ],
   methods: [{ id: "m1", title: "按肾功能调整剂量", description: "先算肌酐清除率，再查表。", whenToUse: "开始抗凝前",
     steps: ["计算 CrCl", "对照说明书减量"], checks: ["复核体重"], pitfalls: [], evidence: [anchor("肌酐清除率", 80)], status: "draft" }],
 };
 
-test("an understanding becomes facts and a labelled draft, each saying whose words it holds", () => {
+test("an understanding becomes its summary and its quote-anchored claims, each saying whose words it holds", () => {
   const entries = libraryCapsuleEntries({ title: "房颤抗凝指南", sourceId: SOURCE, understanding });
-  assert.deepEqual(entries.map((entry) => entry.factKind), ["project_fact", "project_fact", "analysis"], "the unknown slot and the repeated claim add nothing");
-  assert.equal(entries[0].content, "据资料《房颤抗凝指南》，研究设计：多中心随机对照试验");
-  assert.equal(entries[1].content, "据资料《房颤抗凝指南》：利伐沙班推荐剂量为 20 mg 每日一次");
-  assert.match(entries[2].content, /^方法草稿（整理自资料《房颤抗凝指南》；这是这份资料的做法，不是你的方法，也没有验证过）：按肾功能调整剂量\n/);
-  assert.match(entries[2].content, /步骤：\n1\. 计算 CrCl\n2\. 对照说明书减量\n核查：\n- 复核体重$/);
+  // 2026-09-24: a template field is a column of the understanding, not a
+  // memory — one product-test PDF put thirty 「研究设计：本文档没有…」 rows in
+  // the capsule — and a method draft is the document's procedure, not the
+  // researcher's. The repeated claim and the unanchored one add nothing.
+  assert.deepEqual(entries.map((entry) => entry.content), [
+    "资料《房颤抗凝指南》的摘要：非瓣膜性房颤患者口服抗凝的临床指南。",
+    "据资料《房颤抗凝指南》：利伐沙班推荐剂量为 20 mg 每日一次",
+  ]);
+  assert.ok(entries.every((entry) => entry.factKind === "project_fact"));
+  assert.deepEqual(entries[0].provenance, [], "the summary rests on the whole document, not on a quote");
   // The quotes travel with the entry, verbatim, pointing into the document.
   assert.deepEqual(entries[1].provenance, [
     { type: "source", id: `${SOURCE}#40-50`, excerpt: "推荐剂量为20 mg" },
@@ -48,7 +55,16 @@ test("an understanding becomes facts and a labelled draft, each saying whose wor
   assert.deepEqual(libraryCapsuleEntries({ title: "房颤抗凝指南", sourceId: SOURCE, understanding }).map((entry) => entry.key), entries.map((entry) => entry.key));
   const changed = libraryCapsuleEntries({ title: "房颤抗凝指南", sourceId: SOURCE,
     understanding: { ...understanding, claims: [{ id: "c1", statement: "利伐沙班推荐剂量为 15 mg", evidence: [anchor("15 mg", 60)] }] } });
-  assert.equal(changed.filter((entry) => entries.some((old) => old.key === entry.key)).length, 2, "the slot and the method are unchanged");
+  assert.equal(changed.filter((entry) => entries.some((old) => old.key === entry.key)).length, 1, "the summary is unchanged");
+});
+
+test("one document puts at most twelve entries in the capsule: its summary and its first claims", () => {
+  const claims = Array.from({ length: 40 }, (_, index) => ({ id: `c${index}`, statement: `第 ${index + 1} 条结论`, evidence: [anchor(`结论${index}`, 100 + index * 10)] }));
+  const entries = libraryCapsuleEntries({ title: "长指南", sourceId: SOURCE, understanding: { summary: "一份很长的指南。", claims } });
+  assert.equal(entries.length, DOCUMENT_MEMORY_MAX_ENTRIES);
+  assert.equal(entries[0].content, "资料《长指南》的摘要：一份很长的指南。");
+  assert.equal(entries.at(-1).content, `据资料《长指南》：第 ${DOCUMENT_MEMORY_MAX_ENTRIES - 1} 条结论`, "the claims the run put first");
+  assert.equal(libraryCapsuleEntries({ title: "空", sourceId: SOURCE, understanding: { summary: " ", claims: [] } }).length, 0);
 });
 
 test("an entry is bounded to what a capsule entry holds, and a quote to what provenance holds", () => {
@@ -200,7 +216,7 @@ test("publishes one account fires at once never starve another tenant's queries,
     async getUnderstanding() {
       understandingReads += 1;
       await reading;
-      return { current: { generation: 1, claims: [{ id: "c1", statement: "利伐沙班推荐 20 mg 每日一次", evidence: [] }] } };
+      return { current: { generation: 1, summary: "房颤抗凝指南。", claims: [{ id: "c1", statement: "利伐沙班推荐 20 mg 每日一次", evidence: [] }] } };
     },
   };
   let added = 0;

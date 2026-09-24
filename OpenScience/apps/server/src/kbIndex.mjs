@@ -4,7 +4,7 @@ import { chunkDocument, embeddingText, estimateTokens, trigramTerms, tsqueryLite
 import { migrateKnowledgeBaseIndex } from "./kbPersistence.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
-import { sourceParserRevision } from "./sourceService.mjs";
+import { SOURCE_READABLE_SQL, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
 
 /**
  * Knowledge-base search: the index a run's `kb_search` reads, and the worker
@@ -47,7 +47,9 @@ const EMBED_BATCH = 100;
 const INSERT_BATCH = 200;
 /** A source whose indexing failed is not retried before this. */
 const FAILURE_BACKOFF_MS = 5 * 60_000;
-const SEARCHABLE_STATUSES = Object.freeze(["complete", "needs_attention"]);
+// What may be searched is what the page calls usable (`sourceReadable`): a
+// document is indexed as soon as its text is written out, not once its
+// understanding is in (2026-09-24).
 
 /** What the reranker is asked to rank for (English, per qwen3-rerank's docs). */
 export const KB_RERANK_INSTRUCT = "Given a question from a clinical pharmacist or medical researcher, rank passages from their own documents by how directly each answers it; exact drug names, doses and abbreviations matter";
@@ -201,12 +203,12 @@ export class KnowledgeBaseIndex {
   async sync({ userId = null, limit = 10 } = {}) {
     const capabilities = await this.ready();
     const pending = await this.database.query(`SELECT d.user_id, d.id, d.project_id, d.payload, d.revision FROM evimed_product.documents d
-      WHERE d.kind='source' AND d.deleted_at IS NULL AND d.payload->>'status'=ANY($3::text[])
+      WHERE d.kind='source' AND d.deleted_at IS NULL AND ${SOURCE_READABLE_SQL}
         AND d.payload->'analysis'->>'textSha256' IS NOT NULL
         AND ($1::text IS NULL OR d.user_id=$1)
         AND NOT EXISTS (SELECT 1 FROM evimed_kb.documents k WHERE k.user_id=d.user_id AND k.sha256=d.payload->'fingerprint'->>'sha256'
           AND k.text_sha256=d.payload->'analysis'->>'textSha256' AND k.parser_revision=${REVISION_SQL})
-      ORDER BY d.updated_at, d.id LIMIT $2`, [userId, Math.max(1, limit * 4), [...SEARCHABLE_STATUSES]]);
+      ORDER BY d.updated_at, d.id LIMIT $2`, [userId, Math.max(1, limit * 4)]);
     let indexed = 0;
     let failed = 0;
     const seen = new Set();
@@ -362,7 +364,7 @@ export class KnowledgeBaseIndex {
         sourceId: row.id, origin: "project",
         title: String(payload.metadata?.title || path.posix.basename(String(payload.paths?.[0] ?? row.id))),
         status: payload.status, path: readPath,
-        searchable: SEARCHABLE_STATUSES.includes(payload.status) && typeof analysis.textSha256 === "string" && Boolean(readPath),
+        searchable: sourceReadable(payload) && typeof analysis.textSha256 === "string" && Boolean(readPath),
         sha256: payload.fingerprint?.sha256, parserRevision: sourceParserRevision(analysis), textSha256: analysis.textSha256,
         tokens: Number.isSafeInteger(analysis.tokenEstimate) ? analysis.tokenEstimate : Math.round((Number(analysis.unitCount) || 0) * 8000 / 2),
         pages: analysis.pageCount ?? null,
