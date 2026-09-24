@@ -71,6 +71,17 @@ describe("a tab older than the release it talks to", () => {
     expect(reloadingForNewRelease()).toBe(true);
   });
 
+  it("does not reload a tab that is offline: that chunk is not stale, the network is gone", async () => {
+    const { reloadForNewRelease } = await load();
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const reload = vi.fn();
+    expect(reloadForNewRelease(reload)).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    // Nor does it spend the minute's reload on it.
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    expect(reloadForNewRelease(reload)).toBe(true);
+  });
+
   it("does not reload when the tab cannot remember that it did", async () => {
     const { reloadForNewRelease } = await load();
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("denied", "SecurityError"); });
