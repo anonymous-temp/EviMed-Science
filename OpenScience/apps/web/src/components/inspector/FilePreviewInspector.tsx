@@ -62,6 +62,7 @@ import { PaneTitlebarInset } from "./RightPane";
 import { toast } from "@/lib/toast";
 import { parseFailureMessage } from "@/lib/errorText";
 import { labelFor } from "@/lib/statusLabel";
+import { Button } from "@/components/ui/Button";
 
 const HTML_PREVIEW_SANDBOX = "";
 
@@ -540,7 +541,6 @@ function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
  *  and sampling, so even a 90 GB file is introspected, never loaded. */
 export function PreviewError({
   error,
-  filename,
   path,
   root,
   onOpenExternally,
@@ -548,6 +548,7 @@ export function PreviewError({
   externalActionKind = "open",
 }: {
   error: string;
+  /** Kept for callers; the page names the file already. */
   filename: string;
   path?: string;
   root?: FileRoot;
@@ -575,33 +576,20 @@ export function PreviewError({
 
   if (!tooLarge) return <div className="p-4 text-ui text-muted">{error}</div>;
   const ExternalActionIcon = externalActionKind === "download" ? Download : ExternalLink;
-  const externalActionDescription =
-    externalActionKind === "download" ? "下载后在本地查看" : "使用系统应用打开";
   return (
     <div className="p-4">
-      <div className="rounded-card border border-border bg-surface p-4 text-ui text-muted">
-        <div className="mb-1 font-medium text-text">{filename} 文件过大，无法直接预览</div>
-        <p className="mb-3">
-          为避免大文件影响页面响应，在线预览设有大小限制。你可以在不加载完整文件的情况下读取结构、规模、样本和关键指标，
-          也可以{externalActionDescription}。
-        </p>
+      <div className="text-ui text-text-3">
+        <div className="mb-3 font-medium text-text">文件过大，无法预览</div>
         <div className="flex flex-wrap gap-2">
           {path && (
-            <button
-              className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface disabled:opacity-60"
-              onClick={() => void inspect()}
-              disabled={probing}
-            >
-              {probing ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <FileSearch size={16} aria-hidden="true" />}
+            <Button variant="secondary" onClick={() => void inspect()} loading={probing}>
+              {!probing && <FileSearch size={16} aria-hidden="true" />}
               轻量检查文件
-            </button>
+            </Button>
           )}
-          <button
-            className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
-            onClick={onOpenExternally}
-          >
+          <Button variant="secondary" onClick={onOpenExternally}>
             <ExternalActionIcon size={16} aria-hidden="true" /> {externalActionLabel}
-          </button>
+          </Button>
         </div>
         {probeError && <div className="mt-3 text-ui text-error">{probeError}</div>}
         {pointer && <LargeFilePointerPanel p={pointer} />}

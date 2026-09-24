@@ -87,7 +87,7 @@ describe("RunFilePage", () => {
     mocks.openRunProject.mockReturnValue(new Promise(() => {}));
     mocks.readArtifact.mockResolvedValue(null);
     renderAt(`/app/runs/run_other/files/${REPORT}`);
-    expect(await screen.findByText("正在打开这次研究所在的项目…")).toBeInTheDocument();
+    expect(await screen.findByText("正在打开…")).toBeInTheDocument();
     expect(mocks.openRunProject).toHaveBeenCalledWith("run_other");
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -104,6 +104,6 @@ describe("RunFilePage", () => {
 
   it("says a file that cannot be read cannot be read", async () => {
     renderAt("/app/runs/run_1/files/deliverables/d1/missing.md");
-    expect(await screen.findByRole("alert")).toHaveTextContent("这个文件读不出来");
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法读取此文件");
   });
 });

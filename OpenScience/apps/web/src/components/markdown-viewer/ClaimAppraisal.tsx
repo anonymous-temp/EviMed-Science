@@ -1,4 +1,5 @@
 import type { ClaimAppraisalDisplay } from "@/lib/claimAppraisal";
+import { Tag } from "@/components/ui/Tag";
 
 /**
  * A claim's appraisal, compact enough for a popover and a table cell: its
@@ -31,12 +32,9 @@ export function ClaimAppraisalSummary({ display, sourceCount = 1 }: { display: C
       {display.certainty.map((badge, index) => (
         <p key={`certainty-${index}`} className="flex flex-wrap items-center gap-1.5">
           {badge.outcome && <span className="text-muted">{badge.outcome}</span>}
-          <span
-            aria-label={`证据确定性：${badge.label}`}
-            className="rounded-full border border-border bg-surface-2 px-1.5 text-text"
-          >
-            确定性 {badge.label}
-          </span>
+          <Tag>
+            <span aria-label={`证据确定性：${badge.label}`}>确定性 {badge.label}</span>
+          </Tag>
           {badge.note && <span className="text-muted">{badge.note}</span>}
         </p>
       ))}

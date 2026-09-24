@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { preservedSourceHref, type VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
 import { ClaimAppraisalSummary } from "@/components/markdown-viewer/ClaimAppraisal";
 import { SourceUpdateBadges } from "@/components/markdown-viewer/SourceUpdateBadges";
+import { Tag } from "@/components/ui/Tag";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -89,12 +90,8 @@ export function EvidenceMatrixTable({
                     {sources.map((source, index) => (
                       <li key={index}>
                         <span className="flex flex-wrap items-center gap-1">
-                          {source.sourceType !== "other" && (
-                            <span className="rounded-full border border-border bg-surface-2 px-1.5 text-caption">
-                              {EVIDENCE_SOURCE_TYPE_LABELS_ZH[source.sourceType]}
-                            </span>
-                          )}
-                          {source.accessLevel && <span className="text-caption text-muted">{ACCESS_LABEL[source.accessLevel] ?? "获取程度未注明"}</span>}
+                          {source.sourceType !== "other" && <Tag>{EVIDENCE_SOURCE_TYPE_LABELS_ZH[source.sourceType]}</Tag>}
+                          {source.accessLevel && ACCESS_LABEL[source.accessLevel] && <span className="text-caption text-text-3">{ACCESS_LABEL[source.accessLevel]}</span>}
                           <SourceUpdateBadges updates={check?.sources[index]?.updates} />
                         </span>
                         <span className="mt-0.5 block text-caption text-text">{source.sourceTitle ?? source.identifier ?? "来源未记录"}</span>

@@ -66,17 +66,16 @@ beforeEach(() => {
 });
 
 describe("ReportReader", () => {
-  // Plan §5 act 4: the four facts a clinical reader weighs before reading,
-  // 「未注明」 where the package is silent — never a date read out of prose.
-  it("states the report's facts above it, dating a silent package's search by its run", async () => {
+  // Two dates above a report (2026-09-23 inventory §1.11): when the search
+  // stopped — the run's own start when the package is silent — and when it
+  // was written. No model name, no tally, no 「未注明」 rows.
+  it("states the search cutoff and the date written above the report, and nothing else", async () => {
     renderReader();
     const facts = await screen.findByText("检索截止日");
     const list = facts.closest("dl")!;
-    expect(within(list).getByText("检索截止日").nextElementSibling).toHaveTextContent(/年.*月.*日（按检索执行日）/);
-    await waitFor(() => expect(within(list).getByText("来源范围").nextElementSibling).toHaveTextContent("RCT 1（共 1 个来源）"));
-    expect(within(list).getByText("模型").nextElementSibling).toHaveTextContent("DeepSeek · deepseek-flash");
-    expect(within(list).getByRole("button", { name: "见正文「局限性」一节" })).toBeInTheDocument();
+    expect(within(list).getByText("检索截止日").nextElementSibling).toHaveTextContent(/\d{4}年\d+月\d+日$/);
     expect(within(list).getByText("生成日期").nextElementSibling).toHaveTextContent("2026年9月17日");
+    expect(within(list).queryByText(/模型|来源范围|已知局限/)).toBeNull();
   });
 
   it("marks each sentence ✓ or ⚠, and says which quotation to check", async () => {
@@ -87,9 +86,8 @@ describe("ReportReader", () => {
     expect(check).toHaveTextContent("依据 ⚠");
     await userEvent.click(check);
     expect(await screen.findByText(/这段引文没有在保存的原文中找到：请打开原文核对措辞与数字。/)).toBeInTheDocument();
-    // The kind of source, and the way to the preserved original.
-    expect(screen.getAllByText("RCT").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /在保存的原文中定位这段引文/ })).toHaveAttribute(
+    // The way to the preserved original.
+    expect(screen.getByRole("link", { name: /定位原文/ })).toHaveAttribute(
       "href",
       "/app/runs/run_1/files/.evimed-sources/aspree/fulltext.md?quote=higher%20risk%20of%20major%20hemorrhage",
     );
@@ -99,7 +97,7 @@ describe("ReportReader", () => {
     renderReader();
     const toc = await screen.findByRole("navigation", { name: "目录" });
     expect(within(toc).getAllByRole("button").map((button) => button.textContent)).toEqual(["摘要", "结果", "出血", "局限性"]);
-    expect(await screen.findByRole("note")).toHaveTextContent("本报告 2 条主张");
+    expect(await screen.findByRole("note")).toHaveTextContent("⚠ 1 条待核对");
   });
 
   // One table of contents at a time: a column beside a wide page, folded
@@ -125,7 +123,7 @@ describe("ReportReader", () => {
 
   it("shows the evidence matrix as a table on its own tab", async () => {
     renderReader();
-    await userEvent.click(await screen.findByRole("radio", { name: "证据矩阵（2）" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条主张" });
     expect(within(table).getByRole("rowheader", { name: "CLM-002" })).toBeInTheDocument();
     expect(within(table).getByText("⚠ 原文中未找到")).toBeInTheDocument();
@@ -170,13 +168,14 @@ describe("ReportReader", () => {
         <ReportReader path=".evimed-sources/aspree/fulltext.md" text={"The use of aspirin resulted in a higher risk of major hemorrhage."} layout="page" highlight="higher risk of major hemorrhage" />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("status")).toHaveTextContent("已在这份保存的原文里定位到引文");
+    // A located quotation is its own highlight; nothing is said about it.
+    await waitFor(() => expect(screen.queryByRole("note")).toBeNull());
     unmount();
     render(
       <MemoryRouter>
         <ReportReader path=".evimed-sources/aspree/fulltext.md" text={"The use of aspirin resulted in a higher risk."} layout="page" highlight="lower risk of stroke" />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("note")).toHaveTextContent("这段引文没有在这份保存的原文里找到");
+    expect(await screen.findByRole("note")).toHaveTextContent("未找到这段引文");
   });
 });

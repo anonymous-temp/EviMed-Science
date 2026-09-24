@@ -3,6 +3,7 @@ import hljs from "highlight.js/lib/common";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/cn";
 import "./hljs-theme.css";
+import { Button } from "@/components/ui/Button";
 
 /** A fenced code block with syntax highlighting and a copy affordance.
  *
@@ -54,15 +55,10 @@ export const CodeBlock = memo(function CodeBlock({
             {language}
           </span>
         )}
-        <button
-          type="button"
-          onClick={() => void copy()}
-          aria-label={copied ? "已复制" : "复制代码"}
-          className="flex items-center gap-1 rounded-input border border-strong bg-surface px-2 py-1 text-caption text-muted shadow-pop hover:text-text"
-        >
+        <Button size="sm" variant="secondary" onClick={() => void copy()} aria-label={copied ? "已复制" : "复制代码"}>
           {copied ? <Check size={16} className="text-ok" aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
           {copied ? "已复制" : "复制"}
-        </button>
+        </Button>
       </div>
       {html !== null ? (
         <code className="hljs" dangerouslySetInnerHTML={{ __html: html }} />
