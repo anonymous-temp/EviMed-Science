@@ -94,7 +94,7 @@ const LEAKS = [
  */
 const BACK_OFFICE = [
   /已交付/, /核对\s*\d+\s*条/, /已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
-  /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /（[^）]*\bAPI）/, /openFDA\s*(药品|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
+  /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /（[^）]*\bAPI）/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
 ];
 
 /**
