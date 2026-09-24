@@ -66,7 +66,7 @@ starterPrompts:
 display:
   title: "孟德尔随机化"
   category: "研究设计与数据"
-  description: "基于 GWAS 工具变量完成因果推断、敏感性分析与 STROBE-MR 研究报告。"
+  description: "用 GWAS 工具变量做因果推断和敏感性分析，写成 STROBE-MR 报告。"
   starterPrompts:
   - "评估体重指数对冠心病的因果效应，并完成双向孟德尔随机化分析。"
   - "LDL 胆固醇对阿尔茨海默病风险的因果效应。"
