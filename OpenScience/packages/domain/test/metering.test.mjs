@@ -151,3 +151,21 @@ test('every registered price list carries its own unique version and a valid eff
   }
   assert.equal(new Set(PRICE_LIST_VERSIONS).size, PRICE_LIST_VERSIONS.length)
 })
+
+test('every row a list bills in another currency has that currency\'s rate in the same list', () => {
+  let foreign = 0
+  for (const version of PRICE_LIST_VERSIONS) {
+    const list = /** @type {any} */ (priceListFor(version))
+    for (const [model, rate] of Object.entries(/** @type {Record<string, any>} */ (list.model))) {
+      if (!rate.currency || rate.currency === list.currency) continue
+      foreign += 1
+      const exchange = list.exchangeRates?.[rate.currency]
+      assert.ok(exchange && Number.isFinite(exchange.rate) && exchange.rate > 0, `${version} bills ${model} in ${rate.currency} and fixes no rate for it`)
+      assert.match(String(exchange.date), /^\d{4}-\d{2}-\d{2}$/, `${version}: the ${rate.currency} rate is dated`)
+      assert.ok(String(exchange.source).length > 10, `${version}: the ${rate.currency} rate names its source`)
+      assert.ok(Date.parse(exchange.date) <= Date.parse(list.effectiveFrom) + 86_400_000, `${version}: a rate from after the list took effect`)
+      assert.equal(priceUsage({ resourceType: 'model', model, cacheMiss: 1_000_000, peak: true }, list).priced, true)
+    }
+  }
+  assert.ok(foreign >= 1, 'no list bills in another currency; the walk checked nothing')
+})

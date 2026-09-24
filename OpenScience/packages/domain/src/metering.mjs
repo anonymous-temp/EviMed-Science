@@ -112,9 +112,15 @@ export function isPeak(at) {
  * @property {string} version
  * @property {string} effectiveFrom  ISO instant this list started billing
  * @property {string} [modelSource]
- * @property {Record<string, { cacheHit: number, cacheMiss: number, output: number, offPeak?: boolean }>} model  price per 1M tokens;
+ * @property {Record<string, { cacheHit: number, cacheMiss: number, output: number, offPeak?: boolean, currency?: string }>} model  price per 1M tokens;
  *   `offPeak: false` marks a provider with no night rate (DashScope), whose
- *   row the off-peak multiplier must never touch
+ *   row the off-peak multiplier must never touch; `currency` marks a row the
+ *   provider bills in another currency than the list's, converted at the
+ *   list's own `exchangeRates` entry for it
+ * @property {Record<string, { rate: number, date: string, source: string }>} [exchangeRates]
+ *   units of the list's currency per one unit of another, fixed with the list:
+ *   the rate is part of the price, so a row priced under this version is
+ *   priced the same way for as long as the version exists
  * @property {number} asrPerMinute
  * @property {number} embeddingPerMillion
  * @property {Record<string, number>} specialistJob
@@ -193,7 +199,7 @@ const referencePrices20260910 = deepFreeze({
  * listed because the provider answers with the snapshot's id either way.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20260923 = deepFreeze({
   ...referencePrices20260910,
   version: 'evimed-reference-2026-09-23',
   effectiveFrom: '2026-09-23T00:00:00.000Z',
@@ -202,6 +208,39 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
     ...referencePrices20260910.model,
     'qwen3.8-max-0902': { cacheHit: 1.5, cacheMiss: 12, output: 36, offPeak: false },
     'qwen3.8-max': { cacheHit: 1.5, cacheMiss: 12, output: 36, offPeak: false },
+  },
+})
+
+/**
+ * The 2026-09-23 rates plus TypeSafe's Jev, the first pass of the reply check
+ * (plan 2026-09-22 §6 and §13 item 1; the owner's decision of 2026-09-24).
+ *
+ * Jev is billed in US dollars, per input token only: $0.042 per million,
+ * output free, no night rate and no cache tier (the model table at
+ * https://docs.typesafe.ai/models, read 2026-09-24). The ledger is CNY and
+ * stays CNY, so the row is written in the provider's own currency and priced
+ * at a rate fixed with this list: the US dollar's central parity announced by
+ * the China Foreign Exchange Trade System on behalf of the People's Bank of
+ * China. Fixed rather than looked up, because a price that moved with the
+ * market would bill two identical rows of one version differently; a new rate
+ * is a new version, like any other price change.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20260923,
+  version: 'evimed-reference-2026-09-24',
+  effectiveFrom: '2026-09-24T00:00:00.000Z',
+  modelSource: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ · https://help.aliyun.com/zh/model-studio/qwen3-8-max · https://docs.typesafe.ai/models',
+  exchangeRates: {
+    USD: {
+      rate: 6.7489,
+      date: '2026-09-24',
+      source: 'CFETS central parity of USD/CNY for 2026-09-24, announced at 09:15 Beijing time on behalf of the People\'s Bank of China (https://www.chinamoney.com.cn/chinese/bkccpr/)',
+    },
+  },
+  model: {
+    ...referencePrices20260923.model,
+    'jev-1.13.0': { cacheHit: 0.042, cacheMiss: 0.042, output: 0, offPeak: false, currency: 'USD' },
   },
 })
 
@@ -231,7 +270,8 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
 const priceLists = deepFreeze({
   'evimed-reference-2026-09-05': referencePrices20260905,
   'evimed-reference-2026-09-10': referencePrices20260910,
-  'evimed-reference-2026-09-23': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-09-23': referencePrices20260923,
+  'evimed-reference-2026-09-24': REFERENCE_PRICE_LIST,
 })
 
 /**
@@ -326,6 +366,11 @@ export function priceUsage(usage, ...prices) {
     case 'model': {
       const rate = list.model[String(usage.model ?? '')]
       if (!rate) return { cost: 0, priced: false, currency }
+      // A row billed in another currency is converted at the list's own rate
+      // for it; a list that fixed no rate for that currency cannot price it,
+      // and says so rather than billing dollars as yuan.
+      const exchange = !rate.currency || rate.currency === currency ? 1 : Number(list.exchangeRates?.[rate.currency]?.rate)
+      if (!Number.isFinite(exchange) || exchange <= 0) return { cost: 0, priced: false, currency }
       // The night rate is DeepSeek's. A row that says its provider has none is
       // billed at its one price around the clock.
       const multiplier = usage.peak || rate.offPeak === false ? 1 : OFF_PEAK_MULTIPLIER
@@ -333,7 +378,7 @@ export function priceUsage(usage, ...prices) {
       const cost = millions(usage.cacheHit) * rate.cacheHit
         + millions(usage.cacheMiss) * rate.cacheMiss
         + millions(usage.output) * rate.output
-      return { cost: round(cost * multiplier), priced: true, currency }
+      return { cost: round(cost * multiplier * exchange), priced: true, currency }
     }
     case 'asr':
       return { cost: round((Number(usage.minutes) || 0) * list.asrPerMinute), priced: true, currency }
