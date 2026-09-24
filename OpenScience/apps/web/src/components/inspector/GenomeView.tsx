@@ -108,7 +108,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
     <div className="flex h-full flex-col bg-surface">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-caption">
         <span className="flex items-center gap-1 font-medium text-muted">
-          <Dna size={13} aria-hidden="true" /> {format.toUpperCase()}
+          <Dna size={16} aria-hidden="true" /> {format.toUpperCase()}
         </span>
         {data.contigs.length > 1 ? (
           <select
@@ -132,16 +132,16 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
         <div className="flex-1" />
         <div className="flex items-center gap-1">
           <IconBtn label="放大" onClick={() => zoomAt(0.6, width / 2)}>
-            <Plus size={13} aria-hidden="true" />
+            <Plus size={16} aria-hidden="true" />
           </IconBtn>
           <IconBtn label="缩小" onClick={() => zoomAt(1.66, width / 2)}>
-            <Minus size={13} aria-hidden="true" />
+            <Minus size={16} aria-hidden="true" />
           </IconBtn>
           <IconBtn
             label="重置视图"
             onClick={() => setView({ start: extent.start, end: extent.end })}
           >
-            <RotateCcw size={12} aria-hidden="true" />
+            <RotateCcw size={16} aria-hidden="true" />
           </IconBtn>
         </div>
       </div>

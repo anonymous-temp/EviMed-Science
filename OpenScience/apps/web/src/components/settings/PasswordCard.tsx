@@ -70,7 +70,7 @@ export function PasswordCard() {
         {problem && <p role="alert" className="text-ui text-error sm:col-span-3">{problem}</p>}
         <div className="sm:col-span-3">
           <Button type="submit" size="sm" disabled={!ready} loading={busy}>
-            {!busy && <KeyRound size={13} aria-hidden="true" />}
+            {!busy && <KeyRound size={16} aria-hidden="true" />}
             更新密码
           </Button>
         </div>

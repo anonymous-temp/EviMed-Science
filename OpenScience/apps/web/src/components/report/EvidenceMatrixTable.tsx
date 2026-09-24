@@ -150,7 +150,7 @@ function QuoteLink({ source, runId }: { source: ReturnType<typeof claimSources>[
     return (
       <a href={source.sourceUrl} target="_blank" rel="noreferrer" className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link" title="打开原始来源">
         {excerpt}
-        <ExternalLink size={11} className="ml-0.5 inline" aria-hidden="true" />
+        <ExternalLink size={16} className="ml-0.5 inline" aria-hidden="true" />
       </a>
     );
   }

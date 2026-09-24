@@ -230,9 +230,9 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
   const shown = (sources ?? []).filter(source => filter !== "duplicates" || groupOf(source.id));
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="ghost" size="sm" onClick={() => setShowOpenList(true)} title="从你的网盘导入或持续同步一个文件夹"><Cloud size={14} aria-hidden="true" />连接网盘</Button>
+      <Button variant="ghost" size="sm" onClick={() => setShowOpenList(true)} title="从你的网盘导入或持续同步一个文件夹"><Cloud size={16} aria-hidden="true" />连接网盘</Button>
       <Button size="sm" disabled={!hasWebApi || uploading} loading={uploading} onClick={() => void uploadFiles()} title={KNOWLEDGE_BASE_UPLOAD_HINT}>
-        {!uploading && <Upload size={14} aria-hidden="true" />}上传资料
+        {!uploading && <Upload size={16} aria-hidden="true" />}上传资料
       </Button>
     </div>
   );
@@ -242,7 +242,7 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
-            <Upload size={15} aria-hidden="true" />
+            <Upload size={16} aria-hidden="true" />
             松开以上传到知识库
           </div>
         </div>
@@ -285,7 +285,7 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
           filter === "all"
             ? <EmptyState icon={Database} title="知识库还是空的"
               description={`把文献、方案或数据放进来，EviMed 回答和做研究时会去读。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
-              action={<Button disabled={!hasWebApi || uploading} onClick={() => void uploadFiles()}><Upload size={14} aria-hidden="true" />上传资料</Button>} />
+              action={<Button disabled={!hasWebApi || uploading} onClick={() => void uploadFiles()}><Upload size={16} aria-hidden="true" />上传资料</Button>} />
             : <EmptyState icon={Database} title={filter === "duplicates" ? "没有疑似重复的资料" : "这一类里没有资料"} />
         ) : (
           <ul className="divide-y divide-border rounded-card border border-border bg-surface">
@@ -402,12 +402,12 @@ function SourceRow({ source, busy, shared, duplicate, chainOpen, onPreview, onDu
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={onPreview} title={`预览 ${name}`} className="min-w-0 truncate text-left text-ui font-medium text-text hover:underline">{name}</button>
-            <span className={cn("text-caption font-medium", STATUS_TONE[status] ?? "text-muted")}>{working && <Loader2 size={11} className="mr-0.5 inline animate-spin motion-reduce:animate-none" aria-hidden="true" />}{statusText}</span>
+            <span className={cn("text-caption font-medium", STATUS_TONE[status] ?? "text-muted")}>{working && <Loader2 size={16} className="mr-0.5 inline animate-spin motion-reduce:animate-none" aria-hidden="true" />}{statusText}</span>
             {shared === true && <span className="rounded-full border border-border px-1.5 text-badge text-muted" title="你的每个项目都能读取和检索它">所有项目</span>}
             {duplicate && (
               <button type="button" onClick={onDuplicates} title={`${labelFor(DUPLICATE_KINDS, duplicate.kind, "其他相似情况")}：点开决定是不是同一份`}
                 className="flex items-center gap-1 rounded-full bg-warn-soft px-1.5 text-badge font-medium text-warn hover:opacity-80">
-                <Copy size={10} aria-hidden="true" />疑似重复
+                <Copy size={16} aria-hidden="true" />疑似重复
               </button>
             )}
           </div>
@@ -424,9 +424,9 @@ function SourceRow({ source, busy, shared, duplicate, chainOpen, onPreview, onDu
               stored English `message`. The classification reason is said only
               when a person is being asked to look. */}
           {failure && <p className="mt-1 text-caption text-error" title={operator ? failure.code : undefined}>
-            <AlertCircle size={12} className="mr-1 inline" aria-hidden="true" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</p>}
+            <AlertCircle size={16} className="mr-1 inline" aria-hidden="true" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</p>}
           {(failure || status === "needs_attention") && source.payload.reasons[0] && (
-            <p className="mt-0.5 text-caption text-muted"><FileSearch size={12} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</p>
+            <p className="mt-0.5 text-caption text-muted"><FileSearch size={16} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</p>
           )}
           <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
           {chainOpen && <div className="mt-2"><VersionChain sourceId={source.id} /></div>}
@@ -456,7 +456,7 @@ function RowMenu({ name, items, disabled }: { name: string; items: { label: stri
       <button type="button" aria-label={`「${name}」的操作`} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         disabled={disabled} onClick={() => setOpen((value) => !value)}
         className="grid h-7 w-7 place-items-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50">
-        <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden="true" />
+        <MoreHorizontal size={16} aria-hidden="true" />
       </button>
       {open && (
         <div id={menuId} role="menu" aria-label={`「${name}」的操作`} className="absolute right-0 z-30 mt-1 min-w-40 rounded-card border border-border bg-surface p-1 shadow-pop">
@@ -509,16 +509,16 @@ export function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolder
       <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void browse(); }}>
         <Input label="网盘路径" value={remotePath} onChange={(event) => setRemotePath(event.target.value)} />
         <Button className="self-end" type="submit" loading={busy}>浏览</Button>
-        <Button className="self-end" variant="ghost" type="button" disabled={busy} onClick={() => void registerFolder(remotePath)}><FolderSync size={13} aria-hidden="true" />同步当前文件夹</Button>
+        <Button className="self-end" variant="ghost" type="button" disabled={busy} onClick={() => void registerFolder(remotePath)}><FolderSync size={16} aria-hidden="true" />同步当前文件夹</Button>
       </form>
       {entries && <div className="divide-y divide-border rounded-input border border-border">{remotePath !== "/" && <button type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-ui text-text hover:bg-surface-2" onClick={() => void browse(parent)}><Folder size={15} aria-hidden="true" />返回上级</button>}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-ui text-text hover:bg-surface-2" onClick={() => void browse(parent)}><Folder size={16} aria-hidden="true" />返回上级</button>}
         {entries.length === 0 ? <p className="px-3 py-4 text-ui text-muted">这里没有可导入的资料。</p> : entries.map((entry) => <div key={entry.path}
-          className="flex items-center gap-3 px-3 py-2 text-ui text-text"><span className="flex min-w-0 flex-1 items-center gap-2">{entry.entryType === "dir" ? <Folder size={15} aria-hidden="true" /> : <FileSearch size={15} aria-hidden="true" />}<span className="truncate">{entry.name}</span></span>
+          className="flex items-center gap-3 px-3 py-2 text-ui text-text"><span className="flex min-w-0 flex-1 items-center gap-2">{entry.entryType === "dir" ? <Folder size={16} aria-hidden="true" /> : <FileSearch size={16} aria-hidden="true" />}<span className="truncate">{entry.name}</span></span>
           {entry.entryType === "dir" ? <><Button size="sm" variant="ghost" disabled={busy} onClick={() => void browse(entry.path)}>打开</Button>
-            <Button size="sm" variant="ghost" disabled={busy} title="持续同步这个文件夹" onClick={() => void registerFolder(entry.path)}><FolderSync size={13} aria-hidden="true" />同步</Button></>
+            <Button size="sm" variant="ghost" disabled={busy} title="持续同步这个文件夹" onClick={() => void registerFolder(entry.path)}><FolderSync size={16} aria-hidden="true" />同步</Button></>
             : <Button size="sm" variant="ghost" disabled={busy || !entry.providerHash?.startsWith("sha256:")} title={entry.providerHash?.startsWith("sha256:") ? "导入并分析" : "这个存储无法提供内容指纹，请改用平台上传"}
-              onClick={() => void importFile(entry.path)}><FilePlus2 size={13} aria-hidden="true" />导入</Button>}</div>)}</div>}
+              onClick={() => void importFile(entry.path)}><FilePlus2 size={16} aria-hidden="true" />导入</Button>}</div>)}</div>}
     </div>
   </Card>;
 }
@@ -580,14 +580,14 @@ export function SyncedFolders({ projectId, refreshToken, onError }: { projectId:
           <div className="flex flex-wrap items-center gap-2 text-ui text-text">
             {/* The folder's own name, not the connector id it is stored under
                 (which is the gateway path, tenant namespace and all). */}
-            <Folder size={15} aria-hidden="true" /><span className="min-w-0 flex-1 truncate" title={displayPath(folder.payload.connector.id)}>
+            <Folder size={16} aria-hidden="true" /><span className="min-w-0 flex-1 truncate" title={displayPath(folder.payload.connector.id)}>
               {baseName(displayPath(folder.payload.connector.id))}</span>
             <span className="text-ui text-muted">{folder.payload.status === "active" ? "已启用同步" : "已暂停"}</span>
             <Button size="sm" variant="ghost" disabled={busy || folder.payload.status !== "active"}
-              onClick={() => void mutate(() => syncSourceFolder(folder.id, folder.revision))}><RefreshCw size={13} aria-hidden="true" />立即同步</Button>
+              onClick={() => void mutate(() => syncSourceFolder(folder.id, folder.revision))}><RefreshCw size={16} aria-hidden="true" />立即同步</Button>
             <Button size="sm" variant="ghost" disabled={busy}
               onClick={() => void mutate(() => setSourceFolderStatus(folder.id, folder.revision, folder.payload.status === "active" ? "paused" : "active"))}>
-              {folder.payload.status === "active" ? <><Pause size={13} aria-hidden="true" />暂停同步</> : <><Play size={13} aria-hidden="true" />恢复同步</>}</Button>
+              {folder.payload.status === "active" ? <><Pause size={16} aria-hidden="true" />暂停同步</> : <><Play size={16} aria-hidden="true" />恢复同步</>}</Button>
           </div>
           {lastError && <p className="text-ui text-error" title={operator ? lastError.code : undefined}>上次同步失败：{sourceFailureMessage(lastError)}
             {folder.payload.status === "paused" ? "同步已暂停，处理后点「恢复同步」。" : "已入库的资料不受影响，可点「立即同步」重试。"}</p>}
@@ -615,7 +615,7 @@ function DuplicateGroups({ groups, busy, onDecide }: { groups: DuplicateGroup[];
   if (groups.length === 0) return <p className="text-ui text-muted">没有发现疑似重复的资料。</p>;
   return <div className="space-y-3">{groups.map((group) => <div key={group.groupKey} className="space-y-2 rounded-input border border-border px-3 py-2">
     <div className="flex flex-wrap items-center gap-2 text-ui text-text">
-      <Copy size={15} aria-hidden="true" /><span className="flex-1 truncate">{baseName(group.label)}</span>
+      <Copy size={16} aria-hidden="true" /><span className="flex-1 truncate">{baseName(group.label)}</span>
       <span className="text-ui text-muted">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
     </div>
     <ul className="space-y-1 text-ui text-muted">{group.members.map((item) => <li key={item.sourceId}>
@@ -628,8 +628,8 @@ function DuplicateGroups({ groups, busy, onDecide }: { groups: DuplicateGroup[];
       {/* Linking is a statement about two sources. A shared-content group is
           one source under several paths, so there is nothing to link. */}
       {group.sourceIds.length > 1 && <Button size="sm" variant="ghost" disabled={busy}
-        onClick={() => onDecide(group, "linked")}><Link2 size={13} aria-hidden="true" />标记为同一份</Button>}
-      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide(group, "dismissed")}><XCircle size={13} aria-hidden="true" />不是重复</Button>
+        onClick={() => onDecide(group, "linked")}><Link2 size={16} aria-hidden="true" />标记为同一份</Button>}
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide(group, "dismissed")}><XCircle size={16} aria-hidden="true" />不是重复</Button>
     </div>
   </div>)}</div>;
 }

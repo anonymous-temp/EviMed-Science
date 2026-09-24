@@ -92,7 +92,7 @@ function Source({ source, index, count, status, runId, pagesRead, updates }: {
         {href ? (
           <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-link hover:underline">
             {source.sourceTitle ?? source.identifier ?? "来源"}
-            <ExternalLink size={11} aria-hidden="true" />
+            <ExternalLink size={16} aria-hidden="true" />
           </a>
         ) : (
           <span>{source.sourceTitle ?? source.identifier ?? "来源未记录"}</span>
@@ -108,7 +108,7 @@ function Source({ source, index, count, status, runId, pagesRead, updates }: {
           to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)}
           className="inline-flex items-center gap-1 text-caption text-link hover:underline"
         >
-          <FileText size={12} aria-hidden="true" />在保存的原文中定位这段引文
+          <FileText size={16} aria-hidden="true" />在保存的原文中定位这段引文
         </Link>
       )}
     </div>
@@ -229,7 +229,7 @@ export function ClaimCitation({ ids, claims, statuses, reading }: {
           )}
         >
           {mark}
-          {safety && <ShieldAlert size={11} className="text-danger" aria-hidden="true" />}
+          {safety && <ShieldAlert size={16} className="text-danger" aria-hidden="true" />}
         </button>
       </Popover.Trigger>
       <Popover.Portal>

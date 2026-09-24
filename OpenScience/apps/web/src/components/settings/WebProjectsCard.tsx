@@ -208,7 +208,7 @@ export function WebProjectsCard({
           title="刷新项目列表"
           aria-label="刷新项目列表"
         >
-          <RefreshCw size={14} className={cn(loading && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
+          <RefreshCw size={16} className={cn(loading && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -295,7 +295,7 @@ export function WebProjectsCard({
                       title="重命名"
                       aria-label={`重命名「${project.name}」`}
                     >
-                      <Pencil size={14} aria-hidden="true" />
+                      <Pencil size={16} aria-hidden="true" />
                     </button>
                     <button
                       type="button"
@@ -305,7 +305,7 @@ export function WebProjectsCard({
                       title="导出为压缩包"
                       aria-label={`导出「${project.name}」`}
                     >
-                      <Download size={14} className={cn(busy && "animate-pulse motion-reduce:animate-none")} aria-hidden="true" />
+                      <Download size={16} className={cn(busy && "animate-pulse motion-reduce:animate-none")} aria-hidden="true" />
                     </button>
                     <button
                       type="button"
@@ -315,7 +315,7 @@ export function WebProjectsCard({
                       title={project.id === DEFAULT_PROJECT_ID ? "每个账号都有这个项目，不能删除" : "删除"}
                       aria-label={`删除「${project.name}」`}
                     >
-                      <Trash2 size={14} aria-hidden="true" />
+                      <Trash2 size={16} aria-hidden="true" />
                     </button>
                   </>
                 )}
@@ -345,7 +345,7 @@ export function WebProjectsCard({
               disabled={controlsDisabled}
             />
             <button type="submit" className={cn(primaryButtonCls, "gap-1.5")} disabled={controlsDisabled || !newName.trim()}>
-              <FolderPlus size={14} aria-hidden="true" />
+              <FolderPlus size={16} aria-hidden="true" />
               {creating ? "创建中…" : "创建"}
             </button>
           </div>

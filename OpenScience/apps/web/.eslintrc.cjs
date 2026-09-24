@@ -7,15 +7,15 @@ const banned = (pattern, message) => [
 const tokenRules = [
   ...banned(
     "/text-\\[\\d+(\\.\\d+)?px\\]/",
-    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-badge / text-meta (12) / text-caption (13) / text-ui (14) / text-body (16) / text-wordmark (16) / text-title (20) / text-display (24) — six sizes, no more (see DESIGN.md and fontSize in tailwind.config.js).",
+    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-badge / text-meta / text-caption (12) / text-ui (14) / text-body / text-wordmark (16) / text-title (20) / text-display (24) — five sizes, no more (see DESIGN.md and fontSize in tailwind.config.js).",
   ),
   ...banned(
     "/(^|[\\s:])text-(xs|sm|base|lg|xl|[2-9]xl)($|\\s)/",
-    "Tailwind's default text sizes bypass the type scale. Use text-meta (12px) / text-caption (13px) / text-ui (14px) / text-body (16px) / text-title (20px) / text-display (24px) (see fontSize in tailwind.config.js).",
+    "Tailwind's default text sizes bypass the type scale. Use text-meta or text-caption (12px) / text-ui (14px) / text-body (16px) / text-title (20px) / text-display (24px) (see fontSize in tailwind.config.js).",
   ),
   ...banned(
     "/rounded-\\[\\d+px\\]/",
-    "Arbitrary px radii are banned in components. Use rounded (8px: controls and rows), rounded-card (12px: cards and popovers), rounded-panel (16px: panels and dialogs), rounded-composer (24px) or rounded-full (chips) (see borderRadius in tailwind.config.js).",
+    "Arbitrary px radii are banned in components. Use rounded (8px: controls and rows), rounded-tag (4px: tags), rounded-card (12px: cards, popovers and dialogs), rounded-composer (24px) or rounded-full (pills) (see borderRadius in tailwind.config.js).",
   ),
   ...banned(
     "/\\bshadow-(sm|md|lg)\\b/",
@@ -61,6 +61,41 @@ const serifRules = banned(
   "/(^|[\\s:])font-serif($|\\s)/",
   "There is no serif family. One sans stack carries the shell and the kernel conversation; the class resolves to it and does nothing (see fontFamily in tailwind.config.js and DESIGN.md).",
 );
+
+// One component set (2026-09-23 plan §7, gate 1). A bordered pill and a
+// bordered button were re-made on almost every page — about seventeen tag
+// recipes and 85 hand-written button class lists (inventory §2.1, §2.2) — and
+// each new feature added another. Outside `components/ui/` they are errors:
+// a chip is `FilterChip` / `FilterChips`, a label is `Tag`, a button is
+// `Button` / `IconButton`.
+const componentRules = [
+  ...banned(
+    "/(?=.*(^|\\s)rounded-full(\\s|$))(?=.*(^|\\s)border(\\s|$))/",
+    "A bordered pill is a hand-made chip or tag. Use FilterChip / FilterChips (clickable) or Tag (metadata) from components/ui.",
+  ),
+  {
+    selector: "JSXOpeningElement[name.name='button'] JSXAttribute[name.name='className'] Literal[value=/(^|\\s)border(\\s|$)/]",
+    message: "A bordered <button> is a hand-made outline button, and there are no outline buttons. Use Button (primary / secondary / text) or IconButton from components/ui.",
+  },
+  {
+    selector: "JSXOpeningElement[name.name='button'] JSXAttribute[name.name='className'] TemplateElement[value.raw=/(^|\\s)border(\\s|$)/]",
+    message: "A bordered <button> is a hand-made outline button, and there are no outline buttons. Use Button (primary / secondary / text) or IconButton from components/ui.",
+  },
+];
+
+// Two icon sizes and one stroke (2026-09-23 plan §4): 16 inline, 20 for a
+// chrome glyph; the stroke is set once in index.css (`svg.lucide`). Ten sizes
+// and three strokes were in use, 43 of 239 icons on the scale.
+const iconRules = [
+  {
+    selector: "JSXAttribute[name.name='size'] > JSXExpressionContainer > Literal[raw=/^(?!(16|20)$)\\d+$/]",
+    message: "Icons are 16 (inline with text) or 20 (a chrome glyph) — ICON_SIZES in @evimed/domain/design-tokens.",
+  },
+  {
+    selector: "JSXOpeningElement[name.name=/^[A-Z]/] > JSXAttribute[name.name='strokeWidth']",
+    message: "The icon stroke is set once, in index.css (svg.lucide, ICON_STROKE). Do not pass strokeWidth to an icon.",
+  },
+];
 
 const errorTextRules = [
   {
@@ -114,7 +149,7 @@ module.exports = {
       // with a reason, or an entry in the override below.
       files: ["src/**/*.{ts,tsx}"],
       rules: {
-        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...errorTextRules],
+        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules],
       },
     },
     {
@@ -126,7 +161,32 @@ module.exports = {
         "src/components/cards/**/*.{ts,tsx}",
       ],
       rules: {
-        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...serifRules, ...errorTextRules],
+        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...serifRules, ...iconRules, ...errorTextRules],
+      },
+    },
+    {
+      // Pages that still hand-make a bordered chip or button, until the page
+      // rewrites of the 2026-09-23 plan (WP2, WP4) replace them with the
+      // primitives. The list only shrinks: a file leaves it when its last
+      // bordered pill or button goes.
+      files: [
+        "src/app/routes/CapabilitiesPage.tsx",
+        "src/app/routes/FrontierPage.tsx",
+        "src/app/routes/SourcesPage.tsx",
+        "src/components/frontier/FrontierFilters.tsx",
+        "src/components/inspector/FilePreviewInspector.tsx",
+        "src/components/markdown-viewer/ClaimAppraisal.tsx",
+        "src/components/markdown-viewer/ClaimCitation.tsx",
+        "src/components/markdown-viewer/CodeBlock.tsx",
+        "src/components/markdown-viewer/SourceUpdateBadges.tsx",
+        "src/components/memory/MemoryControls.tsx",
+        "src/components/report/EvidenceMatrixTable.tsx",
+        "src/components/runs/ReadPages.tsx",
+        "src/components/runs/RouteLine.tsx",
+        "src/components/settings/WebAccountCard.tsx",
+      ],
+      rules: {
+        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...iconRules, ...errorTextRules],
       },
     },
     {

@@ -49,7 +49,7 @@ export function FrontierFilters({ value, showWindow, onChange }: {
       </label>
       <button type="button" aria-pressed={value.starred} onClick={() => onChange({ starred: !value.starred })}
         className={cn(PILL, value.starred ? PILL_ON : PILL_OFF)}>
-        <Star size={14} aria-hidden="true" fill={value.starred ? "currentColor" : "none"} />只看收藏
+        <Star size={16} aria-hidden="true" fill={value.starred ? "currentColor" : "none"} />只看收藏
       </button>
       {showWindow && (
         <div role="radiogroup" aria-label="时间范围" className="flex flex-wrap items-center gap-1.5">

@@ -54,9 +54,8 @@ describe("AutopilotPage", () => {
     expect(await screen.findByText("新增直接证据")).toBeInTheDocument();
     // Once as the lead's own claim, once as the section label above it.
     expect(screen.getAllByText("待验证线索").length).toBeGreaterThan(0);
-    // The opening line is built from what the digest records, and from nothing
-    // else: an invented saving or runway is a number a reader would act on.
-    expect(screen.getByText("2026-09-06 的简报：1 条重点发现 · 1 条待验证线索 · 花费 ¥3.2")).toBeInTheDocument();
+    // No summary sentence under the title (2026-09-23 plan §5.7).
+    expect(screen.queryByText(/的简报：.*花费/)).not.toBeInTheDocument();
   });
 
   it("names when the first briefing is due, in the agenda's own hour and zone", async () => {

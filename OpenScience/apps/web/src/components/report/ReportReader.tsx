@@ -230,10 +230,10 @@ export function ReportReader({
       )}
       <div className="flex-1" />
       <Button size="sm" variant="ghost" onClick={() => void download()}>
-        <Download size={14} aria-hidden="true" />下载 Markdown
+        <Download size={16} aria-hidden="true" />下载 Markdown
       </Button>
       <Button size="sm" variant="ghost" onClick={() => window.print()} title="打印，或在打印对话框里选「存为 PDF」">
-        <Printer size={14} aria-hidden="true" />打印 / 存为 PDF
+        <Printer size={16} aria-hidden="true" />打印 / 存为 PDF
       </Button>
     </div>
   );
@@ -291,7 +291,7 @@ export function ReportReader({
         <div className="mx-auto flex w-full max-w-content-full gap-8 px-6 py-6 max-sm:px-0 max-sm:py-3">
           {wide && view === "report" && toc.length > 0 && (
             <aside className="sticky top-4 max-h-[calc(100vh-6rem)] w-56 shrink-0 self-start overflow-y-auto" data-print-hide="">
-              <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={14} aria-hidden="true" />目录</p>
+              <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={16} aria-hidden="true" />目录</p>
               {contents}
               {/* A 60 KB report needs a way back up (appendix D §4.5). */}
               <button
@@ -299,7 +299,7 @@ export function ReportReader({
                 onClick={() => articleRef.current?.closest(".overflow-y-auto")?.scrollTo({ top: 0 })}
                 className="mt-3 flex items-center gap-1 px-2 text-caption text-link hover:underline"
               >
-                <ArrowUp size={12} aria-hidden="true" />回到顶部
+                <ArrowUp size={16} aria-hidden="true" />回到顶部
               </button>
             </aside>
           )}

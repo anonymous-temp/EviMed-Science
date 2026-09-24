@@ -119,14 +119,14 @@ function signInMessage(error: unknown): string {
               className={buttonClasses({ className: "mt-7 h-11 w-full gap-2 text-ui" })}
             >
               {methods.oidc?.label ?? "统一身份登录"}
-              <ArrowRight size={15} aria-hidden="true" />
+              <ArrowRight size={16} aria-hidden="true" />
             </a>
           ) : (
             <form className="mt-7 space-y-4" onSubmit={submit}>
               <div>
                 <label htmlFor="login-username" className="mb-1.5 block text-ui font-medium">账号</label>
                 <div className="relative">
-                  <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} aria-hidden="true" />
+                  <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} aria-hidden="true" />
                   <Input
                     id="login-username"
                     autoFocus
@@ -141,7 +141,7 @@ function signInMessage(error: unknown): string {
               <div>
                 <label htmlFor="login-password" className="mb-1.5 block text-ui font-medium">密码</label>
                 <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} aria-hidden="true" />
+                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} aria-hidden="true" />
                   <Input
                     id="login-password"
                     type="password"

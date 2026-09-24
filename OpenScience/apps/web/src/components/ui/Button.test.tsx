@@ -33,16 +33,24 @@ describe("Button", () => {
     render(
       <>
         <Button variant="primary">主按钮</Button>
-        <Button variant="ghost">次按钮</Button>
+        <Button variant="secondary">次按钮</Button>
+        <Button variant="ghost">旧名</Button>
+        <Button variant="text" destructive>移除</Button>
         <Button variant="danger" size="sm">
           删除
         </Button>
       </>,
     );
-    // 32 is the control height (md); `sm` is the 28 px compact control.
+    // 32 is a page's control height (md); `sm` is 24, inside a row.
     expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-8");
-    expect(screen.getByRole("button", { name: "次按钮" })).toHaveClass("border", "border-strong", "bg-surface");
-    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-7");
+    // No outline buttons: the secondary look is a grey ground, and `ghost` is its retired name.
+    for (const name of ["次按钮", "旧名"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveClass("bg-surface-2", "text-text");
+      expect(button.className).not.toMatch(/(^|\s)border(\s|$)/);
+    }
+    expect(screen.getByRole("button", { name: "移除" })).toHaveClass("bg-transparent", "text-danger");
+    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-6");
   });
 
   it("merges caller classes with conflict resolution", () => {

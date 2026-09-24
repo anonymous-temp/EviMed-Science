@@ -125,7 +125,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
         title="永久删除这个账号的全部记忆；对话、报告、知识库和收到的胶囊都不动。"
         onClick={() => setConfirmingReset(true)}
       >
-        {busy !== "reset" && <RotateCcw size={13} aria-hidden="true" />}
+        {busy !== "reset" && <RotateCcw size={16} aria-hidden="true" />}
         重置全部记忆
       </Button>
       {confirmingReset && (

@@ -153,7 +153,7 @@ export function MemoryRecordRow({
         <div>
           <Textarea value={value} onChange={(event) => setValue(event.target.value)} aria-label="改这条记忆" rows={3} className="bg-bg text-ui" />
           <div className="mt-2 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={13} aria-hidden="true" />取消</Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={16} aria-hidden="true" />取消</Button>
             <Button size="sm" loading={busy} disabled={!value.trim()} onClick={() => confirmOrSave({ value, status: "active" })}>保存</Button>
           </div>
         </div>
@@ -198,22 +198,22 @@ export function MemoryRecordRow({
         <div className="mt-2 flex flex-wrap gap-2">
           {record.status === "pending" && (
             <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => confirmOrSave({ status: "active" })}>
-              <Check size={13} aria-hidden="true" />是这样
+              <Check size={16} aria-hidden="true" />是这样
             </Button>
           )}
           {forgotten ? (
             <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => void restore()}>
-              <Undo2 size={13} aria-hidden="true" />恢复
+              <Undo2 size={16} aria-hidden="true" />恢复
             </Button>
           ) : (
             <>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={13} aria-hidden="true" />改</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" />改</Button>
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => void forget()}>忘记</Button>
               {inferred && (
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => setRejecting(true)}>不对</Button>
               )}
               {record.revisions.length > 0 && (
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={13} aria-hidden="true" />撤销上次改动</Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={16} aria-hidden="true" />撤销上次改动</Button>
               )}
             </>
           )}

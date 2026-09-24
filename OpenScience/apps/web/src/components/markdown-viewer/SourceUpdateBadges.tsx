@@ -43,11 +43,11 @@ export function SourceUpdateBadges({ updates, className }: {
             aria-label={`${title}查看声明`}
             className={cn(chip, "hover:underline")}
           >
-            <FileWarning size={11} aria-hidden="true" />{text}
+            <FileWarning size={16} aria-hidden="true" />{text}
           </a>
         ) : (
           <span key={`${update.kind}:${index}`} title={title} className={chip}>
-            <FileWarning size={11} aria-hidden="true" />{text}
+            <FileWarning size={16} aria-hidden="true" />{text}
           </span>
         );
       })}

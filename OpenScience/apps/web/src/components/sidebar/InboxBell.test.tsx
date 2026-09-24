@@ -15,12 +15,13 @@ beforeEach(() => {
 });
 
 describe("the inbox bell", () => {
-  // The count used to be one 50-item page's length, so 「99+」 was dead code.
-  it("shows the server's total, and 99+ past ninety-nine", async () => {
+  // A dot, not a number (2026-09-23 plan §5.2): the count is in the name.
+  it("marks unread with a dot and says the server's total in its name", async () => {
     mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 137, safetyUnread: 0 });
     render(<MemoryRouter><InboxBell /></MemoryRouter>);
     const bell = await screen.findByRole("button", { name: "收件箱，137 条未读" });
-    expect(bell).toHaveTextContent("99+");
+    expect(bell.textContent).toBe("");
+    expect(bell.querySelector("span.rounded-full")).not.toBeNull();
     expect(unreadBadgeText(99)).toBe("99");
     expect(unreadBadgeText(100)).toBe("99+");
   });
@@ -30,7 +31,7 @@ describe("the inbox bell", () => {
     render(<MemoryRouter><InboxBell /></MemoryRouter>);
     const bell = await screen.findByRole("button", { name: "收件箱" });
     await waitFor(() => expect(mocks.fetchInboxUnreadCount).toHaveBeenCalled());
-    expect(bell.textContent).toBe("");
+    expect(bell.querySelector("span.rounded-full")).toBeNull();
   });
 
   // Safety is the one class allowed to interrupt, so it is told apart by

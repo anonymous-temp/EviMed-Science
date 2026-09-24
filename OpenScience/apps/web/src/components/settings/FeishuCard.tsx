@@ -204,7 +204,7 @@ function UnboundView({ registration, starting, onStart }: {
       )}
       <div>
         <Button onClick={onStart} loading={starting}>
-          <QrCode size={14} aria-hidden="true" />
+          <QrCode size={16} aria-hidden="true" />
           {ended ? "重新生成二维码" : "扫码创建飞书机器人"}
         </Button>
       </div>
@@ -241,9 +241,9 @@ function ScanView({ registration, cancelling, onCancel }: {
         {url && !saving && (
           <a href={url} target="_blank" rel="noreferrer"
             className="inline-flex min-h-8 items-center gap-1 text-ui text-link hover:underline">
-            <Smartphone size={14} aria-hidden="true" />
+            <Smartphone size={16} aria-hidden="true" />
             正在用手机？直接在飞书中打开
-            <ExternalLink size={12} aria-hidden="true" />
+            <ExternalLink size={16} aria-hidden="true" />
           </a>
         )}
         {minutes != null && !saving && <p className="text-caption text-muted">二维码约 {minutes} 分钟内有效。</p>}
@@ -313,7 +313,7 @@ function BoundView({ binding, busy, onToggle, onUnbind }: {
       </div>
       <div className="border-t border-border pt-4">
         <Button variant="ghost" size="sm" onClick={onUnbind} loading={busy === "unbind"}>
-          <Unlink size={14} aria-hidden="true" />
+          <Unlink size={16} aria-hidden="true" />
           解除绑定
         </Button>
       </div>

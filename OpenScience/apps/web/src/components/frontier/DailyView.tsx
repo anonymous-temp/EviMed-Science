@@ -79,7 +79,7 @@ export function DailyIssue({ state }: { state: DailyState }) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 rounded-card border border-danger bg-danger-soft px-4 py-3 text-ui text-danger-strong">
         <span className="min-w-0 flex-1">{state.error}</span>
-        <Button size="sm" variant="ghost" onClick={state.retry}><RefreshCw size={14} aria-hidden="true" />重试</Button>
+        <Button size="sm" variant="ghost" onClick={state.retry}><RefreshCw size={16} aria-hidden="true" />重试</Button>
       </div>
     );
   }
@@ -104,7 +104,7 @@ export function DailyIssue({ state }: { state: DailyState }) {
             {covers && <> · {covers}</>}
           </p>
           <Button size="sm" variant="ghost" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
-            <Copy size={14} aria-hidden="true" />复制为 Markdown
+            <Copy size={16} aria-hidden="true" />复制为 Markdown
           </Button>
         </div>
         <h2 id="frontier-daily-title" className="text-title font-semibold text-text">

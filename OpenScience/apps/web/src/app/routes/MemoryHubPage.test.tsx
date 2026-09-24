@@ -86,11 +86,10 @@ describe("记忆胶囊", () => {
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-  it("is one page with the two nouns printed under its title, and no tabs at all", async () => {
+  it("is one page with its title and no sentence under it, and no tabs at all", async () => {
     open();
     expect(await screen.findByRole("heading", { name: "记忆胶囊", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(/EviMed 自己记下的/)).toBeInTheDocument();
-    expect(screen.getByText(/资料本身在「知识库」/)).toBeInTheDocument();
+    expect(screen.queryByText(/EviMed 自己记下的/)).not.toBeInTheDocument();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     // What the six tabs used to be named, and what the page no longer asks for.
     for (const gone of ["总览", "项目档案", "时间轴", "写一个方法", "你写下的笔记", "放进胶囊", "逐个管理胶囊", "还缺"]) {

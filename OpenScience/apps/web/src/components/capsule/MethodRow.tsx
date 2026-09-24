@@ -104,7 +104,7 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
         {!retired && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void stop()}>停用</Button>}
         {method.revision > 1 && (
           <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => void rollback()}>
-            {!busy && <RotateCcw size={13} aria-hidden="true" />}回到上一版
+            {!busy && <RotateCcw size={16} aria-hidden="true" />}回到上一版
           </Button>
         )}
       </div>

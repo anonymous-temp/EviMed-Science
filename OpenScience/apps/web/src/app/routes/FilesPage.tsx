@@ -81,16 +81,16 @@ export function partitionKnowledgeBaseFiles(files: readonly File[]) {
 }
 
 function iconFor(entry: DirEntry) {
-  if (entry.isDir) return <Folder size={15} className="text-accent" aria-hidden="true" />;
+  if (entry.isDir) return <Folder size={16} className="text-accent" aria-hidden="true" />;
   const kind = previewKindForName(entry.name);
   const cls = "text-muted";
-  if (kind === "image" || kind === "fits" || kind === "anomaly" || kind === "phase") return <ImageIcon size={15} className={cls} aria-hidden="true" />;
-  if (kind === "video") return <Film size={15} className={cls} aria-hidden="true" />;
-  if (kind === "table") return <Sheet size={15} className={cls} aria-hidden="true" />;
-  if (kind === "molecule" || kind === "dos" || kind === "bands") return <FlaskConical size={15} className={cls} aria-hidden="true" />;
-  if (kind === "genome") return <Dna size={15} className={cls} aria-hidden="true" />;
-  if (kind === "qcode") return <Highlighter size={15} className={cls} aria-hidden="true" />;
-  return <FileText size={15} className={cls} aria-hidden="true" />;
+  if (kind === "image" || kind === "fits" || kind === "anomaly" || kind === "phase") return <ImageIcon size={16} className={cls} aria-hidden="true" />;
+  if (kind === "video") return <Film size={16} className={cls} aria-hidden="true" />;
+  if (kind === "table") return <Sheet size={16} className={cls} aria-hidden="true" />;
+  if (kind === "molecule" || kind === "dos" || kind === "bands") return <FlaskConical size={16} className={cls} aria-hidden="true" />;
+  if (kind === "genome") return <Dna size={16} className={cls} aria-hidden="true" />;
+  if (kind === "qcode") return <Highlighter size={16} className={cls} aria-hidden="true" />;
+  return <FileText size={16} className={cls} aria-hidden="true" />;
 }
 
 /**
@@ -166,7 +166,7 @@ export function FilesPage() {
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
-            <Upload size={15} aria-hidden="true" />
+            <Upload size={16} aria-hidden="true" />
             松开以上传到个人知识库
           </div>
         </div>
@@ -192,7 +192,7 @@ export function FilesPage() {
             const isLast = i === crumbs.length - 1;
             return (
               <span key={to} className="flex items-center gap-0.5">
-                <ChevronRight size={13} className="text-muted" aria-hidden="true" />
+                <ChevronRight size={16} className="text-muted" aria-hidden="true" />
                 <button
                   className={cn("rounded px-1 hover:bg-surface-2", isLast ? "font-medium text-text" : "text-link")}
                   onClick={() => setDir(to)}
@@ -212,7 +212,7 @@ export function FilesPage() {
                 onClick={() => void uploadFiles()}
                 disabled={uploading}
               >
-                {uploading ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />}
+                {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
               </button>
             </>
           )}
@@ -249,7 +249,7 @@ export function FilesPage() {
               {iconFor(entry)}
               <span className="flex-1 truncate">{entry.name}</span>
               {!entry.isDir && <span className="shrink-0 text-caption text-muted">{humanSize(entry.size)}</span>}
-              {entry.isDir && <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden="true" />}
+              {entry.isDir && <ChevronRight size={16} className="shrink-0 text-muted" aria-hidden="true" />}
             </button>
           ))}
         </div>
@@ -381,7 +381,7 @@ export function SessionFilesPane({
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
-        <Folder size={14} strokeWidth={1.5} className="shrink-0 text-text" aria-hidden="true" />
+        <Folder size={16} className="shrink-0 text-text" aria-hidden="true" />
         <span className="truncate text-ui font-medium text-text" title={workspace ?? undefined}>
           {baseName(workspace)}
         </span>
@@ -396,11 +396,11 @@ export function SessionFilesPane({
             onClick={() => void uploadFiles()}
             disabled={uploading}
           >
-            {uploading ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />}
+            {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
           </button>
         )}
         <button className="text-text hover:opacity-60" aria-label="关闭对话文件" onClick={onClose}>
-          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          <X size={16} aria-hidden="true" />
         </button>
       </div>
       {crumbs.length > 0 && (
@@ -413,7 +413,7 @@ export function SessionFilesPane({
             const isLast = i === crumbs.length - 1;
             return (
               <span key={to} className="flex items-center gap-0.5">
-                <ChevronRight size={12} className="text-muted" aria-hidden="true" />
+                <ChevronRight size={16} className="text-muted" aria-hidden="true" />
                 <button
                   className={cn("rounded px-1 hover:bg-surface-2", isLast ? "font-medium text-text" : "text-link")}
                   onClick={() => setDir(to)}
@@ -440,7 +440,7 @@ export function SessionFilesPane({
             {iconFor(entry)}
             <span className="flex-1 truncate">{entry.name}</span>
             {!entry.isDir && <span className="shrink-0 text-caption text-muted">{humanSize(entry.size)}</span>}
-            {entry.isDir && <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden="true" />}
+            {entry.isDir && <ChevronRight size={16} className="shrink-0 text-muted" aria-hidden="true" />}
           </button>
         ))}
       </div>

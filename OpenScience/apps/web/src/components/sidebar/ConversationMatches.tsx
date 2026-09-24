@@ -63,7 +63,7 @@ export function ConversationMatches({ query, shownSessionIds }: { query: string;
           to={`/app/chat/${encodeURIComponent(item.sessionId)}`}
           className="flex items-start gap-2 rounded-input py-1.5 pl-2 pr-2 hover:bg-surface-2 aria-[current=page]:bg-accent-soft"
         >
-          <MessageSquareText size={13} strokeWidth={1.75} className="mt-1 shrink-0 text-muted" aria-hidden="true" />
+          <MessageSquareText size={16} className="mt-1 shrink-0 text-muted" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-ui text-text">{item.title || "未命名对话"}</span>
             {item.snippet && <span className="block truncate text-caption text-muted">{item.snippet}</span>}

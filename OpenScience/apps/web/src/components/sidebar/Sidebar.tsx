@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   Bot,
@@ -7,17 +7,18 @@ import {
   Newspaper,
   Orbit,
   PanelLeft,
+  Settings,
   SquarePen,
-  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { fetchWebMe } from "@/lib/apiClient";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { InboxBell } from "@/components/sidebar/InboxBell";
 import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
-import { useConnectorAttention } from "@/lib/connectorAttention";
 import { useFrontierFeature } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
+import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -30,7 +31,7 @@ interface NavItem {
 }
 
 /**
- * Five destinations, plus the account in the footer.
+ * Five destinations (six with the frontier feed), plus the account in the footer.
  *
  * It was ten here and two in the footer, with no grouping and no hierarchy, and
  * three of the ten were the same body of material seen three ways while two
@@ -72,8 +73,13 @@ export function Sidebar() {
   // are only written on pointer-up.
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragging = dragWidth !== null;
-  const connectorAttention = useConnectorAttention();
   const frontier = useFrontierFeature() === "on";
+  const [accountName, setAccountName] = useState("");
+  useEffect(() => {
+    let live = true;
+    void fetchWebMe().then((me) => { if (live && me) setAccountName(me.user.name); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
   const rows = frontier ? [NAV[0], FRONTIER_NAV, ...NAV.slice(1)] : NAV;
 
   const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -116,25 +122,15 @@ export function Sidebar() {
       )}
       style={{ width: sidebarCollapsed ? 0 : width }}
     >
-      <aside className="flex h-full max-w-full flex-col border-r border-border bg-surface" style={{ width }}>
+      {/* The grey ground is the whole edge: no rule down the right side
+        * (2026-09-23 plan §5.2), the same grey as the kernel's own column. */}
+      <aside className="flex h-full max-w-full flex-col bg-surface-1" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
-          <div className="flex items-baseline gap-1.5">
-            <EviMedMark className="h-5 w-5 shrink-0 self-center" />
-            <div className="font-serif text-wordmark font-semibold text-text">
-              EviMed
-            </div>
+          <div className="flex items-center gap-1.5">
+            <EviMedMark className="h-5 w-5 shrink-0" />
+            <div className="text-wordmark font-semibold text-text">EviMed</div>
             <InboxBell />
-            {/* 32 px, like the bell beside it: the 22 px it was sat under the
-              * 24 px floor WCAG 2.5.8 sets for a pointer target. */}
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              aria-label="收起侧边栏"
-              title="收起侧边栏 (Ctrl+B)"
-              className="grid h-8 w-8 shrink-0 place-items-center self-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
-            >
-              <PanelLeft size={16} strokeWidth={1.75} aria-hidden="true" />
-            </button>
+            <IconButton icon={PanelLeft} label="收起侧边栏" title="收起侧边栏 (Ctrl+B)" onClick={toggleSidebar} />
           </div>
         </div>
 
@@ -157,23 +153,27 @@ export function Sidebar() {
           * list of the current project's recent work below the rows above. */}
         <ProjectBrowser />
 
-        <div className="flex flex-col border-t border-border px-3 py-3">
-          {/* One footer row. 「设置」 was the second, and it was the deployment
-            * console as much as the product's settings; it is a tab of this
-            * page now, beside usage, credentials and the operator's board. */}
-          {/* The data sources nothing serves for this account, as a quiet
-            * count: a standing fact about the deployment, not unread work, so
-            * it is neutral rather than the bell's red (review B §7c). */}
-          <NavRow
-            to={connectorAttention > 0 ? "/app/account?tab=connectors" : "/app/account"}
-            icon={<UserRound size={15} aria-hidden="true" />}
-            label="账户与设置"
-            active={location.pathname.startsWith("/app/account")}
-            badge={connectorAttention > 0 ? {
-              text: String(connectorAttention),
-              label: `${connectorAttention} 个数据源没有可用凭据`,
-            } : undefined}
-          />
+        {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
+          * plan §5.2). The count of data sources without a credential used to
+          * sit here — a standing fact about the deployment, not the reader's
+          * work; 设置 → 数据源 lists what needs setting. */}
+        <div className="flex items-center gap-2 px-4 py-3">
+          <span
+            aria-hidden="true"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-caption font-medium text-accent-fg"
+          >
+            {(accountName.trim()[0] ?? "").toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-ui text-text">{accountName}</span>
+          <Link
+            to="/app/account"
+            aria-label="设置"
+            title="设置"
+            aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
+            className={iconButtonClasses({ active: location.pathname.startsWith("/app/account") })}
+          >
+            <Settings size={16} aria-hidden="true" />
+          </Link>
         </div>
       </aside>
 
@@ -242,14 +242,11 @@ function NavRow({
   label,
   active = false,
   freshState,
-  badge,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
-  /** A count beside the label, with the sentence it stands for. */
-  badge?: { text: string; label: string };
   /**
    * Router state minted at the moment of the click, not at render.
    *
@@ -274,20 +271,13 @@ function NavRow({
         navigate(to, { state: freshState() });
       }}
       aria-current={active ? "page" : undefined}
-      aria-label={badge ? `${label}，${badge.label}` : undefined}
-      title={badge?.label}
       className={cn(
-        "flex items-center gap-2 rounded-input px-2 py-1.5 text-ui hover:bg-surface-2",
+        "flex h-8 items-center gap-2 rounded px-2 text-ui hover:bg-surface-2",
         active ? "bg-surface-2 font-medium text-text" : "text-text",
       )}
     >
-      <span className="text-muted">{icon}</span>
+      <span className="text-text-3">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {badge && (
-        <span aria-hidden="true" className="grid h-4 min-w-4 place-items-center rounded-full border border-strong px-1 text-badge tabular-nums text-muted">
-          {badge.text}
-        </span>
-      )}
     </Link>
   );
 }

@@ -60,7 +60,7 @@ export function CapsuleEntryRow({ entry, onChanged }: { entry: OwnCapsuleEntry; 
         <div>
           <Textarea value={value} onChange={(event) => setValue(event.target.value)} aria-label="修订这一条" rows={3} className="bg-bg text-ui" maxLength={20000} />
           <div className="mt-2 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={13} aria-hidden="true" />取消</Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={16} aria-hidden="true" />取消</Button>
             <Button size="sm" loading={busy} disabled={!value.trim()} onClick={() => void save()}>保存修订</Button>
           </div>
         </div>
@@ -74,10 +74,10 @@ export function CapsuleEntryRow({ entry, onChanged }: { entry: OwnCapsuleEntry; 
       </p>
       {!editing && (
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={13} aria-hidden="true" />修订</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" />修订</Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => void retire()}>停用</Button>
           {entry.revision > 1 && (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={13} aria-hidden="true" />撤销上次改动</Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={16} aria-hidden="true" />撤销上次改动</Button>
           )}
         </div>
       )}

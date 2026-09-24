@@ -40,7 +40,7 @@
  */
 
 /** Bumped when a consumer must be regenerated, not when a value is tuned. */
-export const DESIGN_TOKENS_VERSION = '2.0.0'
+export const DESIGN_TOKENS_VERSION = '3.0.0'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -191,8 +191,11 @@ export const COLOR_ROLES = Object.freeze(
     // the kernel's `bg-layer-1` and its sidebar fill, so the two sidebars are
     // the same grey.
     'surface-1': { light: 'n-50', dark: 'dark-surface' },
-    // Hover, the neutral selected row, a skeleton bar.
+    // Hover, the neutral selected row, a skeleton bar, a secondary button.
     'surface-2': { light: 'n-100', dark: 'dark-surface-2' },
+    // The hover and pressed step of something already on surface-2: a
+    // secondary button, a selected filter chip.
+    'surface-3': { light: 'n-150', dark: 'dark-border' },
     // Modal scrim. Not `black/30`: an opacity modifier on a Tailwind default
     // is a colour no theme switch can reach.
     scrim: { light: 'rgba(20, 24, 26, 0.32)', dark: 'rgba(0, 0, 0, 0.56)' },
@@ -237,9 +240,11 @@ export const COLOR_ROLES = Object.freeze(
     'danger-strong': { light: 'danger-800', dark: 'danger-300', note: 'on danger-soft: 8.13' },
     info: { light: 'info-700', dark: 'info-300' },
     'info-soft': { light: 'info-50', dark: 'info-950' },
-    // Links are not the brand, so a page full of citations never drowns the
-    // primary button.
-    link: { light: 'info-700', dark: 'info-300', note: '5.99 on the page' },
+    // Links wear the accent (2026-09-23 plan §4): one accent colour on the
+    // whole product. A blue link beside a teal primary was the second accent
+    // every screen carried, and the pages that are mostly citations now keep
+    // their primary button apart by weight, not by hue.
+    link: { light: 'brand-700', dark: 'brand-400', note: '5.59 on the page' },
 
     /* --- product marks -------------------------------------------------- */
     // A verified claim, in the brand colour on purpose.
@@ -326,10 +331,13 @@ export const FONT_STACKS = Object.freeze({
 
 /**
  * The closed size scale, in px. A size outside it is a defect:
- * `designTokens.test.ts` asserts the rungs below use exactly these six.
+ * `designTokens.test.ts` asserts the rungs below use exactly these five.
+ * 13 is gone (2026-09-23 plan §4): a 13 px caption beside 12 px metadata and
+ * 14 px interface text was three sizes a reader cannot tell apart and every
+ * page combined differently — nine to eleven size × weight pairs per page.
  * @type {readonly number[]}
  */
-export const TYPE_SIZES = Object.freeze([12, 13, 14, 16, 20, 24])
+export const TYPE_SIZES = Object.freeze([12, 14, 16, 20, 24])
 
 /** The only three weights. Chinese screen faces without a 500 cut fall to 400. */
 export const FONT_WEIGHTS = Object.freeze({ regular: 400, medium: 500, semibold: 600 })
@@ -354,7 +362,9 @@ export const TYPE_SCALE = Object.freeze(
   /** @type {Record<string, TypeRung>} */ ({
     badge: { size: 12, lineHeight: '1', use: 'a count inside a pill' },
     meta: { size: 12, lineHeight: '1.5', use: 'the densest metadata: timestamps, counts, units' },
-    caption: { size: 13, lineHeight: '20px', use: 'captions and secondary one-liners' },
+    // 12 px, like `meta`, with an interface line box (size + 8): a caption is
+    // a line of secondary text in a row, `meta` the densest stamp.
+    caption: { size: 12, lineHeight: '20px', use: 'captions and secondary one-liners' },
     ui: { size: 14, lineHeight: '22px', use: 'interface text, chat, list rows, controls — the default' },
     // Retired: the 13 px `ui-sm` and the 13.5 px `ui` were one rung half a
     // pixel apart. Kept as an alias so an unmigrated class renders at `ui`;
@@ -370,12 +380,13 @@ export const TYPE_SCALE = Object.freeze(
 /* --------------------------------------------------------------- geometry -- */
 
 /**
- * Base 4, and six steps. `cardPadding` / `gridGap` / `pageGutter` are the
- * three that were hand-picked per page before this table existed.
+ * Base 4, and seven steps: 8 inside a group, 16–24 between groups, 32–48
+ * between sections. `cardPadding` / `gridGap` / `pageGutter` are the three
+ * that were hand-picked per page before this table existed.
  */
 export const SPACE = Object.freeze({
   base: 4,
-  scale: Object.freeze([8, 12, 16, 24, 32, 48]),
+  scale: Object.freeze([4, 8, 12, 16, 24, 32, 48]),
   cardPadding: 16,
   gridGap: 12,
   pageGutter: 24,
@@ -383,42 +394,64 @@ export const SPACE = Object.freeze({
 })
 
 /**
- * Container widths. A page's title, its description and its body share one of
- * these — `PageShell` is what makes that structural rather than a convention,
- * after three pages shipped with five different left edges.
+ * Container widths. A page's title and its body share one of these —
+ * `PageShell` is what makes that structural rather than a convention, after
+ * three pages shipped with five different left edges.
  *
- * `full` is retired: it was 1120 px, and a wide page is 1000. It points at
- * `wide` so an unmigrated call site converges instead of breaking.
+ * `page` is the one column every page sits in (2026-09-23 plan §4: the inbox
+ * sat 126 px right of every other page because it chose 748 where the rest
+ * chose 1000). `wide` and `full` are its retired names, pointed at it so an
+ * unmigrated call site converges instead of breaking. `measure` is the line
+ * length of multi-line text — 40 CJK characters at 14 px (560) and at 16 px
+ * (`measureBody`, 640) — and no list is wide enough to lift it.
  */
 export const CONTAINERS = Object.freeze({
   narrow: 560,
   content: 748,
-  wide: 1000,
-  full: 1000,
+  page: 960,
+  wide: 960,
+  full: 960,
+  measure: 560,
+  measureBody: 640,
   sidebar: 280,
   sidebarCollapsed: 56,
 })
 
-/** Radii, by what wears them. */
+/**
+ * Radii, by what wears them: a tag 4, a control 8, a card, popover or dialog
+ * 12, a pill fully round. `panel` is the retired dialog step (16), pointed at
+ * the card's; `composer` is the kernel's input, which is not ours to reshape.
+ */
 export const RADII = Object.freeze({
+  tag: 4,
   control: 8,
   card: 12,
-  panel: 16,
+  panel: 12,
   composer: 24,
   chip: 999,
 })
 
-/** Control heights. 40 is a form's primary button and nothing else. */
+/**
+ * Control heights: 24 inside a row, 32 on a page, 40 for a form's primary
+ * button and nothing else; a tag is 20. Controls on one line share a height.
+ * The shell used 28 / 32 / 36 / 40 / 44 on one screen (2026-09-23 plan §4).
+ */
 export const CONTROL_HEIGHTS = Object.freeze({
-  chip: 28,
+  tag: 20,
+  inline: 24,
   control: 32,
-  row: 36,
   formPrimary: 40,
-  bar: 44,
 })
 
 /** Two icon sizes: inline with text, and a chrome glyph. */
 export const ICON_SIZES = Object.freeze({ inline: 16, chrome: 20 })
+
+/**
+ * One stroke for every icon. Set once, in the stylesheet (`svg.lucide`), so a
+ * call site cannot pick its own: 2, 1.75 and 1.5 sat side by side in one
+ * column (2026-09-23 inventory §2.6).
+ */
+export const ICON_STROKE = 1.75
 
 /**
  * Three levels. A static card is flat — its 1 px hairline is its whole edge —

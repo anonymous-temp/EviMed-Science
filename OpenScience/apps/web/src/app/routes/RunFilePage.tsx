@@ -111,7 +111,7 @@ export function RunFilePage() {
           {/* Never squeezed by a long title (at 390 px it stacked a character
             * a line), and a 30 px target: on a phone it is the way back. */}
           <Link to={backTo} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-ui text-link hover:underline">
-            <ArrowLeft size={14} aria-hidden="true" />返回对话
+            <ArrowLeft size={16} aria-hidden="true" />返回对话
           </Link>
           <span className="text-muted" aria-hidden="true">/</span>
           <h1 className="min-w-0 truncate text-ui font-semibold text-text">
@@ -121,7 +121,7 @@ export function RunFilePage() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {locating && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={15} className="animate-spin" aria-hidden="true" />正在打开这次研究所在的项目…
+              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开这次研究所在的项目…
             </p>
           )}
           {!locating && !path && (
@@ -129,7 +129,7 @@ export function RunFilePage() {
           )}
           {!locating && path && readsText && loading && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={15} className="animate-spin" aria-hidden="true" />正在读取 {filename}…
+              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取 {filename}…
             </p>
           )}
           {!locating && path && readsText && !loading && error && (

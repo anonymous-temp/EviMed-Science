@@ -93,7 +93,7 @@ export function CapabilitiesPage() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">搜索科研工具</span>
-            <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="search"
               value={query}
@@ -133,7 +133,7 @@ export function CapabilitiesPage() {
             <div role="alert" className="flex flex-wrap items-center gap-3 rounded-input border border-danger bg-danger-soft px-4 py-3 text-ui text-danger-strong">
               <span className="min-w-0 flex-1 break-words">无法加载工具目录：{error}</span>
               <Button size="sm" variant="ghost" onClick={() => setReloads((value) => value + 1)}>
-                <RefreshCw size={12} aria-hidden /> 重试
+                <RefreshCw size={16} aria-hidden /> 重试
               </Button>
             </div>
           )}
@@ -180,13 +180,13 @@ function CapabilityRow({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boo
       aria-label={`用「${agent.title}」开始一次对话`}
       className="group flex min-h-[4.75rem] w-full items-start gap-3 rounded-card border border-border bg-surface p-4 text-left transition-colors duration-fast hover:border-strong hover:bg-surface-2"
     >
-      <Icon size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
+      <Icon size={20} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="block text-ui font-semibold text-text">{agent.title}</span>
         <span className="mt-0.5 block truncate text-ui text-muted">{agent.description}</span>
         <span className="mt-1 flex flex-wrap items-center gap-x-3 text-caption text-muted">
-          {minutes && <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" />{minutes}</span>}
-          {agent.materials && <span className="inline-flex items-center gap-1"><FolderUp size={12} aria-hidden="true" />需要你的资料</span>}
+          {minutes && <span className="inline-flex items-center gap-1"><Clock3 size={16} aria-hidden="true" />{minutes}</span>}
+          {agent.materials && <span className="inline-flex items-center gap-1"><FolderUp size={16} aria-hidden="true" />需要你的资料</span>}
         </span>
       </span>
     </button>

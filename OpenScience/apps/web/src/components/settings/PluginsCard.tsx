@@ -121,7 +121,7 @@ function ProjectPluginsCard({ projectId }: { projectId: string }) {
           <p className="mt-0.5 text-ui text-muted">{projectName ? `作用于项目「${projectName}」` : "作用于当前项目"}</p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => void refresh(true)} disabled={fetching || mutating !== null} aria-label="刷新插件状态">
-          <RefreshCw size={14} aria-hidden="true" />刷新
+          <RefreshCw size={16} aria-hidden="true" />刷新
         </Button>
       </div>
     }>

@@ -187,7 +187,7 @@ export function InboxPage() {
         description="研究完成、需要你决定、或者结论有变化时才会通知；涉及临床安全的放在最前。"
         actions={<Button variant="ghost" size="sm" loading={markingAll} disabled={!hasUnread}
           title={hasUnread ? undefined : "没有未读消息"} onClick={() => void readAll()}>
-          {!markingAll && <CheckCheck size={14} aria-hidden="true" />}全部已读
+          {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
         </Button>}
       />
       <div className="flex flex-wrap items-center gap-3">
@@ -270,13 +270,13 @@ function InboxRow({ item, busy, onRead, onResolve, onOpened }: {
     <article className="space-y-2" aria-label={item.title}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
         {severity === "safety" && <span className="inline-flex items-center gap-1 font-semibold text-danger-strong">
-          <ShieldAlert size={14} aria-hidden="true" />临床安全</span>}
+          <ShieldAlert size={16} aria-hidden="true" />临床安全</span>}
         {severity === "attention" && <span className="inline-flex items-center gap-1 font-medium text-warn-strong">
-          <AlertCircle size={14} aria-hidden="true" />{labelFor(TYPE_LABEL, item.noticeType, "值得一看")}</span>}
+          <AlertCircle size={16} aria-hidden="true" />{labelFor(TYPE_LABEL, item.noticeType, "值得一看")}</span>}
         {severity === "info" && item.noticeType !== "notify" && <span className="text-muted">{labelFor(TYPE_LABEL, item.noticeType, "通知")}</span>}
         {item.count > 1 && !mergedRuns && <span className="text-muted">合并 {item.count} 条</span>}
         <span className="ml-auto flex items-center gap-2 text-muted">
-          {completed && <span className="inline-flex items-center gap-1 text-ok"><CheckCircle2 size={13} aria-hidden="true" />已处理</span>}
+          {completed && <span className="inline-flex items-center gap-1 text-ok"><CheckCircle2 size={16} aria-hidden="true" />已处理</span>}
           <time dateTime={item.createdAt}>{timeOfDay(item.createdAt)}</time>
         </span>
       </div>
@@ -350,7 +350,7 @@ function SilentFold({ items, className }: { items: InboxItem[]; className?: stri
   return <Disclosure
     className={className}
     summaryClassName="text-caption"
-    summary={<span className="inline-flex items-center gap-1"><Bot size={13} aria-hidden="true" />自动运行 {items.length} 条（评测与主动科研，不计入未读）</span>}
+    summary={<span className="inline-flex items-center gap-1"><Bot size={16} aria-hidden="true" />自动运行 {items.length} 条（评测与主动科研，不计入未读）</span>}
   >
     <ul className="space-y-1 pl-5">
       {items.map((item) => {

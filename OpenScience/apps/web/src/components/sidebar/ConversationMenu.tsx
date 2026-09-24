@@ -177,7 +177,7 @@ export function ConversationMenu({ run, onRenamed, className }: {
         onClick={(event) => { event.preventDefault(); event.stopPropagation(); setOpen((value) => !value); }}
         className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
       >
-        <MoreHorizontal size={14} strokeWidth={1.75} aria-hidden="true" />
+        <MoreHorizontal size={16} aria-hidden="true" />
       </button>
       {open && (
         <div

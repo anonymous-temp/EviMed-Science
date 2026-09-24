@@ -73,7 +73,7 @@ export function AppShell() {
   if (authState === "checking") {
     return (
       <div className="flex h-dvh w-screen items-center justify-center bg-bg text-muted">
-        <Loader2 size={18} className="animate-spin" aria-label="正在检查登录状态" />
+        <Loader2 size={20} className="animate-spin" aria-label="正在检查登录状态" />
       </div>
     );
   }
@@ -107,7 +107,7 @@ export function AppShell() {
               // way off a page a phone was sent to.
               className="fade-in grid h-8 w-8 place-items-center rounded-input text-text hover:bg-surface-2"
             >
-              <PanelLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+              <PanelLeft size={16} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -145,7 +145,7 @@ export function AppShell() {
 function RouteFallback() {
   return (
     <div className="flex h-full items-center justify-center bg-bg text-muted" role="status" aria-live="polite">
-      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+      <Loader2 size={20} className="animate-spin" aria-hidden="true" />
       <span className="ml-2 text-ui">正在载入…</span>
     </div>
   );
