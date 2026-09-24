@@ -373,8 +373,19 @@
       "create",
       "open",
       "refresh",
-      "scope"
+      "scope",
+      "binding"
     ],
+    "sessionHistory": {
+      "method": "sessions.binding(id).session.loadThrough(seq)",
+      "snapshot": [
+        "openState",
+        "hasMore",
+        "loadingOlder",
+        "running"
+      ],
+      "note": "The session's own jump loader (`ISession.loadThrough`, the call `ui-chat`'s turn rail makes). The transcript body reads a finished conversation to its first event with it, because the chat folds a closed turn's process only once `hasMore` is false."
+    },
     "inputMethod": "conversation.input.for(scope).setDraft",
     "generation": "connection.generation",
     "failureMarker": "dshRemoteStreamFailure",
