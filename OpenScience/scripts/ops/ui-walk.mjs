@@ -18,8 +18,9 @@
  *     carries no subtitle;
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
- *     control, 5 text colours (8 on the frontier feed, which adds the safety
- *     red and the rank colours) and 3 kinds of border; the title and the page
+ *     control (9 on the frontier feed, whose headlines are links), 5 text
+ *     colours (8 on the frontier feed, which adds the safety red and the rank
+ *     colours) and 3 kinds of border; the title and the page
  *     body's blocks start on one left edge; within a list, every row's title
  *     (`[data-row-title]`) starts on one left edge;
  *   - no page is replaced by the router's English error page, and a lazy page
@@ -100,10 +101,13 @@ const BACK_OFFICE = [
 
 /**
  * The style budget per page (2026-09-23 plan §7 gate 3). The frontier feed may
- * spend three more text colours: the safety red and the rank colours.
+ * spend three more text colours — the safety red and the rank colours — and
+ * one more kind of control: an item's headline is the link to its original
+ * (owner, 2026-09-24).
  */
 const BUDGET = { controls: 8, colors: 5, borders: 3 };
-const BUDGET_BY_PAGE = { frontier: { colors: 8 }, "frontier-hot": { colors: 8 }, "frontier-daily": { colors: 8 }, "frontier-all": { colors: 8 } };
+const FRONTIER_BUDGET = { controls: 9, colors: 8 };
+const BUDGET_BY_PAGE = { frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET };
 
 /**
  * A capability id printed as a SHOUTED key, from the deployment's own catalogue.
@@ -162,7 +166,10 @@ function measure([leakSources, backOfficeSources]) {
     const r = el.getBoundingClientRect();
     const framed = parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== "none";
     const filled = cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== "rgb(255, 255, 255)";
-    return `${Math.round(r.height)}h ${cs.fontSize}/${cs.fontWeight}${framed ? " framed" : ""}${filled ? " filled" : ""} r${cs.borderTopLeftRadius}`;
+    // A text link's height is its number of lines: a headline that wraps is
+    // the same control as one that does not.
+    const size = cs.display === "inline" ? "inline" : `${Math.round(r.height)}h`;
+    return `${size} ${cs.fontSize}/${cs.fontWeight}${framed ? " framed" : ""}${filled ? " filled" : ""} r${cs.borderTopLeftRadius}`;
   });
 
   // One left edge: the title and the page body's top-level blocks, and within
