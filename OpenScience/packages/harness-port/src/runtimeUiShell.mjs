@@ -111,6 +111,27 @@ export function shellStylesheet(pin) {
     // upload carrier (`__DSH_FILE_UPLOAD__`, runtimeUiTransport.mjs). It was
     // hidden here until 2026-09-22, when uploads were refused on this surface.
 
+    // The kernel's instruments, for every account (整改方案 §5.3): no
+    // consumer research product shows a reader tokens, decode speed or cache
+    // hits. The session statistics under the composer — 「N 轮 N 步 · tok/s」,
+    // 「token · 缓存命中」 and the dialog each opens — are one row with a
+    // stable data attribute (`StatsPills`, `data-composer-stats`); hidden, it
+    // stays in the document, where `walk:ui` still reads it as proof the frame
+    // loaded.
+    '[data-composer-stats]{display:none !important}',
+    // A finished turn's footer (`data-turn-tail`) keeps copy, branch and its
+    // time. Its usage pill (「用量 860K tok」) and duration pill (「用时 …」,
+    // with tok/s and TTFT behind it) are the footer's only dialog triggers,
+    // each in a wrapper of its own.
+    '[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}',
+    // A tool row that renders nothing — the delivery gate's own calls, which
+    // the 运行 view still lists — leaves its call row holding one empty
+    // outlet; the flow item goes too, so the transcript keeps no gap for it.
+    // Every outlet the renderer draws is a `display:contents` anchor
+    // (`div[data-slot]`), which is why the path names two of them; all of it is
+    // data attributes the chat and the tool tree document.
+    '[data-chat-flow-kind="tool-call"]:has(> [data-slot="conversation.chat.node"] > [data-chat-call-id] > [data-slot="tool.call.toolview"]:only-child:empty){display:none !important}',
+
     // The left column, which `sidebar` occupies with nothing.
     //
     // Occupying the slot replaces the column's CONTENT; the frame still sizes

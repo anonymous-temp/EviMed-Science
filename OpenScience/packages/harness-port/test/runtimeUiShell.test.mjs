@@ -89,6 +89,28 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
   assert.ok(shellStylesheet(GEOMETRY_KERNEL_PIN).startsWith(`/* evimed-shell: selectors read against dsh-client ${GEOMETRY_KERNEL_PIN} */`));
 });
 
+test("the kernel's instruments are hidden for every account; a turn's footer keeps copy, branch and time", () => {
+  const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  // The session statistics under the composer, by their stable data attribute.
+  assert.ok(css.includes('[data-composer-stats]{display:none !important}'));
+  // The footer's usage and duration pills are its only dialog triggers; the
+  // copy and branch buttons open none, and the clock is a plain span.
+  assert.ok(css.includes('[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}'));
+  assert.doesNotMatch(css, /\[data-turn-tail\]\{display:none|aria-label="复制"|aria-label="在新对话中分支"/, 'the footer itself stays');
+  // A tool row that renders nothing leaves no gap. The path is the renderer's
+  // own: a flow item holds the chat-node outlet anchor, the call row, and the
+  // tool-view outlet anchor (both anchors `display:contents`); a call with
+  // sub-calls keeps its row.
+  assert.ok(css.includes('[data-chat-flow-kind="tool-call"]:has(> [data-slot="conversation.chat.node"] > [data-chat-call-id] > [data-slot="tool.call.toolview"]:only-child:empty){display:none !important}'));
+  // None of it depends on who is looking: the rules carry no operator switch.
+  const operator = fixture();
+  operator.target.__EVIMED_FRAME__.operator = true;
+  const kit = kitFor(operator.ctx, operator.target);
+  apply(operator.ctx, {}, operator.target, undefined, kit);
+  const sheet = operator.target.document.head.children.find((/** @type {any} */ node) => 'data-evimed-shell' in node.attributes);
+  assert.ok(sheet.textContent.includes('[data-composer-stats]{display:none !important}'));
+});
+
 test('a slot the kernel refuses costs that slot, never the rest of the body', () => {
   const f = fixture();
   const register = f.ctx.slots.register;
