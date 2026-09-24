@@ -24,10 +24,16 @@
  *    wave-two readers below return `null` for both, so a block that has
  *    nothing behind it is hidden or says 「还在准备」, and never breaks the page.
  *  - Nothing a response carries is rendered unread. Items are parsed field by
- *    field, so a field the page does not know — a score, a model name — never
- *    reaches the DOM: the reader sees levels in words and never a number
- *    (plan §4.3), and that is enforced here, not remembered at each render.
- *    A link is kept only when it is http(s).
+ *    field, so a field the page does not know — a dimension's score, a model
+ *    name — never reaches the DOM. Since 2026-09-24 a card shows one number,
+ *    the editorial total (`score`, plan 2026-09-23 §6.2 编辑评分) with its
+ *    band; the four dimensions behind it stay words (`levels`), and that is
+ *    enforced here, not remembered at each render. A link is kept only when it
+ *    is http(s).
+ *  - Heat is shown as the server shows it: a whole number (heat × 10), with
+ *    the hot list's rank change, badge and trend, and the event page's side
+ *    column. How it is computed, in the reader's words, is `@evimed/domain`'s
+ *    `FRONTIER_HEAT_METHOD_ZH` (「热度怎么算」), stated from the same numbers.
  */
 import { useEffect, useState } from "react";
 import {
@@ -81,9 +87,13 @@ export type FrontierAxis = "timeline" | "published";
 export type FrontierWindow = "24h" | "3d" | "7d" | "30d";
 export const FRONTIER_WINDOWS: readonly FrontierWindow[] = Object.freeze(["24h", "3d", "7d", "30d"]);
 export type FrontierLevel = "high" | "medium" | "low";
+/** The band an editorial score reads in: at or above the selection line, from 60 up to it, below 60. */
+export type FrontierScoreBand = "high" | "medium" | "low";
 export type FrontierVerification = "pending" | "passed" | "repaired" | "title-only";
 export type FrontierDatePrecision = "instant" | "day" | "inferred";
 export type FrontierSearchMode = "list" | "keyword" | "hybrid";
+/** How a search is ordered: by relevance (the default), or the matches newest first. A list is always newest first. */
+export type FrontierSearchSort = "relevance" | "time";
 
 export interface FrontierItemState {
   starred: boolean;
@@ -127,6 +137,13 @@ export interface FrontierItem {
   selectedRule: string | null;
   safetyAlert: boolean;
   verification: FrontierVerification;
+  /**
+   * The editorial total, 0–100 (「编辑评分 · 满分 100」): null for a safety
+   * alert, which is not scored for a reader, and for an item not scored in full.
+   */
+  score: number | null;
+  /** The band `score` reads in; null with no score. */
+  scoreBand: FrontierScoreBand | null;
   /** The four dimensions in words. The numbers behind them never leave the server. */
   levels: { authority: FrontierLevel | null; impact: FrontierLevel | null; novelty: FrontierLevel | null; relevance: FrontierLevel | null };
   openAccess: { status: string; pdfUrl: string | null } | null;
@@ -136,8 +153,15 @@ export interface FrontierItem {
    * §14.6: a new field reaches the card without a release).
    */
   facts: Record<string, FrontierFact>;
+  /**
+   * Other institutions that reported it (「另有 N 家报道」), one each — its
+   * latest mention — named as a reader knows them, at most five.
+   */
   alsoReportedBy: Array<{ sourceId: string; sourceName: string; url: string }>;
+  /** How many other institutions reported it; `alsoReportedBy` names up to five of them. */
+  alsoReportedCount: number;
   event: { id: string; title: string } | null;
+  /** The reader's own marks; `read` is what greys a card's title. */
   state: FrontierItemState;
 }
 
@@ -157,6 +181,8 @@ export interface FrontierItemsQuery {
   starred?: boolean;
   /** Official safety alerts only, from every lane (the rail's 安全警示). */
   safety?: boolean;
+  /** A search's order; relevance unless `time` (the words' matches, newest first). */
+  sort?: FrontierSearchSort;
   cursor?: string | null;
   /** 1–50; the server's default is 30. */
   limit?: number;
@@ -205,7 +231,10 @@ export interface FrontierStatus {
 /** One row of the public sources list (build spec B.6 `FrontierSource`). */
 export interface FrontierSource {
   id: string;
+  /** The registry's name: the feed this row is (「openFDA 药品召回（enforcement）API」). */
   name: string;
+  /** The institution a reader knows it by (「FDA」); the feed's name where the platform names none. */
+  displayName: string;
   homepage: string | null;
   lane: string;
   laneLabel: string;
@@ -217,6 +246,8 @@ export interface FrontierSource {
   lastOkAt: string | null;
   lastNewEntryAt: string | null;
   entries7d: number;
+  /** Its items selected in the last 30 days (「近 30 天精选」), recounted hourly. */
+  selected30d: number;
   enabled: boolean;
   retired: boolean;
 }
@@ -241,17 +272,41 @@ export interface FrontierFollow {
  * defensively, so a partial answer renders what it has.
  */
 
-/** `GET /api/frontier/for-you`. `basis: "tags"` means ranked without vectors, and the block says so. */
+/**
+ * `GET /api/frontier/for-you`. `basis: "tags"` means ranked without vectors, and the block says so.
+ * A reason's `topic` is the reader's own phrase alone — what 「与我相关」 groups items under and
+ * heads a group with — and `text` the older sentence around it (「因为你在做：…」).
+ */
 export interface FrontierForYou {
   state: "available" | "unavailable" | "off";
   basis: "vector" | "tags" | null;
-  items: Array<{ item: FrontierItem; reason: { text: string; memoryId: string | null } }>;
+  items: Array<{ item: FrontierItem; reason: { text: string; topic: string | null; memoryId: string | null } }>;
 }
 
 /** What makes an event's first-hand material first-hand: 「含原始论文」「含官方公告」…. */
 export type FrontierPrimaryKind = "paper" | "official" | "guideline" | "label";
 
-/** One row of `GET /api/frontier/hot` — ranked by decayed heat, which is never sent. */
+/** Which ranking `GET /api/frontier/hot` answers: the current list (72 hours), or a week's or a month's. */
+export type FrontierHotWindow = "current" | "week" | "month";
+export const FRONTIER_HOT_WINDOWS: readonly FrontierHotWindow[] = Object.freeze(["current", "week", "month"]);
+
+/** A hot event's one badge: 「新」 (first reported within 12 hours) or 「升温」 (placed or measured higher than 6 hours before). */
+export type FrontierHotBadge = "new" | "rising";
+
+/** One point of a heat trend: its time and the heat shown then (×10, rounded); null where nothing was measured. */
+export interface FrontierTrendPoint {
+  at: string;
+  heat: number | null;
+}
+
+/**
+ * One row of `GET /api/frontier/hot`. On the current list: `heat` (the heat shown, heat × 10 rounded),
+ * `rankChange` against the list 6 hours before (places gained, negative when lost, `"new"` when it was
+ * not on it, null with no list that old), `badge`, and a 24-hour `trend` of seven points, oldest first —
+ * null means 「暂无走势」 (less than 6 hours of history). On a week's or a month's ranking those four are
+ * null and `period` carries the row instead: 「本周 N 家机构 · M 篇 · 在榜 X 小时 · 最高第 K 名」.
+ * `sourceCount72h` counts independent institutions (「N 家机构报道」).
+ */
 export interface FrontierHotEvent {
   rank: number;
   id: string;
@@ -260,8 +315,27 @@ export interface FrontierHotEvent {
   sourceCount72h: number;
   reportCount: number;
   primary: FrontierPrimaryKind | null;
+  hasPrimary: boolean;
+  firstAt: string | null;
   lastAt: string | null;
   status: "developing" | "settled";
+  heat: number | null;
+  rankChange: number | "new" | null;
+  badge: FrontierHotBadge | null;
+  trend: FrontierTrendPoint[] | null;
+  period: { institutions: number; reports: number; hoursOnList: number | null; bestRank: number | null } | null;
+}
+
+/**
+ * `GET /api/frontier/hot?window=`: the ranking and when it was taken — for the current list the
+ * snapshot's time (「近 72 小时 · 22:40 更新」) with `since` 72 hours before it; for a week or a
+ * month the moment it was computed, over the window from `since`.
+ */
+export interface FrontierHotBoard {
+  window: FrontierHotWindow;
+  takenAt: string | null;
+  since: string | null;
+  events: FrontierHotEvent[];
 }
 
 export type FrontierEventRole = "primary" | "report" | "background";
@@ -281,6 +355,20 @@ export interface FrontierEvent {
   reportCount: number;
   firstAt: string | null;
   lastAt: string | null;
+  /*
+   * The side column (plan 2026-09-23 §6.2). The parser always sets these;
+   * they are optional only so hand-built fixtures that predate them still
+   * type-check.
+   */
+  /** The heat now, as shown (heat × 10, rounded); null with nothing to measure. */
+  heat?: number | null;
+  /** Whether it holds first-hand material, and which (「有论文原文」「有官方公告」…). */
+  hasPrimary?: boolean;
+  primary?: FrontierPrimaryKind | null;
+  /** Institutions reporting it in the last 72 hours, by kind of source (「期刊 1 · 媒体 1」); the kinds add up to `total`. */
+  institutions72h?: { total: number; byType: Array<{ type: string; label: string; count: number }> };
+  /** Hourly heat over the last 72 hours from its first report, oldest first; null — 「暂无走势」 — under 6 hours old. */
+  trend?: FrontierTrendPoint[] | null;
   items: Array<FrontierItem & { role: FrontierEventRole }>;
   related: Array<{ id: string; title: string; relation: string; at: string | null }>;
 }
@@ -293,7 +381,11 @@ export interface FrontierDailySummary {
   generatedAt: string | null;
 }
 
-/** `GET /api/frontier/dailies/:day`. */
+/**
+ * `GET /api/frontier/dailies/:day`. The header reads 「9月23日 周三 · {itemCount} 条 · 约 {readingMinutes} 分钟」;
+ * `previousDay` / `nextDay` are the nearest issues on either side (a quiet day has none), null at either end.
+ * `markdown` is the issue as it reads now — the institutions' names, no withdrawn item — ready to copy.
+ */
 export interface FrontierDaily {
   day: string;
   windowStart: string | null;
@@ -304,7 +396,12 @@ export interface FrontierDaily {
   safety: FrontierItem[];
   aiMinute: string | null;
   markdown: string;
+  /** The items the issue shows now. */
   itemCount: number;
+  /** Minutes to read it, at 400 characters a minute; at least 1. */
+  readingMinutes: number;
+  previousDay: string | null;
+  nextDay: string | null;
 }
 
 /** `POST …/save-to-library`: an open-access PDF, or a short record when there is none. */
@@ -332,6 +429,21 @@ const count = (value: unknown): number => (typeof value === "number" && Number.i
 const strings = (value: unknown, max = 50): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim() !== "").slice(0, max) : []);
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? value as T : fallback);
 const orNull = <T extends string>(value: unknown, allowed: readonly T[]): T | null => (allowed.includes(value as T) ? value as T : null);
+/** A whole number the server computed — a heat shown, hours on the list — or null when it sent none. */
+const whole = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
+/** A rank: a whole number from 1, or null. */
+const place = (value: unknown): number | null => (typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null);
+
+/** A heat trend, oldest first: points with a readable time; null when the server sent none (「暂无走势」). */
+function parseTrend(value: unknown): FrontierTrendPoint[] | null {
+  if (!Array.isArray(value)) return null;
+  const points = value.flatMap((entry) => {
+    const point = record(entry);
+    const at = moment(point?.at);
+    return at ? [{ at, heat: whole(point?.heat) }] : [];
+  });
+  return points.length > 0 ? points : null;
+}
 
 /** A version as a string: the server sends numbers, and `1` and `"1"` are one version. */
 function version(value: unknown): string | null {
@@ -436,6 +548,13 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
   const entities = record(raw.entities);
   const event = record(raw.event);
   const state = record(raw.state);
+  const alsoReportedBy = (Array.isArray(raw.alsoReportedBy) ? raw.alsoReportedBy : []).flatMap((entry) => {
+    const mention = record(entry);
+    const name = text(mention?.sourceName);
+    const link = safeLink(mention?.url);
+    return name && link ? [{ sourceId: text(mention?.sourceId) ?? "", sourceName: name, url: link }] : [];
+  }).slice(0, 5);
+  const score = typeof raw.score === "number" && Number.isFinite(raw.score) && raw.score >= 0 && raw.score <= 100 ? Math.round(raw.score) : null;
   return {
     id,
     title: text(raw.title) ?? titleZh ?? titleRaw,
@@ -472,6 +591,9 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     selectedRule: text(raw.selectedRule),
     safetyAlert: raw.safetyAlert === true,
     verification: oneOf(raw.verification, ["pending", "passed", "repaired", "title-only"] as const, "pending"),
+    // A safety alert carries no score for a reader, whatever a server sent.
+    score: raw.safetyAlert === true ? null : score,
+    scoreBand: raw.safetyAlert === true || score === null ? null : orNull(raw.scoreBand, ["high", "medium", "low"] as const),
     levels: {
       authority: orNull(levels?.authority, LEVELS),
       impact: orNull(levels?.impact, LEVELS),
@@ -480,12 +602,9 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
     },
     openAccess: openAccess ? { status: text(openAccess.status) ?? "unknown", pdfUrl: safeLink(openAccess.pdfUrl) } : null,
     facts: parseFacts(raw.facts),
-    alsoReportedBy: (Array.isArray(raw.alsoReportedBy) ? raw.alsoReportedBy : []).flatMap((entry) => {
-      const mention = record(entry);
-      const name = text(mention?.sourceName);
-      const link = safeLink(mention?.url);
-      return name && link ? [{ sourceId: text(mention?.sourceId) ?? "", sourceName: name, url: link }] : [];
-    }).slice(0, 5),
+    alsoReportedBy,
+    // A server that sends no count has named them all (it named at most five).
+    alsoReportedCount: Math.max(count(raw.alsoReportedCount), alsoReportedBy.length),
     event: event && text(event.id) && text(event.title) ? { id: text(event.id)!, title: text(event.title)! } : null,
     state: { starred: state?.starred === true, hidden: state?.hidden === true, read: state?.read === true },
   };
@@ -549,6 +668,7 @@ function parseSource(value: unknown): FrontierSource | null {
   return {
     id,
     name,
+    displayName: text(raw.displayName) ?? name,
     homepage: safeLink(raw.homepage),
     lane,
     laneLabel: text(raw.laneLabel) ?? LANE_LABELS[lane] ?? "",
@@ -560,6 +680,7 @@ function parseSource(value: unknown): FrontierSource | null {
     lastOkAt: moment(raw.lastOkAt),
     lastNewEntryAt: moment(raw.lastNewEntryAt),
     entries7d: count(raw.entries7d),
+    selected30d: count(raw.selected30d),
     enabled: raw.enabled !== false,
     retired: raw.retired === true,
   };
@@ -575,6 +696,8 @@ function parseHotEvent(value: unknown, index: number): FrontierHotEvent | null {
   const id = text(raw?.id) ?? text(record(raw?.event)?.id);
   const title = text(raw?.title) ?? text(record(raw?.event)?.title);
   if (!raw || !id || !title) return null;
+  const primary = orNull(raw.primary, ["paper", "official", "guideline", "label"] as const);
+  const period = record(raw.period);
   return {
     rank: count(raw.rank) || index + 1,
     id,
@@ -582,9 +705,29 @@ function parseHotEvent(value: unknown, index: number): FrontierHotEvent | null {
     latest: text(raw.latest),
     sourceCount72h: count(raw.sourceCount72h),
     reportCount: count(raw.reportCount),
-    primary: orNull(raw.primary, ["paper", "official", "guideline", "label"] as const),
+    primary,
+    hasPrimary: raw.hasPrimary === true || primary !== null,
+    firstAt: moment(raw.firstAt),
     lastAt: moment(raw.lastAt),
     status: oneOf(raw.status, ["developing", "settled"] as const, "developing"),
+    heat: whole(raw.heat),
+    rankChange: raw.rankChange === "new" ? "new" : typeof raw.rankChange === "number" && Number.isInteger(raw.rankChange) ? raw.rankChange : null,
+    badge: orNull(raw.badge, ["new", "rising"] as const),
+    trend: parseTrend(raw.trend),
+    period: period ? {
+      institutions: count(period.institutions), reports: count(period.reports), hoursOnList: whole(period.hoursOnList), bestRank: place(period.bestRank),
+    } : null,
+  };
+}
+
+function parseHotBoard(value: unknown, window: FrontierHotWindow): FrontierHotBoard {
+  const raw = record(value) ?? {};
+  const rows = Array.isArray(raw.events) ? raw.events : Array.isArray(raw.items) ? raw.items : [];
+  return {
+    window: oneOf(raw.window, FRONTIER_HOT_WINDOWS, window),
+    takenAt: moment(raw.takenAt),
+    since: moment(raw.since),
+    events: rows.map(parseHotEvent).filter((row): row is FrontierHotEvent => row !== null).slice(0, 10),
   };
 }
 
@@ -595,6 +738,8 @@ function parseEvent(value: unknown): FrontierEvent | null {
   if (!raw || !id || !title) return null;
   const latest = record(raw.latest);
   const lane = text(raw.lane) ?? "mixed";
+  const primary = orNull(raw.primary, ["paper", "official", "guideline", "label"] as const);
+  const institutions = record(raw.institutions72h);
   return {
     id,
     title,
@@ -608,6 +753,20 @@ function parseEvent(value: unknown): FrontierEvent | null {
     reportCount: count(raw.reportCount),
     firstAt: moment(raw.firstAt),
     lastAt: moment(raw.lastAt),
+    heat: whole(raw.heat),
+    hasPrimary: raw.hasPrimary === true || primary !== null,
+    primary,
+    institutions72h: {
+      total: count(institutions?.total),
+      // A kind the server did not label is not shown: a key on screen is a key the reader has to learn.
+      byType: (Array.isArray(institutions?.byType) ? institutions.byType : []).flatMap((entry) => {
+        const kind = record(entry);
+        const type = text(kind?.type);
+        const label = text(kind?.label);
+        return type && label && count(kind?.count) > 0 ? [{ type, label, count: count(kind?.count) }] : [];
+      }),
+    },
+    trend: parseTrend(raw.trend),
     items: (Array.isArray(raw.items) ? raw.items : []).flatMap((entry) => {
       const item = parseFrontierItem(entry);
       return item ? [{ ...item, role: oneOf(record(entry)?.role, ["primary", "report", "background"] as const, "report") }] : [];
@@ -649,6 +808,9 @@ function parseDaily(value: unknown): FrontierDaily | null {
     aiMinute: text(raw.aiMinute),
     markdown: typeof raw.markdown === "string" ? raw.markdown : "",
     itemCount: count(raw.itemCount),
+    readingMinutes: Math.max(1, count(raw.readingMinutes)),
+    previousDay: text(raw.previousDay),
+    nextDay: text(raw.nextDay),
   };
 }
 
@@ -709,6 +871,8 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   if (query.window) params.set("window", query.window);
   const q = query.q?.trim();
   if (q) params.set("q", q.slice(0, 200));
+  // Relevance is the server's default; only the other order is named.
+  if (q && query.sort === "time") params.set("sort", "time");
   if (query.starred) params.set("starred", "1");
   if (query.safety) params.set("safety", "1");
   if (query.cursor) params.set("cursor", query.cursor);
@@ -808,7 +972,7 @@ export function fetchFrontierForYou(): Promise<FrontierForYou | null> {
       const item = parseFrontierItem(row?.item);
       const reason = record(row?.reason);
       const because = text(reason?.text);
-      return item && because ? [{ item, reason: { text: because, memoryId: text(reason?.memoryId) } }] : [];
+      return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) } }] : [];
     }).slice(0, 5);
     return {
       state: oneOf(raw.state ?? raw.status, ["available", "unavailable", "off"] as const, "off"),
@@ -818,12 +982,17 @@ export function fetchFrontierForYou(): Promise<FrontierForYou | null> {
   });
 }
 
-export function fetchFrontierHot(): Promise<FrontierHotEvent[] | null> {
-  return optional(async () => {
-    const raw = record(await productRequest<unknown>("/frontier/hot")) ?? {};
-    const rows = Array.isArray(raw.events) ? raw.events : Array.isArray(raw.items) ? raw.items : [];
-    return rows.map(parseHotEvent).filter((row): row is FrontierHotEvent => row !== null).slice(0, 10);
-  });
+/**
+ * A hot ranking with the time it was taken: the current list (the default), or a week's or a
+ * month's ranking. Null where the route does not exist yet or the module is off.
+ */
+export function fetchFrontierHotBoard(window: FrontierHotWindow = "current"): Promise<FrontierHotBoard | null> {
+  return optional(async () => parseHotBoard(await productRequest<unknown>(window === "current" ? "/frontier/hot" : `/frontier/hot?window=${window}`), window));
+}
+
+/** The current hot list's rows alone (what the page read before the board carried its time). */
+export async function fetchFrontierHot(): Promise<FrontierHotEvent[] | null> {
+  return (await fetchFrontierHotBoard("current"))?.events ?? null;
 }
 
 /**
