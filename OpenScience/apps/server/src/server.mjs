@@ -47,8 +47,9 @@ import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
-import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "./notificationService.mjs";
+import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
+import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
 import { sessionDispatchNotes } from "./memorySessions.mjs";
@@ -884,7 +885,7 @@ export function createWebApiApp(overrides = {}) {
   }
 
   const learningService = productDocuments
-    ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService,
+    ? new LearningService({ documents: productDocuments, jobs: productJobs,
       resolveBaselineDigest: async (userId, projectId) => {
         const user = await store.userById(userId);
         if (!user) throw new HttpError(404, "learning_account_unavailable", "The evaluation owner is unavailable.");
@@ -1139,6 +1140,13 @@ export function createWebApiApp(overrides = {}) {
     parser: documentParser,
     pollMs: config.sourceIngestionPollMs,
     leaseMs: config.sourceIngestionLeaseMs,
+    // The orphan sweep's own line: what it withdrew, or why it could not.
+    report: (event, detail) => {
+      const failed = event === "derived_memory_sweep_failed";
+      void securityAudit(config, "memory.derived.sweep", failed ? "failed" : "completed", failed
+        ? { code: detail.code }
+        : { code: event, detail: `sources=${detail.sources} projects=${detail.projects} entries=${detail.entries} ledgers=${detail.ledgers}` });
+    },
     understandingRuns: new SourceUnderstandingRuns({
       dispatch: request => sourceUnderstandingRuntime.dispatch(request),
       readResult: identity => sourceUnderstandingRuntime.readResult(identity),
@@ -1821,24 +1829,25 @@ export function createWebApiApp(overrides = {}) {
       }, project, run);
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
-      // and each reports where it belongs (「方法库整理」, the knowledge base's
-      // own row). On 2026-09-21 their runs were 20 of the acceptance account's
-      // 24 unread items — 「9月21日完成 8 项研究：从已完成运行中提炼可复用方法」,
-      // 「研究运行已被平台终止」 for a lesson nobody asked for.
-      if (notificationService && !evaluationRun && !isInternalProject(project.id) && runFinishedNotifies(run)) {
+      // and each reports where it belongs (the knowledge base's own row). On
+      // 2026-09-21 their runs were 20 of the acceptance account's 24 unread
+      // items — 「9月21日完成 8 项研究：从已完成运行中提炼可复用方法」,
+      // 「研究运行已被平台终止」 for a lesson nobody asked for. Automated work
+      // leaves no item either, not even a quiet one (plan 2026-09-23 §5.8):
+      // an evaluation harness says so at dispatch (`automated`), and an
+      // autopilot episode or its verification is known here — the episode's
+      // digest is its result, and that is an ordinary notice.
+      if (notificationService && runFinishedReachesInbox(run, {
+        internalProject: isInternalProject(project.id), evaluation: evaluationRun,
+        automated: automatedRun(run), autopilotOwned: autopilotOwned === true,
+      })) {
         try {
           // Say what happened, in the notice itself. The mapping lives in
           // `notificationService.runFinishedInboxItem` so it is a tested pure
           // function rather than inline copy in a completion callback.
-          //
-          // Automated work is recorded without notifying anyone (C1): an
-          // evaluation harness says so at dispatch (`automated`), and an
-          // autopilot episode or its verification is known here — the
-          // episode has its own digest, which is the notice a person reads.
-          const silent = automatedRun(run) || autopilotOwned === true;
           const peers = (await agentRuns.list(project).catch(() => []))
-            .filter((other) => other.id !== run.id && automatedRun(other) === silent);
-          await notificationService.create(project.userId, runFinishedInboxItem(project, run, { peers, silent }));
+            .filter((other) => other.id !== run.id && !automatedRun(other));
+          await notificationService.create(project.userId, runFinishedInboxItem(project, run, { peers }));
         } catch (error) {
           await securityAudit(config, "notification.agent_run.create", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
@@ -2136,7 +2145,7 @@ export function createWebApiApp(overrides = {}) {
     const consolidation = new MethodConsolidation({
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
-      learning: learningService, jobs: productJobs, notifications: notificationService,
+      learning: learningService, jobs: productJobs,
       // A step waits for its run as long as the run monitor lets a run live.
       stepWaitMs: config.agentRunMonitorTimeoutMs,
       // The line a researcher reads for a method that came without one.
@@ -4063,7 +4072,18 @@ export function createWebApiApp(overrides = {}) {
           // derived copy that survives holds no original data and goes with the
           // next rebuild, so failing here would report a deletion that did.
           await memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
-          const data = await store.deleteProject(user, projectId);
+          // What the project's documents and runs put in the account's own
+          // capsule — 「来自资料」 above all — is account-level and outlived
+          // every project deletion until 2026-09-24 (62 such memories were
+          // cleared by hand on production the day before). Withdrawn inside
+          // the deletion's own transaction, so the two commit together; the
+          // update is also what tells the recall index (`derivedMemory.mjs`).
+          if (productDatabase) await migrateProductStore(productDatabase);
+          const data = await store.deleteProject(user, projectId, {
+            beforeDelete: async (client) => {
+              if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
+            },
+          });
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
           return;

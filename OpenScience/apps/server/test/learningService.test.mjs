@@ -207,8 +207,9 @@ test("retirement needs no evidence, says why, and is undone by the rollback the 
   const retired = await learning.retire("u1", created.id, { expectedRevision: created.revision, reason: "superseded by hand" });
   assert.equal(retired.payload.status, "retired");
   assert.equal(retired.payload.statusReason, "superseded by hand");
-  assert.equal(notices.length, 1);
-  assert.match(notices[0].body, /superseded by hand/);
+  // The why lives on the method; the inbox hears nothing of the library's own
+  // changes (plan 2026-09-23 §5.8) — they were quiet records under 「自动运行」.
+  assert.deepEqual(notices, []);
 
   // Un-retiring is a rollback, not a second verb. A `revive` existed here and
   // had no caller anywhere: the route offers `retire` and `rollback`, and two
@@ -344,9 +345,7 @@ test("an explicitly taught method takes effect at once, which is the other half 
   // And the nightly path still works on it without complaint.
   const approved = await learning.approve("u1", created.id, { expectedRevision: created.revision });
   assert.equal(approved.payload.status, "approved");
-  assert.match(notices.at(-1).body, /已生效/);
-  assert.match(notices.at(-1).body, /回到上一版/, "the notice names the way back");
-  assert.doesNotMatch(notices.at(-1).body, /[A-Za-z]{6,}/, "no English sentence reaches the inbox");
+  assert.deepEqual(notices, [], "a method put in force is shown on the memory page, not posted to the inbox");
 });
 
 test("a caller cannot assert a status, an origin or a verdict of its own", async () => {

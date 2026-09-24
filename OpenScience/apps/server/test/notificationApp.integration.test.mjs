@@ -38,7 +38,7 @@ test("the real app exposes an account-scoped inbox decision journey", {
     assert.equal((await resolved.json()).data.resolution.actionId, "adopt");
     // C1: the bell's two integers, the list's total, and read-all.
     await app.notificationService.create(user.id, { noticeType: "notify", title: "研究已交付，待你复核",
-      body: "已交付。1 项自证未通过，其中 1 项涉及临床安全。", severity: "safety", actions: [{ id: "open", label: "查看运行" }] });
+      body: "已交付。1 项自证未通过，其中 1 项涉及临床安全。", severity: "safety", actions: [{ id: "open", label: "打开对话" }] });
     const count = await fetch(`${base}/api/inbox/unread-count`, { headers });
     assert.equal(count.status, 200);
     assert.deepEqual((await count.json()).data, { unreadTotal: 1, safetyUnread: 1 });

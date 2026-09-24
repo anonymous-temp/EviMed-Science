@@ -37,6 +37,13 @@ CREATE INDEX IF NOT EXISTS inbox_project_fk_idx ON evimed_inbox.notifications(us
 -- existing row reads as the quiet default, which is what it was.
 ALTER TABLE evimed_inbox.notifications ADD COLUMN IF NOT EXISTS severity text NOT NULL DEFAULT 'info';
 ALTER TABLE evimed_inbox.notifications ADD COLUMN IF NOT EXISTS silent boolean NOT NULL DEFAULT false;
+-- 2026-09-24 (plan 2026-09-23 §5.8): nothing is recorded quietly any more.
+-- Evaluations, the platform's own background work and the method library's
+-- housekeeping leave no inbox item at all, and the quiet records already
+-- stored — read on arrival, shown only under the 「自动运行 N 条」 fold the
+-- page no longer has — go too. The column stays, unwritten, while the release
+-- before this one can still be switched back to: that release inserts it.
+DELETE FROM evimed_inbox.notifications WHERE silent;
 -- The bell's count, and the retention sweep's scan. Both are partial on
 -- read_at, which is the only column either of them filters on first.
 CREATE INDEX IF NOT EXISTS inbox_unread_idx ON evimed_inbox.notifications(user_id,severity) WHERE read_at IS NULL;

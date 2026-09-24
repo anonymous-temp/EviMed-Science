@@ -43,11 +43,10 @@ import {
   cleanMethodDisplay,
   parseSkillFrontmatter,
   preservedSectionsIntact,
-  reflectionDue,
   retirementProposal,
   validateMethodGraph,
 } from "@evimed/domain";
-import { methodLabel, methodRecordFrom } from "./learningService.mjs";
+import { methodRecordFrom } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
@@ -197,14 +196,17 @@ export function groupPairs(pairs, limits = {}) {
 
 export class MethodConsolidation {
   /**
+   * No inbox: what a pass did rides on its job result, and a refusal on the
+   * audit line (plan 2026-09-23 §5.8).
+   *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          jobs?: any, notifications?: any, evaluate?: ((request: any) => Promise<any>) | null,
+   *          jobs?: any, evaluate?: ((request: any) => Promise<any>) | null,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
    */
   constructor({
-    dispatch, readResult, learning, jobs = null, notifications = null, evaluate = null, audit = null, now = () => new Date(),
+    dispatch, readResult, learning, jobs = null, evaluate = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null,
   }) {
@@ -216,7 +218,6 @@ export class MethodConsolidation {
     this.readResult = readResult;
     this.learning = learning;
     this.jobs = jobs;
-    this.notifications = notifications;
     this.evaluate = evaluate;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
@@ -358,20 +359,18 @@ export class MethodConsolidation {
       // evaluation someone asks for.
     }
 
+    // A proposal that is not immediate stays a proposal: it rides on this
+    // pass's result (`retirements`), and nothing is posted to the inbox — the
+    // library's housekeeping used to arrive there as quiet records, in
+    // engineering words, under the 「自动运行」 fold (plan 2026-09-23 §5.8).
     const retirements = await this.learning.retirementProposals(job.userId, { nowMs: this.now().getTime() });
     for (const entry of retirements) {
-      if (entry.proposal.immediate) {
-        await this.learning.retire(job.userId, entry.document.id, {
-          expectedRevision: entry.document.revision,
-          reason: retirementSentence(entry.proposal),
-        }).catch(() => null);
-        continue;
-      }
-      await this.notice(job, entry.document, retirementSentence(entry.proposal));
+      if (!entry.proposal.immediate) continue;
+      await this.learning.retire(job.userId, entry.document.id, {
+        expectedRevision: entry.document.revision,
+        reason: retirementSentence(entry.proposal),
+      }).catch(() => null);
     }
-
-    const importance = relationCount * 10 + promoted.length * 40 + retirements.length * 20;
-    if (reflectionDue(importance)) await this.reflect(job, { relationCount, promoted, retirements });
 
     // Last, so no write above races these revisions: every method a researcher
     // would read without a line of their own gets one — those that predate
@@ -694,8 +693,9 @@ export class MethodConsolidation {
       const preserved = preservedSectionsIntact(target.payload.body, parsed.body);
       if (!preserved.ok) {
         // The builder dropped a check. The paper asks the model not to; this
-        // asks the record.
-        await this.notice(job, target, `A rewrite dropped ${preserved.dropped.length} verification or constraint item(s) and was refused.`);
+        // asks the record, and the refusal goes to the operator's audit line —
+        // it used to be an English notice in the researcher's inbox.
+        await this.audit?.(job, "method.rewrite.refused", { methodId: target.id, dropped: preserved.dropped.length });
         continue;
       }
       const amended = await this.learning.amendMethod(job.userId, target.id, {
@@ -710,51 +710,15 @@ export class MethodConsolidation {
     return { applied };
   }
 
-  /** @param {any} job @param {any} document @param {string} body */
-  async notice(job, document, body) {
-    if (!this.notifications) return;
-    try {
-      await this.notifications.create(job.userId, {
-        noticeType: "notify",
-        title: `方法库整理：${methodLabel(document)}`,
-        body,
-        ...(job.projectId ? { projectId: job.projectId } : {}),
-        source: { type: "system", id: document.id },
-        idempotencyKey: `consolidate-notice:${job.id}:${document.id}`,
-        // Nightly housekeeping of the method library notifies nobody (C1:
-        // 完成 / 需要你 / 结论变了 only); the record stays in the inbox, read.
-        silent: true,
-      });
-    } catch {
-      // isolated: evimed_learning_notice_failed_total
-    }
-  }
-
-  /** @param {any} job @param {{relationCount: number, promoted: string[], retirements: any[]}} summary */
-  async reflect(job, summary) {
-    if (!this.notifications) return;
-    try {
-      await this.notifications.create(job.userId, {
-        noticeType: "notify",
-        title: "方法库有了一次值得一看的变化",
-        body: `新增关系 ${summary.relationCount} 条，启用 ${summary.promoted.length} 条方法，建议停用 ${summary.retirements.length} 条。`,
-        ...(job.projectId ? { projectId: job.projectId } : {}),
-        idempotencyKey: `consolidate-reflection:${job.id}`,
-        silent: true,
-      });
-    } catch {
-      // isolated: evimed_learning_notice_failed_total
-    }
-  }
 }
 
 /**
  * Why a method was retired or is proposed for it, in the reader's words.
  *
  * `retirementProposal` names the branch that decided (`code`) and keeps its
- * English sentence for the log; this is the one a researcher reads, in the
- * inbox and on the method. The inbox used to carry the English one
- * (「Proposed for retirement: … One click restores it.」).
+ * English sentence for the log; this is the one a researcher reads, on the
+ * method. The inbox used to carry the English one (「Proposed for
+ * retirement: … One click restores it.」).
  * @param {{code?: string, immediate?: boolean, runs?: number, rejected?: number}} proposal
  */
 export function retirementSentence(proposal) {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { sourceFileFormat } from "@evimed/domain";
+import { SOURCE_PUBLICATION_RECORD_TYPE, withdrawDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { HttpError, assertNoSymlinkPath, readJson, safeId, sendJson, writeFileAtomicNoFollow } from "./security.mjs";
 import { sourceIndexDocument, sourceParserRevision } from "./sourceService.mjs";
@@ -45,8 +46,10 @@ const RECORD_KIND = "preferences";
 export const LIBRARY_RECORD_TYPE = "library-item";
 /** The other `preferences` record this service writes: what of one document's
  *  understanding is already in the capsule. Keyed by the document so it exists
- *  whether or not the researcher ever put that document in their library. */
-export const PUBLICATION_RECORD_TYPE = "source-publication";
+ *  whether or not the researcher ever put that document in their library.
+ *  Defined beside the withdrawal that reads it (`derivedMemory.mjs`): deleting
+ *  the document, or its project, withdraws exactly the entries it lists. */
+export const PUBLICATION_RECORD_TYPE = SOURCE_PUBLICATION_RECORD_TYPE;
 
 /** @param {string} sourceId */
 function publicationId(sourceId) {
@@ -539,6 +542,17 @@ export class LibraryService {
         generation: understanding.generation, at: this.now().toISOString(), facts, methods, entries: entryIds,
       }, { expectedRevision: latest?.revision ?? 0 });
       this.counters.published += 1;
+      // The document may have been deleted while this ran — a researcher who
+      // uploads a file and removes it at once. Its deletion withdrew what it
+      // could see then; what this publication wrote afterwards, the ledger
+      // just written included, goes now rather than on the orphan sweep's
+      // next cycle. Only a definite "not there" counts: a failed read is not
+      // a deletion.
+      const gone = await this.sources.get(userId, id).then(() => false, (/** @type {any} */ error) => error?.code === "source_not_found");
+      if (gone && typeof this.database.transaction === "function") {
+        await this.database.transaction((/** @type {any} */ client) => withdrawDerivedMemory(client, userId, { sourceIds: [id], reason: "source_deleted" }))
+          .catch((/** @type {any} */ error) => this.#failed(error));
+      }
       return { sourceId: id, capsuleId: capsule.id, capsuleTitle: String(capsule.payload.title ?? ""),
         generation: understanding.generation, facts, methods, added, kept, retired };
     });

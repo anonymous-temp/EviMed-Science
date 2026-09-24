@@ -87,7 +87,7 @@ function consolidation(options) {
       readResult: options.readResult ?? (async () => ({ status: "succeeded", output: {} })),
       learning: options.learning,
       jobs: options.jobs ?? null,
-      notifications: options.notifications ?? null,
+      audit: options.audit ?? null,
       now: () => new Date("2026-09-07T00:00:00.000Z"),
     }),
   };
@@ -127,15 +127,15 @@ test("candidate pairs come from shared vocabulary, and groups are disjoint", () 
   assert.equal(groupPairs([{ a: "a", b: "b", overlap: 1 }], { maxGroups: 0 }).length, 0);
 });
 
-test("a rewrite that drops a verification item is refused, and the refusal is a notice", async () => {
+test("a rewrite that drops a verification item is refused, and the refusal is an audit line, not an inbox item", async () => {
   const items = [doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")];
   const learning = fakeLearning(items);
   /** @type {any[]} */
-  const notices = [];
+  const audited = [];
   const shrunk = SECTIONS().replace("- The numbers were swept.\n", "");
   const { instance } = consolidation({
     learning,
-    notifications: { async create(userId, input) { notices.push(input); return input; } },
+    audit: async (job, event, detail) => { audited.push({ job: job.id, event, detail }); },
     readResult: async (identity) => ({
       status: "succeeded",
       output: identity.dispatchId.includes("build")
@@ -145,7 +145,10 @@ test("a rewrite that drops a verification item is refused, and the refusal is a 
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
   assert.deepEqual(learning.amendments, [], "the shrunken rewrite was never written");
-  assert.ok(notices.some((notice) => /verification or constraint/.test(notice.body)), notices.map((n) => n.body).join(" | "));
+  // It used to be the English sentence 「A rewrite dropped 1 verification or
+  // constraint item(s) and was refused.」 in the researcher's inbox.
+  assert.deepEqual(audited, [{ job: "job_1", event: "method.rewrite.refused", detail: { methodId: "m1", dropped: 1 } }]);
+  assert.equal("notifications" in instance, false, "the library's housekeeping has no inbox to post to (plan 2026-09-23 §5.8)");
 });
 
 test("a rewrite that only grows the checks is accepted", async () => {
