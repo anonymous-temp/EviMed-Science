@@ -58,7 +58,7 @@ starterPrompts:
 display:
   title: "论文审稿"
   category: "写作与传播"
-  description: "按研究类型审查方法学、统计、报告规范、完整性并给出可执行修改建议。"
+  description: "按研究类型审查稿件的方法学、统计与报告规范，给出修改意见。"
   starterPrompts:
   - "审查我上传的论文，定位方法学、统计学、报告规范和完整性问题。"
   - "按 CONSORT 审查这篇随机对照试验稿件的报告完整性。"

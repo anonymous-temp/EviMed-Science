@@ -41,7 +41,7 @@ describe("SourcesPage automatic project fallback", () => {
     expect(getWebProjectId()).toBe("default");
     expect(useProjectStore.getState().currentId).toBe("default");
     expect(api.listSources).toHaveBeenLastCalledWith("default", { status: "" });
-    expect(await screen.findByText("知识库还是空的")).toBeInTheDocument();
+    expect(await screen.findByText("还没有资料。拖进来，或点右上角上传。")).toBeInTheDocument();
 
     await act(async () => { resolveDeleted({ items: [{ id: "obsolete", projectId: "deleted-project", payload: { paths: ["obsolete.txt"] } }], nextCursor: null }); });
     expect(screen.queryByText("obsolete.txt")).not.toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("SourcesPage automatic project fallback", () => {
     });
     expect(getWebProjectId()).toBe("new-project");
     expect(api.listSources).toHaveBeenLastCalledWith("new-project", { status: "" });
-    expect(await screen.findByText("知识库还是空的")).toBeInTheDocument();
+    expect(await screen.findByText("还没有资料。拖进来，或点右上角上传。")).toBeInTheDocument();
     await act(async () => { rejectDeleted(new Error("Old project unavailable")); });
     expect(screen.queryByText(/无法加载资料状态/)).not.toBeInTheDocument();
     expect(api.listSources).not.toHaveBeenCalledWith("default", { status: "" });

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, Loader2, LockKeyhole, UserRound } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import {
@@ -91,91 +91,62 @@ function signInMessage(error: unknown): string {
     );
   }
 
+  // The brand once, the two fields by their labels, and the one button — no
+  // eyebrow, no sentence about the workspace, no card and no footer
+  // (2026-09-23 plan §5.10, mockup m12). The heading names the form for a
+  // screen reader; the page itself shows the brand, not a second 「EviMed」.
   return (
     <main className="grid min-h-screen place-items-center bg-bg px-6 py-10 text-text">
-      <div className="w-full max-w-[420px]">
+      <PageTitle page={registering ? "注册" : "登录"} />
+      <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center justify-center gap-2.5">
-          <EviMedMark className="h-9 w-9" />
-          <span className="font-serif text-display font-semibold">EviMed</span>
+          <span aria-hidden="true"><EviMedMark className="h-7 w-7" /></span>
+          <span className="text-display font-semibold">EviMed</span>
         </div>
+        <h1 className="sr-only">{registering ? "注册" : "登录"}</h1>
 
-        <section className="rounded-card border border-border bg-surface px-7 py-8 sm:px-9">
-          <div className="text-center">
-            <div className="text-caption font-medium text-accent">循证医学科研智能体</div>
-            <PageTitle page="登录" />
-            <h1 className="mt-3 font-serif text-display font-semibold">
-              {registering ? "注册 EviMed" : "登录 EviMed"}
-            </h1>
-            <p className="mt-2 text-ui leading-6 text-muted">
-              {registering
-                ? "注册后你会得到一个独立的科研空间，别人看不到你的项目和数据"
-                : "进入你的个人知识库与科研工作空间"}
-            </p>
-          </div>
-
-          {methods?.mode === "oidc" ? (
-            <a
-              href={getWebOidcStartUrl("/app/chat")}
-              className={buttonClasses({ className: "mt-7 h-11 w-full gap-2 text-ui" })}
-            >
-              {methods.oidc?.label ?? "统一身份登录"}
-              <ArrowRight size={16} aria-hidden="true" />
-            </a>
-          ) : (
-            <form className="mt-7 space-y-4" onSubmit={submit}>
-              <div>
-                <label htmlFor="login-username" className="mb-1.5 block text-ui font-medium">账号</label>
-                <div className="relative">
-                  <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} aria-hidden="true" />
-                  <Input
-                    id="login-username"
-                    autoFocus
-                    autoComplete="username"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    placeholder="请输入账号"
-                    className="h-11 bg-bg pl-10 text-ui"
-                  />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="login-password" className="mb-1.5 block text-ui font-medium">密码</label>
-                <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} aria-hidden="true" />
-                  <Input
-                    id="login-password"
-                    type="password"
-                    autoComplete={registering ? "new-password" : "current-password"}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="请输入密码"
-                    className="h-11 bg-bg pl-10 text-ui"
-                  />
-                </div>
-              </div>
-              <Button type="submit" loading={submitting} className="h-11 w-full gap-2 text-ui">
-                {registering ? "注册并进入" : "登录"}
+        {methods?.mode === "oidc" ? (
+          <a href={getWebOidcStartUrl("/app/chat")} className={buttonClasses({ size: "lg", className: "w-full" })}>
+            {methods.oidc?.label ?? "统一身份登录"}
+            <ArrowRight size={16} aria-hidden="true" />
+          </a>
+        ) : (
+          <form className="space-y-4" onSubmit={submit}>
+            <Input
+              id="login-username"
+              label="账号"
+              autoFocus
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+            />
+            <Input
+              id="login-password"
+              label="密码"
+              type="password"
+              autoComplete={registering ? "new-password" : "current-password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <Button type="submit" size="lg" loading={submitting} className="w-full">
+              {registering ? "注册并进入" : "登录"}
+            </Button>
+            {methods?.selfRegistration && (
+              <Button
+                variant="text"
+                className="w-full"
+                onClick={() => {
+                  setRegistering((value) => !value);
+                  setError(null);
+                }}
+              >
+                {registering ? "已有账号？返回登录" : "还没有账号？注册一个"}
               </Button>
-              {methods?.selfRegistration && (
-                <button
-                  type="button"
-                  className="w-full text-center text-ui text-link hover:underline"
-                  onClick={() => {
-                    setRegistering((value) => !value);
-                    setError(null);
-                  }}
-                >
-                  {registering ? "已有账号？返回登录" : "还没有账号？注册一个"}
-                </button>
-              )}
-            </form>
-          )}
+            )}
+          </form>
+        )}
 
-          {error && <div className="mt-4 text-center text-ui text-error" role="alert">{error}</div>}
-        </section>
-        <p className="mt-5 text-center text-caption text-muted">
-          仅用于科研辅助，不替代临床诊疗或专业判断；关键结论需回溯原始证据
-        </p>
+        {error && <p className="mt-4 text-center text-ui text-danger" role="alert">{error}</p>}
       </div>
     </main>
   );
