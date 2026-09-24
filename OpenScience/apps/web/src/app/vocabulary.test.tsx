@@ -109,9 +109,10 @@ describe("runtime vocabulary never leads a surface", () => {
     expect(row.textContent).not.toMatch(/open-domain-answer/);
   });
 
-  it("keeps the identifiers reachable, behind the row's own menu", async () => {
+  it("keeps the identifiers reachable for an operator, behind the row's own menu", async () => {
     const written: string[] = [];
     Object.assign(navigator, { clipboard: { writeText: (text: string) => { written.push(text); return Promise.resolve(); } } });
+    mocks.fetchWebMe.mockResolvedValue({ project: { id: "default" }, operator: true });
     mocks.listWebAgentRuns.mockResolvedValue([leakyRun()]);
     renderBrowser();
 
@@ -123,5 +124,15 @@ describe("runtime vocabulary never leads a surface", () => {
     expect(written[0]).toContain("run_c657a9e0b079c8e9e401a19ed95f42e7");
     expect(written[0]).toContain("ses_0722bc34fffeRehfLDGbxJn4I3");
     expect(written[0]).toContain("deepseek/deepseek-v4-pro");
+  });
+
+  it("offers a researcher no identifiers to copy", async () => {
+    mocks.listWebAgentRuns.mockResolvedValue([leakyRun()]);
+    renderBrowser();
+
+    await screen.findByRole("link", { name: /临床证据深度分析/ });
+    await userEvent.click(screen.getByRole("button", { name: /的操作$/ }));
+    await screen.findByRole("menuitem", { name: "重命名" });
+    expect(screen.queryByRole("menuitem", { name: "复制诊断信息" })).toBeNull();
   });
 });
