@@ -199,12 +199,38 @@ describe("native frame identity and readiness", () => {
     await act(async () => { generation = {}; generationChanged(); });
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("恢复"));
     expect(container.querySelector("iframe")).toBe(frame);
+    mocks.start.mockClear();
     await userEvent.click(screen.getByRole("button", { name: "重新连接" }));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(screen.queryByRole("status")).toBeNull();
     expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(1);
     expect(create).not.toHaveBeenCalled(); expect(draft).not.toHaveBeenCalled();
+    // The reader asking for the conversation back is an opening: its runtime
+    // may have yielded to a project opened in another tab.
+    expect(mocks.start).toHaveBeenCalledWith({ projectId: "default", opening: true });
     dispose();
+  });
+
+  it("says so when 重新连接 is refused because the runtime went to a project opened elsewhere and none is idle", async () => {
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    // The kernel's page cannot reconnect: its runtime yielded to a project
+    // opened in another tab. The first loss is renewed silently; the second
+    // is said, with the button.
+    emit(frame, { type: "evimed.runtime-ui.error", seq: 3, error: "NATIVE_NOT_READY" });
+    await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("研究连接暂时无法恢复，请重试"));
+    mocks.start.mockRejectedValueOnce(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
+    await userEvent.click(screen.getByRole("button", { name: "重新连接" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("同时进行的研究已达上限，先结束一个再试。"));
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
   it("creates an immutable frame and waits for verified native readiness rather than iframe load", async () => {
