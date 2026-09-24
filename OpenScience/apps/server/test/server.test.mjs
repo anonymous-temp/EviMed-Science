@@ -6070,6 +6070,29 @@ test("static frontend assets are served with SPA fallback", async () => {
   });
 });
 
+test("a build file the release no longer has is a 404, while every page address keeps the fallback", async () => {
+  // 2026-09-23 plan §2.1: a tab opened before a release asks for the old
+  // hashed chunk; index.html in its place failed the module MIME check and
+  // replaced the whole shell with the router's English error page.
+  await withStaticApp(async ({ base }) => {
+    for (const missing of ["/assets/InboxPage-0ld4a5h.js", "/assets/index-0ld4a5h.css", "/assets/", "/assets"]) {
+      const asset = await fetch(`${base}${missing}`);
+      assert.equal(asset.status, 404, missing);
+      assert.match(asset.headers.get("content-type") ?? "", /application\/json/, `${missing} must not be the page`);
+      assert.equal(asset.headers.get("cache-control"), "no-store", missing);
+      assert.equal((await asset.json()).code, "not_found");
+    }
+    // A page address ending in what looks like a file name is still a page.
+    for (const page of ["/app/runs/run_1/files/deliverables/evidence/report.md", "/app/inbox", "/login"]) {
+      const route = await fetch(`${base}${page}`);
+      assert.equal(route.status, 200, page);
+      assert.equal(await route.text(), "<div id=\"root\"></div>", page);
+    }
+    // The file that exists is still served.
+    assert.equal((await fetch(`${base}/assets/app.js`)).status, 200);
+  });
+});
+
 test("static frontend assets reject symbolic links", async () => {
   await withStaticApp(async ({ base, dataDir, staticDir }) => {
     const outside = path.join(dataDir, "outside.js");
