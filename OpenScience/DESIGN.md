@@ -196,7 +196,7 @@ bordered pill or bordered `<button>` outside it:
 | `Tag` | the metadata label: 20 px, 12 px text, 4 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
 | `IconButton` | 24 in a row, 32 in a header; the label is its name and tooltip |
-| `List` / `ListRow` | like things as rows, no box; the title is the row's target, actions on hover, 「⋯」 quietly visible |
+| `List` / `ListRow` | like things as rows, no box; the title is the row's target, at most two quiet actions and 「⋯」, always visible |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has |
 

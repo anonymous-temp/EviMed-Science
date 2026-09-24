@@ -49,7 +49,7 @@ describe("a card", () => {
     const card = screen.getByRole("article", { name: "口服 PCSK9 抑制剂降低主要心血管事件" });
     const title = within(card).getByRole("heading", { level: 3 });
     expect(title).toHaveAttribute("data-row-title");
-    expect(title).toHaveClass("text-text");
+    expect(within(title).getByRole("link")).toHaveClass("text-text");
     for (const text of ["NEJM", "RCT", "多中心双盲试验纳入 12000 例患者。", "另有 3 家报道 ›", "#心血管", "#高胆固醇血症"]) {
       expect(card).toHaveTextContent(text);
     }
@@ -97,7 +97,7 @@ describe("a card", () => {
 
   it("steps a read card's title down to the secondary colour", () => {
     renderCard(scored({ state: { starred: false, hidden: false, read: true } }));
-    expect(screen.getByRole("heading", { level: 3 })).toHaveClass("text-text-2");
+    expect(within(screen.getByRole("heading", { level: 3 })).getByRole("link")).toHaveClass("text-text-2");
   });
 
   it("says in words the flags that change how to take it, and a retraction in the safety colour", () => {
@@ -126,16 +126,20 @@ describe("its actions", () => {
     expect(handlers.onStar).toHaveBeenCalledWith(item);
   });
 
-  it("keeps 原文, 深入研究 and 「⋯」 out of sight until the card is hovered or focused", () => {
+  it("shows its star, 深入研究 and 「⋯」 without a pointer over it, and no second 原文 control", () => {
     renderCard();
-    const original = screen.getByRole("link", { name: "原文" });
-    expect(original.parentElement).toHaveClass("opacity-0", "group-hover/card:opacity-100", "group-focus-within/card:opacity-100");
+    const card = screen.getByRole("article");
+    for (const name of ["收藏", "深入研究", "更多操作"]) {
+      let node: HTMLElement | null = within(card).getByRole("button", { name });
+      for (; node && node !== card; node = node.parentElement) expect(node.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
+    }
+    expect(within(card).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("opens the original in a new tab and records the reading", async () => {
+  it("opens the original from its title, in a new tab, and records the reading", async () => {
     const item = frontierItem();
     const handlers = renderCard(item);
-    const original = screen.getByRole("link", { name: "原文" });
+    const original = within(screen.getByRole("heading", { level: 3 })).getByRole("link", { name: item.title });
     expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
     expect(original).toHaveAttribute("target", "_blank");
     expect(original).toHaveAttribute("rel", "noopener noreferrer");
@@ -143,16 +147,12 @@ describe("its actions", () => {
     expect(handlers.onOpened).toHaveBeenCalledWith(item);
   });
 
-  it("opens a new conversation with the draft in the composer, and sends nothing", async () => {
+  it("opens a new conversation with the draft in the composer at once, and sends nothing", async () => {
     renderCard();
     await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
-    const menu = await screen.findByRole("menu", { name: "深入研究" });
-    expect(within(menu).getAllByRole("menuitem").map((entry) => entry.textContent)).toEqual([
-      "这项研究可靠吗", "对我的课题意味着什么", "围绕这个问题做一份证据综合", "自己写问题",
-    ]);
-    await userEvent.click(within(menu).getByRole("menuitem", { name: "围绕这个问题做一份证据综合" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     const probe = await screen.findByTestId("probe");
-    expect(probe.textContent?.startsWith("/app/chat|create|围绕这条进展涉及的临床问题做一份证据综合")).toBe(true);
+    expect(probe.textContent?.startsWith("/app/chat|create|这项研究可靠吗？")).toBe(true);
     expect(probe).toHaveTextContent("原文：https://www.nejm.org/doi/full/10.1056/example");
   });
 
