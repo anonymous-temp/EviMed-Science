@@ -35,6 +35,10 @@ import { HttpError } from "./security.mjs";
  * - Retention is bounded deletes, one statement per table per hour, and what
  *   one pass leaves the next takes (plan §10.4.5): entries that produced
  *   nothing after 30 days, the change log after 90, hot snapshots after 90.
+ *   The same hourly pass recounts each source's selected items of the last
+ *   thirty days (`sources.selected_30d`, the sources list's 「近 30 天精选」),
+ *   here and not in the mirror because it is the platform's own number and
+ *   must move while the plugin is down.
  *
  * @module frontierWorker
  */
@@ -206,7 +210,9 @@ export class FrontierWorker {
       started.push(this.#run("process", () => this.#process()));
     }
     if (this.composer && !this.running.compose) started.push(this.#run("compose", () => this.composer.tick()));
-    if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) started.push(this.#run("cleanup", () => this.cleanup()));
+    if (!this.running.cleanup && this.#due("cleanup", this.cleanupMs)) {
+      started.push(this.#run("cleanup", async () => ({ ...(await this.cleanup()), recounted: await this.recountSelected() })));
+    }
     return Promise.all(started);
   }
 
@@ -244,6 +250,23 @@ export class FrontierWorker {
     const removed = { entries: entries.rowCount ?? 0, itemChanges: itemChanges.rowCount ?? 0, hotSnapshots: hotSnapshots.rowCount ?? 0 };
     for (const [key, value] of Object.entries(removed)) this.retentionTotals[key] += value;
     return removed;
+  }
+
+  /**
+   * Each source's published, selected items whose day is within the last
+   * thirty (`sources.selected_30d`), in one statement; only a source whose
+   * count moved is written. Returns how many were.
+   * @returns {Promise<number>}
+   */
+  async recountSelected() {
+    const since = new Date(this.now().getTime() - 30 * DAY_MS).toISOString();
+    const result = await this.database.query(`UPDATE evimed_frontier.sources s SET selected_30d = counted.n
+      FROM (SELECT src.id, count(i.id)::integer AS n FROM evimed_frontier.sources src
+        LEFT JOIN evimed_frontier.items i ON i.primary_source_id = src.id AND i.state = 'published' AND i.selected
+          AND i.timeline_at >= $1::timestamptz
+        GROUP BY src.id) counted
+      WHERE s.id = counted.id AND s.selected_30d IS DISTINCT FROM counted.n`, [since]);
+    return result.rowCount ?? 0;
   }
 
   status() {

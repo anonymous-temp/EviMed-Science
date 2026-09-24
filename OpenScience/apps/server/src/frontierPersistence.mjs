@@ -11,7 +11,9 @@
  *   connection between the two; the HTTP contract is the only link.
  * - The DDL is the design draft `tools/frontier-schema.sql` (22 tables),
  *   validated twice on PostgreSQL 16 before it was moved here, plus one
- *   index the draft did not have (`frontier_items_visible_idx`, below). It runs the way
+ *   index the draft did not have (`frontier_items_visible_idx`, below) and one
+ *   column (`hot_snapshots.heats`, added in place by `ADD COLUMN IF NOT
+ *   EXISTS`, so a deployed schema takes it on the next start). It runs the way
  *   `kbPersistence.mjs` does: one transaction behind an advisory lock, every
  *   statement idempotent, the extension-backed pieces created only where the
  *   extension exists. Closed vocabularies that move with the product (lane,
@@ -339,6 +341,11 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.hot_snapshots (
   taken_at timestamptz(3) PRIMARY KEY,
   ranking  jsonb NOT NULL
 );
+-- Not in the draft (2026-09-24, plan 2026-09-23 §6.5 #2): each snapshot also
+-- records the heat of every event that could be on the list — public id →
+-- heat — so the hot list can draw a 24-hour trend from what was measured then.
+-- Snapshots taken before it hold '{}', which reads as no history.
+ALTER TABLE evimed_frontier.hot_snapshots ADD COLUMN IF NOT EXISTS heats jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.dailies (
   day          date PRIMARY KEY,

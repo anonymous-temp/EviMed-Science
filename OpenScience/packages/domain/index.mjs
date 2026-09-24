@@ -713,11 +713,12 @@ export {
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'
-// frontierVocabulary — 49 exports: the frontier feed's closed vocabularies
+// frontierVocabulary — 59 exports: the frontier feed's closed vocabularies
 // (lane, source type, evidence type, specialty, flag, health, egress, access —
 // the enums of the knowledge-source plugin's contract), their Chinese labels,
 // the fallbacks for values a newer plugin sends, PubMed publication type →
-// evidence type, the authority score and the masthead title list.
+// evidence type, the authority score, the heat arithmetic the hot list states
+// (with its 「热度怎么算」 text) and the masthead title list.
 export {
   FRONTIER_ACCESSES,
   FRONTIER_ACCESS_LABELS_ZH,
@@ -735,6 +736,15 @@ export {
   FRONTIER_FACT_KEYS,
   FRONTIER_HEALTH_LABELS_ZH,
   FRONTIER_HEALTH_STATES,
+  FRONTIER_HEAT_BILINGUAL_FACTOR,
+  FRONTIER_HEAT_DISPLAY_SCALE,
+  FRONTIER_HEAT_HALF_LIFE_HOURS,
+  FRONTIER_HEAT_METHOD_ZH,
+  FRONTIER_HEAT_PRIMARY_FACTOR,
+  FRONTIER_HOT_BADGE_HOURS,
+  FRONTIER_HOT_MIN_INSTITUTIONS,
+  FRONTIER_HOT_TREND,
+  FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAGS,
   FRONTIER_MENTION_REGISTRY_IDS,
   FRONTIER_MENTION_SOURCE_TYPES,
@@ -764,6 +774,7 @@ export {
   PUBMED_RESEARCH_TYPE_EVIDENCE,
   frontierAuthorityScore,
   frontierEvidenceFromPublicationTypes,
+  frontierHeatDisplay,
   frontierLabel,
   frontierScoreLevel,
   frontierValue,
@@ -771,3 +782,10 @@ export {
   isFrontierValue,
   mastheadTitleKey,
 } from './src/frontierVocabulary.mjs'
+// frontierSourceNames — 2 exports: what a reader calls a source — the
+// institution, by the registry's owner entity, never the feed or interface the
+// plugin reads it through (the table is `frontier-source-names.json`).
+export {
+  FRONTIER_SOURCE_DISPLAY_NAMES,
+  frontierSourceDisplayName,
+} from './src/frontierSourceNames.mjs'

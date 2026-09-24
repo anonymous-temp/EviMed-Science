@@ -45,6 +45,7 @@ function fixture(config, userId = "reader") {
     async deleteFollow() { return { deleted: true }; },
     async operateItem(id, action, input) { calls.push([`ops-${action}`, id, input.reason]); return { item: { id, state: action === "withdraw" ? "withdrawn" : "published" } }; },
     async setSourceEnabled(id, enabled) { return { source: { id, enabled } }; },
+    async hot(params) { calls.push(["hot", params.get("window")]); return { window: params.get("window") ?? "current", events: [] }; },
   };
   const routes = createFrontierRoutes({ store, service, config, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push({ event, status, ...details }); } });
@@ -122,6 +123,18 @@ test("operator routes answer 403 to anyone else, and an operator's change is aud
   await routes(request("POST", "/api/frontier/ops/sources/nejm/enabled", { body: { enabled: false } }), source);
   assert.deepEqual(source.json(), { data: { source: { id: "nejm", enabled: false } } });
   assert.equal(audits.at(-1).event, "frontier.source.enabled");
+});
+
+test("the hot list hands its window to the service: the current list by default, a week's or a month's ranking when asked", async () => {
+  const { routes, calls } = fixture(on);
+  const current = response();
+  await routes(request("GET", "/api/frontier/hot"), current);
+  assert.deepEqual(current.json(), { data: { window: "current", events: [] } });
+  const week = response();
+  await routes(request("GET", "/api/frontier/hot?window=week"), week);
+  assert.deepEqual(week.json().data.window, "week");
+  assert.deepEqual(calls.filter((call) => call[0] === "hot"), [["hot", null], ["hot", "week"]]);
+  assert.equal(frontierRoutePattern("/api/frontier/hot"), "/api/frontier/hot");
 });
 
 test("route labels fold ids so a dashboard row is a route", () => {

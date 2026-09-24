@@ -16,6 +16,15 @@ import {
   FRONTIER_FACT_KEYS,
   FRONTIER_HEALTH_LABELS_ZH,
   FRONTIER_HEALTH_STATES,
+  FRONTIER_HEAT_BILINGUAL_FACTOR,
+  FRONTIER_HEAT_DISPLAY_SCALE,
+  FRONTIER_HEAT_HALF_LIFE_HOURS,
+  FRONTIER_HEAT_METHOD_ZH,
+  FRONTIER_HEAT_PRIMARY_FACTOR,
+  FRONTIER_HOT_BADGE_HOURS,
+  FRONTIER_HOT_MIN_INSTITUTIONS,
+  FRONTIER_HOT_TREND,
+  FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAGS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANES,
@@ -34,6 +43,7 @@ import {
   FRONTIER_VOCABULARY_NAMES,
   frontierAuthorityScore,
   frontierEvidenceFromPublicationTypes,
+  frontierHeatDisplay,
   frontierLabel,
   frontierScoreLevel,
   frontierValue,
@@ -264,4 +274,32 @@ test("a masthead is recognised by its whole title only", () => {
   }
   assert.equal(mastheadTitleKey("  Issue\u00A0Information  "), "issue information");
   for (const title of FRONTIER_MASTHEAD_TITLES) assert.equal(mastheadTitleKey(title), title, `${title} is written in key form`);
+});
+
+test("the heat a page shows is the computed heat times ten, rounded; nothing to show is null, never a zero made up", () => {
+  assert.equal(FRONTIER_HEAT_DISPLAY_SCALE, 10);
+  assert.equal(frontierHeatDisplay(3.84), 38);
+  assert.equal(frontierHeatDisplay(1.25), 13);
+  assert.equal(frontierHeatDisplay(0), 0);
+  assert.equal(frontierHeatDisplay("2.2"), 22, "a numeric string from the database is a number");
+  assert.equal(frontierHeatDisplay(-0.4), 0, "heat is never negative on the page");
+  for (const nothing of [null, undefined, "", Number.NaN, Number.POSITIVE_INFINITY, "hot", true]) {
+    assert.equal(frontierHeatDisplay(nothing), null, String(nothing));
+  }
+});
+
+test("「热度怎么算」 states the numbers the hot list is computed with, every one of them", () => {
+  const text = FRONTIER_HEAT_METHOD_ZH.join("\n");
+  assert.ok(Object.isFrozen(FRONTIER_HEAT_METHOD_ZH) && FRONTIER_HEAT_METHOD_ZH.length >= 3);
+  for (const [name, value] of Object.entries({ FRONTIER_HEAT_HALF_LIFE_HOURS, FRONTIER_HEAT_PRIMARY_FACTOR, FRONTIER_HEAT_BILINGUAL_FACTOR,
+    FRONTIER_HEAT_DISPLAY_SCALE, FRONTIER_HOT_WINDOW_HOURS, FRONTIER_HOT_MIN_INSTITUTIONS, trendHours: FRONTIER_HOT_TREND.hours,
+    trendStep: FRONTIER_HOT_TREND.stepHours, trendHistory: FRONTIER_HOT_TREND.minHistoryHours, badgeNew: FRONTIER_HOT_BADGE_HOURS.new,
+    badgeRising: FRONTIER_HOT_BADGE_HOURS.rising })) {
+    // As a whole number: 1.5 is not stated by 11.5, nor 36 by 360.
+    const stated = new RegExp(`(?<![\\d.])${String(value).replace(".", "\\.")}(?![\\d.])`);
+    assert.match(text, stated, `${name} (${value}) is not stated`);
+  }
+  // It explains attention, not evidence: the one misreading a heat number invites.
+  assert.match(text, /不衡量证据强弱/);
+  assert.doesNotMatch(text, /爆|AI 评分|推荐/, "the words the plan keeps out of the medical version");
 });

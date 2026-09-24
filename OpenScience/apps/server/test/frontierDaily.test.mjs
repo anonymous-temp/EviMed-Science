@@ -5,12 +5,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   FRONTIER_DAILY_SECTION_MAX,
+  FRONTIER_READING_CHARS_PER_MINUTE,
   clockMinutes,
   dayLabel,
   frontierDailyIssue,
   frontierDailyMarkdown,
   frontierDailyNotice,
   frontierDailyWindow,
+  frontierReadingMinutes,
   previousDay,
   zonedClock,
   zonedInstant,
@@ -83,15 +85,27 @@ test("the Markdown: the window in Beijing time, each item with its source and a 
   assert.match(markdown, /## 安全警示\n\n- \*\*说明书修订\*\*（NMPA）：导读 2 \[原文\]\(https:\/\/example.org\/2\)/);
   assert.match(markdown, /## 审批监管\n\n- \*\*条目 3\*\*（FDA）/);
   assert.match(markdown, /## AI 一分钟\n\nAI 一分钟的内容。/);
-  assert.match(markdown, /数字已逐字核对；引用前请阅读原文。/);
+  assert.match(markdown, /\n---\n\n来源：EviMed 前沿动态\n$/, "signed, and nothing about how it was made");
+  assert.doesNotMatch(markdown, /逐字核对|由模型/);
 });
 
-test("the notice: counts and the lead's title, keyed and grouped by the day, a digest the inbox opens as the daily", () => {
+test("reading time: the characters shown, whitespace aside, at 400 a minute — at least a minute", () => {
+  assert.equal(FRONTIER_READING_CHARS_PER_MINUTE, 400);
+  assert.equal(frontierReadingMinutes(["司".repeat(3_600)]), 9, "「约 9 分钟」");
+  assert.equal(frontierReadingMinutes(["司".repeat(1_000), "美 格 鲁 肽".repeat(250), null, 7]), 5,
+    "2,000 characters: the spaces between them and what is not text are not read");
+  assert.equal(frontierReadingMinutes([]), 1);
+  assert.equal(frontierReadingMinutes(["短"]), 1);
+});
+
+test("the notice: the day and the selected count in the title, the lead's title and the safety count as the body — nothing else", () => {
   const notice = frontierDailyNotice({ day: "2026-09-22", lead: { title: "司美格鲁肽减重 3 年结果" },
     sections: [{ lane: "evidence", itemIds: ["a", "b"] }, { lane: "regulatory", itemIds: ["c"] }], safety: ["d"] });
   assert.equal(notice.noticeType, "notify");
   assert.equal(notice.title, "今日前沿 · 9月22日 · 4 条精选");
-  assert.equal(notice.body, "头条：司美格鲁肽减重 3 年结果\n安全警示 1 条\n临床证据 2 条 · 审批监管 1 条\n打开「前沿动态」看完整日报，可以复制为 Markdown 转给同事。");
+  assert.equal(notice.body, "司美格鲁肽减重 3 年结果\n安全警示 1 条", "no lane counts, no instructions (plan 2026-09-23 C §1.13)");
+  assert.equal(frontierDailyNotice({ day: "2026-09-22", lead: { title: "头条" }, sections: [], safety: [] }).body, "头条",
+    "no safety alert, no safety line");
   assert.deepEqual(notice.source, { type: "digest", id: "frontier-daily:2026-09-22" });
   assert.equal(notice.idempotencyKey, "frontier-daily:2026-09-22");
   assert.equal(notice.groupKey, "frontier-daily:2026-09-22");

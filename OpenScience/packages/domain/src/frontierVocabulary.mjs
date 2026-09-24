@@ -598,6 +598,55 @@ export function frontierScoreLevel(dimension, score) {
   return share >= 2 / 3 ? 'high' : share >= 1 / 3 ? 'medium' : 'low'
 }
 
+// ───────────────────────── heat ─────────────────────────
+//
+// An event's heat is arithmetic the page states (plan 2026-09-23 §6.2: the
+// hot list shows it, and 「热度怎么算」 says how it is made). The control plane
+// computes it (`apps/server/src/frontierEvents.mjs`) from these numbers and
+// the page explains it from the same ones, so the explanation cannot say one
+// thing while the list does another.
+
+/** Half-life of an institution's contribution to an event's heat, in hours (plan §6.4). */
+export const FRONTIER_HEAT_HALF_LIFE_HOURS = 36
+/** An event reported in both Chinese and English weighs this much more. */
+export const FRONTIER_HEAT_BILINGUAL_FACTOR = 1.3
+/** An event holding first-hand material — a paper, a notice, a guideline — weighs this much more. */
+export const FRONTIER_HEAT_PRIMARY_FACTOR = 1.5
+/** The heat a page shows is the computed heat times this, rounded (plan 2026-09-23 §6.5 #1). */
+export const FRONTIER_HEAT_DISPLAY_SCALE = 10
+/** The hot list reads institutions reporting in this many hours. */
+export const FRONTIER_HOT_WINDOW_HOURS = 72
+/** Independent institutions an event needs in that window to be hot (one suffices for a major regulator notice). */
+export const FRONTIER_HOT_MIN_INSTITUTIONS = 2
+/** A hot event's trend: this many hours back, a point every `stepHours`, drawn only with `minHistoryHours` of history. */
+export const FRONTIER_HOT_TREND = Object.freeze({ hours: 24, stepHours: 4, minHistoryHours: 6 })
+/** 「新」: first reported within `new` hours of the list; 「升温」: rank or heat above the list of `rising` hours before. */
+export const FRONTIER_HOT_BADGE_HOURS = Object.freeze({ new: 12, rising: 6 })
+
+/**
+ * The heat a reader is shown: the computed heat times ten, rounded — an
+ * integer, never negative; null when there is no heat to show.
+ * @param {unknown} heat @returns {number | null}
+ */
+export function frontierHeatDisplay(heat) {
+  if (heat == null || heat === '' || typeof heat === 'boolean') return null
+  const value = Number(heat)
+  if (!Number.isFinite(value)) return null
+  return Math.max(0, Math.round(value * FRONTIER_HEAT_DISPLAY_SCALE))
+}
+
+/**
+ * 「热度怎么算」, paragraph by paragraph, in the words the hot list is read in
+ * and with the numbers it is computed with.
+ * @type {readonly string[]}
+ */
+export const FRONTIER_HEAT_METHOD_ZH = Object.freeze([
+  `热度按报道这件事的独立机构计算：同一机构的多个渠道只算一次，每家机构按来源权威加权（期刊、监管机构高于媒体），它的分数随最近一次报道的时间衰减，每 ${FRONTIER_HEAT_HALF_LIFE_HOURS} 小时减半；有论文、官方公告或指南原文时乘以 ${FRONTIER_HEAT_PRIMARY_FACTOR}，中文和英文来源都有报道时再乘以 ${FRONTIER_HEAT_BILINGUAL_FACTOR}。页面上的热度数是这个分数乘以 ${FRONTIER_HEAT_DISPLAY_SCALE} 后取整。`,
+  `热度衡量关注程度，不衡量证据强弱；证据强弱看每条报道的证据类型。近 ${FRONTIER_HOT_WINDOW_HOURS} 小时内至少 ${FRONTIER_HOT_MIN_INSTITUTIONS} 家独立机构报道，或者有一条高分的监管公告，才进热榜。`,
+  `走势是近 ${FRONTIER_HOT_TREND.hours} 小时的热度，每 ${FRONTIER_HOT_TREND.stepHours} 小时一个点；热度记录不足 ${FRONTIER_HOT_TREND.minHistoryHours} 小时的事件不画走势。「新」是首次报道在 ${FRONTIER_HOT_BADGE_HOURS.new} 小时以内，「升温」是名次或热度比 ${FRONTIER_HOT_BADGE_HOURS.rising} 小时前高。`,
+  '本周榜和本月榜按窗口内报道它的独立机构数排，一样多时有一手材料的在前，再看它在热榜上到过的最高名次。',
+])
+
 // ───────────────────────── mastheads ─────────────────────────
 
 /**

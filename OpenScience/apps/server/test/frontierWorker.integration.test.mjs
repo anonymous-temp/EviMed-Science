@@ -11,7 +11,7 @@ import { FrontierIngest } from "../src/frontierIngest.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierWorker } from "../src/frontierWorker.mjs";
 import { KnowledgePluginClient } from "../src/knowledgePluginClient.mjs";
-import { TEST_VOCABULARY, insertSource, memoryPlugin, pluginEntry, pluginSource, sha256 } from "./helpers/frontierFixtures.mjs";
+import { TEST_VOCABULARY, insertItem, insertSource, memoryPlugin, pluginEntry, pluginSource, sha256 } from "./helpers/frontierFixtures.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -91,4 +91,26 @@ test("the retention pass removes what produced nothing after 30 days and the log
     { backfill: 1, dropped: 1, failed: 1, held: 1, merged: 1, promoted: 1, received: 1, "screened-out": 1 },
     "young rows and every row behind an item stay");
   assert.deepEqual(await worker.cleanup(), { entries: 0, itemChanges: 0, hotSnapshots: 0 }, "a second pass finds nothing left");
+});
+
+test("the hourly pass recounts each source's selected items of the last 30 days, writing only the counts that moved", options, async () => {
+  await insertSource(database, "nejm");
+  await insertSource(database, "lancet", { name: "The Lancet" });
+  await database.query("UPDATE evimed_frontier.sources SET selected_30d = 5 WHERE id = 'lancet'");
+  const now = Date.parse("2026-09-22T04:00:00Z");
+  const daysAgo = (days) => new Date(now - days * 86_400_000).toISOString();
+  for (const [selected, days, state] of [[true, 1, "published"], [true, 29, "published"], [true, 31, "published"], [false, 1, "published"],
+    [true, 2, "withdrawn"]]) {
+    await insertItem(database, { sourceId: "nejm", selected, state, timelineAt: daysAgo(days), visibleAt: daysAgo(days) });
+  }
+  await insertItem(database, { sourceId: "lancet", selected: false, timelineAt: daysAgo(3), visibleAt: daysAgo(3) });
+  const worker = new FrontierWorker({ ingest: { plugin: { configured: false } }, database, now: () => new Date(now) });
+  assert.equal(await worker.recountSelected(), 2, "the journal gains two; the stale five of the other is put right");
+  const counts = (await database.query("SELECT id, selected_30d FROM evimed_frontier.sources ORDER BY id")).rows;
+  assert.deepEqual(counts.map((row) => [row.id, row.selected_30d]), [["lancet", 0], ["nejm", 2]],
+    "published and selected within 30 days: not the older one, not the unselected, not the withdrawn");
+  assert.equal(await worker.recountSelected(), 0, "nothing moved, nothing written");
+  // The mirror keeps the platform's own count (frontierIngest.mjs), so an hour's mirroring never undoes it.
+  await worker.tick();
+  assert.equal(worker.status().loops.cleanup.lastError, null, "the hourly pass runs the recount with the retention");
 });

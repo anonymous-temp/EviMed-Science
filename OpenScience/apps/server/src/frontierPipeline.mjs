@@ -66,6 +66,7 @@ import {
   FRONTIER_MENTION_REGISTRY_IDS,
   FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
+  frontierSourceDisplayName,
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
@@ -165,6 +166,17 @@ export function frontierBudgetState(spentCny, budgetCny) {
   if (spentCny >= budgetCny) return "exhausted";
   if (spentCny >= budgetCny * 0.8) return "throttled";
   return "ok";
+}
+
+/**
+ * The selection line (`OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD`, 70 unless
+ * set): what the pipeline selects by and what a card's score band is read
+ * against (`frontierService.mjs`), from one reading of the config.
+ * @param {Record<string, any> | null | undefined} config @returns {number}
+ */
+export function frontierSelectThreshold(config) {
+  const value = Number(config?.frontierSelectThreshold);
+  return config?.frontierSelectThreshold != null && config.frontierSelectThreshold !== "" && Number.isFinite(value) ? value : 70;
 }
 
 /** Safety feeds, regulators and authority-5 journals: edited at peak and past 80%, never waiting for an abstract.
@@ -441,7 +453,7 @@ export class FrontierPipeline {
     this.glossaryStore = glossary instanceof FrontierGlossary ? { current: async () => glossary }
       : glossary && typeof glossary.current === "function" ? glossary : new FrontierGlossaryStore({ database });
     this.leaseMs = Math.max(MINUTE, Number(this.config.frontierLeaseMs) || 10 * MINUTE);
-    this.threshold = Number.isFinite(Number(this.config.frontierSelectThreshold)) ? Number(this.config.frontierSelectThreshold) : 70;
+    this.threshold = frontierSelectThreshold(this.config);
     this.budgetCny = Number.isFinite(Number(this.config.frontierDailyBudgetCny)) ? Number(this.config.frontierDailyBudgetCny) : 10;
     this.offpeak = this.config.frontierOffpeak !== false;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
@@ -1174,7 +1186,9 @@ export class FrontierPipeline {
     const bodyExcerpt = texts?.body_excerpt ?? null;
     return {
       titleRaw: item.title_raw,
-      sourceName: source?.name ?? item.primary_source_id,
+      // The institution, not the feed: the summary is prose a reader reads, and
+      // the model repeats the source's name as it was shown it (plan 2026-09-23 §6.5 #5).
+      sourceName: frontierSourceDisplayName({ id: source?.id ?? item.primary_source_id, name: source?.name, ownerEntity: source?.owner_entity }),
       sourceTypeLabel: /** @type {Record<string, string>} */ (FRONTIER_SOURCE_TYPE_LABELS_ZH)[source?.source_type] ?? null,
       publishedAt: item.published_at ? new Date(item.published_at).toISOString() : null,
       datePrecision: item.date_precision,
@@ -1339,7 +1353,9 @@ export class FrontierPipeline {
     const fields = {
       titleZh: output ? output.titleZh : (isChinese ? String(item.title_raw).slice(0, 200) : item.title_zh ?? null),
       summaryZh: output ? output.summaryZh : item.summary_zh ?? null,
-      reasonZh: output ? output.reasonZh : item.reason_zh ?? null,
+      // Retired 2026-09-24: an edit writes none, and a re-edit clears the one
+      // an older edit wrote beside the summary it replaces.
+      reasonZh: output ? null : item.reason_zh ?? null,
       lane: output?.lane ?? item.lane,
       specialties: output?.specialties ?? item.specialties ?? [],
       entities,
