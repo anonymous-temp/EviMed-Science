@@ -170,7 +170,6 @@ module.exports = {
       // primitives. The list only shrinks: a file leaves it when its last
       // bordered pill or button goes.
       files: [
-        "src/app/routes/CapabilitiesPage.tsx",
         "src/app/routes/FrontierPage.tsx",
         "src/app/routes/SourcesPage.tsx",
         "src/components/frontier/FrontierFilters.tsx",

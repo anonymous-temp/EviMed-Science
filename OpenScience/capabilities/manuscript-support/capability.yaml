@@ -125,7 +125,7 @@ starterPrompts:
 display:
   title: "论文章节写作"
   category: "写作与传播"
-  description: "在你给定的资料范围内起草或修改论文的一节（前言、方法、结果、讨论）：每条主张都能追溯到资料，每条引文都能解析。"
+  description: "在你给定的资料范围内起草或修改论文的一节，主张都能追溯到资料。"
   starterPrompts:
   - "这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。"
   - "按 CONSORT 帮我写这项随机对照试验的结果部分。"

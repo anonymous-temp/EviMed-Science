@@ -78,7 +78,7 @@ starterPrompts:
 display:
   title: "药品安全性分析"
   category: "药学评价"
-  description: "开展不良事件信号挖掘、说明书比对与安全性证据汇总。"
+  description: "从 FAERS 不良事件报告里挖掘安全信号，汇总成安全性证据报告。"
   starterPrompts:
   - "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"
   - "比较阿托伐他汀与瑞舒伐他汀的肝损伤报告信号。"

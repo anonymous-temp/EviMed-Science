@@ -114,7 +114,7 @@ display:
   # and a title without it read as the tool having disappeared.
   title: "GEO 答案引擎优化"
   category: "写作与传播"
-  description: "先测量各消费级答案引擎当前如何回答一组真实问题，再产出可被后续测量对照的证据绑定内容块：结论、依据、适用条件、可解析引文、作者资质与 JSON-LD。"
+  description: "先测各大 AI 答案引擎怎样回答你的问题，再写出可被引用的内容。"
   starterPrompts:
   - "测一测「速效救心丸开封后多久失效」在各平台的回答，并写出可被引用的内容块。"
   - "用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"
