@@ -1,0 +1,35 @@
+{
+  "$comment": "The study types a planned deliverable may declare (evimed_plan, deliverables[].studyType), and the reporting guideline each one is written to. Data, not code: a methodologist edits a row here. Absent means the deliverable reports no one study. A type whose guideline is null is still worth declaring — the delegation brief and the independent reviewer name the design — and gets its guideline the day one is added: a row in `guidelines`, the item table under capability-skills/reporting-guidelines/checklists/<id>.md, and the reviewer's list in apps/server/src/reviewChecklists.json (byStudyType, same id; a test holds the three together). The reviewer's item texts are deliberately not here: this package ships inside the runtime.",
+  "schemaVersion": 1,
+  "studyTypes": [
+    { "id": "rct", "labelZh": "随机对照试验", "guideline": "consort-2025" },
+    { "id": "prediction-model", "labelZh": "临床预测模型研究", "guideline": "tripod-ai" },
+    { "id": "systematic-review", "labelZh": "系统评价／Meta 分析", "guideline": "prisma-2020" },
+    { "id": "mendelian-randomization", "labelZh": "孟德尔随机化研究", "guideline": "strobe-mr" },
+    { "id": "observational", "labelZh": "观察性研究", "guideline": null },
+    { "id": "diagnostic-accuracy", "labelZh": "诊断准确性研究", "guideline": null },
+    { "id": "other", "labelZh": "其他设计", "guideline": null }
+  ],
+  "guidelines": {
+    "consort-2025": {
+      "name": "CONSORT 2025",
+      "citation": "Hopewell S, Chan AW, Collins GS, et al. CONSORT 2025 statement: updated guideline for reporting randomised trials. BMJ 2025;389:e081123",
+      "url": "https://doi.org/10.1136/bmj-2024-081123"
+    },
+    "tripod-ai": {
+      "name": "TRIPOD+AI",
+      "citation": "Collins GS, Moons KGM, Dhiman P, et al. TRIPOD+AI statement: updated guidance for reporting clinical prediction models that use regression or machine learning methods. BMJ 2024;385:e078378",
+      "url": "https://doi.org/10.1136/bmj-2023-078378"
+    },
+    "prisma-2020": {
+      "name": "PRISMA 2020",
+      "citation": "Page MJ, McKenzie JE, Bossuyt PM, et al. The PRISMA 2020 statement: an updated guideline for reporting systematic reviews. BMJ 2021;372:n71",
+      "url": "https://doi.org/10.1136/bmj.n71"
+    },
+    "strobe-mr": {
+      "name": "STROBE-MR",
+      "citation": "Skrivankova VW, Richmond RC, Woolf BAR, et al. Strengthening the reporting of observational studies in epidemiology using mendelian randomization: the STROBE-MR statement. JAMA 2021;326(16):1614-1621",
+      "url": "https://doi.org/10.1001/jama.2021.18236"
+    }
+  }
+}

@@ -5,7 +5,7 @@
 # was graded by nobody. A skill with no capability is a capability the catalogue
 # cannot offer.
 id: research-grant-development
-version: 1.0.0
+version: 1.1.0
 title: Research Grant Development
 category: Research Planning
 description: Turn a funding call and a research direction into specific aims, a proposal outline, a milestone
@@ -23,6 +23,7 @@ skills:
 - citation-integrity
 - deep-research
 - biomedical-database-search
+- reporting-guidelines
 tools:
 - mcp__evimed__literature_search
 - mcp__evimed__biomedical_source_search
@@ -56,6 +57,14 @@ produces:
     required: true
   - path: delivery-summary.md
     required: true
+  # The reporting checklist of the one study the proposal designs, when the
+  # plan declared its type and that type has a guideline (@evimed/domain
+  # studyTypes.mjs; owner ruling 2026-09-24): each design item mapped to where
+  # the proposal specifies it, the results items marked as not yet reportable.
+  # Optional: most proposals declare no single study, and a new file enters at
+  # `required: false` (required-outputs-baseline.json).
+  - path: reporting-checklist.md
+    required: false
   - path: revision-notes.md
     required: false
   - path: agenda-delta.json

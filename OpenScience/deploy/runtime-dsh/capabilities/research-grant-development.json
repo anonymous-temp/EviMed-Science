@@ -1,6 +1,6 @@
 {
   "id": "research-grant-development",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Research Grant Development",
   "description": "Turn a funding call and a research direction into specific aims, a proposal outline, a milestone table and a reviewer-oriented audit — with every stated call requirement quoted from the call itself.",
   "whenToUse": "需要写课题申报书（具体目标、研究方案、里程碑、评审要点自查）时，委派给我——我从招标文件本身抽取要求并逐条落到位置，不从别的项目搬规则。",
@@ -10,7 +10,8 @@
     "autopilot-episode",
     "citation-integrity",
     "deep-research",
-    "biomedical-database-search"
+    "biomedical-database-search",
+    "reporting-guidelines"
   ],
   "tools": [
     "mcp__evimed__literature_search",
@@ -57,6 +58,10 @@
         {
           "path": "delivery-summary.md",
           "required": true
+        },
+        {
+          "path": "reporting-checklist.md",
+          "required": false
         },
         {
           "path": "revision-notes.md",

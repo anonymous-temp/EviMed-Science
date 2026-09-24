@@ -88,7 +88,9 @@ import {
   gateDeliverable,
   indexPlan,
   planCapabilityIssues,
+  planToolParameters,
   rejectionEnvelope,
+  reportingChecklistLines,
   rootHiddenMcpTools,
   boundedSuggestions,
   renderDeliverySummary,
@@ -577,6 +579,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         deferredSections: method.deferred,
         capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
         reviewEnabled: config.reviewEnabled,
+        skillsDir: config.skillsDir,
       }), name)
     } catch (error) {
       diagnostics(entry.sessionId)?.degrade?.(`inline capability method not injected: ${errorMessage(error)}`)
@@ -681,6 +684,16 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       tools.push(locator)
     }
     return tools
+  }
+
+  /**
+   * The files a planned deliverable's contract declares, read off the
+   * capability catalogue this runtime mounted.
+   * @param {Record<string, any>} item @returns {{ path: string, required: boolean }[]}
+   */
+  const declaredOutputs = (item) => {
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+    return manifest?.produces?.find((/** @type {any} */ entry) => entry.contractKind === item.contractKind)?.outputs ?? []
   }
 
   // ---- each dispatch context, injected as a first-class user message -------
@@ -1100,31 +1113,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       name: 'evimed_plan',
       description: [
         '写下或读取本次运行的计划。需要产出文件的任务在开始工作前必须先写计划。',
-        'action=write：给出 clarifications（问过的问题，或你直接采用的假设——不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn，以及 acceptance：5–10 条按用户要求写的验收项，读者能在交付文件里逐条核对到的东西，独立审查会逐条核对）。',
+        'action=write：给出 clarifications（问过的问题，或你直接采用的假设——不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn，以及 acceptance：5–10 条按用户要求写的验收项，读者能在交付文件里逐条核对到的东西，独立审查会逐条核对；报告或设计某一项具体研究的交付物再加 studyType）。',
         'action=status：读回每件交付物当前的状态。',
         '直接回答的问题不需要调用本工具。',
       ].join(' '),
-      parameters: {
-        action: { type: 'string', enum: ['write', 'status'], required: true, description: 'write 写下或修订计划，status 读回进度。' },
-        clarifications: { type: 'array', items: { type: 'string' }, description: '问过的问题或采用的假设，逐条写。' },
-        deliverables: {
-          type: 'array',
-          description: '交付物清单。',
-          items: {
-            type: 'object',
-            additionalProperties: true,
-            properties: {
-              id: { type: 'string' },
-              contractKind: { type: 'string' },
-              capability: { type: 'string' },
-              title: { type: 'string' },
-              dependsOn: { type: 'array', items: { type: 'string' } },
-              acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：交付文件里能核对到的具体内容。' },
-            },
-          },
-        },
-        reason: { type: 'string', description: '当 deliverables 为空时，说明为什么这次不需要产出文件。' },
-      },
+      parameters: planToolParameters(),
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
         if (args.action === 'status') {
@@ -1155,7 +1148,27 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           entry.completed = false
           entry.steered = false
           entry.childrenReminders = 0
-          entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
+          // What the plan declares about a deliverable follows the plan being
+          // written; what the run has done with it — status, attempts, the
+          // child working on it, its last review — survives the revision. The
+          // declared half used to stop at contract kind, capability and
+          // dependencies, so a revision that rewrote a title or the acceptance
+          // items kept the old ones, and it would have kept an old study type
+          // too — the reporting checklist the reviewer holds the package to.
+          entry.items = items.map((item) => {
+            const merged = {
+              ...item,
+              ...(previous.get(item.id) ?? {}),
+              contractKind: item.contractKind,
+              capability: item.capability,
+              dependsOn: item.dependsOn,
+              title: item.title,
+              acceptance: item.acceptance,
+            }
+            if (item.studyType) merged.studyType = item.studyType
+            else delete merged.studyType
+            return merged
+          })
           // A child working on a deliverable this revision dropped has nowhere
           // to deliver: its submissions would name an item that no longer
           // exists. Cancelled by name rather than left to spend its budget.
@@ -1172,7 +1185,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // to do it here — so this session needs that capability's method and
           // tools, exactly as a child would have been given them.
           await activateBoundCapability(entry, ctx.get('agents')?.get?.(call.agentId))
-          return { ok: true, data: { runId: entry.runId, revision, deliverables: entry.items.map(publicItem) } }
+          // A declared study type with a guideline asks for the completed
+          // checklist, said here as well as in a child's brief: a session that
+          // does the work itself may have been given its method before this
+          // plan existed, and that method names no deliverable.
+          const reportingChecklists = entry.items.flatMap((/** @type {any} */ item) => reportingChecklistLines({ item, outputs: declaredOutputs(item), skillsDir: config.skillsDir }))
+          return { ok: true, data: { runId: entry.runId, revision, deliverables: entry.items.map(publicItem), ...(reportingChecklists.length ? { reportingChecklists } : {}) } }
         })
       },
     })
@@ -2113,6 +2131,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       capability: String(item.capability ?? ''),
       attempt: Number(entry.attempts.get(item.id) ?? 1) || 1,
       acceptance: Array.isArray(item.acceptance) ? item.acceptance : [],
+      ...(item.studyType ? { studyType: String(item.studyType) } : {}),
       signal: call.signal,
       ...(config.reviewPollMs ? { pollMs: config.reviewPollMs } : {}),
       ...(config.reviewWaitMs ? { waitMs: config.reviewWaitMs } : {}),
@@ -2287,6 +2306,8 @@ function publicItem(item) {
     contractKind: item.contractKind,
     capability: item.capability,
     dependsOn: item.dependsOn,
+    // The design the deliverable reports or designs, when the plan declared one.
+    ...(item.studyType ? { studyType: String(item.studyType) } : {}),
     status: item.status,
     attempts: item.attempts ?? 0,
     issues: (item.lastIssues ?? []).slice(0, 20),

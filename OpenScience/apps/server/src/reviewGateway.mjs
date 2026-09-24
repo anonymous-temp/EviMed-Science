@@ -19,14 +19,19 @@
  *   findings back; the prompt, the checklists and the model live here.
  *
  * Operations (under `/internal/review/v1`):
- *   POST /deliverables          { deliverableId, contractKind, capability?, runId?, sessionId?, attempt?, acceptance?, editor? }
+ *   POST /deliverables          { deliverableId, contractKind, capability?, runId?, sessionId?, attempt?, acceptance?, studyType?, editor? }
  *   GET  /deliverables/<id>     the review's state, and its findings once done
  *   POST /responses             { reviewId, answers: [{ id, response, reason? }] }
+ *
+ * `studyType` is what the run's plan declared the deliverable to report or
+ * design, from the domain's closed vocabulary; it decides which reporting
+ * checklist is attached beside the contract kind's, so a value outside the
+ * vocabulary is refused rather than read as "none".
  *
  * @module reviewGateway
  */
 
-import { CONTRACT_KINDS } from "@evimed/domain";
+import { CONTRACT_KINDS, isStudyType } from "@evimed/domain";
 
 export const REVIEW_GATEWAY_PREFIX = "/internal/review/v1/";
 const START_PATH = "/internal/review/v1/deliverables";
@@ -90,7 +95,7 @@ function optionalText(value, max) {
 
 /** @param {Record<string, any>} body */
 function startRequest(body) {
-  onlyFields(body, ["deliverableId", "contractKind", "capability", "runId", "sessionId", "attempt", "turn", "acceptance", "editor"]);
+  onlyFields(body, ["deliverableId", "contractKind", "capability", "runId", "sessionId", "attempt", "turn", "acceptance", "studyType", "editor"]);
   const deliverableId = String(body.deliverableId ?? "");
   if (!DELIVERABLE_ID.test(deliverableId)) throw new ReviewGatewayError(400, "review_request_invalid", "deliverableId is invalid.");
   const contractKind = String(body.contractKind ?? "");
@@ -104,11 +109,14 @@ function startRequest(body) {
   const attempt = body.attempt == null ? 1 : Number(body.attempt);
   if (!Number.isSafeInteger(attempt) || attempt < 1 || attempt > 100) throw new ReviewGatewayError(400, "review_request_invalid", "attempt is invalid.");
   if (body.editor != null && typeof body.editor !== "boolean") throw new ReviewGatewayError(400, "review_request_invalid", "editor must be a boolean.");
+  const studyType = body.studyType ?? "";
+  if (studyType !== "" && !isStudyType(studyType)) throw new ReviewGatewayError(400, "review_request_invalid", "studyType is not a study type.");
   return {
     deliverableId, contractKind, capability, attempt, acceptance,
     runId: optionalText(body.runId, 120),
     sessionId: optionalText(body.sessionId, 200),
     turn: Number.isSafeInteger(body.turn) ? body.turn : undefined,
+    ...(studyType ? { studyType: String(studyType) } : {}),
     ...(body.editor === false ? { editor: false } : {}),
   };
 }

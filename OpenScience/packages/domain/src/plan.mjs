@@ -16,6 +16,7 @@
 
 import { isContractKind } from './contractKinds.mjs'
 import { PLAN_ITEM_STATES } from './states.mjs'
+import { STUDY_TYPES, isStudyType } from './studyTypes.mjs'
 
 /**
  * @typedef {object} PlanDeliverable
@@ -28,6 +29,10 @@ import { PLAN_ITEM_STATES } from './states.mjs'
  * @property {readonly string[]} acceptance  what a reader will be able to check in
  *   the finished file, written at plan time from the brief: the independent
  *   reviewer checks each one (an instance rubric beats a generic list — RaR)
+ * @property {string} [studyType]  the design of the one study the deliverable
+ *   reports or designs (`studyTypes.mjs`); absent when it reports no one study.
+ *   The reviewer attaches that design's reporting checklist, and a deliverable
+ *   whose contract carries one writes it completed.
  */
 
 /**
@@ -113,6 +118,17 @@ export function validateTaskPlan(value) {
     const acceptance = Array.isArray(item.acceptance)
       ? item.acceptance.map((line) => String(line ?? '').replace(/\s+/g, ' ').trim().slice(0, PLAN_ACCEPTANCE_ITEM_MAX)).filter(Boolean).slice(0, PLAN_ACCEPTANCE_LIMIT)
       : []
+    // Optional, and a value outside the vocabulary is an issue the model
+    // repairs, never a guess: a study type decides which reporting checklist
+    // the reviewer holds the package to.
+    const studyType = item.studyType == null ? '' : String(item.studyType).trim()
+    if (studyType && !isStudyType(studyType)) {
+      issues.push({
+        code: 'plan_invalid',
+        message: `deliverable "${id}": unknown studyType "${studyType}" — one of ${STUDY_TYPES.join(', ')}; leave it out when the deliverable reports or designs no one specific study.`,
+        deliverableId: id,
+      })
+    }
     deliverables.push({
       id,
       contractKind,
@@ -121,6 +137,7 @@ export function validateTaskPlan(value) {
       dependsOn: Object.freeze(dependsOn),
       status,
       acceptance: Object.freeze(acceptance),
+      ...(isStudyType(studyType) ? { studyType } : {}),
     })
   }
   for (const item of deliverables) {
