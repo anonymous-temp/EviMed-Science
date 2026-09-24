@@ -1709,6 +1709,40 @@ test("opening a project takes the researcher's own idle runtime a hidden tab sti
   await manager.closeAll();
 });
 
+test("an opening that joins a start already under way still makes room as an opening", async () => {
+  // A warm-up of the same project may be measuring the project when the
+  // frame's own start arrives; they are one start, and it makes room when the
+  // measurement is done — as an opening, because one asked in the meantime.
+  const manager = new RuntimeManager({
+    runtimeMode: "kernel",
+    runtimeSandboxMode: "docker",
+    maxRunningRuntimes: 10,
+    maxRunningRuntimesPerUser: 1,
+  }, { hasRunningRuns: async () => false });
+  manager.startKernel = async (currentProject) => ({ ...fakeRuntime(`${currentProject.userId}-${currentProject.id}`, currentProject.workspaceDir), project: currentProject });
+  manager.runtimeBusy = async () => false;
+  const stopped = [];
+  manager.stopIdleRuntime = async (stopping, options) => {
+    stopped.push({ id: stopping.id, evenIfConnected: options?.evenIfConnected });
+    manager.runtimes.delete(manager.key(stopping));
+  };
+  await manager.start(project);
+  manager.beginProxy(project);
+  const projectB = { ...project, id: "paper2", workspaceDir: "/srv/open-science/users/alice/projects/paper2/workspace" };
+  let measured;
+  manager.enforceProjectQuota = () => new Promise((resolve) => { measured = resolve; });
+  const warmUp = manager.start(projectB);
+  for (let i = 0; i < 20 && !measured; i++) await sleep(1);
+  const opening = manager.start(projectB, { opening: true });
+  measured();
+  const [warmed, opened] = await Promise.all([warmUp, opening]);
+  assert.equal(warmed, opened, "one start, joined");
+  assert.deepEqual(stopped, [{ id: "paper1", evenIfConnected: true }]);
+  assert.equal(manager.openingStarts.size, 0, "nothing is left marked once the start settles");
+  manager.endProxy(project);
+  await manager.closeAll();
+});
+
 test("an opening held only by the deployment's ceiling takes another researcher's long-idle runtime before its owner's hidden one", async () => {
   const manager = new RuntimeManager({
     runtimeMode: "kernel",

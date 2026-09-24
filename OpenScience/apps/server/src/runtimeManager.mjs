@@ -768,14 +768,15 @@ function runtimeStateFile(project) {
 }
 
 /**
- * The moments a runtime start goes through, in order, as the reader sees them
- * while waiting (plan §3.1 #8): 准备环境 (a container or a cloud session, and
- * room made for it), 同步文件 (the project's files carried into a remote
- * session — a local container mounts them, so the Docker provider has no such
- * moment and never reports it) and 启动内核 (the kernel composing its plugin
- * tree until its first wire call answers). The shell drew one sentence for all
- * of them, so a slow kernel, a slow copy and a slot the deployment had run out
- * of all read as "a cold start is slow".
+ * The moments a runtime start goes through, in order (plan §3.1 #8):
+ * `environment` (a container or a cloud session, and room made for it),
+ * `sync` (the project's files carried into a remote session — a local
+ * container mounts them, so the Docker provider has no such moment and never
+ * reports it) and `kernel` (the kernel composing its plugin tree until its
+ * first wire call answers). The shell times its wait by them, each moment
+ * restarting the allowance, so a slow start that is moving is not a failure.
+ * It no longer shows them: since 2026-09-23 the reader sees the
+ * conversation's title and 「正在打开…」 (UI plan §2.2).
  */
 export const RUNTIME_START_STAGES = Object.freeze(["environment", "sync", "kernel"]);
 
@@ -3136,6 +3137,10 @@ export class RuntimeManager {
     this.lastOrphanCleanup = null;
     /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
     this.startProgress = new Map();
+    /** Pending starts an opening has asked for or joined, by project key:
+     *  read when that start makes room (`makeRoomFor`), so an opening that
+     *  finds a warm-up's start under way still counts as one. */
+    this.openingStarts = new Set();
     /** The last start of each project that was refused, by project key, for
      *  the status the waiting shell polls: `{ code, status, at }`. */
     this.startFailures = new Map();
@@ -3488,6 +3493,7 @@ export class RuntimeManager {
       this.scheduleIdleStop(project);
       return existing;
     }
+    if (opening) this.openingStarts.add(key);
     const pending = this.starts.get(key);
     if (pending) return pending;
 
@@ -3498,7 +3504,7 @@ export class RuntimeManager {
       // instead of beginning a second container. Its own entry in `starts` is
       // not counted against the ceilings it checks.
       await this.enforceProjectQuota(project);
-      await this.makeRoomFor(project, { opening });
+      await this.makeRoomFor(project, { opening: this.openingStarts.has(key) });
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
@@ -3589,6 +3595,7 @@ export class RuntimeManager {
     } finally {
       this.starts.delete(key);
       this.startProgress.delete(key);
+      this.openingStarts.delete(key);
     }
   }
 

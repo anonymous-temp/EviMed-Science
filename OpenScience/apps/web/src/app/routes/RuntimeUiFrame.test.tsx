@@ -1049,8 +1049,8 @@ describe("the conversation surface outlives the route", () => {
     expect(screen.queryByRole("status")).toBeNull();
     await userEvent.click(screen.getByText("Open B"));
     await waitFor(() => expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(2));
-    expect(screen.queryByText("准备环境")).toBeNull();
-    expect(screen.queryByText("正在打开对话…")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText("正在打开…")).toBeNull();
     expect(container.querySelector("iframe")).toBe(frame);
   });
 });
