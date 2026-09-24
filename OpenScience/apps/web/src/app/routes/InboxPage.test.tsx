@@ -265,19 +265,21 @@ it("reads the whole inbox in one request", async () => {
   expect(screen.queryByText(/已把 .* 条标为已读/)).not.toBeInTheDocument();
 });
 
-// The fold 「自动运行 N 条（评测与主动科研，不计入未读）」 is gone: whatever the
-// list route returns is a row, and no grouping field is read.
+// The fold 「自动运行 N 条（评测与主动科研，不计入未读）」 is gone: nothing is
+// silent any more, a proactive result arrives as its digest, and whatever the
+// list route returns is a row — no grouping field is read.
 it("renders every item as a row: no automated-run fold, no merged completions", async () => {
   vi.mocked(api.listInbox).mockResolvedValue({
     items: [
-      runNotice({ id: "auto-1", silent: true, readAt: at(0), title: "GLP-1 受体激动剂在心衰中的新证据 · 本周结果" }),
+      { ...review, id: "digest", title: "主动科研简报：GLP-1 受体激动剂在心衰中的新证据", body: "3 条重点发现，1 条待验证线索。",
+        source: { type: "digest", id: "digest-1" }, actions: [{ id: "open", label: "查看简报", style: "neutral" }], readAt: at(0) },
       runNotice({ id: "c1", title: "研究已完成" }),
       runNotice({ id: "c2", title: "研究已完成", groupKey: "run-finished:default:2026-09-18", count: 3 }),
     ],
     nextCursor: null,
   });
   open();
-  expect(await screen.findByText("GLP-1 受体激动剂在心衰中的新证据 · 本周结果")).toBeInTheDocument();
+  expect(await screen.findByText("主动科研简报：GLP-1 受体激动剂在心衰中的新证据")).toBeInTheDocument();
   expect(screen.getAllByText("研究已完成")).toHaveLength(2);
   expect(screen.queryByText(/自动运行/)).not.toBeInTheDocument();
   expect(screen.queryByText(/合并 \d+ 条/)).not.toBeInTheDocument();

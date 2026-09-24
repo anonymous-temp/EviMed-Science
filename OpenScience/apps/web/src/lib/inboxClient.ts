@@ -28,11 +28,6 @@ export interface InboxItem {
   /** Absent on items written before the field existed; read as `info`. */
   severity?: InboxSeverity;
   /**
-   * Automated work — an evaluation cell, an autopilot episode — is recorded
-   * here but never counted or pushed: it arrives already read.
-   */
-  silent?: boolean;
-  /**
    * Items merged into one row share this key (per day, per project, for
    * 「研究已完成」); `count` says how many the row stands for.
    */

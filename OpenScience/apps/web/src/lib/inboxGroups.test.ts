@@ -46,18 +46,18 @@ describe("orderInbox", () => {
       item({ id: "s-old", severity: "safety", createdAt: todayAt(8) }),
       item({ id: "s-read", severity: "safety", readAt: todayAt(12), createdAt: todayAt(12) }),
       item({ id: "s-new", severity: "safety", createdAt: todayAt(13) }),
-      item({ id: "quiet", silent: true, readAt: todayAt(12), createdAt: todayAt(11) }),
+      item({ id: "read", readAt: todayAt(12), createdAt: todayAt(11) }),
     ]);
     expect(order.pinned.map((entry) => entry.id)).toEqual(["s-new", "s-old"]);
-    expect(order.rest.map((entry) => entry.id)).toEqual(["a", "s-read", "quiet"]);
+    expect(order.rest.map((entry) => entry.id)).toEqual(["a", "s-read", "read"]);
   });
 
-  it("renders a silent or grouped item as a row like any other: nothing is folded", () => {
+  it("renders a merged or a digest item as a row like any other: nothing is folded", () => {
     const order = orderInbox([
-      item({ id: "c1", title: "研究已完成" }),
-      item({ id: "c2", title: "研究已完成", groupKey: "run-finished:default:2026-09-18", count: 3 }),
-      item({ id: "eval", silent: true, readAt: todayAt(9) }),
+      item({ id: "c1", title: "阿司匹林一级预防 已完成" }),
+      item({ id: "c2", title: "9月18日完成 3 项研究", groupKey: "run-finished:default:2026-09-18", count: 3 }),
+      item({ id: "digest", noticeType: "review", title: "主动科研简报：GLP-1", source: { type: "digest", id: "digest-1" }, readAt: todayAt(9) }),
     ]);
-    expect(order.rest.map((entry) => entry.id)).toEqual(["c1", "c2", "eval"]);
+    expect(order.rest.map((entry) => entry.id)).toEqual(["c1", "c2", "digest"]);
   });
 });

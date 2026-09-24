@@ -7,9 +7,10 @@ import type { InboxItem, InboxSeverity } from "@/lib/inboxClient";
  *
  * It used to group by day, fold a day's routine completions into one line and
  * fold automated work into 「自动运行 N 条」 (2026-09-23 plan §5.8). The
- * server no longer writes a notice for an evaluation and writes a proactive
- * result as an ordinary one, so the page renders every item it is given as a
- * row and reads no grouping field. The day moved into each row's time column.
+ * server writes no notice for an evaluation, an internal project or an
+ * autopilot run any more — a proactive result arrives as its digest — and
+ * nothing is silent, so the page renders every item it is given as a row and
+ * reads no grouping field. The day moved into each row's time column.
  */
 
 /** An item's weight; items written before the field existed read as the server reads them. */
@@ -27,7 +28,7 @@ export interface InboxOrder {
 
 export function orderInbox(items: readonly InboxItem[]): InboxOrder {
   const pinnedIds = new Set(items
-    .filter((item) => !item.readAt && !item.silent && severityOf(item) === "safety")
+    .filter((item) => !item.readAt && severityOf(item) === "safety")
     .map((item) => item.id));
   const newestFirst = (a: InboxItem, b: InboxItem) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
   return {
