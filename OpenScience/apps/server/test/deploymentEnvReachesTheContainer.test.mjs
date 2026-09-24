@@ -214,6 +214,12 @@ const operatorLevers = {
   OPEN_SCIENCE_REVIEW_REPLY_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_REVIEW_POLL_MS: ["open-science-web"],
   OPEN_SCIENCE_REVIEW_REFERENCE_TIMEOUT_MS: ["open-science-web"],
+  // TypeSafe's Jev, the reply check's first pass (2026-09-24): on wherever its
+  // key is mounted, so the off switch is what keeps a key in place and stops
+  // paying; the timeout decides when the reviewer takes every sentence. The
+  // web API is the only caller — no runtime ever talks to Jev.
+  OPEN_SCIENCE_REVIEW_JEV_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ["open-science-web"],
 };
 
 async function composeFiles() {
@@ -370,3 +376,31 @@ test("every setting the controller's launch plan reads reaches the controller wh
     assert.ok(gaps.includes(name), `${name} no longer needs an exemption from the controller's environment; drop it from the list`);
   }
 });
+
+test("TypeSafe's key reaches the web API from an optional mount, and nothing else", async () => {
+  // The owner approved the key for production on 2026-09-24; a deployment
+  // that has not placed it yet must still start. The mount defaults to
+  // /dev/null, which config.mjs reads as no key (Jev off, the reviewer judges
+  // every sentence) rather than as a broken secret.
+  const files = await composeFiles();
+  const base = files.find(({ name }) => name === "docker-compose.yml");
+  assert.ok(base, "the base compose file was not read");
+  const document = YAML.parse(base.text);
+  const web = document.services["open-science-web"];
+  assert.equal(web.environment.OPEN_SCIENCE_TYPESAFE_API_KEY_FILE, "/run/secrets/typesafe-api-key");
+  const mount = web.volumes.find((/** @type {any} */ volume) => volume?.target === "/run/secrets/typesafe-api-key");
+  assert.deepEqual(mount, { type: "bind", source: "${OPEN_SCIENCE_TYPESAFE_API_KEY_HOST_FILE:-/dev/null}", target: "/run/secrets/typesafe-api-key", read_only: true });
+  // The runtime never holds a provider key; its controller has no use for one.
+  for (const { name, text } of files) {
+    const services = YAML.parse(text)?.services ?? {};
+    for (const [service, definition] of Object.entries(services)) {
+      if (service === "open-science-web") continue;
+      assert.equal(JSON.stringify(definition ?? {}).includes("TYPESAFE"), false, `${name} hands TypeSafe's key to ${service}`);
+    }
+  }
+  const unset = loadConfig({ rootDir: repoRoot, typesafeApiKeyFile: "/dev/null" });
+  assert.equal(unset.typesafeApiKey, "");
+  assert.equal(unset.typesafeApiKeyError, null, "/dev/null is no key, not a broken one");
+  assert.equal(unset.reviewJevEnabled, false);
+});
+
