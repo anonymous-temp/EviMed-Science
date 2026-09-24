@@ -221,6 +221,17 @@ test('past four files the rest wait behind one control', () => {
   assert.match(html, /显示全部 6 个文件/);
 });
 
+// Production, 2026-09-24: two helper scripts took half the cards of a
+// finished review. A reader's files are the cards; the rest wait.
+test('a helper script is not a card while there are readable files', () => {
+  const f = column();
+  f.kit.hub.deliver('run-state', { ...DELIVERED, artifacts: ['d/clinical-evidence-report.md', 'd/clinical-evidence-matrix.json', 'd/build_claims.py', 'd/build_tables.py', 'd/renumber.py'], unverifiedArtifacts: [] });
+  const html = renderStatic(f.answerRow().component, answerProps().props);
+  assert.equal((html.match(/data-evimed-file="/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /data-evimed-file="d\/build_/);
+  assert.match(html, /显示全部 5 个文件/);
+});
+
 test('an answer can carry both the reply check and the files, each drawing what it shadows first', () => {
   const f = column({ replyChecks: true });
   f.kit.hub.deliver('run-state', DELIVERED);

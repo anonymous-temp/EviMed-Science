@@ -289,17 +289,23 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   };
 
   /**
-   * The run's files, two to a row; past four, the rest behind one control, as
-   * the kernel's own delivery cards do.
+   * The run's files, two to a row: its readable files first, at most four;
+   * the rest behind one control, as the kernel's own delivery cards do.
    * @param {{ model: { runId: string, files: any[] }, sessionId: string | null, useResource?: any }} props
    */
   const FileCards = ({ model, sessionId, useResource }) => {
     const [all, setAll] = React.useState(false);
-    const shown = all ? model.files : model.files.slice(0, 4);
+    // Cards are for what a reader opens — documents, tables, data, figures.
+    // A helper script the run left beside its report (build_tables.py) waits
+    // behind 「显示全部」 with everything else (production, 2026-09-24: two
+    // scripts took half the cards of a finished review).
+    const readable = model.files.filter((/** @type {any} */ file) => file.rank <= 4);
+    const lead = (readable.length ? readable : model.files).slice(0, 4);
+    const shown = all ? model.files : lead;
     return h('div', { 'data-evimed-files': model.runId, style: { marginTop: '16px', minWidth: 0 } },
       h('div', { style: { display: 'grid', gridTemplateColumns: model.files.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)', gap: '8px' } },
         shown.map((file) => h(FileCard, { key: file.path, file, runId: model.runId, sessionId, useResource }))),
-      model.files.length > 4
+      model.files.length > lead.length
         ? h('button', { type: 'button', 'aria-expanded': all, onClick: () => setAll(!all), style: { ...textButton, ...meta, marginTop: '4px' } },
           all ? '收起' : `显示全部 ${model.files.length} 个文件`)
         : null);
