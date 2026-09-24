@@ -41,6 +41,7 @@ export function ListRow({
   to,
   href,
   onOpen,
+  expanded,
   leading,
   meta,
   trailing,
@@ -55,8 +56,14 @@ export function ListRow({
   to?: string;
   /** An outside address the row opens in a new tab. */
   href?: string;
-  /** Opens the row, when it is neither a route nor an address. */
+  /**
+   * Opens the row, when it is neither a route nor an address. Beside `to` or
+   * `href` it runs as the row is followed: a notice marks itself read on the
+   * way to the conversation it names.
+   */
   onOpen?: () => void;
+  /** A row that opens in place (its detail under the title): whether it is open now. */
+  expanded?: boolean;
   /** Fixed-width content before the title. */
   leading?: ReactNode;
   /** The line under the title. */
@@ -83,11 +90,11 @@ export function ListRow({
   // `data-row-title` is what the release walk measures: every title in a
   // list must start on one left edge (scripts/ops/ui-walk.mjs).
   const heading = to ? (
-    <Link to={to} data-row-title className={cn(titleClass, stretched)}>{title}</Link>
+    <Link to={to} onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</Link>
   ) : href ? (
-    <a href={href} target="_blank" rel="noreferrer" data-row-title className={cn(titleClass, stretched)}>{title}</a>
+    <a href={href} target="_blank" rel="noreferrer" onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</a>
   ) : onOpen ? (
-    <button type="button" onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</button>
+    <button type="button" onClick={onOpen} aria-expanded={expanded} data-row-title className={cn(titleClass, stretched)}>{title}</button>
   ) : (
     <span data-row-title className={titleClass}>{title}</span>
   );

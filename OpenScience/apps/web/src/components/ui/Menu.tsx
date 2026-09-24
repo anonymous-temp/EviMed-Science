@@ -25,6 +25,12 @@ export interface MenuItem {
   disabled?: boolean;
   /** A single-choice menu marks the current option. */
   checked?: boolean;
+  /**
+   * An on/off item among actions (a `menuitemcheckbox`): `checked` is its
+   * state, and the other items stay plain actions rather than turning the
+   * whole menu into a single choice (the memory header's 「本项目除外」).
+   */
+  toggle?: boolean;
 }
 
 export type MenuEntry = MenuItem | "separator";
@@ -64,7 +70,7 @@ export function Menu({
     buttons[next]?.focus();
   };
 
-  const single = items.some((item) => item !== "separator" && item.checked !== undefined);
+  const single = items.some((item) => item !== "separator" && !item.toggle && item.checked !== undefined);
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -91,8 +97,8 @@ export function Menu({
               <button
                 key={`${item.label}-${index}`}
                 type="button"
-                role={single ? "menuitemradio" : "menuitem"}
-                aria-checked={single ? Boolean(item.checked) : undefined}
+                role={item.toggle ? "menuitemcheckbox" : single ? "menuitemradio" : "menuitem"}
+                aria-checked={item.toggle || single ? Boolean(item.checked) : undefined}
                 disabled={item.disabled}
                 onClick={() => {
                   setOpen(false);
@@ -106,7 +112,7 @@ export function Menu({
               >
                 {item.icon && <item.icon size={16} className="shrink-0 text-text-3" aria-hidden="true" />}
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {single && item.checked && <Check size={16} className="shrink-0 text-accent" aria-hidden="true" />}
+                {(single || item.toggle) && item.checked && <Check size={16} className="shrink-0 text-accent" aria-hidden="true" />}
               </button>
             ))}
           </div>
