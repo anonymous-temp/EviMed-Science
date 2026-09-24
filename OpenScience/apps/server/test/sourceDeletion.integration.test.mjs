@@ -91,8 +91,13 @@ test("the real source deletion producer and leased consumer retire owned underst
   await f.worker().tick();
   assert.equal(await absent(artifact), true, "the source deletion job must have a real consumer that removes its materialized index");
   assert.equal(await f.documents.get(f.owner, "source-unit", "unit-one"), null);
-  const fact = await f.documents.get(f.owner, "fact", "derived-fact");
+  // Withdrawn with the document (derivedMemory.mjs): out of every list and
+  // recall, the reason on the row, the text kept for the audit trail.
+  assert.equal(await f.documents.get(f.owner, "fact", "derived-fact"), null);
+  const fact = await f.documents.get(f.owner, "fact", "derived-fact", { includeDeleted: true });
+  assert.ok(fact.deletedAt);
   assert.equal(fact.payload.status, "retired");
+  assert.equal(fact.payload.withdrawn.reason, "source_deleted");
   assert.equal(fact.payload.content, "audited derived fact");
   assert.equal((await f.documents.get(f.other, "fact", "derived-fact")).payload.status, "approved");
   assert.ok(await f.documents.get(f.other, "source", current.id));
