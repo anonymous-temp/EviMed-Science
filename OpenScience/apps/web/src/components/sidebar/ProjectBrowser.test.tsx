@@ -124,14 +124,13 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(readProjects()).toEqual(["default"]);
   });
 
-  // What a project is, said where projects are chosen: switching one restarts
-  // the runtime, and until 2026-09-18 nothing said so (review B §2e).
-  it("says what a project is at the head of the section", async () => {
+  // The section is named and not explained (2026-09-23 plan §4: the
+  // interface does not describe how the system works).
+  it("names the section without a sentence about what a project is", async () => {
     renderBrowser();
     const section = await screen.findByRole("region", { name: "项目" });
-    expect(section).toHaveAccessibleDescription(PROJECT_EXPLAINER);
-    expect(within(section).getByRole("heading", { name: "项目" })).toHaveAttribute("title", PROJECT_EXPLAINER);
-    expect(PROJECT_EXPLAINER).toContain("各有自己的研究环境");
+    expect(section).not.toHaveAccessibleDescription(PROJECT_EXPLAINER);
+    expect(within(section).getByRole("heading", { name: "项目" })).not.toHaveAttribute("title");
   });
 
   it("opens another project's group and reads its tasks under that project", async () => {
@@ -305,9 +304,13 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1");
   });
 
-  it("links to the account page for exporting and deleting projects", async () => {
+  // The everyday two: search and a new project. Export, rename and delete
+  // live in 设置 → 项目 (2026-09-23 plan §5.2).
+  it("offers search and a new project at the head of the section, and nothing else", async () => {
     renderBrowser();
-    expect(await screen.findByRole("link", { name: "管理项目" })).toHaveAttribute("href", "/app/account?tab=projects");
+    expect(await screen.findByRole("button", { name: "搜索对话" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新建项目" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "管理项目" })).not.toBeInTheDocument();
   });
 });
 
@@ -365,15 +368,16 @@ describe("ProjectBrowser — reading the ledgers", () => {
 });
 
 describe("ProjectBrowser — task rows", () => {
-  // A run whose session id is not addressable has no conversation to open. It
-  // used to link to its row on the run ledger; that page went on 2026-09-20,
-  // so the row states the fact instead of pointing at a page that answers
-  // 「找不到」.
-  it("shows a run with no addressable session without offering a way in", async () => {
-    mocks.runs.default = [run({ id: "run-1", question: "早期的运行", sessionId: "not a session id" })];
+  // A run whose session id is not addressable has no conversation to open, so
+  // it is not a row (it used to be a greyed row with a tooltip explaining why).
+  it("lists no row for a run with no addressable session", async () => {
+    mocks.runs.default = [
+      run({ id: "run-1", question: "早期的运行", sessionId: "not a session id" }),
+      run({ id: "run-2", question: "可以打开的运行" }),
+    ];
     renderBrowser();
-    expect(await screen.findByTitle("这次研究没有留下可打开的对话")).toHaveTextContent("早期的运行");
-    expect(screen.queryByRole("link", { name: /早期的运行/ })).toBeNull();
+    expect(await screen.findByRole("link", { name: /可以打开的运行/ })).toBeInTheDocument();
+    expect(screen.queryByText("早期的运行")).toBeNull();
   });
 
   // The controls the run ledger page held for one conversation, on its row.
@@ -394,42 +398,36 @@ describe("ProjectBrowser — task rows", () => {
     expect(screen.queryByRole("menuitem", { name: "停止" })).toBeNull();
   });
 
-  // A session says a conversation happened, a run says how it came out. A
-  // delivered run with an open gate issue must not read as an accepted one.
-  it("does not show a delivered-but-unverified run as a success", async () => {
+  // One line: the title and a time. How the verification came out belongs to
+  // the report, not to the list (2026-09-23 plan §5.2).
+  it("shows no delivery or verification state on a row", async () => {
     mocks.runs.default = [
       run({ id: "clean", question: "干净的运行" }),
       run({ id: "open", question: "有待复核的运行", verification: "unverified" }),
-      run({ id: "degraded", question: "降级交付的运行", phase: "degraded" }),
+      run({ id: "failed", question: "没做完的运行", status: "failed", errorCode: "runtime_stalled" }),
     ];
     renderBrowser();
-
-    const clean = await screen.findByRole("link", { name: /干净的运行/ });
-    expect(clean).toHaveTextContent("已交付");
-    expect(clean).not.toHaveTextContent("未逐字核对");
-    expect(clean.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "done");
-
-    for (const name of [/有待复核的运行/, /降级交付的运行/]) {
+    await screen.findByRole("link", { name: /干净的运行/ });
+    for (const name of [/干净的运行/, /有待复核的运行/, /没做完的运行/]) {
       const row = screen.getByRole("link", { name });
-      expect(row).toHaveTextContent("已交付 · 有结论未逐字核对");
-      expect(row.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "review");
+      expect(row).not.toHaveTextContent(/已交付|核对|未完成|已取消/);
+      expect(row.querySelector("[data-run-state]")).toBeNull();
     }
   });
 
-  // Twelve runs of one capability with no recorded question used to be
-  // twelve identical rows. The second line is what tells them apart.
-  it("gives every row a second line saying when and how it ended", async () => {
+  // A spinner while it works; a dot once it has finished and nobody opened it.
+  it("marks a running conversation with a spinner and an unopened finished one with a dot", async () => {
+    window.localStorage.setItem("evimed.runs.seen.v1", JSON.stringify({ since: Date.parse("2026-01-01T00:00:00Z"), seen: {} }));
     mocks.runs.default = [
-      run({ id: "a", status: "failed", errorCode: "runtime_stalled" }),
-      run({ id: "b", status: "canceled" }),
-      run({ id: "c", status: "running", finishedAt: null }),
+      run({ id: "c", question: "还在做的", status: "running", finishedAt: null }),
+      run({ id: "d", question: "刚做完的", finishedAt: new Date().toISOString() }),
     ];
     renderBrowser();
-    const links = await screen.findAllByRole("link", { name: /未记录题面的运行/ });
-    const text = links.map((link) => link.textContent ?? "");
-    expect(text.some((line) => line.includes("未完成"))).toBe(true);
-    expect(text.some((line) => line.includes("已取消"))).toBe(true);
-    expect(text.some((line) => line.includes("进行中"))).toBe(true);
+    const running = await screen.findByRole("link", { name: /还在做的/ });
+    expect(within(running).getByLabelText("进行中")).toBeInTheDocument();
+    const finished = screen.getByRole("link", { name: /刚做完的/ });
+    expect(within(finished).getByRole("img", { name: "未打开" })).toBeInTheDocument();
+    window.localStorage.removeItem("evimed.runs.seen.v1");
   });
 
   it("titles a row with the ledger's title before its question", async () => {
@@ -461,8 +459,8 @@ describe("ProjectBrowser — search", () => {
 
     const results = screen.getByRole("list", { name: "搜索结果" });
     expect(within(results).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(results).getByRole("button", { name: /阿司匹林与出血/ })).toHaveTextContent("Paper 1 ·");
-    expect(within(results).getByRole("link", { name: /阿司匹林一级预防/ })).toHaveTextContent("我的研究 ·");
+    expect(within(results).getByRole("button", { name: /阿司匹林与出血/ })).toHaveTextContent("Paper 1");
+    expect(within(results).getByRole("link", { name: /阿司匹林一级预防/ })).toHaveTextContent("我的研究");
     expect(within(results).queryByText(/二甲双胍/)).not.toBeInTheDocument();
     // The project nobody opened was not read behind the reader's back…
     expect(readProjects()).not.toContain("p-heart");

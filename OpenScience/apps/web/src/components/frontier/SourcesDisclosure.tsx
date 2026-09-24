@@ -66,11 +66,11 @@ function SourcesTable() {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-2 text-ui text-muted">
         <span>{error}</span>
-        <Button size="sm" variant="ghost" onClick={() => setAttempt((value) => value + 1)}><RefreshCw size={14} aria-hidden="true" />重试</Button>
+        <Button size="sm" variant="ghost" onClick={() => setAttempt((value) => value + 1)}><RefreshCw size={16} aria-hidden="true" />重试</Button>
       </div>
     );
   }
-  if (!data) return <p role="status" className="flex items-center gap-1.5 text-ui text-muted"><Loader2 size={14} className="animate-spin" aria-hidden="true" />正在读取信源清单…</p>;
+  if (!data) return <p role="status" className="flex items-center gap-1.5 text-ui text-muted"><Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取信源清单…</p>;
   return (
     <div className="space-y-4">
       {groups.length === 0 && <p className="text-ui text-muted">信源正在接入，还没有开始读取的。</p>}

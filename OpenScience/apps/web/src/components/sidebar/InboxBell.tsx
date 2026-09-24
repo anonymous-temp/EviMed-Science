@@ -22,12 +22,12 @@ export function inboxBellLabel({ unreadTotal, safetyUnread }: InboxUnreadCount):
 }
 
 /**
- * The inbox's bell and its unread count.
+ * The inbox's bell, and a small red dot when something is unread.
  *
- * Geometry per appendix D §10.1: a 20 px glyph in a 32 px hit area (WCAG 2.5.8
- * asks for 24), and a 16 px pill that hangs off the button's corner with a ring
- * in the sidebar's colour, so a two-digit count never covers the bell — the
- * owner's first complaint was 「31」 sitting on top of it.
+ * A dot, not a number (2026-09-23 plan §5.2): the count is on the inbox's own
+ * 「未读 N」 filter and in the bell's accessible name; in the sidebar it was
+ * one more figure competing with the conversations. A 20 px glyph in a 32 px
+ * hit area (WCAG 2.5.8 asks for 24).
  *
  * The count is the server's total, not a page length: it used to be
  * `items.length` of one 50-item page, so the badge saturated at 50 and 「99+」
@@ -87,18 +87,16 @@ export function InboxBell() {
         title={inboxBellLabel(count)}
         data-safety={safety || undefined}
         className={cn(
-          "relative ml-auto grid h-8 w-8 shrink-0 place-items-center self-center rounded-input hover:bg-surface-2",
-          safety ? "text-danger" : "text-muted hover:text-text",
+          "relative ml-auto grid h-8 w-8 shrink-0 place-items-center rounded hover:bg-surface-2",
+          safety ? "text-danger" : "text-text-3 hover:text-text",
         )}
       >
-        <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
+        <Icon size={20} aria-hidden="true" />
         {unread > 0 && (
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-unread px-1 text-badge font-semibold tabular-nums text-unread-fg ring-2 ring-surface"
-          >
-            {unreadBadgeText(unread)}
-          </span>
+            className="pointer-events-none absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-unread ring-2 ring-surface-1"
+          />
         )}
       </button>
       <span className="sr-only" aria-live="polite">{announcement}</span>

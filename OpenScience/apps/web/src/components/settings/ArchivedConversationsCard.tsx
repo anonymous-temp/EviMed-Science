@@ -46,7 +46,7 @@ export function ArchivedConversationsCard() {
       {error && (
         <div role="alert" className="mb-3 flex items-center gap-2 text-ui text-error">
           <span className="flex-1">{error}</span>
-          <Button size="sm" variant="ghost" onClick={() => void load()}><RefreshCw size={13} aria-hidden="true" />重试</Button>
+          <Button size="sm" variant="ghost" onClick={() => void load()}><RefreshCw size={16} aria-hidden="true" />重试</Button>
         </div>
       )}
       {runs === null ? <p className="text-ui text-muted">正在读取…</p>
@@ -55,7 +55,7 @@ export function ArchivedConversationsCard() {
             <ul className="divide-y divide-border">
               {runs.map((run) => (
                 <li key={run.id} className="flex items-center gap-3 py-2">
-                  <Archive size={14} className="shrink-0 text-muted" aria-hidden="true" />
+                  <Archive size={16} className="shrink-0 text-muted" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
                     <Link to={chatPath(run.sessionId)} className="block truncate text-ui text-text hover:underline">{runTitle(run)}</Link>
                     <span className="block truncate text-caption text-muted">{runMetaLine(run)}</span>

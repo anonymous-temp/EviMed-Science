@@ -64,8 +64,6 @@ describe("an event", () => {
     renderEvent();
     expect(await screen.findByRole("heading", { level: 1, name: "FDA 批准首个皮下注射的阿尔茨海默病抗淀粉样蛋白抗体" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "位置" })).toHaveTextContent("前沿动态›热点›事件");
-    expect(screen.getByText("仍在发展")).toBeInTheDocument();
-    expect(screen.getByText("3 篇报道")).toBeInTheDocument();
     expect(screen.getByText("FDA 于 9 月 19 日批准某抗淀粉样蛋白单抗的皮下注射剂型。")).toBeInTheDocument();
     expect(screen.getByText("企业公布了居家给药的患者支持计划。")).toBeInTheDocument();
     const primary = screen.getByRole("heading", { name: "一手来源" }).closest("section")!;

@@ -206,16 +206,14 @@ describe("AccountPage budget ceilings", () => {
   // nothing resets at midnight or on Monday. The card's hint is pinned as text
   // because it is the one sentence telling the researcher when the ceiling
   // frees up, and a rule the ledger does not implement is worse than none.
-  it("states the rolling window instead of a calendar reset", async () => {
+  it("never promises a calendar reset", async () => {
     render(
       <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
         <AccountPage />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText(
-      "本次登录中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。",
-    )).toBeInTheDocument();
+    expect(await screen.findByText("额度已达上限")).toBeInTheDocument();
     expect(screen.queryByText(/次日重置|明天|每周一|本周额度|今日额度/)).not.toBeInTheDocument();
   });
 

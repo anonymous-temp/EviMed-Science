@@ -67,7 +67,7 @@ export function AccountPage() {
             <div className="truncate text-body font-medium text-text">{identity.name || "EviMed 用户"}</div>
           </div>
           <div className="flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-caption font-medium text-ok">
-            <ShieldCheck size={13} aria-hidden="true" /> 数据独立
+            <ShieldCheck size={16} aria-hidden="true" /> 数据独立
           </div>
         </div>
       </Card>
@@ -125,7 +125,7 @@ export function AccountPage() {
         >
           <div className="flex items-start gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn-soft text-warn">
-              <WalletMinimal size={17} aria-hidden="true" />
+              <WalletMinimal size={16} aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <p className="text-ui text-text">{describeWebUsageBudget(budgetRefusal)}</p>

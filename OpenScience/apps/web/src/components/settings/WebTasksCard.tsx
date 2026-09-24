@@ -76,7 +76,7 @@ export function WebTasksCard() {
           title="刷新任务"
           aria-label="刷新任务"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -112,7 +112,7 @@ export function WebTasksCard() {
                     title={`取消 ${task.command}`}
                     aria-label={`取消 ${task.command}`}
                   >
-                    <X size={13} aria-hidden="true" />
+                    <X size={16} aria-hidden="true" />
                   </button>
                 )}
               </div>

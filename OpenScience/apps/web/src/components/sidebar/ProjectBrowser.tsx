@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ChevronRight, Folder, FolderOpen, FolderPlus, Loader2, Pencil, Plus, Search, Settings2, X } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { PROJECT_EXPLAINER, PROJECT_NAME_MAX, projectErrorMessage, projectNameProblem } from "@/lib/projectNames";
+import { PROJECT_NAME_MAX, projectErrorMessage, projectNameProblem } from "@/lib/projectNames";
 import { chatPath } from "@/lib/runLocation";
-import { runMetaLine, runMoment, runState, runTitle } from "@/lib/runPresentation";
+import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
+import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
-import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
 import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
 import { inputClasses } from "@/components/ui/Input";
+import { IconButton } from "@/components/ui/IconButton";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
@@ -108,7 +109,6 @@ export function ProjectBrowser() {
   const navigate = useNavigate();
   const location = useLocation();
   const headingId = useId();
-  const explainerId = useId();
   const newNameId = useId();
   const rootRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -304,7 +304,7 @@ export function ProjectBrowser() {
     for (const project of listed) {
       const entry = byProject[project.id];
       if (entry?.status !== "ready") continue;
-      for (const run of entry.runs) if (runTitle(run).toLowerCase().includes(needle)) found.push({ project, run });
+      for (const run of entry.runs) if (taskTarget(run) && runTitle(run).toLowerCase().includes(needle)) found.push({ project, run });
     }
     return found.sort((a, b) => runMoment(b.run) - runMoment(a.run));
   }, [needle, listed, byProject]);
@@ -327,23 +327,18 @@ export function ProjectBrowser() {
     go(project.id, () => ({ to }));
   };
 
-  const iconButton = "grid h-7 w-7 shrink-0 place-items-center rounded-input text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text";
-
   return (
     <section
       ref={rootRef}
       aria-labelledby={headingId}
-      aria-describedby={explainerId}
       className="mt-4 flex min-h-0 flex-1 flex-col"
     >
-      <p id={explainerId} className="sr-only">{PROJECT_EXPLAINER}</p>
       <div className="flex h-9 shrink-0 items-center gap-0.5 px-3">
         {/* The heading stays in the tree while the search box has the row:
           * it is the section's name either way. */}
         <h2
           id={headingId}
-          title={PROJECT_EXPLAINER}
-          className={cn("min-w-0 flex-1 px-2 text-caption font-semibold text-muted", searchOpen && "sr-only")}
+          className={cn("min-w-0 flex-1 px-2 text-caption text-text-3", searchOpen && "sr-only")}
         >
           项目
         </h2>
@@ -356,7 +351,7 @@ export function ProjectBrowser() {
               if (!needle && !event.currentTarget.contains(event.relatedTarget as Node | null)) closeSearch(false);
             }}
           >
-            <Search size={12} className="pointer-events-none absolute left-2.5 text-muted" aria-hidden="true" />
+            <Search size={16} className="pointer-events-none absolute left-2 text-text-3" aria-hidden="true" />
             <input
               ref={searchInputRef}
               type="search"
@@ -369,45 +364,26 @@ export function ProjectBrowser() {
                 event.preventDefault();
                 closeSearch(true);
               }}
-              className={inputClasses({ className: "h-7 bg-bg pl-7 pr-7 text-caption [&::-webkit-search-cancel-button]:hidden" })}
+              className={inputClasses({ className: "h-8 bg-bg pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden" })}
             />
-            <button
-              type="button"
-              aria-label="清除搜索"
-              title="清除搜索"
-              onClick={() => closeSearch(true)}
-              className="absolute right-0.5 grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
-            >
-              <X size={12} aria-hidden="true" />
-            </button>
+            <IconButton icon={X} label="清除搜索" size="sm" onClick={() => closeSearch(true)} className="absolute right-1" />
           </div>
         ) : (
           <>
-            <button
+            <IconButton
               ref={searchButtonRef}
-              type="button"
-              aria-label="搜索对话"
-              title="搜索对话"
+              icon={Search}
+              label="搜索对话"
               onClick={() => { setCreating(false); setSearchOpen(true); }}
-              className={iconButton}
-            >
-              <Search size={14} strokeWidth={1.75} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              aria-label="新建项目"
-              title="新建项目"
+            />
+            {/* The everyday two. Export, rename and delete of a project live
+              * in 设置 → 项目 (2026-09-23 plan §5.2). */}
+            <IconButton
+              icon={Plus}
+              label="新建项目"
               aria-expanded={creating}
               onClick={() => { setCreating((open) => !open); setCreateError(null); }}
-              className={iconButton}
-            >
-              <FolderPlus size={14} strokeWidth={1.75} aria-hidden="true" />
-            </button>
-            {/* Export and delete live on the account page, beside every
-              * project's run count; the sidebar keeps the everyday two. */}
-            <Link to="/app/account?tab=projects" aria-label="管理项目" title="管理项目：导出、删除" className={iconButton}>
-              <Settings2 size={14} strokeWidth={1.75} aria-hidden="true" />
-            </Link>
+            />
           </>
         )}
       </div>
@@ -417,14 +393,14 @@ export function ProjectBrowser() {
           className="shrink-0 px-3 pb-2"
           onSubmit={(event) => { event.preventDefault(); void submitNew(); }}
         >
-          <label className="mb-1 block px-2 text-caption text-muted" htmlFor={newNameId}>新项目名</label>
+          <label className="sr-only" htmlFor={newNameId}>新项目名</label>
           <input
             id={newNameId}
             ref={newNameRef}
             value={draftName}
             maxLength={PROJECT_NAME_MAX}
             disabled={createBusy}
-            placeholder="例如：阿司匹林一级预防"
+            placeholder="项目名，回车创建"
             onChange={(event) => { setDraftName(event.target.value); setCreateError(null); }}
             onKeyDown={(event) => {
               if (event.key !== "Escape") return;
@@ -435,9 +411,7 @@ export function ProjectBrowser() {
             }}
             className={inputClasses({ className: "h-8" })}
           />
-          {createError
-            ? <p role="alert" className="mt-1 px-2 text-caption text-error">{createError}</p>
-            : <p className="mt-1 px-2 text-caption text-muted">按 Enter 创建，并在新项目里开始第一条对话。{PROJECT_EXPLAINER}</p>}
+          {createError && <p role="alert" className="mt-1 px-2 text-caption text-error">{createError}</p>}
         </form>
       )}
 
@@ -473,7 +447,7 @@ export function ProjectBrowser() {
             )}
             {results.length === 0 && !unsearchedLoading && <p className="px-2 py-2 text-caption text-muted">没有匹配的对话</p>}
             {results.length > SEARCH_RESULTS_MAX && (
-              <p className="px-2 py-1 text-caption text-muted">只列出最近的 {SEARCH_RESULTS_MAX} 条，换个更具体的词试试。</p>
+              <p className="px-2 py-1 text-caption text-text-3">仅显示前 {SEARCH_RESULTS_MAX} 条</p>
             )}
             {unsearchedLoading && <p role="status" className="px-2 py-1 text-caption text-muted">正在读取其余项目的对话…</p>}
             {!unsearchedLoading && unsearched.length > 0 && (
@@ -622,7 +596,8 @@ function ProjectGroup({
     }
   };
 
-  const rows = runs?.status === "ready" ? runs.runs : [];
+  // A run whose session was never recorded has no conversation to open.
+  const rows = runs?.status === "ready" ? runs.runs.filter((run) => taskTarget(run) != null) : [];
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_TASK_ROWS);
   const hidden = rows.length - Math.min(rows.length, COLLAPSED_TASK_ROWS);
   const status = [current && !standIn && "当前项目", switching && "正在切换", running && "有对话正在运行"].filter(Boolean).join("，");
@@ -675,15 +650,14 @@ function ProjectGroup({
             )}
           >
             <ChevronRight
-              size={14}
-              strokeWidth={1.75}
+              size={16}
               className={cn("shrink-0 text-muted transition-transform duration-fast", expanded && "rotate-90")}
               aria-hidden="true"
             />
-            <Icon size={16} strokeWidth={1.75} className={cn("shrink-0", current ? "text-accent" : "text-muted")} aria-hidden="true" />
+            <Icon size={16} className={cn("shrink-0", current ? "text-accent" : "text-muted")} aria-hidden="true" />
             <span className={cn("min-w-0 flex-1 truncate", current && "font-semibold")}>{project.name}</span>
             {switching ? (
-              <Loader2 size={12} className="shrink-0 animate-spin text-muted motion-reduce:animate-none" aria-hidden="true" />
+              <Loader2 size={16} className="shrink-0 animate-spin text-muted motion-reduce:animate-none" aria-hidden="true" />
             ) : running && (
               <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-dot-running motion-reduce:animate-none" aria-hidden="true" />
             )}
@@ -699,7 +673,7 @@ function ProjectGroup({
             >
               {/* A plus, as the kernel's list has it: the pen-in-a-square of
                 * 「新对话」 sat beside the rename pencil as its near twin. */}
-              <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+              <Plus size={16} aria-hidden="true" />
             </button>
             {!standIn && (
               <button
@@ -709,7 +683,7 @@ function ProjectGroup({
                 onClick={() => { setDraft(project.name); setRenameError(null); setRenaming(true); }}
                 className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
               >
-                <Pencil size={13} strokeWidth={1.75} aria-hidden="true" />
+                <Pencil size={16} aria-hidden="true" />
               </button>
             )}
           </span>
@@ -763,16 +737,18 @@ function ProjectGroup({
 }
 
 /**
- * One conversation: two lines, not one longer one (appendix D §10.3). Twelve
- * runs of one capability share a first line whenever their question was not
- * recorded; the second — when, and how it came out — is what tells them apart,
- * and it says the state in words beside the dot's shape. In the search results
- * the second line leads with the project, because the results mix projects.
+ * One conversation: one line — its title, and at the end the time, or the one
+ * mark it may carry (2026-09-23 plan §5.2). A spinner while it works; a small
+ * dot once it has finished and nobody has opened it since; nothing otherwise.
+ * 「已交付 · 有结论未逐字核对」 used to be a second line under every row: the
+ * verification belongs to the report, and the list's job is to say which
+ * conversation is which and which one wants you. In the search results the
+ * project's name takes the time's place, because the results mix projects.
  *
- * The 「…」 beside it carries what the run ledger page used to hold for one
- * conversation: stop, rename, copy the identifiers (`ConversationMenu`). It is
- * only offered for the project the shell is in, because every one of those acts
- * on that project's runtime.
+ * A run whose session was never recorded has no conversation to open and is
+ * not listed. The 「⋯」 beside a row (`ConversationMenu`) — stop, rename,
+ * archive, delete — is offered for the project the shell is in, because every
+ * one of those acts on that project's runtime.
  */
 function TaskRow({
   run,
@@ -795,25 +771,31 @@ function TaskRow({
   onOpen: (row: HTMLElement | null) => void;
   onWarm?: () => void;
 }) {
-  const className = "flex w-full items-start gap-2 rounded-input py-1 pl-7 pr-2 text-left hover:bg-surface-2 aria-[current=page]:bg-accent-soft";
-  const meta = withProject ? `${projectName} · ${runMetaLine(run)}` : runMetaLine(run);
+  useRunsSeenVersion();
+  useEffect(() => {
+    if (active) markRunSeen(run);
+  }, [active, run]);
   const target = taskTarget(run);
+  if (!target) return null;
+  const running = isRunning(run);
+  const unseen = !active && isRunUnseen(run);
+  const className = "flex h-8 w-full items-center gap-2 rounded pl-7 pr-2 text-left hover:bg-surface-2 aria-[current=page]:bg-surface-2";
   const content = (
     <>
-      <RunStatusDot state={runState(run).key} labelled className="mt-1.5" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-ui text-text">{runTitle(run)}</span>
-        <span className="block truncate text-caption text-muted">{meta}</span>
-      </span>
+      <span className={cn("min-w-0 flex-1 truncate text-ui", unseen ? "font-medium text-text" : "text-text")}>{runTitle(run)}</span>
+      {running ? (
+        <Loader2 size={16} className="shrink-0 animate-spin text-text-3 motion-reduce:animate-none" aria-label="进行中" />
+      ) : (
+        <span className={cn("flex shrink-0 items-center gap-1.5", current && "group-hover/task:invisible group-focus-within/task:invisible")}>
+          {unseen && <span className="h-1.5 w-1.5 rounded-full bg-accent" role="img" aria-label="未打开" />}
+          <span className="max-w-24 truncate text-meta tabular-nums text-text-3">
+            {withProject ? projectName : compactTime(runMoment(run))}
+          </span>
+        </span>
+      )}
     </>
   );
-  const row = !target ? (
-    // A run whose session was never recorded: shown, because it happened, but
-    // there is no conversation behind it to open.
-    <div data-task-key={taskKey(projectId, run)} title="这次研究没有留下可打开的对话" className={`${className} text-muted`}>
-      {content}
-    </div>
-  ) : current ? (
+  const row = current ? (
     <Link
       to={target}
       data-task-key={taskKey(projectId, run)}

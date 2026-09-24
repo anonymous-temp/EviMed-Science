@@ -28,11 +28,10 @@ describe("知识库", () => {
   // (「上传与浏览原始文件」), so an empty knowledge base showed three empty
   // states at once (2026-09-22). One page, one list: the documents are the
   // list, each row carries its own state and opens its own preview.
-  it("is one page with the two nouns printed under its title, one list and no second view of the folder", () => {
+  it("is one page with its title and no sentence under it, one list and no second view of the folder", () => {
     open();
     expect(screen.getByRole("heading", { name: "知识库", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(/你放进来的资料/)).toBeInTheDocument();
-    expect(screen.getByText(/它自己记下的内容在「记忆胶囊」/)).toBeInTheDocument();
+    expect(screen.queryByText(/你放进来的资料/)).not.toBeInTheDocument();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(screen.getByText("资料清单")).toBeInTheDocument();
     expect(screen.queryByText("上传与浏览原始文件")).toBeNull();

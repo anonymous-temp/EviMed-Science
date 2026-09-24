@@ -58,7 +58,7 @@ function RenderState({ error, loading }: { error: string | null; loading: boolea
   if (loading)
     return (
       <div className="flex items-center gap-2 p-4 text-ui text-muted">
-        <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在渲染…
+        <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在渲染…
       </div>
     );
   return null;

@@ -34,8 +34,9 @@ per-project workspace + JSONL provenance.
 - `apps/web/` — the React single-page frontend (`@ai4s/web`), served by `apps/server`.
   Layout: `src/app/` (router — every page under `/app`, layout, providers),
   `src/components/` (feature components + `components/ui/` primitives: Button,
-  Input/Textarea, Card, SegmentedControl, ConfirmDialog, Toaster, EmptyState,
-  Skeletons, ShortcutHelp), `src/lib/` (api client, project store, run stream).
+  IconButton, Tag, FilterChips, Tabs, ListRow, Panel, Menu, Switch, SearchInput,
+  Input/Textarea, Card, ConfirmDialog, Toaster, ShortcutHelp; `EmptyState` and
+  `Skeletons` in `components/cards/`), `src/lib/` (api client, project store, run stream).
   There is no desktop packaging: the Tauri shell, its Rust command layer,
   `packages/sdk` and the browser-side kernel store were deleted on 2026-09-04.
 - `packages/` — `ui` (placeholder README only — real primitives live in
@@ -121,14 +122,22 @@ per-project workspace + JSONL provenance.
   (`kernelThemeTokens()`). `apps/web/src/app/designTokens.test.ts` regenerates
   and compares, so editing a consumer instead of the module is a red test.
   The shell conforms to the kernel, not the other way around.
-- One sans stack, **no serif in the chrome**; six sizes only (12/13/14/16/20/24)
-  as `text-badge/meta/caption/ui/body/wordmark/title/display`; weights 400/500/600.
-  Containers `max-w-content-narrow` 560 / `max-w-content` 748 / `max-w-content-wide`
-  1000 — a page uses **`PageShell`** so its title and body share one container.
-  Radii: `rounded` 8 (controls, rows), `rounded-card` 12, `rounded-panel` 16,
-  `rounded-composer` 24, `rounded-full` chips. Heights: 32 controls, 28 chips,
-  36 rows, 44 bars, 40 only for a form's primary button. Static cards have no
-  shadow — `shadow-pop` (menus, popovers) / `shadow-modal` (dialogs, drawers).
+- One sans stack, **no serif in the chrome**; five sizes only (12/14/16/20/24)
+  as `text-badge/meta/caption/ui/body/wordmark/title/display`; weights 400/500/600;
+  a line of text at most 40 CJK characters (`max-w-measure` 560 / `-body` 640).
+  Every page sits in **one 960 px column** (`max-w-page`) through **`PageShell`**,
+  whose header is one line with **no subtitle**. Radii: `rounded-tag` 4, `rounded` 8
+  (controls, rows), `rounded-card` 12 (cards, popovers, dialogs), `rounded-composer`
+  24, `rounded-full` pills. Heights: 24 in a row, 32 on a page, 40 only for a form's
+  primary button, tags 20. Icons 16 / 20, one stroke. One accent (links too).
+  Static cards have no shadow — `shadow-pop` (menus, popovers) / `shadow-modal`
+  (dialogs, drawers). The component set (`PageShell`, `Tabs`, `FilterChips`, `Tag`,
+  `Button`, `IconButton`, `List`/`ListRow`, `Panel`, `EmptyState`, plus `Menu`,
+  `Switch`, `SearchInput`) is in `DESIGN.md`; ESLint rejects a hand-made bordered
+  pill or bordered button outside `components/ui/`.
+- **The interface never explains the system** (2026-09-23 plan): no subtitle, no hint
+  under a card title, no 「为什么入选」; no internal state as text (已交付, 核对 N 条,
+  用过 N 次, token, tok/s, API names, ids). Say what the user can do and the result.
 - ESLint bans new arbitrary values (`text-[Npx]`, `rounded-[Npx]`, bare
   `shadow-sm/md/lg`, `shadow-card`, opacity modifiers on token colours) across
   `src/**`, and `font-serif` inside `components/{ui,layout,cards}` — use the

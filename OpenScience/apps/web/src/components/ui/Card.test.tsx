@@ -3,14 +3,18 @@ import { describe, expect, it } from "vitest";
 import { Card } from "./Card";
 
 describe("Card", () => {
-  it("renders the unified surface with title and hint in the header", () => {
+  // No hint under a card's title and no rule under its header (2026-09-23
+  // plan §4): a card that needs a sentence of explanation is explaining the
+  // system.
+  it("renders the unified surface with its title and no hint", () => {
     render(
       <Card title="外观" hint="主题保存在本浏览器中">
         内容
       </Card>,
     );
     expect(screen.getByRole("heading", { name: "外观" })).toBeInTheDocument();
-    expect(screen.getByText("主题保存在本浏览器中")).toBeInTheDocument();
+    expect(screen.queryByText("主题保存在本浏览器中")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "外观" }).closest("header")?.className).not.toMatch(/border/);
     expect(screen.getByText("内容")).toBeInTheDocument();
     const section = screen.getByText("内容").closest("section");
     expect(section).toHaveClass("rounded-card", "border", "border-border", "bg-surface");
@@ -39,14 +43,15 @@ describe("Card", () => {
     expect(screen.queryByRole("heading", { name: "被替换" })).not.toBeInTheDocument();
   });
 
-  it("renders a footer slot behind a top border", () => {
+  it("renders a footer slot without a second rule inside the card", () => {
     render(
       <Card title="t" footer={<button>保存</button>}>
         正文
       </Card>,
     );
     const footer = screen.getByRole("button", { name: "保存" }).closest("footer");
-    expect(footer).toHaveClass("border-t", "border-border");
+    expect(footer).toBeInTheDocument();
+    expect(footer?.className).not.toMatch(/border/);
   });
 
   it("omits the header entirely when no title, hint or header is given", () => {

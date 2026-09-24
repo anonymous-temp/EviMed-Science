@@ -143,10 +143,11 @@ describe("the token table has one source", () => {
 });
 
 describe("the type scale is closed and sans-only", () => {
-  it("uses exactly the six agreed sizes", () => {
+  // 13 is gone (2026-09-23 plan §4): 12 / 14 / 16 / 20, and 24 for a hero.
+  it("uses exactly the five agreed sizes", () => {
     const used = [...new Set(Object.values(TYPE_SCALE).map((rung) => rung.size))].sort((a, b) => a - b);
     expect(used).toEqual([...TYPE_SIZES]);
-    expect(TYPE_SIZES).toEqual([12, 13, 14, 16, 20, 24]);
+    expect(TYPE_SIZES).toEqual([12, 14, 16, 20, 24]);
   });
 
   it("names no serif face, in the module or in either consumer", () => {

@@ -468,7 +468,7 @@ export function AutopilotPage() {
     <PageHeader
       title="主动科研"
       description={summaryLine}
-      actions={<Button size="sm" disabled={busy} onClick={() => setCreating(true)}><Plus size={13} aria-hidden="true" />新建定时研究</Button>}
+      actions={<Button size="sm" disabled={busy} onClick={() => setCreating(true)}><Plus size={16} aria-hidden="true" />新建定时研究</Button>}
     />
     {visibleError && <Card><div role="alert" className="flex items-center justify-between gap-3"><p className="text-ui text-error">{visibleError}</p>
       <Button size="sm" variant="ghost" onClick={() => void load()}>重试</Button></div></Card>}
@@ -497,10 +497,10 @@ export function AutopilotPage() {
                 {/* Spending is confirmed; a verdict is not. 「立即跑一次」 starts
                   * a paid episode on one click, so it says what it may cost
                   * first (2026-09-16 review, U17). */}
-                {active ? <><Button size="sm" disabled={busy} onClick={() => setRunning(agenda)}><Sparkles size={13} aria-hidden="true" />立即跑一次</Button>
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} aria-hidden="true" />停止</Button></>
-                  : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} aria-hidden="true" />开始主动科研</Button>}
-                <Button size="sm" variant="ghost" onClick={() => setHistory(agenda)}><History size={13} aria-hidden="true" />运行历史</Button>
+                {active ? <><Button size="sm" disabled={busy} onClick={() => setRunning(agenda)}><Sparkles size={16} aria-hidden="true" />立即跑一次</Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={16} aria-hidden="true" />停止</Button></>
+                  : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={16} aria-hidden="true" />开始主动科研</Button>}
+                <Button size="sm" variant="ghost" onClick={() => setHistory(agenda)}><History size={16} aria-hidden="true" />运行历史</Button>
               </div>
             </li>;
           })}

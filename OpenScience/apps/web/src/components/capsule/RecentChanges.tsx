@@ -101,7 +101,7 @@ export function RecentChanges({ items, onChanged }: { items: readonly TimelineEv
               </div>
               {item.type === "memory" && item.recordId && item.version ? (
                 <Button size="sm" variant="ghost" loading={busy === item.id} disabled={busy !== null} onClick={() => void undo(item)}>
-                  <Undo2 size={13} aria-hidden="true" />撤销
+                  <Undo2 size={16} aria-hidden="true" />撤销
                 </Button>
               ) : null}
             </li>

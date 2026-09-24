@@ -31,16 +31,16 @@ export interface RunStatePresentation {
 
 export const RUN_STATE_LABEL: Record<RunStateKey, string> = {
   running: "进行中",
-  done: "已交付",
-  // One vocabulary for the verdict, the domain's `runVerdictText`: what is
-  // true is that some conclusions could not be matched word for word in their
-  // sources, not that a person owes the run a review.
-  review: "已交付 · 有结论未逐字核对",
+  done: "已完成",
+  // One word per state, the same words the inbox uses (2026-09-23 plan §5.8):
+  // 「已交付」 beside 「已完成」 was a distinction no reader could make, and
+  // 「有结论未逐字核对」 was the system describing its own check.
+  review: "待核对",
   // Not 「失败」: a run the stall detector stopped, one refused for a missing
   // credential and one whose package the gate could not read all land here,
   // and none of those says the science failed.
   failed: "未完成",
-  canceled: "已取消",
+  canceled: "已停止",
 };
 
 export function runState(run: WebAgentRun): RunStatePresentation {
@@ -124,6 +124,21 @@ export function relativeTime(ms: number, now = Date.now()): string {
   const date = new Date(ms);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
+/**
+ * A list's time column: 刚刚 / N 分钟 / N 小时 / 月/日 (and the year when it is
+ * not this one) — the sidebar's one-line rows have room for no more.
+ */
+export function compactTime(ms: number, now = Date.now()): string {
+  if (!ms) return "";
+  const seconds = Math.max(0, Math.floor((now - ms) / 1000));
+  if (seconds < 60) return "刚刚";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时`;
+  const date = new Date(ms);
+  const sameYear = date.getFullYear() === new Date(now).getFullYear();
+  return sameYear ? `${date.getMonth() + 1}/${date.getDate()}` : `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 /**

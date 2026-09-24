@@ -130,7 +130,7 @@ export function ConnectorsCard() {
                   className="flex min-h-6 shrink-0 items-center gap-1 text-caption text-accent hover:underline"
                 >
                   获取
-                  <ExternalLink size={12} aria-hidden="true" />
+                  <ExternalLink size={16} aria-hidden="true" />
                 </a>
               </div>
               {connector.source !== "deployment" && (
@@ -156,7 +156,7 @@ export function ConnectorsCard() {
                     aria-label={`保存 ${connector.title} 凭据`}
                     disabled={busy === connector.id || !(drafts[connector.id] ?? "").trim()}
                   >
-                    <KeyRound size={14} aria-hidden="true" />
+                    <KeyRound size={16} aria-hidden="true" />
                     保存
                   </Button>
                   {connector.own && (
@@ -167,7 +167,7 @@ export function ConnectorsCard() {
                       disabled={busy === connector.id}
                       onClick={() => setPendingRemoval(connector)}
                     >
-                      <Trash2 size={14} aria-hidden="true" />
+                      <Trash2 size={16} aria-hidden="true" />
                     </Button>
                   )}
                 </form>

@@ -504,11 +504,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
           <SegmentedControl aria-label="视图" value={view} onChange={setView} options={VIEWS} />
           {staleAt && (
             <span className="inline-flex items-center gap-1 text-caption text-muted">
-              <Clock3 size={14} aria-hidden="true" />最近更新于 {clockOrDate(staleAt)}
+              <Clock3 size={16} aria-hidden="true" />最近更新于 {clockOrDate(staleAt)}
             </span>
           )}
           <div className="relative w-full sm:ml-auto sm:w-72">
-            <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <Input
               type="search"
               aria-label="搜索前沿动态"
@@ -595,7 +595,7 @@ function FeedList({
       {fresh > 0 && (
         <button type="button" onClick={onFresh}
           className="flex w-full items-center justify-center gap-1.5 rounded-card border border-border bg-surface-1 py-2 text-ui text-link transition-colors duration-fast hover:bg-surface-2">
-          <ArrowUp size={14} aria-hidden="true" />有 {fresh >= PAGE_SIZE ? `${fresh}+` : fresh} 条新的
+          <ArrowUp size={16} aria-hidden="true" />有 {fresh >= PAGE_SIZE ? `${fresh}+` : fresh} 条新的
         </button>
       )}
       {listing.items.length === 0 ? (

@@ -55,7 +55,7 @@ export function RouteLine({
   return (
     <div className={cn("text-ui text-text", className)}>
       <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-        <Waypoints size={14} className="shrink-0 text-muted" aria-hidden="true" />
+        <Waypoints size={16} className="shrink-0 text-muted" aria-hidden="true" />
         <span>
           按 <strong className="font-semibold">{line.label}</strong> 处理
         </span>
@@ -92,7 +92,7 @@ export function RouteLine({
               >
                 其他能力
                 <ChevronDown
-                  size={12}
+                  size={16}
                   className={cn("transition-transform duration-fast", picking && "rotate-180")}
                   aria-hidden="true"
                 />

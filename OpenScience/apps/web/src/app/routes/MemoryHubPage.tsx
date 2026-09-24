@@ -167,7 +167,7 @@ export function MemoryHubPage() {
                 * export: it was a disclosure at the foot of the page, and the
                 * owner asked where it had gone (2026-09-22). */}
               <Button variant="ghost" size="sm" onClick={() => setSharing(true)} title="把 EviMed 学到的做法加密导出给别人，或收下别人分享的胶囊">
-                <Share2 size={13} aria-hidden="true" />
+                <Share2 size={16} aria-hidden="true" />
                 分享与导入
               </Button>
             </>
@@ -189,7 +189,7 @@ export function MemoryHubPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 id="capsule-list" className="text-body font-semibold text-text">记下的内容</h2>
                 <div className="relative">
-                  <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                  <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                   <Input
                     aria-label="搜索记忆"
                     type="search"

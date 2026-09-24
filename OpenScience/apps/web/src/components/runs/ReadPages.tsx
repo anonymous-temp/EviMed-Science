@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
 export function OfficialSourceBadge() {
   return (
     <span className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface-2 px-1.5 text-caption text-text">
-      <Landmark size={11} aria-hidden="true" />官方来源
+      <Landmark size={16} aria-hidden="true" />官方来源
     </span>
   );
 }
@@ -39,7 +39,7 @@ export function ReadPageCard({ page, runId, compact = false, showSnapshot = true
         {original ? (
           <a href={original} target="_blank" rel="noreferrer" className="min-w-0 break-words text-link hover:underline">
             {page.title}
-            <ExternalLink size={11} className="ml-0.5 inline align-baseline" aria-hidden="true" />
+            <ExternalLink size={16} className="ml-0.5 inline align-baseline" aria-hidden="true" />
           </a>
         ) : (
           <span className="min-w-0 break-words text-text">{page.title}</span>
@@ -57,7 +57,7 @@ export function ReadPageCard({ page, runId, compact = false, showSnapshot = true
           to={snapshotHref(runId, page.snapshotPath)}
           className="inline-flex items-center gap-1 text-caption text-link hover:underline"
         >
-          <FileText size={12} aria-hidden="true" />查看保存的快照
+          <FileText size={16} aria-hidden="true" />查看保存的快照
         </Link>
       )}
     </div>

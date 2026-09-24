@@ -168,7 +168,7 @@ describe("SourcesPage", () => {
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘" }));
     // No product names, server paths or hash algorithms on a researcher's page.
-    expect(await screen.findByText(/无法提供内容指纹的文件，请改用平台上传/)).toBeInTheDocument();
+    expect(await screen.findByText("网盘资料")).toBeInTheDocument();
     expect(screen.queryByText(/OpenList|SHA-256|\/tenants/)).not.toBeInTheDocument();
     expect(screen.queryByText(/本地分析代理/)).not.toBeInTheDocument();
     expect(screen.queryByText(/本地代理/)).not.toBeInTheDocument();

@@ -3,41 +3,41 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { cn } from "@/lib/cn";
 
 /**
- * A page's title, said once, at one size, in the sans stack the conversation
- * beside it uses.
+ * A page's header: one line. The title on the left — 20 px, 600 — optionally
+ * followed by a grey count or update time; on the right the page's one primary
+ * action and at most two icon buttons or a search box.
  *
- * 「运行记录」 was 26 px and 「收件箱」 20 px for no reason a reader could infer
- * (review B §2.5), and both were serif while the kernel's conversation was
- * not — the seam the 2026-09-20 rectification closed. Every page H1 is the
- * 20 px `title` rung now; `display` (24) is the home hero, the login page and
- * a full-page empty state. No letter-spacing — tracking on Chinese breaks the
- * character grid.
- *
- * Prefer `PageShell`, which puts this header and the page body in one
- * container. Use `PageHeader` alone only where the page already owns its
- * container (`WorkbenchTabs`).
+ * No subtitle (2026-09-23 plan §4, §7 gate 2). Seven pages opened with a grey
+ * sentence about how the system works — 「EviMed 每天替你读 314 个信源…」 — and
+ * a reader who wanted any of it could not act on it. What a page needs to
+ * explain goes into its empty state or the help, so this component has no
+ * place to put a description: `description` is kept on the type only until the
+ * last caller is gone, and renders nothing.
  */
 export function PageHeader({
   title,
-  description,
+  meta,
   actions,
   documentTitle,
   className,
 }: {
   title: string;
+  /** @deprecated Pages carry no subtitle; ignored. */
   description?: ReactNode;
-  /** The page's primary action and at most two secondary ones. */
+  /** A grey count or update time after the title (「29 条」「22:40 更新」). */
+  meta?: ReactNode;
+  /** The page's primary action and at most two icon buttons or a search box. */
   actions?: ReactNode;
   /** The browser tab's name, when it should differ from the heading. */
   documentTitle?: string;
   className?: string;
 }) {
   return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-3", className)}>
+    <header className={cn("flex min-h-8 flex-wrap items-center justify-between gap-3", className)}>
       <PageTitle page={documentTitle ?? title} />
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-baseline gap-2">
         <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
-        {description && <p className="mt-2 text-ui text-muted">{description}</p>}
+        {meta && <span className="text-caption tabular-nums text-text-3">{meta}</span>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>

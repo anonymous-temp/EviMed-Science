@@ -121,10 +121,11 @@ describe("where the module is not offered", () => {
 });
 
 describe("精选, the default view", () => {
-  it("opens with the one sentence, the filters and the feed by day", async () => {
+  it("opens with the title — no sentence under it — the filters and the feed by day", async () => {
     renderPage();
     expect(screen.getByRole("heading", { level: 1, name: "前沿动态" })).toBeInTheDocument();
-    expect(await screen.findByText("EviMed 每天替你读 267 个医学与 AI 信源，只留下值得看的。每条都标明来源和证据类型，点开就是原文。")).toBeInTheDocument();
+    await screen.findByText("今天的一条 RCT");
+    expect(screen.queryByText(/每天替你读/)).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "精选" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radiogroup", { name: "栏目" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "专科" })).toBeInTheDocument();
@@ -157,7 +158,7 @@ describe("精选, the default view", () => {
   it("does not even ask for 与你相关 when the status says personalisation is off", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
-    await screen.findByText(/每天替你读 267 个/);
+    await waitFor(() => expect(client.fetchFrontierStatus).toHaveBeenCalled());
     expect(client.fetchFrontierForYou).not.toHaveBeenCalled();
   });
 

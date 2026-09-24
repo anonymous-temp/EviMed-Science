@@ -112,7 +112,7 @@ export function WebAccountCard({
           title="刷新账户"
           aria-label="刷新账户"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -127,7 +127,7 @@ export function WebAccountCard({
         ) : (
           <>
             <div className="flex min-h-12 items-center gap-3 rounded-input border border-border px-3 py-2">
-              <UserRound size={15} className="shrink-0 text-accent" aria-hidden="true" />
+              <UserRound size={16} className="shrink-0 text-accent" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-ui font-medium text-text">{account.name || account.id}</p>
                 <p className="truncate font-mono text-caption text-muted">{account.id}</p>
@@ -139,7 +139,7 @@ export function WebAccountCard({
                 title="导出账户归档"
                 aria-label="导出账户归档"
               >
-                <Download size={13} className={cn(exporting && "animate-pulse")} aria-hidden="true" />
+                <Download size={16} className={cn(exporting && "animate-pulse")} aria-hidden="true" />
               </button>
               <button
                 className={iconButtonCls}
@@ -148,7 +148,7 @@ export function WebAccountCard({
                 title="退出登录"
                 aria-label="退出登录"
               >
-                <LogOut size={13} aria-hidden="true" />
+                <LogOut size={16} aria-hidden="true" />
               </button>
               <button
                 className={cn(iconButtonCls, "hover:text-error")}
@@ -157,7 +157,7 @@ export function WebAccountCard({
                 title="删除账户"
                 aria-label="打开账户删除"
               >
-                <Trash2 size={13} aria-hidden="true" />
+                <Trash2 size={16} aria-hidden="true" />
               </button>
             </div>
 
@@ -177,7 +177,7 @@ export function WebAccountCard({
                     title="取消删除"
                     aria-label="取消账户删除"
                   >
-                    <X size={13} aria-hidden="true" />
+                    <X size={16} aria-hidden="true" />
                   </button>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">

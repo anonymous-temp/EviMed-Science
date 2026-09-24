@@ -197,10 +197,10 @@ export function FilePreviewInspector({
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
-              <Eye size={13} aria-hidden="true" /> 预览
+              <Eye size={16} aria-hidden="true" /> 预览
             </ToggleBtn>
             <ToggleBtn active={tab === "code"} onClick={() => setTab("code")}>
-              <Code2 size={13} aria-hidden="true" /> 源文件
+              <Code2 size={16} aria-hidden="true" /> 源文件
             </ToggleBtn>
           </div>
         )}
@@ -212,7 +212,7 @@ export function FilePreviewInspector({
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
-          <History size={14} strokeWidth={1.5} aria-hidden="true" />
+          <History size={16} aria-hidden="true" />
         </button>
         <button
           className="text-text hover:opacity-60"
@@ -220,11 +220,11 @@ export function FilePreviewInspector({
           title={fileActionTitle}
           onClick={() => void runFileAction()}
         >
-          <FileActionIcon size={14} strokeWidth={1.5} aria-hidden="true" />
+          <FileActionIcon size={16} aria-hidden="true" />
         </button>
         {controls}
         <button className="text-text hover:opacity-60" aria-label="关闭预览" onClick={onClose}>
-          <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          <X size={16} aria-hidden="true" />
         </button>
       </header>
 
@@ -232,7 +232,7 @@ export function FilePreviewInspector({
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
         {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-ui text-muted">
-            <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}…
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}…
           </div>
         )}
         {!showHistory && !loading && error && (
@@ -592,7 +592,7 @@ export function PreviewError({
               onClick={() => void inspect()}
               disabled={probing}
             >
-              {probing ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <FileSearch size={13} aria-hidden="true" />}
+              {probing ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <FileSearch size={16} aria-hidden="true" />}
               轻量检查文件
             </button>
           )}
@@ -600,7 +600,7 @@ export function PreviewError({
             className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
             onClick={onOpenExternally}
           >
-            <ExternalActionIcon size={13} aria-hidden="true" /> {externalActionLabel}
+            <ExternalActionIcon size={16} aria-hidden="true" /> {externalActionLabel}
           </button>
         </div>
         {probeError && <div className="mt-3 text-ui text-error">{probeError}</div>}

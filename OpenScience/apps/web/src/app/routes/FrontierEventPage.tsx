@@ -163,7 +163,7 @@ function EventBody({ event }: { event: FrontierEvent }) {
     <EventFrame
       title={event.title}
       description={facts}
-      actions={<Button onClick={research}><Microscope size={14} aria-hidden="true" />深入研究这个事件</Button>}
+      actions={<Button onClick={research}><Microscope size={16} aria-hidden="true" />深入研究这个事件</Button>}
     >
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1 space-y-4">

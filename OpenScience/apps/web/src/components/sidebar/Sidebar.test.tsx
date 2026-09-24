@@ -107,7 +107,7 @@ describe("Sidebar navigation", () => {
     await userEvent.click(screen.getByRole("link", { name: "科研工具" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities");
 
-    await userEvent.click(screen.getByRole("link", { name: "账户与设置" }));
+    await userEvent.click(screen.getByRole("link", { name: "设置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
   });
 
@@ -115,7 +115,7 @@ describe("Sidebar navigation", () => {
   // row that led to 「还没有开放」 would be a destination that is not one.
   it("has no 前沿动态 row unless the account is offered the module", async () => {
     renderSidebar();
-    await screen.findByRole("link", { name: "账户与设置" });
+    await screen.findByRole("link", { name: "设置" });
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
   });
@@ -139,18 +139,20 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
   });
 
-  // The credentials banner used to sit across the top of seven pages. The
-  // fact it stated is now a quiet count on the account row.
-  it("counts the data sources nothing serves on the account row instead of a banner", async () => {
+  // The footer is who is signed in and a gear (2026-09-23 plan §5.2). The
+  // count of data sources without a credential is a fact about the
+  // deployment, not the reader's work, and no longer rides on it.
+  it("ends with the account's name and a gear to 设置, and no data-source count", async () => {
     mocks.fetchWebConnectors.mockResolvedValue([
       { id: "opengwas", needsAttention: true },
       { id: "core", needsAttention: true },
-      { id: "semantic-scholar", needsAttention: false },
     ]);
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "cdss-access" }, project: { id: "default", name: "我的研究" }, projects: [] });
     renderSidebar();
-    const row = await screen.findByRole("link", { name: "账户与设置，2 个数据源没有可用凭据" });
-    expect(row).toHaveAttribute("href", "/app/account?tab=connectors");
-    expect(row).toHaveTextContent("2");
+    expect(await screen.findByText("cdss-access")).toBeInTheDocument();
+    const gear = screen.getByRole("link", { name: "设置" });
+    expect(gear).toHaveAttribute("href", "/app/account");
+    expect(screen.queryByText(/数据源没有可用凭据/)).not.toBeInTheDocument();
   });
 
   // The rows that used to be here and are now tabs of one of the six. The
@@ -160,10 +162,11 @@ describe("Sidebar navigation", () => {
     for (const gone of ["资料整理", "科研笔记本", "科研记忆", "记忆胶囊", "能力模板", "设置", "账户与额度", "运行记录"]) {
       expect(screen.queryByRole("button", { name: gone })).not.toBeInTheDocument();
     }
+    expect(screen.queryByRole("link", { name: "账户与设置" })).not.toBeInTheDocument();
     // Let the bell and the account's feature answer land inside the test.
     await waitFor(() => expect(mocks.fetchInboxUnreadCount).toHaveBeenCalled());
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
-    await screen.findByRole("link", { name: "账户与设置" });
+    await screen.findByRole("link", { name: "设置" });
   });
 
   // The kernel's column, top to bottom: brand, the destinations, the
@@ -174,7 +177,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     const lastRow = screen.getByRole("link", { name: "主动科研" });
     const projects = screen.getByRole("region", { name: "项目" });
-    const account = await screen.findByRole("link", { name: "账户与设置" });
+    const account = await screen.findByRole("link", { name: "设置" });
     expect(lastRow.compareDocumentPosition(projects) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(projects.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^当前项目：/ })).not.toBeInTheDocument();
@@ -185,8 +188,8 @@ describe("Sidebar navigation", () => {
     mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 2, safetyUnread: 0 });
     renderSidebar();
     expect(screen.getByRole("img", { name: "EviMed" })).toBeInTheDocument();
-    // One old notification did not earn a permanent navigation row; an unread
-    // count does earn a badge.
+    // One old notification did not earn a permanent navigation row; unread
+    // work earns a dot on the bell, and the count is in its name.
     const bell = await screen.findByRole("button", { name: "收件箱，2 条未读" });
     await userEvent.click(bell);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/inbox");

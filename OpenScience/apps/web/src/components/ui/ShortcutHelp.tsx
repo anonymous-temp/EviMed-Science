@@ -94,7 +94,7 @@ export function ShortcutHelp() {
               aria-label="关闭快捷键面板"
               className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
             >
-              <X size={14} aria-hidden="true" />
+              <X size={16} aria-hidden="true" />
             </button>
           </header>
           <ul className="px-4 py-3">

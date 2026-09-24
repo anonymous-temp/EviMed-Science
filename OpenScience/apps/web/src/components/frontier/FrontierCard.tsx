@@ -77,7 +77,7 @@ export function FrontierCard({ item, markSelected = false, onStar, onHide, onSav
       className={cn("rounded-card border p-4", safety ? "border-danger bg-danger-soft" : "border-border bg-surface")}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
-        {safety && <FrontierChip tone="danger"><ShieldAlert size={12} aria-hidden="true" />安全警示</FrontierChip>}
+        {safety && <FrontierChip tone="danger"><ShieldAlert size={16} aria-hidden="true" />安全警示</FrontierChip>}
         {item.sourceTypeLabel && <FrontierChip tone={sourceTypeTone(item.sourceType)}>{item.sourceTypeLabel}</FrontierChip>}
         <span className="font-medium text-text-2">{item.source.name}</span>
         {when && <><span aria-hidden="true">·</span><time dateTime={item.publishedAt ?? item.timelineAt}>{when}</time></>}
@@ -133,14 +133,14 @@ export function FrontierCard({ item, markSelected = false, onStar, onHide, onSav
         <ResearchMenu item={item} />
         {onSave && (
           <button type="button" className={ACTION} disabled={saving} aria-busy={saving || undefined} onClick={() => onSave(item)}>
-            {saving ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <BookmarkPlus size={14} aria-hidden="true" />}存入知识库
+            {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <BookmarkPlus size={16} aria-hidden="true" />}存入知识库
           </button>
         )}
         <button type="button" aria-pressed={starred} className={cn(ACTION, starred && "text-accent")} onClick={() => onStar(item)}>
-          <Star size={14} aria-hidden="true" fill={starred ? "currentColor" : "none"} />{starred ? "已收藏" : "收藏"}
+          <Star size={16} aria-hidden="true" fill={starred ? "currentColor" : "none"} />{starred ? "已收藏" : "收藏"}
         </button>
         <button type="button" className={ACTION} onClick={() => onHide(item)}>
-          <EyeOff size={14} aria-hidden="true" />不感兴趣
+          <EyeOff size={16} aria-hidden="true" />不感兴趣
         </button>
       </div>
 
@@ -235,13 +235,13 @@ function AbstractBody({ itemId }: { itemId: string }) {
   }, [itemId, attempt]);
 
   if (state.kind === "loading") {
-    return <p role="status" className="flex items-center gap-1.5 text-caption text-muted"><Loader2 size={12} className="animate-spin" aria-hidden="true" />正在读取摘要…</p>;
+    return <p role="status" className="flex items-center gap-1.5 text-caption text-muted"><Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取摘要…</p>;
   }
   if (state.kind === "error") {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-2 text-caption text-muted">
         <span>{state.message}</span>
-        <Button size="sm" variant="ghost" onClick={() => setAttempt((value) => value + 1)}><RefreshCw size={12} aria-hidden="true" />重试</Button>
+        <Button size="sm" variant="ghost" onClick={() => setAttempt((value) => value + 1)}><RefreshCw size={16} aria-hidden="true" />重试</Button>
       </div>
     );
   }
@@ -310,7 +310,7 @@ export function ResearchMenu({ item }: { item: FrontierItem }) {
         onClick={() => setOpen((value) => !value)}
         className={cn(ACTION, "font-medium text-text")}
       >
-        <Microscope size={14} aria-hidden="true" />深入研究<ChevronDown size={12} aria-hidden="true" />
+        <Microscope size={16} aria-hidden="true" />深入研究<ChevronDown size={16} aria-hidden="true" />
       </button>
       {open && (
         // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- roving focus lives on the menu items, not the container (WAI menu pattern).

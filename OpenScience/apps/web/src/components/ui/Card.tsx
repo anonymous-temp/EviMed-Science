@@ -2,17 +2,19 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * The one card container (P2-1, spec §7): `rounded-card` (12) + a hairline +
- * the surface, no shadow — a static card's border is its whole edge — 16 px
- * padding, and optional header (title + hint, or a raw slot) / footer slots.
- * Page sections compose from this instead of re-declaring the same box.
+ * A card, for content unlike its neighbours (a hot list above a feed, a tool
+ * in a grid): `rounded-card` (12) + a hairline + the surface, no shadow — a
+ * static card's border is its whole edge — 16 px padding. A list of like
+ * things is a `List` of rows, and a settings group is a `Panel`.
  *
- * The title is the sans `ui` rung at 600, not a serif heading: a card is a
- * grouping, not a document, and the shell has one type ladder now.
+ * The header draws no rule under itself and carries no hint line (2026-09-23
+ * plan §4): a card whose title needs a sentence of explanation is explaining
+ * the system, and a divider under a card's title was a second edge inside
+ * the first. `hint` is kept for the pages not yet rewritten and renders
+ * nothing.
  */
 export function Card({
   title,
-  hint,
   header,
   footer,
   padding = "p-4",
@@ -21,7 +23,7 @@ export function Card({
 }: {
   /** Section title in the built-in header. */
   title?: ReactNode;
-  /** Quiet one-liner under the title. */
+  /** @deprecated Cards carry no explanatory hint; ignored. */
   hint?: ReactNode;
   /** Raw header content — replaces the title/hint block when given. */
   header?: ReactNode;
@@ -32,21 +34,16 @@ export function Card({
   className?: string;
   children: ReactNode;
 }) {
-  const hasHeader = header != null || title != null || hint != null;
+  const hasHeader = header != null || title != null;
   return (
     <section className={cn("rounded-card border border-border bg-surface", className)}>
       {hasHeader && (
-        <header className="border-b border-border px-4 py-3">
-          {header ?? (
-            <>
-              {title != null && <h2 className="text-ui font-semibold text-text">{title}</h2>}
-              {hint != null && <p className="mt-1 text-caption text-muted">{hint}</p>}
-            </>
-          )}
+        <header className="px-4 pt-4">
+          {header ?? <h2 className="text-ui font-semibold text-text">{title}</h2>}
         </header>
       )}
       <div className={padding}>{children}</div>
-      {footer != null && <footer className="border-t border-border px-4 py-3">{footer}</footer>}
+      {footer != null && <footer className="px-4 pb-4">{footer}</footer>}
     </section>
   );
 }

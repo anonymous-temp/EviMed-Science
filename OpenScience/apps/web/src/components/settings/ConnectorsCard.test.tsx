@@ -47,7 +47,7 @@ describe("ConnectorsCard", () => {
   it("reports a source per connector and offers an input only where the deployment has none", async () => {
     render(<ConnectorsCard />);
     expect(await screen.findByText("OpenGWAS")).toBeInTheDocument();
-    expect(screen.getByText(/1 个数据源本部署没有配置凭据/)).toBeInTheDocument();
+    expect(screen.queryByText(/个数据源本部署没有配置凭据/)).not.toBeInTheDocument();
     expect(screen.getByText("未配置")).toBeInTheDocument();
     expect(screen.getByText("平台已配置")).toBeInTheDocument();
     expect(screen.getByText("无需凭据")).toBeInTheDocument();

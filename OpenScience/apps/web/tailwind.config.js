@@ -73,26 +73,31 @@ export default {
         serif: FONT_STACKS.sans,
         mono: FONT_STACKS.mono,
       },
-      // Eight named rungs over six sizes (12/13/14/16/20/24), and nothing
+      // Eight named rungs over five sizes (12/14/16/20/24), and nothing
       // else: `designTokens.test.ts` asserts the set is closed, and ESLint
       // rejects `text-[Npx]` and Tailwind's own `text-sm`-style defaults.
       fontSize,
-      // Containers. A page's title, description and body share one of these —
-      // `PageShell` is what makes that structural.
+      // Containers. A page's title and body share one of these — `PageShell`
+      // is what makes that structural. `page` is the one column every page
+      // sits in; `measure` caps a paragraph at 40 CJK characters.
       // NOTE: `content` intentionally overrides Tailwind's own `max-w-content`.
       maxWidth: {
         "content-narrow": `${CONTAINERS.narrow}px`,
         content: `${CONTAINERS.content}px`,
+        page: `${CONTAINERS.page}px`,
+        measure: `${CONTAINERS.measure}px`,
+        "measure-body": `${CONTAINERS.measureBody}px`,
+        // Retired names of `page`, pointed at the same width so an unmigrated
+        // call site converges rather than breaking.
         "content-wide": `${CONTAINERS.wide}px`,
-        // Retired: a wide page is `content-wide`. Pointed at the same width so
-        // an unmigrated call site converges rather than breaking.
         "content-full": `${CONTAINERS.full}px`,
       },
-      // Radii by what wears them: controls and rows 8 (bare `rounded`), cards
-      // and popovers 12, panels and dialogs 16, the composer 24, chips
-      // `rounded-full`.
+      // Radii by what wears them: a tag 4, controls and rows 8 (bare
+      // `rounded`), cards, popovers and dialogs 12, the composer 24, pills
+      // `rounded-full`. `panel` is the retired dialog step, now 12.
       borderRadius: {
         DEFAULT: `${RADII.control}px`,
+        tag: `${RADII.tag}px`,
         input: `${RADII.control}px`,
         card: `${RADII.card}px`,
         panel: `${RADII.panel}px`,

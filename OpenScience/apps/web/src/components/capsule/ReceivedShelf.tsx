@@ -100,8 +100,8 @@ export function ReceivedShelf() {
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
               <span className="inline-flex items-center gap-1 text-text">
                 {pack.issuerTrust === "verified"
-                  ? <><ShieldCheck size={13} aria-hidden="true" />签名已验证</>
-                  : <><ShieldQuestion size={13} aria-hidden="true" />签名有效，但发布者不在本服务上</>}
+                  ? <><ShieldCheck size={16} aria-hidden="true" />签名已验证</>
+                  : <><ShieldQuestion size={16} aria-hidden="true" />签名有效，但发布者不在本服务上</>}
               </span>
               <span>{contents(pack)}</span>
               {pack.importedAt && <span>收到于 {formatDateTime(pack.importedAt, { month: "short", day: "numeric" })}</span>}

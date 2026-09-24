@@ -38,7 +38,7 @@ export function WebErrorsCard() {
           title="刷新错误列表"
           aria-label="刷新错误列表"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -54,7 +54,7 @@ export function WebErrorsCard() {
                   index > 0 && "border-t border-border",
                 )}
               >
-                <AlertTriangle size={13} className="shrink-0 text-error" aria-hidden="true" />
+                <AlertTriangle size={16} className="shrink-0 text-error" aria-hidden="true" />
                 <span className="w-10 shrink-0 font-mono text-caption text-error">{event.status}</span>
                 <span className="min-w-0 flex-1 truncate font-mono text-caption text-text" title={event.route}>
                   {event.route}

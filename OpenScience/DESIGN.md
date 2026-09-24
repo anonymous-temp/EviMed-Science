@@ -56,7 +56,8 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   errors, the unread badge. Nothing else.
 - **"Needs checking" is amber, never red.** A claim awaiting verification is not a clinical alarm.
 - **`ok` is not the verified mark.** A verified claim is the brand colour, on purpose.
-- **Links are not the brand**, so a page full of citations never drowns the primary button.
+- **One accent.** Links wear it too (2026-09-23): a blue link beside a teal primary was a second
+  accent on every screen. A primary button stands apart by being solid, not by hue.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -108,15 +109,18 @@ in it rather than falling back to the browser's Georgia. ESLint rejects the clas
 `components/ui`, `components/layout` and `components/cards`; the ban widens to `src/**` once the
 page rewrites have dropped their call sites.
 
-### The six sizes
+### The five sizes
 
-12 / 13 / 14 / 16 / 20 / 24. The set is closed — a seventh is a defect, and the test says so.
+12 / 14 / 16 / 20 / 24 (2026-09-23: 13 is gone — a 13 px caption beside 12 px metadata and
+14 px interface text was three sizes a reader could not tell apart). The set is closed — a sixth
+is a defect, and the test says so. A page uses at most four size × weight pairs: title 20/600,
+item title 14/500, text 14/400, metadata 12/400; reading prose 15–16.
 
 | Rung | Size / line | What it is |
 |---|---|---|
 | `badge` | 12 / 1 | a count inside a pill |
 | `meta` | 12 / 1.5 | the densest metadata: timestamps, counts, units |
-| `caption` | 13 / 20px | captions and secondary one-liners |
+| `caption` | 12 / 20px | captions and secondary one-liners (a line in a row) |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
 | `wordmark` | 16 / 1.3 | the EviMed lockup in the sidebar |
@@ -130,44 +134,75 @@ would differ, byte for byte, from the quotation it copies. Tables use tabular nu
 
 `ui-sm` is retired (13 and 13.5 px were one rung half a pixel apart) and renders as `ui`.
 
+A line of multi-line text is at most **40 CJK characters**: `max-w-measure` (560 at 14 px) and
+`max-w-measure-body` (640 at 16 px). No list is wide enough to lift it. Ranks, scores, heat and
+times are set in tabular numbers.
+
 ---
 
 ## Space, containers, radii, heights
 
-**Base 4. Six steps: 8 / 12 / 16 / 24 / 32 / 48.** Card padding 16, grid gap 12, page gutter 24,
-section gap 32.
+**Base 4. Seven steps: 4 / 8 / 12 / 16 / 24 / 32 / 48** — 8 inside a group, 16–24 between
+groups, 32–48 between sections. Card padding 16, grid gap 12, page gutter 24. Separate by space
+first, then a quiet ground, and draw a line last.
 
 ### Containers — a page has one left edge
 
 | Name | Width | For |
 |---|---|---|
-| `max-w-content-narrow` | 560 | settings, forms |
-| `max-w-content` | **748** | the reading column: conversation, report prose, the inbox |
-| `max-w-content-wide` | 1000 | catalogues, ledgers, the evidence matrix |
-| `max-w-content-full` | *retired* → 1000 | an unmigrated call site converges here |
+| `max-w-page` | **960** | every page — the one column (2026-09-23) |
+| `max-w-measure` / `max-w-measure-body` | 560 / 640 | a paragraph's line length |
+| `max-w-content` | 748 | a reading column inside a page: report prose |
+| `max-w-content-narrow` | 560 | a form inside a drawer |
+| `max-w-content-wide`, `-full` | *retired* → 960 | an unmigrated call site converges here |
 
 Sidebar 280, collapsed 56 — the kernel's constants.
 
-**Use `PageShell`.** It puts the title, the description, the actions and the body inside the same
-`mx-auto max-w-…` box, because three pages shipped with five different left edges (327 / 356 /
-388 / 440 / 461 px) when each page chose its own. A page that must lay itself out takes
-`width="full"` and still shares the gutter; it does not open a sixth container.
+**Use `PageShell`.** It puts the title, the actions and the body inside the same 960 px box,
+because three pages shipped with five different left edges (327 / 356 / 388 / 440 / 461 px) when
+each page chose its own, and on 2026-09-23 the inbox still sat 126 px right of the rest. A page
+that must lay itself out takes `width="full"` and still shares the gutter.
+
+**A page header is one line**: the title, optionally a grey count or update time, and at the
+right at most one primary button and two icon buttons or a search box. **No subtitle** — nothing
+under the title explains how the system works; `PageHeader` has no place to put it.
 
 ### Radii
 
-8 controls and rows (bare `rounded`) · 12 cards and popovers (`rounded-card`) · 16 panels and
-dialogs (`rounded-panel`) · 24 the composer (`rounded-composer`) · `rounded-full` chips. A
-control nested inside another wears the outer radius minus the padding (a segment inside an 8 px
-track is 6).
+4 tags (`rounded-tag`) · 8 controls and rows (bare `rounded`) · 12 cards, popovers and dialogs
+(`rounded-card`; `rounded-panel` is its retired name) · 24 the composer (`rounded-composer`) ·
+`rounded-full` pills. One border width (1 px) and one border colour; at most one bordered
+container deep, and no rule under a card's title.
 
 ### Heights
 
-32 controls · 28 chips and in-composer tags · 36 list rows · 44 nav and tab bars · **40 for a
-form's primary button and nothing else** · icons 16 inline / 20 in the chrome. Minimum hit area
-24×24 CSS px (WCAG 2.2 SC 2.5.8); 32×32 for chrome icon buttons.
+**24 inside a row · 32 on a page · 40 for a form's primary button and nothing else** · a tag is
+20. Controls on one line share a height. Icons are **16 inline / 20 in the chrome**, one stroke
+(1.75, set once on `svg.lucide`). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8).
 
-`Button` sizes map onto that: `sm` 28, `md` 32 (the default), `lg` 40. `Input` and `Textarea` are
+`Button` sizes map onto that: `sm` 24, `md` 32 (the default), `lg` 40. `Input` and `Textarea` are
 32 and 8 px round.
+
+### The component set (2026-09-23)
+
+`components/ui/` holds the vocabulary a page is written in, and ESLint rejects a hand-made
+bordered pill or bordered `<button>` outside it:
+
+| Component | What it is |
+|---|---|
+| `PageShell` / `PageHeader` | the one column and the one-line header, no subtitle |
+| `Tabs` | a page's views: underlined tabs over a hairline |
+| `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips (no border; selected sits on grey), the rest in 「更多 ▾」 |
+| `Tag` | the metadata label: 20 px, 12 px text, 4 px corner, grey, no border; `safety` red |
+| `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
+| `IconButton` | 24 in a row, 32 in a header; the label is its name and tooltip |
+| `List` / `ListRow` | like things as rows, no box; the title is the row's target, actions on hover, 「⋯」 quietly visible |
+| `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
+| `EmptyState` | an icon and one sentence; no button the header already has |
+
+Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, `Drawer`,
+`ConfirmDialog`, `Toaster`, `Disclosure`. A card (`Card`) is for unlike content — a hot list
+above a feed, a tool in a grid — and never for a list of like things.
 
 ---
 
@@ -232,16 +267,18 @@ facts on white paper, never the shell.
 
 **Do** — ration colour (more than three coloured elements on a screen means one is wrong) · say
 status three ways · use `border-control` for the visible edge of a control and `border-hairline`
-for decoration · show odometers (elapsed, sources, claims checked, cost) for long work ·
-right-align numbers with `tabular-nums` · put identifiers in mono · keep prose to 748 px · give
-every failure a next action.
+for decoration · right-align numbers with `tabular-nums` · put identifiers in mono · keep a line
+to 40 CJK characters · give every failure a next action · say what the user can do and what came
+of it, in their words.
 
 **Don't** — use red for anything but danger and unhandled work · make "needs checking" look like
 an alarm · put a percentage or a progress bar on an agent run · use a gradient, a glow or a
 coloured shimmer · put an opacity modifier on a token colour · put a shadow on a static card ·
 let a badge cover the icon it sits on · render two adjacent rows with identical text · show raw
 validator strings, enum codes, run ids or model names in the body of the UI · rely on hover to
-reveal anything a keyboard user needs.
+reveal anything a keyboard user needs · explain how the system works on the page (a subtitle, a
+hint under a card, 「为什么入选」) · show the back office as text: 已交付, 核对 N 条, 用过 N 次,
+起生效, token, 缓存命中, tok/s, an API's name, a project id.
 
 ---
 
