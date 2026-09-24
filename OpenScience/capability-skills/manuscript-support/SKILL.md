@@ -54,9 +54,9 @@ somewhere else.
 | 结论 | What the study supports, at the strength it supports it | Anything the results did not measure |
 
 Write to the reporting guideline the study needs (STROBE, CONSORT, PRISMA,
-TRIPOD…) when one applies. Name it in `delivery-summary.md` and say which items
-this section is responsible for — a guideline invoked and never mapped is a
-citation, not a method.
+TRIPOD…) when one applies, and map it item by item (see *The reporting
+guideline is the section's checklist*) — a guideline invoked and never mapped
+is a citation, not a method.
 
 ## The gap stays a gap
 
@@ -158,10 +158,19 @@ at proof stage rewrites all of it by hand.
 
 If the brief names one — CONSORT for a trial, STROBE for an observational study,
 PRISMA for a systematic review, SPIRIT for a protocol, and the rest of the
-EQUATOR set — then it says what this section must contain, item by item. Say in
-`delivery-summary.md` which of its items this section is responsible for and
-where each is answered. Do not claim the checklist is satisfied as a whole: you
-wrote one section, and the claim belongs to whoever assembles the manuscript.
+EQUATOR set — then it says what this section must contain, item by item.
+
+When the plan declared the study's type and that type has a guideline — CONSORT
+2025, TRIPOD+AI, PRISMA 2020 or STROBE-MR — the delegation message names it and
+its item table, and the deliverable carries the completed checklist:
+`reporting-checklist.md`, every item of the guideline with the heading of this
+section that reports it, and 「未报告：属于<哪一部分>」 for the items other
+sections carry. Fill it in by the `reporting-guidelines` method. For a guideline
+no item table ships for, say in `delivery-summary.md` which of its items this
+section is responsible for and where each is answered.
+
+Either way, do not claim the checklist is satisfied as a whole: you wrote one
+section, and the claim belongs to whoever assembles the manuscript.
 
 ## Backstage prose has a destination, so the section may refuse it
 
@@ -172,7 +181,7 @@ has one place to be:
 |---|---|
 | What you changed and why, what you cut, which source you rejected and on what grounds | `revision-notes.md` |
 | Your own review findings on the draft, and any reply to a reviewer's comment | `revision-notes.md` |
-| What was delivered, what is still open, which guideline items this section covers | `delivery-summary.md` |
+| What was delivered, what is still open, which guideline items this section covers | `delivery-summary.md`; item by item in `reporting-checklist.md` when the plan declared the study type |
 | How the work was produced — tools called, gateways, files fetched, artifact paths, 「我先检索了……」 | Nowhere in the deliverable. The retrieval record is the citation ledger |
 
 `revision-notes.md` is a required output, not a courtesy. It is the thing that
