@@ -577,7 +577,7 @@ function lookup(mention, source) {
  * The check: every number in each claimed text must be a number of the source.
  *
  * @param {Record<string, unknown>} claims field name → what the model wrote
- *   (title_zh, summary_zh, reason_zh)
+ *   (title_zh, summary_zh; a digest, an AI minute, an abstract)
  * @param {unknown} sourceText exactly what the model was shown
  * @returns {{ ok: boolean, checked: number, missing: Array<{ field: string, raw: string }>,
  *             unitMismatches: Array<{ field: string, raw: string }> }}

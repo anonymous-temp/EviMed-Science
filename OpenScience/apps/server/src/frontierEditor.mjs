@@ -6,14 +6,17 @@
  *
  * - `screen(batch)` — up to twenty entries in one call: is it medical (or
  *   medical AI), is it news, which lane, which specialties, which language.
- * - `edit(item)` — one call per item: the Chinese title, a two-to-three
- *   sentence summary, why it is worth reading, lane, specialties, evidence
- *   type, entities, three scores.
+ * - `edit(item)` — one call per item: the Chinese title, a summary of at most
+ *   three lines whose last sentence says what the item means for practice or
+ *   research, lane, specialties, evidence type, entities, three scores. The
+ *   separate 「为什么值得看」 (`reason_zh`) is no longer asked for (2026-09-24,
+ *   plan 2026-09-23 §6.3): the card lost the green box it filled, and its
+ *   sentence moved into the summary. Rows written before keep theirs.
  * - the verification of what `edit` wrote — numbers (`frontierNumbers.mjs`),
  *   vocabularies, lengths, links, Chinese prose, entity caps — is code. A
  *   failed verification is sent back once with the specific issues; a second
- *   failure keeps the title (if it passed on its own) and drops the summary
- *   and the reason. Nothing is softened (principle 5).
+ *   failure keeps the title (if it passed on its own) and drops the summary.
+ *   Nothing is softened (principle 5).
  *
  * Hidden knowledge:
  *
@@ -69,10 +72,11 @@ export const FRONTIER_MODEL_INPUT_CHARS = 6_000;
 
 /**
  * What a verified field may be, in code points. The prompt asks for less
- * (title 40, summary 140, reason 50) so an answer near the request passes;
- * the database allows more (200 / 600 / 200).
+ * (title 40, summary 120 — three lines of forty on the card) so an answer
+ * near the request passes; the card clamps anything past three lines behind
+ * 「展开」, and the database allows more (200 / 600).
  */
-export const FRONTIER_TEXT_LIMITS = Object.freeze({ title: 60, summary: 160, reason: 80, entitiesPerKind: 5, entityChars: 60 });
+export const FRONTIER_TEXT_LIMITS = Object.freeze({ title: 60, summary: 140, entitiesPerKind: 5, entityChars: 60 });
 
 const SCREEN_TIMEOUT_MS = 60_000;
 const EDIT_TIMEOUT_MS = 45_000;
@@ -120,8 +124,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "",
   "字段要求：",
   "- title_zh：中文标题，不超过 40 个字，陈述事实，不用问句。条目注明「中文信源：是」时，原样照抄标题。",
-  "- summary_zh：两三句导读，不超过 140 个字，只写标题之外的内容。条目注明「正文：无」时给空字符串，不要复述标题。",
-  "- reason_zh：一句话说明为什么值得看，不超过 50 个字。",
+  "- summary_zh：两三句导读，不超过 120 个字，只写标题之外的内容：先说这是什么、结果如何，最后一句说明它对临床实践或科研意味着什么，只依据原文，不夸大。条目注明「正文：无」时给空字符串，不要复述标题。",
   "- lane：从条目的「允许的栏目」里选一个。",
   "- specialties：0 到 3 个专科键，按相关程度排列。",
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。",
@@ -135,7 +138,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   `专科词表：${SPECIALTY_LINE}。`,
   "",
   "输出格式（键名固定）：",
-  "{\"title_zh\":\"\",\"summary_zh\":\"\",\"reason_zh\":\"\",\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}",
+  "{\"title_zh\":\"\",\"summary_zh\":\"\",\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}",
 ].join("\n");
 
 /** The event digest's instructions (plan §6.4: 「先了解这件事」 and 「最新进展」). */
@@ -417,7 +420,7 @@ export function buildModelInput(item) {
 // ───────────────────────── verification ─────────────────────────
 
 /**
- * @typedef {{ titleZh: string | null, summaryZh: string | null, reasonZh: string | null, lane: string | null,
+ * @typedef {{ titleZh: string | null, summaryZh: string | null, lane: string | null,
  *             specialties: string[], evidenceType: string | null,
  *             entities: { drugs: string[], trials: string[], orgs: string[], diseases: string[] },
  *             scores: { impact: number, novelty: number, relevance: number } | null, flags: string[] }} FrontierEditOutput
@@ -443,7 +446,9 @@ export function verifyEdit(answer, item, modelInput) {
   const value = answer && typeof answer === "object" ? answer : {};
   if (!answer) fail("answer", "没有读到 JSON 对象，请只输出一个 JSON 对象。");
 
-  /** @param {"title_zh" | "summary_zh" | "reason_zh"} field @param {number} limit @param {boolean} [optional] */
+  // A `reason_zh` an answer still carries (the field was retired on
+  // 2026-09-24) is neither checked nor kept: it is not what was asked for.
+  /** @param {"title_zh" | "summary_zh"} field @param {number} limit @param {boolean} [optional] */
   const prose = (field, limit, optional = false) => {
     const text = typeof value[field] === "string" ? value[field].replace(/\s+/g, " ").trim() : "";
     if (!text) { if (!optional) fail(field, `${field} 不能为空。`); return null; }
@@ -455,12 +460,12 @@ export function verifyEdit(answer, item, modelInput) {
   const titleZh = item.isChinese ? String(item.titleRaw ?? "").trim().slice(0, 200) : prose("title_zh", FRONTIER_TEXT_LIMITS.title);
   // An item with nothing but its title has nothing to summarise (「正文：无」).
   const summaryZh = prose("summary_zh", FRONTIER_TEXT_LIMITS.summary, !(item.abstract || item.summary || item.bodyExcerpt));
-  const reasonZh = prose("reason_zh", FRONTIER_TEXT_LIMITS.reason);
 
+  // The summary's last sentence — what the item means — is held to the source
+  // like every other: a number it states must be one the source states.
   const numbers = checkNumbers({
     ...(item.isChinese ? {} : { title_zh: titleZh ?? "" }),
     summary_zh: summaryZh ?? "",
-    reason_zh: reasonZh ?? "",
   }, modelInput);
   for (const { field, raw } of numbers.missing) {
     fail(field, `${field} 里的数字「${raw}」在原文里找不到相等的数字：只能使用原文出现过的数字，找不到就删去这个数字。`);
@@ -532,7 +537,7 @@ export function verifyEdit(answer, item, modelInput) {
   }
 
   return {
-    output: { titleZh, summaryZh, reasonZh, lane, specialties, evidenceType, entities, scores, flags },
+    output: { titleZh, summaryZh, lane, specialties, evidenceType, entities, scores, flags },
     issues,
     failed,
     numbers,
@@ -1021,9 +1026,9 @@ export class FrontierEditor {
       this.counters.verification.repaired += 1;
       return result;
     }
-    // Title-only: the summary and the reason are dropped; what passed its own
-    // checks is kept — the title only if it passed on its own, structure from
-    // the latest answer where it passed, else the screening verdict.
+    // Title-only: the summary is dropped; what passed its own checks is kept —
+    // the title only if it passed on its own, structure from the latest
+    // answer where it passed, else the screening verdict.
     const last = second ?? first;
     const defaults = item.defaults ?? {};
     const keep = (/** @type {string} */ field) => !last.failed.has(field) && !last.failed.has("answer");
@@ -1036,7 +1041,6 @@ export class FrontierEditor {
     result.output = {
       titleZh,
       summaryZh: null,
-      reasonZh: null,
       lane: keep("lane") ? last.output.lane : (defaults.lane ?? null),
       specialties: keep("specialties") ? last.output.specialties : [...(defaults.specialties ?? [])],
       evidenceType: item.evidenceFixed?.type ?? (keep("evidence_type") ? last.output.evidenceType : null),
