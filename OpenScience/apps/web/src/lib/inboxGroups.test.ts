@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { InboxItem } from "@/lib/inboxClient";
-import { dayKey, dayLabel, isLegacyRoutineCompletion, layoutInbox, severityOf } from "./inboxGroups";
+import { dayKey, dayLabel, inboxWhen, orderInbox, severityOf } from "./inboxGroups";
 
 const base: InboxItem = {
   id: "x", noticeType: "notify", priority: 2, title: "研究已完成", body: "", actions: [], count: 1,
@@ -27,45 +27,37 @@ describe("dayLabel", () => {
   });
 });
 
-describe("isLegacyRoutineCompletion", () => {
-  it("is a per-run completion written before the server merged them, and nothing else", () => {
-    expect(isLegacyRoutineCompletion(item({}))).toBe(true);
-    expect(isLegacyRoutineCompletion(item({ groupKey: "run-finished:default:2026-09-18" }))).toBe(false);
-    expect(isLegacyRoutineCompletion(item({ title: "交付物未通过核验" }))).toBe(false);
-    expect(isLegacyRoutineCompletion(item({ severity: "safety" }))).toBe(false);
-    expect(isLegacyRoutineCompletion(item({ source: { type: "digest", id: "d" } }))).toBe(false);
+describe("inboxWhen", () => {
+  const now = new Date(2026, 8, 18, 15, 0).getTime();
+  it("is the clock today and the day before that, never both", () => {
+    expect(inboxWhen(new Date(2026, 8, 18, 8, 0).toISOString(), now)).toBe("08:00");
+    expect(inboxWhen(new Date(2026, 8, 17, 20, 0).toISOString(), now)).toBe("昨天");
+    expect(inboxWhen(new Date(2026, 8, 12, 9, 0).toISOString(), now)).toBe("9月12日");
+    expect(inboxWhen("not a date", now)).toBe("");
   });
 });
 
-describe("layoutInbox", () => {
-  const now = new Date(2026, 8, 18, 15, 0).getTime();
+describe("orderInbox", () => {
   const todayAt = (h: number) => new Date(2026, 8, 18, h).toISOString();
 
-  it("puts a day's weightier items first, then the newest", () => {
-    const layout = layoutInbox([
-      item({ id: "info-late", title: "别的通知", createdAt: todayAt(14) }),
-      item({ id: "attention", severity: "attention", title: "待复核", createdAt: todayAt(9) }),
-    ], now);
-    expect(layout.days[0].entries.map((entry) => entry.kind === "item" ? entry.item.id : "fold")).toEqual(["attention", "info-late"]);
+  it("pins only unread safety, newest first, and keeps everything else in the server's order", () => {
+    const order = orderInbox([
+      item({ id: "a", createdAt: todayAt(14) }),
+      item({ id: "s-old", severity: "safety", createdAt: todayAt(8) }),
+      item({ id: "s-read", severity: "safety", readAt: todayAt(12), createdAt: todayAt(12) }),
+      item({ id: "s-new", severity: "safety", createdAt: todayAt(13) }),
+      item({ id: "read", readAt: todayAt(12), createdAt: todayAt(11) }),
+    ]);
+    expect(order.pinned.map((entry) => entry.id)).toEqual(["s-new", "s-old"]);
+    expect(order.rest.map((entry) => entry.id)).toEqual(["a", "s-read", "read"]);
   });
 
-  it("folds two or more legacy completions, and leaves a single one as it is", () => {
-    const one = layoutInbox([item({ id: "a" })], now);
-    expect(one.days[0].entries).toEqual([{ kind: "item", item: expect.objectContaining({ id: "a" }) }]);
-    const two = layoutInbox([item({ id: "a", createdAt: todayAt(9) }), item({ id: "b", createdAt: todayAt(10) })], now);
-    expect(two.days[0].entries).toHaveLength(1);
-    expect(two.days[0].entries[0]).toMatchObject({ kind: "completions" });
-  });
-
-  it("pins only unread safety, and keeps silent items out of the day's list", () => {
-    const layout = layoutInbox([
-      item({ id: "s-unread", severity: "safety" }),
-      item({ id: "s-read", severity: "safety", readAt: todayAt(12) }),
-      item({ id: "quiet", silent: true, readAt: todayAt(12) }),
-    ], now);
-    expect(layout.pinned.map((entry) => entry.id)).toEqual(["s-unread"]);
-    const [day] = layout.days;
-    expect(day.silent.map((entry) => entry.id)).toEqual(["quiet"]);
-    expect(day.entries.map((entry) => entry.kind === "item" ? entry.item.id : "fold")).toEqual(["s-read"]);
+  it("renders a merged or a digest item as a row like any other: nothing is folded", () => {
+    const order = orderInbox([
+      item({ id: "c1", title: "阿司匹林一级预防 已完成" }),
+      item({ id: "c2", title: "9月18日完成 3 项研究", groupKey: "run-finished:default:2026-09-18", count: 3 }),
+      item({ id: "digest", noticeType: "review", title: "主动科研简报：GLP-1", source: { type: "digest", id: "digest-1" }, readAt: todayAt(9) }),
+    ]);
+    expect(order.rest.map((entry) => entry.id)).toEqual(["c1", "c2", "digest"]);
   });
 });

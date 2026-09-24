@@ -1802,6 +1802,34 @@ export async function fetchWebAccountUsage(): Promise<WebUsageSummary> {
   return parseApiResponse<WebUsageSummary>(res);
 }
 
+/** One research run of the month in the usage 明细: date, conversation, cost. */
+export interface WebUsageRun {
+  runId: string;
+  projectId: string;
+  /** The conversation's title or question; null when it has neither. */
+  title: string | null;
+  at: string | null;
+  cost: number;
+  calls: number;
+  /** For an operator's view; a researcher's shows the money only. */
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** The month's spend, one row per research run, and `other` for what no conversation can show. */
+export interface WebUsageRuns {
+  since: string;
+  currency: string;
+  items: WebUsageRun[];
+  other: { calls: number; cost: number };
+}
+
+export async function fetchWebAccountUsageRuns(): Promise<WebUsageRuns> {
+  if (!hasWebApi) throw new BackendUnavailableError("account.usage.runs");
+  const res = await fetchWithWebAuth(apiUrl("/account/usage/runs"));
+  return parseApiResponse<WebUsageRuns>(res);
+}
+
 export async function exportWebAccount(): Promise<Blob> {
   if (!hasWebApi) throw new BackendUnavailableError("account.export");
   const res = await fetchWithWebAuth(apiUrl("/account/export"));

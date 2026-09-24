@@ -47,6 +47,7 @@ import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
+import { accountUsageRuns } from "./accountUsageRuns.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
@@ -449,7 +450,7 @@ function routePattern(pathname) {
   if (pathname === "/api/inbox") return pathname;
   if (pathname.startsWith("/api/inbox/")) return "/api/inbox/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
-  if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage") return pathname;
+  if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage" || pathname === "/api/account/usage/runs") return pathname;
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
@@ -766,7 +767,9 @@ export function createWebApiApp(overrides = {}) {
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const usageLedger = productDatabase ? new UsageLedger(productDatabase) : null;
+  // `overrides.usageLedger` is for tests that need the ledger's interface
+  // without a database, as `researchMemory` and `connectorCredentials` are.
+  const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
   let notificationTimer = null;
@@ -3857,6 +3860,35 @@ export function createWebApiApp(overrides = {}) {
           const rows = await readServerUsageJsonl(config, user);
           sendJson(res, 200, { data: { since: since.toISOString(), ...summarizeUsage(rows, { userId: user.id, since }) } });
         }
+        return;
+      }
+
+      // The same month, one row per research run: date, conversation, cost —
+      // the settings page's 明细 (2026-09-23 plan §5.9). Read-only. A
+      // deployment without the durable ledger has no run attribution, so all
+      // of its spend is `other`.
+      if (pathname === "/api/account/usage/runs" && req.method === "GET") {
+        const user = await store.ensureUser(req, res);
+        const now = new Date();
+        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        if (!usageLedger) {
+          const summary = summarizeUsage(await readServerUsageJsonl(config, user), { userId: user.id, since });
+          sendJson(res, 200, { data: { since: since.toISOString(), currency: summary.currency, items: [], other: { calls: summary.calls, cost: summary.cost } } });
+          return;
+        }
+        const groups = await usageLedger.runsSince(user.id, { since });
+        const runs = [];
+        if (groups.some((group) => group.runId)) {
+          const registry = await agentRegistry;
+          for (const listed of await store.listProjects(user)) {
+            const project = await store.requireProject(user, listed.id);
+            for (const run of await agentRuns.list(project)) {
+              const agent = String(run.effectiveAgentId ?? run.agentId ?? "");
+              runs.push({ run, projectId: project.id, internal: registry?.get?.(agent)?.visibility === "internal" });
+            }
+          }
+        }
+        sendJson(res, 200, { data: { since: since.toISOString(), currency: "CNY", ...accountUsageRuns(groups, runs) } });
         return;
       }
 

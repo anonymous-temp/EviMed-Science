@@ -1,10 +1,16 @@
 import type { InboxItem, InboxSeverity } from "@/lib/inboxClient";
 
 /**
- * How the inbox page arranges what the list route returns (contract C1,
- * appendix C §3.4): by day, with the day's routine completions folded into one
- * line, automated work kept out of the way, and unread clinical-safety
- * findings pinned above everything — the one class allowed to interrupt.
+ * How the inbox page arranges what the list route returns (contract C1): one
+ * list of rows in the server's order, with unread clinical-safety findings
+ * above it — the one class allowed to interrupt.
+ *
+ * It used to group by day, fold a day's routine completions into one line and
+ * fold automated work into 「自动运行 N 条」 (2026-09-23 plan §5.8). The
+ * server writes no notice for an evaluation, an internal project or an
+ * autopilot run any more — a proactive result arrives as its digest — and
+ * nothing is silent, so the page renders every item it is given as a row and
+ * reads no grouping field. The day moved into each row's time column.
  */
 
 /** An item's weight; items written before the field existed read as the server reads them. */
@@ -13,42 +19,22 @@ export function severityOf(item: InboxItem): InboxSeverity {
   return item.noticeType === "notify" ? "info" : "attention";
 }
 
-const RANK: Record<InboxSeverity, number> = { safety: 0, attention: 1, info: 2 };
-
-/**
- * The titles the control plane gave a routine completion before it merged them
- * itself (a closed vocabulary: its own outcome table). Newer items arrive
- * merged with a `groupKey`; these are the per-run items written before that,
- * which a busy day turned into ten identical cards. 「研究已交付，待你复核」
- * is the wording that ran until 2026-09-20 and is still on stored rows.
- */
-const LEGACY_ROUTINE_TITLES = new Set(["研究已完成", "研究已交付", "研究已交付，待你复核"]); // retired-word-ok: titles stored before the rename still have to fold
-
-export function isLegacyRoutineCompletion(item: InboxItem): boolean {
-  return item.noticeType === "notify"
-    && item.source?.type === "run"
-    && !item.groupKey
-    && severityOf(item) !== "safety"
-    && LEGACY_ROUTINE_TITLES.has(item.title);
-}
-
-export type InboxEntry =
-  | { kind: "item"; item: InboxItem }
-  /** Routine completions of one day, folded: 「研究已完成 × N」. */
-  | { kind: "completions"; items: InboxItem[] };
-
-export interface InboxDay {
-  key: string;
-  label: string;
-  entries: InboxEntry[];
-  /** Evaluation cells and autopilot episodes: recorded, never counted, shown quietly. */
-  silent: InboxItem[];
-}
-
-export interface InboxLayout {
-  /** Unread clinical-safety findings, whatever day they came. */
+export interface InboxOrder {
+  /** Unread clinical-safety findings, newest first, whatever day they came. */
   pinned: InboxItem[];
-  days: InboxDay[];
+  /** Everything else, as the server ordered it. */
+  rest: InboxItem[];
+}
+
+export function orderInbox(items: readonly InboxItem[]): InboxOrder {
+  const pinnedIds = new Set(items
+    .filter((item) => !item.readAt && severityOf(item) === "safety")
+    .map((item) => item.id));
+  const newestFirst = (a: InboxItem, b: InboxItem) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
+  return {
+    pinned: items.filter((item) => pinnedIds.has(item.id)).sort(newestFirst),
+    rest: items.filter((item) => !pinnedIds.has(item.id)),
+  };
 }
 
 /** `YYYY-MM-DD` of a moment in the reader's own time zone. */
@@ -69,47 +55,16 @@ export function dayLabel(key: string, now = Date.now()): string {
   return year === new Date(now).getFullYear() ? `${month}月${day}日` : `${year}年${month}月${day}日`;
 }
 
-export function layoutInbox(items: readonly InboxItem[], now = Date.now()): InboxLayout {
-  const pinned: InboxItem[] = [];
-  const byDay = new Map<string, InboxItem[]>();
-  for (const item of items) {
-    if (!item.readAt && !item.silent && severityOf(item) === "safety") {
-      pinned.push(item);
-      continue;
-    }
-    const key = dayKey(item.createdAt) ?? "unknown";
-    const bucket = byDay.get(key) ?? [];
-    bucket.push(item);
-    byDay.set(key, bucket);
-  }
-  const newestFirst = (a: InboxItem, b: InboxItem) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
-  const days = [...byDay.entries()]
-    .sort(([a], [b]) => (a === "unknown" ? 1 : b === "unknown" ? -1 : b.localeCompare(a)))
-    .map(([key, bucket]): InboxDay => {
-      const silent = bucket.filter((item) => item.silent).sort(newestFirst);
-      const loud = bucket
-        .filter((item) => !item.silent)
-        .sort((a, b) => RANK[severityOf(a)] - RANK[severityOf(b)] || newestFirst(a, b));
-      const completions = loud.filter(isLegacyRoutineCompletion);
-      const entries: InboxEntry[] = [];
-      let placed = false;
-      for (const item of loud) {
-        if (completions.length > 1 && isLegacyRoutineCompletion(item)) {
-          // The folded line sits where the day's newest completion would.
-          if (!placed) entries.push({ kind: "completions", items: completions });
-          placed = true;
-          continue;
-        }
-        entries.push({ kind: "item", item });
-      }
-      return { key, label: key === "unknown" ? "日期不明" : dayLabel(key, now), entries, silent };
-    });
-  return { pinned: pinned.sort(newestFirst), days };
-}
-
 /** 14:02, in the reader's time zone. */
 export function timeOfDay(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+/** A row's time column: 14:02 today, then 昨天, 9月22日, 2025年9月22日. */
+export function inboxWhen(value: string, now = Date.now()): string {
+  const key = dayKey(value);
+  if (!key) return "";
+  return key === dayKey(now) ? timeOfDay(value) : dayLabel(key, now);
 }

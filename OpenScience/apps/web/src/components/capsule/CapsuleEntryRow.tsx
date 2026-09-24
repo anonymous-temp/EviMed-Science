@@ -1,25 +1,30 @@
 import { useEffect, useState } from "react";
-import { Pencil, Undo2, X } from "lucide-react";
-import { capsuleEntryLabel } from "@/lib/capsuleText";
+import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { announceMemoryChanged, retireCapsuleEntry, undoCapsuleEntry, type OwnCapsuleEntry } from "@/lib/memoryClient";
+import { memoryExcerpt } from "@/lib/memoryText";
 import { productErrorMessage, updateCapsuleEntry } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/Button";
-import { Textarea } from "@/components/ui/Input";
-
-/** Where a capsule entry came from, in the researcher's words (principle 18:
- *  the assistant's wording is never 「你写的」). */
-export function capsuleEntryOrigin(entry: OwnCapsuleEntry): string {
-  if (entry.payload.origin === "explicit") return "你写的";
-  if (entry.payload.provenance.some((item) => item.type === "source")) return "来自资料";
-  return "对话中记下";
-}
+import { IconButton } from "@/components/ui/IconButton";
+import { ListRow } from "@/components/ui/ListRow";
+import { Menu } from "@/components/ui/Menu";
+import { EditingRow, RowOrigin, RowSentence } from "./rowParts";
 
 /**
- * One entry of the researcher's own capsule: revise it, stop it, or take the
- * last change back — each a revision, none asking first.
+ * One entry of the researcher's own capsule, as a memory row like any other:
+ * 编辑 and 忘记 on hover, the undo of its last change in 「⋯」, and 「推断」
+ * when the researcher did not write it themselves (principle 18: an entry
+ * noted from a conversation or a document is the platform's wording). Its kind
+ * and its version number are not said (2026-09-23 inventory §1.7).
+ *
+ * 忘记 retires it, as a revision the toast takes back; a retired entry is
+ * under 已忘记的内容, with 恢复.
  */
-export function CapsuleEntryRow({ entry, onChanged }: { entry: OwnCapsuleEntry; onChanged: () => void }) {
+export function CapsuleEntryRow({ entry, origin, onChanged }: {
+  entry: OwnCapsuleEntry;
+  /** The left column: 关于你, 做法, or the project's name. */
+  origin: string;
+  onChanged: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(entry.payload.content);
   const [busy, setBusy] = useState(false);
@@ -41,46 +46,56 @@ export function CapsuleEntryRow({ entry, onChanged }: { entry: OwnCapsuleEntry; 
   const save = () => run(async () => {
     await updateCapsuleEntry(capsuleId, entry.id, { content: value.trim(), expectedRevision: entry.revision });
     setEditing(false);
-    toast.success("已改好，之后的对话按新的来");
+    toast.success("已保存");
   });
-  const retire = () => run(async () => {
+  const forget = () => run(async () => {
     const retired = await retireCapsuleEntry(capsuleId, entry.id, entry.revision);
-    toast.success("已停用这一条", {
-      action: { label: "撤销", onClick: () => void undoCapsuleEntry(capsuleId, retired).then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(productErrorMessage(error))) },
+    toast.success("已忘记", {
+      action: {
+        label: "撤销",
+        onClick: () => void undoCapsuleEntry(capsuleId, retired)
+          .then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(productErrorMessage(error))),
+      },
     });
   });
-  const undo = () => run(async () => {
+  const undo = (done: string) => run(async () => {
     const result = await undoCapsuleEntry(capsuleId, entry);
-    toast.success(result.undone === "removed" ? "已撤销这一条" : "已撤销上次改动");
+    toast.success(result.undone === "removed" ? "已撤销这一条" : done);
   });
 
+  const retired = entry.payload.status === "retired";
+
+  if (editing) {
+    return (
+      <EditingRow
+        origin={origin}
+        label="编辑这一条"
+        value={value}
+        busy={busy}
+        maxLength={20000}
+        onChange={setValue}
+        onCancel={() => setEditing(false)}
+        onSave={() => void save()}
+      />
+    );
+  }
+
   return (
-    <li className="px-4 py-3">
-      {editing ? (
-        <div>
-          <Textarea value={value} onChange={(event) => setValue(event.target.value)} aria-label="修订这一条" rows={3} className="bg-bg text-ui" maxLength={20000} />
-          <div className="mt-2 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={16} aria-hidden="true" />取消</Button>
-            <Button size="sm" loading={busy} disabled={!value.trim()} onClick={() => void save()}>保存修订</Button>
-          </div>
-        </div>
+    <ListRow
+      leading={<RowOrigin label={origin} />}
+      title={<RowSentence text={memoryExcerpt(entry.payload.content)} inferred={entry.payload.origin !== "explicit"} />}
+      muted={retired}
+      actions={retired ? (
+        <IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy} onClick={() => void undo("已恢复")} />
       ) : (
-        <p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p>
+        <>
+          <IconButton icon={Pencil} label="编辑" size="sm" disabled={busy} onClick={() => setEditing(true)} />
+          <IconButton icon={Trash2} label="忘记" size="sm" destructive disabled={busy} onClick={() => void forget()} />
+        </>
       )}
-      <p className="mt-1 flex flex-wrap gap-x-2 text-caption text-muted">
-        <span className="text-text">{capsuleEntryOrigin(entry)}</span>
-        <span>{capsuleEntryLabel(entry.payload.factKind)}</span>
-        {entry.revision > 1 && <span>第 {entry.revision} 版</span>}
-      </p>
-      {!editing && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" />修订</Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void retire()}>停用</Button>
-          {entry.revision > 1 && (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={16} aria-hidden="true" />撤销上次改动</Button>
-          )}
-        </div>
-      )}
-    </li>
+      menu={!retired && entry.revision > 1
+        ? <Menu label="更多" items={[{ label: "撤销上次改动", disabled: busy, onSelect: () => void undo("已撤销上次改动") }]} />
+        : undefined}
+    />
   );
 }

@@ -43,6 +43,7 @@ export function ListRow({
   to,
   href,
   onOpen,
+  expanded,
   leading,
   meta,
   trailing,
@@ -57,8 +58,14 @@ export function ListRow({
   to?: string;
   /** An outside address the row opens in a new tab. */
   href?: string;
-  /** Opens the row, when it is neither a route nor an address. */
+  /**
+   * Opens the row, when it is neither a route nor an address. Beside `to` or
+   * `href` it runs as the row is followed: a notice marks itself read on the
+   * way to the conversation it names.
+   */
   onOpen?: () => void;
+  /** A row that opens in place (its detail under the title): whether it is open now. */
+  expanded?: boolean;
   /** Fixed-width content before the title. */
   leading?: ReactNode;
   /** The line under the title. */
@@ -85,11 +92,11 @@ export function ListRow({
   // `data-row-title` is what the release walk measures: every title in a
   // list must start on one left edge (scripts/ops/ui-walk.mjs).
   const heading = to ? (
-    <Link to={to} data-row-title className={cn(titleClass, stretched)}>{title}</Link>
+    <Link to={to} onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</Link>
   ) : href ? (
-    <a href={href} target="_blank" rel="noreferrer" data-row-title className={cn(titleClass, stretched)}>{title}</a>
+    <a href={href} target="_blank" rel="noreferrer" onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</a>
   ) : onOpen ? (
-    <button type="button" onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</button>
+    <button type="button" onClick={onOpen} aria-expanded={expanded} data-row-title className={cn(titleClass, stretched)}>{title}</button>
   ) : (
     <span data-row-title className={titleClass}>{title}</span>
   );
@@ -103,7 +110,8 @@ export function ListRow({
       </div>
       {(trailing || actions || menu) && (
         // Above the stretched title, so its own controls stay clickable.
-        <div className="relative z-10 flex shrink-0 items-center gap-1 self-center">
+        // An open row keeps its controls on its first line, beside the title.
+        <div className={cn("relative z-10 flex shrink-0 items-center gap-1", expanded ? "self-start" : "self-center")}>
           {actions && (
             <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast group-hover/row:opacity-100 group-focus-within/row:opacity-100 max-lg:opacity-100">
               {actions}

@@ -71,63 +71,30 @@ export function memoryExcerpt(text: string, max = 400): string {
   return readable.length > max ? `${readable.slice(0, max)}…` : readable;
 }
 
-/**
- * The label a memory keeps for good (principle 18): who it came from. An
- * inference is 「EviMed 推断」 however often it is seen; only its owner makes it
- * anything else.
- *
- * The page's whole vocabulary of origins is 你说的 / EviMed 推断 / 来自研究 /
- * 来自资料 / 来自 X 的胶囊; the last two belong to a capsule entry, which
- * carries its own label. 「来自工具结果」 and 「来自对话中的分析」 were the same
- * thing said twice — both mean the platform saw it while doing the work — and
- * the difference was not one a reader could act on.
- */
-export const MEMORY_BASIS_LABELS: Record<WebMemoryProvenance["basis"], string> = {
-  stated: "你说的",
-  confirmed: "你确认过",
-  edited: "你改过",
-  inferred: "EviMed 推断",
-  tool: "来自研究",
-  assistant: "来自研究",
-};
-
-/** The researcher's own word, as opposed to the platform's observation: what
- *  the 关于我 filter keeps, and what 「不对」 is never offered on. */
+/** The researcher's own word, as opposed to the platform's observation. */
 export const STATED_BASES: ReadonlySet<string> = new Set(["stated", "confirmed", "edited"]);
 
 /**
- * How established a memory is, counted — never a percentage. The page used
- * to print 「置信度 85%」, a number the extractor typed, over records with one
- * piece of evidence (49 of 52 on the acceptance account, 2026-09-19).
- */
-export function memoryStrength(provenance: WebMemoryProvenance | undefined, evidenceCount = 0): string {
-  if (!provenance) return evidenceCount > 0 ? `${evidenceCount} 处依据` : "";
-  const times = Math.max(provenance.observations, 1);
-  const spread = provenance.conversations > 1 ? ` · ${provenance.conversations} 次对话` : "";
-  switch (provenance.basis) {
-    case "stated": return `你说过 ${times} 次${spread}`;
-    case "confirmed": return `你确认过 · 观察到 ${times} 次`;
-    case "edited": return "你改过";
-    case "inferred": return `在 ${Math.max(provenance.runs, 1)} 次研究中观察到`;
-    case "tool":
-    case "assistant": return `${times} 处依据`;
-  }
-}
-
-/**
- * 「用过 7 次，上次 9月18日」 — how often this memory actually reached a run.
+ * Whether a memory is EviMed's inference rather than something the researcher
+ * said, confirmed or corrected (principle 18). It is the one annotation a
+ * memory row keeps — a small grey 「推断」 after the sentence (2026-09-23 plan
+ * §5.6). The origin pill (「你说的」「EviMed 推断」), the counted strength
+ * (「你说过 3 次」「在 4 次研究中观察到」) and the usage line (「用过 7 次」)
+ * were the back office's account of a memory and are gone with their helpers.
  *
- * A count, never a share: a percentage here would be a number nobody measured,
- * which is the mistake 「置信度 85%」 was. A memory with no usage row has never
- * been used, and says so rather than showing a zero to interpret.
+ * A record from a control plane older than `provenance` is read by its origin;
+ * a record whose text carries a machine envelope is never the researcher's
+ * word, whatever it was filed as.
  */
-export function memoryUsage(
-  usage: { count: number; lastUsedAt: string | null } | undefined,
-  when: (value: string) => string,
-): string {
-  if (!usage || usage.count <= 0) return "还没用过";
-  const last = usage.lastUsedAt ? when(usage.lastUsedAt) : "";
-  return last ? `用过 ${usage.count} 次，上次 ${last}` : `用过 ${usage.count} 次`;
+export function isInference(record: {
+  provenance?: WebMemoryProvenance;
+  origin?: string;
+  summary?: string;
+  value?: string;
+}): boolean {
+  const basis = record.provenance?.basis
+    ?? (record.origin === "explicit" || record.origin === "manual" ? "stated" : "inferred");
+  return !STATED_BASES.has(basis) || looksInjected(record.summary || record.value || "");
 }
 
 /** The memory kinds, in the researcher's words. */
