@@ -11,7 +11,6 @@ import {
 import { HttpError } from "./security.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
-import { MEMORY_KIND_LABELS_ZH } from "./researchMemoryPersistence.mjs";
 
 /**
  * What extraction may write.
@@ -808,8 +807,8 @@ export class MemoryIntelligence {
     /** Confirmed memories this conversation changed: for the run's own notice,
      *  the inbox and the audit line. A record of a write, never a refusal of one. */
     const conflicts = [];
-    /** Every record this run wrote and what the write did to it: the input of
-     *  the write prompt 「刚记住了…」 and of the learning loop's correction trigger. */
+    /** Every record this run wrote and what the write did to it: the run's own
+     *  result, and the input of the learning loop's correction trigger. */
     const written = [];
     for (const candidate of candidates.slice(0, 12)) {
       const previous = known.get(canonicalKey(candidate));
@@ -866,7 +865,10 @@ export class MemoryIntelligence {
         await this.#reportReplacedValue(project, conflict);
       }
     }
-    await this.#reportWrites(project, run, written);
+    // No inbox item for what was simply written (plan 2026-09-23 §5.8): the
+    // memory page and the conversation's own prompt (`/api/memory/changes`)
+    // show it where the researcher is, and a 「刚记住了 N 条」 line per run was
+    // one more item nobody needed to act on.
     return {
       runSummary, extracted, activated, source: "model", proposed,
       rejected: proposed - candidates.length,
@@ -911,40 +913,6 @@ export class MemoryIntelligence {
     } catch (error) {
       await this.audit("memory.extraction.rejected_keys", error);
       return new Set();
-    }
-  }
-
-  /**
-   * 「刚记住了 …」 — the write prompt, in the inbox.
-   *
-   * Owner ruling 2026-09-19: a memory takes effect without asking, so the
-   * researcher has to be told where they will see it, with the way back one
-   * click away. Recorded silently — it is neither a finished task, nor
-   * something that needs them, nor a changed conclusion (the three moments the
-   * inbox notifies at, C1), and the conversation panel and the capsule page
-   * carry the same prompt where the researcher is. One item per run, keyed by
-   * the run, so a replay is the same item.
-   *
-   * @param {any} project @param {any} run @param {any[]} written
-   */
-  async #reportWrites(project, run, written) {
-    const news = written.filter((entry) => entry.change === "created" || entry.change === "updated");
-    if (!this.notifications || news.length === 0 || !run?.id) return;
-    const named = news.slice(0, 3).map((entry) => `「${entry.summary}」`).join("");
-    try {
-      await this.notifications.create(project.userId, {
-        noticeType: "notify",
-        title: `刚记住了 ${news.length} 条`,
-        body: `${named}${news.length > 3 ? ` 等 ${news.length} 条` : ""}。已经生效；不对的话，在记忆胶囊里一键撤销。`,
-        projectId: project.id,
-        source: { type: "memory", id: news[0].id },
-        actions: [{ id: "open", label: "查看或撤销", style: "primary" }],
-        idempotencyKey: `memory-written:${run.id}`,
-        severity: "info",
-        silent: true,
-      });
-    } catch (error) {
-      await this.audit("notification.memory_written.create", error);
     }
   }
 
@@ -995,7 +963,11 @@ export class MemoryIntelligence {
    * reads it — so the one thing the researcher could click did nothing at all.
    * Both values are in the body instead, because the way back is for the person
    * to say so in memory management, and they cannot say so about text they
-   * cannot see.
+   * cannot see — and nothing else (plan 2026-09-23 §5.8): 「「旧」已改为「新」」,
+   * with 「（推断）」 when the new value is EviMed's inference rather than the
+   * researcher's own words, the one provenance mark the memory page keeps too
+   * (principle 18). The revision history and the way to change it back are on
+   * the page the notice opens.
    *
    * The identity is the contradiction, not the run. The first version keyed on
    * the record and the parked key while sending `source: {type:"run"}` and the
@@ -1016,13 +988,8 @@ export class MemoryIntelligence {
     try {
       return await this.notifications.create(project.userId, {
         noticeType: "notify",
-        title: "一条你确认过的记忆已被本次对话改写",
-        body: `一条「${MEMORY_KIND_LABELS_ZH[conflict.kind] ?? "记忆"}」记忆原本记的是「${conflict.previousValue}」，`
-          + `本次对话把它改为「${conflict.nextValue}」，现在生效的是后者。`
-          + (conflict.origin === "inferred"
-            ? "这次改写来自模型对本次对话的推断，你并没有明确要求。"
-            : "这次改写来自你在本次对话里的说法。")
-          + "原值保留在这条记忆的修订记录中，如果不是你要的结果，可在记忆管理中改回。",
+        title: "一条记忆已改写",
+        body: `「${conflict.previousValue}」已改为「${conflict.nextValue}」${conflict.origin === "inferred" ? "（推断）" : ""}`,
         // A user-scoped memory belongs to no project, and naming the project
         // the run happened in would make the same contradiction look like
         // different content each time it is observed from somewhere else. A

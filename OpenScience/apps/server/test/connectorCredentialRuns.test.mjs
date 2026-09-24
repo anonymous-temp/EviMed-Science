@@ -70,12 +70,13 @@ test("a run failed for a missing connector credential names the connector, as th
 
 test("the inbox tells the researcher which credential to add, not that a tool failed", () => {
   const notice = runFinishedNotice({ status: "failed", errorCode: "runtime_tool_error", missingCredential: "opengwas", qualityNotices: [], artifacts: [] });
-  assert.equal(notice.title, "研究中断：缺少数据源凭据");
+  assert.equal(notice.title, "一项研究 未完成");
   assert.match(notice.body, /缺少 OpenGWAS 的访问凭据/);
-  assert.match(notice.body, /账户与额度 → 数据源凭据/);
+  // Where the page is now (plan 2026-09-23 §5.9), not 「账户与额度 → 数据源凭据」.
+  assert.match(notice.body, /「设置 → 数据源」/);
   assert.equal(notice.severity, "attention");
   const plain = runFinishedNotice({ status: "failed", errorCode: "runtime_tool_error", qualityNotices: [], artifacts: [] });
-  assert.notEqual(plain.title, "研究中断：缺少数据源凭据");
+  assert.doesNotMatch(plain.body, /凭据/);
 });
 
 test("the account payload counts the data sources waiting for a credential", async () => {

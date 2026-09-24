@@ -103,14 +103,18 @@ export const MAX_TRIAL_METHODS = 4;
 
 export class LearningService {
   /**
-   * @param {{documents: any, jobs?: any, notifications?: any, now?: () => Date,
+   * No inbox: the method library's own changes — a method put in force or
+   * retired — are shown on the memory page, in the method's own row and its
+   * history, and used to arrive as quiet inbox records nobody read, under the
+   * 「自动运行」 fold (plan 2026-09-23 §5.8).
+   *
+   * @param {{documents: any, jobs?: any, now?: () => Date,
    * resolveBaselineDigest?: (userId: string, projectId: string) => Promise<string>}} dependencies
    */
-  constructor({ documents, jobs = null, notifications = null, now = () => new Date(), resolveBaselineDigest }) {
+  constructor({ documents, jobs = null, now = () => new Date(), resolveBaselineDigest }) {
     if (!documents) throw new TypeError("The learning service needs the product document store.");
     this.documents = documents;
     this.jobs = jobs;
-    this.notifications = notifications;
     this.now = now;
     this.resolveBaselineDigest = resolveBaselineDigest;
   }
@@ -429,15 +433,7 @@ export class LearningService {
     if (verdict.status !== "approved") {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);
     }
-    const updated = await this.#setStatus(userId, methodId, "approved", input.expectedRevision, document);
-    // The reader's words: the method's own title and what now happens. The
-    // verdict's reasons are the log's, in English, and read in an inbox as
-    // 「claim-verdict-audit：no unresolved conflicts」.
-    await this.#notify(userId, document, {
-      title: "已启用一条学到的方法",
-      body: `「${methodLabel(document)}」已生效，之后同类的研究会用上它。觉得不对，可以在「记忆胶囊」里停用或回到上一版。`,
-    });
-    return updated;
+    return this.#setStatus(userId, methodId, "approved", input.expectedRevision, document);
   }
 
   /**
@@ -453,12 +449,7 @@ export class LearningService {
    */
   async retire(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
-    const updated = await this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason);
-    await this.#notify(userId, document, {
-      title: "已停用一条学到的方法",
-      body: `「${methodLabel(document)}」：${String(input.reason ?? "不再使用").replace(/[。.]+$/, "")}。`,
-    });
-    return updated;
+    return this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason);
   }
 
   /**
@@ -624,25 +615,6 @@ export class LearningService {
     return proposals;
   }
 
-  /** @param {string} userId @param {any} document @param {{title: string, body: string}} notice */
-  async #notify(userId, document, notice) {
-    if (!this.notifications) return;
-    try {
-      await this.notifications.create(userId, {
-        noticeType: "notify",
-        title: notice.title,
-        body: notice.body,
-        ...(document.projectId ? { projectId: document.projectId } : {}),
-        source: { type: "system", id: document.id },
-        idempotencyKey: `method-status:${document.id}:${document.revision}`,
-        // The method library's own housekeeping is none of the three moments
-        // the inbox notifies at (完成 / 需要你 / 结论变了, C1): recorded, read.
-        silent: true,
-      });
-    } catch {
-      // isolated: evimed_learning_notice_failed_total
-    }
-  }
 }
 
 /**

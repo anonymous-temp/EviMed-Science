@@ -823,15 +823,26 @@ export class AutopilotService {
       }).catch(() => null);
     }
     if (!this.notifications) return null;
-    return this.notifications.create(userId, {
-      noticeType: "question",
-      title: "已采纳的结论未能通过独立复核",
-      body: `${digest.payload.date} 简报里你采纳的「${String(claim.statement).slice(0, 120)}」，独立复核未能复现它，已从重点发现中移除。请确认是否继续沿用。`,
-      projectId: digest.projectId,
-      source: { type: "digest", id: digest.id },
-      idempotencyKey: `autopilot-refuted:${digest.id}:${claim.id}`,
-      actions: [{ id: "open", label: "查看简报" }, { id: "keep", label: "仍然沿用" }],
-    });
+    try {
+      // The fact and nothing else (plan 2026-09-23 §5.8): which finding, and
+      // that it left the headlines. The two actions are the question.
+      return await this.notifications.create(userId, {
+        noticeType: "question",
+        title: "已采纳的结论复核未通过",
+        body: `「${String(claim.statement).slice(0, 120)}」已从重点发现中移除。`,
+        projectId: digest.projectId,
+        source: { type: "digest", id: digest.id },
+        idempotencyKey: `autopilot-refuted:${digest.id}:${claim.id}`,
+        actions: [{ id: "open", label: "查看简报" }, { id: "keep", label: "仍然沿用" }],
+      });
+    } catch (error) {
+      // The key names this refutation, and a key that already holds other
+      // words means the question was put already — by a release that worded
+      // it differently. Asking again would be the duplicate; failing the fold
+      // over it would stop the verification from ever landing.
+      if (/** @type {any} */ (error)?.code === "notification_idempotency_conflict") return null;
+      throw error;
+    }
   }
 
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
