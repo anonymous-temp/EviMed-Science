@@ -7,6 +7,7 @@
  * false and a code path nothing can reach.
  */
 import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage } from "@evimed/domain";
+import { rememberConversationTitles } from "./conversationTitles";
 
 const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
 
@@ -1597,7 +1598,10 @@ export async function listWebAgentRuns({ projectId, archived = false }: { projec
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.list");
   // The shelf (`archived=1`) instead of the desk: what the researcher put away.
   const res = await fetchWithWebAuth(apiUrl(archived ? "/agent-runs?archived=1" : "/agent-runs"), projectId ? { headers: { "X-Open-Science-Project": projectId } } : {});
-  return parseApiResponse<WebAgentRun[]>(res);
+  const runs = await parseApiResponse<WebAgentRun[]>(res);
+  // What the conversation surface names a conversation it is opening.
+  rememberConversationTitles(runs);
+  return runs;
 }
 
 /**
@@ -1917,9 +1921,23 @@ export async function fetchWebMetrics(): Promise<WebMetrics> {
   return parseApiResponse<WebMetrics>(res);
 }
 
-export async function startWebRuntime(): Promise<string> {
+/**
+ * Start a project's research runtime: the tab's project unless `projectId`
+ * names another.
+ *
+ * `opening` is the conversation frame starting the runtime it is about to
+ * show. It is the one start the control plane lets take the researcher's own
+ * idle runtime that a hidden tab still holds (`makeRoomFor`, UI plan §2.2); a
+ * warm-up or a button elsewhere never does.
+ */
+export async function startWebRuntime({ projectId, opening = false }: { projectId?: string; opening?: boolean } = {}): Promise<string> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.start");
-  return invokeWebCommand<string>("start_runtime");
+  const res = await fetchWithWebAuth(commandUrl("start_runtime"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId ?? getWebProjectId() },
+    body: JSON.stringify(opening ? { opening: true } : {}),
+  });
+  return parseApiResponse<string>(res);
 }
 
 /** When each project's runtime was last asked to warm, by project id. */
@@ -1936,11 +1954,15 @@ const warmedAt = new Map<string, number>();
  * then. At most once a minute per project; a refusal (a runtime ceiling, a
  * held project) is not this call's to report: the frame that opens next
  * meets the same answer and explains it.
+ *
+ * `afterRelease`: the caller has just released another project's surface to
+ * make room, so a warm-up refused earlier in the minute — by the ceiling that
+ * release lifted — must not hold this one back.
  */
-export function warmWebRuntime(projectId: string = getWebProjectId()): void {
+export function warmWebRuntime(projectId: string = getWebProjectId(), { afterRelease = false }: { afterRelease?: boolean } = {}): void {
   if (!hasWebApi || !projectId) return;
   const now = Date.now();
-  if (now - (warmedAt.get(projectId) ?? 0) < 60_000) return;
+  if (!afterRelease && now - (warmedAt.get(projectId) ?? 0) < 60_000) return;
   warmedAt.set(projectId, now);
   void fetchWithWebAuth(commandUrl("start_runtime"), {
     method: "POST",

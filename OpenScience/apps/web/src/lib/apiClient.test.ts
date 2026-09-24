@@ -766,6 +766,61 @@ describe("apiClient", () => {
     expect(callHeaders(fetchMock, 3).get("X-Open-Science-CSRF")).toBe("csrf_test");
   });
 
+  // 2026-09-23 UI plan §2.2: the conversation frame's own start is the one
+  // that may take the researcher's own idle runtime a hidden tab still holds,
+  // and it names the frame's project rather than whatever the tab is on.
+  it("starts a named project's runtime as an opening only when asked to", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => (
+      String(url).endsWith("/api/me") ? csrfMeResponse() : responseJson("https://science.example/api/runtime")
+    ));
+    const client = await loadClient("https://science.example/api");
+    client.setWebProjectId("default");
+
+    await client.startWebRuntime({ projectId: "paper2", opening: true });
+    const opening = fetchMock.mock.calls.findIndex(([url]) => String(url).endsWith("/commands/start_runtime"));
+    expect((fetchMock.mock.calls[opening][1] as RequestInit).body).toBe(JSON.stringify({ opening: true }));
+    expect(callHeaders(fetchMock, opening).get("X-Open-Science-Project")).toBe("paper2");
+    expect(client.getWebProjectId()).toBe("default");
+
+    await client.startWebRuntime();
+    const plain = fetchMock.mock.calls.findLastIndex(([url]) => String(url).endsWith("/commands/start_runtime"));
+    expect((fetchMock.mock.calls[plain][1] as RequestInit).body).toBe(JSON.stringify({}));
+    expect(callHeaders(fetchMock, plain).get("X-Open-Science-Project")).toBe("default");
+  });
+
+  it("warms a project at most once a minute, unless room was just made for it", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => (
+      String(url).endsWith("/api/me") ? csrfMeResponse() : responseJson("https://science.example/api/runtime")
+    ));
+    const client = await loadClient("https://science.example/api");
+    const warms = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/commands/start_runtime")).length;
+    client.warmWebRuntime("paper2");
+    await vi.waitFor(() => expect(warms()).toBe(1));
+    client.warmWebRuntime("paper2");
+    await Promise.resolve();
+    expect(warms()).toBe(1);
+    // The shell released another project's surface to make room: an earlier
+    // warm-up refused by that ceiling must not hold this one back.
+    client.warmWebRuntime("paper2", { afterRelease: true });
+    await vi.waitFor(() => expect(warms()).toBe(2));
+  });
+
+  it("remembers what each conversation is called from the ledger reads, the newest run first", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => responseJson([
+      { sessionId: "ses_a", title: "ASPREE试验主要结论", question: "ASPREE 的主要结论是什么？" },
+      { sessionId: "ses_a", title: "更早的一次", question: null },
+      { sessionId: "ses_b", title: null, question: "二甲双胍最常见的不良反应" },
+      { sessionId: "ses_c", title: "  ", question: null },
+    ]));
+    const client = await loadClient("/api");
+    const { conversationTitle } = await import("./conversationTitles");
+    await client.listWebAgentRuns({ projectId: "paper1" });
+    expect(conversationTitle("ses_a")).toBe("ASPREE试验主要结论");
+    expect(conversationTitle("ses_b")).toBe("二甲双胍最常见的不良反应");
+    expect(conversationTitle("ses_c")).toBeNull();
+    expect(conversationTitle(null)).toBeNull();
+  });
+
   it("downloads hosted workspace files with the selected project id", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response("file-bytes", {

@@ -5475,7 +5475,17 @@ test("start_runtime makes room from the same user's idle runtime, and refuses wh
         assert.equal(out.json.code, "runtime_limit_exceeded");
         assert.match(out.json.error, /user/);
         assert.equal(out.res.headers.get("retry-after"), "5");
-        assert.equal((await app.runtimeManager.status(paper2)).running, true, "a runtime with an open connection is never taken");
+        assert.equal((await app.runtimeManager.status(paper2)).running, true, "a warm-up never takes a runtime with an open connection");
+
+        // The shell opening a conversation in this project is the one start
+        // that does: that connection is the tab's hidden frame of the project
+        // the researcher just left, and nothing is running there (UI plan §2.2).
+        out = await command(base, "start_runtime", { opening: true });
+        assert.equal(out.res.status, 200, "the researcher's own idle runtime yields to the project they are opening");
+        const taken = await app.runtimeManager.status(paper2);
+        assert.equal(taken.running, false);
+        assert.equal(taken.lastEvent, "yielded");
+        assert.equal((await app.runtimeManager.status(defaultProject)).running, true);
       } finally {
         app.runtimeManager.endProxy(paper2);
       }
@@ -6067,6 +6077,29 @@ test("static frontend assets are served with SPA fallback", async () => {
     const route = await fetch(`${base}/sessions/demo`);
     assert.equal(route.status, 200);
     assert.equal(await route.text(), "<div id=\"root\"></div>");
+  });
+});
+
+test("a build file the release no longer has is a 404, while every page address keeps the fallback", async () => {
+  // 2026-09-23 plan §2.1: a tab opened before a release asks for the old
+  // hashed chunk; index.html in its place failed the module MIME check and
+  // replaced the whole shell with the router's English error page.
+  await withStaticApp(async ({ base }) => {
+    for (const missing of ["/assets/InboxPage-0ld4a5h.js", "/assets/index-0ld4a5h.css", "/assets/", "/assets"]) {
+      const asset = await fetch(`${base}${missing}`);
+      assert.equal(asset.status, 404, missing);
+      assert.match(asset.headers.get("content-type") ?? "", /application\/json/, `${missing} must not be the page`);
+      assert.equal(asset.headers.get("cache-control"), "no-store", missing);
+      assert.equal((await asset.json()).code, "not_found");
+    }
+    // A page address ending in what looks like a file name is still a page.
+    for (const page of ["/app/runs/run_1/files/deliverables/evidence/report.md", "/app/inbox", "/login"]) {
+      const route = await fetch(`${base}${page}`);
+      assert.equal(route.status, 200, page);
+      assert.equal(await route.text(), "<div id=\"root\"></div>", page);
+    }
+    // The file that exists is still served.
+    assert.equal((await fetch(`${base}/assets/app.js`)).status, 200);
   });
 });
 

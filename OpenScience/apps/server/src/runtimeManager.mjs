@@ -768,14 +768,15 @@ function runtimeStateFile(project) {
 }
 
 /**
- * The moments a runtime start goes through, in order, as the reader sees them
- * while waiting (plan §3.1 #8): 准备环境 (a container or a cloud session, and
- * room made for it), 同步文件 (the project's files carried into a remote
- * session — a local container mounts them, so the Docker provider has no such
- * moment and never reports it) and 启动内核 (the kernel composing its plugin
- * tree until its first wire call answers). The shell drew one sentence for all
- * of them, so a slow kernel, a slow copy and a slot the deployment had run out
- * of all read as "a cold start is slow".
+ * The moments a runtime start goes through, in order (plan §3.1 #8):
+ * `environment` (a container or a cloud session, and room made for it),
+ * `sync` (the project's files carried into a remote session — a local
+ * container mounts them, so the Docker provider has no such moment and never
+ * reports it) and `kernel` (the kernel composing its plugin tree until its
+ * first wire call answers). The shell times its wait by them, each moment
+ * restarting the allowance, so a slow start that is moving is not a failure.
+ * It no longer shows them: since 2026-09-23 the reader sees the
+ * conversation's title and 「正在打开…」 (UI plan §2.2).
  */
 export const RUNTIME_START_STAGES = Object.freeze(["environment", "sync", "kernel"]);
 
@@ -3136,6 +3137,10 @@ export class RuntimeManager {
     this.lastOrphanCleanup = null;
     /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
     this.startProgress = new Map();
+    /** Pending starts an opening has asked for or joined, by project key:
+     *  read when that start makes room (`makeRoomFor`), so an opening that
+     *  finds a warm-up's start under way still counts as one. */
+    this.openingStarts = new Set();
     /** The last start of each project that was refused, by project key, for
      *  the status the waiting shell polls: `{ code, status, at }`. */
     this.startFailures = new Map();
@@ -3451,11 +3456,20 @@ export class RuntimeManager {
     return true;
   }
 
-  async start(project) {
-    return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project)) : this.startAdmitted(project);
+  /**
+   * @param {Record<string, any>} project
+   * @param {{ opening?: boolean }} [options] `opening`: the researcher is
+   *   opening a conversation in this project (the shell's own start of its
+   *   frame) rather than a request of a surface that is already open — see
+   *   `makeRoomFor`. It shapes only a start this call begins; one already
+   *   under way is joined as it is.
+   */
+  async start(project, options = {}) {
+    return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
 
-  async startAdmitted(project) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean }} [options] */
+  async startAdmitted(project, { opening = false } = {}) {
     const key = this.key(project);
     await this.runtimeQuotaStops.get(key);
     let existing = this.runtimes.get(key);
@@ -3479,6 +3493,7 @@ export class RuntimeManager {
       this.scheduleIdleStop(project);
       return existing;
     }
+    if (opening) this.openingStarts.add(key);
     const pending = this.starts.get(key);
     if (pending) return pending;
 
@@ -3489,7 +3504,7 @@ export class RuntimeManager {
       // instead of beginning a second container. Its own entry in `starts` is
       // not counted against the ceilings it checks.
       await this.enforceProjectQuota(project);
-      await this.makeRoomFor(project);
+      await this.makeRoomFor(project, { opening: this.openingStarts.has(key) });
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
@@ -3580,6 +3595,7 @@ export class RuntimeManager {
     } finally {
       this.starts.delete(key);
       this.startProgress.delete(key);
+      this.openingStarts.delete(key);
     }
   }
 
@@ -4782,9 +4798,14 @@ export class RuntimeManager {
    * first. A warm runtime is a convenience to its owner, never a reason
    * another researcher cannot start. When nothing qualifies the ceiling
    * refuses exactly as before.
+   *
+   * An `opening` — the researcher opening a conversation in this project —
+   * may also take their own idle runtime that a tab still holds open; see
+   * the second pass below.
    * @param {Record<string, any>} project
+   * @param {{ opening?: boolean }} [options]
    */
-  async makeRoomFor(project) {
+  async makeRoomFor(project, { opening = false } = {}) {
     // Background work waits for room; it never takes a researcher's idle
     // runtime to make some. The capacity check refuses it and its job defers.
     if (isInternalProject(project.id)) return;
@@ -4822,23 +4843,54 @@ export class RuntimeManager {
     const others = [...this.runtimes.entries()]
       .filter((entry) => eligible(entry) && !entry[0].startsWith(prefix) && Date.now() - idleSince(entry) >= yieldAfterMs)
       .sort((left, right) => idleSince(left) - idleSince(right));
-    for (const [key, runtime] of [...mine, ...others]) {
-      // Another researcher's runtime makes room only for the global ceiling;
-      // the per-user one is this researcher's own to spend.
-      if (!key.startsWith(prefix) && !globalFull()) return;
-      if ((this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0) continue;
+    /** Whether a tab holds this runtime: a connection proxied to it right now. */
+    const connected = (/** @type {string} */ key) => (this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0;
+    /**
+     * Stop one runtime if nothing needs it: no session mid-turn, no run the
+     * ledger still holds, and — unless `evenIfConnected` — no open connection.
+     * @param {[string, any]} entry @param {boolean} evenIfConnected
+     */
+    const yieldIfIdle = async ([key, runtime], evenIfConnected) => {
+      if (this.runtimes.get(key) !== runtime || (!evenIfConnected && connected(key))) return;
       let busy;
       try {
         busy = await this.runtimeBusy(runtime.project);
       } catch {
         // Unknown is not idle — the idle sweep's rule.
-        continue;
+        return;
       }
-      if (busy || this.runtimes.get(key) !== runtime || (this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0) continue;
+      if (busy || this.runtimes.get(key) !== runtime || (!evenIfConnected && connected(key))) return;
       // The ledger's view too: a run it still calls running is closed as
       // cancelled by the stop, whatever the kernel says (see `hasRunningRuns`).
-      if (await this.hasRunningRuns(runtime.project).catch(() => true)) continue;
-      await this.stopIdleRuntime(runtime.project, { event: "yielded" }).catch(() => {});
+      if (await this.hasRunningRuns(runtime.project).catch(() => true)) return;
+      await this.stopIdleRuntime(runtime.project, { event: "yielded", evenIfConnected }).catch(() => {});
+    };
+    for (const entry of mine) {
+      await yieldIfIdle(entry, false);
+      if (!full()) return;
+    }
+    // Another researcher's runtime makes room only for the global ceiling;
+    // the per-user one is this researcher's own to spend — so an opening held
+    // by its own ceiling goes straight to its own runtimes below.
+    if (!(opening && userFull())) {
+      for (const entry of others) {
+        if (!globalFull()) break;
+        await yieldIfIdle(entry, false);
+        if (!full()) return;
+      }
+    }
+    if (!opening) return;
+    // Last, for an opening only: the researcher's own idle runtime that a tab
+    // still holds. The shell keeps the last project's conversation connected
+    // but hidden, and refusing on that connection made a project switch a 429
+    // and a retry seven seconds later (2026-09-23 UI plan §2.2). Idle still
+    // means idle — a turn under way or a run the ledger holds keeps its
+    // runtime — and another researcher's is never taken this way. Not for
+    // other starts: a frame reconnecting to a runtime that just yielded must
+    // not take one back, or two open tabs would retire each other in turn.
+    for (const entry of mine) {
+      if (!connected(entry[0])) continue;
+      await yieldIfIdle(entry, true);
       if (!full()) return;
     }
   }
@@ -5887,14 +5939,17 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ event?: string }} [options] what the ledger calls this stop:
-   *   `idle_timeout` from the idle sweep, `yielded` when the same user's next
-   *   project needed the slot (`makeRoomFor`)
+   * @param {{ event?: string, evenIfConnected?: boolean }} [options] `event`
+   *   is what the ledger calls this stop: `idle_timeout` from the idle sweep,
+   *   `yielded` when the same user's next project needed the slot
+   *   (`makeRoomFor`). `evenIfConnected` stops it with a tab's connection
+   *   still open — an opening's yield — instead of waiting for it to close.
    */
-  async stopIdleRuntime(project, { event = "idle_timeout" } = {}) {
+  async stopIdleRuntime(project, { event = "idle_timeout", evenIfConnected = false } = {}) {
     const key = this.key(project);
     const activity = this.runtimeActivity.get(key);
-    if (activity?.activeProxies > 0) {
+    const openConnections = activity?.activeProxies ?? 0;
+    if (openConnections > 0 && !evenIfConnected) {
       this.scheduleIdleStop(project);
       return;
     }
@@ -5924,6 +5979,9 @@ export class RuntimeManager {
       pid: runtime.pid,
       containerName: runtime.containerName ?? null,
       idleTimeoutMs: Number(this.config.runtimeIdleTimeoutMs),
+      // A stop that closed a tab's connection says so: that tab is the one
+      // that will next show 连接中断.
+      ...(openConnections > 0 ? { openConnections } : {}),
     }, this.config);
     await recordRuntimeState(project, event, {
       running: false,

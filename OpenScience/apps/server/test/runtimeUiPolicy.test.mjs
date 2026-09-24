@@ -130,7 +130,7 @@ test("native HTTP prompts check the bound session before forwarding while source
   const send = body => fetch(`${f.base}/api/session/prompt`, { method: "POST",
     headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body });
   const denied = await send(request("source-private"));
-  assert.equal(denied.status, 403); assert.ok((await denied.text()).includes("资料页")); assert.equal(forwarded.length, 0);
+  assert.equal(denied.status, 403); assert.ok((await denied.text()).includes("请在知识库中处理这份资料")); assert.equal(forwarded.length, 0);
   const publicRequest = request("public-session");
   assert.equal((await send(publicRequest)).status, 200); assert.deepEqual(forwarded, [publicRequest]);
   assert.equal(checked[0].userId, f.user.id); assert.equal(checked[0].projectId, "default");
@@ -188,7 +188,7 @@ test("real HTTP and mux startup cannot replace a bounded source workspace and hi
   assert.equal(await f.manager.start(sourceProject), bounded, "same-workspace read startup must reuse its runtime");
   const denied = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
   assert.equal(denied.status, 423);
-  assert.ok((await denied.text()).includes("后台任务正在进行"));
+  assert.ok((await denied.text()).includes("项目正忙，请稍后再试"));
   const socketDenied = f.connect(); assert.equal(await socketDenied.opened, 423);
   assert.deepEqual(calls, { stop: 0, spawn: 0, close: 0, http: 0 });
   assert.equal(f.manager.runtimes.get(f.manager.key(project)), bounded);
@@ -1103,4 +1103,44 @@ test("PostgreSQL plugin fence holds native mux admission through kernel ACK and 
   connection.ws.terminate();
   for (let n = 0; n < 50; n++) { if (await service.hasPendingPrompts(project)) break; await delay(10); }
   assert.equal(await service.hasPendingPrompts(project), true);
+});
+
+test("releasing a frame closes its own connections before it answers, and nobody else's", { timeout: 5000 }, async (t) => {
+  // The shell waits on this release before it starts another project's
+  // runtime (2026-09-23 UI plan §2.2): a connection still counted when it
+  // answers is a slot `makeRoomFor` will not give away.
+  const f = await fixture(t);
+  const project = await f.store.requireProject(f.user, "default");
+  const released = f.connect();
+  assert.equal(await released.opened, 101);
+  const other = issueRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session, project });
+  const kept = f.connect({ Cookie: `${f.loginCookie}; ${other.cookie.split(";")[0]}` }, `${other.prefix}api/remote.mux`);
+  assert.equal(await kept.opened, 101);
+  await eventually(() => f.manager.activeProxyCountForProject(project) === 2);
+
+  assert.equal(await f.ui.releaseFrame(f.frame.frameId, "another-user"), 0, "a frame id alone closes no one's connection");
+  assert.equal(released.ws.readyState, WebSocket.OPEN);
+
+  const closed = once(released.ws, "close");
+  assert.equal(await f.ui.releaseFrame(f.frame.frameId, f.user.id), 1);
+  assert.equal(f.manager.activeProxyCountForProject(project), 1, "counted as released by the time the release answers");
+  await closed;
+  assert.equal(kept.ws.readyState, WebSocket.OPEN, "the other frame keeps its connection");
+  assert.equal(await f.ui.releaseFrame(f.frame.frameId, f.user.id), 0, "a second release has nothing left to close");
+});
+
+test("a notice page says what stopped the conversation in the shell's own words, and never names the kernel", async (t) => {
+  const f = await fixture(t);
+  f.manager.proxy = async () => { throw new HttpError(429, "runtime_limit_exceeded", "Too many running runtimes for this user; limit is 2."); };
+  const capped = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(capped.status, 429);
+  const cappedPage = await capped.text();
+  assert.ok(cappedPage.includes("同时进行的研究已达上限，先结束一个再试。"), cappedPage);
+  assert.ok(cappedPage.includes('"runtime_limit_exceeded"'), "the shell is told the code");
+  f.config.runtimeUiProxyEnabled = false;
+  const off = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(off.status, 404);
+  const offPage = await off.text();
+  assert.ok(offPage.includes("对话暂不可用"), offPage);
+  for (const page of [cappedPage, offPage]) assert.ok(!page.includes("内核"), page);
 });
