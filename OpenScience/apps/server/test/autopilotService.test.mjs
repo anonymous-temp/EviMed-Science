@@ -749,8 +749,37 @@ test("refuting a finding the researcher already adopted raises a question, and o
   assert.equal(notice.noticeType, "question", "the first question producer in the system");
   assert.equal(notice.source.id, digest.id);
   assert.ok(notice.actions.length > 0, "a blocking inbox item needs something to answer with");
-  assert.match(notice.body, /心衰再入院下降 0/);
+  // The fact and nothing else (plan 2026-09-23 §5.8); the actions are the question.
+  assert.equal(notice.title, "已采纳的结论复核未通过");
+  assert.equal(notice.body, "「心衰再入院下降 0」已从重点发现中移除。");
   assert.equal(notice.idempotencyKey, `autopilot-refuted:${digest.id}:claim-0`);
+});
+
+test("a refutation already put to the researcher in older words is not asked again, and does not stop the fold", async () => {
+  // The key names the refutation. A replay after a release that reworded the
+  // question meets the old item under the same key; the inbox calls that an
+  // idempotency conflict, and the verification must still land.
+  /** Refuse only the refutation question; the digest's own notice goes through. */
+  const refusing = (error) => async (userId, input, notifications) => {
+    if (String(input.idempotencyKey).startsWith("autopilot-refuted:")) throw error;
+    notifications.created.push({ userId, input });
+  };
+  const f = fixture({ notificationCreate: refusing(Object.assign(new Error("The notification key already names different content."),
+    { status: 409, code: "notification_idempotency_conflict" })) });
+  const { episode, digest } = await completedEpisode(f, { count: 1 });
+  await f.service.decide("user-one", digest.id, { action: "adopt", claimId: "claim-0" });
+  const recorded = await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: verificationIdFor(episode.id, 0),
+    verdict: "refuted", checkedSources: [], runId: "verify-run-a" });
+  assert.equal(recorded.claim.refutation, "refuted");
+  const placed = await f.service.getDigest("user-one", digest.id);
+  assert.equal([...placed.payload.headlines, ...placed.payload.leads].find((claim) => claim.id === "claim-0").refutation, "refuted");
+  // Any other refusal still surfaces.
+  const failing = fixture({ notificationCreate: refusing(Object.assign(new Error("inbox down"), { code: "notification_unavailable" })) });
+  const second = await completedEpisode(failing, { count: 1 });
+  await failing.service.decide("user-one", second.digest.id, { action: "adopt", claimId: "claim-0" });
+  await assert.rejects(failing.service.recordVerification("user-one", { episodeId: second.episode.id,
+    verificationId: verificationIdFor(second.episode.id, 0), verdict: "refuted", checkedSources: [], runId: "verify-run-b" }),
+  { code: "notification_unavailable" });
 });
 
 test("an adopted finding becomes capsule knowledge, a rejected one becomes a lesson, and a refuted one becomes neither", async () => {

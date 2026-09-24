@@ -164,7 +164,9 @@ test("a message becomes a run in the most recent project, with a card that track
     "the result to be delivered");
   const closing = JSON.parse(fake.callsTo("card.update").at(-1).args.data.card.data);
   assert.equal(closing.header.template, "green");
-  assert.match(closing.body.elements[0].content, /研究已完成/);
+  // The status word under the question the card already shows — not the
+  // inbox title, which would repeat the question's own name.
+  assert.match(closing.body.elements[0].content, /✅ 已完成/);
   const answer = fake.callsTo("message.reply").find((call) => call.args.path.message_id === "om_q1"
     && JSON.parse(call.args.data.content).body?.elements?.[0]?.content?.includes("获益有限"));
   assert.ok(answer, "the answer replies to the question");

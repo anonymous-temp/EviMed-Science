@@ -229,12 +229,11 @@ class FakePool extends EventEmitter {
     if (/^UPDATE evimed_inbox\.notifications SET title=\$2,body=\$3,actions=\$4::jsonb,source=\$5::jsonb/.test(sql)) {
       const row = this.inbox.get(values[0]);
       if (!row) return { rows: [], rowCount: 0 };
-      const silent = values[6] === true;
+      // A new event brings a group back, read or not: nothing joins quietly.
       Object.assign(row, {
         title: values[1], body: values[2], actions: JSON.parse(values[3]), source: JSON.parse(values[4]), severity: values[5],
-        silent: row.silent && silent, read_at: silent ? row.read_at : null, resolved_at: silent ? row.resolved_at : null,
-        resolution: silent ? row.resolution : null, event_count: row.event_count + 1, revision: row.revision + 1,
-        created_at: String(values[7]) > String(row.created_at) ? values[7] : row.created_at, updated_at: values[7],
+        read_at: null, resolved_at: null, resolution: null, event_count: row.event_count + 1, revision: row.revision + 1,
+        created_at: String(values[6]) > String(row.created_at) ? values[6] : row.created_at, updated_at: values[6],
       });
       return { rows: [row], rowCount: 1 };
     }
@@ -244,7 +243,7 @@ class FakePool extends EventEmitter {
         id: values[0], user_id: values[1], project_id: values[2], notice_type: values[3], priority: values[4],
         title: values[5], body: values[6], actions: JSON.parse(values[7]), source: JSON.parse(values[8]),
         group_key: values[9], due_at: values[10], default_action: values[11], event_count: 1,
-        severity: values[13], silent: values[14] === true, read_at: values[14] === true ? values[12] : null,
+        severity: values[13], read_at: null,
         resolved_at: null, resolution: null, channels_sent: { "in-app": values[12] },
         revision: 1, created_at: values[12], updated_at: values[12],
       };
@@ -1464,18 +1463,16 @@ test("the memory extractor the composition root built reports a rewritten memory
   assert.equal(stored.value, "回答请用英文");
   assert.equal(stored.status, "active");
 
-  // And the researcher was told, in the table the composed inbox writes to.
-  // Beside it, recorded silently, the write prompt every automatic write gets
-  // (「刚记住了 …」, 2026-09-20); the conflict is the one that notifies.
-  const all = [...fixture.pool.inbox.values()];
-  const notices = all.filter((row) => !row.silent);
-  assert.equal(notices.length, 1, "the conflict notice never reached evimed_inbox.notifications");
-  assert.deepEqual(all.filter((row) => row.silent).map((row) => row.title), ["刚记住了 1 条"]);
+  // And the researcher was told, in the table the composed inbox writes to —
+  // that, and nothing else: the write prompt 「刚记住了 …」 was a quiet item
+  // beside it from 2026-09-20 until plan 2026-09-23 §5.8 took it out.
+  const notices = [...fixture.pool.inbox.values()];
+  assert.equal(notices.length, 1, "the conflict notice never reached evimed_inbox.notifications, or something else did");
   assert.equal(notices[0].user_id, USER_ID);
   assert.equal(notices[0].notice_type, "notify", "the change already happened; there is nothing left to ask");
   // 「结论变了」 is one of the three moments the inbox notifies at (C1).
   assert.equal(notices[0].severity, "attention");
-  assert.equal(notices[0].silent, false);
+  assert.equal(notices[0].read_at, null, "it arrives unread");
   // One action, and it is a link rather than a resolution: the change has
   // already happened, so a button that posts a decision would promise one
   // nothing acts on. Without it the inbox said a memory had been rewritten and
@@ -1483,8 +1480,8 @@ test("the memory extractor the composition root built reports a rewritten memory
   assert.deepEqual(notices[0].actions, [{ id: "open", label: "查看这条记忆", style: "primary" }]);
   assert.equal(notices[0].source?.type, "memory", "the notice names no record");
   assert.equal(notices[0].project_id, null, "a user-scoped memory belongs to no project");
-  assert.match(notices[0].body, /回答请用中文/);
-  assert.match(notices[0].body, /回答请用英文/);
+  assert.equal(notices[0].title, "一条记忆已改写");
+  assert.equal(notices[0].body, "「回答请用中文」已改为「回答请用英文」");
 
   // Observing the same change again is the same inbox item, against the
   // service's real identity rule rather than a double that only appends.
@@ -1492,8 +1489,7 @@ test("the memory extractor the composition root built reports a rewritten memory
     id: "run-memory-2", sessionId: "session-memory", status: "succeeded", artifacts: [],
     startedAt: "2026-09-08T07:59:00.000Z", finishedAt: "2026-09-08T08:00:00.000Z",
   }, [{ info: { id: "message-2", role: "user" }, parts: [{ type: "text", text: "回答请用英文" }] }]);
-  assert.equal([...fixture.pool.inbox.values()].filter((row) => !row.silent).length, 1, "one change is one notice, however many runs observe it");
-  assert.equal([...fixture.pool.inbox.values()].length, 2, "and a change observed again is not news");
+  assert.equal([...fixture.pool.inbox.values()].length, 1, "one change is one notice, however many runs observe it");
 });
 
 // 「前沿动态」. The module is off by default, so every test above composes a

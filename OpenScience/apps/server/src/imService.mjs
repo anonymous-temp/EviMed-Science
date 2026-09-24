@@ -203,9 +203,19 @@ export function progressView(run, now) {
   return { status, progress: lines.join("\n") };
 }
 
-/** The four endings a card can show. @param {string} outcome */
-function cardOutcome(outcome) {
-  if (outcome === "delivered" || outcome === "qualified" || outcome === "stopped") return outcome;
+/**
+ * The four endings a card can show, read off the notice's own status word so
+ * the card's colour and mark never disagree with what it says: a finished run
+ * with nothing marked for checking is green 「已完成」 whatever the delivery
+ * check's bookkeeping was, and one with something to check — or a clinical
+ * safety finding — is orange.
+ * @param {{ status: string, severity: string }} notice
+ * @returns {"delivered" | "qualified" | "stopped" | "failed"}
+ */
+export function cardOutcome(notice) {
+  if (notice.severity === "safety" || notice.status === "待核对") return "qualified";
+  if (notice.status === "已完成") return "delivered";
+  if (notice.status === "已停止") return "stopped";
   return "failed";
 }
 
@@ -551,8 +561,10 @@ export class ImService {
       await this.notifications.create(user.id, {
         noticeType: "notify", severity: "attention",
         title: "飞书机器人已绑定到你的账号",
-        body: `绑定的飞书身份：${feishuIdentity(binding)}。从现在起，这个飞书用户发给机器人的消息会在你的账号里开始研究，`
-          + "你的通知也会推送给它。如果不是你本人扫的码，点「解除绑定」。",
+        // Who is bound, what that identity can now do, and the one thing to
+        // do if it is not them — a security notice keeps its consequence.
+        body: `绑定的飞书身份：${feishuIdentity(binding)}。它发来的消息会在你的账号里开始研究，你的通知也会推给它；`
+          + "不是你本人扫的码，点「解除绑定」。",
         actions: [{ id: FEISHU_UNBIND_ACTION, label: "解除绑定", style: "danger" }],
         source: { type: "system", id: `${FEISHU_BINDING_SOURCE}${binding.id}` },
         idempotencyKey: `feishu-bound:${binding.id}`,
@@ -1015,10 +1027,13 @@ export class ImService {
     const notice = runFinishedNotice(run);
     const minutes = elapsedMinutes(run.startedAt, Date.parse(run.finishedAt ?? "") || this.now());
     if (!result.cardClosed) {
-      const icon = { delivered: "✅", qualified: "⚠️", stopped: "⏹" }[cardOutcome(notice.outcome)] ?? "❌";
+      const outcome = cardOutcome(notice);
+      const icon = { delivered: "✅", qualified: "⚠️", stopped: "⏹" }[outcome] ?? "❌";
+      // The status word, not the inbox title: the card already shows the
+      // question, and 「〈研究标题〉 已完成」 under it would say the title twice.
       await conversation.closeCard({
-        binding, card, question, outcome: cardOutcome(notice.outcome),
-        status: `${icon} ${notice.title}${minutes ? ` · 用时 ${minutes} 分钟` : ""}`,
+        binding, card, question, outcome,
+        status: `${icon} ${notice.status}${minutes ? ` · 用时 ${minutes} 分钟` : ""}`,
         lines: notice.body.split("\n").filter(Boolean), link,
       });
       result.cardClosed = true;
@@ -1152,7 +1167,7 @@ export class ImService {
    * @param {any} item
    */
   async notificationChanged(item) {
-    if (!this.enabled || !item || item.silent || item.readAt) return;
+    if (!this.enabled || !item || item.readAt) return;
     try {
       const preferences = await this.notifications.preferences(item.userId);
       await this.#enqueuePushes(item, preferences);
@@ -1261,7 +1276,7 @@ export class ImService {
         if (!preferences) continue;
         const page = await this.notifications.list(binding.userId, { unreadOnly: true, limit: 50 }).catch(() => null);
         for (const item of page?.items ?? []) {
-          if (item.silent || this.now() - Date.parse(item.updatedAt ?? "") > RECONCILE_WINDOW_MS) continue;
+          if (this.now() - Date.parse(item.updatedAt ?? "") > RECONCILE_WINDOW_MS) continue;
           queued += await this.#enqueuePushes(item, preferences);
         }
       }

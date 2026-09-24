@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NOTICE_PRIORITY, NOTICE_TYPES, connectorCredentialSpec, errorCodeMessage, errorCodeOutcome, summarizeGateNotices } from "@evimed/domain";
+import { NOTICE_PRIORITY, NOTICE_TYPES, connectorCredentialSpec, errorCodeMessage, runOutcomeKind, summarizeGateNotices } from "@evimed/domain";
 import { describedQualityNotices } from "./runNotices.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -81,10 +81,9 @@ function record(row) {
     resolvedAt: row.resolved_at == null ? null : new Date(row.resolved_at).toISOString(),
     resolution: row.resolution, channelsSent: row.channels_sent, revision: Number(row.revision),
     createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
-    // A row written before these columns existed reads as the quiet default,
+    // A row written before this column existed reads as the quiet default,
     // which is what it was.
     severity: INBOX_SEVERITIES.includes(row.severity) ? row.severity : "info",
-    silent: row.silent === true,
   } : null;
 }
 
@@ -138,87 +137,93 @@ function sameSemantics(item, values) {
 /** Durable in-app notification, question and review inbox. */
 
 /**
- * What the inbox says about a finished run.
+ * The words a finished run's notice may end its title with, and nothing else
+ * (plan 2026-09-23 §5.8): 已完成, 待核对 — finished, and something in it is
+ * marked for the reader to check — 未完成 and 已停止. 「研究已交付」 beside
+ * 「研究已完成」 was a distinction only the delivery gate could read.
+ */
+export const RUN_NOTICE_STATUS_WORDS = Object.freeze(["已完成", "待核对", "未完成", "已停止"]);
+
+/** The word for each outcome class of the domain registry (`RUN_OUTCOME_KINDS`). */
+const STATUS_BY_OUTCOME = Object.freeze({
+  delivered: "已完成", qualified: "已完成",
+  // The platform ended it — a timer, a cancel, an outage. Never a statement
+  // about the work, so never 未完成 either.
+  stopped: "已停止",
+  gated: "未完成", capped: "未完成", upstream: "未完成", unknown: "未完成",
+});
+
+/**
+ * What the inbox says about a finished run: the research's own name and one
+ * status word as the title, and as the body the result and where to look.
  *
- * Both bodies used to be fixed strings — "研究结果已准备好" and one that told
- * the reader to go and look up a ledger row — which sent them somewhere else to learn
- * what the control plane already knew. Worse, a run the platform stopped on a
- * timer and a package the gate refused arrived under the same sentence, so the
- * inbox could not distinguish "your work was rejected" from "we killed it".
+ * 「研究结果已准备好，报告与文件都在这条对话里。本次运行产出 6 个文件，仍在工作区
+ * 里，可以直接打开。」 became 「〈研究标题〉 已完成」 · 「报告和 6 个文件已在对话里」:
+ * nothing about the workspace, the files' custody or how checks work — the
+ * one fact a reader acts on is whether something is marked for them to check.
+ *
+ * 待核对 counts what the reader finds marked ⚠ in the report's 「依据」: the
+ * claims whose quotation was not found in the source they name — the run's own
+ * count (`claimSummary.unverified`), the same number the conversation shows. A
+ * run that counted no claims falls back to the delivery check's must-fix
+ * findings, which are that defect seen from the gate.
+ *
+ * Clinical safety is the one exception, and the only class allowed to
+ * interrupt (C1): the title states the fact, 「〈研究标题〉：有 1 处用药安全提示」.
  *
  * A pure function over the run record, so the mapping is testable and there is
- * exactly one of it. The sentences come from the domain registry rather than a
- * table here, because a second table is how the frontend ended up with three.
+ * exactly one of it. Why a run did not finish comes from the domain registry
+ * (`errorCodeMessage`) rather than a table here, because a second table is how
+ * the frontend ended up with three; no finding's own sentence ever reaches the
+ * body — the gate's English repair instructions once did (2026-09-18 review,
+ * E §9.7).
  * @param {{status?: string, errorCode?: string|null, verification?: string|null, missingCredential?: string|null,
+ *          title?: string|null, question?: string|null,
  *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[],
+ *          claimSummary?: { total?: number, verified?: number, unverified?: number } | null,
  *          artifactCounts?: { deliverable?: number, revisionNotes?: number, work?: number, superseded?: number }}} run
- * @returns {{ outcome: string, title: string, body: string, severity: 'safety'|'attention'|'info', counts: { safety: number, mustFix: number, advice: number } }}
+ * @returns {{ outcome: string, status: string, title: string, body: string, severity: 'safety'|'attention'|'info',
+ *   pending: number, counts: { safety: number, mustFix: number, advice: number } }}
  */
 export function runFinishedNotice(run) {
-  const outcome = run?.errorCode
-    ? errorCodeOutcome(run.errorCode)
-    : run?.verification ? "qualified" : "delivered";
-  const title = {
-    delivered: "研究已完成",
-    qualified: "研究已交付",
-    // 「核对」, the reader's word; 「质量门」 is the engineering one (B §1g).
-    gated: "报告与文件未通过检查",
-    stopped: "研究运行已被平台终止",
-    capped: "研究未开始：额度或并发受限",
-    upstream: "研究中断：外部数据源或服务异常",
-    unknown: "研究运行已结束",
-  }[outcome] ?? "研究运行已结束";
+  const outcome = runOutcomeKind(run);
+  const finished = outcome === "delivered" || outcome === "qualified";
   // A source the researcher can open themselves (`missingCredential`, set only
   // for a known connector): said as the one thing to do, not as a failure.
   const credential = run?.missingCredential ? connectorCredentialSpec(run.missingCredential) : null;
-  // The body is counts and titles, never a finding's own sentence. It used to
-  // carry the first two notices verbatim, cut at 200 characters — the gate's
-  // English repair instructions, in a Chinese researcher's inbox (2026-09-18
-  // review, E §9.7). The titles are the domain's (`describeGateIssue`), and
-  // the sentence each came from stays on the run, one click away.
   const summary = summarizeGateNotices(describedQualityNotices(run?.qualityNotices ?? []));
-  const failing = summary.safety + summary.mustFix;
-  const reason = credential
-    ? `缺少 ${credential.title} 的访问凭据，这次运行没能完成。可在「账户与额度 → 数据源凭据」填入你自己的凭据，再重新发起。`
-    : run?.errorCode
-      ? errorCodeMessage(run.errorCode)
-      : run?.verification === "unverified"
-        ? failing > 0
-          ? `已交付。其中 ${failing} 条结论没能逐字核对${summary.safety ? `，${summary.safety} 条涉及临床安全` : ""}；引用前请在报告的「依据」里核对带 ⚠ 的结论。`
-          : "已交付。有结论没能逐字核对；引用前请在报告的「依据」里核对带 ⚠ 的结论。"
-        : run?.verification === "unchecked"
-          ? "已交付。有一项检查没有运行，无法确认是否达标；引用前请自行核对来源。"
-          : "研究结果已准备好，报告与文件都在这条对话里。";
-  // Files on disk are the researcher's own work whatever the verdict was, and
-  // saying so here is the same rule the run surface follows: a refused package
-  // is not a deleted one.
-  const files = [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length;
-  // What was delivered, apart from what the run wrote for itself on the way
-  // (`artifactCounts`, runArtifacts.mjs): the aspirin run of 2026-09-19 left
-  // five deliverable files, one revision note and 24 scratch scripts, and
-  // 「产出 30 个文件」 counted the scripts as products.
-  const counts = run?.artifactCounts;
-  const delivered = counts && Number.isFinite(counts.deliverable) ? counts.deliverable + (Number(counts.revisionNotes) || 0) : null;
-  const work = counts && Number.isFinite(counts.work) ? counts.work + (Number(counts.superseded) || 0) : 0;
-  const filesLine = delivered != null && delivered > 0
-    ? `交付 ${delivered} 个文件${work > 0 ? `（另有 ${work} 个过程文件）` : ""}，都在工作区里，可以直接打开。`
-    : files > 0 ? `本次运行产出 ${files} 个文件，仍在工作区里，可以直接打开。` : null;
-  // What to look at first: at most the two largest groups a reader must check,
-  // by title. Advice is on the run; it does not need an inbox line.
-  const named = summary.groups.filter((group) => group.severity !== "advice").slice(0, 2)
-    .map((group) => (group.count > 1 ? `${group.title}（${group.count} 项）` : group.title));
-  const body = [
-    reason,
-    filesLine,
-    named.length ? `请先核对：${named.join("；")}。` : null,
-  ].filter(Boolean).join("\n");
-  // Only clinical safety may interrupt (C1); anything the reader must check is
-  // attention; a clean delivery is information.
-  const severity = summary.safety > 0 ? "safety"
-    : failing > 0 || ["gated", "stopped", "capped", "upstream", "unknown"].includes(outcome) || run?.verification ? "attention"
-      : "info";
+  const claims = run?.claimSummary;
+  const pending = !finished ? 0
+    : claims && Number(claims.total) > 0 && Number.isFinite(Number(claims.unverified))
+      ? Math.max(0, Math.trunc(Number(claims.unverified)))
+      : summary.mustFix;
+  const status = credential ? "未完成"
+    : finished && pending > 0 ? "待核对" : STATUS_BY_OUTCOME[/** @type {keyof typeof STATUS_BY_OUTCOME} */ (outcome)] ?? "未完成";
+  const label = runLabel(run);
+  const title = summary.safety > 0 ? `${label}：有 ${summary.safety} 处用药安全提示` : `${label} ${status}`;
+  let body;
+  if (credential) {
+    body = `缺少 ${credential.title} 的访问凭据。可在「设置 → 数据源」填入后重新发起。`;
+  } else if (!finished) {
+    body = errorCodeMessage(run?.errorCode ?? "");
+  } else {
+    // What was delivered, apart from what the run wrote for itself on the way
+    // (`artifactCounts`, runArtifacts.mjs): the aspirin run of 2026-09-19 left
+    // five deliverable files, one revision note and 24 scratch scripts, and
+    // 「产出 30 个文件」 counted the scripts as products.
+    const counts = run?.artifactCounts;
+    const files = counts && Number.isFinite(counts.deliverable)
+      ? Number(counts.deliverable) + (Number(counts.revisionNotes) || 0)
+      : [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length;
+    const where = files > 0 ? `报告和 ${files} 个文件已在对话里` : "结果已在对话里";
+    body = pending > 0 ? `${where}，${pending} 处引用待核对` : where;
+  }
+  // Only clinical safety may interrupt (C1); something the reader must check,
+  // or a run that did not finish, is attention; a clean delivery is
+  // information.
+  const severity = summary.safety > 0 ? "safety" : !finished || credential || pending > 0 ? "attention" : "info";
   return {
-    outcome, title: credential ? "研究中断：缺少数据源凭据" : title, body, severity,
+    outcome, status: summary.safety > 0 ? `有 ${summary.safety} 处用药安全提示` : status, title, body, severity, pending,
     counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice },
   };
 }
@@ -257,7 +262,7 @@ function runLabel(run) {
  * Two endings are not: a dispatch refused before it started was already
  * answered by the request that made it, and a run the researcher stopped is
  * not news to them. One the platform stopped is, and says so
- * (「研究运行已被平台终止」). A stop the kernel reported without saying who
+ * (「〈研究标题〉 已停止」). A stop the kernel reported without saying who
  * asked is counted as the person's: the platform's own stops are recorded as
  * its own.
  * @param {Record<string, any>} run
@@ -280,6 +285,29 @@ export function runFinishedNotifies(run) {
 /** How long a turn may take and still count as one the reader watched. */
 const WATCHED_TURN_MS = 120_000;
 
+/**
+ * Whether a finished run produces an inbox item at all.
+ *
+ * Only a person's own research does. An evaluation, and the platform's own
+ * background work — a lesson, a document being read — leave no item, not even
+ * one recorded quietly: those used to arrive already read and folded under
+ * 「自动运行 N 条（评测与主动科研，不计入未读）」, a backstage count in the
+ * reader's inbox (plan 2026-09-23 §5.8). An autopilot episode, or the
+ * verification of one of its claims, reports through its digest, which is an
+ * ordinary notice (`AutopilotService.createDigest`).
+ *
+ * @param {Record<string, any>} run
+ * @param {{ internalProject?: boolean, evaluation?: boolean, automated?: boolean, autopilotOwned?: boolean }} [origin]
+ *   `internalProject` — the run is in one of the account's own background
+ *   projects (`isInternalProject`); `evaluation` — its runtime is an
+ *   evaluation cell's; `automated` — a harness or autopilot dispatched it
+ *   (`automatedRun`); `autopilotOwned` — an autopilot episode owns it.
+ */
+export function runFinishedReachesInbox(run, { internalProject = false, evaluation = false, automated = false, autopilotOwned = false } = {}) {
+  if (internalProject || evaluation || automated || autopilotOwned) return false;
+  return runFinishedNotifies(run);
+}
+
 /** @param {{ outcome: string, severity: string }} notice */
 function routineCompletion(notice) {
   return (notice.outcome === "delivered" || notice.outcome === "qualified") && notice.severity !== "safety";
@@ -288,40 +316,40 @@ function routineCompletion(notice) {
 /**
  * The inbox item a finished run produces, grouped by project and day.
  *
- * Routine completions — delivered, or delivered for review, with nothing
- * touching clinical safety — share one item per project per day
+ * Routine completions — finished, with nothing touching clinical safety —
+ * share one item per project per day
  * (`run-finished:<project>:<YYYY-MM-DD, Asia/Shanghai>`), so an afternoon of
- * ten runs is one line saying ten instead of ten lines (2026-09-18 plan §8.5;
- * 29 of the 31 unread items the walk found were machine-generated). A safety
- * finding and every run that did not deliver stand alone: they are the
- * 「需要你」 moment and must not be folded under a count.
+ * ten runs is one line saying ten instead of ten lines (2026-09-18 plan §8.5):
+ * 「8 项研究已完成，其中 1 项有 1 处引用待核对」, and the body only names them,
+ * the ones with something to check first. A safety finding and every run that
+ * did not finish stand alone: they are the 「需要你」 moment and must not be
+ * folded under a count.
  *
- * `peers` are the project's other finished runs of the same kind — silent
- * with silent, attended with attended — and the group is recomposed from them
- * each time, so the item always says what the ledger says. The body is counts
- * and run titles; no finding's sentence reaches it.
+ * `peers` are the project's other finished runs a person asked for, and the
+ * group is recomposed from them each time, so the item always says what the
+ * ledger says.
  *
  * @param {{ id: string }} project
  * @param {Record<string, any>} run
- * @param {{ peers?: readonly Record<string, any>[], silent?: boolean }} [options]
+ * @param {{ peers?: readonly Record<string, any>[] }} [options]
  */
-export function runFinishedInboxItem(project, run, { peers = [], silent = false } = {}) {
+export function runFinishedInboxItem(project, run, { peers = [] } = {}) {
   const notice = runFinishedNotice(run);
   const base = {
     noticeType: "notify",
     // Without an action the card renders no control at all, so a notice that
-    // names a run could not open it. The frontend turns this id into
-    // `/app/runs?run=<id>`; resolving it here would mean knowing its routes.
-    actions: [{ id: "open", label: "查看运行", style: "primary" }],
+    // names a run could not open it. The frontend turns this id into the
+    // run's conversation; resolving it here would mean knowing its routes.
+    // One label for it everywhere (plan 2026-09-23 C §1.14).
+    actions: [{ id: "open", label: "打开对话", style: "primary" }],
     projectId: project.id,
     source: { type: "run", id: run.id },
     idempotencyKey: `run-finished:${run.id}`,
     severity: notice.severity,
-    silent,
   };
   const day = shanghaiDay(run.finishedAt ?? run.startedAt);
   if (!routineCompletion(notice) || !day) return { ...base, title: notice.title, body: notice.body };
-  const groupKey = `run-finished:${project.id}:${day}${silent ? ":silent" : ""}`;
+  const groupKey = `run-finished:${project.id}:${day}`;
   const seen = new Set([run.id]);
   const members = [{ run, notice }];
   for (const peer of peers) {
@@ -332,29 +360,19 @@ export function runFinishedInboxItem(project, run, { peers = [], silent = false 
     members.push({ run: peer, notice: peerNotice });
   }
   if (members.length === 1) return { ...base, groupKey, title: notice.title, body: notice.body };
-  members.sort((left, right) => String(right.run.finishedAt ?? "").localeCompare(String(left.run.finishedAt ?? "")));
-  const review = members.filter((member) => member.notice.outcome === "qualified");
-  const failing = review.reduce((sum, member) => sum + member.notice.counts.safety + member.notice.counts.mustFix, 0);
-  const [, month, date] = day.split("-").map(Number);
-  const parts = [review.length ? `${review.length} 项有结论要核对` : null, members.length - review.length ? `${members.length - review.length} 项已完成` : null].filter(Boolean);
-  const shown = members.slice(0, 3).map(({ run: member, notice: memberNotice }) => {
-    const memberFailing = memberNotice.counts.safety + memberNotice.counts.mustFix;
-    const state = memberNotice.outcome !== "qualified" ? "已完成" : memberFailing ? `已交付，${memberFailing} 条结论要核对` : "已交付";
-    return `· ${runLabel(member)}：${state}`;
-  });
-  const body = [
-    `其中 ${parts.join("，")}。`,
-    failing > 0 ? `这些研究里共有 ${failing} 条结论没能逐字核对；引用前请在报告的「依据」里核对带 ⚠ 的结论。` : null,
-    ...shown,
-    members.length > shown.length ? `另有 ${members.length - shown.length} 项。` : null,
-  ].filter(Boolean).join("\n");
-  const severity = members.some((member) => member.notice.severity === "attention") ? "attention" : "info";
+  // The ones with something to check first, so the names the body leads with
+  // are the ones the title counts; newest first within each.
+  members.sort((left, right) => Number(right.notice.pending > 0) - Number(left.notice.pending > 0)
+    || String(right.run.finishedAt ?? "").localeCompare(String(left.run.finishedAt ?? "")));
+  const checking = members.filter((member) => member.notice.pending > 0);
+  const pending = checking.reduce((sum, member) => sum + member.notice.pending, 0);
+  const named = members.slice(0, 3).map((member) => runLabel(member.run));
   return {
     ...base,
     groupKey,
-    title: `${month}月${date}日完成 ${members.length} 项研究`,
-    body,
-    severity,
+    title: `${members.length} 项研究已完成${checking.length ? `，其中 ${checking.length} 项有 ${pending} 处引用待核对` : ""}`,
+    body: `${named.join("、")}${members.length > named.length ? ` 等 ${members.length} 项` : ""}`,
+    severity: checking.length ? "attention" : "info",
   };
 }
 
@@ -404,13 +422,13 @@ export class NotificationService {
     // attention; a plain notice defaults to information.
     const severity = input.severity == null ? (noticeType === "notify" ? "info" : "attention") : String(input.severity);
     if (!INBOX_SEVERITIES.includes(severity)) throw new HttpError(400, "notification_payload_invalid", "Invalid severity.");
-    if (input.silent != null && typeof input.silent !== "boolean") throw new HttpError(400, "notification_payload_invalid", "Invalid silent flag.");
-    // Recorded without notifying anyone: stored already read, so no count ever
-    // includes it. Automated work (an evaluation cell, an autopilot episode)
-    // and platform housekeeping use it — the inbox keeps the record without
-    // spending the reader's attention on it (C1).
-    const silent = input.silent === true;
-    if (silent && noticeType !== "notify") throw new HttpError(400, "notification_payload_invalid", "Only a notice can be recorded silently.");
+    // There is no quiet record any more (plan 2026-09-23 §5.8). Automated work
+    // and platform housekeeping used to be stored already read and shown under
+    // 「自动运行 N 条」; now they leave no item at all. A caller that still asks
+    // for one is refused, not turned into a notice that lights the bell.
+    if (input.silent === true) {
+      throw new HttpError(400, "notification_payload_invalid", "Silent inbox records are retired: work nobody asked about leaves no inbox item.");
+    }
     const values = {
       id: input.idempotencyKey == null ? randomUUID() : `notification:${createHash("sha256")
         .update(JSON.stringify([user, text(input.idempotencyKey, "idempotency key", 200)])).digest("hex")}`,
@@ -418,7 +436,7 @@ export class NotificationService {
       noticeType, priority: NOTICE_PRIORITY[noticeType], title: text(input.title, "title", 150), body: text(input.body, "body", 8000),
       actions: JSON.stringify(actionList), source: JSON.stringify(source(input.source)),
       groupKey: input.groupKey == null ? null : text(input.groupKey, "group key", 200),
-      dueAt: timestamp(input.dueAt, "due time"), defaultAction, createdAt, severity, silent,
+      dueAt: timestamp(input.dueAt, "due time"), defaultAction, createdAt, severity,
     };
     await migrateNotifications(this.database);
     const saved = await this.database.transaction(async (client) => {
@@ -444,9 +462,9 @@ export class NotificationService {
         // One row per key. The key carries its own period — a run-finished
         // key names the project and the day — so there is no time window
         // here, and a row the reader already read or opened is brought back
-        // rather than joined by a second one: 「9月18日完成 4 项研究」 is one item
+        // rather than joined by a second one: 「4 项研究已完成」 is one item
         // that says four, not a read one saying three beside a new one saying
-        // one. A silent event joins without bringing anything back.
+        // one.
         const existing = await client.query(`SELECT * FROM evimed_inbox.notifications
           WHERE user_id=$1 AND notice_type='notify' AND group_key=$2 AND project_id IS NOT DISTINCT FROM $3::text
           ORDER BY created_at DESC,id DESC FOR UPDATE LIMIT 1`, [values.user, values.groupKey, values.projectId]);
@@ -454,14 +472,11 @@ export class NotificationService {
           const current = existing.rows[0];
           const strongest = severityRank[values.severity] > (severityRank[current.severity] ?? 0) ? values.severity : current.severity;
           const merged = await client.query(`UPDATE evimed_inbox.notifications SET title=$2,body=$3,actions=$4::jsonb,source=$5::jsonb,
-            severity=$6,silent=(silent AND $7::boolean),
-            read_at=CASE WHEN $7::boolean THEN read_at ELSE NULL END,
-            resolved_at=CASE WHEN $7::boolean THEN resolved_at ELSE NULL END,
-            resolution=CASE WHEN $7::boolean THEN resolution ELSE NULL END,
+            severity=$6,read_at=NULL,resolved_at=NULL,resolution=NULL,
             event_count=LEAST(event_count+1,10000),revision=revision+1,
-            created_at=GREATEST(created_at,$8::timestamptz),updated_at=$8::timestamptz
+            created_at=GREATEST(created_at,$7::timestamptz),updated_at=$7::timestamptz
             WHERE id=$1 RETURNING *`,
-          [current.id, values.title, values.body, values.actions, values.source, strongest, values.silent, values.createdAt]);
+          [current.id, values.title, values.body, values.actions, values.source, strongest, values.createdAt]);
           if (input.idempotencyKey != null) {
             await client.query(`INSERT INTO evimed_inbox.merged_events(id,notification_id,created_at) VALUES($1,$2,$3::timestamptz)
               ON CONFLICT(id) DO NOTHING`, [values.id, current.id, values.createdAt]);
@@ -471,13 +486,13 @@ export class NotificationService {
       }
       const inserted = await client.query(`INSERT INTO evimed_inbox.notifications
         (id,user_id,project_id,notice_type,priority,title,body,actions,source,group_key,due_at,default_action,channels_sent,
-         severity,silent,read_at,created_at,updated_at)
+         severity,created_at,updated_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,jsonb_build_object('in-app',$13::text),
-         $14,$15::boolean,CASE WHEN $15::boolean THEN $13::timestamptz ELSE NULL END,$13::timestamptz,$13::timestamptz)
+         $14,$13::timestamptz,$13::timestamptz)
         ON CONFLICT(id) DO NOTHING RETURNING *`,
       [values.id, values.user, values.projectId, values.noticeType, values.priority, values.title, values.body,
         values.actions, values.source, values.groupKey, values.dueAt, values.defaultAction, values.createdAt,
-        values.severity, values.silent]);
+        values.severity]);
       if (inserted.rowCount && values.groupKey && input.idempotencyKey != null) {
         // The first event of a group is recorded like every later one, so a
         // replay of it is recognised after the group has changed its content.
@@ -493,7 +508,7 @@ export class NotificationService {
     // After the commit, never inside it: a push is a network call, and the
     // channel's outbox is idempotent per (item, event), so announcing a
     // replayed item costs nothing. The hook never fails the write.
-    if (this.channels && saved && !saved.silent) {
+    if (this.channels && saved) {
       try { this.channels.onChange(saved); } catch { /* isolated: evimed_im_events_total{kind="notice_hook_failed"} */ }
     }
     return saved;
@@ -537,8 +552,7 @@ export class NotificationService {
    *
    * Scoped like the list: every project of the account unless a project is
    * named, and then that project plus the account-wide items (a user-scoped
-   * memory notice belongs to no project and to every one). A silent item was
-   * stored read and is never here.
+   * memory notice belongs to no project and to every one).
    * @param {string} userId @param {{ projectId?: string | null }} [options]
    */
   async unreadCount(userId, { projectId = null } = {}) {
