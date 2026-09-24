@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import {
-  FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_ITEM_FLAG_LABELS_ZH,
-  FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH, FRONTIER_SPECIALTY_LABELS_ZH,
-  frontierScoreLevel,
+  FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
+  FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
+  FRONTIER_SPECIALTY_LABELS_ZH, frontierScoreLevel, frontierSourceDisplayName,
 } from "@evimed/domain";
+import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.mjs";
+import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
+import { FRONTIER_LANE_FLOOR_SCORE, frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
 import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
@@ -47,9 +50,23 @@ import { HttpError } from "./security.mjs";
  *   embedder exist — fifty candidates each, fused by reciprocal rank (k = 60,
  *   as `kbIndex.mjs`). `mode` says which ran. Searching 精选 searches 全部 and
  *   marks what was selected (§4.2).
- * - `levels` are display bands, never numbers (§4.3: no score on a card),
- *   banded by the domain's `frontierScoreLevel`: two thirds of a dimension's
- *   maximum or above is `high`, one third or above `medium`, below that `low`.
+ * - A card carries the editorial total, `score` (0–100), and the band it reads
+ *   in, `scoreBand` (plan 2026-09-23 §6.2 编辑评分: `high` at or above the
+ *   selection line, `medium` from 60, `low` below); a safety alert carries
+ *   neither — it is selected whatever it scored. The four dimensions stay
+ *   internal: `levels` are their display bands, never their numbers, banded by
+ *   the domain's `frontierScoreLevel` (two thirds of a dimension's maximum or
+ *   above is `high`, one third or above `medium`, below that `low`).
+ * - A source reaches a reader by its institution's name, never the feed it is
+ *   read through (`frontierSourceDisplayName`, plan 2026-09-23 §6.5 #5): the
+ *   card, 「另有 N 家报道」, the event page, the daily and its Markdown. 「另有
+ *   N 家」 counts institutions — another feed of the card's own institution is
+ *   not another report — and names the first five.
+ * - Search sorts by relevance, or by time (`sort=time`): the items that carry
+ *   the words — the keyword and trigram legs' results — newest first. The
+ *   vector leg ranks by meaning and matches everything a little, so in time
+ *   order it would put the newest loosely related item first; it stands in
+ *   only when the words matched nothing.
  * - Every query runs with a five-second statement timeout of its own: the
  *   control plane sets none, and a list that cannot answer in five seconds is
  *   better refused than held (§10.4.6).
@@ -94,7 +111,23 @@ const PUBLIC_ID = /^[a-z0-9]{12,32}$/;
 export const FRONTIER_WINDOWS = Object.freeze({ "24h": 24 * 3_600_000, "3d": 3 * 86_400_000, "7d": 7 * 86_400_000, "30d": 30 * 86_400_000 });
 const VIEWS = Object.freeze(["selected", "all"]);
 const AXES = Object.freeze(["timeline", "published"]);
+/** How a search is ordered; a list is always newest first. */
+const SORTS = Object.freeze(["relevance", "time"]);
+/** The hot rankings a reader may ask for (`GET /hot?window=`). */
+export const FRONTIER_HOT_WINDOWS = Object.freeze(["current", ...Object.keys(FRONTIER_HOT_PERIODS)]);
 const FOLLOW_KINDS = Object.freeze(["topic", "specialty", "drug", "source", "event"]);
+
+/**
+ * The band an editorial score reads in (plan 2026-09-23 §6.2): `high` at or
+ * above the selection line, `medium` from the lane floor (60) up to it, `low`
+ * below; null without a score.
+ * @param {unknown} score @param {number} threshold @returns {"high" | "medium" | "low" | null}
+ */
+export function frontierScoreBand(score, threshold) {
+  if (score == null || score === "" || !Number.isFinite(Number(score))) return null;
+  const value = Number(score);
+  return value >= threshold ? "high" : value >= FRONTIER_LANE_FLOOR_SCORE ? "medium" : "low";
+}
 
 /**
  * Whether this account sees the module at all: on, and either open to every
@@ -241,13 +274,17 @@ export function normalizeItemsQuery(params, vocabulary) {
   const limitValue = params.get("limit");
   const limit = limitValue == null || limitValue === "" ? DEFAULT_LIMIT : Number(limitValue);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw invalid("limit");
-  return { view, by, lane, specialty, window, q: rawQuery || null, starred: starredValue === "1", safety: safetyValue === "1", cursor, limit };
+  // A list is newest first whatever it is asked; `sort` orders a search.
+  const sort = params.get("sort") || "relevance";
+  if (!SORTS.includes(sort)) throw invalid("sort");
+  return { view, by, lane, specialty, window, q: rawQuery || null, starred: starredValue === "1", safety: safetyValue === "1", cursor, limit, sort };
 }
 
 /** @typedef {ReturnType<typeof normalizeItemsQuery>} ItemsQuery */
 
 /** The filters a cursor was minted under, as a short fingerprint. @param {ItemsQuery} query */
-const filterPrint = (query) => shortHash(JSON.stringify([query.lane, query.specialty, query.window, query.starred, query.q, query.safety]));
+const filterPrint = (query) => shortHash(JSON.stringify([query.lane, query.specialty, query.window, query.starred, query.q, query.safety,
+  query.q ? query.sort : "relevance"]));
 
 /** @param {Record<string, unknown>} value */
 const encodeCursor = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -325,20 +362,27 @@ export function frontierCardFacts(raw) {
   return facts;
 }
 
+// 「另有 N 家报道」 is by institution (plan 2026-09-23 §6.2): one row per other
+// owner entity — its latest mention — and never the card's own institution
+// under another feed. `mention_count` is how many there are; `mentions` names
+// the five latest.
 const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.lang, i.lane, i.source_type,
   i.evidence_type, i.evidence_basis, i.specialties, i.entities, i.flags, i.doi, i.pmid, i.registry_ids, i.canonical_url,
   i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification,
-  i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.primary_source_id,
-  s.name AS source_name, s.homepage AS source_homepage,
+  i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.score_total, i.primary_source_id,
+  s.name AS source_name, s.owner_entity AS source_owner, s.homepage AS source_homepage,
   t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url, t.enrichment - '{${CARD_HIDDEN_ENRICHMENT.join(",")}}'::text[] AS card_enrichment,
   CASE WHEN e.report_count > 1 THEN e.public_id END AS event_public_id, e.title_zh AS event_title,
-  (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceId', r.source_id, 'sourceName', r.name, 'url', r.url) ORDER BY r.rank), '[]'::jsonb)
-     FROM (SELECT d.source_id, d.name, d.url, row_number() OVER (ORDER BY d.published_at DESC NULLS LAST, d.source_id) AS rank
-             FROM (SELECT DISTINCT ON (im.source_id) im.source_id, ms.name, im.url, im.published_at
+  (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceId', r.source_id, 'sourceName', r.name, 'ownerEntity', r.owner_entity, 'url', r.url)
+      ORDER BY r.rank), '[]'::jsonb)
+     FROM (SELECT d.source_id, d.name, d.owner_entity, d.url, row_number() OVER (ORDER BY d.published_at DESC NULLS LAST, d.source_id) AS rank
+             FROM (SELECT DISTINCT ON (ms.owner_entity) im.source_id, ms.name, ms.owner_entity, im.url, im.published_at
                      FROM evimed_frontier.item_mentions im JOIN evimed_frontier.sources ms ON ms.id = im.source_id
-                    WHERE im.item_id = i.id AND im.source_id <> i.primary_source_id AND ms.enabled
-                    ORDER BY im.source_id, im.published_at DESC NULLS LAST) d
-            ORDER BY d.published_at DESC NULLS LAST, d.source_id LIMIT 5) r) AS mentions`;
+                    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled
+                    ORDER BY ms.owner_entity, im.published_at DESC NULLS LAST, im.source_id) d
+            ORDER BY d.published_at DESC NULLS LAST, d.source_id LIMIT 5) r) AS mentions,
+  (SELECT count(DISTINCT ms.owner_entity)::integer FROM evimed_frontier.item_mentions im JOIN evimed_frontier.sources ms ON ms.id = im.source_id
+    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled) AS mention_count`;
 
 const ITEM_FROM = `evimed_frontier.items i
   JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -375,6 +419,8 @@ export class FrontierService {
     this.daily = daily;
     this.profiles = profiles;
     this.actions = actions;
+    /** The selection line a card's score band is read against (the pipeline's own). */
+    this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
     this.cache = new Map();
     /** @type {{ at: number, value: any } | null} */
@@ -464,7 +510,8 @@ export class FrontierService {
         .map((key) => ({ key, label: labels.specialties[key] })),
       flags: (row.flags ?? []).filter((key) => Object.hasOwn(labels.flags, key)).map((key) => ({ key, label: labels.flags[key] })),
       entities: { drugs: stringList(entities.drugs), trials: stringList(entities.trials), orgs: stringList(entities.orgs), diseases: stringList(entities.diseases) },
-      source: { id: row.primary_source_id, name: row.source_name, homepage: row.source_homepage ?? null },
+      source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
+        homepage: row.source_homepage ?? null },
       url: row.canonical_url,
       doi: row.doi ?? null,
       pmid: row.pmid ?? null,
@@ -477,6 +524,9 @@ export class FrontierService {
       selectedRule: row.selected ? row.selected_rule ?? null : null,
       safetyAlert: row.safety_alert === true,
       verification: row.verification,
+      // The editorial total and its band; a safety alert is not scored for a reader.
+      score: row.safety_alert === true || row.score_total == null ? null : Number(row.score_total),
+      scoreBand: row.safety_alert === true ? null : frontierScoreBand(row.score_total, this.selectThreshold),
       levels: {
         authority: frontierScoreLevel("authority", row.score_authority),
         impact: frontierScoreLevel("impact", row.score_impact),
@@ -485,7 +535,12 @@ export class FrontierService {
       },
       openAccess,
       facts: frontierCardFacts(row.card_enrichment),
-      alsoReportedBy: Array.isArray(row.mentions) ? row.mentions.slice(0, 5) : [],
+      alsoReportedBy: (Array.isArray(row.mentions) ? row.mentions.slice(0, 5) : []).map((/** @type {any} */ mention) => ({
+        sourceId: mention.sourceId,
+        sourceName: frontierSourceDisplayName({ id: mention.sourceId, name: mention.sourceName, ownerEntity: mention.ownerEntity }),
+        url: mention.url,
+      })),
+      alsoReportedCount: Number(row.mention_count ?? 0),
       event: row.event_public_id ? { id: row.event_public_id, title: row.event_title } : null,
     };
   }
@@ -534,7 +589,7 @@ export class FrontierService {
   /**
    * The fused ranking of a search, best first (at most three legs of fifty).
    * @param {ItemsQuery} query @param {string} userId
-   * @returns {Promise<{ ids: string[], mode: "keyword" | "hybrid", legs: Record<string, number>, vectorSkipped?: string }>}
+   * @returns {Promise<{ ids: string[], lexical: string[], mode: "keyword" | "hybrid", legs: Record<string, number>, vectorSkipped?: string }>}
    */
   async #searchRanking(query, userId) {
     const capabilities = await this.ready();
@@ -602,11 +657,35 @@ export class FrontierService {
     const ids = [...fused.entries()]
       .sort((left, right) => right[1].score - left[1].score || left[1].first - right[1].first || Number(right[0]) - Number(left[0]))
       .map(([id]) => id);
+    // What the words matched, in the fused order: what a search by time lists.
+    const worded = new Set([...(legs.keyword ?? []), ...(legs.trigram ?? [])]);
     return {
-      ids, mode: legs.vector ? "hybrid" : "keyword",
+      ids, mode: legs.vector ? "hybrid" : "keyword", lexical: ids.filter((id) => worded.has(id)),
       legs: Object.fromEntries(Object.entries(legs).map(([name, ranked]) => [name, ranked.length])),
       ...(vectorSkipped ? { vectorSkipped } : {}),
     };
+  }
+
+  /**
+   * A search's matches newest first (`sort=time`): the items the words matched
+   * — the keyword and trigram legs — on the list's own axis, or the fused
+   * ranking when the words matched nothing (see the module note). Kept for
+   * the next pages, as the ranking is.
+   * @param {{ ids: string[], lexical: string[], mode: "keyword" | "hybrid" }} ranking @param {ItemsQuery} query
+   * @param {number} version @param {number} clock
+   * @returns {Promise<{ ids: string[], mode: "keyword" | "hybrid" }>}
+   */
+  async #byTime(ranking, query, version, clock) {
+    const key = query.starred ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock]);
+    const cached = key ? this.#cached(key, version) : null;
+    if (cached) return cached;
+    const candidates = ranking.lexical.length ? ranking.lexical : ranking.ids;
+    const axis = query.by === "published" ? "i.published_at" : "i.timeline_at";
+    const ids = candidates.length ? await this.#transaction(async (client) => (await client.query(`SELECT i.id FROM evimed_frontier.items i
+      WHERE i.id = ANY($1::bigint[]) ORDER BY ${axis} DESC NULLS LAST, i.id DESC`, [candidates])).rows.map((/** @type {any} */ row) => String(row.id))) : [];
+    const value = { ids, mode: /** @type {"keyword" | "hybrid"} */ (ranking.lexical.length ? "keyword" : ranking.mode) };
+    if (key) this.#remember(key, version, value);
+    return value;
   }
 
   /**
@@ -666,7 +745,7 @@ export class FrontierService {
     }
     // Public content is shared by every reader; "only my stars" is not.
     const cacheKey = query.starred ? null : JSON.stringify([search ? "search" : "list", query.view, query.by, query.lane, query.specialty,
-      query.window, query.q, query.safety, query.cursor, query.limit, clock]);
+      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null]);
     let page = cacheKey ? this.#cached(cacheKey, versions.content) : null;
     if (!page) {
       if (search) {
@@ -680,11 +759,12 @@ export class FrontierService {
           catch (error) { this.counters.searchFailures += 1; throw error; }
           if (rankingKey) this.#remember(rankingKey, versions.content, ranking);
         }
-        const slice = ranking.ids.slice(offset, offset + query.limit);
+        const ordered = query.sort === "time" ? await this.#byTime(ranking, query, versions.content, clock) : ranking;
+        const slice = ordered.ids.slice(offset, offset + query.limit);
         const items = await this.#transaction((client) => this.#rowsById(client, slice));
-        const more = offset + query.limit < ranking.ids.length;
+        const more = offset + query.limit < ordered.ids.length;
         page = {
-          items, mode: ranking.mode,
+          items, mode: ordered.mode,
           next: more ? encodeCursor({ by: query.by, view: query.view, v: versions.content, f: filterPrint(query), o: offset + query.limit }) : null,
         };
       } else {
@@ -881,8 +961,8 @@ export class FrontierService {
     const cached = this.sourcesCache.get(key);
     if (cached && this.now().getTime() - cached.at < this.cacheTtlMs) return cached.value;
     const value = await this.#transaction(async (client) => {
-      const rows = (await client.query(`SELECT id, name, homepage, lane, source_type, access, egress, launch_tier, plugin_health,
-          last_ok_at, last_new_entry_at, entries_7d, enabled, retired_at, mirrored_at
+      const rows = (await client.query(`SELECT id, name, owner_entity, homepage, lane, source_type, access, egress, launch_tier, plugin_health,
+          last_ok_at, last_new_entry_at, entries_7d, selected_30d, enabled, retired_at, mirrored_at
         FROM evimed_frontier.sources ${operator ? "" : "WHERE enabled AND retired_at IS NULL"} ORDER BY lane, name, id`)).rows;
       const manifest = (await client.query(`SELECT value FROM evimed_frontier.meta WHERE key=$1`, [FRONTIER_META_KEYS.pluginManifest])).rows[0]?.value;
       const mirrored = (await client.query(`SELECT max(mirrored_at) AS at FROM evimed_frontier.sources`)).rows[0]?.at;
@@ -901,12 +981,19 @@ export class FrontierService {
     return value;
   }
 
-  /** @param {Record<string, any>} row */
+  /**
+   * One row of the sources list: the registry's name (the feed — what the list
+   * is a list of), the institution a reader knows it by, and how many of its
+   * items were selected in the last thirty days (「近 30 天精选」, recounted
+   * hourly by the worker).
+   * @param {Record<string, any>} row
+   */
   #source(row) {
     const health = Object.hasOwn(this.vocabulary.health, row.plugin_health) ? row.plugin_health : FRONTIER_FALLBACKS.health;
     return {
       id: row.id,
       name: row.name,
+      displayName: frontierSourceDisplayName({ id: row.id, name: row.name, ownerEntity: row.owner_entity }),
       homepage: row.homepage ?? null,
       lane: row.lane,
       laneLabel: this.vocabulary.lanes[row.lane] ?? row.lane,
@@ -920,6 +1007,7 @@ export class FrontierService {
       lastOkAt: iso(row.last_ok_at),
       lastNewEntryAt: iso(row.last_new_entry_at),
       entries7d: Number(row.entries_7d ?? 0),
+      selected30d: Number(row.selected_30d ?? 0),
       enabled: row.enabled === true,
       retired: row.retired_at != null,
     };
@@ -1084,11 +1172,37 @@ export class FrontierService {
     return this.profiles.forYou(user, (/** @type {{ id: string }} */ reader, /** @type {string[]} */ publicIds) => this.hydrate(reader, { publicIds }));
   }
 
-  /** The hot list (plan §4.4), or 404 `not_found` without the event layer. */
-  async hot() {
+  /**
+   * The hot list (plan §4.4, plan 2026-09-23 §6.2), or 404 `not_found` without
+   * the event layer. `window=current` (the default) is the latest snapshot's
+   * list — each event with its heat, rank change, badge and 24-hour trend —
+   * taken at `takenAt` over the 72 hours from `since`; `week` and `month` are
+   * that window's ranking, computed now (`takenAt`) from `since`. Shared by
+   * every reader, and kept a minute at most — never past a new list or new
+   * content, since the versions are in the key.
+   * @param {URLSearchParams} [params]
+   */
+  async hot(params = new URLSearchParams()) {
     if (!this.events) throw failure(404, "not_found", "Frontier route not found.");
-    const { events } = await this.events.hotList();
-    return { events };
+    const window = params.get("window") || "current";
+    if (!FRONTIER_HOT_WINDOWS.includes(window)) throw failure(400, "frontier_query_invalid", "The window parameter is invalid.");
+    const meta = await this.#transaction(async (client) => Object.fromEntries((await client.query(`SELECT key, value FROM evimed_frontier.meta
+      WHERE key = ANY($1::text[])`, [[FRONTIER_META_KEYS.contentVersion, FRONTIER_META_KEYS.hotVersion]])).rows
+      .map((/** @type {any} */ row) => [row.key, metaNumber(row.value)])));
+    const content = meta[FRONTIER_META_KEYS.contentVersion] ?? 0;
+    const key = JSON.stringify(["hot", window, meta[FRONTIER_META_KEYS.hotVersion] ?? 0]);
+    const cached = this.#cached(key, content);
+    if (cached) return cached;
+    let value;
+    if (window === "current") {
+      const { takenAt, events } = await this.events.hotList();
+      value = { window, takenAt, since: takenAt ? new Date(Date.parse(takenAt) - FRONTIER_HOT_WINDOW_HOURS * 3_600_000).toISOString() : null, events };
+    } else {
+      const period = await this.events.hotPeriod(window);
+      value = { window, takenAt: period.at, since: period.since, events: period.events };
+    }
+    this.#remember(key, content, value);
+    return value;
   }
 
   /**
@@ -1117,6 +1231,18 @@ export class FrontierService {
         reportCount: Number(event.report_count ?? 0),
         firstAt: iso(event.first_at),
         lastAt: iso(event.last_at),
+        // The side column (plan 2026-09-23 §6.2): the heat now (×10, rounded),
+        // the first-hand material, the institutions of the last 72 hours by
+        // kind, and the hourly trend — null, 「暂无走势」, under six hours old.
+        heat: read.heat,
+        hasPrimary: read.primary != null,
+        primary: read.primary,
+        institutions72h: {
+          total: read.institutions.total,
+          byType: read.institutions.byType.map(({ type, count }) => ({ type, count,
+            label: this.vocabulary.sourceTypes[type] ?? this.vocabulary.sourceTypes[FRONTIER_FALLBACKS.source_type] })),
+        },
+        trend: read.trend,
         items: read.members.flatMap((member) => (items.has(member.rowId) ? [{ ...items.get(member.rowId), role: member.role }] : [])),
         related: read.related,
       },
@@ -1134,7 +1260,16 @@ export class FrontierService {
 
   /**
    * One day's issue: its frozen structure with its items read now (a
-   * withdrawn item leaves, a retraction flag shows).
+   * withdrawn item leaves, a retraction flag shows), and what its header and
+   * footer need (plan 2026-09-23 §6.2 「9月23日 周三 · 52 条 · 约 9 分钟」,
+   * 「前一日 / 后一日」): the number of items it shows now, the minutes they take
+   * to read, and the issues on either side (a quiet day has none, so they are
+   * the nearest issues, not the calendar's neighbours).
+   *
+   * The Markdown a reader copies is rendered from the same live items, so it
+   * says what the page says — the institution's name, no withdrawn item — and
+   * not what was frozen at 07:30 (`dailies.markdown` keeps that, for the
+   * record). The lead's text and the AI minute are the issue's own.
    * @param {{ id: string }} user @param {string} day
    */
   async dailyIssue(user, day) {
@@ -1145,17 +1280,33 @@ export class FrontierService {
     const ids = [issue.lead?.itemId, ...issue.safety, ...sections.flatMap((section) => section.ids)].filter((id) => typeof id === "string");
     const items = await this.hydrate(user, { publicIds: [...new Set(ids)] });
     const leadItem = issue.lead?.itemId ? items.get(String(issue.lead.itemId)) : null;
+    const leadText = typeof issue.lead?.text === "string" ? issue.lead.text : null;
+    const shownSections = sections.map((section) => ({ lane: section.lane, laneLabel: this.vocabulary.lanes[section.lane] ?? section.lane,
+      items: section.ids.flatMap((id) => (items.has(id) ? [items.get(id)] : [])) })).filter((section) => section.items.length);
+    const safety = issue.safety.flatMap((/** @type {unknown} */ id) => (items.has(String(id)) ? [items.get(String(id))] : []));
+    const shown = [leadItem, ...safety, ...shownSections.flatMap((section) => section.items)].filter(Boolean);
+    const line = (/** @type {any} */ item) => ({ id: item.id, title_zh: item.titleZh, title_raw: item.titleRaw, summary_zh: item.summary,
+      source_name: item.source.name, canonical_url: item.url });
+    const markdown = frontierDailyMarkdown({
+      day: issue.day, window: { start: new Date(issue.windowStart), end: new Date(issue.windowEnd) },
+      timeZone: this.daily.timeZone || this.config.frontierTimeZone || "Asia/Shanghai",
+      lead: leadItem ? line(leadItem) : null, leadText, safety: safety.map(line),
+      sections: shownSections.map((section) => ({ lane: section.lane, rows: section.items.map(line) })), aiMinute: issue.aiMinute,
+    });
     return {
       daily: {
         day: issue.day, windowStart: issue.windowStart, windowEnd: issue.windowEnd, generatedAt: issue.generatedAt,
         lead: leadItem ? {
-          item: leadItem, text: typeof issue.lead.text === "string" ? issue.lead.text : null,
+          item: leadItem, text: leadText,
           event: issue.lead.eventId ? { id: String(issue.lead.eventId), title: String(issue.lead.eventTitle ?? leadItem.title) } : null,
         } : null,
-        sections: sections.map((section) => ({ lane: section.lane, laneLabel: this.vocabulary.lanes[section.lane] ?? section.lane,
-          items: section.ids.flatMap((id) => (items.has(id) ? [items.get(id)] : [])) })).filter((section) => section.items.length),
-        safety: issue.safety.flatMap((/** @type {unknown} */ id) => (items.has(String(id)) ? [items.get(String(id))] : [])),
-        aiMinute: issue.aiMinute, markdown: issue.markdown, itemCount: issue.itemCount,
+        sections: shownSections,
+        safety,
+        aiMinute: issue.aiMinute, markdown,
+        itemCount: new Set(shown.map((item) => item.id)).size,
+        readingMinutes: frontierReadingMinutes([leadText, issue.aiMinute, ...shown.flatMap((item) => [item.title, item.summary])]),
+        previousDay: issue.previousDay ?? null,
+        nextDay: issue.nextDay ?? null,
       },
     };
   }
@@ -1245,8 +1396,8 @@ export class FrontierService {
     if (!id || id.length > 120) throw failure(404, "frontier_source_not_found", "No such source.");
     const row = await this.#transaction(async (client) => {
       const updated = (await client.query(`UPDATE evimed_frontier.sources SET enabled=$2 WHERE id=$1
-        RETURNING id, name, homepage, lane, source_type, access, egress, launch_tier, plugin_health, last_ok_at, last_new_entry_at,
-          entries_7d, enabled, retired_at`, [id, enabled])).rows[0];
+        RETURNING id, name, owner_entity, homepage, lane, source_type, access, egress, launch_tier, plugin_health, last_ok_at, last_new_entry_at,
+          entries_7d, selected_30d, enabled, retired_at`, [id, enabled])).rows[0];
       if (!updated) throw failure(404, "frontier_source_not_found", "No such source.");
       await bumpFrontierVersion(client);
       return updated;

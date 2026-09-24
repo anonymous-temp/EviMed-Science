@@ -46,7 +46,18 @@
  *   report; ×1.3 when both Chinese and English sources report it, ×1.5 when it
  *   holds a primary source. No age cap: the window is the decay, so a safety
  *   signal reported for two weeks stays on the list while it is reported.
- *   Heat is never shown (plan §4.4) — only rank and the two counts.
+ *   Since 2026-09-24 it is shown (plan 2026-09-23 §6.5 #1), as heat × 10
+ *   rounded (`frontierHeatDisplay`); the numbers live in `@evimed/domain`,
+ *   whose 「热度怎么算」 text states them, so the page cannot explain one
+ *   thing while the list does another.
+ * - **Two trends, two sources.** Each hot snapshot records the heat of every
+ *   event that could be listed (`heats`, the first fifty eligible by heat), and
+ *   the list's 24-hour trend reads what was measured then. The event page's
+ *   72-hour trend is computed when read, the heat function at each hour over
+ *   the reports that existed by then — no table. Neither can keep to the
+ *   sources covered the whole time (AIHOT's 「可比范围」): the platform keeps
+ *   no history of when a source was enabled (`frontierHotReading` says what
+ *   softens that).
  * - **Three counts** (§14.8 #4): independent entities in the last 72 hours,
  *   every report over the event's life, distinct entities over its life. The
  *   page shows the first two.
@@ -70,17 +81,30 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { FRONTIER_MENTION_REGISTRY_IDS, FRONTIER_MENTION_SOURCE_TYPES } from "@evimed/domain";
+import {
+  FRONTIER_HEAT_BILINGUAL_FACTOR,
+  FRONTIER_HEAT_HALF_LIFE_HOURS,
+  FRONTIER_HEAT_PRIMARY_FACTOR,
+  FRONTIER_HOT_BADGE_HOURS,
+  FRONTIER_HOT_MIN_INSTITUTIONS,
+  FRONTIER_HOT_TREND,
+  FRONTIER_HOT_WINDOW_HOURS,
+  FRONTIER_MENTION_REGISTRY_IDS,
+  FRONTIER_MENTION_SOURCE_TYPES,
+  FRONTIER_SOURCE_TYPES,
+  frontierHeatDisplay,
+  frontierSourceDisplayName,
+} from "@evimed/domain";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** Half-life of an entity's contribution to heat (plan §4.4). */
-export const FRONTIER_HEAT_HALF_LIFE_HOURS = 36;
+/** Half-life of an entity's contribution to heat (plan §4.4); the number lives in `@evimed/domain`, which the page's 「热度怎么算」 states. */
+export { FRONTIER_HEAT_HALF_LIFE_HOURS };
 /** The window the independent-source count and hot eligibility read. */
-export const FRONTIER_EVENT_WINDOW_MS = 72 * HOUR;
+export const FRONTIER_EVENT_WINDOW_MS = FRONTIER_HOT_WINDOW_HOURS * HOUR;
 /** Clustering compares an item with clustered items this far back. */
 export const FRONTIER_CLUSTER_WINDOW_MS = 7 * DAY;
 /** Cosine at or above which two items are one event without asking. */
@@ -91,6 +115,22 @@ export const FRONTIER_CLUSTER_ASK_COSINE = 0.72;
 export const FRONTIER_CLUSTER_ASK_MAX = 3;
 /** Events on the hot list. */
 export const FRONTIER_HOT_SIZE = 10;
+/**
+ * Events a hot snapshot records the heat of: the eligible ones by heat, the
+ * ten on the list and the forty below them — so an event climbing onto the
+ * list already has a trend, and a snapshot stays a few kilobytes.
+ */
+export const FRONTIER_HOT_TRACKED = 50;
+/** A trend point or a comparison reads the latest snapshot at most this long before its time; older means no reading. */
+export const FRONTIER_HOT_SNAPSHOT_TOLERANCE_MS = HOUR;
+/**
+ * Time on the list counts at most this much per snapshot (two hot runs): a
+ * longer gap to the next snapshot is the worker being down, not the event
+ * being listed.
+ */
+export const FRONTIER_HOT_SNAPSHOT_SPAN_MS = 20 * MINUTE;
+/** The rankings a reader may ask for besides the current list, and how far back each reads. */
+export const FRONTIER_HOT_PERIODS = Object.freeze({ week: 7 * DAY, month: 30 * DAY });
 /** A fresh item waits this long for its vector before it is clustered without one. */
 export const FRONTIER_VECTOR_GRACE_MS = 30 * MINUTE;
 /** An item still owed its edit waits this long for its entities. */
@@ -216,8 +256,8 @@ export function frontierEventHeat({ members, now }) {
     heat += (authority / 5) * 2 ** (-hours / FRONTIER_HEAT_HALF_LIFE_HOURS);
   }
   const counts = frontierEventCounts({ members, now });
-  if (counts.bilingual) heat *= 1.3;
-  if (counts.hasPrimary) heat *= 1.5;
+  if (counts.bilingual) heat *= FRONTIER_HEAT_BILINGUAL_FACTOR;
+  if (counts.hasPrimary) heat *= FRONTIER_HEAT_PRIMARY_FACTOR;
   return heat;
 }
 
@@ -245,7 +285,18 @@ export const FRONTIER_HOT_SOLO_SCORE = 85;
  * @param {{ sourceCount72h: number, selectedRegulatorPrimary?: boolean }} counts
  */
 export function frontierHotEligible({ sourceCount72h, selectedRegulatorPrimary = false }) {
-  return sourceCount72h >= 2 || (sourceCount72h >= 1 && selectedRegulatorPrimary);
+  return sourceCount72h >= FRONTIER_HOT_MIN_INSTITUTIONS || (sourceCount72h >= 1 && selectedRegulatorPrimary);
+}
+
+/**
+ * The hot list's order: heat, then the latest report, then the lower id.
+ * @param {{ id: number | string, heat: number, lastAt: Date | string | null }} left
+ * @param {{ id: number | string, heat: number, lastAt: Date | string | null }} right
+ */
+function byHeat(left, right) {
+  return right.heat - left.heat
+    || new Date(right.lastAt ?? 0).getTime() - new Date(left.lastAt ?? 0).getTime()
+    || Number(left.id) - Number(right.id);
 }
 
 /**
@@ -255,11 +306,205 @@ export function frontierHotEligible({ sourceCount72h, selectedRegulatorPrimary =
  * @param {T[]} events @returns {T[]}
  */
 export function frontierRankHot(events) {
-  return events.filter((event) => event.eligible)
-    .sort((left, right) => right.heat - left.heat
-      || new Date(right.lastAt ?? 0).getTime() - new Date(left.lastAt ?? 0).getTime()
-      || Number(left.id) - Number(right.id))
-    .slice(0, FRONTIER_HOT_SIZE);
+  return events.filter((event) => event.eligible).sort(byHeat).slice(0, FRONTIER_HOT_SIZE);
+}
+
+/**
+ * What a hot snapshot records besides the list (plan 2026-09-23 §6.5 #2):
+ * the heat of each eligible event in the list's own order, the first fifty —
+ * the ten listed and those just below — by public id, to four decimals.
+ * @param {Array<{ id: number | string, publicId: string, heat: number, lastAt: Date | string | null, eligible: boolean }>} events
+ * @returns {Record<string, number>}
+ */
+export function frontierTrackedHeats(events) {
+  return Object.fromEntries(events.filter((event) => event.eligible && Number.isFinite(event.heat)).sort(byHeat).slice(0, FRONTIER_HOT_TRACKED)
+    .map((event) => [event.publicId, Math.round(event.heat * 10_000) / 10_000]));
+}
+
+/**
+ * @typedef {{ at: Date | string, ranking?: unknown, heats?: unknown }} FrontierHotSample
+ *   One snapshot as a trend point or a comparison reads it: `at` the point's
+ *   own time (the snapshot is the latest one at most an hour before it).
+ */
+
+/**
+ * An event's rank and recorded heat in one snapshot, under any of its public
+ * ids — its own, and those of events folded into it since, which the
+ * snapshot may name instead: the best rank and the highest heat among them.
+ * @param {FrontierHotSample | null | undefined} sample @param {string[]} ids
+ * @returns {{ rank: number | null, heat: number | null }}
+ */
+export function frontierSnapshotReading(sample, ids) {
+  const ranking = Array.isArray(sample?.ranking) ? sample.ranking : [];
+  const heats = sample?.heats && typeof sample.heats === "object" && !Array.isArray(sample.heats)
+    ? /** @type {Record<string, unknown>} */ (sample.heats) : {};
+  let rank = null;
+  let heat = null;
+  for (const id of ids) {
+    for (const entry of ranking) {
+      const value = Number(entry?.rank);
+      if (String(entry?.eventId ?? "") === id && Number.isSafeInteger(value) && value > 0 && (rank == null || value < rank)) rank = value;
+    }
+    const recorded = Object.hasOwn(heats, id) ? Number(heats[id]) : Number.NaN;
+    if (Number.isFinite(recorded) && (heat == null || recorded > heat)) heat = recorded;
+  }
+  return { rank, heat };
+}
+
+/**
+ * A hot event's rank change against the list of six hours before (plan
+ * 2026-09-23 §6.2 「↑2 / 新」): places gained (negative when lost), `"new"`
+ * when it was not on that list, null when there is no list that old to read.
+ * @param {{ rank: number, before: { rank: number | null } | null }} input
+ * @returns {number | "new" | null}
+ */
+export function frontierRankChange({ rank, before }) {
+  if (!before) return null;
+  if (before.rank == null) return "new";
+  return before.rank - rank;
+}
+
+/**
+ * The one badge a hot event may carry (plan 2026-09-23 §6.2): 「新」 when its
+ * first report is at most twelve hours older than the list; else 「升温」 when
+ * it is placed higher than six hours before — including not having been on
+ * that list — or its shown heat is higher than the heat recorded for it then;
+ * else none. Heats are compared as shown (×10, rounded), so a rise too small
+ * to see is not called one. No list six hours old, no 「升温」.
+ * @param {{ firstAt: Date | string | null, takenAt: Date | string, rank: number, heat: number | null,
+ *           before: { rank: number | null, heat: number | null } | null }} input
+ * @returns {"new" | "rising" | null}
+ */
+export function frontierHotBadge({ firstAt, takenAt, rank, heat, before }) {
+  const taken = new Date(takenAt).getTime();
+  const first = firstAt == null ? Number.NaN : new Date(firstAt).getTime();
+  if (Number.isFinite(first) && taken - first <= FRONTIER_HOT_BADGE_HOURS.new * HOUR) return "new";
+  if (!before) return null;
+  if (before.rank == null || rank < before.rank) return "rising";
+  if (before.heat != null && heat != null && heat > before.heat) return "rising";
+  return null;
+}
+
+/**
+ * What the hot list says about one listed event beyond its rank, from the
+ * snapshots (plan 2026-09-23 §6.5 #1, #2): the heat shown (×10, rounded), the
+ * rank change and the badge against the list six hours before, and the
+ * 24-hour trend — seven points four hours apart, oldest first, ending with the
+ * list itself — or null, 「暂无走势」, when the snapshot six hours before did
+ * not record the event's heat: less history than that is not a trend.
+ *
+ * Limitation, said here because the page cannot say it better: AIHOT compares
+ * a trend over the sources covered the whole time (「可比范围」). A snapshot
+ * holds the heat measured over the sources enabled then, and the platform keeps
+ * no history of when a source was enabled or switched off, so the trend cannot
+ * be cut to sources covered throughout. What softens it: a source the plugin
+ * adds brings no backlog (its first contact is `backfill`, never an item), so
+ * it enters a trend with what it reports from then on, as new coverage.
+ * @param {{ rank: number, ids: string[], firstAt: Date | string | null, fallbackHeat?: number | null,
+ *           latest: FrontierHotSample, compare: FrontierHotSample | null, earlier: Array<FrontierHotSample | null> }} input
+ *   `ids` the event's public id and those of events folded into it; `earlier` the
+ *   trend's points before the list, oldest first (a missing snapshot is null).
+ */
+export function frontierHotReading({ rank, ids, firstAt, fallbackHeat = null, latest, compare, earlier }) {
+  const now = frontierSnapshotReading(latest, ids);
+  // A snapshot from before snapshots recorded heat: the event's stored heat,
+  // which that same run wrote.
+  const heat = frontierHeatDisplay(now.heat ?? fallbackHeat);
+  const then = compare ? frontierSnapshotReading(compare, ids) : null;
+  const before = then ? { rank: then.rank, heat: frontierHeatDisplay(then.heat) } : null;
+  const trend = then?.heat == null ? null : [
+    ...earlier.map((sample, index) => ({
+      at: new Date(sample?.at ?? new Date(latest.at).getTime() - (earlier.length - index) * FRONTIER_HOT_TREND.stepHours * HOUR).toISOString(),
+      heat: sample ? frontierHeatDisplay(frontierSnapshotReading(sample, ids).heat) : null,
+    })),
+    { at: new Date(latest.at).toISOString(), heat },
+  ];
+  return {
+    heat,
+    rankChange: frontierRankChange({ rank, before }),
+    badge: frontierHotBadge({ firstAt, takenAt: latest.at, rank, heat, before }),
+    trend,
+  };
+}
+
+/**
+ * The week's or the month's ranking (plan 2026-09-23 §6.2, research §8.1
+ * #10), computed when read: independent institutions reporting within the
+ * window, then whether the event holds first-hand material, then the best
+ * rank it reached on the hot list within the window, then the latest report,
+ * then the lower id; at most ten.
+ * @template {{ id: number | string, institutions: number, hasPrimary: boolean, bestRank: number | null, lastAt: Date | string | null }} T
+ * @param {T[]} events @returns {T[]}
+ */
+export function frontierRankPeriod(events) {
+  const best = (/** @type {number | null} */ rank) => (rank == null ? Number.MAX_SAFE_INTEGER : rank);
+  return [...events].sort((left, right) => right.institutions - left.institutions
+    || Number(right.hasPrimary) - Number(left.hasPrimary)
+    || best(left.bestRank) - best(right.bestRank)
+    || new Date(right.lastAt ?? 0).getTime() - new Date(left.lastAt ?? 0).getTime()
+    || Number(left.id) - Number(right.id)).slice(0, FRONTIER_HOT_SIZE);
+}
+
+/**
+ * The institutions reporting an event in the last 72 hours, split by the kind
+ * of source (plan 2026-09-23 §6.2 「机构：期刊 1 · 媒体 1」): an institution
+ * counts once, as the kind of its most authoritative channel (on a tie, the
+ * vocabulary's first), so the kinds add up to the total.
+ * @param {{ members: FrontierEventMember[], now: Date }} input
+ * @returns {{ total: number, byType: Array<{ type: string, count: number }> }}
+ */
+export function frontierEventInstitutions({ members, now }) {
+  const since = now.getTime() - FRONTIER_EVENT_WINDOW_MS;
+  const order = (/** @type {string} */ type) => {
+    const index = FRONTIER_SOURCE_TYPES.indexOf(/** @type {any} */ (type));
+    return index < 0 ? FRONTIER_SOURCE_TYPES.length : index;
+  };
+  /** @type {Map<string, { type: string, authority: number }>} */
+  const entities = new Map();
+  for (const member of members) {
+    if (!(new Date(member.timelineAt).getTime() >= since)) continue;
+    const entity = String(member.ownerEntity || "");
+    const type = String(member.sourceType || "media");
+    const authority = Number(member.authority) || 0;
+    const seen = entities.get(entity);
+    if (!seen || authority > seen.authority || (authority === seen.authority && order(type) < order(seen.type))) entities.set(entity, { type, authority });
+  }
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const { type } of entities.values()) counts.set(type, (counts.get(type) ?? 0) + 1);
+  return {
+    total: entities.size,
+    byType: [...counts].sort((left, right) => order(left[0]) - order(right[0]) || left[0].localeCompare(right[0]))
+      .map(([type, count]) => ({ type, count })),
+  };
+}
+
+/**
+ * An event's heat hour by hour over the last 72 hours, computed now (plan
+ * 2026-09-23 §6.5 #4, no table): at each hour the heat function over the
+ * reports that existed by then — a member's timeline instant is fixed at
+ * publication, so the function answers for any past hour. From the event's
+ * first report on (73 points for an event older than the window), oldest
+ * first; null — 「暂无走势」 — with less than six hours of history. The same
+ * limitation as the hot list's trend holds (`frontierHotReading`), with one
+ * difference: this is computed over the sources enabled now, for every hour.
+ * @param {{ members: FrontierEventMember[], now: Date }} input
+ * @returns {Array<{ at: string, heat: number | null }> | null}
+ */
+export function frontierHeatTrend({ members, now }) {
+  const times = members.map((member) => new Date(member.timelineAt).getTime()).filter(Number.isFinite);
+  if (!times.length) return null;
+  const first = Math.min(...times);
+  if (now.getTime() - first < FRONTIER_HOT_TREND.minHistoryHours * HOUR) return null;
+  /** @type {Array<{ at: string, heat: number | null }>} */
+  const points = [];
+  for (let back = FRONTIER_HOT_WINDOW_HOURS; back >= 0; back -= 1) {
+    const at = now.getTime() - back * HOUR;
+    if (at < first) continue;
+    const known = members.filter((member) => new Date(member.timelineAt).getTime() <= at);
+    points.push({ at: new Date(at).toISOString(), heat: frontierHeatDisplay(frontierEventHeat({ members: known, now: new Date(at) })) });
+  }
+  return points;
 }
 
 /**
@@ -807,8 +1052,10 @@ export class FrontierEvents {
         rank: index + 1, eventId: event.publicId, sourceCount: event.sourceCount72h, reportCount: event.reportCount,
         delta: before.has(event.publicId) ? /** @type {number} */ (before.get(event.publicId)) - (index + 1) : null,
       }));
-      await client.query("INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking) VALUES ($1, $2::jsonb) ON CONFLICT (taken_at) DO NOTHING",
-        [now, JSON.stringify(ranking)]);
+      // The heats go with the list, for its trend: what was measured now, of
+      // every event that could be listed (`frontierTrackedHeats`).
+      await client.query(`INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking, heats) VALUES ($1, $2::jsonb, $3::jsonb)
+        ON CONFLICT (taken_at) DO NOTHING`, [now, JSON.stringify(ranking), JSON.stringify(frontierTrackedHeats(scored))]);
       const shown = (/** @type {any[]} */ list) => JSON.stringify(list.map((entry) => [entry?.eventId, entry?.rank, entry?.sourceCount, entry?.reportCount]));
       const changed = shown(ranking) !== shown(Array.isArray(previous) ? previous : []);
       if (changed) await bumpFrontierVersion(client, FRONTIER_META_KEYS.hotVersion);
@@ -837,35 +1084,160 @@ export class FrontierEvents {
   /**
    * The hot list as the page shows it: the latest snapshot's events, current
    * (a merged one appears as its survivor, once), with rank, the two counts,
-   * the kind of first-hand material, the latest report and the status. The
-   * heat is never here.
+   * the kind of first-hand material, the first and the latest report, the
+   * status — and, from the snapshots (plan 2026-09-23 §6.5 #1, #2), the heat
+   * shown (×10, rounded), the rank change and the badge against the list six
+   * hours before, and the 24-hour trend (`frontierHotReading`).
    */
   async hotList() {
     await this.ready();
-    const snapshot = (await this.database.query(`SELECT taken_at, ranking FROM evimed_frontier.hot_snapshots ORDER BY taken_at DESC LIMIT 1`)).rows?.[0];
+    const snapshot = (await this.database.query(`SELECT taken_at, ranking, heats FROM evimed_frontier.hot_snapshots ORDER BY taken_at DESC LIMIT 1`)).rows?.[0];
     const ranking = Array.isArray(snapshot?.ranking) ? snapshot.ranking : [];
     const publicIds = ranking.map((entry) => String(entry?.eventId ?? "")).filter((id) => PUBLIC_ID.test(id));
     if (!publicIds.length) return { takenAt: iso(snapshot?.taken_at), events: [] };
     const rows = (await this.database.query(`SELECT named.public_id AS named_id, e.id, e.public_id, e.title_zh, e.latest_zh, e.source_count_72h,
-        e.report_count, e.last_at, e.status
+        e.report_count, e.first_at, e.last_at, e.status, e.heat
       FROM evimed_frontier.events named
       JOIN evimed_frontier.events e ON e.id = coalesce(named.merged_into, named.id) AND e.merged_into IS NULL
       WHERE named.public_id = ANY($1::text[])`, [publicIds])).rows ?? [];
     const byNamed = new Map(rows.map((row) => [row.named_id, row]));
-    const primaries = await this.#primaryKinds(this.database, rows.map((row) => String(row.id)));
+    const survivors = [...new Set(rows.map((row) => String(row.id)))];
+    const primaries = await this.#primaryKinds(this.database, survivors);
+    const aliases = await this.#aliases(survivors);
+    const takenAt = new Date(snapshot.taken_at);
+    const { earlier, compare } = await this.#hotSamples(takenAt);
+    const latest = { at: takenAt, ranking, heats: snapshot.heats };
     const seen = new Set();
     const events = [];
     for (const publicId of publicIds) {
       const row = byNamed.get(publicId);
       if (!row || seen.has(row.id) || Number(row.report_count) < 1) continue;
       seen.add(row.id);
+      const rank = events.length + 1;
+      const primary = primaries.get(String(row.id)) ?? null;
+      const reading = frontierHotReading({ rank, ids: aliases.get(String(row.id)) ?? [row.public_id], firstAt: row.first_at,
+        fallbackHeat: row.heat == null ? null : Number(row.heat), latest, compare, earlier });
       events.push({
-        rank: events.length + 1, id: row.public_id, title: row.title_zh, latest: row.latest_zh ?? null,
+        rank, id: row.public_id, title: row.title_zh, latest: row.latest_zh ?? null,
         sourceCount72h: Number(row.source_count_72h), reportCount: Number(row.report_count),
-        primary: primaries.get(String(row.id)) ?? null, lastAt: iso(row.last_at), status: row.status,
+        primary, hasPrimary: primary != null, firstAt: iso(row.first_at), lastAt: iso(row.last_at), status: row.status,
+        heat: reading.heat, rankChange: reading.rankChange, badge: reading.badge, trend: reading.trend, period: null,
       });
     }
-    return { takenAt: iso(snapshot?.taken_at), events };
+    return { takenAt: iso(snapshot.taken_at), events };
+  }
+
+  /**
+   * The snapshots a list's trend and comparison read: the latest one at most
+   * an hour before each of the trend's earlier points (24, 20 … 4 hours before
+   * the list, oldest first) and before the comparison (six hours). A point
+   * with no snapshot in its hour is null — the worker was not running then.
+   * @param {Date} takenAt
+   * @returns {Promise<{ earlier: Array<FrontierHotSample | null>, compare: FrontierHotSample | null }>}
+   */
+  async #hotSamples(takenAt) {
+    const count = Math.round(FRONTIER_HOT_TREND.hours / FRONTIER_HOT_TREND.stepHours);
+    const targets = Array.from({ length: count }, (_, index) => new Date(takenAt.getTime() - (count - index) * FRONTIER_HOT_TREND.stepHours * HOUR));
+    const compareAt = new Date(takenAt.getTime() - FRONTIER_HOT_BADGE_HOURS.rising * HOUR);
+    const rows = (await this.database.query(`SELECT t.k, s.ranking, s.heats
+      FROM unnest($1::timestamptz[]) WITH ORDINALITY AS t(at, k)
+      LEFT JOIN LATERAL (SELECT h.ranking, h.heats FROM evimed_frontier.hot_snapshots h
+        WHERE h.taken_at <= t.at AND h.taken_at > t.at - make_interval(secs => $2::float8)
+        ORDER BY h.taken_at DESC LIMIT 1) s ON true
+      ORDER BY t.k`, [[...targets, compareAt], FRONTIER_HOT_SNAPSHOT_TOLERANCE_MS / 1000])).rows ?? [];
+    const sample = (/** @type {number} */ index, /** @type {Date} */ at) => {
+      const row = rows[index];
+      return row && row.ranking != null ? { at, ranking: row.ranking, heats: row.heats } : null;
+    };
+    return { earlier: targets.map((at, index) => sample(index, at)), compare: sample(targets.length, compareAt) };
+  }
+
+  /**
+   * Each event's public ids: its own first, then those of the events folded
+   * into it — what older snapshots may name it by (merges flatten chains, so
+   * one hop finds them all).
+   * @param {string[]} eventIds @returns {Promise<Map<string, string[]>>}
+   */
+  async #aliases(eventIds) {
+    /** @type {Map<string, string[]>} */
+    const ids = new Map();
+    if (!eventIds.length) return ids;
+    const rows = (await this.database.query(`SELECT coalesce(merged_into, id) AS id, public_id FROM evimed_frontier.events
+      WHERE id = ANY($1::bigint[]) OR merged_into = ANY($1::bigint[]) ORDER BY (merged_into IS NULL) DESC, id`, [eventIds])).rows ?? [];
+    for (const row of rows) ids.set(String(row.id), [...(ids.get(String(row.id)) ?? []), row.public_id]);
+    return ids;
+  }
+
+  /**
+   * The week's or the month's ranking (plan 2026-09-23 §6.2), computed when
+   * read and never stored: every event reported within the window by at
+   * least two independent institutions, or on the hot list at some time in
+   * it, ranked by `frontierRankPeriod`, with what its row says — 「本周 N 家机构
+   * · M 篇 · 在榜 X 小时 · 最高第 K 名」. Time on the list sums, per snapshot
+   * that listed the event, the time to the next snapshot, at most two hot runs
+   * (`FRONTIER_HOT_SNAPSHOT_SPAN_MS`): the worker being down is not time on the
+   * list. No heat, no trend, no badge: those belong to the current list.
+   * @param {"week" | "month"} window
+   */
+  async hotPeriod(window) {
+    const span = /** @type {Record<string, number>} */ (FRONTIER_HOT_PERIODS)[window];
+    if (!span) throw Object.assign(new Error("The hot list's window is invalid."), { code: "frontier_query_invalid" });
+    await this.ready();
+    const now = this.now();
+    const since = new Date(now.getTime() - span);
+    const listed = (await this.database.query(`WITH snaps AS (
+        SELECT ranking, least(coalesce(lead(taken_at) OVER (ORDER BY taken_at), $2::timestamptz), taken_at + make_interval(secs => $3::float8))
+          - taken_at AS listed
+        FROM evimed_frontier.hot_snapshots WHERE taken_at >= $1::timestamptz AND taken_at <= $2::timestamptz)
+      SELECT entry->>'eventId' AS public_id, min((entry->>'rank')::integer) AS best_rank, sum(extract(epoch FROM snaps.listed))::float8 AS seconds
+      FROM snaps CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(snaps.ranking) = 'array' THEN snaps.ranking ELSE '[]'::jsonb END) AS entry
+      WHERE entry->>'eventId' IS NOT NULL AND (entry->>'rank') ~ '^[0-9]{1,4}$'
+      GROUP BY 1`, [since, now, FRONTIER_HOT_SNAPSHOT_SPAN_MS / 1000])).rows ?? [];
+    /** @type {Map<string, { bestRank: number, seconds: number }>} survivor row id → its time on the list */
+    const onList = new Map();
+    if (listed.length) {
+      const named = (await this.database.query(`SELECT public_id, coalesce(merged_into, id) AS id FROM evimed_frontier.events
+        WHERE public_id = ANY($1::text[])`, [listed.map((row) => row.public_id)])).rows ?? [];
+      const survivorOf = new Map(named.map((row) => [row.public_id, String(row.id)]));
+      for (const row of listed) {
+        const id = survivorOf.get(row.public_id);
+        if (!id) continue;
+        const seen = onList.get(id);
+        onList.set(id, { bestRank: Math.min(seen?.bestRank ?? Infinity, Number(row.best_rank)), seconds: (seen?.seconds ?? 0) + Number(row.seconds) });
+      }
+    }
+    const rows = (await this.database.query(`SELECT e.id, e.public_id, e.title_zh, e.latest_zh, e.source_count_72h, e.report_count, e.first_at,
+        e.last_at, e.status,
+        count(DISTINCT s.owner_entity) FILTER (WHERE i.timeline_at >= $1::timestamptz)::integer AS institutions,
+        count(*) FILTER (WHERE i.timeline_at >= $1::timestamptz)::integer AS reports,
+        bool_or(ei.role = 'primary') AS has_primary
+      FROM evimed_frontier.events e
+      JOIN evimed_frontier.event_items ei ON ei.event_id = e.id
+      JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+      JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+      WHERE e.merged_into IS NULL AND e.last_at >= $1::timestamptz
+      GROUP BY e.id
+      HAVING count(*) FILTER (WHERE i.timeline_at >= $1::timestamptz) > 0
+        AND (count(DISTINCT s.owner_entity) FILTER (WHERE i.timeline_at >= $1::timestamptz) >= $2 OR e.id = ANY($3::bigint[]))`,
+    [since, FRONTIER_HOT_MIN_INSTITUTIONS, [...onList.keys()]])).rows ?? [];
+    /** @type {Array<{ id: string, institutions: number, hasPrimary: boolean, bestRank: number | null, lastAt: Date | string | null, row: any }>} */
+    const candidates = rows.map((row) => ({ id: String(row.id), institutions: Number(row.institutions), hasPrimary: row.has_primary === true,
+      bestRank: onList.get(String(row.id))?.bestRank ?? null, lastAt: row.last_at, row }));
+    const ranked = frontierRankPeriod(candidates);
+    const primaries = await this.#primaryKinds(this.database, ranked.map((entry) => entry.id));
+    const events = ranked.map((entry, index) => {
+      const { row } = entry;
+      const listedFor = onList.get(entry.id);
+      return {
+        rank: index + 1, id: row.public_id, title: row.title_zh, latest: row.latest_zh ?? null,
+        sourceCount72h: Number(row.source_count_72h), reportCount: Number(row.report_count),
+        primary: primaries.get(entry.id) ?? null, hasPrimary: entry.hasPrimary, firstAt: iso(row.first_at), lastAt: iso(row.last_at), status: row.status,
+        heat: null, rankChange: null, badge: null, trend: null,
+        period: { institutions: entry.institutions, reports: Number(row.reports),
+          hoursOnList: listedFor ? Math.round(listedFor.seconds / 3600) : null, bestRank: entry.bestRank },
+      };
+    });
+    return { at: now.toISOString(), since: since.toISOString(), events };
   }
 
   /** @param {any} client @param {string[]} eventIds @returns {Promise<Map<string, "official" | "guideline" | "paper" | null>>} */
@@ -945,8 +1317,8 @@ export class FrontierEvents {
 
   /** The reports a digest is written from, primary sources first. @param {string} eventId */
   async #digestReports(eventId) {
-    const rows = (await this.database.query(`SELECT ei.role, s.name AS source_name, s.source_type, i.published_at, i.timeline_at,
-        i.title_raw, i.title_zh, i.summary_zh, t.abstract_raw, t.body_excerpt
+    const rows = (await this.database.query(`SELECT ei.role, s.id AS source_id, s.name AS source_name, s.owner_entity, s.source_type,
+        i.published_at, i.timeline_at, i.title_raw, i.title_zh, i.summary_zh, t.abstract_raw, t.body_excerpt
       FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -954,7 +1326,9 @@ export class FrontierEvents {
       WHERE ei.event_id = $1 AND i.state = 'published' AND s.enabled
       ORDER BY (ei.role = 'primary') DESC, i.timeline_at DESC, i.id DESC LIMIT ${DIGEST_REPORTS}`, [eventId])).rows ?? [];
     return rows.map((row) => ({
-      role: row.role, sourceName: row.source_name, sourceTypeLabel: null, publishedAt: iso(row.published_at ?? row.timeline_at),
+      // The digest is prose a reader reads: the institution, never the feed (plan 2026-09-23 §6.5 #5).
+      role: row.role, sourceName: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.owner_entity }),
+      sourceTypeLabel: null, publishedAt: iso(row.published_at ?? row.timeline_at),
       titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, text: row.abstract_raw || row.body_excerpt || null,
     }));
   }
@@ -966,7 +1340,9 @@ export class FrontierEvents {
    * `{ redirect }` for a merged event's old public id — its row, or an alias.
    * @param {string} publicId
    * @returns {Promise<null | { redirect: string } | { event: any, members: Array<{ rowId: string, role: string }>,
-   *   related: Array<{ id: string, title: string, relation: string, at: string | null }>, specialties: string[] }>}
+   *   related: Array<{ id: string, title: string, relation: string, at: string | null }>, specialties: string[],
+   *   heat: number | null, institutions: { total: number, byType: Array<{ type: string, count: number }> },
+   *   trend: Array<{ at: string, heat: number | null }> | null, primary: "official" | "guideline" | "paper" | null }>}
    */
   async read(publicId) {
     if (!PUBLIC_ID.test(String(publicId ?? ""))) return null;
@@ -1001,11 +1377,20 @@ export class FrontierEvents {
     /** @type {Map<string, number>} */
     const tally = new Map();
     for (const row of members) for (const key of Array.isArray(row.specialties) ? row.specialties : []) tally.set(key, (tally.get(key) ?? 0) + 1);
+    // What the page's side column says (plan 2026-09-23 §6.5 #4), computed
+    // now from the same visible members: the heat, the institutions of the
+    // last 72 hours by kind, the hourly trend and the first-hand material.
+    const now = this.now();
+    const facts = this.#asMembers((await this.#members(this.database, [String(event.id)])).get(String(event.id)) ?? []);
     return {
       event,
       members: members.map((row) => ({ rowId: String(row.item_id), role: row.role })),
       related: related.map((row) => ({ id: row.public_id, title: row.title_zh, relation: row.relation, at: iso(row.last_at ?? row.linked_at) })),
       specialties: [...tally].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, 3).map(([key]) => key),
+      heat: facts.length ? frontierHeatDisplay(frontierEventHeat({ members: facts, now })) : null,
+      institutions: frontierEventInstitutions({ members: facts, now }),
+      trend: frontierHeatTrend({ members: facts, now }),
+      primary: frontierPrimaryKind(facts),
     };
   }
 

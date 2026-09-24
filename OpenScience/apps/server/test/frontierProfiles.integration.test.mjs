@@ -137,6 +137,8 @@ test("a profile from stated and confirmed memories only, ranked by phrase vector
     ["Kidney and SGLT2", "因为你在做：SGLT2 抑制剂与心衰", memories.project.id],
     ["Between", "因为你关注：心内科临床", memories.profile.id],
   ], "by cosine; the entity in common admits another specialty's item; far, hidden, muted, old and unrelated left out");
+  assert.deepEqual(answer.items.map((entry) => entry.reason.topic), ["SGLT2 抑制剂与心衰", "心内科临床", "SGLT2 抑制剂与心衰", "心内科临床"],
+    "the phrase alone, what 「与我相关」 groups by and heads each group with");
 });
 
 test("a reason whose memory is gone takes its item with it at once, without a new ranking", options, async () => {

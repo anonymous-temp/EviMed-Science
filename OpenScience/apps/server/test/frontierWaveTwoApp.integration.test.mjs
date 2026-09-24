@@ -110,10 +110,19 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   await events.clusterPending();
   await events.computeHot();
   const hot = (await (await fetch(`${base}/api/frontier/hot`, { headers: sessions.reader })).json()).data;
-  const event = (await database.query("SELECT e.public_id FROM evimed_frontier.items i JOIN evimed_frontier.events e ON e.id = i.event_id WHERE i.id = $1", [paper.id])).rows[0];
+  const event = (await database.query("SELECT e.public_id, e.heat FROM evimed_frontier.items i JOIN evimed_frontier.events e ON e.id = i.event_id WHERE i.id = $1", [paper.id])).rows[0];
+  assert.equal(hot.window, "current");
+  assert.equal(Date.parse(hot.takenAt) - Date.parse(hot.since), 72 * 3_600_000, "the list covers the 72 hours before its own time");
   assert.equal(hot.events[0].id, event.public_id);
-  assert.deepEqual({ ...hot.events[0], lastAt: undefined }, { rank: 1, id: event.public_id, title: "热门试验", latest: "Hot trial coverage",
-    sourceCount72h: 2, reportCount: 2, primary: "paper", lastAt: undefined, status: "developing" });
+  assert.deepEqual({ ...hot.events[0], lastAt: undefined, firstAt: undefined }, { rank: 1, id: event.public_id, title: "热门试验", latest: "Hot trial coverage",
+    sourceCount72h: 2, reportCount: 2, primary: "paper", hasPrimary: true, lastAt: undefined, firstAt: undefined, status: "developing",
+    heat: Math.round(event.heat * 10), rankChange: null, badge: "new", trend: null, period: null });
+  const week = (await (await fetch(`${base}/api/frontier/hot?window=week`, { headers: sessions.reader })).json()).data;
+  assert.equal(week.window, "week");
+  assert.deepEqual(week.events.map((row) => [row.id, row.period]), [[event.public_id, { institutions: 2, reports: 2, hoursOnList: 0, bestRank: 1 }]],
+    "listed once, just now: on the list for less than half an hour, first");
+  const refused = await fetch(`${base}/api/frontier/hot?window=year`, { headers: sessions.reader });
+  assert.deepEqual([refused.status, (await refused.json()).code], [400, "frontier_query_invalid"]);
 
   const page = (await (await fetch(`${base}/api/frontier/events/${event.public_id}`, { headers: sessions.reader })).json()).data.event;
   assert.equal(page.id, event.public_id);
@@ -122,6 +131,10 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   assert.deepEqual(page.items.map((item) => [item.id, item.role]), [[paper.publicId, "primary"], [coverage.publicId, "report"]]);
   assert.equal(page.items[1].event.id, event.public_id, "a card of a two-report event names its event");
   assert.equal(page.sourceCount72h, 2);
+  assert.deepEqual(page.institutions72h, { total: 2, byType: [{ type: "journal", count: 1, label: "期刊" }, { type: "media", count: 1, label: "媒体" }] });
+  assert.deepEqual([page.hasPrimary, page.primary], [true, "paper"]);
+  assert.ok(Number.isInteger(page.heat) && page.heat > 0);
+  assert.equal(page.trend, null, "five hours of history: 「暂无走势」");
 
   // Fold this event into an older one by hand, as a bridge would.
   const older = (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
@@ -156,7 +169,13 @@ test("the daily over the wire: the archive and one issue, its items read now; a 
   assert.equal(issue.lead.text, "头条导读");
   assert.deepEqual(issue.sections, [], "a withdrawn item leaves the issue, and an emptied section with it");
   assert.equal(issue.aiMinute, "AI 一分钟。");
-  assert.equal(issue.markdown, "# 日报");
+  // The copy is the issue as it reads now: the withdrawn item left it too, and
+  // the count in its header is the count shown (the archive keeps the frozen 2).
+  assert.match(issue.markdown, /^# EviMed 医学前沿日报 · 2026年9月21日\n\n覆盖 9月20日 07:00 至 9月21日 07:00（北京时间），共 1 条。/);
+  assert.match(issue.markdown, /## 头条\n\n\*\*日报头条\*\*（NEJM Journal）\n\n头条导读/);
+  assert.doesNotMatch(issue.markdown, /Withdrawn since/);
+  assert.match(issue.markdown, /来源：EviMed 前沿动态\n$/);
+  assert.deepEqual([issue.itemCount, issue.readingMinutes, issue.previousDay, issue.nextDay], [1, 1, null, null]);
   assert.equal(issue.windowStart, "2026-09-19T23:00:00.000Z");
   assert.equal((await fetch(`${base}/api/frontier/dailies/2026-09-20`, { headers: sessions.reader })).status, 404);
   assert.equal((await fetch(`${base}/api/frontier/dailies?limit=0`, { headers: sessions.reader })).status, 400);
@@ -166,8 +185,11 @@ test("存入知识库 through the upload's own path: the open-access PDF, or a r
   const { app, base, sessions, database, pdfRequests } = context;
   const open = await insertComposedItem(database, { sourceId: "nejm", title: "Open access paper", openAccess: "gold", oaPdfUrl: "https://journals.example.org/oa.pdf",
     summaryZh: "导读", visibleAt: hoursAgo(2), timelineAt: hoursAgo(2), publishedAt: "2026-09-21T08:00:00Z" });
-  const closed = await insertComposedItem(database, { sourceId: "nejm", title: "Closed paper", summaryZh: "闭源论文导读", visibleAt: hoursAgo(2), timelineAt: hoursAgo(2),
-    publishedAt: "2026-09-21T08:00:00Z" });
+  // From a feed whose registry name is an interface's: the record names the institution.
+  await insertSource(database, "openfda-drug-enforcement-api", { name: "openFDA 药品召回（enforcement）API", lane: "safety", source_type: "regulator",
+    owner_entity: "U.S. Food and Drug Administration" });
+  const closed = await insertComposedItem(database, { sourceId: "openfda-drug-enforcement-api", sourceType: "regulator", title: "Closed paper",
+    summaryZh: "闭源论文导读", visibleAt: hoursAgo(2), timelineAt: hoursAgo(2), publishedAt: "2026-09-21T08:00:00Z" });
   const { "x-open-science-csrf": _csrf, ...withoutCsrf } = sessions.reader;
   const forged = await fetch(`${base}/api/frontier/items/${open.publicId}/save-to-library`, { method: "POST", headers: withoutCsrf, body: JSON.stringify({ projectId: "default" }) });
   assert.equal(forged.status, 403);
@@ -186,7 +208,9 @@ test("存入知识库 through the upload's own path: the open-access PDF, or a r
   const record = (await (await fetch(`${base}/api/frontier/items/${closed.publicId}/save-to-library`, { method: "POST", headers: sessions.reader,
     body: JSON.stringify({ projectId: "default" }) })).json()).data.saved;
   assert.equal(record.kind, "md");
-  assert.match(await readFile(path.join(project.baseDir, record.path), "utf8"), /闭源论文导读/);
+  const kept = await readFile(path.join(project.baseDir, record.path), "utf8");
+  assert.match(kept, /闭源论文导读/);
+  assert.match(kept, /^来源：FDA（监管）$/m, "the institution, never 「openFDA 药品召回（enforcement）API」");
   const sources = (await database.query(`SELECT payload->'paths'->>0 AS path FROM evimed_product.documents WHERE user_id = $1 AND kind = 'source' AND deleted_at IS NULL`,
     [accounts.reader])).rows.map((row) => row.path).sort();
   assert.deepEqual(sources, [record.path, saved.path].sort(), "both saves became knowledge-base sources, as an upload does");

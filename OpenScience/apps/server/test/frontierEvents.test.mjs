@@ -7,6 +7,15 @@ import { test } from "node:test";
 import {
   FRONTIER_CLUSTER_ASK_MAX,
   FRONTIER_HOT_SIZE,
+  FRONTIER_HOT_TRACKED,
+  frontierEventInstitutions,
+  frontierHeatTrend,
+  frontierHotBadge,
+  frontierHotReading,
+  frontierRankChange,
+  frontierRankPeriod,
+  frontierSnapshotReading,
+  frontierTrackedHeats,
   frontierClusterDecision,
   frontierClusterEntities,
   frontierClusterKeys,
@@ -205,4 +214,121 @@ test("one publisher's notices above the join cosine are asked about, never joine
   ]);
   assert.deepEqual(reading.strong, ["8"]);
   assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["7", "9"]);
+});
+
+// ───────────────── the hot list's numbers (plan 2026-09-23 §6.5 #1, #2, #4) ─────────────────
+
+test("a snapshot tracks the heat of every eligible event in the list's order, the first fifty, to four decimals", () => {
+  const events = Array.from({ length: 60 }, (_, index) => ({ id: String(index + 1), publicId: `e${index + 1}`, heat: 60 - index + 0.123456,
+    lastAt: NOW, eligible: index !== 1 }));
+  events.push({ id: "99", publicId: "nan", heat: Number.NaN, lastAt: NOW, eligible: true });
+  const tracked = frontierTrackedHeats(events);
+  assert.equal(Object.keys(tracked).length, FRONTIER_HOT_TRACKED);
+  assert.equal(tracked.e1, 60.1235);
+  assert.equal(Object.hasOwn(tracked, "e2"), false, "an ineligible event is not tracked, however hot");
+  assert.equal(Object.hasOwn(tracked, "nan"), false, "a heat that is not a number is not recorded");
+  assert.equal(Object.keys(tracked).at(-1), "e51", "the ten listed and the forty just below them");
+});
+
+test("one snapshot's reading of an event: under any of its ids, the best rank and the highest heat", () => {
+  const sample = { at: NOW, ranking: [{ rank: 3, eventId: "a" }, { rank: 1, eventId: "old" }, { rank: "x", eventId: "b" }],
+    heats: { a: 2.1, old: 3.4, b: "hot" } };
+  assert.deepEqual(frontierSnapshotReading(sample, ["a"]), { rank: 3, heat: 2.1 });
+  assert.deepEqual(frontierSnapshotReading(sample, ["a", "old"]), { rank: 1, heat: 3.4 }, "an event folded in since counts as this one");
+  assert.deepEqual(frontierSnapshotReading(sample, ["b"]), { rank: null, heat: null }, "what is not a number reads as nothing");
+  assert.deepEqual(frontierSnapshotReading(null, ["a"]), { rank: null, heat: null });
+  assert.deepEqual(frontierSnapshotReading({ at: NOW, ranking: "junk", heats: [1, 2] }, ["a"]), { rank: null, heat: null });
+});
+
+test("rank change against the list six hours before: places gained or lost, new, or nothing to compare with", () => {
+  assert.equal(frontierRankChange({ rank: 1, before: { rank: 3 } }), 2);
+  assert.equal(frontierRankChange({ rank: 5, before: { rank: 2 } }), -3);
+  assert.equal(frontierRankChange({ rank: 4, before: { rank: 4 } }), 0);
+  assert.equal(frontierRankChange({ rank: 4, before: { rank: null } }), "new", "not on that list");
+  assert.equal(frontierRankChange({ rank: 4, before: null }), null, "no list that old");
+});
+
+test("the badge: new within twelve hours of its first report, rising when placed or measured higher than six hours before", () => {
+  const takenAt = NOW;
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(11), takenAt, rank: 5, heat: 10, before: null }), "new");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(12), takenAt, rank: 5, heat: 10, before: { rank: 1, heat: 30 } }), "new", "twelve hours is still new");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(13), takenAt, rank: 5, heat: 10, before: null }), null, "no list six hours old: no rise to see");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(30), takenAt, rank: 2, heat: 10, before: { rank: 4, heat: 12 } }), "rising", "placed higher");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(30), takenAt, rank: 4, heat: 13, before: { rank: 4, heat: 12 } }), "rising", "hotter");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(30), takenAt, rank: 6, heat: 10, before: { rank: null, heat: null } }), "rising", "newly on the list");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(30), takenAt, rank: 4, heat: 12, before: { rank: 4, heat: 12 } }), null, "the same is no rise");
+  assert.equal(frontierHotBadge({ firstAt: hoursAgo(30), takenAt, rank: 5, heat: 11, before: { rank: 3, heat: 14 } }), null, "cooling");
+  assert.equal(frontierHotBadge({ firstAt: null, takenAt, rank: 5, heat: 11, before: { rank: 3, heat: null } }), null);
+});
+
+test("the list's reading of an event: the heat shown, the change, the badge and seven trend points — or no trend without six hours of history", () => {
+  const at = (hours) => new Date(NOW.getTime() - hours * 3_600_000);
+  const sample = (hours, heats, ranking = []) => ({ at: at(hours), heats, ranking });
+  const latest = sample(0, { cur: 2.44 }, [{ rank: 1, eventId: "cur" }]);
+  const earlier = [sample(24, { old: 0.5 }), null, sample(16, { cur: 1.02 }), sample(12, { cur: 1.5 }), sample(8, { cur: 1.9 }), sample(4, { cur: 2.2 })];
+  const compare = sample(6, { cur: 2.0 }, [{ rank: 3, eventId: "cur" }]);
+  const reading = frontierHotReading({ rank: 1, ids: ["cur", "old"], firstAt: at(40), latest, compare, earlier });
+  assert.equal(reading.heat, 24, "×10, rounded");
+  assert.equal(reading.rankChange, 2);
+  assert.equal(reading.badge, "rising");
+  assert.deepEqual(reading.trend, [
+    { at: at(24).toISOString(), heat: 5 }, { at: at(20).toISOString(), heat: null }, { at: at(16).toISOString(), heat: 10 },
+    { at: at(12).toISOString(), heat: 15 }, { at: at(8).toISOString(), heat: 19 }, { at: at(4).toISOString(), heat: 22 },
+    { at: NOW.toISOString(), heat: 24 },
+  ], "oldest first; a folded-in event's heat counts; an hour with no snapshot is null");
+
+  const young = frontierHotReading({ rank: 2, ids: ["cur"], firstAt: at(5), latest, compare: sample(6, {}, []), earlier });
+  assert.equal(young.trend, null, "not tracked six hours ago: 「暂无走势」");
+  assert.equal(young.rankChange, "new");
+  assert.equal(young.badge, "new");
+  const unrecorded = frontierHotReading({ rank: 1, ids: ["cur"], firstAt: at(40), fallbackHeat: 1.26, latest: sample(0, {}, []), compare: null, earlier: [] });
+  assert.equal(unrecorded.heat, 13, "a snapshot from before heats were recorded: the event's stored heat");
+  assert.deepEqual([unrecorded.rankChange, unrecorded.badge, unrecorded.trend], [null, null, null]);
+});
+
+test("the week's ranking: institutions in the window, then first-hand material, then the best rank reached, then the latest", () => {
+  const ranked = frontierRankPeriod([
+    { id: "1", institutions: 3, hasPrimary: false, bestRank: 1, lastAt: hoursAgo(5) },
+    { id: "2", institutions: 5, hasPrimary: false, bestRank: null, lastAt: hoursAgo(50) },
+    { id: "3", institutions: 3, hasPrimary: true, bestRank: 7, lastAt: hoursAgo(90) },
+    { id: "4", institutions: 3, hasPrimary: true, bestRank: 2, lastAt: hoursAgo(90) },
+    { id: "5", institutions: 3, hasPrimary: true, bestRank: null, lastAt: hoursAgo(1) },
+    { id: "6", institutions: 3, hasPrimary: true, bestRank: null, lastAt: hoursAgo(2) },
+  ]);
+  assert.deepEqual(ranked.map((event) => event.id), ["2", "4", "3", "5", "6", "1"]);
+  const many = frontierRankPeriod(Array.from({ length: 15 }, (_, index) => ({ id: String(index), institutions: index, hasPrimary: false, bestRank: null, lastAt: null })));
+  assert.equal(many.length, FRONTIER_HOT_SIZE);
+  assert.equal(many[0].id, "14");
+});
+
+test("institutions of the last 72 hours by kind: each once, as the kind of its most authoritative channel; the kinds add up", () => {
+  const counted = frontierEventInstitutions({ now: NOW, members: [
+    { role: "primary", ownerEntity: "nejm-group", authority: 5, timelineAt: hoursAgo(10), sourceType: "journal" },
+    { role: "report", ownerEntity: "nejm-group", authority: 3, timelineAt: hoursAgo(9), sourceType: "media" },
+    { role: "report", ownerEntity: "stat", authority: 3, timelineAt: hoursAgo(8), sourceType: "media" },
+    { role: "primary", ownerEntity: "fda", authority: 5, timelineAt: hoursAgo(7), sourceType: "regulator" },
+    { role: "report", ownerEntity: "reuters", authority: 3, timelineAt: hoursAgo(80), sourceType: "media" },
+  ] });
+  assert.deepEqual(counted, { total: 3, byType: [{ type: "journal", count: 1 }, { type: "regulator", count: 1 }, { type: "media", count: 1 }] },
+    "a publisher's news arm is the publisher; a report older than 72 hours is not counted");
+  assert.deepEqual(frontierEventInstitutions({ now: NOW, members: [] }), { total: 0, byType: [] });
+});
+
+test("the event's hourly trend: the heat function at each hour over the reports that existed by then, from the first report on", () => {
+  const members = [
+    { role: "primary", ownerEntity: "nejm-group", authority: 5, timelineAt: hoursAgo(10), lang: "en", sourceType: "journal" },
+    { role: "report", ownerEntity: "stat", authority: 3, timelineAt: hoursAgo(4), lang: "en", sourceType: "media" },
+  ];
+  const trend = frontierHeatTrend({ members, now: NOW });
+  assert.equal(trend.length, 11, "hours 10 … 0 before now");
+  assert.equal(trend[0].at, hoursAgo(10));
+  assert.equal(trend.at(-1).at, NOW.toISOString());
+  assert.equal(trend[0].heat, 15, "the paper alone when it appeared: 1 × 1.5, shown ×10");
+  assert.ok(trend[7].heat > trend[5].heat, "the report six hours later lifts it");
+  assert.equal(trend.at(-1).heat, Math.round(frontierEventHeat({ members, now: NOW }) * 10), "the last point is the heat now");
+  const old = frontierHeatTrend({ members: [{ role: "report", ownerEntity: "a", authority: 5, timelineAt: hoursAgo(200), lang: "en" }], now: NOW });
+  assert.equal(old.length, 73, "an event older than the window: every hour of 72, both ends counted");
+  assert.equal(frontierHeatTrend({ members: [{ role: "report", ownerEntity: "a", authority: 5, timelineAt: hoursAgo(5), lang: "en" }], now: NOW }), null,
+    "under six hours of history: 「暂无走势」");
+  assert.equal(frontierHeatTrend({ members: [], now: NOW }), null);
 });

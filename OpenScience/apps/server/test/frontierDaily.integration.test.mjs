@@ -135,6 +135,34 @@ test("one issue a day through the frontier-daily job: its window, its sections w
   assert.equal(await writer.read("not-a-day"), null);
 });
 
+test("an issue names every source by its institution — the safety block, the Markdown, the AI minute's input — never by its feed", options, async () => {
+  await insertSource(database, "openfda-drug-enforcement-api", { name: "openFDA 药品召回（enforcement）API", lane: "safety", source_type: "regulator",
+    authority: 5, owner_entity: "U.S. Food and Drug Administration" });
+  await insertSource(database, "stat-health-tech", { name: "STAT · Health Tech 频道", lane: "ai", source_type: "media", owner_entity: "Boston Globe Media" });
+  const summary = { summaryZh: "导读。", verification: "passed", selected: true };
+  const recall = await insertComposedItem(database, { ...summary, sourceId: "openfda-drug-enforcement-api", lane: "safety", sourceType: "regulator",
+    title: "Class I recall", titleZh: "I 级召回：葡萄糖注射液", safetyAlert: true, visibleAt: "2026-09-21T06:00:00Z" });
+  await insertComposedItem(database, { ...summary, sourceId: "stat-health-tech", lane: "ai", sourceType: "media", title: "AI scribe study", selected: false,
+    scoreTotal: 50, visibleAt: "2026-09-21T07:00:00Z" });
+  const editor = aiEditor();
+  const issue = await daily({ editor }).compose(DAY);
+  assert.deepEqual(issue.safety, [recall.publicId]);
+  assert.match(issue.markdown, /## 安全警示\n\n- \*\*I 级召回：葡萄糖注射液\*\*（FDA）：导读。/);
+  assert.doesNotMatch(issue.markdown, /（[^）\n]*(openFDA|enforcement|API|频道)/, "no feed's or interface's name where a source is named");
+  assert.match(issue.markdown, /来源：EviMed 前沿动态\n$/);
+  assert.deepEqual(editor.calls[0].items.map((item) => item.sourceName), ["STAT"], "the AI minute is written from institution names");
+});
+
+test("an issue knows the issues on either side of it: the nearest, since a quiet day has none", options, async () => {
+  for (const day of ["2026-09-18", "2026-09-20", "2026-09-22"]) {
+    await database.query(`INSERT INTO evimed_frontier.dailies (day, window_start, window_end, lead, sections, safety, markdown, item_ids, model)
+      VALUES ($1::date, now(), now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '# 日报', '{}', 'deepseek-flash')`, [day]);
+  }
+  const reader = daily();
+  assert.deepEqual([(await reader.read("2026-09-20")).previousDay, (await reader.read("2026-09-20")).nextDay], ["2026-09-18", "2026-09-22"]);
+  assert.deepEqual([(await reader.read("2026-09-18")).previousDay, (await reader.read("2026-09-22")).nextDay], [null, null]);
+});
+
 test("a day with nothing to publish is no issue and no alert; a failed one is retried and, past 07:45, an alert", options, async () => {
   const quiet = daily();
   assert.deepEqual(await quiet.runDue(), { day: DAY, ran: true, empty: true });
@@ -180,7 +208,7 @@ test("the push: one inbox item per reader at their own digest time, only to read
   assert.deepEqual(pushed.map((row) => row.user_id).sort(), [users.follower, users.preview, users.reader].sort(),
     "seen in 14 days or following; not the stale, the switched off, the later digest time, or the already pushed");
   assert.equal(pushed[0].title, "今日前沿 · 9月22日 · 3 条精选");
-  assert.match(pushed[0].body, /^头条：头条论文\n安全警示 1 条\n临床证据 1 条 · 审批监管 1 条/);
+  assert.equal(pushed[0].body, "头条论文\n安全警示 1 条", "the headline and the safety count: no lane counts, no instructions");
   assert.deepEqual(pushed[0].source, { type: "digest", id: `frontier-daily:${DAY}` });
   assert.equal(pushed[0].group_key, `frontier-daily:${DAY}`);
   assert.doesNotMatch(pushed[0].body, /因为|与你相关/);

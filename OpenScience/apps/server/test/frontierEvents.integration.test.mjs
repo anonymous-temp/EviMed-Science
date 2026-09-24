@@ -275,13 +275,128 @@ test("the hot list: the eligible by decayed heat, a snapshot every run, hot_vers
   assert.equal(await metaValue(database, "hot_version"), hotBefore + 1, "an unchanged list does not move the version");
   assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.hot_snapshots")).rows[0].n >= 1, true);
   const list = await events.hotList();
-  assert.deepEqual(list.events.map((event) => [event.rank, event.id, event.primary, event.sourceCount72h, event.reportCount, event.status]), [
-    [1, trialEvent.public_id, "paper", 2, 2, "developing"],
-    [2, noticeEvent.public_id, "official", 1, 1, "developing"],
+  assert.deepEqual(list.events.map((event) => [event.rank, event.id, event.primary, event.hasPrimary, event.sourceCount72h, event.reportCount, event.status]), [
+    [1, trialEvent.public_id, "paper", true, 2, 2, "developing"],
+    [2, noticeEvent.public_id, "official", true, 1, 1, "developing"],
   ]);
   assert.equal(list.events[0].title, "试验");
   assert.equal(list.events[0].latest, "Trial coverage");
-  assert.equal(list.events[0].heat, undefined, "heat is never on the wire");
+  assert.equal(list.events[0].firstAt, hoursAgo(20));
+  // Shown since 2026-09-24: the heat the run measured, ×10 and rounded.
+  const stored = (await database.query("SELECT heat FROM evimed_frontier.events WHERE id = $1", [trialEvent.id])).rows[0].heat;
+  assert.equal(list.events[0].heat, Math.round(stored * 10));
+  const heats = (await database.query("SELECT heats FROM evimed_frontier.hot_snapshots ORDER BY taken_at DESC LIMIT 1")).rows[0].heats;
+  assert.deepEqual(Object.keys(heats).sort(), [trialEvent.public_id, noticeEvent.public_id].sort(), "every event that could be listed, and nothing else");
+  assert.equal(heats[trialEvent.public_id], Math.round(stored * 10_000) / 10_000);
+  assert.deepEqual([list.events[0].rankChange, list.events[0].badge, list.events[0].trend, list.events[0].period], [null, null, null, null],
+    "no list six hours old yet: nothing to compare, no trend");
+});
+
+test("a snapshot records the heat of what could be listed; the list reads its trend, rank change and badge from the snapshots", options, async () => {
+  const events = layer({ embedder: null });
+  const old = await insertComposedItem(database, { sourceId: "nejm", title: "Old trial", registryIds: ["NCT11"], visibleAt: hoursAgo(40), timelineAt: hoursAgo(40) });
+  await insertComposedItem(database, { sourceId: "reuters", sourceType: "media", title: "Old trial coverage", registryIds: ["NCT11"], clusterKeys: [],
+    visibleAt: hoursAgo(30), timelineAt: hoursAgo(30) });
+  const fresh = await insertComposedItem(database, { sourceId: "nejm", title: "Fresh trial", registryIds: ["NCT22"], visibleAt: hoursAgo(5), timelineAt: hoursAgo(5) });
+  await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Fresh trial coverage", registryIds: ["NCT22"], clusterKeys: [],
+    visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await events.clusterPending();
+  const oldEvent = await eventOf(database, old.id);
+  const freshEvent = await eventOf(database, fresh.id);
+  // An event folded into the old one since: older snapshots name it by its own id.
+  await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, merged_into)
+    VALUES ('0123456789abcdef', '并入的事件', 'evidence', $1, $1, $2)`, [hoursAgo(45), oldEvent.id]);
+  // Earlier lists, as the worker left them: the old story listed and cooler,
+  // no snapshot at all around 20, 12, 8 and 4 hours ago, the fresh one nowhere.
+  const snapshot = (hours, ranking, heats) => database.query(`INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking, heats)
+    VALUES ($1, $2::jsonb, $3::jsonb)`, [hoursAgo(hours), JSON.stringify(ranking), JSON.stringify(heats)]);
+  await snapshot(24, [{ rank: 1, eventId: oldEvent.public_id }], { [oldEvent.public_id]: 0.9 });
+  await snapshot(20.5, [{ rank: 1, eventId: "0123456789abcdef" }], { "0123456789abcdef": 0.7 });
+  await snapshot(16.5, [{ rank: 1, eventId: oldEvent.public_id }], { [oldEvent.public_id]: 1.1 });
+  await snapshot(6.25, [{ rank: 2, eventId: oldEvent.public_id }], { [oldEvent.public_id]: 0.6 });
+  await events.computeHot();
+  const list = await events.hotList();
+  assert.deepEqual(list.events.map((event) => event.id), [freshEvent.public_id, oldEvent.public_id], "the fresh story is hotter now");
+  const [hot, cooling] = list.events;
+  assert.equal(hot.badge, "new", "first reported five hours ago");
+  assert.equal(hot.rankChange, "new", "not on the list six hours ago");
+  assert.equal(hot.trend, null, "no heat recorded six hours ago: 「暂无走势」");
+  assert.equal(cooling.rankChange, 0, "second then, second now");
+  assert.equal(cooling.badge, "rising", "hotter than the 6 it was shown at six hours ago");
+  assert.deepEqual(cooling.trend.map((point) => point.heat), [9, 7, 11, null, null, null, cooling.heat],
+    "seven points four hours apart; the folded-in event's heat is this event's; an hour without a snapshot is null");
+  assert.equal(cooling.trend[0].at, hoursAgo(24));
+  assert.equal(cooling.trend.at(-1).at, list.takenAt);
+});
+
+test("the week's and the month's rankings: institutions in the window, first-hand material, the best rank reached; time on the list", options, async () => {
+  const at = (hours) => new FrontierEvents({ database, editor: null, embedder: null, now: () => new Date(NOW.getTime() - hours * 3_600_000),
+    budget: async () => ({ state: "ok" }), config: {} });
+  const story = async (key, reports, hoursBack = 0) => {
+    let first = null;
+    for (const [index, report] of reports.entries()) {
+      const row = await insertComposedItem(database, { sourceId: report.source, sourceType: report.type ?? "media", title: `${key} ${index}`,
+        registryIds: [key], clusterKeys: index === 0 ? undefined : [], visibleAt: hoursAgo(report.hours), timelineAt: hoursAgo(report.hours) });
+      first ??= row;
+    }
+    await at(hoursBack).clusterPending();
+    return eventOf(database, first.id);
+  };
+  const a = await story("NCT-A", [{ source: "nejm", type: "journal", hours: 30 }, { source: "reuters", hours: 29 }, { source: "stat", hours: 28 }]);
+  const b = await story("NCT-B", [{ source: "fda", type: "regulator", hours: 50 }, { source: "stat", hours: 49 }]);
+  const c = await story("NCT-C", [{ source: "reuters", hours: 20 }, { source: "yimaitong", hours: 19 }]);
+  const d = await story("NCT-D", [{ source: "ema", type: "regulator", hours: 70 }]);
+  const e = await story("NCT-E", [{ source: "stat", hours: 10 }]);
+  const f = await story("NCT-F", [{ source: "nejm", type: "journal", hours: 216 }, { source: "reuters", hours: 215 }, { source: "stat", hours: 214 }], 200);
+  // Six lists ten minutes apart, three days ago: D first, B second — seventy
+  // minutes each, the last list counted until the next run could have come.
+  for (let index = 0; index < 6; index += 1) {
+    await database.query("INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking, heats) VALUES ($1, $2::jsonb, '{}'::jsonb)",
+      [new Date(NOW.getTime() - 72 * 3_600_000 + index * 600_000), JSON.stringify([{ rank: 1, eventId: d.public_id }, { rank: 2, eventId: b.public_id }])]);
+  }
+  const events = layer({ embedder: null });
+  const week = await events.hotPeriod("week");
+  assert.equal(week.since, hoursAgo(7 * 24));
+  assert.equal(week.at, NOW.toISOString());
+  assert.deepEqual(week.events.map((event) => event.id), [a.public_id, b.public_id, c.public_id, d.public_id],
+    "three institutions first; then two with first-hand material; one institution only because it was listed; E alone and never listed is not here");
+  assert.deepEqual(week.events.map((event) => event.period), [
+    { institutions: 3, reports: 3, hoursOnList: null, bestRank: null },
+    { institutions: 2, reports: 2, hoursOnList: 1, bestRank: 2 },
+    { institutions: 2, reports: 2, hoursOnList: null, bestRank: null },
+    { institutions: 1, reports: 1, hoursOnList: 1, bestRank: 1 },
+  ]);
+  assert.deepEqual(week.events.map((event) => [event.rank, event.hasPrimary, event.primary]),
+    [[1, true, "paper"], [2, true, "official"], [3, false, null], [4, true, "official"]]);
+  assert.deepEqual([week.events[0].heat, week.events[0].trend, week.events[0].badge, week.events[0].rankChange], [null, null, null, null],
+    "a window's ranking carries no heat, trend or badge: those are the current list's");
+  assert.ok(!week.events.some((event) => event.id === e.public_id));
+  const month = await events.hotPeriod("month");
+  assert.deepEqual(month.events.map((event) => event.id), [a.public_id, f.public_id, b.public_id, c.public_id, d.public_id],
+    "nine days ago is in the month: three institutions and a paper, after A only by its latest report");
+  await assert.rejects(events.hotPeriod("year"), { code: "frontier_query_invalid" });
+});
+
+test("the event page's facts, computed when read: the heat now, the institutions of 72 hours by kind, the hourly trend, the first-hand material", options, async () => {
+  const events = layer({ embedder: null });
+  // The earliest report holds the trial's key, as the first sighting would.
+  await insertComposedItem(database, { sourceId: "reuters", sourceType: "media", title: "Early word", registryIds: ["NCT33"],
+    visibleAt: hoursAgo(80), timelineAt: hoursAgo(80) });
+  const paper = await insertComposedItem(database, { sourceId: "nejm", title: "Paper", registryIds: ["NCT33"], clusterKeys: [],
+    visibleAt: hoursAgo(10), timelineAt: hoursAgo(10) });
+  await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Coverage", registryIds: ["NCT33"], clusterKeys: [],
+    visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await events.clusterPending();
+  const event = await eventOf(database, paper.id);
+  const read = await events.read(event.public_id);
+  assert.deepEqual(read.institutions, { total: 2, byType: [{ type: "journal", count: 1 }, { type: "media", count: 1 }] },
+    "the report of 80 hours ago is outside the 72 hours");
+  assert.equal(read.primary, "paper");
+  assert.equal(read.trend.length, 73, "the first report is older than the window: every hour of it");
+  assert.equal(read.trend.at(-1).at, NOW.toISOString());
+  assert.equal(read.trend.at(-1).heat, read.heat, "the last point is the heat now");
+  assert.ok(read.heat > 0 && Number.isInteger(read.heat));
+  assert.ok(read.trend.at(-1).heat > read.trend.at(-11).heat, "the paper ten hours ago and the coverage since lifted it");
 });
 
 test("digests: earned by the hot list or a primary with two reports, rewritten on a new primary, kept when a rewrite fails", options, async () => {
