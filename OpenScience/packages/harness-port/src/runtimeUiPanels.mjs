@@ -86,9 +86,14 @@ export function fileTypeOf(path) {
   // each item. The name is @evimed/domain's REPORTING_CHECKLIST_FILE, written
   // out because this function is shipped into the frame on its own.
   const report = icon === 'doc' && /report/.test(lower) && lower !== 'reporting-checklist.md';
+  // A delivery summary says what the answer above it already says, once per
+  // run and once per deliverable; it waits behind 「显示全部」 (production,
+  // 2026-09-24: three 「交付摘要」 took three of four cards from a manuscript
+  // run whose two sections and two checklists were the delivery).
   const rank = report ? 0
     : /matrix.*\.json$/.test(lower) ? 1
-      : icon === 'doc' ? 2 : icon === 'sheet' ? 3 : icon === 'image' ? 4 : 5;
+      : lower === 'delivery-summary.md' ? 5
+        : icon === 'doc' ? 2 : icon === 'sheet' ? 3 : icon === 'image' ? 4 : 5;
   return { name, type, icon, rank };
 }
 
@@ -143,9 +148,11 @@ export function documentNameOf(path) {
  * wrote nothing. Accepted and unchecked files are both the run's output (a
  * gate verdict never withholds a delivery), and neither says which it is.
  * Revision notes are the run's answer to its reviewer — a backstage file
- * (principle 10a) — and stay in the file tree.
+ * (principle 10a) — and stay in the file tree. Two files of one name — one
+ * per deliverable — say which deliverable's folder each is in (`where`), the
+ * folder the answer names them by.
  * @param {any} live
- * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number }[] } | null}
+ * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number, where: string | null }[] } | null}
  */
 export function fileCardsModel(live) {
   const state = String(live?.state ?? '');
@@ -160,9 +167,16 @@ export function fileCardsModel(live) {
     seen.add(path);
     const type = fileTypeOf(path);
     if (/^revision-notes?\.md$/i.test(type.name)) continue;
-    files.push({ path, ...type, label: documentNameOf(path) ?? type.name });
+    files.push({ path, ...type, label: documentNameOf(path) ?? type.name, where: /** @type {string | null} */ (null) });
   }
-  files.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+  /** @type {Map<string, number>} */
+  const named = new Map();
+  for (const file of files) named.set(file.label, (named.get(file.label) ?? 0) + 1);
+  for (const file of files) {
+    const folders = file.path.split('/');
+    if ((named.get(file.label) ?? 0) > 1 && folders.length > 1) file.where = folders[folders.length - 2];
+  }
+  files.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
   return files.length ? { runId: String(live.runId), files } : null;
 }
 
@@ -261,7 +275,8 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     h('path', { d: 'M7 7h10v10' }), h('path', { d: 'M7 17 17 7' }));
 
   /**
-   * One delivered file: its name, 「类型 · 大小」, and the one way to open it.
+   * One delivered file: its name, 「类型 · 大小」 (「文件夹 · 类型」 when two
+   * files share the name), and the one way to open it.
    * The name is the document's (the reader's title); the file's own name is
    * the tooltip, as it is in the file tree.
    * @param {{ file: any, runId: string, sessionId: string | null, useResource?: (address: string) => any }} props
@@ -271,6 +286,7 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     // does not recognise reads as `none`, not as a failure.
     const resource = typeof useResource === 'function' ? useResource(sessionId ? fileAddress(sessionId, file.path) : '') : null;
     const size = resource && resource.status === 'live' ? formatBytes(resource.value?.bytes) : null;
+    const facts = [file.where, file.type, size].filter(Boolean).join(' · ');
     return h('button', {
       type: 'button', 'data-evimed-file': file.path, 'aria-label': `打开${file.label}`, title: file.name,
       onClick: () => { kit.hub.send('open-artifact', { runId, path: file.path }); },
@@ -284,7 +300,7 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
       h(FileIcon, { kind: file.icon })),
     h('span', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
       h('span', { style: { ...text, ...title } }, file.label),
-      h('span', { style: { ...meta, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, size ? `${file.type} · ${size}` : file.type)),
+      h('span', { style: { ...meta, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, facts)),
     h('span', { 'aria-hidden': true, style: { flex: 'none', display: 'inline-flex', color: 'var(--dsw-alias-label-tertiary)' } }, h(OpenIcon)));
   };
 

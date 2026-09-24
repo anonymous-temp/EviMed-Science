@@ -74,6 +74,21 @@ test('a completed reporting checklist is never taken for the report: it follows 
   assert.equal(/** @type {any} */ (fileCardsModel(withReport)).files[0].label, '证据分析报告');
 });
 
+test('two deliverables of one kind are the lead cards, each saying its folder; the delivery summaries wait behind the fold', () => {
+  // Production, 2026-09-24 (run_cfb13f0e): a manuscript run with two
+  // deliverables showed three 「交付摘要」 and one 「论文章节」 as its cards.
+  const artifacts = ['consort-checklist', 'ms-methods-results'].flatMap((id) => ['citation-ledger.csv', 'delivery-summary.md', 'manuscript-section.md', 'reporting-checklist.md', 'revision-notes.md', 'section-claims.json']
+    .map((file) => `deliverables/${id}/${file}`)).concat('delivery-summary.md');
+  const model = /** @type {any} */ (fileCardsModel({ ...DELIVERED, artifacts, unverifiedArtifacts: [] }));
+  assert.deepEqual(model.files.slice(0, 4).map((/** @type {any} */ file) => [file.label, file.where]), [
+    ['论文章节', 'consort-checklist'], ['论文章节', 'ms-methods-results'],
+    ['报告规范清单', 'consort-checklist'], ['报告规范清单', 'ms-methods-results'],
+  ]);
+  assert.ok(model.files.filter((/** @type {any} */ file) => file.label === '交付摘要').every((/** @type {any} */ file) => file.rank > 4), 'a summary is not one of the readable lead cards');
+  assert.equal(model.files.find((/** @type {any} */ file) => file.path === 'delivery-summary.md').where, null, 'a file at the root has no folder to say');
+  assert.equal(/** @type {any} */ (fileCardsModel(DELIVERED)).files.every((/** @type {any} */ file) => file.where === null), true, 'a name used once needs no folder');
+});
+
 test("a card names a document exactly as the shell's reader does, from a table held equal to the shell's", async () => {
   // The frame's copy exists because a body may import nothing; this is what
   // keeps it from drifting from `apps/web/src/lib/artifactNames.ts`.
