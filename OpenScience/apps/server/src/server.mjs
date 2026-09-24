@@ -3279,12 +3279,17 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname.startsWith("/api/runtime-ui/frames/") && req.method === "DELETE") {
-        const { session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+        const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
         if (req.headers["x-open-science-csrf"] !== session.csrfToken) throw new HttpError(403, "csrf_required", "A valid CSRF token is required.");
         const frameId = pathname.slice("/api/runtime-ui/frames/".length);
-        // This expires the browser's exact Path cookie, not the signed ticket.
-        // Existing connections and other frame cookies remain untouched.
-        res.setHeader("Set-Cookie", releaseRuntimeUiFrameCookie(config, frameId));
+        // This expires the browser's exact Path cookie, not the signed ticket:
+        // logout stays the authority boundary, and other frames' cookies are
+        // untouched. The frame's own connections are closed before the answer,
+        // so a release the shell waits for has freed its runtime's slot by
+        // the time the shell starts the next project (UI plan §2.2).
+        const expired = releaseRuntimeUiFrameCookie(config, frameId);
+        await runtimeUi.releaseFrame(frameId, user.id);
+        res.setHeader("Set-Cookie", expired);
         sendJson(res, 200, { data: true });
         return;
       }
