@@ -68,6 +68,19 @@ test('a delivered file is named by what the contract calls it', () => {
   assert.equal(artifactKind('deliverables/evidence/revision-notes.md').label, '修订说明');
   assert.equal(artifactKind('deliverables/brief/summary.docx').label, '文档');
   assert.equal(artifactKind('deliverables/brief/data.csv').label, '文件');
+  assert.deepEqual(artifactKind('deliverables/results/reporting-checklist.md'), { kind: 'document', label: '报告规范清单' },
+    'a completed reporting checklist is named for what it is, never taken for the report');
+});
+
+test('the card opens the section a checklist lists, not the checklist', () => {
+  // manuscript-support delivers `manuscript-section.md` beside its CONSORT
+  // checklist; only the checklist's name contains `report`.
+  const delivered = { ...LIVE, state: 'succeeded',
+    artifacts: ['deliverables/results/reporting-checklist.md', 'deliverables/results/manuscript-section.md', 'deliverables/evidence/clinical-evidence-report.md'] };
+  const model = /** @type {any} */ (deliveryModel(delivered, null, 9_999_999_999, kit()));
+  assert.equal(model.reportPath, 'deliverables/evidence/clinical-evidence-report.md');
+  const onlySection = /** @type {any} */ (deliveryModel({ ...delivered, artifacts: ['deliverables/results/reporting-checklist.md', 'deliverables/results/manuscript-section.md'] }, null, 9_999_999_999, kit()));
+  assert.equal(onlySection, null, 'with no report and no claims there is no card to show, and the checklist does not stand in for one');
 });
 
 test('the files group by the piece of work that wrote them, and say which were not checked', () => {
