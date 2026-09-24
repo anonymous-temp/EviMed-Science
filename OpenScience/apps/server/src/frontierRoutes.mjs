@@ -130,7 +130,8 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       return reply(await service.forYou(user));
     }
     if (parts.length === 1 && parts[0] === "hot" && method === "GET") {
-      return reply(await service.hot());
+      // `?window=week|month`: that window's ranking instead of the current list.
+      return reply(await service.hot(url.searchParams));
     }
     if (parts.length === 2 && parts[0] === "events" && method === "GET") {
       const answer = await service.event(user, parts[1]);
