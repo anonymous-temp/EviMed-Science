@@ -21,7 +21,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
-import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, workspaceLayout } from "@evimed/domain";
+import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, workspaceLayout } from "@evimed/domain";
 
 import { GUIDANCE_SECTION_NAME, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
@@ -29,6 +29,7 @@ import { evidenceFromOutcome } from "../src/evidenceIngest.mjs";
 import { skillBodyDigestAsync } from "../src/digest.mjs";
 import {
   buildDelegation,
+  buildInlineMethod,
   completionCheck,
   gateDeliverable,
   indexPlan,
@@ -187,6 +188,8 @@ function harness() {
     listeners,
     tools: registry,
     toolNames: () => [...tools.keys()],
+    /** A registered tool's definition, as the plugin handed it to the registry. @param {string} name */
+    toolDefinition: (name) => tools.get(name),
   };
   const services = new Map();
   return ctx;
@@ -1593,6 +1596,148 @@ test("a review that is not there costs the submission nothing but a line saying 
   } finally {
     await new Promise((resolve) => server.close(() => resolve(undefined)));
   }
+});
+
+/**
+ * A capability whose contract carries a completed reporting checklist, as
+ * manuscript-support's does; and the fixture's own research-brief one, which
+ * a plan with two capabilities needs beside it.
+ */
+const sectionCapability = {
+  id: "manuscript-support", skills: [], tools: [], persona: "Manuscript writer",
+  produces: [{ contractKind: "manuscript-section", outputs: [
+    { path: "manuscript-section.md", required: true },
+    { path: "reporting-checklist.md", required: false },
+  ] }],
+};
+const briefCapability = { id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [
+  { path: "brief.md", required: true },
+  { path: "reporting-checklist.md", required: false },
+] }] };
+
+test("the plan tool offers studyType as the domain's closed vocabulary, optional, in one line", async () => {
+  // Owner ruling 2026-09-24: the planning stage declares the study type, and
+  // the checklist attaches to it. The kernel holds the call to this enum
+  // (planToolSchema.test.mjs compiles it with the kernel's own DSL).
+  const f = await nativePolicyFixture();
+  const plan = f.ctx.toolDefinition("evimed_plan");
+  const field = plan.parameters.deliverables.items.properties.studyType;
+  assert.equal(field.type, "string");
+  assert.deepEqual(field.enum, [...STUDY_TYPES]);
+  assert.ok(field.description.length <= 100, `one line (principle 16), not ${field.description.length} characters`);
+  assert.match(field.description, /省略/, "the planner is told to leave it out, not to fill it with nothing");
+  assert.equal(plan.parameters.deliverables.items.required, undefined, "a deliverable that reports no one study declares nothing");
+  assert.match(plan.description, /studyType/, "the field list in the description names it");
+});
+
+test("a declared study type is in the plan record, and the one who writes the deliverable is told which checklist it carries", async () => {
+  const f = await nativePolicyFixture({ briefId: "study-type-owner", capabilities: [sectionCapability, briefCapability] });
+  await f.step(1);
+  const written = await f.execute("evimed_plan", { action: "write", clarifications: ["The trial's results are final."], deliverables: [
+    { id: "results", contractKind: "manuscript-section", capability: "manuscript-support", title: "结果", dependsOn: [], studyType: "rct" },
+    { id: "brief", contractKind: "research-brief", capability: "research-brief", title: "简报", dependsOn: [] },
+  ] });
+  assert.equal(written.value.ok, true, JSON.stringify(written.value));
+  assert.deepEqual(written.value.data.deliverables.map((/** @type {any} */ item) => [item.id, item.studyType ?? null]), [["results", "rct"], ["brief", null]]);
+  // The completed checklist is asked for in the plan's own answer: a session
+  // doing the work itself may have had its method before this plan existed.
+  assert.equal(written.value.data.reportingChecklists.length, 1, JSON.stringify(written.value.data.reportingChecklists));
+  const line = written.value.data.reportingChecklists[0];
+  assert.match(line, /^交付物「results」报告或设计的是一项随机对照试验，适用 CONSORT 2025/);
+  assert.ok(line.includes("`/skills/reporting-guidelines/checklists/consort-2025.md`"), line);
+  assert.ok(line.includes("`deliverables/results/reporting-checklist.md`"), line);
+  assert.match(line, /未报告：原因/);
+
+  const status = await f.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.items.find((/** @type {any} */ item) => item.id === "results").studyType, "rct");
+  const planFile = [...f.files.entries()].find(([name]) => name.endsWith(workspaceLayout.planFile));
+  assert.equal(JSON.parse(planFile?.[1] ?? "{}").deliverables[0].studyType, "rct", "task-plan.json keeps what was declared");
+});
+
+test("a study type outside the vocabulary is a plan issue to repair, and no plan is recorded", async () => {
+  const f = await nativePolicyFixture({ capabilities: [sectionCapability] });
+  await f.step(1);
+  const refused = await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [
+    { id: "results", contractKind: "manuscript-section", capability: "manuscript-support", title: "结果", dependsOn: [], studyType: "cohort" },
+  ] });
+  assert.equal(refused.value.ok, false);
+  assert.equal(refused.value.code, "plan_invalid");
+  assert.match(refused.value.issues[0].message, /unknown studyType "cohort"/);
+  assert.equal(refused.value.issues[0].deliverableId, "results");
+  assert.equal((await f.execute("evimed_plan", { action: "status" })).value.data.revision, 0);
+});
+
+test("the review is asked with the study type the plan declared, and a revised plan's declarations replace the old ones", async () => {
+  const gateway = await reviewGatewayStub(sampleReview);
+  const f = await nativePolicyFixture({ briefId: "review-study-type", reviewEnabled: true, revisionAuthorizeUrl: gateway.revisionAuthorizeUrl, capabilities: [briefCapability] });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [
+      { id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Model", dependsOn: [], studyType: "prediction-model", acceptance: ["写明结局与时间范围"] },
+    ] });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Model\nA synthetic summary.\n");
+    assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+    const starts = () => gateway.requests.filter((request) => request.method === "POST" && request.path === "/internal/review/v1/deliverables");
+    assert.equal(starts()[0].body.studyType, "prediction-model", "the control plane attaches TRIPOD+AI from this, never from the prose");
+    assert.deepEqual(starts()[0].body.acceptance, ["写明结局与时间范围"]);
+
+    // Revised: the same deliverable, no longer declaring a design, with new
+    // acceptance items. What it did (its status, its last review) stays; what
+    // the plan says about it is the new plan's.
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [
+      { id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Model, revised", dependsOn: [], acceptance: ["写明校准度"] },
+    ] });
+    const status = await f.execute("evimed_plan", { action: "status" });
+    const item = status.value.data.items[0];
+    assert.equal(item.status, "accepted", "the revision kept what the run had done");
+    assert.equal(item.title, "Model, revised");
+    assert.equal(Object.hasOwn(item, "studyType"), false, "a study type the new plan dropped is dropped");
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Model\nA corrected summary.\n");
+    assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+    assert.equal(starts().length, 2);
+    assert.equal(Object.hasOwn(starts()[1].body, "studyType"), false, "a request without a study type is the request it always was");
+    assert.deepEqual(starts()[1].body.acceptance, ["写明校准度"], "the reviewer is given the revised plan's acceptance items");
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a child's brief names the declared design and, where its contract carries one, the checklist to complete", () => {
+  const item = { id: "results", title: "结果", contractKind: "manuscript-section", capability: "manuscript-support", dependsOn: [], studyType: "rct" };
+  /** @param {Record<string, any>} overrides */
+  const brief = (overrides = {}) => buildDelegation({
+    manifest: sectionCapability, item, briefExcerpt: "按 CONSORT 写这项试验的结果部分。", skillBodies: [], toolFilter: [],
+    skillsDir: "/opt/evimed/capability-skills", ...overrides,
+  }).prompt;
+
+  const rct = brief();
+  assert.match(rct, /你负责一件交付物：结果（契约种类 manuscript-section；研究类型 随机对照试验）。/);
+  assert.ok(rct.includes("- `deliverables/results/reporting-checklist.md`（可选）"), "the file is in the list the manifest declares");
+  assert.ok(rct.includes("适用 CONSORT 2025：把 `/opt/evimed/capability-skills/reporting-guidelines/checklists/consort-2025.md` 的条目表抄进 `deliverables/results/reporting-checklist.md`"), rct);
+  assert.ok(rct.indexOf("reporting-checklist.md`（可选）") < rct.indexOf("适用 CONSORT 2025"), "the instruction follows the file list it explains");
+
+  const tripod = brief({ item: { ...item, studyType: "prediction-model" } });
+  assert.ok(tripod.includes("适用 TRIPOD+AI") && tripod.includes("reporting-guidelines/checklists/tripod-ai.md"));
+
+  const observational = brief({ item: { ...item, studyType: "observational" } });
+  assert.match(observational, /研究类型 观察性研究/, "a design without a guideline yet is still named");
+  assert.equal(observational.includes("reporting-guidelines/checklists"), false, "and no checklist is asked for that no table exists for");
+
+  const undeclared = brief({ manifest: { ...sectionCapability, produces: [{ contractKind: "manuscript-section", outputs: [{ path: "manuscript-section.md", required: true }] }] } });
+  assert.equal(undeclared.includes("reporting-checklist.md"), false, "a contract that does not carry the file is never asked for it");
+
+  const plain = brief({ item: { ...item, studyType: undefined } });
+  assert.equal(/研究类型/.test(plain), false, "a deliverable that declares nothing reads as it always did");
+  assert.equal(plain.includes("reporting-guidelines"), false);
+
+  const relative = brief({ skillsDir: "" });
+  assert.ok(relative.includes("`reporting-guidelines/checklists/consort-2025.md`"), "without a deployment root the table is named relative to the capability skills");
+
+  // The session doing the work itself reads the same instruction.
+  const inline = buildInlineMethod({ manifest: sectionCapability, item, skillBodies: [], skillsDir: "/opt/evimed/capability-skills" });
+  assert.ok(inline.includes("适用 CONSORT 2025：把 `/opt/evimed/capability-skills/reporting-guidelines/checklists/consort-2025.md`"), inline);
+  assert.equal(buildInlineMethod({ manifest: sectionCapability, skillBodies: [] }).includes("reporting-checklist.md"), false,
+    "a method given before there is a plan names no deliverable and no checklist");
 });
 
 test("a completed native workflow may plan again and its receipt names actual workspace files", async () => {

@@ -86,8 +86,9 @@ const QUIET = Object.freeze({ findings: [], checklist: [{ item: "E2", status: "a
 /** An editor that said nothing at all. */
 const SILENT = Object.freeze({ findings: [], checklist: [], acceptance: [] });
 
-/** @param {{ modelAnswers: any[], notifications?: any, imService?: any, runtimeManager?: any }} input */
-function service({ modelAnswers, notifications = null, imService = null, runtimeManager = null }) {
+/** @param {{ modelAnswers: any[], notifications?: any, imService?: any, runtimeManager?: any, outputs?: { path: string }[] }} input */
+function service({ modelAnswers, notifications = null, imService = null, runtimeManager = null,
+  outputs = [{ path: "clinical-evidence-report.md" }, { path: "clinical-evidence-matrix.json" }] }) {
   /** @type {any[]} */
   const prompts = [];
   const answers = [...modelAnswers];
@@ -98,7 +99,7 @@ function service({ modelAnswers, notifications = null, imService = null, runtime
         userById: async (/** @type {string} */ id) => (id === userId ? { id } : null),
         requireProject: async () => ({ id: projectId, userId, workspaceDir: workspace }),
       },
-      agentRegistry: Promise.resolve({ get: () => ({ outputs: [{ path: "clinical-evidence-report.md" }, { path: "clinical-evidence-matrix.json" }] }) }),
+      agentRegistry: Promise.resolve({ get: () => ({ outputs }) }),
       attributeRun: async () => "run_review_1",
       notifications, imService, runtimeManager, retryDelayMs: 0,
       fetchImpl: /** @type {any} */ (async (/** @type {string} */ _url, /** @type {any} */ init) => {
@@ -194,6 +195,53 @@ test("a package is reviewed whole: references resolved, located findings kept, t
 
   // Another account sees none of it.
   assert.equal(await review.reviewStatus({ userId: "someone-else", projectId }, /** @type {any} */ (started).reviewId), null);
+});
+
+test("a section declared a randomised trial is asked the trial's list, and a checklist row that points at nothing is a located finding", options, async () => {
+  // Owner ruling 2026-09-24: the plan declares the study type, the reviewer
+  // attaches its reporting checklist, and the deliverable carries its own
+  // completed copy — which the editor may hold to the text.
+  const row = "| Methods — Randomisation: allocation concealment mechanism | 18 | Mechanism used to implement the random allocation sequence | 资料与方法 › 随机化 |";
+  const section = [
+    "## 资料与方法",
+    "本研究为多中心随机对照试验，按 1:1 分配 [1]。",
+    "",
+    "## 参考文献",
+    "1. Smith J. Metformin versus placebo in type 2 diabetes. doi:10.1000/real",
+    "",
+  ].join("\n");
+  const dir = path.join(workspace, "deliverables/sec1");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "manuscript-section.md"), section);
+  await fs.writeFile(path.join(dir, "reporting-checklist.md"), `# CONSORT 2025\n\n| Section/topic | Item | Checklist item | 报告位置 |\n| --- | --- | --- | --- |\n${row}\n`);
+  const { review, prompts } = service({
+    outputs: [{ path: "manuscript-section.md" }, { path: "section-claims.json" }, { path: "citation-ledger.csv" }, { path: "reporting-checklist.md" }],
+    modelAnswers: [{
+      findings: [{ location: "18", kind: "missing_item", evidence: row, fix: "在「随机化」下写明分配隐藏的方法，或把这一行改为「未报告：原因」。" }],
+      checklist: [{ item: "C1", status: "present", evidence: "本研究为多中心随机对照试验" }, { item: "C18", status: "absent", evidence: "" }],
+      acceptance: [],
+    }],
+  });
+  const started = await review.startDeliverableReview({ userId, projectId }, {
+    runId: "native_rct", sessionId: "s-rct", deliverableId: "sec1", contractKind: "manuscript-section", capability: "manuscript-support", attempt: 1, studyType: "rct",
+  });
+  const done = await settled(review, /** @type {any} */ (started).reviewId);
+  assert.equal(done.status, "done", JSON.stringify(done));
+  assert.deepEqual(done.findings.map((/** @type {any} */ finding) => [finding.kind, finding.origin, finding.location]), [["missing_item", "editor", "18"]],
+    "the checklist row it rests on is in the package, so the finding is located and kept");
+  assert.equal(done.deterministic.references.references, 1, "the references were read from the section, not from the checklist");
+  assert.deepEqual(done.checklist, { present: 1, absent: ["C18"], unlocated: [] });
+
+  const schema = prompts[0].response_format.json_schema.schema;
+  assert.equal(schema.properties.checklist.minItems, 39, "SAMPL for the contract, CONSORT 2025 for the declared trial");
+  assert.ok(schema.properties.checklist.items.properties.item.enum.includes("C30"));
+  const message = prompts[0].messages[1].content;
+  assert.match(message, /^<submission contract="manuscript-section" deliverable="sec1" tier="L2" clinical="true" study-type="rct">/);
+  assert.match(message, /研究类型：随机对照试验（作者声明），报告规范 CONSORT 2025。/);
+  assert.match(message, /作者附了填好的报告规范清单（reporting-checklist\.md）/);
+  assert.match(message, /<file name="reporting-checklist\.md">/);
+  const stored = await database.query("SELECT deterministic->>'studyType' AS study_type FROM evimed_review.reviews WHERE id=$1", [/** @type {any} */ (started).reviewId]);
+  assert.equal(stored.rows[0].study_type, "rct", "the review's record says which design it was held to");
 });
 
 test("a second pass reads the repaired package with the last findings and their answers; a third is deterministic only", options, async () => {

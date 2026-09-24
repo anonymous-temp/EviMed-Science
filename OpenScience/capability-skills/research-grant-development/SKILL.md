@@ -74,6 +74,21 @@ carry it as an open risk. **An unresolved feasibility risk that survives into
 the audit is worth more than one that quietly disappears** — the second is the
 version that surfaces during review instead.
 
+## The designed study's reporting checklist
+
+When the plan declared the type of the one study the proposal designs — a
+randomised trial, a prediction model, a systematic review, a Mendelian
+randomisation study — and that type has a reporting guideline, the delegation
+message names it and its item table, and the package carries the completed
+checklist, `reporting-checklist.md`, by the `reporting-guidelines` method.
+
+It is the checklist the finished study will be reported against, so the design
+has to make its items answerable. Map each design item — randomisation,
+allocation concealment, blinding, outcomes, sample size, analysis — to where
+the proposal specifies it (研究方案 › 随机化), and mark the results items
+「未报告：方案阶段，结果待试验完成后报告」. A design item the proposal cannot
+answer yet is an open risk in `grant-audit.md`, not a row left blank.
+
 ## The files, at their names
 
 The manifest checks the package by file name before it reads a line, so the

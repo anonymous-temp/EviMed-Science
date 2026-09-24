@@ -82,6 +82,30 @@ test("what the gateway refuses, it refuses by name", async () => {
   }
 });
 
+test("a declared study type reaches the service, and one outside the vocabulary is refused by name", async () => {
+  // It decides which reporting checklist the editor is asked beside the
+  // contract kind's, so a value the domain does not know is refused rather
+  // than read as "none declared".
+  const g = await gateway();
+  try {
+    const started = await g.request("POST", "/internal/review/v1/deliverables", { deliverableId: "d1", contractKind: "manuscript-section", studyType: "rct" });
+    assert.equal(started.status, 202);
+    assert.equal(g.calls[0][2].studyType, "rct");
+    for (const absent of [undefined, null, ""]) {
+      await g.request("POST", "/internal/review/v1/deliverables", { deliverableId: "d2", contractKind: "manuscript-section", ...(absent === undefined ? {} : { studyType: absent }) });
+      assert.equal(Object.hasOwn(g.calls.at(-1)?.[2] ?? {}, "studyType"), false, `${JSON.stringify(absent)} declares nothing`);
+    }
+    for (const studyType of ["cohort", "RCT", 3, true, ["rct"]]) {
+      const refused = await g.request("POST", "/internal/review/v1/deliverables", { deliverableId: "d3", contractKind: "manuscript-section", studyType });
+      assert.equal(refused.status, 400, JSON.stringify(studyType));
+      assert.equal(refused.body.error.code, "review_request_invalid");
+    }
+    assert.equal(g.calls.filter((entry) => entry[0] === "start").length, 4, "nothing refused reached the service");
+  } finally {
+    await g.close();
+  }
+});
+
 test("off is one answer, whoever asks", async () => {
   const g = await gateway({ enabled: false });
   try {

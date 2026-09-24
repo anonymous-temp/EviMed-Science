@@ -48,6 +48,7 @@ import path from "node:path";
 import {
   REPLY_CHECK_OUTPUT_SCHEMA,
   REPLY_CHECK_WARNING_VERDICTS,
+  REPORTING_CHECKLIST_FILE,
   REVIEW_ANSWER_REQUIRED_KINDS,
   REVIEW_EDITOR_FINDINGS_LIMIT,
   REVIEW_FINDING_KIND_LABELS_ZH,
@@ -59,6 +60,7 @@ import {
   deliverableReviewTier,
   editorSaidNothing,
   evidenceLocated,
+  isStudyType,
   numericTraceFindings,
   outputNumbers,
   referenceEntries,
@@ -67,9 +69,11 @@ import {
   replyCheckCounts,
   replyCitedSentences,
   replyReviewTier,
+  reportingGuidelineFor,
   reviewEditorSchema,
   reviewSeverity,
   statConsistencyFindings,
+  studyTypeLabel,
 } from "@evimed/domain";
 import { callReviewModel, ReviewModelError } from "./reviewModel.mjs";
 import { migrateReview } from "./reviewPersistence.mjs";
@@ -215,14 +219,35 @@ function sourceForEditor(source, quotes, radius) {
   return passages.length > SOURCE_TEXT_FULL_LIMIT ? `${passages.slice(0, SOURCE_TEXT_FULL_LIMIT - 1)}…` : passages;
 }
 
-/** The checklist items for a contract kind. @param {string} contractKind */
-export function checklistFor(contractKind) {
-  const ids = Array.isArray(CHECKLISTS.byContractKind?.[contractKind]) ? CHECKLISTS.byContractKind[contractKind] : [];
+/**
+ * The checklist items a package is reviewed against: its contract kind's
+ * lists, then the reporting guideline of the study type its plan declared —
+ * each list once, so a meta-analysis declared a systematic review is not asked
+ * the PRISMA items twice.
+ * @param {string} contractKind @param {string} [studyType]
+ */
+export function checklistFor(contractKind, studyType = "") {
+  const byKind = CHECKLISTS.byContractKind?.[contractKind];
+  const byStudy = studyType ? CHECKLISTS.byStudyType?.[studyType] : null;
+  const ids = [...new Set([...(Array.isArray(byKind) ? byKind : []), ...(Array.isArray(byStudy) ? byStudy : [])])];
   return ids.flatMap((/** @type {string} */ id) => {
     const list = CHECKLISTS.checklists?.[id];
     if (!list) return [];
     return (Array.isArray(list.items) ? list.items : []).map((/** @type {any} */ item) => ({ id: String(item.id), text: String(item.text), list: String(list.title) }));
   });
+}
+
+/**
+ * The prose document of a package that its references are read from: the
+ * Markdown file named as a report, else the first Markdown file. The author's
+ * reporting checklist is never it — a table of where things are reported, not
+ * the report — and its name matches `report`, so it is set aside by name
+ * before the choice is made.
+ * @param {Map<string, string>} files @returns {string}
+ */
+export function packageReport(files) {
+  const documents = [...files.entries()].filter(([name]) => name.endsWith(".md") && name !== REPORTING_CHECKLIST_FILE);
+  return documents.find(([name]) => /report|报告/i.test(name))?.[1] ?? documents[0]?.[1] ?? "";
 }
 
 /**
@@ -322,7 +347,7 @@ export class ReviewService {
   /**
    * Start the review of one submitted deliverable.
    * @param {ReviewIdentity} identity
-   * @param {{ runId?: string, sessionId?: string, deliverableId: string, contractKind: string, capability?: string, attempt?: number, turn?: number, acceptance?: string[], editor?: boolean }} input
+   * @param {{ runId?: string, sessionId?: string, deliverableId: string, contractKind: string, capability?: string, attempt?: number, turn?: number, acceptance?: string[], studyType?: string, editor?: boolean }} input
    * @returns {Promise<{ reviewId: string, status: 'running' } | { status: 'skipped', reason: string }>}
    */
   async startDeliverableReview(identity, input) {
@@ -415,7 +440,7 @@ export class ReviewService {
     // package has nothing to judge and is paid to guess.
     if (!files.size) throw Object.assign(new Error(`No file of deliverable ${input.deliverableId} could be read.`), { code: "review_package_unreadable" });
     const prose = [...files.entries()].filter(([name]) => name.endsWith(".md"));
-    const report = prose.find(([name]) => /report|报告/i.test(name))?.[1] ?? prose[0]?.[1] ?? "";
+    const report = packageReport(files);
     const packageText = [...files.entries()].map(([name, text]) => `${name}\n${text}`).join("\n\n");
     const packageDigest = sha256(packageText);
 
@@ -446,7 +471,10 @@ export class ReviewService {
     // The claims and what their sources say around each quote (the
     // clinical evidence report is the one kind with a claim matrix).
     const { claims, sources } = await claimsWithSources(root, files.get(MATRIX_FILE));
-    const checklist = checklistFor(input.contractKind);
+    // The gateway refuses a value outside the vocabulary; a caller that did
+    // not come through it gets no list and no attribute from one either.
+    const studyType = isStudyType(input.studyType) ? String(input.studyType) : "";
+    const checklist = checklistFor(input.contractKind, studyType);
     const acceptanceItems = (Array.isArray(input.acceptance) ? input.acceptance : []).map((item) => clip(item, 240)).filter(Boolean).slice(0, 10);
 
     // The editor: at most `reviewEditorPasses` passes a deliverable, and only
@@ -477,7 +505,7 @@ export class ReviewService {
       const previousFindings = lastEditor ? await this.#findingsWithResponses(lastEditor.id) : [];
       const haystacks = [packageText, ...sources.map((source) => source.text)];
       const message = editorMessage({
-        contractKind: input.contractKind, deliverableId: input.deliverableId, tier, files, claims, sources, checklist, acceptanceItems,
+        contractKind: input.contractKind, deliverableId: input.deliverableId, tier, files, claims, sources, checklist, acceptanceItems, studyType,
         today: this.now().toISOString().slice(0, 10),
         deterministic: { references: references.metrics, referenceFindings: references.findings, numeric, stats }, previousFindings,
       });
@@ -583,6 +611,7 @@ export class ReviewService {
           editor: editorAllowed ? (editorError ? "failed" : "done") : (changed ? "skipped" : "unchanged"),
           editorAnswer,
           acceptanceItems,
+          studyType: studyType || null,
         }),
         JSON.stringify(checks.checklist), JSON.stringify(checks.acceptance), JSON.stringify(dropped), JSON.stringify(usage), cost, editorError]);
     });
@@ -1089,14 +1118,29 @@ async function readJobOutputs(root, jobIds) {
  * repaired report shares the provider's cached prefix; the report last.
  * @param {Record<string, any>} input
  */
-export function editorMessage({ contractKind, deliverableId, tier, files, claims, sources = [], checklist, acceptanceItems, deterministic, previousFindings, today = "" }) {
+export function editorMessage({ contractKind, deliverableId, tier, files, claims, sources = [], checklist, acceptanceItems, deterministic, previousFindings, today = "", studyType: declared = "" }) {
+  const studyType = isStudyType(declared) ? String(declared) : "";
   const parts = [];
-  parts.push(`<submission contract="${contractKind}" deliverable="${deliverableId}" tier="${tier.tier}"${tier.safety ? " clinical=\"true\"" : ""}>`);
+  parts.push(`<submission contract="${contractKind}" deliverable="${deliverableId}" tier="${tier.tier}"${tier.safety ? " clinical=\"true\"" : ""}${studyType ? ` study-type="${studyType}"` : ""}>`);
   // The editor's own sense of "now" is its training data's: on 2026-09-23 it
   // called a search date in 2026 「明显为笔误或占位符」. One date, from the
   // service's clock (principle 17), in the message rather than the system
   // prompt, so the prompt stays byte-stable for the provider's cache.
   if (today) parts.push(`今天是 ${today}（UTC）。`);
+  // The design the plan declared, which is why its guideline's items are in
+  // the checklist below: each item is read for this design. Said here and not
+  // in the system prompt, for the same reason as the date.
+  if (studyType) {
+    const guideline = reportingGuidelineFor(studyType);
+    parts.push(`研究类型：${studyTypeLabel(studyType)}（作者声明）${guideline ? `，报告规范 ${guideline.name}` : ""}。`);
+  }
+  // The author's own completed checklist is a claim about the text like any
+  // other, and the one kind of defect only it can carry: an item it says is
+  // reported where the text has nothing. Located by code like every finding —
+  // the row it rests on is in the package.
+  if (files instanceof Map && files.has(REPORTING_CHECKLIST_FILE)) {
+    parts.push(`作者附了填好的报告规范清单（${REPORTING_CHECKLIST_FILE}）。清单说某条已在某处报告、那里却找不到的，是清单写错了：写一条 missing_item 发现，location 写清单里的条目号（如 17a），evidence 逐字复制清单里那一行。`);
+  }
   if (checklist.length) {
     parts.push("<checklist>", ...checklist.map((/** @type {any} */ item) => `${item.id}（${item.list}）${item.text}`), "</checklist>");
   }
