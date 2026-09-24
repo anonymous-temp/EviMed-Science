@@ -99,9 +99,13 @@ export function SessionFrameHost() {
   const evictedFor = useRef<string | null>(null);
   const trackRelease = useCallback((projectId: string, released: Promise<void>) => {
     releases.current.set(projectId, released);
-    void released.finally(() => {
+    const forget = () => {
       if (releases.current.get(projectId) === released) releases.current.delete(projectId);
-    });
+    };
+    void released.finally(forget);
+    // A release that never answers is waited on for its bound once, not by
+    // every switch that comes after it.
+    setTimeout(forget, RELEASE_WAIT_MS);
   }, []);
 
   // Release first, then start (UI plan §2.2). A project with no surface here,

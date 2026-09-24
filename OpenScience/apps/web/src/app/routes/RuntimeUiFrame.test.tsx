@@ -1005,6 +1005,13 @@ describe("the conversation surface outlives the route", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(mocks.create).toHaveBeenCalledWith("project-c");
       expect(mocks.start).toHaveBeenCalledWith({ projectId: "project-c", opening: true });
+
+      // Waited on once: the next switch — back to a project it keeps, off the
+      // conversation — is admitted at once rather than behind it again.
+      await act(async () => { screen.getByText("Knowledge").click(); await vi.advanceTimersByTimeAsync(0); });
+      mocks.warm.mockReset();
+      await act(async () => { useProjectStore.setState({ currentId: "project-b" }); await vi.advanceTimersByTimeAsync(0); });
+      expect(mocks.warm).toHaveBeenCalledWith("project-b", { afterRelease: false });
     });
 
     it("switching project off the conversation also lets a surface go first, then warms the new project past an earlier refusal", async () => {
