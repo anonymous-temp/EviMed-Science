@@ -1,47 +1,57 @@
 /**
- * What a finished research run hands back, said in the conversation: the
- * delivery card above the composer, and the right column opening on the
- * kernel's own file tree the first time a run writes a report.
+ * What a finished research run hands back, said in the conversation: its
+ * files as cards at the end of the answer that delivered them, and the right
+ * column opening on the kernel's own file tree the first time a run writes a
+ * report.
  *
- * Until 2026-09-22 this body also drew a 运行 view of its own in the
- * conversation's view ring and a 文件 tab of its own in the right column. Both
- * went on the owner's ruling that the process view is the kernel's
- * (「运行那部分咋没有用 dsh 那种有图的那种呢」, 「预览也没了」): the kernel's
- * trajectory view — a timing overview over the per-step ledger, with a record
- * inspector — is the 运行 tab now (relabelled by the language pack), and the
- * kernel's file tree with its document previews is the right column. What the
- * product still has to say about a run that the kernel cannot — that it was
- * delivered, how many of its conclusions checked out against their sources,
- * and where the report is — is the card.
+ * Until 2026-09-23 this was a card docked above the composer: 已交付 · 结论 N
+ * 条，已核对 N 条 · N 个文件 · 用时 · 约 ¥. The owner's ruling (整改方案 §5.3)
+ * is that the conversation shows what the reader acts on and none of the
+ * machinery: each file, with its name, its type and size, and one way to open
+ * it, after the answer — where DSH itself puts delivered files ("between the
+ * closing message's body and its action footer") and where Manus ends a task.
+ * Cost is on 设置 → 用量; whether a conclusion checked out is the report's own
+ * 「依据」 marks.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
- *  - `conversation.input.dock` is a list seat directly above the composer
- *    card, full width. The composer itself is `--dsh-composer-card-max-width`
- *    wide and centred, so an occupant that does not say its own width sits at
- *    the frame's left edge, beside a centred composer (the misaligned chip of
- *    2026-09-22). The kernel's own queue dock holds itself to
- *    `calc(var(--dsh-composer-card-max-width) - 2 * var(--dsh-composer-dock-inset))`
- *    with `margin: 0 auto`; so does this.
- *  - The right column's default page is the one registered guide entry, when
- *    there is exactly one. The kernel's file tree (`ui-sidebar-files`) is that
- *    entry; a second one — the product's own tab used to be it — turns the
- *    default into the kernel's 「开始」 compass.
+ *  - Every answer is an `assistant-step` chat node in the keyed slot
+ *    `conversation.chat.node`; `ui-chat` holds the key at priority 0 and the
+ *    lowest priority renders. The reply-check body takes it over at -1; this
+ *    body goes below that, at -2, renders the row it shadows (the reply
+ *    check's, or the kernel's own when that body is off) and adds the cards
+ *    after it. Taking over `turn-tail` instead would put the kernel's footer
+ *    under our entry's props, and its `renderSlotChain` is bound per entry to
+ *    the children that entry declared — which a second entry may not declare
+ *    again (`SlotCore.register`: "is already declared").
+ *  - Which step is the answer: the turn's own data. `ui-chat` publishes the
+ *    `turn-tail` value at `turn/end` with the closing message it chose
+ *    (`closing.finalNode.seq`); every chat node reads it through the slot's
+ *    `useTurnData` hook, and a settled step is the answer when its
+ *    `finalNode.seq` is that one.
+ *  - Which turn: the frame knows one run, the one the shell binds to the
+ *    conversation (the newest on its root session). Its files go on the
+ *    conversation's newest turn (`useChat` → `timeline.turnOrder`), and only
+ *    when that turn belongs to the run — it began before the run finished and
+ *    ended after the run began — so a later question never wears an earlier
+ *    run's files. A delegated child's view is the same run and shows none.
+ *  - The size is the kernel's own `file` resource: `useResource`, a hook every
+ *    slot component receives, on `dsh-resource://file/session/<id>/<path>`,
+ *    which stats a workspace-relative path through `workspaceFiles.stat` (the
+ *    proxy holds it to the workspace). Without it a card names the type alone.
  *  - `ctx.sidebarRight.openTab(kind)` acts through the mounted seat and throws
  *    when none is mounted, so an automatic open is attempted and retried on the
  *    next change rather than assumed. The kernel's file tree is kind `files`.
  *
- * Everything drawn comes from the shell: the bound run's state (C9 `run-state`,
- * with the run's delivered files) and the claims read from its evidence matrix
- * (`evidence`). Opening the report is a message to the shell, whose reader
- * marks each conclusion ✓/⚠ and goes through the control plane's own file
- * boundary.
+ * Opening a file is a message to the shell, whose reader marks each
+ * conclusion ✓/⚠, offers the download and goes through the control plane's own
+ * file boundary.
  *
  * @module @evimed/harness-port/runtime-ui-panels
  */
 
 import { frameStyles } from './runtimeUiStyles.mjs';
-import { liveRunFor, toolviewText, verdictText } from './runtimeUiToolviews.mjs';
+import { liveRunFor } from './runtimeUiToolviews.mjs';
 
 /** Services this body needs outright: the slot registry and the sessions. */
 export const inject = ['slots', 'sessions'];
@@ -50,168 +60,168 @@ export const inject = ['slots', 'sessions'];
 export const KERNEL_FILES_TAB = 'files';
 
 /**
- * A run's state in the words every surface uses for it.
- * @param {any} live
- * @returns {{ text: string, tone: string }}
- */
-export function runStateText(live) {
-  const state = String(live?.state ?? '');
-  if (state === 'running') return { text: '进行中', tone: 'active' };
-  if (state === 'succeeded') return live?.verification === 'unverified' ? { text: '已交付 · 有结论未逐字核对', tone: 'warn' } : { text: '已交付', tone: 'ok' };
-  if (state === 'failed') return { text: '未完成', tone: 'warn' };
-  if (state === 'canceled' || state === 'cancelled') return { text: '已停止', tone: 'muted' };
-  return { text: '等待中', tone: 'muted' };
-}
-
-/**
- * What a delivered file is, from its name. The names are the capability
- * contracts' own (`clinical-evidence-report.md`, `clinical-evidence-matrix.json`,
- * `revision-notes.md`); anything else is a file under its own name.
+ * What a delivered file is, from its name: the type a reader knows it by, the
+ * icon it wears, and where it sorts (the report first, then its evidence
+ * table, then documents, sheets, pictures and the rest).
  * @param {string} path
- * @returns {{ kind: 'report' | 'matrix' | 'notes' | 'document' | 'file', label: string }}
+ * @returns {{ name: string, type: string, icon: 'doc' | 'sheet' | 'data' | 'image' | 'file', rank: number }}
  */
-export function artifactKind(path) {
-  const name = String(path).split('/').pop()?.toLowerCase() ?? '';
-  if (/matrix.*\.json$/.test(name)) return { kind: 'matrix', label: '证据表' };
-  if (/revision-notes?\.md$/.test(name)) return { kind: 'notes', label: '修订说明' };
-  // A deliverable's completed reporting checklist (CONSORT 2025, TRIPOD+AI…:
-  // every item and where it is reported). Its name matches `report`, and read
-  // as a report it would be the file the delivery card opens as 「报告」 in
-  // place of the section it lists. The name is @evimed/domain's
-  // REPORTING_CHECKLIST_FILE, written out because this function is shipped
-  // into the frame on its own.
-  if (name === 'reporting-checklist.md') return { kind: 'document', label: '报告规范清单' };
-  if (/report.*\.(md|docx|pdf|html)$/.test(name)) return { kind: 'report', label: '报告' };
-  if (/\.(md|docx|pdf|html)$/.test(name)) return { kind: 'document', label: '文档' };
-  return { kind: 'file', label: '文件' };
-}
-
-/**
- * The run's files, grouped by the piece of work that wrote them. A file the
- * gate accepted and one it did not are both the run's output; the second says
- * so.
- * @param {any} live
- */
-export function artifactModel(live) {
-  if (!live) return null;
-  const titles = new Map((Array.isArray(live.progress?.deliverables) ? live.progress.deliverables : [])
-    .filter((/** @type {any} */ item) => item && item.id).map((/** @type {any} */ item) => [String(item.id), String(item.title || item.id)]));
-  /** @type {Map<string, { deliverableId: string | null, title: string, files: any[] }>} */
-  const groups = new Map();
-  const files = [
-    ...(Array.isArray(live.artifacts) ? live.artifacts : []).map((/** @type {unknown} */ path) => ({ path, verified: true })),
-    ...(Array.isArray(live.unverifiedArtifacts) ? live.unverifiedArtifacts : []).map((/** @type {unknown} */ path) => ({ path, verified: false })),
-  ].filter((entry) => typeof entry.path === 'string' && entry.path);
-  const seen = new Set();
-  for (const entry of files) {
-    const path = String(entry.path);
-    if (seen.has(path)) continue;
-    seen.add(path);
-    const owner = /(?:^|\/)deliverables\/([^/]+)\//.exec(path)?.[1] ?? null;
-    const key = owner ?? '';
-    const group = groups.get(key) ?? { deliverableId: owner, title: owner ? (titles.get(owner) ?? owner) : '其他文件', files: /** @type {any[]} */ ([]) };
-    const { kind, label } = artifactKind(path);
-    group.files.push({ path, name: path.split('/').pop() ?? path, kind, label, verified: entry.verified });
-    groups.set(key, group);
-  }
-  const order = { report: 0, matrix: 1, notes: 2, document: 3, file: 4 };
-  const list = [...groups.values()];
-  for (const group of list) group.files.sort((a, b) => order[/** @type {keyof typeof order} */ (a.kind)] - order[/** @type {keyof typeof order} */ (b.kind)] || a.name.localeCompare(b.name));
-  return { runId: String(live.runId), groups: list, produced: files.some((entry) => ['report', 'matrix'].includes(artifactKind(String(entry.path)).kind)) };
-}
-
-/**
- * Each conclusion of the report and what the control plane found when it
- * looked its quotation up in the source it names.
- * @param {any} evidence the shell's last `evidence`
- * @param {any} live
- */
-export function evidenceModel(evidence, live) {
-  if (!evidence || !Array.isArray(evidence.claims) || (live && evidence.runId && evidence.runId !== live.runId)) return null;
-  const marks = {
-    verified: { mark: '✓', tone: 'ok', statusText: '引文已在保存的原文中核对' },
-    quote_not_found: { mark: '⚠', tone: 'warn', statusText: '引文未在保存的原文中找到' },
-    source_unavailable: { mark: '⚠', tone: 'warn', statusText: '来源原文没有保存，无法核对' },
-    no_quote: { mark: '⚠', tone: 'warn', statusText: '没有给出可核对的引文' },
-    derived: { mark: '·', tone: 'muted', statusText: '推算结果，本身没有引文' },
+export function fileTypeOf(path) {
+  const name = String(path ?? '').split('/').pop() ?? '';
+  const lower = name.toLowerCase();
+  const extension = lower.includes('.') ? lower.slice(lower.lastIndexOf('.') + 1) : '';
+  /** @type {Record<string, [string, 'doc' | 'sheet' | 'data' | 'image' | 'file']>} */
+  const types = {
+    md: ['Markdown', 'doc'], markdown: ['Markdown', 'doc'], txt: ['文本', 'doc'],
+    docx: ['Word', 'doc'], doc: ['Word', 'doc'], pdf: ['PDF', 'doc'], pptx: ['PPT', 'doc'], ppt: ['PPT', 'doc'],
+    html: ['网页', 'doc'], htm: ['网页', 'doc'],
+    xlsx: ['Excel', 'sheet'], xls: ['Excel', 'sheet'], csv: ['CSV', 'sheet'], tsv: ['TSV', 'sheet'],
+    json: ['JSON', 'data'], jsonl: ['JSON', 'data'], xml: ['XML', 'data'], ris: ['RIS', 'data'], bib: ['BibTeX', 'data'],
+    png: ['图片', 'image'], jpg: ['图片', 'image'], jpeg: ['图片', 'image'], gif: ['图片', 'image'], svg: ['图片', 'image'], webp: ['图片', 'image'],
+    zip: ['压缩包', 'file'],
   };
-  const claims = evidence.claims.filter((/** @type {any} */ claim) => claim && typeof claim.claimId === 'string').map((/** @type {any} */ claim) => {
-    const status = /** @type {Record<string, any>} */ (marks)[claim.status] ?? { mark: '?', tone: 'muted', statusText: '尚未核对' };
-    return {
-      claimId: claim.claimId,
-      text: typeof claim.claim === 'string' ? claim.claim : '',
-      source: typeof claim.sourceTitle === 'string' ? claim.sourceTitle : null,
-      ...status,
-    };
-  });
-  const verified = claims.filter((/** @type {any} */ claim) => claim.tone === 'ok').length;
-  const attention = claims.filter((/** @type {any} */ claim) => claim.tone === 'warn').length;
-  return {
-    runId: typeof evidence.runId === 'string' ? evidence.runId : null,
-    reportPath: typeof evidence.reportPath === 'string' ? evidence.reportPath : null,
-    summary: claims.length ? `${claims.length} 条结论：✓ ${verified} 条已核对${attention ? `，⚠ ${attention} 条待核对` : ''}` : null,
-    attention,
-    claims,
-  };
+  const [type, icon] = types[extension] ?? ['文件', 'file'];
+  // A deliverable's completed reporting checklist (CONSORT 2025, TRIPOD+AI…)
+  // matches `report` and is not the report: it lists where the report says
+  // each item. The name is @evimed/domain's REPORTING_CHECKLIST_FILE, written
+  // out because this function is shipped into the frame on its own.
+  const report = icon === 'doc' && /report/.test(lower) && lower !== 'reporting-checklist.md';
+  const rank = report ? 0
+    : /matrix.*\.json$/.test(lower) ? 1
+      : icon === 'doc' ? 2 : icon === 'sheet' ? 3 : icon === 'image' ? 4 : 5;
+  return { name, type, icon, rank };
 }
 
 /**
- * What a finished run hands back, in the six facts a reader acts on.
- *
- * This is the card at the end of the turn that delivered: today a delivered
- * report announced itself only in whatever the model happened to write last,
- * and on 2026-09-20 that was an English aside about frozen bytes — the reader
- * was never told the report existed, let alone that thirteen of its
- * conclusions carried an advisory.
- *
- * @param {any} live @param {any} evidence @param {number} now @param {any} kit
+ * What a researcher calls a delivered document, or null for a file known by
+ * its name alone. These are the shell's own names — the report reader's title
+ * (`apps/web/src/lib/artifactNames.ts`) — written out because this function
+ * is shipped into the frame on its own; a test holds the two tables equal, so
+ * a card and the reader it opens name one document one way.
+ * @param {string} path
+ * @returns {string | null}
  */
-export function deliveryModel(live, evidence, now, kit) {
+export function documentNameOf(path) {
+  /** @type {Record<string, string>} */
+  const names = {
+    'clinical-evidence-report.md': '证据分析报告',
+    'clinical-evidence-matrix.json': '证据矩阵',
+    'safety-report.md': '安全性分析报告',
+    'signals.csv': '信号数据表',
+    'revision-notes.md': '修订说明',
+    'reporting-checklist.md': '报告规范清单',
+    'delivery-summary.md': '交付摘要',
+    'comprehensive-evaluation-report.md': '综合评价报告',
+    'drug-selection-report.md': '遴选评价报告',
+    'off-label-report.md': '超说明书用药分析报告',
+    'meta-analysis-report.md': 'Meta 分析报告',
+    'mendelian-randomization-report.md': '孟德尔随机化报告',
+    'bibliometric-analysis-report.md': '文献计量分析报告',
+    'peer-review-report.md': '审稿报告',
+    'research-topic-report.md': '科研选题报告',
+    'research-portfolio.md': '研究选题组合',
+    'manuscript-section.md': '论文章节',
+    'specific-aims.md': '具体目标',
+    'proposal-outline.md': '申报书大纲',
+    'grant-audit.md': '申报书自查',
+    'study-protocol.md': '研究方案',
+    'feasibility-matrix.md': '可行性矩阵',
+    'data-profile.md': '数据剖析',
+    'data-quality.md': '数据质量说明',
+    'evidence-map.md': '证据图谱',
+    'appraisal-table.md': '证据评价表',
+    'geo-content-pack.md': '内容包',
+    'geo-measurement.md': '答案引擎测量',
+  };
+  const name = String(path ?? '').split('/').pop() ?? '';
+  return Object.hasOwn(names, name) ? names[name] : null;
+}
+
+/**
+ * The files a finished run hands back, in the order a reader looks for them,
+ * each under the name a reader knows it by, or null while it runs or when it
+ * wrote nothing. Accepted and unchecked files are both the run's output (a
+ * gate verdict never withholds a delivery), and neither says which it is.
+ * Revision notes are the run's answer to its reviewer — a backstage file
+ * (principle 10a) — and stay in the file tree.
+ * @param {any} live
+ * @returns {{ runId: string, files: { path: string, name: string, label: string, type: string, icon: string, rank: number }[] } | null}
+ */
+export function fileCardsModel(live) {
   const state = String(live?.state ?? '');
-  if (!live || !['succeeded', 'failed'].includes(state)) return null;
-  const files = artifactModel(live);
-  const report = files?.groups.flatMap((/** @type {any} */ group) => group.files).find((/** @type {any} */ file) => file.kind === 'report') ?? null;
-  const claims = evidenceModel(evidence, live);
-  const progress = live.progress && typeof live.progress === 'object' ? live.progress : {};
-  const counted = progress.claims && Number(progress.claims.total) > 0 ? progress.claims : null;
-  const total = claims?.claims.length || Number(counted?.total) || 0;
-  const verified = claims ? claims.claims.filter((/** @type {any} */ claim) => claim.tone === 'ok').length : Number(counted?.verified) || 0;
-  const started = typeof progress.startedAt === 'string' ? Date.parse(progress.startedAt) : NaN;
-  const ended = typeof progress.updatedAt === 'string' ? Date.parse(progress.updatedAt) : now;
-  const usage = progress.usage && typeof progress.usage === 'object' ? progress.usage : live.usage;
-  if (!report && !total) return null;
-  return {
-    runId: String(live.runId),
-    state: runStateText(live),
-    title: report ? (typeof live.title === 'string' && live.title.trim() ? live.title.trim() : report.name) : null,
-    reportPath: report ? report.path : null,
-    fileCount: files ? files.groups.reduce((sum, /** @type {any} */ group) => sum + group.files.length, 0) : 0,
-    claims: total ? `结论 ${total} 条，已核对 ${verified} 条${total > verified ? `，${total - verified} 条待核对` : ''}` : null,
-    attention: claims ? claims.attention : 0,
-    elapsed: Number.isFinite(started) && Number.isFinite(ended) && ended >= started ? kit.formatDuration(ended - started) : null,
-    cost: usage && Number.isFinite(usage.costCny) && usage.costCny > 0 ? `约 ¥${Number(usage.costCny).toFixed(2)}` : null,
-  };
+  if (!live || !live.runId || !['succeeded', 'failed', 'canceled', 'cancelled'].includes(state)) return null;
+  /** @type {Set<string>} */
+  const seen = new Set();
+  const files = [];
+  for (const path of [...(Array.isArray(live.artifacts) ? live.artifacts : []), ...(Array.isArray(live.unverifiedArtifacts) ? live.unverifiedArtifacts : [])]) {
+    // The shell opens what the bridge lets through: a relative path that climbs nowhere.
+    if (typeof path !== 'string' || !path || seen.has(path) || path.startsWith('/') || path.includes('\\')
+      || path.split('/').some((part) => part === '' || part === '.' || part === '..')) continue;
+    seen.add(path);
+    const type = fileTypeOf(path);
+    if (/^revision-notes?\.md$/i.test(type.name)) continue;
+    files.push({ path, ...type, label: documentNameOf(path) ?? type.name });
+  }
+  files.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+  return files.length ? { runId: String(live.runId), files } : null;
 }
 
 /**
- * The width of anything that sits in the composer's column above or below
- * the card: the card's own maximum, less the kernel's dock inset, centred.
- * Read off the kernel's queue dock; an occupant without it lands at the
- * frame's left edge beside a centred composer.
+ * Whether the run wrote a report or its evidence table — what the right
+ * column opens itself for.
+ * @param {any} live
  */
-export function composerColumnStyle() {
-  return {
-    width: '100%',
-    maxWidth: 'calc(var(--dsh-composer-card-max-width, 952px) - 2 * var(--dsh-composer-dock-inset, 8px))',
-    margin: '0 auto',
-    boxSizing: 'border-box',
-  };
+export function hasReport(live) {
+  const paths = [...(Array.isArray(live?.artifacts) ? live.artifacts : []), ...(Array.isArray(live?.unverifiedArtifacts) ? live.unverifiedArtifacts : [])];
+  return paths.some((path) => typeof path === 'string' && fileTypeOf(path).rank <= 1);
+}
+
+/**
+ * Whether a turn belongs to the run: it began before the run finished and
+ * ended after the run began, give or take a clock's worth of slack between the
+ * kernel's event times and the ledger's. A time either side does not know
+ * does not decide.
+ * @param {{ start?: number, end?: number }} turn epoch ms
+ * @param {any} live
+ */
+export function turnCarriesRun(turn, live) {
+  const slack = 120_000;
+  const began = Number(turn?.start);
+  const ended = Number(turn?.end);
+  const runStart = Date.parse(String(live?.progress?.startedAt ?? ''));
+  const runEnd = Date.parse(String(live?.progress?.updatedAt ?? live?.updatedAt ?? ''));
+  if (Number.isFinite(began) && Number.isFinite(runEnd) && began > runEnd + slack) return false;
+  if (Number.isFinite(ended) && Number.isFinite(runStart) && ended < runStart - slack) return false;
+  return true;
+}
+
+/**
+ * A byte count the way a file list says it.
+ * @param {unknown} bytes
+ * @returns {string | null}
+ */
+export function formatBytes(bytes) {
+  const value = Number(bytes);
+  if (bytes === null || bytes === undefined || !Number.isFinite(value) || value < 0) return null;
+  if (value < 1024) return `${Math.round(value)} B`;
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * The kernel's resource address of a workspace file, as its own file tree
+ * names one: the session, then the workspace-relative path, each segment
+ * encoded.
+ * @param {string} sessionId @param {string} path
+ */
+export function fileAddress(sessionId, path) {
+  return `dsh-resource://file/session/${encodeURIComponent(sessionId)}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 /**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
- * @param {any} _target Browser global (unused: the card reads nothing off the window).
+ * @param {any} _target Browser global (unused: the cards read nothing off the window).
  * @param {(id: string) => any} [_require]
  * @param {any} [kit] The frame kit.
  */
@@ -219,54 +229,122 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   if (!kit || !kit.ours || !kit.h || !kit.react) return;
   const h = kit.h;
   const React = kit.react;
-  const { card, line, title, quiet, pill, button } = frameStyles();
-  // `toolviewText` and `verdictText` are what the transcript's tool cards say;
-  // the card below reads the run in the same words they do.
-  void toolviewText; void verdictText;
+  const slot = 'conversation.chat.node';
+  const { text, meta, title, textButton } = frameStyles();
 
   function useLive() {
     const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
     const session = kit.useFrameState((/** @type {any} */ state) => state.session);
     return liveRunFor(runState, session);
   }
-  function useEvidence() { return kit.useFrameState((/** @type {any} */ state) => state.evidence); }
 
-  /** @param {string} runId @param {string} path @param {string | null} [anchor] */
-  const openArtifact = (runId, path, anchor = null) => {
-    kit.hub.send('open-artifact', { runId, path, ...(anchor ? { anchor } : {}) });
+  /** The newest turn of the conversation on screen, from the chat's own timeline. */
+  function latestTurn(/** @type {any} */ snapshot) {
+    const order = snapshot?.timeline?.turnOrder;
+    return Array.isArray(order) && order.length ? order[order.length - 1] : null;
+  }
+
+  /** @param {{ kind: string }} props */
+  const FileIcon = ({ kind }) => {
+    const marks = /** @type {Record<string, string[]>} */ ({
+      doc: ['M10 9H8', 'M16 13H8', 'M16 17H8'],
+      sheet: ['M8 13h2', 'M14 13h2', 'M8 17h2', 'M14 17h2'],
+      data: ['M10 12.5 8 15l2 2.5', 'm14 12.5 2 2.5-2 2.5'],
+      image: ['m20 17-3.1-3.1a2 2 0 0 0-2.8 0L8 20', 'M9 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z'],
+    })[kind] ?? [];
+    return h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+      h('path', { d: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z' }),
+      h('path', { d: 'M14 2v4a2 2 0 0 0 2 2h4' }),
+      ...marks.map((d, index) => h('path', { key: index, d })));
+  };
+  const OpenIcon = () => h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+    h('path', { d: 'M7 7h10v10' }), h('path', { d: 'M7 17 17 7' }));
+
+  /**
+   * One delivered file: its name, 「类型 · 大小」, and the one way to open it.
+   * The name is the document's (the reader's title); the file's own name is
+   * the tooltip, as it is in the file tree.
+   * @param {{ file: any, runId: string, sessionId: string | null, useResource?: (address: string) => any }} props
+   */
+  const FileCard = ({ file, runId, sessionId, useResource }) => {
+    // Always the same hook call for one card; an address the resource model
+    // does not recognise reads as `none`, not as a failure.
+    const resource = typeof useResource === 'function' ? useResource(sessionId ? fileAddress(sessionId, file.path) : '') : null;
+    const size = resource && resource.status === 'live' ? formatBytes(resource.value?.bytes) : null;
+    return h('button', {
+      type: 'button', 'data-evimed-file': file.path, 'aria-label': `打开${file.label}`, title: file.name,
+      onClick: () => { kit.hub.send('open-artifact', { runId, path: file.path }); },
+      style: {
+        display: 'flex', alignItems: 'center', gap: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box',
+        padding: '10px 12px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px',
+        background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer',
+      },
+    },
+    h('span', { 'aria-hidden': true, style: { flex: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'grid', placeItems: 'center', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)' } },
+      h(FileIcon, { kind: file.icon })),
+    h('span', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
+      h('span', { style: { ...text, ...title } }, file.label),
+      h('span', { style: { ...meta, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, size ? `${file.type} · ${size}` : file.type)),
+    h('span', { 'aria-hidden': true, style: { flex: 'none', display: 'inline-flex', color: 'var(--dsw-alias-label-tertiary)' } }, h(OpenIcon)));
   };
 
   /**
-   * What a finished run hands back, said in the conversation.
-   *
-   * Above the composer rather than under the turn that delivered: a turn tail
-   * exists for every completed turn and nothing in its props says which one the
-   * run belongs to, so a card there either repeats itself down the transcript
-   * or needs the occupants to agree among themselves which is newest. This seat
-   * renders once per session by construction, and it is where the reader's eye
-   * already is. It stays until the reader dismisses it or asks the next thing.
+   * The run's files, two to a row; past four, the rest behind one control, as
+   * the kernel's own delivery cards do.
+   * @param {{ model: { runId: string, files: any[] }, sessionId: string | null, useResource?: any }} props
    */
-  const DeliveryCard = () => {
-    const live = useLive();
-    const evidence = useEvidence();
-    const [dismissed, setDismissed] = React.useState(/** @type {string | null} */ (null));
-    const model = kit.guarded('delivery card', () => deliveryModel(live, evidence, Date.now(), kit));
-    if (!model || dismissed === model.runId) return null;
-    return h('div', { style: { ...card, ...composerColumnStyle(), margin: '0 auto 6px' }, 'data-evimed-delivery': model.runId },
-      h('div', { style: line },
-        h('span', { style: pill(model.state.tone) }, model.state.text),
-        model.title ? h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, model.title) : null,
-        model.reportPath
-          ? h('button', { type: 'button', style: button, onClick: () => openArtifact(model.runId, model.reportPath) }, '打开报告')
-          : null,
-        h('button', { type: 'button', 'aria-label': '收起这条', style: { ...button, marginLeft: 0 }, onClick: () => setDismissed(model.runId) }, '收起')),
-      h('div', { style: { ...quiet, whiteSpace: 'normal', marginTop: '2px' } },
-        [model.claims, model.fileCount ? `${model.fileCount} 个文件` : null, model.elapsed ? `用时 ${model.elapsed}` : null, model.cost].filter(Boolean).join(' · ')),
-      model.attention
-        ? h('div', { style: { ...quiet, whiteSpace: 'normal', color: 'var(--dsw-alias-state-warn-label)' } }, '引用前请在报告里核对带 ⚠ 的结论。')
+  const FileCards = ({ model, sessionId, useResource }) => {
+    const [all, setAll] = React.useState(false);
+    const shown = all ? model.files : model.files.slice(0, 4);
+    return h('div', { 'data-evimed-files': model.runId, style: { marginTop: '16px', minWidth: 0 } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: model.files.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)', gap: '8px' } },
+        shown.map((file) => h(FileCard, { key: file.path, file, runId: model.runId, sessionId, useResource }))),
+      model.files.length > 4
+        ? h('button', { type: 'button', 'aria-expanded': all, onClick: () => setAll(!all), style: { ...textButton, ...meta, marginTop: '4px' } },
+          all ? '收起' : `显示全部 ${model.files.length} 个文件`)
         : null);
   };
-  kit.guarded('delivery card', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-delivery', order: 10 }, DeliveryCard));
+
+  /**
+   * The files of the bound run, when the turn they follow belongs to it.
+   * Mounted after one answer only, so one row follows the run state as it
+   * changes rather than every step of the transcript.
+   * @param {{ turn: { start?: number, end?: number }, useResource?: any }} props
+   */
+  const TurnFiles = ({ turn, useResource }) => {
+    const live = useLive();
+    const session = kit.useFrameState((/** @type {any} */ state) => state.session);
+    const model = kit.guarded('file cards', () => {
+      if (session?.subagent === true) return null;
+      const cards = fileCardsModel(live);
+      return cards && turnCarriesRun(turn, live) ? cards : null;
+    });
+    if (!model) return null;
+    return h(FileCards, { model, sessionId: typeof session?.sessionId === 'string' ? session.sessionId : null, useResource });
+  };
+
+  /**
+   * The answer row: whatever this takeover shadows, then — when this is the
+   * closing answer of the conversation's newest turn — the files that turn
+   * delivered.
+   * @param {any} props
+   */
+  function AnswerWithFiles(props) {
+    const Shadowed = kit.shadowed(slot, 'assistant-step', AnswerWithFiles);
+    // The slot's own hooks: the closing answer the turn chose (the kernel's own
+    // answer row reads it the same way), and the chat's newest turn. Present
+    // on every chat node; read unconditionally per instance, which is what the
+    // rules of hooks ask.
+    const tail = typeof props?.useTurnData === 'function' ? props.useTurnData('turn-tail') : undefined;
+    const newest = typeof props?.useChat === 'function' ? props.useChat(latestTurn) : undefined;
+    const own = Shadowed ? h(Shadowed, props) : null;
+    const node = props?.node;
+    const seq = node?.data?.finalNode?.seq;
+    const closing = Number.isInteger(seq) && tail?.closing?.finalNode?.seq === seq && (newest === undefined || newest === node.data.turn);
+    if (!closing) return own;
+    return h(React.Fragment, null, own, h(TurnFiles, { turn: { start: node?.location?.turn?.start?.time, end: tail?.time }, useResource: props?.useResource }));
+  }
+  kit.guarded('file cards', () => kit.occupy({ slot, key: 'assistant-step', priority: -2, locale: 'chat' }, AnswerWithFiles));
 
   // The column opens itself once per run, on the kernel's file tree, when
   // that run first produces a report while the reader is watching — never on
@@ -281,8 +359,7 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
       const live = liveRunFor(state.runState, state.session);
       if (!live || !live.runId) return;
       const runId = String(live.runId);
-      const produced = Boolean(artifactModel(live)?.produced);
-      if (!produced) { watchedWithout.add(runId); return; }
+      if (!hasReport(live)) { watchedWithout.add(runId); return; }
       if (!watchedWithout.has(runId) || opened.has(runId)) return;
       try { scope.sidebarRight.openTab(KERNEL_FILES_TAB); opened.add(runId); } catch { /* no seat mounted yet; the next change tries again */ }
     };
@@ -295,5 +372,5 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
 export const BODY = Object.freeze({
   name: 'panels',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, runStateText, artifactKind, artifactModel, evidenceModel, deliveryModel, composerColumnStyle, apply]),
+  parts: Object.freeze([frameStyles, liveRunFor, fileTypeOf, documentNameOf, fileCardsModel, hasReport, turnCarriesRun, formatBytes, fileAddress, apply]),
 });

@@ -135,15 +135,18 @@ function sharedGuidanceLines(capsuleActive) {
     '- 不给具体的个体诊疗建议（剂量、用药方案、是否停药）。可以综述证据、比较方案、说明适用条件。',
     '- 涉及急症的内容必须写清何时立即就医，且这个条件不能依赖任何药物是否起效。',
     '',
-    // One sentence, and it is the only place any agent is told what language to
-    // answer in. Every narration line of a production conversation on
-    // 2026-09-20 was English and carried our own machinery in it — control
-    // plane, frozen bytes, gated artifacts, sub-agent. The answer line's skill
-    // said 「Chinese in, Chinese out」 and nothing else did, while the clinical
-    // method is 1,839 lines of English, so the model followed the method.
+    // The only place any agent is told what language to answer in. Every
+    // narration line of a production conversation on 2026-09-20 was English
+    // and carried our own machinery in it — control plane, frozen bytes, gated
+    // artifacts, sub-agent. The answer line's skill said 「Chinese in, Chinese
+    // out」 and nothing else did, while the clinical method is 1,839 lines of
+    // English, so the model followed the method — in its reasoning too, which
+    // a running turn shows. And a finished report's reply closed on a
+    // paragraph about submitting, freezing and independent review (整改方案
+    // §3): what the run checked is the platform's record, not the reader's.
     '## 对用户说话',
     '',
-    '用用户的语言回答和说明进展。工具名、网关名、内部代号、文件路径、错误码是我们自己的说法，不出现在给用户看的话里——要提到某份产物，就说它是什么。',
+    '用用户的语言回答和说明进展，思考和过程叙述也用这种语言。工具名、网关名、内部代号、文件路径、错误码是我们自己的说法，不出现在给用户看的话里——要提到某份产物，就说它是什么。最终回答只写结论、交付物、需要用户决定的事和局限，不讲内部做了哪些检查（提交、冻结、独立审查、提交前检查）。',
     '',
   ]
 }
