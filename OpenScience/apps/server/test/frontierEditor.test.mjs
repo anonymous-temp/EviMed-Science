@@ -7,6 +7,7 @@ import {
   FRONTIER_EDIT_INSTRUCTIONS,
   FRONTIER_MODEL_INPUT_CHARS,
   FRONTIER_SCREEN_INSTRUCTIONS,
+  FRONTIER_TEXT_LIMITS,
   FrontierEditor,
   buildDigestInput,
   buildModelInput,
@@ -165,6 +166,14 @@ function answer(overrides = {}) {
   };
 }
 
+test("the edit asks for no 「为什么值得看」: the summary's last sentence carries what the item means, within three lines", () => {
+  assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /reason_zh|为什么值得看/, "the field and its output key are gone");
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /summary_zh：两三句导读，不超过 120 个字/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /最后一句说明它对临床实践或科研意味着什么，只依据原文，不夸大/);
+  assert.equal(FRONTIER_TEXT_LIMITS.summary, 140);
+  assert.equal(Object.hasOwn(FRONTIER_TEXT_LIMITS, "reason"), false);
+});
+
 test("an edit that passes every check is published as written, with what the model was shown and its hash", async () => {
   const { calls, callModel } = stubModel([() => answer()]);
   const editor = new FrontierEditor(config, { owner, callModel });
@@ -206,13 +215,13 @@ test("a number the source does not state is sent back once, by name; a correct r
 test("a rewrite that fails again leaves the title only — and only a title that passed on its own", async () => {
   const wrongTwice = stubModel([
     () => answer({ summary_zh: "心血管事件降低 25%。" }),
-    () => answer({ summary_zh: "心血管事件降低 30%。", reason_zh: "重要！见 https://example.org" }),
+    () => answer({ summary_zh: "心血管事件降低 30%，详见 https://example.org" }),
   ]);
   const kept = await new FrontierEditor(config, { owner, callModel: wrongTwice.callModel }).edit(item());
   assert.equal(kept.verification, "title-only");
   assert.equal(kept.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%");
   assert.equal(kept.output?.summaryZh, null);
-  assert.equal(kept.output?.reasonZh, null);
+  assert.equal(Object.hasOwn(kept.output ?? {}, "reasonZh"), false, "「为什么值得看」 is no longer written at all");
   assert.equal(kept.output?.scores, null, "an unverified answer's scores are not used");
   assert.deepEqual(kept.output?.entities.drugs, ["司美格鲁肽"], "structure that passed its own checks is kept");
   assert.ok(kept.issues.some((issue) => issue.includes("链接")));
@@ -274,9 +283,12 @@ test("the verification's other checks: vocabularies, lengths, links, Chinese pro
   assert.deepEqual(issues({ specialties: ["cardiology", "astrology"] }), []);
   assert.deepEqual(verifyEdit(answer({ specialties: ["cardiology", "astrology"] }), item(), modelInput).output.specialties, ["cardiology"]);
   assert.ok(issues({ evidence_type: "anecdote" }).some((issue) => issue.includes("evidence_type")));
-  assert.ok(issues({ summary_zh: "司".repeat(161) }).some((issue) => issue.includes("太长")));
-  assert.ok(issues({ reason_zh: "见 www.nejm.org 原文" }).some((issue) => issue.includes("链接")));
-  assert.ok(issues({ reason_zh: "An important randomized trial for obesity care" }).some((issue) => issue.includes("中文")));
+  assert.ok(issues({ summary_zh: "司".repeat(141) }).some((issue) => issue.includes("太长")), "three lines of forty, with room for a near miss: 140");
+  assert.deepEqual(issues({ summary_zh: "司".repeat(140) }), []);
+  assert.ok(issues({ summary_zh: "心血管事件降低 20%，见 www.nejm.org 原文。" }).some((issue) => issue.includes("链接")));
+  // A retired 「为什么值得看」 an answer still carries is neither checked nor kept.
+  assert.deepEqual(issues({ reason_zh: "见 www.nejm.org 原文 99%" }), []);
+  assert.equal(Object.hasOwn(verifyEdit(answer({ reason_zh: "理由" }), item(), modelInput).output, "reasonZh"), false);
   const six = { drugs: ["a", "b", "c", "d", "e", "f"], trials: [], orgs: [], diseases: [] };
   assert.deepEqual(issues({ entities: six }), []);
   assert.deepEqual(verifyEdit(answer({ entities: six }), item(), modelInput).output.entities.drugs, ["a", "b", "c", "d", "e"]);
