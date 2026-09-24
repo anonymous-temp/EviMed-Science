@@ -32,8 +32,8 @@ describe("report facts", () => {
   it("dates the search by the run that did it when the package states no cutoff", () => {
     // Midday UTC is the same calendar day in every zone a test machine runs in.
     const run = { model: "deepseek/deepseek-flash", startedAt: "2026-09-18T06:01:56Z", finishedAt: "2026-09-18T06:25:53Z" } as WebAgentRun;
-    const facts = reportFacts({ meta: null, claims: null, run });
-    expect(facts[0]).toEqual({ label: "检索截止日", value: "2026年9月18日（按检索执行日）", missing: false });
+    const facts = reportFacts({ meta: null, run });
+    expect(facts[0]).toEqual({ label: "检索截止日", value: "2026年9月18日", missing: false });
   });
 
   it("counts distinct sources by kind, most authoritative form first", () => {
@@ -44,33 +44,16 @@ describe("report facts", () => {
     ]);
   });
 
-  // Nothing is read out of the prose and nothing is assumed: a field the
-  // package and the run do not state says 「未注明」.
-  it("says 未注明 for every fact neither the package nor the run states", () => {
-    const facts = reportFacts({ meta: null, claims: null, run: null });
-    expect(facts.map((fact) => [fact.label, fact.value, fact.missing])).toEqual([
-      ["检索截止日", "未注明", true],
-      ["来源范围", "未注明", true],
-      ["模型", "未注明", true],
-      ["已知局限", "未注明", true],
-    ]);
-  });
-
-  it("uses what the package and the run do state", () => {
+  // Two dates and nothing else (2026-09-23 inventory §1.11): no model name,
+  // no tally, and no row that only says 「未注明」.
+  it("states the search cutoff and the date written, and leaves out what is not known", () => {
+    expect(reportFacts({ meta: null, run: null })).toEqual([]);
     const run = { model: "deepseek/deepseek-flash", startedAt: "2026-09-17T02:00:00Z", finishedAt: "2026-09-17T02:30:00Z" } as WebAgentRun;
-    const facts = reportFacts({ meta: { searchCutoff: "2026-09-01", limitations: ["仅英文文献"] }, claims: matrix.claims, run, limitationsTarget: "sec-9" });
+    const facts = reportFacts({ meta: { searchCutoff: "2026-09-01", limitations: ["仅英文文献"] }, run });
     expect(Object.fromEntries(facts.map((fact) => [fact.label, fact.value]))).toEqual({
       检索截止日: "2026年9月1日",
-      来源范围: "指南 1 · 系统综述 1 · RCT 1（共 3 个来源）",
-      模型: "DeepSeek · deepseek-flash",
-      已知局限: "仅英文文献",
       生成日期: "2026年9月17日",
     });
-  });
-
-  it("points at the report's own 局限性 section when the package lists no limits", () => {
-    const facts = reportFacts({ meta: {}, claims: matrix.claims, run: null, limitationsTarget: "report-sec-7" });
-    expect(facts.find((fact) => fact.label === "已知局限")).toEqual({ label: "已知局限", value: "见正文「局限性」一节", missing: false, target: "report-sec-7" });
   });
 
   it("names the model as the run recorded it", () => {

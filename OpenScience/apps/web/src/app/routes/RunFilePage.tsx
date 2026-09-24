@@ -90,7 +90,7 @@ export function RunFilePage() {
       .then((file) => {
         if (cancelled) return;
         if (file && file.encoding === "utf8") setText(file.data);
-        else setError("这个文件读不出来：它不在这个项目的工作区里，或者不是文本文件。");
+        else setError("无法读取此文件");
       })
       .catch((caught) => { if (!cancelled) setError(parseFailureMessage(caught, "该文件")); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -121,11 +121,11 @@ export function RunFilePage() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {locating && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开这次研究所在的项目…
+              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开…
             </p>
           )}
           {!locating && !path && (
-            <EmptyState icon={FileQuestion} title="这个地址没有指向文件" description="从对话里打开一份报告或文件，或检查链接是否完整。" />
+            <EmptyState icon={FileQuestion} title="这个地址没有指向文件" />
           )}
           {!locating && path && readsText && loading && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">

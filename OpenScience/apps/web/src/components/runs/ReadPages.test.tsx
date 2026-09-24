@@ -6,7 +6,7 @@ import type { WebReadPage } from "@/lib/apiClient";
 import { pageForSource, readPagesSummary, snapshotHref } from "@/lib/readPages";
 import { parseClaimMatrix } from "@/lib/claimCitations";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
-import { ReadPageCard, ReadPagesList } from "./ReadPages";
+import { ReadPageCard } from "./ReadPages";
 
 const nmpaSnapshot = `.evimed-sources/web-pages/${"a".repeat(16)}/${"c".repeat(64)}/page.md`;
 const nmpa: WebReadPage = {
@@ -39,7 +39,8 @@ describe("the pages a run read", () => {
     expect(original).toHaveAttribute("target", "_blank");
     expect(screen.getByText("官方来源")).toBeInTheDocument();
     expect(screen.getByText("www.nmpa.gov.cn")).toBeInTheDocument();
-    expect(screen.getByText("页面由浏览器打开后读取")).toBeInTheDocument();
+    // How the page was fetched is the reader's machinery, not the reader's business.
+    expect(screen.queryByText("页面由浏览器打开后读取")).toBeNull();
     expect(screen.getByRole("link", { name: "查看保存的快照" })).toHaveAttribute("href", snapshotHref("run_1", nmpaSnapshot));
     expect(document.querySelector("time")).toHaveAttribute("dateTime", nmpa.fetchedAt);
   });
@@ -57,12 +58,6 @@ describe("the pages a run read", () => {
     render(<MemoryRouter><ReadPageCard page={{ ...blog, url: "javascript:alert(1)", finalUrl: "javascript:alert(1)" }} runId="run_1" /></MemoryRouter>);
     expect(screen.getByText("A blog post")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /A blog post/ })).toBeNull();
-  });
-
-  it("the list says how many more were read than it shows", () => {
-    render(<MemoryRouter><ReadPagesList pages={[nmpa, blog]} total={30} runId="run_1" /></MemoryRouter>);
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
-    expect(screen.getByText("另有 28 个网页未列出，完整记录在本次运行的对话记录里。")).toBeInTheDocument();
   });
 
   it("the summary counts authorities only over a complete list", () => {
@@ -97,9 +92,8 @@ describe("the 依据 popover shows the page a quotation was read from", () => {
     const dialog = await screen.findByText("二甲双胍说明书已修订乳酸酸中毒警示。");
     const popover = dialog.closest("[data-radix-popper-content-wrapper]") ?? document.body;
     expect(within(popover as HTMLElement).getByText("官方来源")).toBeInTheDocument();
-    expect(within(popover as HTMLElement).getByText("页面由浏览器打开后读取")).toBeInTheDocument();
     // The quotation's own link opens the same snapshot at the quote.
-    expect(within(popover as HTMLElement).getByRole("link", { name: /在保存的原文中定位这段引文/ })).toBeInTheDocument();
+    expect(within(popover as HTMLElement).getByRole("link", { name: /定位原文/ })).toBeInTheDocument();
     expect(within(popover as HTMLElement).queryByRole("link", { name: "查看保存的快照" })).toBeNull();
   });
 });

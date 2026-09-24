@@ -23,20 +23,21 @@ describe("claim citations", () => {
     expect(linkClaimMarkers("x<!-- claim:CLM-002 --><!-- claim:CLM-002 -->")).toBe("x[依据](#evimed-claims=CLM-002)");
   });
 
-  it("says once, above the report, how much of it was checked against a preserved source", () => {
+  // A tally only when something needs checking (2026-09-23 plan §4).
+  it("says once, above the report, how many claims need checking — and nothing when none do", () => {
     const claim = (claimId: string, status: string) => ({ claimId, claimType: "direct", status, sources: [] });
     expect(claimVerificationSummary(null)).toBeNull();
     expect(claimVerificationSummary({ claims: [], counts: {} })).toBeNull();
     expect(claimVerificationSummary({
       claims: [claim("CLM-001", "verified"), claim("CLM-002", "verified")],
       counts: { verified: 2 },
-    })).toEqual({ text: "本报告 2 条主张：2 条引文已在保存的原文中核对。点句末的「依据」看每一条。", attention: false });
+    })).toBeNull();
     const mixed = claimVerificationSummary({
       claims: [claim("CLM-001", "verified"), claim("CLM-002", "quote_not_found"), claim("CLM-003", "source_unavailable"), claim("CLM-004", "derived")],
       counts: { verified: 1, quote_not_found: 1, source_unavailable: 1, derived: 1 },
     });
     expect(mixed?.attention).toBe(true);
-    expect(mixed?.text).toBe("本报告 4 条主张：1 条引文已在保存的原文中核对，1 条未在原文中找到，1 条无法核对，1 条为推导结果。点句末的「依据」看每一条。");
+    expect(mixed?.text).toBe("⚠ 2 条待核对");
     expect(claimStatuses({ claims: [claim("CLM-001", "verified")], counts: {} }).get("CLM-001")).toBe("verified");
     // Every status the control plane can answer has words for a reader.
     for (const status of ["verified", "quote_not_found", "source_unavailable", "no_quote", "derived"]) {

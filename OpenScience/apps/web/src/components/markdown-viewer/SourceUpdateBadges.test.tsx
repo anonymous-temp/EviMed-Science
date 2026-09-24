@@ -43,6 +43,6 @@ describe("retraction and correction notices on a cited source", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
     expect(await screen.findByRole("link", { name: /该文献已撤稿/ })).toBeInTheDocument();
-    expect(screen.getByText("引文已在保存的原文中核对")).toBeInTheDocument();
+    expect(screen.getByLabelText("引文已在保存的原文中核对")).toHaveTextContent("✓");
   });
 });

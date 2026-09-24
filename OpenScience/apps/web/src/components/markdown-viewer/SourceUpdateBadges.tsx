@@ -2,6 +2,7 @@ import { FileWarning } from "lucide-react";
 import { SOURCE_UPDATE_LABELS_ZH, SOURCE_UPDATE_WEIGHT } from "@evimed/domain";
 import type { SourceUpdate } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
+import { tagClasses } from "@/components/ui/Tag";
 
 /**
  * Retraction and correction notices on a cited work (plan §3.9), read from
@@ -28,11 +29,10 @@ export function SourceUpdateBadges({ updates, className }: {
         const withdrawn = SOURCE_UPDATE_WEIGHT[update.kind as keyof typeof SOURCE_UPDATE_WEIGHT] === "withdrawn";
         const recorder = update.source === "retraction-watch" ? "Retraction Watch" : update.source === "publisher" ? "出版方" : null;
         const text = `${label}${update.date ? ` · ${update.date}` : ""}`;
-        const title = `该文献${label}${update.date ? `（${update.date}）` : ""}${recorder ? `，据${recorder}记录` : ""}；来自 Crossref，仅供参考。`;
-        const chip = cn(
-          "inline-flex items-center gap-0.5 rounded-full border px-1.5 text-caption",
-          withdrawn ? "border-danger bg-danger-soft text-danger-strong" : "border-warn bg-warn-soft text-warn-strong",
-        );
+        const title = `该文献${label}${update.date ? `（${update.date}）` : ""}${recorder ? `，据${recorder}记录` : ""}。`;
+        // A retraction is a safety tag; a correction or an expression of
+        // concern the amber one. Never a hand-made pill (2026-09-23 plan §4).
+        const chip = cn(tagClasses({ tone: withdrawn ? "safety" : "warn" }), "gap-0.5");
         return update.noticeDoi ? (
           <a
             key={`${update.kind}:${update.noticeDoi}:${index}`}

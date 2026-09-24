@@ -84,50 +84,21 @@ function dateText(value: string | null | undefined): string | null {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-export function reportFacts({
-  meta,
-  claims,
-  run,
-  limitationsTarget,
-  verification = null,
-}: {
+/**
+ * The facts above a report: when the search stopped, and when the report was
+ * written — two dates (2026-09-23 inventory §1.11). The model's name was the
+ * deployment's fact; the source tally and the limitations are the report's own
+ * to state in its text; and a row reading 「未注明」 told the reader nothing.
+ * A package that states its cutoff is taken at its word; one that does not was
+ * still searched on a known day, the run's own start.
+ */
+export function reportFacts({ meta, run }: {
   meta: ClaimMatrixMeta | null;
-  claims: Map<string, ClaimEvidence> | null;
   run: WebAgentRun | null;
-  /** The id of the report's own 「局限性」 heading, when it has one. */
-  limitationsTarget?: string | null;
-  /** The control plane's check of the claims, whose sources carry their kind. */
-  verification?: ClaimVerification | null;
 }): ReportFact[] {
   const facts: ReportFact[] = [];
-  // A package that states its cutoff is taken at its word. One that does not
-  // was still searched on a known day: the run's own start, a recorded fact
-  // rather than a date read out of the prose, and said as what it is.
-  const cutoff = dateText(meta?.searchCutoff);
-  const searchedOn = cutoff ? null : dateText(run?.startedAt ?? null);
-  facts.push(cutoff
-    ? { label: "检索截止日", value: cutoff, missing: false }
-    : searchedOn
-      ? { label: "检索截止日", value: `${searchedOn}（按检索执行日）`, missing: false }
-      : { label: "检索截止日", value: NOT_STATED, missing: true });
-
-  const composition = claims ? sourceComposition(claims.values(), verifiedSourceTypes(verification)) : [];
-  const total = composition.reduce((sum, entry) => sum + entry.count, 0);
-  const scope = meta?.sourceScope
-    ?? (total > 0 ? `${composition.map((entry) => `${entry.label} ${entry.count}`).join(" · ")}（共 ${total} 个来源）` : null);
-  facts.push({ label: "来源范围", value: scope ?? NOT_STATED, missing: !scope });
-
-  const model = modelLabel(run?.model);
-  facts.push({ label: "模型", value: model ?? NOT_STATED, missing: !model });
-
-  if (meta?.limitations?.length) {
-    facts.push({ label: "已知局限", value: meta.limitations.join("；"), missing: false, ...(limitationsTarget ? { target: limitationsTarget } : {}) });
-  } else if (limitationsTarget) {
-    facts.push({ label: "已知局限", value: "见正文「局限性」一节", missing: false, target: limitationsTarget });
-  } else {
-    facts.push({ label: "已知局限", value: NOT_STATED, missing: true });
-  }
-
+  const cutoff = dateText(meta?.searchCutoff) ?? dateText(run?.startedAt ?? null);
+  if (cutoff) facts.push({ label: "检索截止日", value: cutoff, missing: false });
   const generated = dateText(run?.finishedAt ?? run?.startedAt ?? null);
   if (generated) facts.push({ label: "生成日期", value: generated, missing: false });
   return facts;

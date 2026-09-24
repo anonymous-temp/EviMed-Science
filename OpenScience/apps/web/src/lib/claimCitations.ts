@@ -109,20 +109,15 @@ export function claimStatuses(verification: ClaimVerification | null | undefined
   return new Map((verification?.claims ?? []).map((claim) => [claim.claimId, String(claim.status)]));
 }
 
-/** One sentence for the top of a report: how many of its claims were checked
- *  against a preserved source, and how many could not be. Null when there is
- *  nothing to say. */
+/** The one line a report opens with when some of its claims need checking —
+ *  「⚠ 3 条待核对」 — and nothing when none do (2026-09-23 plan §4: a check
+ *  shows where it found a problem, never a tally of what passed). The ✓ and ⚠
+ *  beside each sentence carry the rest. */
 export function claimVerificationSummary(verification: ClaimVerification | null | undefined): { text: string; attention: boolean } | null {
   const counts = verification?.counts ?? {};
-  const total = verification?.claims.length ?? 0;
-  if (total === 0) return null;
-  const notFound = counts.quote_not_found ?? 0;
-  const unavailable = (counts.source_unavailable ?? 0) + (counts.no_quote ?? 0);
-  const parts = [`${counts.verified ?? 0} 条引文已在保存的原文中核对`];
-  if (notFound > 0) parts.push(`${notFound} 条未在原文中找到`);
-  if (unavailable > 0) parts.push(`${unavailable} 条无法核对`);
-  if ((counts.derived ?? 0) > 0) parts.push(`${counts.derived} 条为推导结果`);
-  return { text: `本报告 ${total} 条主张：${parts.join("，")}。点句末的「依据」看每一条。`, attention: notFound + unavailable > 0 };
+  const pending = (counts.quote_not_found ?? 0) + (counts.source_unavailable ?? 0) + (counts.no_quote ?? 0);
+  if (pending === 0) return null;
+  return { text: `⚠ ${pending} 条待核对`, attention: true };
 }
 
 /** The link target a citation is rendered from. Not a URL anyone navigates. */

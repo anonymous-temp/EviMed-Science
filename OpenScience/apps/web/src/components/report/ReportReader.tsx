@@ -14,7 +14,7 @@ import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ClaimEvidenceList, type ClaimReading } from "@/components/markdown-viewer/ClaimCitation";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Tabs } from "@/components/ui/Tabs";
 import { EvidenceMatrixTable } from "./EvidenceMatrixTable";
 import { useClaimMatrix } from "./useClaimMatrix";
 
@@ -23,9 +23,6 @@ interface TocEntry {
   text: string;
   level: 2 | 3;
 }
-
-/** The report's own section on its limits, by the name the skill requires. */
-const LIMITATIONS_HEADINGS = new Set(["局限性", "局限"]);
 
 /** Tailwind's `lg`: from here the contents have a column beside the report. */
 const WIDE_MEDIA = "(min-width: 1024px)";
@@ -178,8 +175,7 @@ export function ReportReader({
     // Again once the checks arrive: the marks re-render with their verdicts.
   }, [focusClaim, matrix, verification, reading, view]);
 
-  const limitationsTarget = toc.find((entry) => LIMITATIONS_HEADINGS.has(entry.text))?.id ?? null;
-  const facts = reportFacts({ meta: matrix?.meta ?? null, claims: matrix?.claims ?? null, run, limitationsTarget, verification });
+  const facts = reportFacts({ meta: matrix?.meta ?? null, run });
 
   const scrollTo = (id: string) => {
     const element = document.getElementById(id);
@@ -221,18 +217,19 @@ export function ReportReader({
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2" data-print-hide="">
       {matrix && (
-        <SegmentedControl
+        <Tabs
+          label="查看"
           value={view}
           onChange={setView}
-          aria-label="查看"
-          options={[{ value: "report", label: "报告" }, { value: "matrix", label: `证据矩阵（${matrix.claims.size}）` }]}
+          items={[{ value: "report", label: "报告" }, { value: "matrix", label: "证据矩阵", count: matrix.claims.size }]}
+          className="border-b-0"
         />
       )}
       <div className="flex-1" />
-      <Button size="sm" variant="ghost" onClick={() => void download()}>
+      <Button size="md" variant="text" onClick={() => void download()}>
         <Download size={16} aria-hidden="true" />下载 Markdown
       </Button>
-      <Button size="sm" variant="ghost" onClick={() => window.print()} title="打印，或在打印对话框里选「存为 PDF」">
+      <Button size="md" variant="text" onClick={() => window.print()}>
         <Printer size={16} aria-hidden="true" />打印 / 存为 PDF
       </Button>
     </div>
@@ -243,35 +240,22 @@ export function ReportReader({
   // about eighteen characters a line.
   const reportPage = (
     <div className="rounded-card border border-border bg-surface px-12 py-11 max-sm:rounded-none max-sm:border-x-0 max-sm:px-4 max-sm:py-6">
-      {highlight && quoteFound === true && (
-        <p role="status" className="mb-6 rounded-input border border-border bg-warn-soft px-3 py-2 text-ui text-text">
-          已在这份保存的原文里定位到引文，高亮处就是它。
-        </p>
-      )}
+      {/* A located quotation is its own highlight; only a miss is said. */}
       {highlight && quoteFound === false && (
-        <div role="note" className="mb-6 rounded-input border border-warn bg-warn-soft px-3 py-2 text-ui text-warn-strong">
-          <p>这段引文没有在这份保存的原文里找到——这正是需要核对的地方：</p>
+        <div role="note" className="mb-6 text-ui text-warn-strong">
+          <p>⚠ 未找到这段引文</p>
           <blockquote className="mt-1 border-l-2 border-strong pl-2 text-text">“{highlight}”</blockquote>
         </div>
       )}
       {isReport && <ReportFacts facts={facts} onJump={scrollTo} />}
       {isReport && summary && (
-        <p
-          role="note"
-          className={cn(
-            "mb-6 rounded-input border px-3 py-2 text-ui",
-            summary.attention ? "border-warn bg-warn-soft text-warn-strong" : "border-border bg-accent-soft text-accent-strong",
-          )}
-        >
-          {summary.text}
-        </p>
+        <p role="note" className="mb-6 text-ui font-medium text-verify-pending">{summary.text}</p>
       )}
       {matrix && safetyInMatrix.length > 0 && (
-        <section aria-labelledby="report-safety" className="mb-8 rounded-input border border-danger bg-danger-soft p-4">
-          <h2 id="report-safety" className="flex items-center gap-1.5 text-ui font-semibold text-danger-strong">
+        <section aria-labelledby="report-safety" className="mb-8 rounded-card bg-danger-soft p-4">
+          <h2 id="report-safety" className="mb-2 flex items-center gap-1.5 text-ui font-semibold text-danger-strong">
             <ShieldAlert size={16} aria-hidden="true" />涉及临床安全的结论 · {safetyInMatrix.length} 条
           </h2>
-          <p className="mb-2 mt-1 text-caption text-text">核验在这些结论上发现了临床安全问题；它们的依据在这里展开，引用前请逐条核对。</p>
           <ClaimEvidenceList ids={safetyInMatrix} claims={matrix.claims} statuses={statuses} reading={reading} />
         </section>
       )}

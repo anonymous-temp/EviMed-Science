@@ -1,6 +1,5 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Link } from "react-router";
-import { EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/domain";
 import { ExternalLink, FileText, ShieldAlert } from "lucide-react";
 import {
   CLAIM_STATUS_TEXT,
@@ -13,18 +12,15 @@ import {
 } from "@/lib/claimCitations";
 import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { tagClasses } from "@/components/ui/Tag";
 import type { WebReadPage } from "@/lib/apiClient";
 import { pageForSource } from "@/lib/readPages";
 import { ReadPageCard } from "@/components/runs/ReadPages";
 import { ClaimAppraisalSummary } from "./ClaimAppraisal";
 import { SourceUpdateBadges } from "./SourceUpdateBadges";
 
-const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
-const ACCESS_LABEL: Record<string, string> = {
-  full_text: "全文", official_page: "官方页面", abstract: "仅摘要", structured_record: "结构化记录",
-};
-const CONFIDENCE_LABEL: Record<string, string> = { high: "高", moderate: "中", low: "低" };
-const TONE_CLASS = { ok: "text-verify-ok", warn: "text-verify-pending", muted: "text-muted" } as const;
+const TONE_CLASS = { ok: "text-verify-ok", warn: "text-verify-pending", muted: "text-text-3" } as const;
 
 export type VerifiedClaim = ClaimVerification["claims"][number];
 
@@ -54,20 +50,9 @@ export function preservedSourceHref(runId: string, artifactPath: string, quote?:
   return `/app/runs/${encodeURIComponent(runId)}/files/${path}${quote ? `?quote=${encodeURIComponent(quote.slice(0, 400))}` : ""}`;
 }
 
-function SourceBadge({ source }: { source: ClaimSource }) {
-  // 「其他」 says nothing a reader can use; only a decided kind is drawn.
-  if (source.sourceType === "other") return null;
-  return (
-    <span className="rounded-full border border-border bg-surface-2 px-1.5 text-caption text-text">
-      {EVIDENCE_SOURCE_TYPE_LABELS_ZH[source.sourceType]}
-    </span>
-  );
-}
-
-function Source({ source, index, count, status, runId, pagesRead, updates }: {
+function Source({ source, index, status, runId, pagesRead, updates }: {
   source: ClaimSource;
   index: number;
-  count: number;
   status?: string;
   runId?: string | null;
   pagesRead?: readonly WebReadPage[];
@@ -77,18 +62,21 @@ function Source({ source, index, count, status, runId, pagesRead, updates }: {
   const href = safeHref(source.sourceUrl);
   const page = pageForSource(pagesRead, source);
   const statusText = status ? CLAIM_STATUS_TEXT[status] : undefined;
+  // What a reader acts on: whether this quotation was found (✓ / ⚠), the
+  // quotation, and where it is from. The source's kind, its access level and
+  // the ordinal of the quotation were the checker's bookkeeping (2026-09-23
+  // inventory §1.11); a retraction or correction notice stays — that one is
+  // about the evidence.
+  const mark = statusText ? (statusText.tone === "ok" ? "✓" : statusText.tone === "warn" ? "⚠" : null) : null;
   return (
-    <div className="mt-2 space-y-1">
-      <p className="flex flex-wrap items-center gap-1.5 text-caption text-muted">
-        {count > 1 && <span>第 {index + 1} 段引文</span>}
-        <SourceBadge source={source} />
-        {statusText && count > 1 && <span className={TONE_CLASS[statusText.tone]}>{statusText.tone === "ok" ? "✓ 已核对" : "⚠ 未核对上"}</span>}
-        <SourceUpdateBadges updates={updates} />
-      </p>
+    <div className="mt-2 space-y-1" data-quote-index={index}>
       {source.supportQuote && (
-        <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">“{source.supportQuote}”</blockquote>
+        <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">
+          {mark && <span className={cn("mr-1", TONE_CLASS[statusText!.tone])} aria-label={statusText!.label}>{mark}</span>}
+          “{source.supportQuote}”
+        </blockquote>
       )}
-      <p className="text-caption text-muted">
+      <p className="flex flex-wrap items-center gap-1.5 text-caption text-text-3">
         {href ? (
           <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-link hover:underline">
             {source.sourceTitle ?? source.identifier ?? "来源"}
@@ -97,8 +85,7 @@ function Source({ source, index, count, status, runId, pagesRead, updates }: {
         ) : (
           <span>{source.sourceTitle ?? source.identifier ?? "来源未记录"}</span>
         )}
-        {source.identifier && source.sourceTitle ? ` · ${source.identifier}` : ""}
-        {source.accessLevel ? ` · ${ACCESS_LABEL[source.accessLevel] ?? "获取程度未注明"}` : ""}
+        <SourceUpdateBadges updates={updates} />
       </p>
       {/* The page this quotation was read from, when the run read it on the
         * web: where, when, whether it is an authority's, and its snapshot. */}
@@ -108,7 +95,7 @@ function Source({ source, index, count, status, runId, pagesRead, updates }: {
           to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)}
           className="inline-flex items-center gap-1 text-caption text-link hover:underline"
         >
-          <FileText size={16} aria-hidden="true" />在保存的原文中定位这段引文
+          <FileText size={16} aria-hidden="true" />定位原文
         </Link>
       )}
     </div>
@@ -135,38 +122,34 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
         const statusText = status ? CLAIM_STATUS_TEXT[status] : undefined;
         const guidance = claimGuidance(claim, verified);
         const appraisal = claimAppraisalDisplay(claim, verified);
+        // One line, and only when there is something to do (2026-09-23
+        // inventory §1.11): the claim's id, its type and the model's own
+        // confidence were the matrix's bookkeeping, and a verified claim needs
+        // no sentence saying so — its quotation carries the ✓.
+        const warning = guidance ?? (statusText?.tone === "warn" ? statusText.label : null);
         return (
-          <li key={id}>
-            <p className="text-caption text-muted">
-              {TYPE_LABEL[claim.claimType] ?? "主张"} · {id}
-              {claim.confidence ? ` · 把握度${CONFIDENCE_LABEL[claim.confidence] ?? "未注明"}` : ""}
-            </p>
-            <p className="mt-0.5 text-ui text-text">{claim.claim}</p>
+          <li key={id} data-claim-id={id}>
+            <p className="text-ui text-text">{claim.claim}</p>
             {appraisal && <ClaimAppraisalSummary display={appraisal} sourceCount={sources.length} />}
-            {status && (
-              <p className={cn("mt-1 text-caption", TONE_CLASS[statusText?.tone ?? "muted"])}>
-                {statusText?.label ?? "这条主张还没有被核对"}
-              </p>
-            )}
-            {guidance && <p className="mt-1 text-caption font-medium text-verify-pending">⚠ {guidance}</p>}
+            {warning && <p className="mt-1 text-caption font-medium text-verify-pending">⚠ {warning}</p>}
             {sources.map((source, index) => (
               <Source
                 key={index}
                 source={source}
                 index={index}
-                count={sources.length}
-                status={verified?.sources[index]?.status}
+                // A claim with one source is checked as that source.
+                status={verified?.sources[index]?.status ?? (sources.length === 1 ? status : undefined)}
                 runId={reading?.runId}
                 pagesRead={reading?.pagesRead}
                 updates={verified?.sources[index]?.updates}
               />
             ))}
-            {claim.claimType === "derived" && (
-              <p className="mt-1 text-caption text-muted">
-                由 {claim.derivedFrom?.join("、") || "其他主张"} 推导{claim.method ? `：${claim.method}` : ""}
-              </p>
-            )}
-            {claim.uncertainty && <p className="mt-1 text-caption text-muted">不确定性：{claim.uncertainty}</p>}
+            {(claim.claimType === "derived" && claim.method) || claim.uncertainty ? (
+              <Disclosure summary="推导与不确定性" className="mt-1">
+                {claim.claimType === "derived" && claim.method && <p className="text-caption text-text-3">推导：{claim.method}</p>}
+                {claim.uncertainty && <p className="text-caption text-text-3">不确定性：{claim.uncertainty}</p>}
+              </Disclosure>
+            ) : null}
           </li>
         );
       })}
@@ -223,8 +206,8 @@ export function ClaimCitation({ ids, claims, statuses, reading }: {
           aria-label={label}
           data-claims={ids.join(" ")}
           className={cn(
-            "mx-0.5 inline-flex min-h-6 items-center gap-0.5 rounded-full border px-1.5 align-super text-caption font-medium leading-4",
-            attention ? "border-warn bg-warn-soft" : "border-border bg-surface hover:bg-surface-2",
+            tagClasses({ tone: attention ? "warn" : "neutral" }),
+            "mx-0.5 gap-0.5 align-super font-medium hover:bg-surface-3",
             tone,
           )}
         >
