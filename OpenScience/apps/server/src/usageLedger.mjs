@@ -525,6 +525,39 @@ export class UsageLedger {
   }
 
   /**
+   * What each run of one account cost since `since`, in one query: the
+   * settings page's usage 明细 (2026-09-23 plan §5.9), one row per research
+   * run — date, conversation, cost. A group per attributed `run_id`, counting
+   * settled calls and their money and tokens, and one group (`runId: null`)
+   * for spend no run is attributed to, placed first so the bound never drops
+   * it. The caller resolves a run id to its conversation.
+   * @param {string} userId @param {{ since?: Date, limit?: number }} [options]
+   * @returns {Promise<Array<{ runId: string | null, calls: number, cost: number, inputTokens: number, outputTokens: number, firstAt: string | null }>>}
+   */
+  async runsSince(userId, { since = new Date(0), limit = 500 } = {}) {
+    const at = instant(since, "summary start");
+    const bound = Math.max(1, Math.min(1_000, Math.floor(Number(limit) || 500)));
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT run_id,
+      count(*) FILTER (WHERE status='settled')::integer AS calls,
+      coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS cost,
+      coalesce(sum(cache_hit_tokens + cache_miss_tokens) FILTER (WHERE status='settled'),0) AS input_tokens,
+      coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
+      min(created_at) AS first_at
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND created_at >= $2::timestamptz
+      GROUP BY run_id ORDER BY (run_id IS NOT NULL), min(created_at) DESC LIMIT $3`,
+    [productId(userId, "user"), at, bound]);
+    return result.rows.map((row) => ({
+      runId: row.run_id ?? null,
+      calls: Number(row.calls),
+      cost: Number(row.cost),
+      inputTokens: Number(row.input_tokens),
+      outputTokens: Number(row.output_tokens),
+      firstAt: row.first_at ? new Date(row.first_at).toISOString() : null,
+    }));
+  }
+
+  /**
    * What each purpose cost across every account since `since` — the operator's
    * cost report (X1): requests made, and the settled tokens and money.
    *

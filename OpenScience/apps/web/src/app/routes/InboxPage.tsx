@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
-import { AlertCircle, Bell, Bot, CheckCheck, CheckCircle2, ShieldAlert } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
-import { MemorySkeleton } from "@/components/cards/Skeletons";
-import { Button, buttonClasses, type ButtonVariant } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { LoadError } from "@/components/cards/LoadError";
+import { RunsSkeleton } from "@/components/cards/Skeletons";
+import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/Button";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { IconButton } from "@/components/ui/IconButton";
+import { List, ListRow } from "@/components/ui/ListRow";
+import { Menu } from "@/components/ui/Menu";
+import { Tag } from "@/components/ui/Tag";
 import { InboxBody } from "@/components/inbox/InboxBody";
 import {
   announceInboxChanged,
@@ -18,39 +21,43 @@ import {
   type InboxAction,
   type InboxItem,
 } from "@/lib/inboxClient";
-import { layoutInbox, severityOf, timeOfDay, type InboxEntry } from "@/lib/inboxGroups";
-import { labelFor } from "@/lib/statusLabel";
+import { inboxWhen, orderInbox, severityOf } from "@/lib/inboxGroups";
+import { splitNoticeBody } from "@/lib/qualityNotices";
+import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
 
-// What a notice is, said as what happened rather than as a chore assigned to
-// the reader (WP8, 2026-09-20): the inbox records, it does not hand out work.
-const TYPE_LABEL: Record<string, string> = { review: "有结论要核对", question: "等待回答", notify: "通知" };
+type Filter = "all" | "unread";
+
+/** What a notice still asks of the reader, in two characters (2026-09-23 inventory §1.9). */
+const WAITING: Record<string, string> = { question: "待回答", review: "待核对" };
 
 /**
- * The inbox (contract C1, appendix C §3.4).
+ * The inbox (contract C1): one list, in the column every page shares.
  *
- * It notifies at three moments — a run finished, something needs you, a
- * conclusion changed — and says the rest quietly. Automated work (evaluation
- * cells, autopilot episodes) is recorded but arrives read and folds away; on
- * 2026-09-17, 29 of the 31 unread items one account held were machine runs.
- * A clinical-safety finding is the one kind allowed to interrupt: unread, it
- * is pinned above everything in the danger colour; every other item is a
- * plain line in its day.
+ * A notice is a row — unread dot, title, one line of what happened, time —
+ * and the whole row opens it: a notice that names a conversation, a daily or a
+ * memory goes there, and reading it marks it read; one that names nothing
+ * opens in place. 「标为已读」 appears on hover, a decision the notice asks
+ * for is in its 「⋯」. Unread clinical-safety findings stay above everything,
+ * the one class allowed to interrupt.
  *
- * Any unread item can be marked read — the most common item, a finished run,
- * carries an 「打开对话」 action and used to have no way to be marked read at
- * all (B §1e) — and 「全部已读」 does the whole inbox in one request.
+ * What it no longer is (2026-09-23 plan §5.8): a card with two buttons per
+ * notice, a segmented control, day headings, a subtitle about when it
+ * notifies, and 「自动运行 N 条」 — an evaluation writes no notice any more and
+ * a proactive result is an ordinary one, so every item the list route returns
+ * is rendered as a row and no grouping field is read.
  */
 export function InboxPage() {
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const operator = useOperator();
+  const [filter, setFilter] = useState<Filter>("all");
   const [items, setItems] = useState<InboxItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [unreadTotal, setUnreadTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
   const generation = useRef(0);
   const mutationGeneration = useRef(0);
 
@@ -78,7 +85,7 @@ export function InboxPage() {
     return () => { requests.current++; };
   }, [reload]);
 
-  const applySaved = (saved: InboxItem, currentFilter: "all" | "unread") => {
+  const applySaved = (saved: InboxItem, currentFilter: Filter) => {
     setItems((existing) => currentFilter === "unread" && saved.readAt
       ? existing?.filter((candidate) => candidate.id !== saved.id) ?? []
       : existing?.map((candidate) => candidate.id === saved.id ? saved : candidate) ?? []);
@@ -107,17 +114,10 @@ export function InboxPage() {
     }
   };
 
-  /** A folded line stands for several items; reading it reads each of them. */
-  const readMany = async (group: InboxItem[]) => {
-    for (const item of group.filter((candidate) => !candidate.readAt)) {
-      await update(item, () => markInboxRead(item.id, item.revision));
-    }
-  };
-
   /**
-   * Following an item's link reads it: the researcher has gone to look. Not
-   * awaited — the navigation must not wait on the inbox — and a failure only
-   * leaves the item unread, which is what it was.
+   * Opening a notice reads it: the researcher has gone to look. Not awaited —
+   * a navigation must not wait on the inbox — and a failure only leaves the
+   * item unread, which is what it was.
    */
   const readOnOpen = (item: InboxItem) => {
     if (item.readAt) return;
@@ -134,9 +134,8 @@ export function InboxPage() {
     setMarkingAll(true);
     setError(null);
     try {
-      const { updated } = await markAllInboxRead();
+      await markAllInboxRead();
       announceInboxChanged();
-      setStatus(updated > 0 ? `已把 ${updated} 条标为已读。` : "没有未读消息。");
       await reload();
     } catch (caught) {
       setError(inboxErrorMessage(caught));
@@ -167,68 +166,69 @@ export function InboxPage() {
     }
   };
 
-  const layout = useMemo(() => (items ? layoutInbox(items) : null), [items]);
-  const unreadHere = (items ?? []).some((item) => !item.readAt);
-  const hasUnread = unreadTotal != null ? unreadTotal > 0 : unreadHere;
+  const order = items ? orderInbox(items) : null;
+  const hasUnread = unreadTotal != null ? unreadTotal > 0 : (items ?? []).some((item) => !item.readAt);
 
-  const renderEntry = (entry: InboxEntry) => entry.kind === "completions"
-    ? <CompletionsRow key={`completions-${entry.items[0].id}`} items={entry.items}
-        busy={entry.items.some((item) => item.id === busyId)}
-        onRead={() => void readMany(entry.items)} onOpened={readOnOpen} />
-    : <InboxRow key={entry.item.id} item={entry.item} busy={busyId === entry.item.id}
-        onRead={() => update(entry.item, () => markInboxRead(entry.item.id, entry.item.revision))}
-        onResolve={(actionId) => update(entry.item, () => resolveInboxItem(entry.item.id, actionId, entry.item.revision))}
-        onOpened={readOnOpen} />;
+  const row = (item: InboxItem) => (
+    <InboxRow
+      key={item.id}
+      item={item}
+      operator={operator}
+      busy={busyId === item.id}
+      open={openId === item.id}
+      onToggle={() => { setOpenId((current) => (current === item.id ? null : item.id)); readOnOpen(item); }}
+      onRead={() => void update(item, () => markInboxRead(item.id, item.revision))}
+      onResolve={(actionId) => void update(item, () => resolveInboxItem(item.id, actionId, item.revision))}
+      onOpened={readOnOpen}
+    />
+  );
 
-  return <div className="h-full overflow-y-auto">
-    <div className="mx-auto w-full max-w-content space-y-5 px-6 py-8">
-      <PageHeader
-        title="收件箱"
-        description="研究完成、需要你决定、或者结论有变化时才会通知；涉及临床安全的放在最前。"
-        actions={<Button variant="ghost" size="sm" loading={markingAll} disabled={!hasUnread}
-          title={hasUnread ? undefined : "没有未读消息"} onClick={() => void readAll()}>
+  return (
+    <PageShell
+      title="收件箱"
+      actions={(
+        <Button variant="text" loading={markingAll} disabled={!hasUnread} onClick={() => void readAll()}>
           {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
-        </Button>}
+        </Button>
+      )}
+    >
+      <FilterChips
+        label="消息筛选"
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: "all", label: "全部" },
+          { value: "unread", label: "未读", ...(unreadTotal ? { count: unreadTotal } : {}) },
+        ]}
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <SegmentedControl value={filter} onChange={(value) => { setStatus(null); setFilter(value); }} aria-label="消息筛选"
-          options={[{ value: "all", label: "全部" }, { value: "unread", label: "未读" }]} />
-        {unreadTotal != null && unreadTotal > 0 && <span className="text-caption text-muted">{unreadTotal} 条未读</span>}
-        <p role="status" className="text-caption text-muted">{status}</p>
+      {error && <LoadError className="mt-4" message={error} onRetry={() => void reload()} />}
+      <div className="mt-4">
+        {items === null || order === null ? <RunsSkeleton filter={false} />
+          : items.length === 0 ? (!error && <EmptyState icon={Bell} title={filter === "unread" ? "没有未读消息" : "收件箱为空"} />)
+            : (
+              <>
+                {order.pinned.length > 0 && (
+                  <section aria-labelledby="inbox-pinned" className="mb-4">
+                    <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption font-medium text-danger-strong">
+                      <ShieldAlert size={16} aria-hidden="true" />涉及临床安全 · 未读 {order.pinned.length} 条
+                    </h2>
+                    <List label="涉及临床安全">{order.pinned.map(row)}</List>
+                  </section>
+                )}
+                {order.rest.length > 0 && <List label="消息">{order.rest.map(row)}</List>}
+                {cursor && (
+                  <Button variant="secondary" className="mt-4" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>
+                )}
+              </>
+            )}
       </div>
-      {error && <div role="alert" className="flex items-center justify-between gap-3 rounded-card border border-danger bg-danger-soft p-3 text-ui text-danger-strong">
-        <span>{error}</span><Button size="sm" variant="ghost" onClick={() => void reload()}>重试</Button>
-      </div>}
-      {items === null || layout === null ? <MemorySkeleton /> : items.length === 0 ? <EmptyState icon={Bell}
-        title={filter === "unread" ? "没有未读消息" : "收件箱为空"}
-        description={filter === "unread" ? "新的研究结果和待决事项会显示在这里。" : "研究完成、需要你决定或回答时，这里会通知你。"} />
-        : <div className="space-y-6">
-          {layout.pinned.length > 0 && (
-            <section aria-labelledby="inbox-pinned">
-              <h2 id="inbox-pinned" className="mb-2 flex items-center gap-1.5 text-ui font-semibold text-danger-strong">
-                <ShieldAlert size={16} aria-hidden="true" />涉及临床安全 · 未读 {layout.pinned.length} 条
-              </h2>
-              <ul className="space-y-2">{layout.pinned.map((item) => renderEntry({ kind: "item", item }))}</ul>
-            </section>
-          )}
-          {layout.days.map((day) => (
-            <section key={day.key} aria-labelledby={`inbox-day-${day.key}`}>
-              <h2 id={`inbox-day-${day.key}`} className="mb-2 text-caption font-medium text-muted">{day.label}</h2>
-              {day.entries.length > 0 && <ul className="space-y-2">{day.entries.map(renderEntry)}</ul>}
-              {day.silent.length > 0 && <SilentFold items={day.silent} className={day.entries.length > 0 ? "mt-2" : undefined} />}
-            </section>
-          ))}
-          {cursor && <Button variant="ghost" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>}
-        </div>}
-    </div>
-  </div>;
+    </PageShell>
+  );
 }
 
 /** Where an item's action goes when it is navigation rather than a decision. */
 function actionHref(item: InboxItem, action: InboxAction): string | null {
   if (action.id !== "open" || !item.source) return null;
-  // `Link`, not `<a href>`: a bare anchor inside the shell reloaded the whole
-  // application to move between two of its own pages (U10).
   // A digest is either an autopilot briefing or the frontier daily of a day;
   // the daily names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed
   // under, and opens on that issue.
@@ -244,124 +244,61 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   return null;
 }
 
-function InboxRow({ item, busy, onRead, onResolve, onOpened }: {
+function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onOpened }: {
   item: InboxItem;
+  operator: boolean;
   busy: boolean;
-  onRead: () => Promise<void>;
-  onResolve: (actionId: string) => Promise<void>;
-  onOpened: (item: InboxItem) => void;
-}) {
-  const severity = severityOf(item);
-  const unread = !item.readAt;
-  const completed = Boolean(item.resolvedAt);
-  // An `open` action is navigation, not a decision, so it outlives being
-  // handled: a notice read yesterday still reaches the run it names. Every
-  // other action is a decision and disappears once made.
-  const availableActions = item.actions.filter((action) => !completed || actionHref(item, action) != null);
-  // A server-merged day of completions says its count in its title
-  // (「9月18日完成 3 项研究」); anything else merged says so here.
-  const mergedRuns = item.groupKey?.startsWith("run-finished:") ?? false;
-  return <li
-    className={cn(
-      "rounded-card border p-4",
-      severity === "safety" ? "border-danger bg-danger-soft" : "border-border bg-surface",
-    )}
-  >
-    <article className="space-y-2" aria-label={item.title}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
-        {severity === "safety" && <span className="inline-flex items-center gap-1 font-semibold text-danger-strong">
-          <ShieldAlert size={16} aria-hidden="true" />临床安全</span>}
-        {severity === "attention" && <span className="inline-flex items-center gap-1 font-medium text-warn-strong">
-          <AlertCircle size={16} aria-hidden="true" />{labelFor(TYPE_LABEL, item.noticeType, "值得一看")}</span>}
-        {severity === "info" && item.noticeType !== "notify" && <span className="text-muted">{labelFor(TYPE_LABEL, item.noticeType, "通知")}</span>}
-        {item.count > 1 && !mergedRuns && <span className="text-muted">合并 {item.count} 条</span>}
-        <span className="ml-auto flex items-center gap-2 text-muted">
-          {completed && <span className="inline-flex items-center gap-1 text-ok"><CheckCircle2 size={16} aria-hidden="true" />已处理</span>}
-          <time dateTime={item.createdAt}>{timeOfDay(item.createdAt)}</time>
-        </span>
-      </div>
-      <h3 className={cn("flex items-center gap-2 text-body text-text", unread ? "font-semibold" : "font-normal")}>
-        {unread && <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />}
-        <span className="min-w-0">{item.title}</span>
-        {unread && <span className="sr-only">（未读）</span>}
-      </h3>
-      <InboxBody body={item.body} />
-      {(availableActions.length > 0 || unread) && <div className="flex flex-wrap gap-2 pt-1">
-        {availableActions.map((action) => {
-          const variant: ButtonVariant = action.style === "danger" ? "danger" : action.style === "primary" ? "primary" : "ghost";
-          const href = actionHref(item, action);
-          if (href) {
-            return <Link key={action.id} className={buttonClasses({ size: "sm", variant })} to={href}
-              onClick={() => onOpened(item)}>{action.label}</Link>;
-          }
-          return <Button key={action.id} size="sm" variant={variant} loading={busy} onClick={() => void onResolve(action.id)}>{action.label}</Button>;
-        })}
-        {unread && <Button size="sm" variant="ghost" loading={busy} onClick={() => void onRead()}>标为已读</Button>}
-      </div>}
-    </article>
-  </li>;
-}
-
-/**
- * A day's routine completions from before the control plane merged them
- * itself, as one line: 「研究已完成 × 4」, each run one click away.
- */
-function CompletionsRow({ items, busy, onRead, onOpened }: {
-  items: InboxItem[];
-  busy: boolean;
+  open: boolean;
+  onToggle: () => void;
   onRead: () => void;
+  onResolve: (actionId: string) => void;
   onOpened: (item: InboxItem) => void;
 }) {
-  const unread = items.filter((item) => !item.readAt).length;
-  const review = items.filter((item) => item.title !== "研究已完成").length;
-  return <li className="rounded-card border border-border bg-surface p-4">
-    <article className="space-y-2" aria-label={`研究已完成 × ${items.length}`}>
-      <div className="flex items-center gap-2 text-caption text-muted">
-        {review > 0 && <span>其中 {review} 项有结论要核对</span>}
-        <time className="ml-auto" dateTime={items[0].createdAt}>{timeOfDay(items[0].createdAt)}</time>
-      </div>
-      <h3 className={cn("flex items-center gap-2 text-body text-text", unread ? "font-semibold" : "font-normal")}>
-        {unread > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />}
-        研究已完成 × {items.length}
-        {unread > 0 && <span className="sr-only">（{unread} 条未读）</span>}
-      </h3>
-      <Disclosure summary={<>逐条查看</>}>
-        <ul className="space-y-1">
-          {items.map((item) => {
-            const href = item.source ? `/app/runs?run=${encodeURIComponent(item.source.id)}` : null;
-            return <li key={item.id} className="flex items-center gap-2 text-ui">
-              <time className="w-12 shrink-0 tabular-nums text-muted" dateTime={item.createdAt}>{timeOfDay(item.createdAt)}</time>
-              <span className={cn("min-w-0 flex-1 truncate", !item.readAt && "font-medium")}>{item.title}</span>
-              {href && <Link to={href} onClick={() => onOpened(item)} className="shrink-0 text-link hover:underline">打开对话</Link>}
-            </li>;
-          })}
-        </ul>
-      </Disclosure>
-      {unread > 0 && <Button size="sm" variant="ghost" loading={busy} onClick={onRead}>标为已读</Button>}
-    </article>
-  </li>;
-}
-
-/**
- * Automated work of one day — evaluation cells, autopilot episodes. Recorded,
- * never counted, never pushed; folded, so a batch of forty cells is one line.
- */
-function SilentFold({ items, className }: { items: InboxItem[]; className?: string }) {
-  return <Disclosure
-    className={className}
-    summaryClassName="text-caption"
-    summary={<span className="inline-flex items-center gap-1"><Bot size={16} aria-hidden="true" />自动运行 {items.length} 条（评测与主动科研，不计入未读）</span>}
-  >
-    <ul className="space-y-1 pl-5">
-      {items.map((item) => {
-        const open = item.actions.find((action) => actionHref(item, action) != null);
-        const href = open ? actionHref(item, open) : null;
-        return <li key={item.id} className="flex items-center gap-2 text-caption text-muted">
-          <time className="w-12 shrink-0 tabular-nums" dateTime={item.createdAt}>{timeOfDay(item.createdAt)}</time>
-          <span className="min-w-0 flex-1 truncate">{item.title}</span>
-          {href && open && <Link to={href} className="shrink-0 text-link hover:underline">{open.label}</Link>}
-        </li>;
-      })}
-    </ul>
-  </Disclosure>;
+  const unread = !item.readAt;
+  const safety = severityOf(item) === "safety";
+  const resolved = Boolean(item.resolvedAt);
+  const openAction = item.actions.find((action) => actionHref(item, action) != null);
+  const href = openAction ? actionHref(item, openAction) : null;
+  // A decision disappears once made; the way to what the notice names does not.
+  const decisions = resolved ? [] : item.actions.filter((action) => actionHref(item, action) == null);
+  const waiting = !resolved && (unread || decisions.length > 0) ? WAITING[item.noticeType] : undefined;
+  const decided = resolved && item.resolution != null && item.resolution.actionId !== "open";
+  const body = splitNoticeBody(item.body);
+  const hasBody = body.lines.length > 0 || (operator && body.technical.length > 0);
+  return (
+    <ListRow
+      leading={(
+        <span
+          aria-hidden="true"
+          className={cn("mt-2 h-1.5 w-1.5 self-start rounded-full", unread && (safety ? "bg-danger" : "bg-accent"))}
+        />
+      )}
+      title={<>{item.title}{unread && <span className="sr-only">（未读）</span>}</>}
+      to={href ?? undefined}
+      onOpen={href ? () => onOpened(item) : onToggle}
+      expanded={href ? undefined : open}
+      unread={unread}
+      muted={!unread}
+      meta={hasBody ? <InboxBody body={item.body} open={!href && open} operator={operator} /> : undefined}
+      trailing={(
+        <>
+          {waiting && <Tag>{waiting}</Tag>}
+          {decided && <span>已处理</span>}
+          <time dateTime={item.createdAt} className="tabular-nums">{inboxWhen(item.createdAt)}</time>
+        </>
+      )}
+      actions={unread ? <IconButton icon={Check} label="标为已读" size="sm" disabled={busy} onClick={onRead} /> : undefined}
+      menu={decisions.length > 0 ? (
+        <Menu
+          label="处理"
+          items={decisions.map((action) => ({
+            label: action.label,
+            destructive: action.style === "danger",
+            disabled: busy,
+            onSelect: () => onResolve(action.id),
+          }))}
+        />
+      ) : undefined}
+    />
+  );
 }

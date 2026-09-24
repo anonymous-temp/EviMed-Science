@@ -172,8 +172,6 @@ module.exports = {
       files: [
         "src/app/routes/FrontierPage.tsx",
         "src/components/frontier/FrontierFilters.tsx",
-        "src/components/memory/MemoryControls.tsx",
-        "src/components/settings/WebAccountCard.tsx",
       ],
       rules: {
         "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...iconRules, ...errorTextRules],

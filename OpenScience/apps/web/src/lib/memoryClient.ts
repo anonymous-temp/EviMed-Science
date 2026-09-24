@@ -105,64 +105,12 @@ export function ensureMyCapsule() {
   return productRequest<CapsuleRecord>("/capsules/mine", "POST");
 }
 
-/** One event of 「最近变化」, as codes and the stored words; the page says it in Chinese. */
-export interface TimelineEvent {
-  id: string;
-  at: string;
-  /** The calendar day in the researcher's zone. */
-  day: string;
-  type: "memory" | "run" | "method" | "feedback";
-  change: string;
-  before?: string;
-  after?: string;
-  by?: string;
-  runId?: string | null;
-  recordId?: string;
-  /** The record's current version, which its one-click 撤销 compares and swaps on. */
-  version?: number;
-  kind?: string | null;
-  scope?: string;
-  origin?: string | null;
-  basis?: WebMemoryProvenance["basis"] | null;
-  /** 「曾经如此」: a fact that held until another replaced it. */
-  wasTrue?: boolean;
-  replacedBy?: string;
-  title?: string;
-  recalled?: number;
-  methods?: number;
-  methodId?: string;
-  name?: string;
-  reason?: string;
-}
-
-export interface TimelineDensity {
-  day: string;
-  memory: number;
-  run: number;
-  method: number;
-  feedback: number;
-}
-
-export interface MemoryTimelinePage {
-  items: TimelineEvent[];
-  nextBefore: string | null;
-  density: TimelineDensity[];
-  timeZone: string;
-  /** Sources that could not be read for this page. */
-  missing: string[];
-}
-
-export function fetchMemoryTimeline({ before = null, limit = 50 }: { before?: string | null; limit?: number } = {}) {
-  const query = new URLSearchParams({ limit: String(limit) });
-  if (before) query.set("before", before);
-  try {
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (zone) query.set("timeZone", zone);
-  } catch {
-    // The server's default zone answers instead.
-  }
-  return productRequest<MemoryTimelinePage>(`/memory/timeline?${query.toString()}`);
-}
+/*
+ * The timeline read (`/memory/timeline`) is gone from the page with the
+ * 「最近变化」 block it fed (2026-09-23 plan §5.6): a method's history is its
+ * row's own 「历史版本」, a memory's is its revisions, and a list of back-office
+ * events above the list said the same thing twice.
+ */
 
 /** A pack someone shared, as the received shelf shows it. */
 export interface ReceivedCapsule {

@@ -573,3 +573,33 @@ test("a cap that belongs to one kind of work counts only that work", options, as
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [learner]);
   }
 });
+
+test("a month's spend reads as one group per run, and one for what no run is attributed to", options, async () => {
+  // The settings page's usage 明细 (2026-09-23 plan §5.9). Its own account and
+  // the last window of the file, so no other test's totals see these rows.
+  const monthly = `usage_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Monthly','development')", [monthly]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Monthly',1048576)", [monthly]);
+  try {
+    const since = new Date("2036-08-01T00:00:00.000Z");
+    const runId = `run_${randomUUID().replaceAll("-", "")}`;
+    const settled = (run, actualCost, at, tag) => ledger.recordSettled({
+      id: `usage_${randomUUID().replaceAll("-", "")}`, userId: monthly, projectId: "default", runId: run,
+      purpose: run ? "kernel" : "memory-extraction", model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+      requestFingerprint: createHash("sha256").update(`${tag}-${runId}`).digest("hex"),
+      usage: { cacheHitTokens: 100, cacheMissTokens: 50, completionTokens: 10 }, actualCost, priced: true, now: at,
+    });
+    await settled(runId, 0.5, new Date("2036-08-02T00:00:00.000Z"), "runs-since-1");
+    await settled(runId, 0.25, new Date("2036-08-03T00:00:00.000Z"), "runs-since-2");
+    await settled(null, 0.1, new Date("2036-08-04T00:00:00.000Z"), "runs-since-none");
+    await settled(runId, 9, new Date("2036-07-31T00:00:00.000Z"), "runs-since-before");
+    const groups = await ledger.runsSince(monthly, { since });
+    assert.deepEqual(groups.map(({ firstAt, ...group }) => { assert.ok(Number.isFinite(Date.parse(firstAt))); return group; }), [
+      { runId: null, calls: 1, cost: 0.1, inputTokens: 150, outputTokens: 10 },
+      { runId, calls: 2, cost: 0.75, inputTokens: 300, outputTokens: 20 },
+    ], "the unattributed group first, then each run; nothing from before the window");
+    assert.deepEqual(await ledger.runsSince(other, { since }), [], "another account's spend is not read");
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [monthly]);
+  }
+});

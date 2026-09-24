@@ -6,13 +6,11 @@ import { memoryExcerpt } from "@/lib/memoryText";
 import { methodTitle, retireMethod, rollbackMethod, type WebMethod } from "@/lib/methodsClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
+import { IconButton } from "@/components/ui/IconButton";
+import { ListRow } from "@/components/ui/ListRow";
+import { Menu } from "@/components/ui/Menu";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
-
-/** How long a method wears 「新」. Long enough to be noticed on a weekly visit,
- *  short enough that the badge still means something. */
-const NEW_FOR_DAYS = 14;
+import { RowDetail, RowOrigin, RowSentence } from "./rowParts";
 
 function day(value: string | null | undefined) {
   if (!value) return "";
@@ -20,39 +18,49 @@ function day(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? "" : formatDateTime(date, { month: "long", day: "numeric" });
 }
 
+/** The line a researcher reads for a method: its own title and sentence when
+ *  it has them; the name and description, written for the model, otherwise. */
+export function methodLine(method: WebMethod): string {
+  if (method.title && method.summary) return `${method.title}：${method.summary}`;
+  return method.description ? `${method.name}：${memoryExcerpt(method.description, 120)}` : method.name;
+}
+
 /**
- * What a learned method rests on, said as an observation rather than a rule.
- *
- * 「从你改过的 3 份报告学到」 — the count is the successful deliveries it was
- * distilled from, which is the only thing about it a reader can check. A method
- * the researcher stated is labelled as theirs and claims no evidence it does
- * not have.
+ * A method's history, newest first: when it was learned (or said), when it
+ * was last revised, when it was stopped and why. This is what 「最近变化」
+ * used to show for every method at once, above the list; it is now each
+ * row's own 「历史版本」 (2026-09-23 plan §5.6). Learning and taking effect are
+ * one event since 2026-09-20 — the old block said both, for every method.
  */
-export function methodEvidence(method: WebMethod): string {
-  if (method.origin === "explicit") return "你在对话里说过";
-  const trajectories = method.trajectories ?? method.counts?.succeeded ?? 0;
-  return trajectories > 0 ? `从你的 ${trajectories} 次研究学到` : "从你的研究里学到";
-}
-
-/** Whether this method started being used recently enough to say so. */
-export function isNewMethod(method: WebMethod, now = Date.now()): boolean {
-  if (method.status !== "approved") return false;
-  const at = Date.parse(method.statusChangedAt ?? method.createdAt ?? "");
-  return Number.isFinite(at) && now - at <= NEW_FOR_DAYS * 86_400_000;
+export function methodHistory(method: WebMethod): string[] {
+  const lines: string[] = [];
+  const learned = day(method.createdAt);
+  if (learned) lines.push(`${learned} ${method.origin === "explicit" ? "记下" : "学到"}`);
+  const revised = day(method.updatedAt);
+  if (method.revision > 1 && revised && method.updatedAt !== method.createdAt && method.status !== "retired") {
+    lines.push(`${revised} 更新为第 ${method.revision} 版`);
+  }
+  if (method.status === "retired") {
+    const stopped = day(method.statusChangedAt ?? method.updatedAt);
+    const reason = method.statusReason ? `：${memoryExcerpt(method.statusReason, 80)}` : "";
+    if (stopped) lines.push(`${stopped} 停用${reason}`);
+  }
+  return lines.reverse();
 }
 
 /**
- * One learned method as a line of 我的做法.
+ * One learned method as a row of 做法: the line it is known by, 「推断」 when
+ * EviMed learned it rather than the researcher saying it, and nothing else on
+ * the row — no 「新」, no 「起生效」, no 「用过 N 次」 (2026-09-23 plan §5.6).
+ * Opening the row shows its full steps; its 「⋯」 holds 历史版本, 回到上一版
+ * and 停用. A stopped method lives under 已忘记的内容, with 恢复.
  *
- * It takes effect the night it is learned (`promotionVerdict`), so the row says
- * what it does and since when rather than what it is still waiting for — the
- * old page listed 「还差：成功用到它的任务还不够…」 under every one of them,
- * which described a gate that under stock configuration never opened. The
- * paired evaluation still runs; what it can do now is retire one, and that
- * shows up in 最近变化.
+ * There is nothing to edit: a method is what the model learned from the work,
+ * never a form the researcher fills in (owner ruling 2026-09-20).
  */
 export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [detail, setDetail] = useState<"steps" | "history" | null>(null);
   const retired = method.status === "retired";
 
   const run = async (operation: () => Promise<void>) => {
@@ -68,46 +76,50 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
     }
   };
   const stop = () => run(async () => {
-    await retireMethod(method, "在记忆页里停用");
-    toast.success(`已停用「${methodTitle(method)}」，之后的研究不会再用它。`);
+    const stopped = await retireMethod(method, "在记忆页里停用");
+    toast.success(`已停用「${methodTitle(method)}」`, {
+      action: {
+        label: "撤销",
+        onClick: () => void rollbackMethod(stopped, stopped.revision - 1)
+          .then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(productErrorMessage(error))),
+      },
+    });
   });
   const rollback = () => run(async () => {
     await rollbackMethod(method, method.revision - 1);
-    toast.success(`「${methodTitle(method)}」已回到上一版。`);
+    toast.success(retired ? `已恢复「${methodTitle(method)}」` : `「${methodTitle(method)}」已回到上一版`);
   });
 
+  const history = methodHistory(method);
+  const firstView = method.body ? "steps" : "history";
+
   return (
-    <li className="px-4 py-3" data-method-id={method.id}>
-      <p className="text-ui text-text">
-        {/* The researcher's own line when it exists; the model's name and
-            description otherwise, which are English and written for routing. */}
-        {method.title && method.summary
-          ? `${method.title}：${method.summary}`
-          : method.description ? `${method.name}：${memoryExcerpt(method.description, 120)}` : method.name}
-        <span className="text-muted">（{methodEvidence(method)}）</span>
-      </p>
-      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
-        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-text">我的做法</span>
-        {isNewMethod(method) && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-accent">新</span>}
-        {retired && <span>已停用</span>}
-        {method.statusChangedAt && !retired && <span>{day(method.statusChangedAt)} 起生效</span>}
-        {method.counts ? <span>用过 {method.counts.loaded} 次</span> : null}
-      </p>
-      {method.body && (
-        <Disclosure summary="看看具体怎么做" className="mt-2" summaryClassName="text-caption">
-          <div className="border-l border-border pl-3">
-            <MarkdownViewer className="text-ui">{method.body}</MarkdownViewer>
-          </div>
-        </Disclosure>
+    <ListRow
+      leading={<RowOrigin label="做法" />}
+      title={<RowSentence text={methodLine(method)} inferred={method.origin !== "explicit"} clamp={!retired && detail === null} />}
+      onOpen={retired ? undefined : () => setDetail((current) => (current ? null : firstView))}
+      expanded={retired ? undefined : detail !== null}
+      muted={retired}
+      meta={detail ? (
+        <RowDetail>
+          {detail === "steps"
+            ? <MarkdownViewer className="text-ui text-text-2">{method.body}</MarkdownViewer>
+            : <ul className="space-y-1">{history.map((line) => <li key={line}>{line}</li>)}</ul>}
+        </RowDetail>
+      ) : undefined}
+      actions={retired && method.revision > 1
+        ? <IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy} onClick={() => void rollback()} />
+        : undefined}
+      menu={retired ? undefined : (
+        <Menu
+          label="更多"
+          items={[
+            { label: "历史版本", onSelect: () => setDetail("history") },
+            ...(method.revision > 1 ? [{ label: "回到上一版", disabled: busy, onSelect: () => void rollback() }] : []),
+            { label: "停用", disabled: busy, onSelect: () => void stop() },
+          ]}
+        />
       )}
-      <div className="mt-2 flex flex-wrap gap-2">
-        {!retired && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void stop()}>停用</Button>}
-        {method.revision > 1 && (
-          <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => void rollback()}>
-            {!busy && <RotateCcw size={16} aria-hidden="true" />}回到上一版
-          </Button>
-        )}
-      </div>
-    </li>
+    />
   );
 }
