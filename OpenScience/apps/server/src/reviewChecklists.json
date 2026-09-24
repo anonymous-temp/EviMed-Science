@@ -1,6 +1,6 @@
 {
-  "$comment": "Reporting checklists the independent reviewer checks item by item (present / absent / not applicable), by contract kind. Data, not code (principle 7): a methodologist edits an item here. Kept in the control plane only: the reviewer's inputs are not the run's to read (plan 2026-09-22 §5 rule 6). The reviewer only locates each item; it never scores the package against the list.",
-  "version": 1,
+  "$comment": "Reporting checklists the independent reviewer checks item by item (present / absent / not applicable): the lists of the package's contract kind, and the list of the study type its plan declared (byStudyType, keyed by @evimed/domain's STUDY_TYPES; a list both name is asked once). Data, not code (principle 7): a methodologist edits an item here. Kept in the control plane only: the reviewer's inputs are not the run's to read (plan 2026-09-22 §5 rule 6). The reviewer only locates each item; it never scores the package against the list. Item ids carry the guideline's own item numbers (C18 is CONSORT 2025 item 18, with its sub-items), so a run told an item is missing can find it in the guideline's published checklist. consort-2025 and tripod-ai were read off the published checklist tables (PMC11995449 table 1; PMC11019967 table 2) on 2026-09-24 and condensed one line per numbered item, as the lists above them are.",
+  "version": 2,
   "byContractKind": {
     "clinical-evidence-report": ["evidence-report", "sampl"],
     "drug-evaluation-report": ["evidence-report"],
@@ -19,6 +19,15 @@
     "peer-review-report": [],
     "research-brief": ["evidence-report"],
     "clinical-decision-brief": ["evidence-report"]
+  },
+  "byStudyType": {
+    "rct": ["consort-2025"],
+    "prediction-model": ["tripod-ai"],
+    "systematic-review": ["prisma-2020"],
+    "mendelian-randomization": ["strobe-mr"],
+    "observational": [],
+    "diagnostic-accuracy": [],
+    "other": []
   },
   "checklists": {
     "evidence-report": {
@@ -40,6 +49,7 @@
     "prisma-2020": {
       "title": "PRISMA 2020",
       "source": "Page MJ, et al. BMJ 2021;372:n71",
+      "url": "https://doi.org/10.1136/bmj.n71",
       "items": [
         { "id": "P1", "text": "标题标明为系统评价" },
         { "id": "P2", "text": "摘要按 PRISMA 2020 摘要清单撰写" },
@@ -73,6 +83,7 @@
     "strobe-mr": {
       "title": "STROBE-MR",
       "source": "Skrivankova VW, et al. JAMA 2021;326(16):1614-1621",
+      "url": "https://doi.org/10.1001/jama.2021.18236",
       "items": [
         { "id": "M1", "text": "标题或摘要标明为孟德尔随机化研究" },
         { "id": "M2", "text": "说明科学背景与理由（为何用 MR 回答该问题）" },
@@ -94,6 +105,77 @@
         { "id": "M18", "text": "资助来源" },
         { "id": "M19", "text": "数据与代码的可及性" },
         { "id": "M20", "text": "利益冲突" }
+      ]
+    },
+    "consort-2025": {
+      "title": "CONSORT 2025",
+      "source": "Hopewell S, et al. BMJ 2025;389:e081123",
+      "url": "https://doi.org/10.1136/bmj-2024-081123",
+      "items": [
+        { "id": "C1", "text": "标题标明为随机试验；结构化摘要概括试验设计、方法、结果与结论" },
+        { "id": "C2", "text": "写明试验注册库名称、注册号（附网址）与注册日期" },
+        { "id": "C3", "text": "写明试验方案与统计分析计划可在何处获取" },
+        { "id": "C4", "text": "写明去标识的个体参与者数据（含数据字典）、统计代码及其他材料在何处、如何获取" },
+        { "id": "C5", "text": "写明资助来源与其他支持（如药品供应）、资助方在设计、实施、分析与报告中的作用，以及作者的经济及其他利益冲突" },
+        { "id": "C6", "text": "说明科学背景与研究理由" },
+        { "id": "C7", "text": "写明与获益和危害相关的具体目的" },
+        { "id": "C8", "text": "写明患者或公众参与试验设计、实施与报告的细节" },
+        { "id": "C9", "text": "描述试验设计：类型（如平行组、交叉）、分配比例与框架（如优效、等效、非劣效、探索性）" },
+        { "id": "C10", "text": "写明试验开始后的重要变更（包括未预先设定的结局或分析）及理由" },
+        { "id": "C11", "text": "写明试验实施的场所（如社区、医院）与地点（如国家、中心）" },
+        { "id": "C12", "text": "写明受试者的纳入标准；如适用，写明中心及实施干预者（如外科医生、物理治疗师）的资格标准" },
+        { "id": "C13", "text": "干预与对照写到足以复现；如相关，写明描述干预与对照的附加材料（如干预手册）在何处获取" },
+        { "id": "C14", "text": "写明预先设定的主要与次要结局，每个结局含测量变量、分析指标（如较基线变化、终值、至事件时间）、汇总方式（如中位数、比例）与时间点" },
+        { "id": "C15", "text": "写明危害如何定义与评估（如系统性或非系统性收集）" },
+        { "id": "C16", "text": "说明样本量如何确定及样本量计算所依据的全部假设；说明任何期中分析与终止规则" },
+        { "id": "C17", "text": "写明由谁、用何方法产生随机分配序列，以及随机化类型与任何限制（如分层、区组及区组大小）" },
+        { "id": "C18", "text": "写明实施随机分配序列的机制（如中央电脑或电话；按序编号、不透光、密封的容器）及分配干预前隐藏序列的步骤" },
+        { "id": "C19", "text": "写明招募受试者的人员与分配干预的人员能否接触随机分配序列" },
+        { "id": "C20", "text": "写明分配干预后对谁设盲（如受试者、医护人员、结局评估者、数据分析者）；如设盲，写明如何实现及干预措施的相似性" },
+        { "id": "C21", "text": "写明组间比较主要与次要结局（含危害）的统计方法、每项分析纳入谁及归入哪组、缺失数据如何处理，以及附加分析（如亚组、敏感性分析）的方法并区分预先设定与事后分析" },
+        { "id": "C22", "text": "报告各组随机分配、接受预定干预、纳入主要结局分析的人数，以及随机化后的失访与排除及其原因（宜附流程图）" },
+        { "id": "C23", "text": "写明界定招募期与获益、危害结局随访期的日期；如相关，写明试验结束或提前终止的原因" },
+        { "id": "C24", "text": "报告干预与对照的实际实施情况（如由谁实施、受试者依从性、是否按计划实施），以及各组试验期间接受的伴随治疗" },
+        { "id": "C25", "text": "以表格列出各组的基线人口学与临床特征" },
+        { "id": "C26", "text": "每个主要与次要结局按组报告：纳入分析的人数、该时间点有数据的人数、各组结果以及效应量估计及其精度（如 95% 置信区间）；二分类结局同时给出绝对与相对效应量" },
+        { "id": "C27", "text": "报告各组发生的全部危害或非预期事件" },
+        { "id": "C28", "text": "报告进行的其他分析（包括亚组与敏感性分析），区分预先设定与事后分析" },
+        { "id": "C29", "text": "解释与结果一致，权衡获益与危害，并结合其他相关证据" },
+        { "id": "C30", "text": "写明试验局限：潜在偏倚来源、不精确性、可推广性，以及如相关的分析多重性" }
+      ]
+    },
+    "tripod-ai": {
+      "title": "TRIPOD+AI",
+      "source": "Collins GS, et al. BMJ 2024;385:e078378",
+      "url": "https://doi.org/10.1136/bmj-2023-078378",
+      "items": [
+        { "id": "T1", "text": "标题标明为多变量预测模型的建立或性能评价研究，并写明目标人群与所预测的结局" },
+        { "id": "T2", "text": "摘要按 TRIPOD+AI 摘要清单撰写" },
+        { "id": "T3", "text": "说明医疗背景（诊断或预后）与建立或评价该模型的理由并引用已有模型；描述目标人群、模型在诊疗路径中的预期用途与预期使用者；描述社会人口学群体间已知的健康不平等" },
+        { "id": "T4", "text": "写明研究目的，包括研究是模型建立、验证还是两者兼有" },
+        { "id": "T5", "text": "分别描述建模与评价数据的来源（如随机试验、队列、常规诊疗或登记数据）、使用理由与代表性；写明数据收集的起止日期（如适用含随访结束）" },
+        { "id": "T6", "text": "写明研究场所的关键要素（如初级、二级医疗或一般人群）及中心数量与地点、受试者纳入标准；如相关，写明受试者接受的治疗及建模或评价时如何处理" },
+        { "id": "T7", "text": "描述数据预处理与质量核查，包括在相关社会人口学群体间是否一致" },
+        { "id": "T8", "text": "明确定义所预测的结局与时间范围（如何、何时评估，选择理由，评估方法在社会人口学群体间是否一致）；需主观判断时写明评估者的资质与人口学特征；写明结局评估的盲法" },
+        { "id": "T9", "text": "说明初始预测因子如何选择及建模前的任何预筛选；明确定义全部预测因子（如何、何时测量，评估的盲法）；需主观判断时写明评估者的资质与人口学特征" },
+        { "id": "T10", "text": "说明样本量如何确定（建模与评价分别说明）并论证其足以回答研究问题，给出样本量计算细节" },
+        { "id": "T11", "text": "描述缺失数据如何处理，并给出剔除任何数据的理由" },
+        { "id": "T12", "text": "描述分析方法：数据如何用于建模与性能评价（是否划分数据）；预测因子如何处理（函数形式、缩放、变换、标准化）；模型类型、选择理由、全部建模步骤（含超参数调优）与内部验证方法；跨聚类（如医院、国家）的异质性如何处理与量化；评价性能的全部指标与图（如区分度、校准度、临床效用）及理由；评价研究中的模型更新（如再校准）与预测值的计算方式（如公式、代码、应用程序接口）" },
+        { "id": "T13", "text": "如使用类别不平衡处理方法，说明原因、做法及之后对模型或预测值的再校准" },
+        { "id": "T14", "text": "描述处理模型公平性的方法及理由" },
+        { "id": "T15", "text": "（建模研究）写明模型的输出（如概率、分类），说明分类的细节、理由及阈值如何确定" },
+        { "id": "T16", "text": "指出建模数据与评价数据在医疗场所、纳入标准、结局与预测因子上的差异" },
+        { "id": "T17", "text": "写明批准研究的伦理委员会，并描述受试者知情同意或伦理委员会对知情同意的豁免" },
+        { "id": "T18", "text": "写明资助来源及资助方作用、全部作者的利益冲突、研究方案与注册信息（或说明未制定方案、未注册），以及数据与分析代码的可获得性" },
+        { "id": "T19", "text": "写明患者与公众在设计、实施、报告、解释或传播中的参与，或说明没有参与" },
+        { "id": "T20", "text": "描述受试者流程（有无结局的人数与随访时间汇总，可附图）；报告总体及各数据来源或场所的特征（关键日期、关键预测因子含人口学、治疗、样本量、结局事件数、随访时间与缺失数据量）及关键人口学群体间的差异；评价研究中与建模数据比较重要预测因子与结局的分布" },
+        { "id": "T21", "text": "写明每项分析（如建模、超参数调优、模型评价）中的受试者人数与结局事件数" },
+        { "id": "T22", "text": "（建模研究）提供完整预测模型的细节（如公式、代码、对象、应用程序接口），足以对新个体做出预测并供第三方评价与实施，写明获取或复用的限制（如免费、专有）" },
+        { "id": "T23", "text": "报告模型性能估计及其置信区间，包括关键亚组（如社会人口学群体）；如有考察，报告跨聚类的性能异质性" },
+        { "id": "T24", "text": "（评价研究）报告任何模型更新的结果，包括更新后的模型及其性能" },
+        { "id": "T25", "text": "结合研究目的与既往研究对主要结果做出整体解释，包括公平性问题" },
+        { "id": "T26", "text": "讨论研究局限（如样本不具代表性、样本量、过拟合、缺失数据）及其对偏倚、统计不确定性与可推广性的影响" },
+        { "id": "T27", "text": "说明实施模型时如何评估与处理质量差或缺失的输入数据、使用者是否需要参与输入数据处理或模型使用及所需的专业水平，并讨论下一步研究（尤其是适用性与可推广性）" }
       ]
     },
     "sampl": {
