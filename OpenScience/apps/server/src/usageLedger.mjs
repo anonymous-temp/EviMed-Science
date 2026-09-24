@@ -29,6 +29,42 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
 export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
+/**
+ * The HTTP statuses a provider answers when it refuses a request outright,
+ * before producing anything: the request itself is wrong (400, 409, 413, 422),
+ * the caller may not or cannot pay (401, 402, 403), what it asked for does not
+ * exist (404), or it asked too often (429). Nothing was generated, so nothing
+ * was billed, and the reservation is released.
+ *
+ * Hidden knowledge: these used to be booked `uncertain`, like every call that
+ * reached the provider and came back without a count. On 2026-09-23 the
+ * DeepSeek balance ran out for two hours and every frontier call was answered
+ * 402: 569 ledger rows went `uncertain` at their reserved ceilings — held
+ * against the feed's daily budget and reported as possibly spent — for calls
+ * the provider had declined in writing. A 5xx, a timeout or a connection lost
+ * after the request left is different: the provider may have worked on it, so
+ * those stay `uncertain` (plan 2026-09-22 §15.6).
+ */
+export const PROVIDER_REFUSAL_STATUSES = Object.freeze([400, 401, 402, 403, 404, 409, 413, 422, 429]);
+
+/**
+ * End a reservation whose call brought back no count of the provider's own.
+ * One rule for every metered client (the model gateway, the control plane's
+ * own DeepSeek calls, the reviewer, Jev): never sent is released; refused
+ * outright (`PROVIDER_REFUSAL_STATUSES`) is released and names the status;
+ * anything else that was sent is `uncertain`. A call that did return a count
+ * is settled on it before it gets here.
+ * @param {{ release: Function, markUncertain: Function }} usageLedger
+ * @param {string} userId @param {string} id
+ * @param {{ dispatched: boolean, status?: number, providerRequestId?: string | null }} outcome
+ *   `status` is the HTTP status of an answer that arrived without output; 0 when none did
+ */
+export function closeUnsettledReservation(usageLedger, userId, id, { dispatched, status = 0, providerRequestId = null }) {
+  if (!dispatched) return usageLedger.release(userId, id, "provider_not_accepted");
+  if (PROVIDER_REFUSAL_STATUSES.includes(Number(status))) return usageLedger.release(userId, id, `provider_refused_${Number(status)}`);
+  return usageLedger.markUncertain(userId, id, "provider_response_incomplete", { providerRequestId });
+}
+
 /** Cost a new call must respect on top of settled spend: a reservation counts
  *  until it expires, and an `uncertain` row counts while it is still inside the
  *  rolling window. `uncertain` used to count forever, so one truncated provider

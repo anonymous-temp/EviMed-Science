@@ -19,8 +19,10 @@
  *   connection — no chunk for `IDLE_MS` — as the failure it is.
  *
  * Same ledger discipline as every metered call: reserve before, settle on the
- * provider's own count, mark uncertain when a dispatched request was lost,
- * release one that never left. Purpose `review`, charged to the run reviewed.
+ * provider's own count, release one that never left or that the provider
+ * refused outright (a 4xx before any output), mark uncertain one that was sent
+ * and lost (`closeUnsettledReservation`). Purpose `review`, charged to the run
+ * reviewed.
  * The key is the operator's DashScope key, the same file the reranker and the
  * embedder read; it never reaches a runtime.
  *
@@ -30,6 +32,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { REFERENCE_PRICE_LIST, isPeak, priceUsage } from "@evimed/domain";
 import { estimateModelReservation } from "./modelGateway.mjs";
+import { closeUnsettledReservation } from "./usageLedger.mjs";
 
 /** A stream that says nothing for this long has stalled. */
 const IDLE_MS = 120_000;
@@ -129,6 +132,8 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
   const onOuterAbort = () => controller.abort(call.signal?.reason ?? new ReviewModelError("review_cancelled", "The review was cancelled."));
   call.signal?.addEventListener?.("abort", onOuterAbort, { once: true });
   let dispatched = false;
+  /** The status of an answer that came back without output, 0 while none has. */
+  let refusedStatus = 0;
   try {
     let response;
     try {
@@ -146,6 +151,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     }
     dispatched = true;
     if (!response.ok) {
+      refusedStatus = response.status;
       let providerCode = "";
       try {
         const payload = JSON.parse(await response.text());
@@ -233,8 +239,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     call.signal?.removeEventListener?.("abort", onOuterAbort);
     if (usageLedger && reservation) {
       try {
-        if (dispatched) await usageLedger.markUncertain(call.userId, reservation.id, "provider_response_incomplete", {});
-        else await usageLedger.release(call.userId, reservation.id, "provider_not_accepted");
+        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus });
       } catch {
         process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
       }

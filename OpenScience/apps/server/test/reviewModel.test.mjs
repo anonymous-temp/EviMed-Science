@@ -108,9 +108,24 @@ test("every failure is a named code, and the reservation is closed the way the c
     const ledger = fakeLedger();
     await assert.rejects(callReviewModel({ config, usageLedger: ledger, fetchImpl }, call), (error) => error instanceof ReviewModelError && error.code === code, String(code));
     const last = ledger.calls.at(-1);
-    if (code === "review_model_unreachable") assert.equal(last[0], "release", "never dispatched is released");
+    if (code === "review_model_unreachable") assert.deepEqual(last.slice(0, 1).concat(last[2]), ["release", "provider_not_accepted"], "never dispatched is released");
     else if (code === "review_model_response_invalid" || code === "review_model_truncated") assert.equal(last[0], "settle", "a bad answer was still billed");
-    else assert.equal(last[0], "uncertain", `${code}: dispatched and answered without usage is uncertain`);
+    else if (code === "review_model_upstream_error") assert.deepEqual([last[0], last[2]], ["uncertain", "provider_response_incomplete"], "a 5xx after dispatch may have been worked on: uncertain");
+    else assert.match(`${last[0]} ${last[2]}`, /^release provider_refused_(400|401|404|429)$/, `${code}: refused outright before any output is released, not billed`);
+  }
+});
+
+test("a refusal is released under its status, and a 5xx stays uncertain (the 2026-09-23 balance outage)", async () => {
+  // A spent balance answers 402 before any output. Booked `uncertain`, each
+  // such call held its reserved ceiling as possibly spent; it was declined.
+  for (const [status, expected] of [[402, ["release", "provider_refused_402"]], [403, ["release", "provider_refused_403"]],
+    [409, ["release", "provider_refused_409"]], [413, ["release", "provider_refused_413"]], [422, ["release", "provider_refused_422"]],
+    [500, ["uncertain", "provider_response_incomplete"]], [502, ["uncertain", "provider_response_incomplete"]], [408, ["uncertain", "provider_response_incomplete"]]]) {
+    const ledger = fakeLedger();
+    await assert.rejects(callReviewModel({ config, usageLedger: ledger, fetchImpl: /** @type {any} */ (async () => new Response("{}", { status: /** @type {number} */ (status) })) }, call),
+      (error) => error instanceof ReviewModelError);
+    assert.deepEqual(ledger.calls.map((entry) => entry[0]), ["reserve", expected[0]], String(status));
+    assert.equal(ledger.calls.at(-1)[2], expected[1], String(status));
   }
 });
 
