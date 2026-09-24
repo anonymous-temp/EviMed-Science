@@ -11,9 +11,11 @@
  *   connection between the two; the HTTP contract is the only link.
  * - The DDL is the design draft `tools/frontier-schema.sql` (22 tables),
  *   validated twice on PostgreSQL 16 before it was moved here, plus one
- *   index the draft did not have (`frontier_items_visible_idx`, below) and one
- *   column (`hot_snapshots.heats`, added in place by `ADD COLUMN IF NOT
- *   EXISTS`, so a deployed schema takes it on the next start). It runs the way
+ *   index the draft did not have (`frontier_items_visible_idx`, below) and
+ *   columns it did not have (`hot_snapshots.heats`, and 与我相关's freshness
+ *   columns on `user_profiles` and `user_prefs`), each added in place by
+ *   `ADD COLUMN IF NOT EXISTS`, so a deployed schema takes it on the next
+ *   start. It runs the way
  *   `kbPersistence.mjs` does: one transaction behind an advisory lock, every
  *   statement idempotent, the extension-backed pieces created only where the
  *   extension exists. Closed vocabularies that move with the product (lane,
@@ -418,6 +420,16 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.user_prefs (
   last_seen_at  timestamptz(3),
   last_push_day date
 );
+-- Not in the draft (2026-09-24): what keeps 与我相关 fresh. A reader's action
+-- or a new question moves inputs_version; a profile records the version it
+-- was computed from and a mark of the memory it read (count, versions, latest
+-- change), so a change of either makes it due at the next round instead of
+-- the next day. for_you_seen_at is when the reader last opened the block:
+-- those waiting on it are computed first.
+ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS inputs_version bigint NOT NULL DEFAULT 0;
+ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS computed_inputs_version bigint NOT NULL DEFAULT 0;
+ALTER TABLE evimed_frontier.user_profiles ADD COLUMN IF NOT EXISTS memory_mark text;
+ALTER TABLE evimed_frontier.user_prefs ADD COLUMN IF NOT EXISTS for_you_seen_at timestamptz(3);
 `;
 }
 

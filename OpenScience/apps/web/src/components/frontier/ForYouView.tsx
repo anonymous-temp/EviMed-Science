@@ -27,11 +27,27 @@ export function groupByTopic(forYou: FrontierForYou): Array<{ topic: string; ite
   return groups;
 }
 
+/** What the block says when it has nothing yet: what the reader can do, and what comes of it. */
+export const FOR_YOU_EMPTY = "收藏或打开几条动态、或在对话里提几个问题后，这里会按你的兴趣推荐";
+/** What it says to a reader who switched their memory off. */
+export const FOR_YOU_PAUSED = "开启记忆后，这里会按你的兴趣推荐";
+/** Where this deployment cannot recommend at all, nothing the reader does would change it: no promise. */
+export const FOR_YOU_NONE = "暂无与你相关的动态";
+
+/** The one line an empty block shows. */
+export function forYouEmptyLine(forYou: FrontierForYou | null): string {
+  if (forYou?.paused) return FOR_YOU_PAUSED;
+  return forYou?.state === "available" ? FOR_YOU_EMPTY : FOR_YOU_NONE;
+}
+
 /**
- * 与我相关 (plan 2026-09-23 §6.2): the items the reader's memory points at,
- * grouped under the reader's own topics — the heading is the topic's name,
- * as Google News and Apple News let a section's name carry 「因为你关注」,
- * and no card repeats 「因为你在做：…」. Each item is the feed's own card.
+ * 与我相关 (plan 2026-09-23 §6.2; 2026-09-24): the items the reader's interests
+ * point at — what they starred, opened, asked and what their memory holds —
+ * grouped under those interests: the heading is the interest's name, as
+ * Google News and Apple News let a section's name carry 「因为你关注」, and no
+ * card repeats 「因为你在做：…」. Each item is the feed's own card. With
+ * nothing to show, one line says what the reader can do about it; how the
+ * block is ranked is never shown.
  */
 export function ForYouView({ state, renderItem, onRetry }: {
   state: ForYouState;
@@ -42,7 +58,9 @@ export function ForYouView({ state, renderItem, onRetry }: {
   if (state.kind === "failed") return <LoadError message={state.message} onRetry={onRetry} />;
   const forYou = state.forYou;
   if (forYou?.state === "unavailable") return <LoadError message="暂时读不到与我相关的动态。" onRetry={onRetry} />;
-  if (!forYou || forYou.state !== "available" || forYou.items.length === 0) return <EmptyState icon={Newspaper} title="暂无与你相关的动态" />;
+  if (!forYou || forYou.state !== "available" || forYou.items.length === 0) {
+    return <EmptyState icon={Newspaper} title={forYouEmptyLine(forYou)} />;
+  }
   return (
     <div className="space-y-8">
       {groupByTopic(forYou).map((group, index) => (

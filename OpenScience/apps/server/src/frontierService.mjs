@@ -1040,6 +1040,9 @@ export class FrontierService {
       return row;
     });
     this.counters.writes += 1;
+    // What the reader just did is what 与我相关 is read from: after the
+    // commit, and never failing the action (frontierProfiles.mjs).
+    await this.profiles?.noteItemAction?.(user.id, action);
     return { state: { starred: state.starred, hidden: state.hidden, read: state.read } };
   }
 
@@ -1665,8 +1668,9 @@ export function frontierMetricFamilies(enabled, snapshot) {
     add("personalization_state", "「与你相关」 as /status reports it (1 = current).", "gauge",
       ["available", "unavailable", "off"].map((state) => ({ labels: { state }, value: (profiles?.state ?? "off") === state ? 1 : 0 })));
     if (profiles) {
-      add("profiles_total", "Profile refreshes, rankings and reasons dropped because their memory was gone.", "counter",
-        ["refreshed", "empty", "paused", "failures", "ranked", "embedded", "embedFailures", "reasonsDropped"]
+      add("profiles_total", "Profile refreshes, rankings, reasons dropped because their memory was gone, profiles marked due by a change, and candidates dropped as near a hidden item.", "counter",
+        ["refreshed", "empty", "paused", "failures", "ranked", "embedded", "embedFailures", "reasonsDropped", "staleMarks", "staleMarkFailures",
+          "visitFailures", "questionFailures", "hiddenDropped"]
           .map((kind) => ({ labels: { kind }, value: Number(profiles.counters?.[kind] ?? 0) })));
     }
     add("composer_loop_failures_total", "Composer loop runs that ended in an error, by loop.", "counter",

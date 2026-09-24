@@ -686,7 +686,7 @@ describe("日报", () => {
 describe("与我相关", () => {
   it("groups the items under the reader's own topics, and no card says why", async () => {
     client.fetchFrontierForYou.mockResolvedValue({
-      state: "available", basis: "vector",
+      state: "available", basis: "vector", paused: false,
       items: [
         { item: frontierItem({ id: "fy-1", title: "SGLT2 抑制剂用于射血分数保留的心衰" }), reason: { text: "因为你在做：SGLT2 与心衰的 Meta 分析", topic: "SGLT2 与心衰的 Meta 分析", memoryId: "m1" } },
         { item: frontierItem({ id: "fy-2", title: "替尔泊肽心衰结局试验" }), reason: { text: "因为你在做：SGLT2 与心衰的 Meta 分析", topic: "SGLT2 与心衰的 Meta 分析", memoryId: "m1" } },
@@ -701,10 +701,21 @@ describe("与我相关", () => {
     expect(document.body.textContent).not.toContain("因为你");
   });
 
-  it("says in one sentence that there is nothing for the reader yet", async () => {
-    client.fetchFrontierForYou.mockResolvedValue({ state: "available", basis: "tags", items: [] });
+  it("with nothing yet, says in one line what the reader can do and what comes of it — never how it is ranked", async () => {
+    client.fetchFrontierForYou.mockResolvedValue({ state: "available", basis: "tags", paused: false, items: [] });
     renderPage("/app/frontier?view=foryou");
+    expect(await screen.findByText("收藏或打开几条动态、或在对话里提几个问题后，这里会按你的兴趣推荐")).toBeInTheDocument();
+    for (const word of ["tags", "vector", "关键词", "向量", "记忆", "画像"]) expect(document.body.textContent).not.toContain(word);
+  });
+
+  it("promises nothing where this deployment cannot recommend, and asks a reader whose memory is off to switch it on", async () => {
+    client.fetchFrontierForYou.mockResolvedValue({ state: "off", basis: null, paused: false, items: [] });
+    const first = renderPage("/app/frontier?view=foryou");
     expect(await screen.findByText("暂无与你相关的动态")).toBeInTheDocument();
+    first.unmount();
+    client.fetchFrontierForYou.mockResolvedValue({ state: "off", basis: null, paused: true, items: [] });
+    renderPage("/app/frontier?view=foryou");
+    expect(await screen.findByText("开启记忆后，这里会按你的兴趣推荐")).toBeInTheDocument();
   });
 });
 

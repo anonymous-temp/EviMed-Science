@@ -18,6 +18,7 @@ import {
   buildAbstractInput,
   buildProfileInput,
   buildSameEventInput,
+  frontierProfileSources,
   validateSameEvent,
   verifyAbstract,
   verifyProfile,
@@ -88,48 +89,79 @@ test("same event: metered as a frontier call with its own bounds; an invalid ans
 });
 
 const memories = [
-  { id: "m1", kind: "project_fact", text: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析，纳入 12 项 RCT" },
-  { id: "m2", kind: "profile", text: "心内科主治医师，关注心衰和房颤" },
-  { id: "m3", kind: "preference", text: "回答要简短" },
+  { id: "mem_sglt2", kind: "project_fact", text: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析，纳入 12 项 RCT" },
+  { id: "mem_dept", kind: "profile", text: "心内科主治医师，关注心衰和房颤" },
+  { id: "mem_style", kind: "preference", text: "回答要简短" },
 ];
+const questions = [{ text: "替尔泊肽对射血分数保留心衰的住院结局有什么证据？" }];
+const items = [{ text: "FDA 批准 finerenone 用于 HFpEF", starred: true }, { text: "房颤消融术后抗凝时长的新研究" }];
 
-test("a profile answer is checked piece by piece: a phrase naming no memory, a number its memory lacks, a link — dropped alone", () => {
-  const input = JSON.parse(buildProfileInput({ memories }));
-  assert.deepEqual(input.memories.map((memory) => memory.id), ["m1", "m2", "m3"]);
+test("a profile call shows the model memories, questions and items under short ids, each kind apart and within its bounds", () => {
+  const sources = frontierProfileSources({ memories, questions, items });
+  assert.deepEqual(sources.map((entry) => [entry.id, entry.source, entry.memoryId]), [
+    ["m1", "memory", "mem_sglt2"], ["m2", "memory", "mem_dept"], ["m3", "memory", "mem_style"],
+    ["q1", "question", ""], ["f1", "frontier-item", ""], ["f2", "frontier-item", ""],
+  ]);
+  const input = JSON.parse(buildProfileInput(sources));
+  assert.deepEqual(input.memories[0], { id: "m1", kind: "project_fact", text: memories[0].text });
+  assert.deepEqual(input.questions, [{ id: "q1", text: questions[0].text }]);
+  assert.deepEqual(input.items, [{ id: "f1", text: items[0].text, starred: true }, { id: "f2", text: items[1].text }], "a star is said; an item opened is not");
+  const many = frontierProfileSources({
+    memories: Array.from({ length: 50 }, (_, index) => ({ id: `mem_${index}`, kind: "profile", text: `记忆 ${index}` })),
+    questions: Array.from({ length: 40 }, (_, index) => ({ text: `问题 ${index} ${"长".repeat(400)}` })),
+    items: Array.from({ length: 40 }, (_, index) => ({ text: `条目 ${index}` })),
+  });
+  assert.deepEqual([["memory", 40], ["question", 30], ["frontier-item", 30]].map(([kind]) => [kind, many.filter((entry) => entry.source === kind).length]),
+    [["memory", 40], ["question", 30], ["frontier-item", 30]]);
+  assert.ok(many.find((entry) => entry.source === "question").text.length <= 201, "a question is clipped to what the model is shown");
+});
+
+test("a profile answer is checked piece by piece: a phrase naming no piece, a number its piece lacks, a link — dropped alone", () => {
+  const sources = frontierProfileSources({ memories, questions, items });
   const verified = verifyProfile({
     specialties: ["cardiology", "astrology", "cardiology"],
     phrases: [
-      { text: "SGLT2 抑制剂与心衰住院的 Meta 分析", memory_id: "m1" },
-      { text: "纳入 12 项 RCT 的心衰研究", memory_id: "m1" },
-      { text: "纳入 30 项 RCT 的心衰研究", memory_id: "m1" },
+      { text: "SGLT2 抑制剂与心衰住院的 Meta 分析", source_id: "m1" },
+      { text: "纳入 12 项 RCT 的心衰研究", source_id: "m1" },
+      { text: "纳入 30 项 RCT 的心衰研究", source_id: "m1" },
+      { text: "替尔泊肽与 HFpEF 住院结局", source_id: "q1" },
+      { text: "非奈利酮与 HFpEF", source_id: "f1" },
       { text: "房颤", memory_id: "m2" },
-      { text: "心衰指南", memory_id: "m9" },
-      { text: "见 www.example.com", memory_id: "m2" },
-      { text: "SGLT2 抑制剂与心衰住院的 Meta 分析", memory_id: "m1" },
-      { text: "心", memory_id: "m2" },
+      { text: "心衰指南", source_id: "m9" },
+      { text: "见 www.example.com", source_id: "m2" },
+      { text: "SGLT2 抑制剂与心衰住院的 Meta 分析", source_id: "m1" },
+      { text: "心", source_id: "m2" },
     ],
-  }, memories);
+  }, sources);
   assert.deepEqual(verified.specialties, ["cardiology"]);
   assert.deepEqual(verified.phrases, [
-    { text: "SGLT2 抑制剂与心衰住院的 Meta 分析", memoryId: "m1" },
-    { text: "纳入 12 项 RCT 的心衰研究", memoryId: "m1" },
-    { text: "房颤", memoryId: "m2" },
-  ]);
-  assert.deepEqual(verified.dropped.map((entry) => entry.reason), ["number", "unknown-memory", "link", "duplicate", "length"]);
-  assert.equal(verifyProfile({ specialties: [] }, memories), null, "not the shape at all");
+    { text: "SGLT2 抑制剂与心衰住院的 Meta 分析", source: "memory", memoryId: "mem_sglt2", kind: "project_fact" },
+    { text: "纳入 12 项 RCT 的心衰研究", source: "memory", memoryId: "mem_sglt2", kind: "project_fact" },
+    { text: "替尔泊肽与 HFpEF 住院结局", source: "question", memoryId: "", kind: "question" },
+    { text: "非奈利酮与 HFpEF", source: "frontier-item", memoryId: "", kind: "frontier-item" },
+    { text: "房颤", source: "memory", memoryId: "mem_dept", kind: "profile" },
+  ], "each phrase keeps where it came from; the older memory_id key is still read");
+  assert.deepEqual(verified.dropped.map((entry) => entry.reason), ["number", "unknown-source", "link", "duplicate", "length"]);
+  assert.equal(verifyProfile({ specialties: [] }, sources), null, "not the shape at all");
 });
 
-test("a profile is one metered call, asked once more when the answer is not the shape; no memories, no call", async () => {
-  const model = scriptedModel([{ phrases: "none" }, { specialties: ["cardiology"], phrases: [{ text: "房颤", memory_id: "m2" }] }]);
+test("a profile is one metered call, asked once more when the answer is not the shape; nothing to read, no call", async () => {
+  const model = scriptedModel([{ phrases: "none" }, { specialties: ["cardiology"], phrases: [{ text: "房颤", source_id: "m2" }, { text: "替尔泊肽与心衰", source_id: "q1" }] }]);
   const editor = new FrontierEditor(CONFIG, { callModel: model.callModel, owner: OWNER });
-  const profile = await editor.extractProfile({ memories });
+  const profile = await editor.extractProfile({ memories, questions, items });
   assert.deepEqual({ specialties: profile.specialties, phrases: profile.phrases, error: profile.error, attempts: profile.attempts },
-    { specialties: ["cardiology"], phrases: [{ text: "房颤", memoryId: "m2" }], error: null, attempts: 2 });
+    { specialties: ["cardiology"], phrases: [{ text: "房颤", source: "memory", memoryId: "mem_dept", kind: "profile" },
+      { text: "替尔泊肽与心衰", source: "question", memoryId: "", kind: "question" }], error: null, attempts: 2 });
   assert.equal(model.calls[0].body.messages[0].content, FRONTIER_PROFILE_INSTRUCTIONS);
   assert.equal(model.calls[0].body.max_tokens, 1000);
-  const none = await editor.extractProfile({ memories: [] });
+  assert.deepEqual(Object.keys(JSON.parse(model.calls[0].body.messages[1].content)), ["memories", "questions", "items"]);
+  const onlyItems = scriptedModel([{ specialties: [], phrases: [{ text: "房颤消融术后抗凝", source_id: "f1" }] }]);
+  const fromItems = await new FrontierEditor(CONFIG, { callModel: onlyItems.callModel, owner: OWNER }).extractProfile({ items: [items[1]] });
+  assert.deepEqual(fromItems.phrases, [{ text: "房颤消融术后抗凝", source: "frontier-item", memoryId: "", kind: "frontier-item" }],
+    "a reader with no memory at all still gets a profile from what they opened");
+  const none = await editor.extractProfile({ memories: [], questions: [], items: [] });
   assert.deepEqual(none.phrases, []);
-  assert.equal(model.calls.length, 2, "an empty memory costs nothing");
+  assert.equal(model.calls.length, 2, "nothing to read costs nothing");
 });
 
 test("the Chinese abstract keeps its paragraphs, and every number in it must be in the original", () => {

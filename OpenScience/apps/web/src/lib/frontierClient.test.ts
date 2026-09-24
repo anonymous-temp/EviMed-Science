@@ -270,6 +270,18 @@ describe("the routes of the second wave", () => {
     ] } }));
     const forYou = await fetchFrontierForYou();
     expect(forYou?.items.map((entry) => entry.reason.topic)).toEqual(["SGLT2 抑制剂与心衰", null]);
+    expect(forYou?.paused).toBe(false);
+  });
+
+  it("reads up to eight items, a question's reason with no memory, and a reader whose memory is off", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { state: "available", basis: "vector", items: Array.from({ length: 10 }, (_, index) => ({
+      item: rawItem({ id: `fy${index}` }), reason: { text: "因为你问过：替尔泊肽与心衰", topic: "替尔泊肽与心衰", memoryId: null, source: "question" },
+    })) } }));
+    const forYou = await fetchFrontierForYou();
+    expect(forYou?.items).toHaveLength(8);
+    expect(forYou?.items[0].reason).toEqual({ text: "因为你问过：替尔泊肽与心衰", topic: "替尔泊肽与心衰", memoryId: null });
+    fetchMock.mockResolvedValue(reply(200, { data: { state: "off", basis: null, paused: true, items: [] } }));
+    expect(await fetchFrontierForYou()).toEqual({ state: "off", basis: null, paused: true, items: [] });
   });
 });
 
