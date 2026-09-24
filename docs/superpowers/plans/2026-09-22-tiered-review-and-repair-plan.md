@@ -1,6 +1,6 @@
-# EviMed Science：分级审查与就地修复的通用方案（v1.1，2026-09-23，已实施）
+# EviMed Science：分级审查与就地修复的通用方案（v1.2，2026-09-24，已实施）
 
-状态：**v1.1，已实施并上线**（`evimed-ee8759017e4c-1`，2026-09-23，就绪 26/26，按用户路径验收，见 15.5）。v1.0（2026-09-22 定稿，未改代码）回答的问题是：「平台跑一遍、再由我复核完善，交付质量就不错；平台单跑出来还是大量问题——是不是要 agent 套 agent 才能直接交付？这套东西是所有内容都要过一遍吗？问个"你好"、做个数据分析也这么复查吗？」
+状态：**v1.2，已实施并上线**（`evimed-b70f2f7f33e0-1`，2026-09-24）。v1.2 按你 09-24 对第 13 节的决定做完并在生产验证：Jev 上 L1、不换 pro、研究类型在计划阶段声明后挂 CONSORT 2025 / TRIPOD+AI，结果见第 16 节。v1.1 上线于 `evimed-ee8759017e4c-1`（2026-09-23，就绪 26/26，按用户路径验收，见 15.5）。v1.0（2026-09-22 定稿，未改代码）回答的问题是：「平台跑一遍、再由我复核完善，交付质量就不错；平台单跑出来还是大量问题——是不是要 agent 套 agent 才能直接交付？这套东西是所有内容都要过一遍吗？问个"你好"、做个数据分析也这么复查吗？」
 
 v1.1 做了四件事：
 
@@ -291,7 +291,9 @@ evimed_submit_deliverable
    | 评价表 | 偏倚风险（4 条） |
    | 证据报告四类与 CER | 证据报告要素（10 条），CER 另加 SAMPL |
 
-   CONSORT 2025 与 TRIPOD+AI 没有挂：今天没有一个契约专门报告 RCT 或预测模型（第 13 节）。编辑者只答在/不在并给原文，代码核定位，不打分。
+   | 按研究类型（v1.2） | 计划阶段给交付物声明 `studyType`：`rct` 挂 CONSORT 2025（C1–C30），`prediction-model` 挂 TRIPOD+AI（T1–T27），`systematic-review` 挂 PRISMA 2020，`mendelian-randomization` 挂 STROBE-MR；`observational` / `diagnostic-accuracy` / `other` 暂无清单 |
+
+   v1.1 时 CONSORT 2025 与 TRIPOD+AI 没有挂，因为没有一个契约专门报告 RCT 或预测模型。v1.2 按你的决定改成计划阶段声明研究类型再挂，同时交付物里放一份填好的 `reporting-checklist.md`（第 16 节）。编辑者只答在/不在并给原文，代码核定位，不打分。
 3. **解读审查**（建议）：效应方向、CI 与 p 的一致、"显著"过度、检验适用性（StatQA：模型最常犯的是适用性错误，用了数据不满足假设的检验）。统计量本身的一致性由第 4 节的代码先做。
 4. **方法选择不指望审查。** BLADE 的数字摆在那里；这部分靠 SKILL 里的方法先验（第 8 节）。
 
@@ -356,6 +358,8 @@ evimed_submit_deliverable
 - 不设计新的对照实验；编辑者作为回合内建议进入运行，误报率从账本读。
 
 ## 13. 需要你决定的
+
+> **v1.2（2026-09-24）：** 第 1 条已定——上生产；第 2 条已定——先不换；第 3 条已定——计划阶段声明研究类型再挂，交付物里也放。余额提醒已由平台告警 `ModelProviderBalanceExhausted` 覆盖，你那边也已充值。**只剩第 4 条待定。** 结果见第 16 节，下面保留 v1.1 的原文。
 
 四件事，都不阻塞已上线的部分；另有一个运维开关在最后：
 
@@ -530,3 +534,71 @@ evimed_submit_deliverable
 - **生产上两个高频错误码**，09-20 以来：`public_source_evimed_evidence_credential_missing` 196 次，`model_gateway_unavailable` 121 次。本方案没有处理，单独排查。
 - **余额见底时，前沿动态的 402 被记成"结果不明"。** 那段时间 569 条账本行是 `uncertain`，不是 `released`：提供方明确拒绝、没有计费的调用，被当成可能已计费。审查者的客户端用的是同一条规则（发出去了、没有用量，就记 `uncertain`；测试里写明了），模型网关也是。402/401/400/404/429 这类错误响应该不该直接释放，是账本的口径问题，要三处一起改，没有在本方案里动。
 - **开发机连 DashScope。** Node 的 happy-eyeballs 给六个地址各 250 ms，连接超时报 `UND_ERR_CONNECT_TIMEOUT`，而 curl 0.2 s 就连上。只影响本机评测，生产不受影响；本机跑评测时加 `NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2500`。
+
+## 16. v1.2：你的决定与线上结果（2026-09-24）
+
+### 16.1 决定
+
+| 第 13 节 | 你的决定 | 做了什么 |
+|---|---|---|
+| 1. Jev 上生产 | 上 | L1 先过 Jev，只落它有把握且安全的句子，其余照旧送 Qwen（16.2） |
+| 2. 写作换 pro | 先不换 | 未改。继续看 L2 账本 |
+| 3. CONSORT / TRIPOD+AI | 计划阶段先声明研究类型再挂，交付物里也放 | 16.3 |
+| 余额提醒 | 已充值 | 平台加了告警，账本口径一起改（16.4） |
+| 15.6 的 TDM 数据 | 不移除，留作测试数据 | 未动仓库与历史 |
+
+### 16.2 Jev 进 L1
+
+- **规则。** 一条带引用的回答，先整批问 Jev「所引来源是否支持这句」。满足三条的句子直接记 `supported`（`by: "jev"`）：
+  - Jev 说支持；
+  - 置信度 ≥ 0.8，门槛钉在 `deps-version.json` 的 `typesafe.review.supportConfidence`；
+  - 句子不含药名。
+
+  其余句子送 Qwen，包括 Jev 不确定的、它认为不支持的（⚠ 要引原文，只有 Qwen 给得出）、含药名的（安全判断要逐字证据）。Jev 关闭、拒答、出错或超单次上限时，全部由 Qwen 判，等于 v1.1 的行为。
+- **依据。** 按本模块的问法，在 101 对真实与植入缺陷的句—源上：
+  - Jev 答对 100；
+  - 0.8 门槛下落定 40 条真支持里的 37 条，没有落错；
+  - 唯一一次错判"支持"的置信度是 0.73。
+
+  药名句不交 Jev，因为药师警示它漏了 11/73，词表匹配是 73/73。
+- **计价。** Jev 按美元计费，账本是人民币。价目表 `evimed-reference-2026-09-24` 按 CFETS 汇率 6.7489 折算，一行一模型。
+- **密钥。** 放在宿主机 `/srv/evimed-science/shared/secrets/typesafe.api-key`（root 0400）；`.env` 只写路径，运行时容器不持有。
+- **线上结果**（`run_9ba4b706…`，cdss-access）：
+  - 回答结束后 5 s 核查落定；
+  - 4 句中 Jev 落定 1 句，3 句送 Qwen；
+  - 账本 Jev ¥0.00071（2,511 token），Qwen ¥0.0388；
+  - 就绪检查 `review.jev = {enabled: true, model: "jev-1.13.0"}`。
+
+### 16.3 研究类型与报告规范清单
+
+- **计划。** `evimed_plan` 的交付物加可选字段 `studyType`，词表在 `packages/domain/src/study-types.json`（数据，方法学人员可直接改）：
+
+  | 类型 | 规范 |
+  |---|---|
+  | rct | CONSORT 2025 |
+  | prediction-model | TRIPOD+AI |
+  | systematic-review | PRISMA 2020 |
+  | mendelian-randomization | STROBE-MR |
+  | observational / diagnostic-accuracy / other | 暂无，照样声明，委派简报和审查者会写明设计 |
+
+- **交付物。** manuscript-support 与 research-grant-development（1.1.0）多一个可选产出 `reporting-checklist.md`：规范条目原样抄录，逐条写「报告位置」。
+- **审查。** 编辑者除契约自己的清单，再加该研究类型的整份清单：CONSORT 2025 C1–C30，TRIPOD+AI T1–T27。
+- **线上结果**（`run_cfb13f0e…`，manuscript-support，一项已完成 RCT 的方法与结果两节，32 min 送达）：
+  - 计划给两个交付物（`ms-methods-results`、`consort-checklist`）都声明了 `rct`；
+  - 两个交付物各带一份 `reporting-checklist.md`，CONSORT 2025 的 30 条目、42 行原样抄录，逐行给出报告位置；
+  - 审查每遍问 39 条（契约 9 条 + CONSORT 30 条），两个交付物各两遍，共 ¥3.03，每遍 257–418 s；
+  - `consort-checklist` 两遍都是 30/30 在；
+  - `ms-methods-results` 第一遍 22 在、6 不适用、2 条原文没定位到，第二遍 24 在、6 不适用。不适用的是标题、摘要、讨论类条目，这两节本来就不写。
+
+### 16.4 账本与余额
+
+- **4xx 直接释放。** 提供方明确拒绝、没有产出的调用（400/401/402/403/404/409/413/422/429）不会计费，账本记 `released`（原因 `provider_refused_<状态码>`），不再记 `uncertain`。规则只写在一处，`usageLedger.closeUnsettledReservation`：模型网关（前沿动态经它）、审查者、Jev 都调它。
+- **余额告警。** 余额拒绝单独计数：DeepSeek 为 402，DashScope 的 `400 Arrearage` 也计在 402 下。Prometheus 告警 `ModelProviderBalanceExhausted`（critical）在 10 分钟窗口内出现一次即报，按提供方分开。09-23 那次 569 行 `uncertain` 的情形不再发生。
+- 同一版修了两条审查告警的表达式。
+
+### 16.5 发布
+
+- `evimed-c88e49d3d7d6-1`：Jev、研究类型、账本口径，与界面整改同一版；
+- `evimed-b70f2f7f33e0-1`：会话列表一行一会话，交付文件卡片修正。
+
+两次切换后就绪检查都是 26/26。每次探测后登出，`/api/me` 为 401。
