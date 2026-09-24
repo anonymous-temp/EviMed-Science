@@ -122,7 +122,10 @@ function pause(ms, signal) {
  *
  * @param {any} ctx @param {{ revisionAuthorizeUrl?: string, tokenFile?: string }} config
  * @param {{ runId: string, sessionId: string, deliverableId: string, contractKind: string, capability: string, attempt: number,
- *   acceptance?: readonly string[], editor?: boolean, signal?: AbortSignal, pollMs?: number, waitMs?: number }} input
+ *   acceptance?: readonly string[], studyType?: string, editor?: boolean, signal?: AbortSignal, pollMs?: number, waitMs?: number }} input
+ *   `studyType` is what the plan declared the deliverable to report or design;
+ *   the control plane attaches that design's reporting checklist. Sent only
+ *   when declared, so a request without one is the request it always was.
  * @returns {Promise<{ ok: true, review: ReviewResult } | { ok: true, skipped: string } | { ok: false, code: string, message: string }>}
  */
 export async function runReview(ctx, config, input) {
@@ -137,6 +140,7 @@ export async function runReview(ctx, config, input) {
       sessionId: input.sessionId,
       attempt: Math.max(1, Math.floor(Number(input.attempt) || 1)),
       acceptance: [...(input.acceptance ?? [])].slice(0, 10),
+      ...(input.studyType ? { studyType: input.studyType } : {}),
       ...(input.editor === false ? { editor: false } : {}),
     }, input.signal)
     if (started.status === 200 && started.value?.status === 'skipped') return { ok: true, skipped: String(started.value.reason ?? 'skipped') }
