@@ -6917,6 +6917,17 @@ async function serveStatic(req, res, config, pathname) {
   const rel = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
   let candidate = await staticFileCandidate(config.staticDir, rel);
   if (!candidate || candidate.stat.isDirectory()) {
+    // A build file is that file or nothing. A release renames every hashed
+    // chunk, and a tab opened before it still asks for the old names: answered
+    // with index.html (200, text/html), the browser refused the page's code on
+    // its MIME type and the router swapped the whole shell for its English
+    // error page (2026-09-23 plan §2.1). A 404 is what the shell's reload-once
+    // handler expects. Every other path keeps the single-page fallback, and the
+    // rule is the directory rather than a file extension, because routes such
+    // as /app/runs/:id/files/deliverables/report.md end in one.
+    if (rel === "assets" || rel.startsWith("assets/")) {
+      throw new HttpError(404, "not_found", "Static asset not found.");
+    }
     candidate = await staticFileCandidate(config.staticDir, "index.html");
   }
   if (!candidate?.stat.isFile()) {
