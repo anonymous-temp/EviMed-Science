@@ -17,7 +17,6 @@ import {
   evidenceTag,
   itemMarkdown,
   researchDraft,
-  researchIntents,
   scoreBand,
   timeColumn,
   type CardTag,
@@ -51,18 +50,23 @@ export interface FrontierCardProps {
 
 /**
  * One item (plan 2026-09-23 §6.2, §6.3): a time column and a dot, who said it
- * and how hard the evidence is, the title, what it says in at most three
- * lines, and a quiet footer — 「另有 N 家报道 ›」 and its #tags. At the top
- * right the editorial score and the star; 「原文 ↗」「深入研究」「⋯」 appear
- * on hover or focus.
+ * and how hard the evidence is, the editorial score, the title, what it says
+ * in at most three lines, and a footer — 「另有 N 家报道 ›」 and its #tags on
+ * the left, the card's three actions on the right: the star, 「深入研究」 and
+ * 「⋯」, always shown (owner, 2026-09-24: actions that appear only under the
+ * pointer read as missing).
+ *
+ * The title is the way to the original, as a headline is in every reader
+ * (owner, 2026-09-24: 「看原文，应该是点题目就能进去」); there is no second
+ * 「原文」 control. 「深入研究」 opens a new conversation with a draft question
+ * about the item in the composer, to send or rewrite — no menu of prepared
+ * questions to choose from first.
  *
  * What the card no longer carries, and where it went: 「为什么值得看」 is the
  * summary's last sentence (the editor writes it so); 「为什么入选」 and
  * 「评估与核对」 are the back office's; the original title, the journal, the
  * authors and the impact factor are in 「⋯ › 详情」; the source type is in the
- * institution's own name; 「精选」 is the dot. The title is not a link: the
- * card's first action is 「原文 ↗」, and a title that looked like one control
- * and behaved like another is what the old card had.
+ * institution's own name; 「精选」 is the dot.
  *
  * A read card's title steps down to the secondary colour; a safety alert says
  * 「安全警示」 first and has no score — it is selected whatever it scored.
@@ -92,10 +96,7 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
   ];
-  const research: MenuEntry[] = researchIntents(item).map((intent) => ({
-    label: intent.label,
-    onSelect: () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item, intent.key)) } }),
-  }));
+  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } });
   const reports: MenuEntry[] = [
     ...item.alsoReportedBy.map((mention) => ({
       label: mention.sourceName,
@@ -108,7 +109,7 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
   ];
 
   return (
-    <li data-frontier-item={item.id} className="group/card flex">
+    <li data-frontier-item={item.id} className="flex">
       <div className="mt-4 flex h-6 w-14 shrink-0 items-center justify-between pr-2">
         <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{timeColumn(item, grouped)}</time>
         <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
@@ -122,27 +123,20 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
-          <span className="ml-auto flex shrink-0 items-center gap-1 text-ui">
-            {band && (
-              <span title="编辑评分 · 满分 100" className="inline-flex items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
-                <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
-                <span className="sr-only">编辑评分</span>
-                {item.score}
-              </span>
-            )}
-            <IconButton
-              icon={Star}
-              size="sm"
-              label="收藏"
-              aria-pressed={starred}
-              className={starred ? "text-accent [&_svg]:fill-current" : undefined}
-              onClick={() => onStar(item)}
-            />
-          </span>
+          {band && (
+            <span title="编辑评分 · 满分 100" className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
+              <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
+              <span className="sr-only">编辑评分</span>
+              {item.score}
+            </span>
+          )}
         </div>
 
-        <h3 id={titleId} data-row-title className={cn("mt-1.5 text-body font-semibold leading-6", item.state.read ? "text-text-2" : "text-text")}>
-          {item.title}
+        <h3 id={titleId} data-row-title className="mt-1.5 text-body font-semibold leading-6">
+          <a href={item.url} {...EXTERNAL} onClick={() => onOpened?.(item)}
+            className={cn("rounded outline-none hover:text-accent hover:underline", item.state.read ? "text-text-2" : "text-text")}>
+            {item.title}
+          </a>
         </h3>
         {item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
 
@@ -160,16 +154,18 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
               <span className="text-caption">#{tag.label}</span>
             </button>
           ) : <span key={`${tag.kind}-${tag.key}`} className="px-1 text-caption">#{tag.label}</span>))}
-          {/* Hidden until the card is hovered or holds focus; always there on a touch-width screen. */}
-          <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity duration-fast group-hover/card:opacity-100 group-focus-within/card:opacity-100 max-lg:opacity-100">
-            <a href={item.url} {...EXTERNAL} onClick={() => onOpened?.(item)} className={cn(INLINE_ACTION, "px-1.5 text-accent")}>
-              <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
-            </a>
-            <Menu label="深入研究" items={research}>
-              <button type="button" className={cn(INLINE_ACTION, "px-1.5 text-text-2 hover:text-text")}>
-                <span className="text-caption">深入研究</span>
-              </button>
-            </Menu>
+          <div className="ml-auto flex items-center gap-1">
+            <IconButton
+              icon={Star}
+              size="sm"
+              label="收藏"
+              aria-pressed={starred}
+              className={starred ? "text-accent [&_svg]:fill-current" : undefined}
+              onClick={() => onStar(item)}
+            />
+            <button type="button" onClick={research} className={cn(INLINE_ACTION, "px-1.5 text-text-2 hover:text-text")}>
+              <span className="text-caption">深入研究</span>
+            </button>
             <Menu label="更多操作" items={more} />
           </div>
         </div>

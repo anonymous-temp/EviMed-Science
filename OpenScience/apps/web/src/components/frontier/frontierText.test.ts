@@ -14,7 +14,6 @@ import {
   rankLabel,
   rankTone,
   researchDraft,
-  researchIntents,
   scoreBand,
   sparkline,
   stamp,
@@ -182,26 +181,20 @@ describe("the daily's header", () => {
 describe("the 深入研究 draft", () => {
   it("carries the item, its source, its link and its identifiers into the composer", () => {
     const item = frontierItem({ flags: [{ key: "preprint", label: "未经同行评议" }], pmid: "40000001" });
-    const draft = researchDraft(item, "reliability");
+    const draft = researchDraft(item);
     expect(draft.startsWith("这项研究可靠吗？")).toBe(true);
+    expect(draft).toContain("它对临床实践和我的研究意味着什么");
     for (const part of [item.title, item.titleRaw, "来源：NEJM（期刊 · RCT）", "注意：未经同行评议", item.url, "DOI：10.1056/example", "PMID：40000001", `导读：${item.summary}`]) {
       expect(draft).toContain(part);
     }
   });
 
-  it("leaves the reader's own question for last", () => {
-    expect(researchDraft(frontierItem(), "own").endsWith("我的问题：")).toBe(true);
-  });
-
   it("asks the first question the item can answer: a design for a study, grounds for the rest", () => {
-    const first = (fields: Partial<FrontierItem>) => researchIntents(frontierItem(fields))[0]?.label;
+    const first = (fields: Partial<FrontierItem>) => researchDraft(frontierItem(fields)).split("？")[0];
     expect(first({ evidenceType: "rct" })).toBe("这项研究可靠吗");
     expect(first({ evidenceType: null, sourceType: "preprint" })).toBe("这项研究可靠吗");
     expect(first({ evidenceType: "guideline" })).toBe("这份指南的推荐依据是什么");
     expect(first({ evidenceType: "safety-notice", sourceType: "regulator" })).toBe("这项决定依据什么");
     expect(first({ evidenceType: "other", sourceType: "media" })).toBe("这条消息的依据是什么");
-    const policy = frontierItem({ evidenceType: "other", sourceType: "media" });
-    expect(researchDraft(policy, "reliability").startsWith("这条消息的依据是什么？")).toBe(true);
-    expect(researchIntents(policy).map((intent) => intent.key)).toEqual(["reliability", "my-project", "synthesis", "own"]);
   });
 });

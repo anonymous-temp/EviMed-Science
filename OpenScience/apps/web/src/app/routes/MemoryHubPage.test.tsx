@@ -210,8 +210,8 @@ describe("记忆胶囊", () => {
     const row = rowOf(/药学背景/);
     const edit = within(row).getByRole("button", { name: "编辑" });
     const forget = within(row).getByRole("button", { name: "忘记" });
-    // Revealed on hover or focus, not drawn on every row.
-    expect(edit.parentElement).toHaveClass("opacity-0", "group-hover/row:opacity-100");
+    // On every row, not only under the pointer (owner, 2026-09-24).
+    expect(edit.parentElement).not.toHaveClass("opacity-0");
     expect(forget).toHaveClass("h-6", "w-6");
     await user.click(forget);
     await waitFor(() => expect(archiveMemoryRecord).toHaveBeenCalledWith("rec_1", 2));

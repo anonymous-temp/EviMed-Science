@@ -93,11 +93,11 @@ describe("项目", () => {
     expect(screen.queryByText(/项目插件|隐私与数据流向/)).not.toBeInTheDocument();
   });
 
-  it("offers 重命名 and 导出 on hover, and 删除 in the row's 「⋯」", async () => {
+  it("offers 重命名 and 导出 on the row, and 删除 in the row's 「⋯」", async () => {
     open();
     await screen.findByText("Paper 1");
     const rename = within(row("Paper 1")).getByRole("button", { name: "重命名「Paper 1」" });
-    expect(rename.parentElement).toHaveClass("opacity-0", "group-hover/row:opacity-100");
+    expect(rename.parentElement).not.toHaveClass("opacity-0");
     expect(within(row("Paper 1")).getByRole("button", { name: "导出「Paper 1」" })).toBeInTheDocument();
     expect(within(row("Paper 1")).getByRole("button", { name: "「Paper 1」的更多操作" })).toBeInTheDocument();
     // The account's own project cannot be deleted, so it has no 「⋯」.

@@ -10,8 +10,8 @@ import { cn } from "@/lib/cn";
  *
  * A row opens with a click anywhere on it: its title is the link or button,
  * stretched over the row, so the whole row is one target and a keyboard user
- * still lands on a real control. Secondary actions — two icon buttons at
- * most — appear on hover or focus; a 「⋯」 `menu` stays visible, quietly.
+ * still lands on a real control. Secondary actions — two quiet controls at
+ * most — and a 「⋯」 `menu` are always visible.
  * Anything fixed-width goes in `leading` (an icon, a dot, a time column) so
  * every title in the list starts on one vertical line; variable-width
  * metadata goes under the title (`meta`) or at the end (`trailing`).
@@ -72,7 +72,10 @@ export function ListRow({
   meta?: ReactNode;
   /** Right-aligned, always visible: a time, a score, a switch. */
   trailing?: ReactNode;
-  /** At most two icon buttons, shown on hover or focus. */
+  /**
+   * At most two quiet controls, always shown: an action that appears only
+   * under the pointer reads as missing (owner, 2026-09-24).
+   */
   actions?: ReactNode;
   /** A `Menu`, always visible. */
   menu?: ReactNode;
@@ -102,7 +105,7 @@ export function ListRow({
   );
   const interactive = Boolean(to || href || onOpen);
   return (
-    <li className={cn("group/row relative flex items-start gap-3 rounded px-2 py-3", interactive && "hover:bg-surface-1", className)}>
+    <li className={cn("relative flex items-start gap-3 rounded px-2 py-3", interactive && "hover:bg-surface-1", className)}>
       {leading && <div className="flex shrink-0 items-center self-stretch">{leading}</div>}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {heading}
@@ -112,11 +115,7 @@ export function ListRow({
         // Above the stretched title, so its own controls stay clickable.
         // An open row keeps its controls on its first line, beside the title.
         <div className={cn("relative z-10 flex shrink-0 items-center gap-1", expanded ? "self-start" : "self-center")}>
-          {actions && (
-            <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast group-hover/row:opacity-100 group-focus-within/row:opacity-100 max-lg:opacity-100">
-              {actions}
-            </div>
-          )}
+          {actions && <div className="flex items-center gap-1">{actions}</div>}
           {trailing && <div className="flex items-center gap-2 text-caption text-text-3">{trailing}</div>}
           {menu}
         </div>

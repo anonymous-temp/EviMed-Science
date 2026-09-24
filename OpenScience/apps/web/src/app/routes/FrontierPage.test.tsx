@@ -517,10 +517,11 @@ describe("the actions on a card", () => {
   it("greys the title of an item once its original was opened", async () => {
     renderPage();
     const card = await screen.findByRole("article", { name: "今天的一条 RCT" });
-    expect(within(card).getByRole("heading", { level: 3 })).toHaveClass("text-text");
-    await userEvent.click(within(card).getByRole("link", { name: "原文" }));
+    const title = () => within(within(card).getByRole("heading", { level: 3 })).getByRole("link");
+    expect(title()).toHaveClass("text-text");
+    await userEvent.click(title());
     expect(client.markFrontierItemRead).toHaveBeenCalledWith("today-1");
-    expect(within(card).getByRole("heading", { level: 3 })).toHaveClass("text-text-2");
+    expect(title()).toHaveClass("text-text-2");
   });
 
   it("shows the editorial total and never a dimension's number", async () => {
