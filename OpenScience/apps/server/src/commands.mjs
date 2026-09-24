@@ -312,8 +312,11 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
     // protocol over, which is why the frontend knew that protocol; the browser
     // now creates sessions and subscribes to events through the control plane,
     // and the kernel is unreachable from it.
-    async start_runtime(_args, ctx) {
-      await runtimeManager.start(ctx.project);
+    async start_runtime(args, ctx) {
+      // `opening`: the shell's conversation frame starting the runtime it is
+      // about to show — the one start that may take the researcher's own idle
+      // runtime a tab still holds (`makeRoomFor`). A warm-up says nothing.
+      await runtimeManager.start(ctx.project, { opening: args?.opening === true });
       return `${publicApiBase(ctx)}/runtime`;
     },
 
