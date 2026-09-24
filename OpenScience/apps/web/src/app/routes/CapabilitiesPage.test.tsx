@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CAPABILITY_DISPLAY } from "@evimed/domain";
 import { CapabilitiesPage } from "./CapabilitiesPage";
 import { WebApiError } from "@/lib/apiClient";
 
@@ -92,7 +93,6 @@ const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
   listWebResearchSessions: vi.fn(),
   putWebResearchSession: vi.fn(),
-  hasWebApi: true,
 }));
 
 // The error dictionary (`webErrorMessage`) lives in this module and the code
@@ -100,16 +100,13 @@ const mocks = vi.hoisted(() => ({
 // this test drives are replaced.
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
-  get hasWebApi() {
-    return mocks.hasWebApi;
-  },
   listWebResearchAgents: mocks.listWebResearchAgents,
   listWebResearchSessions: mocks.listWebResearchSessions,
   putWebResearchSession: mocks.putWebResearchSession,
   getWebProjectId: () => "default",
 }));
 
-/** Where a row sent the reader, and with which tool on. */
+/** Where a card sent the reader, and with which tool on. */
 function LocationProbe() {
   const location = useLocation();
   return (
@@ -121,6 +118,17 @@ function LocationProbe() {
   );
 }
 
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <CapabilitiesPage />
+    </MemoryRouter>,
+  );
+}
+
+/** A card, by the tool it opens. */
+const card = (title: string) => screen.getByRole("button", { name: `用「${title}」开始一次对话` });
+
 describe("CapabilitiesPage", () => {
   beforeEach(() => {
     mocks.listWebResearchAgents.mockReset();
@@ -129,72 +137,65 @@ describe("CapabilitiesPage", () => {
     mocks.listWebResearchSessions.mockResolvedValue([]);
     mocks.putWebResearchSession.mockReset();
     mocks.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
-    mocks.hasWebApi = true;
   });
 
-  it("points desktop users to the hosted workspace instead of an empty catalog", () => {
-    mocks.hasWebApi = false;
-    render(
-      <MemoryRouter initialEntries={["/agents"]}>
-        <Routes>
-          <Route path="/agents" element={<CapabilitiesPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText("科研工具仅在 EviMed 在线工作空间中可用")).toBeInTheDocument();
-    expect(mocks.listWebResearchAgents).not.toHaveBeenCalled();
-  });
-
-  it("shows a list skeleton while the catalog loads", () => {
+  it("shows the grid's shape while the catalogue loads", () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
-    const { container } = render(
-      <MemoryRouter>
-        <CapabilitiesPage />
-      </MemoryRouter>,
-    );
+    const { container } = renderPage();
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 
-  it("groups compact rows by category, in the product's words, without monograms", async () => {
-    render(
-      <MemoryRouter>
-        <CapabilitiesPage />
-      </MemoryRouter>,
-    );
+  // 2026-09-23 plan §5.4: the header is the title and a search box; the
+  // sentence under the title explained how the page worked, and was wrong.
+  it("has a title and a search box in its header, and no sentence under the title", async () => {
+    renderPage();
+    const heading = await screen.findByRole("heading", { level: 1, name: "科研工具" });
+    expect(screen.getByRole("searchbox", { name: "搜索工具" })).toHaveAttribute("placeholder", "搜索工具");
+    expect(heading.closest("header")?.querySelectorAll("p")).toHaveLength(0);
+    expect(screen.queryByText(/选一项工具/)).not.toBeInTheDocument();
+  });
 
-    expect(await screen.findByRole("heading", { level: 1, name: "科研工具" })).toBeInTheDocument();
-    const groups = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
-    expect(groups).toEqual(["临床证据1 项", "写作与传播1 项", "药学评价2 项"]);
-    const pharmacy = screen.getByRole("heading", { level: 2, name: /药学评价/ }).closest("section")!;
-    expect(within(pharmacy).getByRole("button", { name: "用「药品安全性分析」开始一次对话" })).toHaveTextContent("通常 20–40 分钟");
-    expect(screen.getByRole("button", { name: "用「论文审稿」开始一次对话" })).toHaveTextContent("需要你的资料");
+  it("groups the tools in the product's order, each card one sentence and how long it usually takes", async () => {
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    // Evidence before pharmacy before writing, not the sort order of the names;
+    // and no 「N 项」 after a group's name.
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["临床证据", "药学评价", "写作与传播"]);
+    const pharmacy = screen.getByRole("heading", { level: 2, name: "药学评价" }).closest("section")!;
+    const safety = within(pharmacy).getByRole("button", { name: "用「药品安全性分析」开始一次对话" });
+    // The whole sentence, never cut to 「…」 by the card.
+    expect(safety).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
+    expect(safety).toHaveTextContent("约 20–40 分钟");
+    expect(safety.innerHTML).not.toMatch(/truncate|line-clamp/);
+    // What a tool needs from the researcher is the composer's to say, not the card's.
+    expect(card("论文审稿")).not.toHaveTextContent("需要你的资料");
     expect(screen.queryByText("SA")).not.toBeInTheDocument();
     expect(screen.queryByText("Drug Safety Analysis")).not.toBeInTheDocument();
   });
 
-  it("filters by search, including example questions, and by category", async () => {
-    render(
-      <MemoryRouter>
-        <CapabilitiesPage />
-      </MemoryRouter>,
-    );
+  it("filters by search, including example questions, and by category, in one row of chips", async () => {
+    renderPage();
     await screen.findByRole("button", { name: /药品安全性分析/ });
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索科研工具" }), "氨甲环酸");
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
     expect(screen.getByRole("button", { name: /自动化 Meta 分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
 
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索科研工具" }));
-    const filters = screen.getByRole("group", { name: "按分类筛选" });
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "不存在的工具");
+    expect(await screen.findByText("没有符合条件的科研工具")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
+    const filters = screen.getByRole("group", { name: "分类" });
+    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "临床证据", "药学评价", "写作与传播"]);
     await userEvent.click(within(filters).getByRole("button", { name: "药学评价" }));
     expect(within(filters).getByRole("button", { name: "药学评价" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /自动化 Meta 分析/ })).not.toBeInTheDocument();
   });
 
-  // The drawer with its own question box is gone: a row opens the conversation
+  // The drawer with its own question box is gone: a card opens the conversation
   // the reader was going to type in anyway, with that tool on.
-  it("a row opens a new conversation carrying the tool, and asks nothing here", async () => {
+  it("a card opens a new conversation carrying the tool, and asks nothing here", async () => {
     render(
       <MemoryRouter initialEntries={["/app/capabilities"]}>
         <Routes>
@@ -218,15 +219,28 @@ describe("CapabilitiesPage", () => {
 
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
     mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
-    render(
-      <MemoryRouter>
-        <CapabilitiesPage />
-      </MemoryRouter>,
-    );
+    renderPage();
     expect(await screen.findByRole("alert")).toHaveTextContent("无法加载工具目录");
     mocks.listWebResearchAgents.mockResolvedValueOnce(agents);
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
+  });
+
+  // A card is a third of the 960 px column: about 280 px of text, twenty
+  // characters of 14 px Chinese a line. The sentence is written to fit two
+  // lines where it is defined (the capability's `display:` block), because a
+  // card that clips it with 「…」 shows half a sentence (plan §5.4).
+  it("every tool's sentence is one sentence that fits two lines of its card", () => {
+    const entries = Object.entries(CAPABILITY_DISPLAY);
+    expect(entries.length).toBeGreaterThanOrEqual(15);
+    for (const [id, entry] of entries) {
+      const text = entry.description;
+      const width = [...text].reduce((sum, char) => sum + ((char.codePointAt(0) ?? 0) > 0x2e80 ? 1 : 0.55), 0);
+      expect(width, `${id}: ${text}`).toBeLessThanOrEqual(40);
+      expect(text.match(/。/g) ?? [], `${id}: ${text}`).toHaveLength(1);
+      expect(text.endsWith("。"), `${id}: ${text}`).toBe(true);
+      expect(text, id).not.toMatch(/…|\.\.\./);
+    }
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatClock, formatDateTime, humanSize } from "./format";
+import { formatClock, formatDateTime, formatDay, humanSize } from "./format";
 
 describe("humanSize", () => {
   it("formats bytes, KB, and MB", () => {
@@ -47,5 +47,20 @@ describe("formatDateTime", () => {
     });
     expect(text).toContain("2026");
     expect(text).toContain("7");
+  });
+});
+
+describe("formatDay", () => {
+  const now = new Date(2026, 8, 24, 10, 0);
+
+  it("dates a day as 9月22日, with the year only when it is not this one", () => {
+    expect(formatDay(new Date(2026, 8, 22, 23, 30).toISOString(), now)).toBe("9月22日");
+    expect(formatDay(new Date(2025, 11, 31, 8, 0).toISOString(), now)).toBe("2025年12月31日");
+  });
+
+  it("reads a bare calendar day as written, not as UTC midnight", () => {
+    expect(formatDay("2026-09-06", now)).toBe("9月6日");
+    expect(formatDay("", now)).toBe("");
+    expect(formatDay("not a date", now)).toBe("");
   });
 });

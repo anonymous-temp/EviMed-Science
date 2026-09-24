@@ -6,16 +6,18 @@ import { routes } from "@/app/router";
 import { NotFound } from "./NotFound";
 
 describe("NotFound", () => {
-  it("says the page does not exist, in Chinese and without the HTTP status, with a link back home", () => {
-    render(
+  // The title and the way back, and no sentence restating the title
+  // (2026-09-23 inventory §1.12).
+  it("says the page does not exist, in Chinese and without the HTTP status, with a link back home and nothing more", () => {
+    const { container } = render(
       <MemoryRouter>
         <NotFound />
       </MemoryRouter>,
     );
     expect(screen.getByText("页面不存在")).toBeInTheDocument();
     expect(screen.queryByText(/404/)).not.toBeInTheDocument();
-    expect(screen.getByText("你访问的页面不存在或已被移动。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+    expect(container.textContent).toBe("页面不存在返回首页");
   });
 
   it("catches unknown paths inside the workbench and outside it", () => {

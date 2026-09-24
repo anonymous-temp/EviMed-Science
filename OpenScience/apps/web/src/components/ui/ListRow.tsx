@@ -30,7 +30,9 @@ export function List({
   children: ReactNode;
 }) {
   return (
-    <ul aria-label={label} className={cn("flex flex-col", divided && "divide-y divide-border", className)}>
+    // A divided list's rule is each row's top border, and a row's 8 px corner
+    // bent both ends of it; rows between rules are square.
+    <ul aria-label={label} className={cn("flex flex-col", divided && "divide-y divide-border [&>li]:rounded-none", className)}>
       {children}
     </ul>
   );

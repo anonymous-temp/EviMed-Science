@@ -69,3 +69,19 @@ export function formatDuration(ms: number | null | undefined): string {
   const rest = minutes % 60;
   return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
 }
+
+/**
+ * A day as a list dates it: 「9月22日」, with the year only when it is not this
+ * one (「2025年9月22日」). A bare `YYYY-MM-DD` is a calendar day, not an
+ * instant — an autopilot episode is dated in its agenda's own zone — so it is
+ * read as written rather than as UTC midnight, which the browser would move
+ * to the day before west of Greenwich. Empty for a value that is not a date.
+ */
+export function formatDay(value: string | null | undefined, now: Date = new Date()): string {
+  if (!value) return "";
+  const calendar = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = calendar ? new Date(Number(calendar[1]), Number(calendar[2]) - 1, Number(calendar[3])) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = `${date.getMonth() + 1}月${date.getDate()}日`;
+  return date.getFullYear() === now.getFullYear() ? day : `${date.getFullYear()}年${day}`;
+}

@@ -103,6 +103,8 @@ export interface SourcePayload {
   version: number;
   familyId?: string;
   generation?: number;
+  /** What intake recorded about the file itself; `size` is in bytes. */
+  fingerprint?: { size?: number; mimeType?: string | null } | null;
   analysis?: { phase?: string; pageCount?: number };
   metadata?: SourceMetadata | null;
   omissionAudit?: { status: string; reason?: string; omissionRate: number | null };

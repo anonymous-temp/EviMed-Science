@@ -2,6 +2,8 @@ import { productRequest, type ProductPage, type ProductRecord } from "./productC
 
 export interface AgendaPayload { title: string; topics: string[]; taskTypes: string[]; dailyBudgetCny: number; weeklyBudgetCny: number;
   maxEpisodeCny: number; scheduleHour: number; timeZone: string; enabled: boolean; status: string; pauseReason: string | null; outcomes: unknown[];
+  /** The agenda-zone day (`YYYY-MM-DD`) the scheduler last queued a run for. */
+  lastScheduledDate?: string | null;
   userSignal?: { score: number; decided: number; rejected: boolean } | null;
   followUps?: Array<{ digestId: string; claimId: string; note: string; at: string; consumedBy?: string }> }
 export interface DigestClaim { id: string; statement: string;
@@ -12,6 +14,8 @@ export interface DigestClaim { id: string; statement: string;
   verification?: { status: string; verdict?: string; reason?: string; code?: string; reproductionMatched?: boolean } | null }
 export interface DigestPayload { date: string; costCny: number; headlines: DigestClaim[]; leads: DigestClaim[];
   openedAt?: string | null;
+  /** The runs this briefing merged; each is a conversation. */
+  agendaId?: string; episodeIds?: string[];
   decisions: Array<{ action: string; claimId: string; note: string; memory?: { status: string; reason?: string; code?: string } }> }
 /** One scheduled run of an agenda: the conversation it ran in and the briefing it fed. */
 export interface EpisodePayload { agendaId: string; taskType: string; date: string; budgetCny: number;
@@ -30,7 +34,9 @@ export function scheduleAgenda(id: string, date: string) { return productRequest
 export function listEpisodes(projectId: string, agendaId?: string) {
   return productRequest<ProductPage<EpisodeRecord>>(`/autopilot/episodes?projectId=${encodeURIComponent(projectId)}${agendaId ? `&agendaId=${encodeURIComponent(agendaId)}` : ""}`);
 }
-export function listDigests(projectId: string) { return productRequest<ProductPage<DigestRecord>>(`/autopilot/digests?projectId=${encodeURIComponent(projectId)}`); }
+// A briefing is read through the run that produced it (主动科研, 2026-09-23):
+// its address resolves to that conversation, and opening a result records the
+// read the stopping rules count. The per-finding decisions left the page with
+// the briefing cards; the server keeps its routes.
 export function getDigest(id: string) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}`); }
 export function markDigestOpened(id: string) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}/opened`, "POST", {}); }
-export function decideDigest(id: string, input: { action: string; claimId: string; note: string }) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}/decisions`, "POST", input); }
