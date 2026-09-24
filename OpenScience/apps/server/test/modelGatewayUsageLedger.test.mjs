@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 import { REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { callModelForControlPlane, createModelGatewayHandler, issueModelGatewayBudgetMarker } from "../src/modelGateway.mjs";
+import { providerRefusalCount } from "../src/providerRefusals.mjs";
 
 const signingSecret = "test-only-model-gateway-signing-secret-32-bytes";
 
@@ -550,4 +551,38 @@ test("an attached image is reserved by its pixels, not by the length of its base
   const forText = cost(asText) - cost(alone);
   assert.ok(forImage > 0, "an image still costs something");
   assert.ok(forImage * 5 < forText, `an image added ${forImage}, the same bytes as text ${forText}`);
+});
+
+test("an exhausted DeepSeek balance is named, counted by provider, and released, on both gateway paths", async (t) => {
+  // 2026-09-23: DeepSeek answered every call 402 for two hours and nothing
+  // alerted. The alert reads open_science_model_provider_refusals_total.
+  const before = providerRefusalCount("deepseek", 402);
+  const events = [];
+  const response = await call(t, async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(402, { "content-type": "application/json" });
+    res.end('{"error":{"message":"Insufficient Balance","type":"unknown_error"}}');
+  }, ledger(events), { messages: [{ role: "user", content: "Spent." }] });
+  const body = await response.json();
+  assert.equal(body.error.code, "model_gateway_payment_required", "the runtime is told the balance is exhausted, not a generic refusal");
+  assert.deepEqual(events.map((event) => [event.type, event.code]).slice(1), [["release", "provider_refused_402"]]);
+  assert.equal(providerRefusalCount("deepseek", 402), before + 1);
+
+  // The control plane's own calls (the frontier feed's path) the same way.
+  const frontier = [];
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger(frontier),
+    fetchImpl: async () => Response.json({ error: { message: "Insufficient Balance" } }, { status: 402 }),
+  }, { userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", limits: { daily: 0, weekly: 0 },
+    body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "Screen." }] } }),
+  (error) => error.code === "model_gateway_payment_required" && error.upstreamStatus === 402);
+  assert.deepEqual(frontier.map((event) => [event.type, event.code]).slice(1), [["release", "provider_refused_402"]]);
+  assert.equal(providerRefusalCount("deepseek", 402), before + 2);
+  // A 5xx is not a refusal and is not counted as one.
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger([]),
+    fetchImpl: async () => new Response("down", { status: 503 }),
+  }, { userId: "usage-owner", projectId: "default", body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }),
+  (error) => error.code === "model_gateway_upstream_error");
+  assert.equal(providerRefusalCount("deepseek", 503), 0);
 });

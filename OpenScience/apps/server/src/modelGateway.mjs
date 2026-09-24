@@ -6,6 +6,7 @@
 // cannot drive the chain fails the release rather than reaching a reader.
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
+import { recordProviderRefusal } from "./providerRefusals.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
 
@@ -745,13 +746,15 @@ export function createModelGatewayHandler(config, runtimeManager, {
       if (!upstream.ok) {
         providerDisposition = "rejected";
         upstreamStatus = upstream.status;
+        recordProviderRefusal("deepseek", upstream.status);
         await upstream.body?.cancel().catch(() => {});
         throw gatewayError(
           mappedUpstreamStatus(upstream.status),
-          upstream.status === 429 ? "model_gateway_rate_limited" : "model_gateway_upstream_error",
-          upstream.status === 429
-            ? "The model provider rate limit was reached."
-            : "The model provider rejected the request.",
+          upstream.status === 429 ? "model_gateway_rate_limited"
+            : upstream.status === 402 ? "model_gateway_payment_required" : "model_gateway_upstream_error",
+          upstream.status === 429 ? "The model provider rate limit was reached."
+            : upstream.status === 402 ? "The model provider refused the call: its balance is exhausted."
+              : "The model provider rejected the request.",
         );
       }
       providerDisposition = "accepted";
@@ -938,11 +941,15 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     dispatched = true;
     if (!response.ok) {
       refusedStatus = response.status;
+      recordProviderRefusal("deepseek", response.status);
       // The provider's own status rides along: the mapped one folds every
       // server error into 502, and a caller that reports why it got no answer
       // (the routing classifier's `http_<status>`) needs the one that happened.
-      throw Object.assign(gatewayError(mappedUpstreamStatus(response.status), "model_gateway_upstream_error",
-        `The model provider returned HTTP ${response.status}.`), { upstreamStatus: response.status });
+      // An exhausted balance is named: every call fails until it is topped up.
+      throw Object.assign(response.status === 402
+        ? gatewayError(mappedUpstreamStatus(402), "model_gateway_payment_required", "The model provider refused the call: its balance is exhausted (HTTP 402).")
+        : gatewayError(mappedUpstreamStatus(response.status), "model_gateway_upstream_error", `The model provider returned HTTP ${response.status}.`),
+      { upstreamStatus: response.status });
     }
     const payload = /** @type {any} */ (JSON.parse(await response.text()));
     if (usageLedger && reservation) {
