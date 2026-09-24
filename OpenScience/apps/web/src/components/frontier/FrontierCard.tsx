@@ -1,330 +1,176 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Link, useNavigate } from "react-router";
-import { BookmarkPlus, ChevronDown, EyeOff, Loader2, Microscope, RefreshCw, ShieldAlert, Star } from "lucide-react";
+import { useId, useState } from "react";
+import { useNavigate } from "react-router";
+import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { fetchFrontierAbstractZh, fetchFrontierItem, frontierErrorMessage, type FrontierItem } from "@/lib/frontierClient";
+import type { FrontierItem } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { Button } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
-import { FrontierChip } from "./FrontierChip";
-import { cardFacts } from "./frontierFacts";
+import { toast } from "@/lib/toast";
+import { IconButton } from "@/components/ui/IconButton";
+import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { Tag } from "@/components/ui/Tag";
+import { FrontierDetails } from "./FrontierDetails";
 import {
   CARD_FLAG_KEYS,
-  CARD_MAX_TOPICS,
-  LEVEL_DIMENSIONS,
-  LEVEL_WORDS,
-  evidenceBasisSentence,
-  flagTone,
-  itemWhen,
+  EXTERNAL,
+  INLINE_ACTION,
+  cardTags,
+  evidenceTag,
+  itemMarkdown,
   researchDraft,
   researchIntents,
-  selectedRuleSentence,
-  sourceTypeTone,
-  verificationSentence,
-  type ResearchIntent,
+  scoreBand,
+  timeColumn,
+  type CardTag,
 } from "./frontierText";
-import { useOpenedOnce } from "./useOpenedOnce";
 
-/** A quiet text action: the feed has thirty cards, and thirty rows of bordered buttons would be the page. */
-const ACTION = "inline-flex items-center gap-1 rounded text-ui text-muted transition-colors duration-fast hover:text-text disabled:cursor-not-allowed disabled:opacity-40";
+const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)}`;
 
-/** A new tab, and nothing of this page's context handed to the site. */
-const EXTERNAL = { target: "_blank", rel: "noopener noreferrer" } as const;
+/** The editorial score's colour by band: the accent at the selection line, grey below it (plan §6.2). */
+const BAND_TONE = { high: "text-accent", medium: "text-text-2", low: "text-text-3" } as const;
 
 export interface FrontierCardProps {
   item: FrontierItem;
-  /** Say 「精选」 on selected items — in 全部 and in search results, where not every item is. */
+  /** Inside a day group the time column is the clock; elsewhere it is the day. */
+  grouped?: boolean;
+  /** Where not every item is 精选 (全部, a search), say which are — the dot, and words for a screen reader. */
   markSelected?: boolean;
   onStar: (item: FrontierItem) => void;
   onHide: (item: FrontierItem) => void;
   /** 「存入知识库」; absent where this server cannot save yet. */
   onSave?: (item: FrontierItem) => void;
   saving?: boolean;
-  /** The reader followed a link to the original. */
+  /** The reader followed a link to the original, or to another report of it. */
   onOpened?: (item: FrontierItem) => void;
+  /** A #tag was pressed: a specialty filters the feed, a disease searches for it. */
+  onTag?: (tag: CardTag) => void;
 }
 
 /**
- * One item (plan §4.3): who said it, how hard the evidence is, what it says,
- * why it matters, who else is saying it, and what the reader can do with it.
+ * One item (plan 2026-09-23 §6.2, §6.3): a time column and a dot, who said it
+ * and how hard the evidence is, the title, what it says in at most three
+ * lines, and a quiet footer — 「另有 N 家报道 ›」 and its #tags. At the top
+ * right the editorial score and the star; 「原文 ↗」「深入研究」「⋯」 appear
+ * on hover or focus.
  *
- * Three variants are the medical difference from a tech feed: a safety alert
- * sits on the danger ground and says 「安全警示」 first; a preprint always says
- * 「未经同行评议」; a company newsroom's topline says 「企业新闻稿 · 数据未发表」.
- * The last two are flags the server attaches, rendered in the caution tone.
+ * What the card no longer carries, and where it went: 「为什么值得看」 is the
+ * summary's last sentence (the editor writes it so); 「为什么入选」 and
+ * 「评估与核对」 are the back office's; the original title, the journal, the
+ * authors and the impact factor are in 「⋯ › 详情」; the source type is in the
+ * institution's own name; 「精选」 is the dot. The title is not a link: the
+ * card's first action is 「原文 ↗」, and a title that looked like one control
+ * and behaved like another is what the old card had.
  *
- * No score, no like, no count of readers: the four dimensions are behind
- * 「为什么入选」, in 高 / 中 / 低.
+ * A read card's title steps down to the secondary colour; a safety alert says
+ * 「安全警示」 first and has no score — it is selected whatever it scored.
  */
-export function FrontierCard({ item, markSelected = false, onStar, onHide, onSave, saving = false, onOpened }: FrontierCardProps) {
+export function FrontierCard({ item, grouped = true, markSelected = false, onStar, onHide, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
   const titleId = useId();
-  const safety = item.safetyAlert;
-  const when = itemWhen(item);
-  // A specialty says what the item is about; an item without one (the AI lane,
-  // most policy) says its lane instead, as the design's AI card does.
-  const topics = (item.specialties.length > 0 ? item.specialties : item.laneLabel ? [{ key: item.lane, label: item.laneLabel }] : [])
-    .slice(0, CARD_MAX_TOPICS);
-  const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
-  // 「其他」 is the evidence vocabulary's remainder: on a card it tells a reader nothing.
-  const evidence = item.evidenceType && item.evidenceType !== "other" ? item.evidenceTypeLabel : null;
-  const pdf = item.openAccess?.pdfUrl && item.openAccess.pdfUrl !== item.url ? item.openAccess.pdfUrl : null;
-  const starred = item.state.starred;
-  const facts = cardFacts(item);
-  return (
-    <article
-      aria-labelledby={titleId}
-      data-frontier-item={item.id}
-      className={cn("rounded-card border p-4", safety ? "border-danger bg-danger-soft" : "border-border bg-surface")}
-    >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
-        {safety && <FrontierChip tone="danger"><ShieldAlert size={16} aria-hidden="true" />安全警示</FrontierChip>}
-        {item.sourceTypeLabel && <FrontierChip tone={sourceTypeTone(item.sourceType)}>{item.sourceTypeLabel}</FrontierChip>}
-        <span className="font-medium text-text-2">{item.source.name}</span>
-        {when && <><span aria-hidden="true">·</span><time dateTime={item.publishedAt ?? item.timelineAt}>{when}</time></>}
-        {evidence && <FrontierChip tone="outline">{evidence}</FrontierChip>}
-        {topics.map((topic) => <FrontierChip key={topic.key}>{topic.label}</FrontierChip>)}
-        {flags.map((flag) => <FrontierChip key={flag.key} tone={flagTone(flag.key)}>{flag.label}</FrontierChip>)}
-        {markSelected && item.selected && <FrontierChip tone="accent">精选</FrontierChip>}
-      </div>
-
-      <h3 id={titleId} className="mt-2 text-body font-semibold text-text">{item.title}</h3>
-      {/* The Chinese title is for reading, the original for finding (plan §10.3.6). */}
-      {item.titleZh && item.titleRaw !== item.titleZh && (
-        <p className="mt-0.5 text-caption text-muted" lang={item.lang !== "und" ? item.lang : undefined}>{item.titleRaw}</p>
-      )}
-      {facts.length > 0 && (
-        <ul aria-label="补充信息" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-caption text-muted">
-          {facts.map((fact) => <li key={fact.key}><span className="text-text-2">{fact.label}</span>：{fact.text}</li>)}
-        </ul>
-      )}
-      {item.summary && <p className="mt-2 text-ui text-text-2">{item.summary}</p>}
-      {item.reason && (
-        <p className={cn("mt-3 rounded px-3 py-2 text-ui text-text", safety ? "bg-surface" : "bg-accent-soft")}>
-          <span className="mr-2 font-medium text-accent-strong">为什么值得看</span>{item.reason}
-        </p>
-      )}
-      {(item.alsoReportedBy.length > 0 || item.event) && (
-        <p className="mt-2 flex flex-wrap items-center gap-x-1 text-caption text-muted">
-          {item.alsoReportedBy.length > 0 && <>
-            <span>还有谁在说：</span>
-            {item.alsoReportedBy.map((mention, index) => (
-              <span key={`${mention.sourceId}-${mention.url}`}>
-                <a href={mention.url} {...EXTERNAL} className="text-link hover:underline">{mention.sourceName}</a>
-                {index < item.alsoReportedBy.length - 1 && <span aria-hidden="true">、</span>}
-              </span>
-            ))}
-          </>}
-          {item.event && <>
-            {item.alsoReportedBy.length > 0 && <span aria-hidden="true" className="mx-1">·</span>}
-            <Link to={`/app/frontier/events/${encodeURIComponent(item.event.id)}`} className="text-link hover:underline">同一事件的全部报道 →</Link>
-          </>}
-        </p>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <a href={item.url} {...EXTERNAL} onClick={() => onOpened?.(item)} className="text-ui font-medium text-link hover:underline">
-          原文<span aria-hidden="true"> ↗</span>
-        </a>
-        {pdf && (
-          <a href={pdf} {...EXTERNAL} onClick={() => onOpened?.(item)} className="text-ui text-link hover:underline">
-            免费全文<span aria-hidden="true"> ↗</span>
-          </a>
-        )}
-        <ResearchMenu item={item} />
-        {onSave && (
-          <button type="button" className={ACTION} disabled={saving} aria-busy={saving || undefined} onClick={() => onSave(item)}>
-            {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <BookmarkPlus size={16} aria-hidden="true" />}存入知识库
-          </button>
-        )}
-        <button type="button" aria-pressed={starred} className={cn(ACTION, starred && "text-accent")} onClick={() => onStar(item)}>
-          <Star size={16} aria-hidden="true" fill={starred ? "currentColor" : "none"} />{starred ? "已收藏" : "收藏"}
-        </button>
-        <button type="button" className={ACTION} onClick={() => onHide(item)}>
-          <EyeOff size={16} aria-hidden="true" />不感兴趣
-        </button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-1 border-t border-faint pt-2">
-        {abstractOffered(item) && <AbstractDetails itemId={item.id} />}
-        <Disclosure className="min-w-0 open:basis-full" summaryClassName="text-caption" summary={item.selected ? "为什么入选" : "评估与核对"}>
-          <SelectionDetails item={item} />
-        </Disclosure>
-      </div>
-    </article>
-  );
-}
-
-/** A literature item that may have an abstract; the no-abstract flag says when it does not. */
-function abstractOffered(item: FrontierItem): boolean {
-  if (item.flags.some((flag) => flag.key === "no-abstract")) return false;
-  return Boolean(item.doi || item.pmid) || item.sourceType === "journal" || item.sourceType === "preprint";
-}
-
-/**
- * The four levels, the selection rule and the number check (plan §4.3). Only
- * words: the scores behind the levels are not on the wire.
- */
-function SelectionDetails({ item }: { item: FrontierItem }) {
-  const levels = LEVEL_DIMENSIONS.flatMap(({ key, label }) => {
-    const level = item.levels[key];
-    return level ? [{ key, label, level }] : [];
-  });
-  const rule = item.selected ? selectedRuleSentence(item.selectedRule) : null;
-  const basis = evidenceBasisSentence(item.evidenceBasis);
-  return (
-    <div className="space-y-1.5 text-caption text-muted">
-      {levels.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5" aria-label="四个维度">
-          {levels.map((entry) => (
-            <li key={entry.key}><FrontierChip tone={entry.level === "high" ? "ok" : "neutral"}>{entry.label} {LEVEL_WORDS[entry.level]}</FrontierChip></li>
-          ))}
-        </ul>
-      ) : <p>这一条还没有评估。</p>}
-      {rule && <p>{rule}</p>}
-      <p>{verificationSentence(item)}</p>
-      {basis && <p>{basis}</p>}
-    </div>
-  );
-}
-
-/** 「中文摘要」: read the first time it is opened, never before. */
-function AbstractDetails({ itemId }: { itemId: string }) {
-  const [ref, opened] = useOpenedOnce();
-  return (
-    <div ref={ref} className="contents">
-      <Disclosure className="min-w-0 open:basis-full" summaryClassName="text-caption" summary="中文摘要">
-        {opened ? <AbstractBody itemId={itemId} /> : null}
-      </Disclosure>
-    </div>
-  );
-}
-
-type AbstractState =
-  | { kind: "loading" }
-  | { kind: "ready"; text: string; note: string | null }
-  | { kind: "none" }
-  | { kind: "error"; message: string };
-
-/**
- * The shared Chinese abstract, written once on first request and then read by
- * everyone (plan §10.3.6). Where it cannot be written — the budget, a failed
- * number check, or a server that does not offer it yet — the original
- * abstract is shown under a sentence that says so, rather than nothing.
- */
-function AbstractBody({ itemId }: { itemId: string }) {
-  const [state, setState] = useState<AbstractState>({ kind: "loading" });
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setState({ kind: "loading" });
-    const read = async (): Promise<{ text: string; note: string | null } | null> => {
-      const answer = await fetchFrontierAbstractZh(itemId);
-      if (answer?.abstractZh) return { text: answer.abstractZh, note: answer.note };
-      if (answer?.abstract) return { text: answer.abstract, note: answer.note ?? "中文摘要这次没有生成，下面是原文摘要。" };
-      if (answer) return null;
-      // No route to write one yet: an abstract already written is still on the item.
-      const detail = await fetchFrontierItem(itemId);
-      if (detail.abstractZh) return { text: detail.abstractZh, note: null };
-      return detail.abstract ? { text: detail.abstract, note: "中文摘要还在准备，下面是原文摘要。" } : null;
-    };
-    read().then(
-      (found) => { if (active) setState(found ? { kind: "ready", ...found } : { kind: "none" }); },
-      (error: unknown) => { if (active) setState({ kind: "error", message: frontierErrorMessage(error) }); },
-    );
-    return () => { active = false; };
-  }, [itemId, attempt]);
-
-  if (state.kind === "loading") {
-    return <p role="status" className="flex items-center gap-1.5 text-caption text-muted"><Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取摘要…</p>;
-  }
-  if (state.kind === "error") {
-    return (
-      <div role="alert" className="flex flex-wrap items-center gap-2 text-caption text-muted">
-        <span>{state.message}</span>
-        <Button size="sm" variant="ghost" onClick={() => setAttempt((value) => value + 1)}><RefreshCw size={16} aria-hidden="true" />重试</Button>
-      </div>
-    );
-  }
-  if (state.kind === "none") return <p className="text-caption text-muted">这一条没有可显示的摘要，点「原文」阅读。</p>;
-  return (
-    <div className="space-y-1">
-      {state.note && <p className="text-caption text-muted">{state.note}</p>}
-      <p className="whitespace-pre-line text-ui text-text-2">{state.text}</p>
-    </div>
-  );
-}
-
-/**
- * 「深入研究」: three prepared questions and a free one (plan §4.7). Choosing
- * one opens a new conversation with the draft in the composer — the same
- * `runtimeUiIntent` a tool's example question travels in — and nothing is
- * sent: the reader reads the draft and presses send. The router decides
- * whether a research tool takes it, as for anything typed there.
- */
-export function ResearchMenu({ item }: { item: FrontierItem }) {
   const navigate = useNavigate();
-  const menuId = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const [details, setDetails] = useState(false);
+  const evidence = evidenceTag(item);
+  const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
+  const band = scoreBand(item);
+  const tags = cardTags(item);
+  const starred = item.state.starred;
+  const also = item.alsoReportedCount;
 
-  useEffect(() => {
-    if (!open) return;
-    root.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      trigger.current?.focus();
-    };
-    const onPointer = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node | null)) setOpen(false); };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("pointerdown", onPointer);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("pointerdown", onPointer); };
-  }, [open]);
-
-  const choose = (intent: ResearchIntent) => {
-    setOpen(false);
-    navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item, intent)) } });
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(itemMarkdown(item));
+      toast.success("已复制");
+    } catch {
+      toast.error("没有复制成功");
+    }
   };
-
-  // Arrow keys move between the four choices, as in any menu.
-  const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const items = [...(root.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
-    const index = items.indexOf(document.activeElement as HTMLButtonElement);
-    const next = event.key === "ArrowDown" ? (index + 1) % items.length
-      : event.key === "ArrowUp" ? (index - 1 + items.length) % items.length
-        : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
-    if (next === null) return;
-    event.preventDefault();
-    items[next]?.focus();
-  };
+  const more: MenuEntry[] = [
+    { label: "详情", onSelect: () => setDetails(true) },
+    ...(onSave ? [{ label: "存入知识库", disabled: saving, onSelect: () => onSave(item) }] : []),
+    { label: "复制为 Markdown", onSelect: () => void copy() },
+    { label: "不感兴趣", onSelect: () => onHide(item) },
+  ];
+  const research: MenuEntry[] = researchIntents(item).map((intent) => ({
+    label: intent.label,
+    onSelect: () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item, intent.key)) } }),
+  }));
+  const reports: MenuEntry[] = [
+    ...item.alsoReportedBy.map((mention) => ({
+      label: mention.sourceName,
+      onSelect: () => {
+        window.open(mention.url, "_blank", "noopener,noreferrer");
+        onOpened?.(item);
+      },
+    })),
+    ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: () => navigate(eventPath(item.event!.id)) }] : []),
+  ];
 
   return (
-    <div ref={root} className="relative">
-      <button
-        ref={trigger}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen((value) => !value)}
-        className={cn(ACTION, "font-medium text-text")}
-      >
-        <Microscope size={16} aria-hidden="true" />深入研究<ChevronDown size={16} aria-hidden="true" />
-      </button>
-      {open && (
-        // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- roving focus lives on the menu items, not the container (WAI menu pattern).
-        <div id={menuId} role="menu" aria-label="深入研究" onKeyDown={onMenuKey}
-          className="absolute left-0 z-30 mt-1 min-w-56 rounded-card border border-border bg-surface p-1 shadow-pop">
-          {researchIntents(item).map((intent) => (
-            <button key={intent.key} type="button" role="menuitem" onClick={() => choose(intent.key)}
-              className="flex w-full items-center rounded px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2 focus-visible:bg-surface-2">
-              {intent.label}
-            </button>
-          ))}
-          <p className="px-2 pb-1 pt-1.5 text-caption text-muted">会带着这条动态打开新对话，发送前你可以改。</p>
+    <li data-frontier-item={item.id} className="group/card flex">
+      <div className="mt-4 flex h-6 w-14 shrink-0 items-center justify-between pr-2">
+        <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{timeColumn(item, grouped)}</time>
+        <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
+        {markSelected && item.selected && <span className="sr-only">精选</span>}
+      </div>
+      <article aria-labelledby={titleId} className="min-w-0 flex-1 border-b border-border pb-5 pt-4">
+        <div className="flex min-h-6 items-center gap-2 text-caption text-text-3">
+          {item.safetyAlert && <Tag tone="safety">安全警示</Tag>}
+          <span className="min-w-0 truncate">{item.source.name}</span>
+          {evidence && <Tag>{evidence}</Tag>}
+          {flags.map((flag) => (flag.key === "retracted"
+            ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
+            : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
+          <span className="ml-auto flex shrink-0 items-center gap-1 text-ui">
+            {band && (
+              <span title="编辑评分 · 满分 100" className={cn("inline-flex items-center gap-1 text-caption font-semibold tabular-nums", BAND_TONE[band])}>
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                <span className="sr-only">编辑评分</span>
+                {item.score}
+              </span>
+            )}
+            <IconButton
+              icon={Star}
+              size="sm"
+              label="收藏"
+              aria-pressed={starred}
+              className={starred ? "text-accent [&_svg]:fill-current" : undefined}
+              onClick={() => onStar(item)}
+            />
+          </span>
         </div>
-      )}
-    </div>
+
+        <h3 id={titleId} data-row-title className={cn("mt-1.5 text-body font-semibold leading-6", item.state.read ? "text-text-2" : "text-text")}>
+          {item.title}
+        </h3>
+        {item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
+
+        <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-2 text-ui text-text-3">
+          {also > 0 && (
+            <Menu label={`另有 ${also} 家报道`} align="start" items={reports}>
+              <button type="button" className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
+                <span className="text-caption">另有 {also} 家报道 ›</span>
+              </button>
+            </Menu>
+          )}
+          {tags.map((tag) => (onTag ? (
+            <button key={`${tag.kind}-${tag.key}`} type="button" title={tag.kind === "specialty" ? `只看${tag.label}` : `搜索「${tag.label}」`}
+              onClick={() => onTag(tag)} className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
+              <span className="text-caption">#{tag.label}</span>
+            </button>
+          ) : <span key={`${tag.kind}-${tag.key}`} className="px-1 text-caption">#{tag.label}</span>))}
+          {/* Hidden until the card is hovered or holds focus; always there on a touch-width screen. */}
+          <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity duration-fast group-hover/card:opacity-100 group-focus-within/card:opacity-100 max-lg:opacity-100">
+            <a href={item.url} {...EXTERNAL} onClick={() => onOpened?.(item)} className={cn(INLINE_ACTION, "px-1.5 text-accent")}>
+              <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
+            </a>
+            <Menu label="深入研究" items={research}>
+              <button type="button" className={cn(INLINE_ACTION, "px-1.5 text-text-2 hover:text-text")}>
+                <span className="text-caption">深入研究</span>
+              </button>
+            </Menu>
+            <Menu label="更多操作" items={more} />
+          </div>
+        </div>
+      </article>
+      {details && <FrontierDetails item={item} onClose={() => setDetails(false)} onOpened={onOpened} />}
+    </li>
   );
 }

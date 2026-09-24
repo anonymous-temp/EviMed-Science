@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
+import { useToastStore } from "@/lib/toast";
+import { Toaster } from "@/components/ui/Toaster";
 import { FrontierCard } from "./FrontierCard";
 import { frontierItem } from "./__fixtures__/frontierItems";
 
@@ -12,177 +14,234 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   ...client,
 }));
 
-function ChatProbe() {
+function Probe() {
   const location = useLocation();
   const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="chat">{intent?.kind}|{intent?.draft}</div>;
+  return <div data-testid="probe">{location.pathname}|{intent?.kind}|{intent?.draft}</div>;
 }
 
 function renderCard(item = frontierItem(), props: Partial<Parameters<typeof FrontierCard>[0]> = {}) {
-  const handlers = { onStar: vi.fn(), onHide: vi.fn(), onSave: vi.fn(), onOpened: vi.fn() };
+  const handlers = { onStar: vi.fn(), onHide: vi.fn(), onSave: vi.fn(), onOpened: vi.fn(), onTag: vi.fn() };
   render(
     <MemoryRouter initialEntries={["/app/frontier"]}>
       <Routes>
-        <Route path="/app/frontier" element={<FrontierCard item={item} {...handlers} {...props} />} />
-        <Route path="/app/chat" element={<ChatProbe />} />
+        <Route path="/app/frontier" element={<ul><FrontierCard item={item} {...handlers} {...props} /></ul>} />
+        <Route path="*" element={<Probe />} />
       </Routes>
+      <Toaster />
     </MemoryRouter>,
   );
   return handlers;
 }
 
+const scored = (overrides: Record<string, unknown> = {}) => frontierItem({ score: 86, scoreBand: "high", ...overrides });
+
 beforeEach(() => {
   client.fetchFrontierAbstractZh.mockReset();
   client.fetchFrontierItem.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
 
 describe("a card", () => {
-  it("says who said it, how hard the evidence is, what it says and why it matters", () => {
-    renderCard();
+  it("says who said it, how hard the evidence is, and what it says, under a title that is the row's one title", () => {
+    renderCard(scored({ alsoReportedBy: [{ sourceId: "stat", sourceName: "STAT", url: "https://www.statnews.com/x" }], alsoReportedCount: 3,
+      entities: { drugs: [], trials: [], orgs: [], diseases: ["高胆固醇血症"] } }));
     const card = screen.getByRole("article", { name: "口服 PCSK9 抑制剂降低主要心血管事件" });
-    for (const text of ["期刊", "NEJM", "RCT", "心血管", "Oral PCSK9 Inhibition and Cardiovascular Outcomes", "多中心双盲试验纳入 12000 例患者。", "为什么值得看"]) {
+    const title = within(card).getByRole("heading", { level: 3 });
+    expect(title).toHaveAttribute("data-row-title");
+    expect(title).toHaveClass("text-text");
+    for (const text of ["NEJM", "RCT", "多中心双盲试验纳入 12000 例患者。", "另有 3 家报道 ›", "#心血管", "#高胆固醇血症"]) {
       expect(card).toHaveTextContent(text);
     }
-    const original = within(card).getByRole("link", { name: "原文" });
-    expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
-    expect(original).toHaveAttribute("target", "_blank");
-    expect(original).toHaveAttribute("rel", "noopener noreferrer");
-    // No open-access copy, no second link; 精选 is said only where not everything is.
-    expect(within(card).queryByRole("link", { name: "免费全文" })).not.toBeInTheDocument();
-    expect(within(card).queryByText("精选")).not.toBeInTheDocument();
+    expect(within(card).getByText("RCT")).toHaveClass("rounded-tag");
   });
 
-  it("marks a safety alert on the danger ground, first", () => {
-    renderCard(frontierItem({ safetyAlert: true, sourceType: "regulator", sourceTypeLabel: "监管", source: { id: "nmpa", name: "国家药监局" } }));
+  it("carries none of what the plan took off it", () => {
+    renderCard(scored({ facts: { journal: "The New England Journal of Medicine", impact_factor: 78.5, authors_short: "Ray KK, et al." } }));
     const card = screen.getByRole("article");
-    expect(card).toHaveClass("bg-danger-soft");
+    // The reason box, the two folds, the original title, the facts line, the source type and the 精选 chip.
+    for (const gone of ["为什么值得看", "首个口服 PCSK9 抑制剂的硬终点证据。", "为什么入选", "评估与核对", "因为你在做",
+      "Oral PCSK9 Inhibition and Cardiovascular Outcomes", "影响因子", "Ray KK", "期刊", "精选", "来源权威"]) {
+      expect(card).not.toHaveTextContent(gone);
+    }
+    // No dimension's number either; only the total, 86.
+    for (const score of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(score);
+  });
+
+  it("puts the editorial score at the top right in its band's colour, and says what it is", () => {
+    renderCard(scored());
+    const score = screen.getByTitle("编辑评分 · 满分 100");
+    expect(score).toHaveTextContent("编辑评分86");
+    expect(score).toHaveClass("tabular-nums", "text-accent");
+  });
+
+  it("gives a score below the line the secondary grey, and a low one the faint grey", () => {
+    renderCard(scored({ score: 68, scoreBand: "medium" }));
+    expect(screen.getByTitle("编辑评分 · 满分 100")).toHaveClass("text-text-2");
+  });
+
+  it("scores no safety notice, and says 安全警示 first", () => {
+    renderCard(frontierItem({ score: 90, scoreBand: "high", safetyAlert: true, evidenceType: "safety-notice", evidenceTypeLabel: "安全通告",
+      sourceType: "regulator", sourceTypeLabel: "监管", source: { id: "fda-recalls", name: "FDA" } }));
+    const card = screen.getByRole("article");
+    expect(screen.queryByTitle("编辑评分 · 满分 100")).not.toBeInTheDocument();
     expect(card.textContent?.indexOf("安全警示")).toBe(0);
+    expect(within(card).getByText("安全警示")).toHaveClass("bg-danger-soft");
+    // The safety tag already says what the evidence type would.
+    expect(card).not.toHaveTextContent("安全通告");
   });
 
-  it("always says a preprint has not been peer reviewed, and a newsroom that its data are unpublished", () => {
-    renderCard(frontierItem({ sourceType: "preprint", sourceTypeLabel: "预印本", flags: [{ key: "preprint", label: "未经同行评议" }] }));
-    expect(screen.getByRole("article")).toHaveTextContent("预印本");
-    expect(screen.getByText("未经同行评议")).toBeInTheDocument();
+  it("steps a read card's title down to the secondary colour", () => {
+    renderCard(scored({ state: { starred: false, hidden: false, read: true } }));
+    expect(screen.getByRole("heading", { level: 3 })).toHaveClass("text-text-2");
   });
 
-  it("says a company topline is the company's own", () => {
-    renderCard(frontierItem({ sourceType: "company", sourceTypeLabel: "企业", flags: [{ key: "press-release", label: "企业新闻稿 · 数据未发表" }] }));
-    expect(screen.getByText("企业新闻稿 · 数据未发表")).toBeInTheDocument();
+  it("says in words the flags that change how to take it, and a retraction in the safety colour", () => {
+    renderCard(frontierItem({ flags: [{ key: "preprint", label: "未经同行评议" }, { key: "retracted", label: "已撤稿" }, { key: "no-abstract", label: "无摘要" }] }));
+    expect(screen.getByText("· 未经同行评议")).toBeInTheDocument();
+    expect(screen.getByText("已撤稿")).toHaveClass("bg-danger-soft");
+    expect(screen.queryByText(/无摘要/)).not.toBeInTheDocument();
   });
 
-  it("offers the free full text beside the original when there is one", () => {
-    renderCard(frontierItem({ openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }));
-    expect(screen.getByRole("link", { name: "免费全文" })).toHaveAttribute("href", "https://europepmc.org/articles/PMC1/pdf");
-  });
-
-  it("names who else is reporting it", () => {
-    renderCard(frontierItem({ alsoReportedBy: [{ sourceId: "stat", sourceName: "STAT", url: "https://www.statnews.com/x" }] }));
-    expect(screen.getByText(/还有谁在说/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "STAT" })).toHaveAttribute("href", "https://www.statnews.com/x");
-  });
-
-  it("marks 精选 where it is asked to", () => {
-    renderCard(frontierItem(), { markSelected: true });
-    expect(within(screen.getByRole("article")).getByText("精选")).toBeInTheDocument();
+  it("puts the time in its own column with a dot, teal for 精选, and says 精选 where not every item is", () => {
+    renderCard(frontierItem({ timelineAt: new Date(2026, 8, 22, 9, 5).toISOString() }), { markSelected: true });
+    const item = screen.getByRole("listitem");
+    expect(within(item).getByText("09:05")).toHaveClass("tabular-nums");
+    expect(item.querySelector(".bg-accent")).not.toBeNull();
+    expect(within(item).getByText("精选")).toHaveClass("sr-only");
   });
 });
 
 describe("its actions", () => {
-  it("stars, hides and records the reading of the original", async () => {
+  it("stars with a pressed star", async () => {
+    const item = frontierItem({ state: { starred: true, hidden: false, read: false } });
+    const handlers = renderCard(item);
+    const star = screen.getByRole("button", { name: "收藏" });
+    expect(star).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(star);
+    expect(handlers.onStar).toHaveBeenCalledWith(item);
+  });
+
+  it("keeps 原文, 深入研究 and 「⋯」 out of sight until the card is hovered or focused", () => {
+    renderCard();
+    const original = screen.getByRole("link", { name: "原文" });
+    expect(original.parentElement).toHaveClass("opacity-0", "group-hover/card:opacity-100", "group-focus-within/card:opacity-100");
+  });
+
+  it("opens the original in a new tab and records the reading", async () => {
     const item = frontierItem();
     const handlers = renderCard(item);
-    await userEvent.click(screen.getByRole("button", { name: "收藏" }));
-    expect(handlers.onStar).toHaveBeenCalledWith(item);
-    await userEvent.click(screen.getByRole("button", { name: "不感兴趣" }));
-    expect(handlers.onHide).toHaveBeenCalledWith(item);
-    await userEvent.click(screen.getByRole("link", { name: "原文" }));
+    const original = screen.getByRole("link", { name: "原文" });
+    expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
+    expect(original).toHaveAttribute("target", "_blank");
+    expect(original).toHaveAttribute("rel", "noopener noreferrer");
+    await userEvent.click(original);
     expect(handlers.onOpened).toHaveBeenCalledWith(item);
-  });
-
-  it("shows a starred item as starred", () => {
-    renderCard(frontierItem({ state: { starred: true, hidden: false, read: false } }));
-    expect(screen.getByRole("button", { name: "已收藏" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("lists the plugin's facts under the title, a key it has never seen by its own name", () => {
-    renderCard(frontierItem({ sourceType: "media", facts: { impact_factor: 12.34, affiliation_countries: ["CN"], evidence_grade: "B" } }));
-    const facts = screen.getByRole("list", { name: "补充信息" });
-    expect(within(facts).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["影响因子：12.3", "作者单位：中国", "evidence grade：B"]);
-  });
-
-  it("hides 存入知识库 where the page does not offer it", () => {
-    renderCard(frontierItem(), { onSave: undefined });
-    expect(screen.queryByRole("button", { name: "存入知识库" })).not.toBeInTheDocument();
   });
 
   it("opens a new conversation with the draft in the composer, and sends nothing", async () => {
     renderCard();
-    await userEvent.click(screen.getByRole("button", { name: /深入研究/ }));
-    const menu = screen.getByRole("menu", { name: "深入研究" });
+    await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
+    const menu = await screen.findByRole("menu", { name: "深入研究" });
     expect(within(menu).getAllByRole("menuitem").map((entry) => entry.textContent)).toEqual([
       "这项研究可靠吗", "对我的课题意味着什么", "围绕这个问题做一份证据综合", "自己写问题",
     ]);
     await userEvent.click(within(menu).getByRole("menuitem", { name: "围绕这个问题做一份证据综合" }));
-    const chat = await screen.findByTestId("chat");
-    expect(chat.textContent?.startsWith("create|围绕这条进展涉及的临床问题做一份证据综合")).toBe(true);
-    expect(chat).toHaveTextContent("原文：https://www.nejm.org/doi/full/10.1056/example");
+    const probe = await screen.findByTestId("probe");
+    expect(probe.textContent?.startsWith("/app/chat|create|围绕这条进展涉及的临床问题做一份证据综合")).toBe(true);
+    expect(probe).toHaveTextContent("原文：https://www.nejm.org/doi/full/10.1056/example");
+  });
+
+  it("keeps 存入知识库, 复制为 Markdown and 不感兴趣 in 「⋯」", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const item = frontierItem();
+    const handlers = renderCard(item);
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect((await screen.findAllByRole("menuitem")).map((entry) => entry.textContent)).toEqual(["详情", "存入知识库", "复制为 Markdown", "不感兴趣"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "存入知识库" }));
+    expect(handlers.onSave).toHaveBeenCalledWith(item);
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "复制为 Markdown" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("**[口服 PCSK9 抑制剂降低主要心血管事件](https://www.nejm.org/doi/full/10.1056/example)**"));
+    expect(await screen.findByText("已复制")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "不感兴趣" }));
+    expect(handlers.onHide).toHaveBeenCalledWith(item);
+  });
+
+  it("offers 存入知识库 only where the page does", async () => {
+    renderCard(frontierItem(), { onSave: undefined });
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await screen.findByRole("menu");
+    expect(screen.queryByRole("menuitem", { name: "存入知识库" })).not.toBeInTheDocument();
+  });
+
+  it("lists the other institutions and the whole event behind 「另有 N 家报道」", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const item = frontierItem({ alsoReportedBy: [{ sourceId: "stat", sourceName: "STAT", url: "https://www.statnews.com/x" }], alsoReportedCount: 2,
+      event: { id: "ev1", title: "口服 PCSK9 抑制剂" } });
+    const handlers = renderCard(item);
+    await userEvent.click(screen.getByRole("button", { name: "另有 2 家报道 ›" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "STAT" }));
+    expect(open).toHaveBeenCalledWith("https://www.statnews.com/x", "_blank", "noopener,noreferrer");
+    expect(handlers.onOpened).toHaveBeenCalledWith(item);
+    await userEvent.click(screen.getByRole("button", { name: "另有 2 家报道 ›" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "同一事件的全部报道" }));
+    expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/events/ev1");
+    open.mockRestore();
+  });
+
+  it("narrows the feed by a #tag: a specialty filters, a disease searches", async () => {
+    const handlers = renderCard(frontierItem({ entities: { drugs: [], trials: [], orgs: [], diseases: ["高胆固醇血症"] } }));
+    await userEvent.click(screen.getByRole("button", { name: "#心血管" }));
+    expect(handlers.onTag).toHaveBeenLastCalledWith({ kind: "specialty", key: "cardiology", label: "心血管" });
+    await userEvent.click(screen.getByRole("button", { name: "#高胆固醇血症" }));
+    expect(handlers.onTag).toHaveBeenLastCalledWith({ kind: "term", key: "高胆固醇血症", label: "高胆固醇血症" });
   });
 });
 
-describe("为什么入选", () => {
-  it("gives the four levels in words and the number check, and no number the server scored", async () => {
-    // The fixture carries scoreTotal 87 and scores 29 / 17 / 13 that the contract never sends.
-    // A day-precision date keeps 「N 小时前」 out of the text this test reads for digits.
-    renderCard(frontierItem({ datePrecision: "day" }));
-    await userEvent.click(screen.getByText("为什么入选"));
-    const levels = screen.getByRole("list", { name: "四个维度" });
-    expect(levels).toHaveTextContent("来源权威 高");
-    expect(levels).toHaveTextContent("实践影响 高");
-    expect(levels).toHaveTextContent("新颖性 中");
-    expect(levels).toHaveTextContent("与国内相关 低");
-    expect(screen.getByText("导读里的数字都已在原文里核对到。")).toBeInTheDocument();
-    expect(screen.getByText("综合评估达到精选线。")).toBeInTheDocument();
-    const card = screen.getByRole("article").textContent ?? "";
-    for (const score of ["87", "29", "17", "13", "/100"]) expect(card).not.toContain(score);
-  });
+describe("「⋯ › 详情」", () => {
+  async function openDetails() {
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "详情" }));
+    return screen.findByRole("dialog", { name: "口服 PCSK9 抑制剂降低主要心血管事件" });
+  }
 
-  it("is 评估与核对 for an item that was not selected", () => {
-    renderCard(frontierItem({ selected: false, selectedRule: null }));
-    expect(screen.getByText("评估与核对")).toBeInTheDocument();
-    expect(screen.queryByText("为什么入选")).not.toBeInTheDocument();
-  });
-});
-
-describe("中文摘要", () => {
-  it("reads nothing until it is opened", async () => {
+  it("holds what the card left out: the original title, the facts and the free full text", async () => {
     client.fetchFrontierAbstractZh.mockResolvedValue({ abstractZh: "这是中文摘要。", abstract: "Abstract.", note: null });
-    renderCard();
-    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByText("中文摘要"));
-    expect(await screen.findByText("这是中文摘要。")).toBeInTheDocument();
-    expect(client.fetchFrontierAbstractZh).toHaveBeenCalledWith("a1b2c3d4e5f60718");
+    renderCard(frontierItem({ sourceType: "media", facts: { journal: "NEJM", impact_factor: 78.456 },
+      openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" } }));
+    const details = await openDetails();
+    for (const text of ["Oral PCSK9 Inhibition and Cardiovascular Outcomes", "期刊", "影响因子", "78.5"]) expect(details).toHaveTextContent(text);
+    expect(within(details).getByRole("link", { name: "免费全文" })).toHaveAttribute("href", "https://europepmc.org/articles/PMC1/pdf");
+    expect(await within(details).findByText("这是中文摘要。")).toBeInTheDocument();
+    expect(within(details).getByRole("heading", { name: "中文摘要" })).toBeInTheDocument();
   });
 
-  it("shows the original abstract, and says why, where the Chinese one is not offered yet", async () => {
+  it("reads the abstract only when the details are opened, and names the original one as such", async () => {
     client.fetchFrontierAbstractZh.mockResolvedValue(null);
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItem(), abstract: "Background: an original abstract.", abstractZh: null });
     renderCard();
-    await userEvent.click(screen.getByText("中文摘要"));
-    expect(await screen.findByText("中文摘要还在准备，下面是原文摘要。")).toBeInTheDocument();
-    expect(screen.getByText("Background: an original abstract.")).toBeInTheDocument();
+    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
+    const details = await openDetails();
+    expect(await within(details).findByText("Background: an original abstract.")).toBeInTheDocument();
+    expect(within(details).getByRole("heading", { name: "原文摘要" })).toBeInTheDocument();
   });
 
   it("offers a retry when the abstract could not be read", async () => {
     client.fetchFrontierAbstractZh.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null }))
       .mockResolvedValueOnce({ abstractZh: "重试之后的中文摘要。", abstract: null, note: null });
     renderCard();
-    await userEvent.click(screen.getByText("中文摘要"));
-    await userEvent.click(await screen.findByRole("button", { name: "重试" }));
-    await waitFor(() => expect(screen.getByText("重试之后的中文摘要。")).toBeInTheDocument());
+    const details = await openDetails();
+    await userEvent.click(await within(details).findByRole("button", { name: "重试" }));
+    await waitFor(() => expect(within(details).getByText("重试之后的中文摘要。")).toBeInTheDocument());
   });
 
-  it("is not offered for an item that has no abstract", () => {
+  it("does not look for an abstract an item does not have", async () => {
     renderCard(frontierItem({ flags: [{ key: "no-abstract", label: "无摘要" }] }));
-    expect(screen.queryByText("中文摘要")).not.toBeInTheDocument();
+    const details = await openDetails();
+    expect(within(details).queryByRole("heading", { name: "中文摘要" })).not.toBeInTheDocument();
+    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
   });
 });
