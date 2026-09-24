@@ -20,7 +20,10 @@ describe("NotFound", () => {
 
   it("catches unknown paths inside the workbench and outside it", () => {
     const shell = routes.find((route) => route.path === "/app");
-    const inside = shell?.children?.find((route) => route.path === "*");
+    // The pages sit under one pathless route, whose error element keeps the
+    // shell on screen when a page fails (UI plan §2.1).
+    const pages = shell?.children?.flatMap((route) => (route.path === undefined && !route.index ? route.children ?? [] : [route]));
+    const inside = pages?.find((route) => route.path === "*");
     expect(isValidElement(inside?.element)).toBe(true);
     if (isValidElement(inside?.element)) expect(inside.element.type).toBe(NotFound);
 
