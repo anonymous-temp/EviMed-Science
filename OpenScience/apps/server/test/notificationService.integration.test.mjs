@@ -116,13 +116,14 @@ test("a group key names one item: later events fold into it and bring it back, a
   const secondReview = await service.create(owner, { noticeType: "review", title: "Do not aggregate", body: "Decision two.", groupKey: "thread-one",
     actions: [{ id: "ok", label: "OK" }] }, { now: new Date(now.getTime() + 60_000) });
   assert.notEqual(review.id, secondReview.id);
-  // A silent event joins the group without bringing it back.
-  const quietlyRead = await service.markRead(owner, later.id, later.revision);
-  const quiet = await service.create(owner, { noticeType: "notify", title: "Index update", body: "A background source indexed.", groupKey: "thread-one", actions: open, silent: true }, { now: new Date(now.getTime() + 7 * 3_600_000) });
-  assert.equal(quiet.id, first.id);
-  assert.equal(quiet.count, 4);
-  assert.equal(quiet.readAt, quietlyRead.readAt);
-  assert.equal(quiet.silent, false, "an attended group does not become silent");
+  // Nothing joins a group quietly any more (plan 2026-09-23 §5.8): a caller
+  // that asks for a silent record is refused, not turned into a notice that
+  // lights the bell, and the group is left as it was.
+  await assert.rejects(service.create(owner, { noticeType: "notify", title: "Index update", body: "A background source indexed.",
+    groupKey: "thread-one", actions: open, silent: true }, { now: new Date(now.getTime() + 7 * 3_600_000) }), { code: "notification_payload_invalid" });
+  const unchanged = await service.get(owner, later.id);
+  assert.equal(unchanged.count, 3);
+  assert.equal("silent" in unchanged, false, "an item has no quiet flag to report");
   await assert.rejects(service.create(owner, { noticeType: "notify", title: "Index update", body: "Wrong project.",
     groupKey: "thread-one", projectId: "missing-project" }, { now: new Date(now.getTime() + 2 * 60_000) }), { code: "23503" });
   const concurrent = await Promise.all([
@@ -158,7 +159,7 @@ test("a replayed event is recognised after its group has moved on, and folds onc
   }
 });
 
-test("the unread count is every unread item, severity is stored, silent items arrive read, and read-all clears the scope", options, async () => {
+test("the unread count is every unread item, severity is stored, a quiet record is refused, and read-all clears the scope", options, async () => {
   const user = `count_${randomUUID()}`;
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Count owner','development')", [user]);
   try {
@@ -168,16 +169,16 @@ test("the unread count is every unread item, severity is stored, silent items ar
       await service.create(user, { noticeType: "notify", title: `Result ${index}`, body: "A run completed.", projectId: "default" });
     }
     const safety = await service.create(user, { noticeType: "notify", title: "涉及临床安全", body: "请核对。", projectId: "second", severity: "safety",
-      actions: [{ id: "open", label: "查看运行" }] });
+      actions: [{ id: "open", label: "打开对话" }] });
     const question = await service.create(user, { noticeType: "question", title: "Choose", body: "Which?", actions: [{ id: "a", label: "A" }] });
-    const silent = await service.create(user, { noticeType: "notify", title: "自动运行已完成", body: "评测。", projectId: "default", silent: true });
     assert.equal(safety.severity, "safety");
     assert.equal(question.severity, "attention", "a blocking item defaults to attention");
-    assert.equal(silent.severity, "info");
-    assert.equal(silent.silent, true);
-    assert.ok(silent.readAt, "a silent item is stored read");
     await assert.rejects(service.create(user, { noticeType: "notify", title: "x", body: "y", severity: "urgent" }), { code: "notification_payload_invalid" });
-    await assert.rejects(service.create(user, { noticeType: "question", title: "x", body: "y", actions: [{ id: "a", label: "A" }], silent: true }), { code: "notification_payload_invalid" });
+    // An evaluation's quiet 「自动运行已完成」 used to arrive read here; work
+    // nobody asked about now leaves no item, and asking for one is refused.
+    await assert.rejects(service.create(user, { noticeType: "notify", title: "自动运行已完成", body: "评测。", projectId: "default", silent: true }),
+      { code: "notification_payload_invalid" });
+    assert.equal((await service.list(user)).items.some((item) => item.title === "自动运行已完成"), false);
 
     assert.deepEqual(await service.unreadCount(user), { unreadTotal: 57, safetyUnread: 1 });
     const page = await service.list(user, { unreadOnly: true, limit: 1 });
@@ -209,24 +210,46 @@ test("read items leave ninety days after they were read, and unread or still-ask
     const unreadOld = await service.create(user, { noticeType: "notify", title: "Old and unread", body: "x" }, { now: old });
     const askingOld = await service.create(user, { noticeType: "question", title: "Old question", body: "x", actions: [{ id: "a", label: "A" }] }, { now: old });
     await service.markRead(user, askingOld.id, askingOld.revision);
-    const silentOld = await service.create(user, { noticeType: "notify", title: "Old silent", body: "x", silent: true }, { now: old });
-    // Read "now" in the database's clock; backdate the two reads the sweep should take.
+    // Read "now" in the database's clock; backdate the two reads.
     await database.query("UPDATE evimed_inbox.notifications SET read_at=$2 WHERE id=ANY($1::text[])", [[readOld.id, askingOld.id], old]);
     const before = (await service.list(user)).items.length;
     const deleted = await service.pruneRead({ now: new Date("2026-04-02T00:00:00Z") });
-    assert.ok(deleted >= 2, `the sweep deleted ${deleted}`);
+    assert.ok(deleted >= 1, `the sweep deleted ${deleted}`);
     const left = new Set((await service.list(user)).items.map((item) => item.id));
     assert.equal(left.has(readOld.id), false, "a notice read more than ninety days ago leaves");
-    assert.equal(left.has(silentOld.id), false, "a silent notice was read when it arrived");
     assert.equal(left.has(unreadOld.id), true, "an unread item is never swept");
     assert.equal(left.has(askingOld.id), true, "a question that is read but unanswered is still asking");
-    assert.equal(before - left.size, 2);
+    assert.equal(before - left.size, 1);
     // Read yesterday: kept.
     const recent = await service.create(user, { noticeType: "notify", title: "Recent", body: "x" }, { now: old });
     await service.markRead(user, recent.id, recent.revision);
     await service.pruneRead({ now: new Date(Date.now() + 86_400_000) });
     assert.ok((await service.list(user)).items.some((item) => item.id === recent.id));
   } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [user]);
+  }
+});
+
+test("the quiet records an earlier release stored are gone after the next start, and nothing else is", options, async () => {
+  const user = `legacy_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Legacy owner','development')", [user]);
+  // A second connection object is a second start: the inbox migration runs
+  // once per database handle.
+  const restarted = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try {
+    const kept = await service.create(user, { noticeType: "notify", title: "问题 A 已完成", body: "报告和 1 个文件已在对话里" });
+    // What the release before 2026-09-24 stored for an evaluation run or the
+    // method library's housekeeping: read on arrival, shown only under the
+    // 「自动运行 N 条」 fold.
+    const legacy = `legacy-${randomUUID()}`;
+    await database.query(`INSERT INTO evimed_inbox.notifications(id,user_id,notice_type,priority,title,body,severity,silent,read_at)
+      VALUES($1,$2,'notify',$3,'方法库整理：核对剂量','x','info',true,clock_timestamp())`, [legacy, user, kept.priority]);
+    const items = (await new NotificationService(restarted).list(user)).items.map((item) => item.id);
+    assert.deepEqual(items, [kept.id]);
+    assert.equal((await database.query("SELECT 1 FROM evimed_inbox.notifications WHERE id=$1", [legacy])).rowCount, 0,
+      "the row itself is gone, not only hidden");
+  } finally {
+    await restarted.close();
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [user]);
   }
 });

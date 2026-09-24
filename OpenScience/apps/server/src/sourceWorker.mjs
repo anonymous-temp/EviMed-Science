@@ -25,8 +25,8 @@ const TERMINAL_ERRORS = new Set([
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -53,19 +53,55 @@ export class SourceIngestionWorker {
     this.workerId = `source-ingest-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
+    this.reconciling = null;
     this.running = null;
     this.lastError = null;
     this.lastCompletedAt = null;
+    /** The last orphan sweep: when, what it withdrew, or the code it failed with. */
+    this.orphanSweep = null;
+    this.report = report;
   }
 
   start() {
     if (this.timer) return;
     this.timer = setInterval(() => { void this.tick(); }, this.pollMs);
-    this.reconcileTimer = setInterval(() => { void this.sources.reconcileJobs?.().catch(() => {}); }, this.reconcileMs);
+    this.reconcileTimer = setInterval(() => { void this.reconcile(); }, this.reconcileMs);
     this.timer.unref();
     this.reconcileTimer.unref();
-    void this.sources.reconcileJobs?.().catch(() => {});
+    void this.reconcile();
     void this.tick();
+  }
+
+  /**
+   * The repair cycle: intake jobs a crash left behind, then the memories still
+   * derived from a document or project that is gone (plan 2026-09-23 §5.6).
+   * The sweep reports for itself — on `status()` and through `report` — so one
+   * that keeps failing is visible, and one that withdrew something says how
+   * much; neither half's failure stops the other. One cycle at a time: a call
+   * while one runs is that run.
+   * @returns {Promise<void>}
+   */
+  reconcile() {
+    if (this.reconciling) return this.reconciling;
+    this.reconciling = (async () => {
+      await this.sources.reconcileJobs?.().catch(() => {});
+      if (typeof this.sources.withdrawOrphanedMemory !== "function") return;
+      const at = new Date().toISOString();
+      /** @param {string} event @param {Record<string, any>} detail */
+      const report = (event, detail) => {
+        try { this.report(event, detail); } catch { /* a report never fails the cycle it reports on */ }
+      };
+      try {
+        const swept = await this.sources.withdrawOrphanedMemory();
+        this.orphanSweep = { at, ...swept, error: null };
+        if (swept.entries > 0 || swept.ledgers > 0) report("derived_memory_withdrawn", swept);
+      } catch (error) {
+        const code = typeof error?.code === "string" ? error.code : "derived_memory_sweep_failed";
+        this.orphanSweep = { at, sources: 0, projects: 0, entries: 0, ledgers: 0, error: code };
+        report("derived_memory_sweep_failed", { code });
+      }
+    })().finally(() => { this.reconciling = null; });
+    return this.reconciling;
   }
 
   async tick() {
@@ -251,7 +287,9 @@ export class SourceIngestionWorker {
     return current;
   }
 
-  status() { return { running: Boolean(this.running), lastError: this.lastError, lastCompletedAt: this.lastCompletedAt }; }
+  status() {
+    return { running: Boolean(this.running), lastError: this.lastError, lastCompletedAt: this.lastCompletedAt, orphanSweep: this.orphanSweep };
+  }
 
   async close() {
     if (this.timer) clearInterval(this.timer);
@@ -259,5 +297,6 @@ export class SourceIngestionWorker {
     this.timer = null;
     this.reconcileTimer = null;
     await this.running;
+    await this.reconciling;
   }
 }

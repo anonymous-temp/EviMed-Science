@@ -591,9 +591,9 @@ function notificationsDouble({ keyPrefix = "memory-value-replaced:" } = {}) {
     attempts,
     rows,
     async create(userId, input) {
-      // Each test watches one kind of notice; since 2026-09-20 every run that
-      // writes a memory also posts the quiet 「刚记住了」 item, which the
-      // contradiction tests are not about.
+      // Each test watches one kind of notice. (From 2026-09-20 to 2026-09-24
+      // every run that wrote a memory also posted a quiet 「刚记住了」 item;
+      // that one is gone, and the filter stays for whatever comes next.)
       if (!String(input.idempotencyKey ?? "").startsWith(keyPrefix)) return { id: "other", ...input };
       attempts.push({ userId, ...input });
       const semantics = JSON.stringify([
@@ -713,9 +713,10 @@ test("a restated preference takes effect at once, and the memory it replaced is 
   assert.ok(typeof notice.source?.id === "string" && notice.source.id.length > 0, "the notice names no record");
   assert.deepEqual(notice.actions, [{ id: "open", label: "查看这条记忆", style: "primary" }]);
   assert.equal(notice.userId, "user_1");
-  assert.match(notice.body, /回答请用中文/);
-  assert.match(notice.body, /回答请用英文/);
-  assert.match(notice.body, /记忆管理/, "the way back has to be in the notice");
+  // Both values and nothing else (plan 2026-09-23 §5.8): the revision history
+  // and the way back are on the page the notice opens.
+  assert.equal(notice.title, "一条记忆已改写");
+  assert.equal(notice.body, "「回答请用中文」已改为「回答请用英文」");
   assert.equal(audit.failures.length, 0);
 });
 
@@ -837,8 +838,10 @@ test("a change the model inferred is a different notice from the same change the
 
   assert.equal(notifications.rows.size, 3);
   assert.deepEqual(audit.failures, []);
-  assert.match(notifications.attempts[0].body, /你在本次对话里的说法/);
-  assert.match(notifications.attempts.at(-1).body, /模型对本次对话的推断/);
+  // The researcher's own words carry no mark; EviMed's inference carries the
+  // one the memory page keeps too (principle 18, plan 2026-09-23 §5.6).
+  assert.equal(notifications.attempts[0].body, "「回答请用中文」已改为「回答请用英文」");
+  assert.equal(notifications.attempts.at(-1).body, "「回答请用中文」已改为「回答请用英文」（推断）");
 });
 
 test("an inbox that refuses the notice costs the run neither its memory nor its visibility", async () => {
@@ -1457,11 +1460,15 @@ test("a memory the researcher removed is not inferred back; their own statement 
   assert.equal(stated.extracted, 1, "the researcher saying so is the one thing that brings it back");
 });
 
-test("what a run wrote is told in the inbox, quietly, once per run, with the way back", async () => {
-  const notifications = notificationsDouble({ keyPrefix: "memory-written:" });
+test("what a run wrote is shown where the researcher is, and never posted to the inbox", async () => {
+  // 「刚记住了 N 条」 was a quiet inbox item per run (2026-09-20); the memory
+  // page and the conversation's own prompt (`/api/memory/changes`) show the
+  // same thing where the researcher is, so it goes (plan 2026-09-23 §5.8).
+  /** @type {any[]} */
+  const posted = [];
   const store = new MemoryStoreDouble();
   const intelligence = new MemoryIntelligence(config, store, {
-    notifications,
+    notifications: { async create(userId, input) { posted.push({ userId, ...input }); return { id: "n1", ...input }; } },
     fetchImpl: modelFetch((sources) => [
       { scope: "user", kind: "preference", key: "preference.table_first", value: "证据先用表格", summary: "表格优先", origin: "explicit",
         importance: 0.6, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text },
@@ -1469,14 +1476,7 @@ test("what a run wrote is told in the inbox, quietly, once per run, with the way
         importance: 0.6, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text },
     ]),
   });
-  await intelligence.recordRun(project(), run("run_told"), [message("m1", "证据先用表格，队列 500 人")]);
-  await intelligence.recordRun(project(), run("run_told"), [message("m1", "证据先用表格，队列 500 人")]);
-  const told = notifications.attempts.filter((attempt) => attempt.idempotencyKey === "memory-written:run_told");
-  assert.equal(told.length, 1, "a replay that wrote nothing new is not news");
-  assert.equal(told[0].title, "刚记住了 2 条");
-  assert.match(told[0].body, /「表格优先」「队列规模」/);
-  assert.match(told[0].body, /一键撤销/);
-  assert.equal(told[0].silent, true, "recorded without lighting the bell: it is neither done, nor needs them, nor a changed conclusion");
-  assert.equal(told[0].source.type, "memory");
-  assert.equal(told[0].projectId, "project_1");
+  const result = await intelligence.recordRun(project(), run("run_told"), [message("m1", "证据先用表格，队列 500 人")]);
+  assert.equal(result.written.filter((entry) => entry.change === "created").length, 2, "both were written");
+  assert.deepEqual(posted, [], "and nothing reached the inbox");
 });

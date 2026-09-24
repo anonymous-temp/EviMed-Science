@@ -77,7 +77,7 @@ test("a Feishu message runs through the real dispatch path and comes back as a c
     assert.equal(run.effectiveAgentId, "open-domain-answer", "routed the way a question from the page is");
     await eventually(() => fake.callsTo("card.update").length > 0, "the card to close");
     const closed = JSON.parse(fake.callsTo("card.update").at(-1).args.data.card.data);
-    assert.match(closed.body.elements[0].content, /研究已完成/);
+    assert.match(closed.body.elements[0].content, /✅ 已完成/);
     // The conversation, not the run ledger page, which was deleted on
     // 2026-09-20: the card knows the session it answered in.
     assert.equal(closed.body.elements[2].behaviors[0].default_url,

@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FEISHU_UNBIND_ACTION, ImService, appLink, finalReplyText, noticeLink, progressView, pushNotBefore, runFileLink, runLink } from "../src/imService.mjs";
+import { FEISHU_UNBIND_ACTION, ImService, appLink, cardOutcome, finalReplyText, noticeLink, progressView, pushNotBefore, runFileLink, runLink } from "../src/imService.mjs";
+import { runFinishedNotice } from "../src/notificationService.mjs";
+
+test("a finished run's card is coloured by the word it says, never ⚠️ beside 已完成", () => {
+  const quote = { code: "clinical_evidence_issue", check: "claim-quote-verbatim", severity: "must-fix", text: "MUST FIX — x" };
+  const safety = { code: "clinical_evidence_issue", check: "clinical-safety-rules", severity: "safety", text: "SAFETY — x" };
+  const cases = [
+    [{ status: "succeeded", artifacts: ["r.md"] }, "delivered"],
+    // Its bookkeeping unproven, nothing marked for the reader: 已完成, so green.
+    [{ status: "succeeded", verification: "unchecked", artifacts: ["r.md"] }, "delivered"],
+    [{ status: "succeeded", verification: "unverified", artifacts: ["r.md"], qualityNotices: [quote] }, "qualified"],
+    [{ status: "succeeded", verification: "unverified", artifacts: ["r.md"], qualityNotices: [safety] }, "qualified"],
+    [{ status: "failed", errorCode: "runtime_monitor_timeout" }, "stopped"],
+    [{ status: "failed", errorCode: "specialist_deliverable_not_accepted" }, "failed"],
+    [{ status: "failed", errorCode: "credits_exhausted" }, "failed"],
+  ];
+  for (const [run, outcome] of cases) assert.equal(cardOutcome(runFinishedNotice(run)), outcome, JSON.stringify(run));
+});
 
 /** A moment given in China Standard Time. @param {string} local "YYYY-MM-DDTHH:MM" */
 const cst = (local) => new Date(`${local}:00+08:00`);
