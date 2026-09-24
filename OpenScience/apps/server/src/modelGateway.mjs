@@ -6,6 +6,7 @@
 // cannot drive the chain fails the release rather than reaching a reader.
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
+import { closeUnsettledReservation } from "./usageLedger.mjs";
 import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
 
 export const supportedDeepSeekModels = Object.freeze(new Set([
@@ -606,6 +607,8 @@ export function createModelGatewayHandler(config, runtimeManager, {
     let reservation = null;
     let reservationUserId = null;
     let providerDisposition = "not-dispatched";
+    /** The provider's status when it answered with an error before any output. */
+    let upstreamStatus = 0;
     let usageTerminal = false;
     let providerRequestId = null;
     /** @type {ReturnType<typeof createUsageTail> | null} */
@@ -741,6 +744,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
       }
       if (!upstream.ok) {
         providerDisposition = "rejected";
+        upstreamStatus = upstream.status;
         await upstream.body?.cancel().catch(() => {});
         throw gatewayError(
           mappedUpstreamStatus(upstream.status),
@@ -804,11 +808,15 @@ export function createModelGatewayHandler(config, runtimeManager, {
       if (usageLedger && reservation && reservationUserId && !usageTerminal) {
         try {
           providerRequestId = usageTail?.providerRequestId() ?? providerRequestId;
+          // A refusal before any output (402, 429, 400…) is released; a 5xx,
+          // or a stream lost after dispatch, is uncertain — the rule every
+          // metered client shares (closeUnsettledReservation).
           if (seenUsage) await settleExact(seenUsage);
-          else if (["dispatched", "accepted"].includes(providerDisposition)) {
-            await usageLedger.markUncertain(reservationUserId, reservation.id, "provider_response_incomplete", { providerRequestId });
+          else {
+            await closeUnsettledReservation(usageLedger, reservationUserId, reservation.id, {
+              dispatched: providerDisposition !== "not-dispatched", status: upstreamStatus, providerRequestId,
+            });
           }
-          else await usageLedger.release(reservationUserId, reservation.id, "provider_not_accepted");
           usageTerminal = true;
         } catch {
           process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
@@ -914,6 +922,8 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
   }
 
   let dispatched = false;
+  /** The status of an answer that came back without output, 0 while none has. */
+  let refusedStatus = 0;
   try {
     const response = await fetchImpl(upstreamUrl(config.deepseekBaseUrl, config.production), {
       method: "POST",
@@ -927,6 +937,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     });
     dispatched = true;
     if (!response.ok) {
+      refusedStatus = response.status;
       // The provider's own status rides along: the mapped one folds every
       // server error into 502, and a caller that reports why it got no answer
       // (the routing classifier's `http_<status>`) needs the one that happened.
@@ -961,14 +972,14 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     }
     return payload;
   } finally {
-    // Still held means the call did not reach a settled end. Dispatched and
-    // then lost is uncertain — the provider may have billed it; never
-    // dispatched is a release, and quietly dropping either would leave a
-    // reservation counting against the account's cap until the sweep expires it.
+    // Still held means the call did not reach a settled end. Refused outright
+    // (a 402 from a spent balance, a 429, a 400) or never dispatched is a
+    // release; dispatched and then lost is uncertain — the provider may have
+    // billed it. Quietly dropping either would leave a reservation counting
+    // against the account's cap until the sweep expires it.
     if (usageLedger && reservation) {
       try {
-        if (dispatched) await usageLedger.markUncertain(call.userId, reservation.id, "provider_response_incomplete", {});
-        else await usageLedger.release(call.userId, reservation.id, "provider_not_accepted");
+        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus });
       } catch {
         process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
       }
