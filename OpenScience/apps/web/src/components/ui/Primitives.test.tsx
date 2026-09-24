@@ -126,6 +126,11 @@ describe("ListRow", () => {
     expect(onEdit).toHaveBeenCalledOnce();
     expect(screen.getByRole("listitem").className).not.toMatch(BORDER);
   });
+
+  it("draws a divided list's rules straight: its rows drop the corner that bent them", () => {
+    render(<List label="定时研究" divided><ListRow title="一" /><ListRow title="二" /></List>);
+    expect(screen.getByRole("list", { name: "定时研究" })).toHaveClass("divide-y", "[&>li]:rounded-none");
+  });
 });
 
 describe("Panel", () => {
