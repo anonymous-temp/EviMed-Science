@@ -22,6 +22,14 @@ export const RUNTIME_UI_SPENDING_METHODS = new Set(["session/prompt"]);
 /** The composer's raw-byte attachment route (`dsh-client-file-upload`). */
 export const RUNTIME_UI_UPLOAD_METHOD = "session/uploadFileBinary";
 
+/**
+ * How long a frame's release waits for its connections to report closed. A
+ * destroyed socket closes within a tick; the bound is for one that never says
+ * so, which must not hold the release — and the shell's next start behind
+ * it — open.
+ */
+const FRAME_RELEASE_WAIT_MS = 2_000;
+
 /** Browser cookies are accepted only from these explicit deployment origins.
  * Origin-less automation must use the control plane's authenticated API; this
  * browser surface deliberately has no implicit internal-client exception.
@@ -99,15 +107,12 @@ function escapeHtml(value) {
  * `@evimed/domain`; this routes through it, and adds the one sentence the
  * table cannot carry because it is about this surface rather than the code:
  * a conversation that cannot start because another is running is waited out or
- * freed, not retried.
+ * freed, not retried. The same words as the shell's own (`RuntimeUiFrame`).
  *
  * @param {string} code
  */
 function noticeDetail(code) {
-  if (code === "runtime_limit_exceeded") {
-    return "当前正在进行的研究对话已达本部署上限，这次没有为你新开一个。"
-      + "等正在进行的对话结束，或先在侧栏里停掉一个，再重新打开。";
-  }
+  if (code === "runtime_limit_exceeded") return "同时进行的研究已达上限，先结束一个再试。";
   return errorCodeMessage(code);
 }
 
@@ -115,7 +120,9 @@ function noticeDetail(code) {
  * A page, not JSON, because everything served here is loaded by a browser as a
  * frame or a navigation: JSON would render as text the person cannot act on.
  *
- * @param {any} res @param {number} status @param {string} title @param {string} detail
+ * @param {any} res @param {number} status @param {string} title
+ * @param {string} detail a second line, or "" when the title says it all —
+ *   the shell then shows the title
  * @param {{ code?: string, shellOrigin?: string }} [context] What to tell the
  *   embedding shell. Without it the shell learns nothing until its own 30 s
  *   deadline fires and blames a slow cold start for a refusal the server
@@ -138,7 +145,8 @@ function sendNotice(res, status, title, detail, context = {}) {
     + `display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#3f3a36">`
     + `<div style="text-align:center;max-width:36rem;padding:0 1.5rem">`
     + `<p style="font-weight:600;margin:0 0 8px">${escapeHtml(title)}</p>`
-    + `<p style="margin:0;color:#8a8178;font-size:14px;line-height:1.6">${escapeHtml(detail)}</p></div>`
+    + (detail ? `<p style="margin:0;color:#8a8178;font-size:14px;line-height:1.6">${escapeHtml(detail)}</p>` : "")
+    + `</div>`
     + `</body>${announce}`;
   res.writeHead(status, {
     "Content-Type": "text/html; charset=utf-8",
@@ -183,7 +191,7 @@ function destroyUpgrade(socket, status, code) {
 
 /**
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null }} deps
- * @returns {{ server: import('node:http').Server, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
+ * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, authorizeMutation = null }) {
   async function authorizePromptSession(project, payload) {
@@ -201,7 +209,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   const frameConnections = new Map();
   function trackFrame(snapshot, claims, transport) {
     const connections = frameConnections.get(claims.frameId) ?? new Set();
-    const connection = { snapshot, claims };
+    const connection = { snapshot, claims, transport };
     connections.add(connection);
     frameConnections.set(claims.frameId, connections);
     const remove = () => {
@@ -366,7 +374,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
 
   async function handle(req, res) {
     if (!config.runtimeUiProxyEnabled) {
-      sendNotice(res, 404, "未启用", "此部署没有开启内核界面。", { code: "runtime_ui_not_enabled", shellOrigin });
+      sendNotice(res, 404, "对话暂不可用", "", { code: "runtime_ui_not_enabled", shellOrigin });
       return;
     }
     // An unauthenticated frame must not be handed a session: the cookie it
@@ -513,14 +521,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       const status = error instanceof HttpError ? error.status : 502;
       const code = error?.code ?? "runtime_ui_failed";
       if (code === "runtime_reserved_for_autopilot") {
-        sendNotice(res, status, "后台任务正在进行", "当前项目正在整理资料或执行科研任务，请稍后重试。任务完成后可打开历史记录。", { code, shellOrigin });
+        sendNotice(res, status, "项目正忙，请稍后再试", "", { code, shellOrigin });
         return;
       }
       if (code === "agent_background_only") {
-        sendNotice(res, status, "此任务由资料页管理", "请在资料页调整或重试该来源；已有结果仍可查看。", { code, shellOrigin });
+        sendNotice(res, status, "请在知识库中处理这份资料", "", { code, shellOrigin });
         return;
       }
-      sendNotice(res, status, "研究会话暂时打不开", noticeDetail(String(code)), { code: String(code), shellOrigin });
+      sendNotice(res, status, "对话暂时打不开", noticeDetail(String(code)), { code: String(code), shellOrigin });
     });
   });
 
@@ -561,6 +569,39 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
 
   return {
     server,
+    /**
+     * Close one frame's live connections — its multiplexed socket and any
+     * request still in flight — and resolve once they have closed, or after
+     * `FRAME_RELEASE_WAIT_MS`. Only the caller's own: a frame id never closes
+     * another login's connections.
+     *
+     * The shell releases a frame when it lets that conversation go, and a
+     * connection the server still counts holds its runtime's slot
+     * (`makeRoomFor`). Closed here, before the release answers, the next
+     * project's start finds the slot free — the order the shell now waits for
+     * (2026-09-23 UI plan §2.2). The browser closes them as well once the
+     * frame leaves the page; this makes the answer mean it has happened.
+     * @param {string} frameId @param {string} userId
+     * @returns {Promise<number>} how many connections were closed
+     */
+    async releaseFrame(frameId, userId) {
+      const closing = [];
+      for (const connection of frameConnections.get(frameId) ?? []) {
+        if (connection.claims.userId !== userId) continue;
+        const { transport } = connection;
+        closing.push(new Promise((resolve) => { transport.once("close", resolve); }));
+        transport.destroy();
+      }
+      if (!closing.length) return 0;
+      /** @type {NodeJS.Timeout | undefined} */
+      let bound;
+      await Promise.race([
+        Promise.all(closing),
+        new Promise((resolve) => { bound = setTimeout(resolve, FRAME_RELEASE_WAIT_MS); bound.unref(); }),
+      ]);
+      clearTimeout(bound);
+      return closing.length;
+    },
     /** Called only after renewal proof, live login, CSRF and project access are validated. */
     refreshFrameBinding(renewed) {
       let updated = 0;

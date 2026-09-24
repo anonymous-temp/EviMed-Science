@@ -5475,7 +5475,17 @@ test("start_runtime makes room from the same user's idle runtime, and refuses wh
         assert.equal(out.json.code, "runtime_limit_exceeded");
         assert.match(out.json.error, /user/);
         assert.equal(out.res.headers.get("retry-after"), "5");
-        assert.equal((await app.runtimeManager.status(paper2)).running, true, "a runtime with an open connection is never taken");
+        assert.equal((await app.runtimeManager.status(paper2)).running, true, "a warm-up never takes a runtime with an open connection");
+
+        // The shell opening a conversation in this project is the one start
+        // that does: that connection is the tab's hidden frame of the project
+        // the researcher just left, and nothing is running there (UI plan §2.2).
+        out = await command(base, "start_runtime", { opening: true });
+        assert.equal(out.res.status, 200, "the researcher's own idle runtime yields to the project they are opening");
+        const taken = await app.runtimeManager.status(paper2);
+        assert.equal(taken.running, false);
+        assert.equal(taken.lastEvent, "yielded");
+        assert.equal((await app.runtimeManager.status(defaultProject)).running, true);
       } finally {
         app.runtimeManager.endProxy(paper2);
       }
