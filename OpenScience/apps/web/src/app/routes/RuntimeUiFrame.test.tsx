@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-rou
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionFrameHost } from "../layout/SessionFrameHost";
 import { SessionRoute } from "./SessionRoute";
-import { WebApiError } from "@/lib/apiClient";
+import { WebApiError, type WebAgentRun } from "@/lib/apiClient";
+import { rememberConversationTitles } from "@/lib/conversationTitles";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
@@ -34,7 +35,7 @@ const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evi
 function PathProbe() {
   const navigate = useNavigate();
   const location = useLocation();
-  return <div><span data-testid="path">{location.pathname}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
+  return <div><span data-testid="path">{location.pathname}</span><span data-testid="search">{location.search}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
     <button onClick={() => navigate("/app/files")}>Knowledge</button>
     <button onClick={() => navigate(-1)}>Back</button>
@@ -212,18 +213,17 @@ describe("native frame identity and readiness", () => {
     const frame = container.querySelector("iframe")!;
     expect(mocks.create).toHaveBeenCalledWith("default"); expect(frame.src).toBe(binding.frameUrl);
     act(() => frame.dispatchEvent(new Event("load")));
-    // The runtime was already running, so this opening is a document load and
-    // gets the neutral skeleton, not the runtime's four moments (WP1).
-    await waitFor(() => expect(screen.getByText("正在打开对话…")).toBeInTheDocument());
-    expect(screen.queryByText("✓ 启动内核")).toBeNull();
+    // One quiet line while the document loads, never the machinery behind it.
+    await waitFor(() => expect(screen.getByText("正在打开…")).toBeInTheDocument());
+    expect(screen.queryByText(/内核|准备环境|载入界面/)).toBeNull();
     emit(frame, { type: "evimed.runtime-ui.ready" }, "https://evil.example");
     emit(frame, { type: "evimed.runtime-ui.ready" }, mocks.profile.uiOrigin, window);
     emit(frame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
-    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开…")).toBeInTheDocument();
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开…")).toBeInTheDocument();
     const command = post.mock.calls[0][0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -278,7 +278,7 @@ describe("native frame identity and readiness", () => {
   // button beside it. Both halves were wrong for a ceiling: the sentence named
   // a cause the code contradicts, and the only offered action is the one action
   // that cannot work while the window is full.
-  it("names the ceiling that refused the frame, says when it frees, and offers the account page instead of a retry", async () => {
+  it("names the ceiling that refused the frame, says when it frees, and offers the usage page instead of a retry", async () => {
     mocks.create.mockRejectedValueOnce(new WebApiError("This account reached its daily spending limit.", {
       status: 402, code: "credits_daily_limit_reached", requestId: "req_402", retryAfterSeconds: 11_520,
     }));
@@ -288,8 +288,9 @@ describe("native frame identity and readiness", () => {
     expect(alert).toHaveTextContent("约 3 小时 12 分钟后额度开始释放");
     expect(alert).toHaveTextContent("不是整点清零");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "查看账户与额度" }));
+    await userEvent.click(screen.getByRole("button", { name: "查看用量" }));
     expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
+    expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
     expect(mocks.create).toHaveBeenCalledTimes(1);
   });
 
@@ -318,7 +319,7 @@ describe("native frame identity and readiness", () => {
     mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("登录已失效，请重新登录。");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "查看账户与额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
   });
 
   it("keeps a capability intent pending until a matching success acknowledgement", async () => {
@@ -332,9 +333,9 @@ describe("native frame identity and readiness", () => {
     expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-a", frameId: "frame-a", intent: { sessionId: "session-new", draft: "Evidence brief" } });
     expect(post.mock.calls[0][1]).toBe(mocks.profile.uiOrigin);
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "wrong", ok: true, sessionId: "session-new" });
-    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
-    await waitFor(() => expect(screen.queryByText("正在打开对话…")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("正在打开…")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
   });
 
@@ -427,7 +428,7 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "wrong-session" });
-    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
@@ -680,44 +681,37 @@ describe("the run behind the task, in the frame", () => {
 });
 
 describe("opening a task", () => {
-  it("names the moment it is in, advanced by the event that ends each one, and says more after five seconds", async () => {
+  // 2026-09-23 UI plan §2.2 #3: the step list (准备环境 · 启动内核 · 载入界面 ·
+  // 打开对话) and its five-second sentences described the machinery, named the
+  // kernel, and made every project switch read as a restart.
+  it("opens quietly: the conversation's title and one line, whatever the runtime is doing, then simply the conversation", async () => {
     vi.useFakeTimers();
+    rememberConversationTitles([{ sessionId: "session-a", title: "ASPREE试验主要结论" } as WebAgentRun]);
     let resolveFrame!: (value: typeof binding) => void;
     mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
-    // A cold Docker runtime: the control plane reports the environment, then
-    // the kernel; a local container has no files to carry over.
+    // A cold runtime: the control plane reports the environment, then the kernel.
     let reported: Record<string, unknown> = { running: false, provider: "docker", startStage: "environment", startError: null };
     mocks.status.mockImplementation(async () => reported);
     const view = mount(null, "/app/chat/session-a");
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    const status = screen.getByRole("status");
-    expect(status).toHaveAttribute("data-open-step", "environment");
-    expect(status).toHaveAttribute("data-open-stage", "0");
-    // The composer the reader is about to type into is drawn from the start.
-    expect(status.querySelector('[aria-hidden="true"] .animate-pulse')).not.toBeNull();
-    expect(screen.getByText("正在准备环境…")).toBeInTheDocument();
-    expect(screen.queryByText("同步文件")).toBeNull();
-    expect(screen.queryByText(/正在为这个项目准备研究环境/)).toBeNull();
+    const cover = () => screen.getByRole("status");
+    const machinery = /准备环境|同步文件|启动内核|载入界面|打开对话|内核|研究环境/;
+    expect(cover()).toHaveTextContent("ASPREE试验主要结论");
+    expect(cover()).toHaveTextContent("正在打开…");
+    expect(cover()).not.toHaveTextContent(machinery);
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    expect(screen.getByText(/正在为这个项目准备研究环境/)).toBeInTheDocument();
-    reported = { running: false, provider: "docker", startStage: "kernel", startError: null };
+    reported = { running: false, provider: "agentbay", startStage: "sync", startError: null };
     await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
-    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "kernel");
-    expect(screen.getByText("✓ 准备环境")).toBeInTheDocument();
-    expect(screen.getByText("正在启动内核…")).toBeInTheDocument();
+    // Still the same two lines: nothing is added after a while, or per moment.
+    expect(cover().querySelectorAll("p")).toHaveLength(2);
+    expect(cover()).not.toHaveTextContent(machinery);
     await act(async () => { resolveFrame(binding); await vi.advanceTimersByTimeAsync(0); });
     const frame = view.container.querySelector("iframe")!;
-    // The kernel's page booting inside the frame is the runtime being up.
     emit(frame, { type: "evimed.runtime-ui.booted" });
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "interface");
-    expect(screen.getByText("✓ 启动内核")).toBeInTheDocument();
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "task");
-    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    expect(screen.getByText(/正在读取这条对话的完整记录/)).toBeInTheDocument();
+    expect(cover()).toHaveTextContent("正在打开…");
     const navigateCommand = post.mock.calls.find(([data]) => data.type === "evimed.runtime-ui.navigate")![0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigateCommand.requestId, ok: true, sessionId: "session-a" });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
@@ -725,17 +719,11 @@ describe("opening a task", () => {
     view.unmount();
   });
 
-  it("names the file sync a remote session goes through, and never a moment the provider does not have", async () => {
-    vi.useFakeTimers();
+  it("opens a conversation it has no name for with the one line alone", async () => {
     mocks.create.mockImplementation(() => new Promise(() => {}));
-    mocks.status.mockResolvedValue({ running: false, provider: "agentbay", startStage: "sync", startError: null });
-    const view = mount(null, "/app/chat/session-a");
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "sync");
-    expect(screen.getByText("✓ 准备环境")).toBeInTheDocument();
-    expect(screen.getByText("正在同步文件…")).toBeInTheDocument();
-    expect(screen.getByText("启动内核")).toBeInTheDocument();
-    view.unmount();
+    mount(null, "/app/chat/session-unlisted");
+    const cover = await screen.findByRole("status");
+    expect(cover).toHaveTextContent(/^正在打开…$/);
   });
 
   it("says a slot cap is a slot cap, with the action that frees one, never as a slow start", async () => {
@@ -744,13 +732,13 @@ describe("opening a task", () => {
     mocks.start.mockRejectedValue(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
     mount(null, "/app/chat/session-a");
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("同时运行的研究环境已达本部署上限");
+    expect(alert).toHaveTextContent("同时进行的研究已达上限，先结束一个再试。");
     expect(alert).not.toHaveTextContent(/冷启动|90 秒/);
     // A concurrency ceiling: no quota page lifts it, so none is offered, and
     // the run ledger it used to point at is gone. Freeing a slot is done in
     // the conversation that holds it, which the sentence says.
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /额度/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /额度|用量/ })).toBeNull();
   });
 
   it("does not fail a retry on a refusal an earlier attempt left on the status", async () => {
@@ -765,6 +753,7 @@ describe("opening a task", () => {
 
   it("waits out a slow start that keeps moving, and gives up only on a moment that stalls", async () => {
     vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     let resolveFrame!: (value: typeof binding) => void;
     mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
     let reported: Record<string, unknown> = { running: false, provider: "docker", startStage: "environment", startError: null };
@@ -790,13 +779,16 @@ describe("opening a task", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     // Nothing more for a whole minute: that moment has stalled.
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
-    expect(screen.getByRole("alert")).toHaveTextContent("对话界面 60 秒内没有载入完成");
+    expect(screen.getByRole("alert")).toHaveTextContent("打开超时，请重试");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    // The reader gets one sentence; which moment stalled goes to the console.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"interface"'), { projectId: "default" });
     view.unmount();
   });
 
-  it("gives up on a runtime that does not start within its own allowance, naming the moment that stalled", async () => {
+  it("gives up on a runtime that does not start within its own allowance, in one sentence", async () => {
     vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mocks.create.mockImplementation(() => new Promise(() => {}));
     mocks.start.mockImplementation(() => new Promise(() => {}));
     mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: "kernel", startError: null });
@@ -805,7 +797,9 @@ describe("opening a task", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(89_000); });
     expect(screen.queryByRole("alert")).toBeNull();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
-    expect(screen.getByRole("alert")).toHaveTextContent("研究内核 90 秒内没有启动完成");
+    expect(screen.getByRole("alert")).toHaveTextContent("打开超时，请重试");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/内核|90 秒/);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"kernel"'), { projectId: "default" });
     view.unmount();
   });
 
@@ -814,8 +808,11 @@ describe("opening a task", () => {
     mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);
     mocks.warm.mockReset();
     mount();
-    // The runtime starts while the lookup decides which task to open.
-    expect(mocks.warm).toHaveBeenCalledTimes(1);
+    // The runtime starts while the lookup decides which task to open: the
+    // frame, mounted and told to open nothing yet, starts it itself — as the
+    // opening, which is the start that may make room — so no warm-up races it.
+    expect(mocks.start).toHaveBeenCalledWith({ projectId: "default", opening: true });
+    expect(mocks.warm).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
     expect(mocks.listRuns).not.toHaveBeenCalled();
   });
@@ -932,9 +929,117 @@ describe("the conversation surface outlives the route", () => {
 
     await act(async () => { useProjectStore.setState({ currentId: "project-c" }); });
     await waitFor(() => expect(mocks.release).toHaveBeenCalledWith("frame-a"));
-    expect(container.querySelectorAll("iframe")).toHaveLength(2);
+    await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(2));
     expect(container.querySelector("iframe")).not.toBe(first);
     useProjectStore.setState({ currentId: "default" });
+  });
+
+  // 2026-09-23 UI plan §2.2: the third project's runtime used to be started
+  // while the surface it displaced was still connected, so the control plane
+  // refused it (429) and the retry came seven seconds later.
+  describe("a project beyond the two kept", () => {
+    afterEach(async () => {
+      const { useProjectStore } = await import("@/lib/projects");
+      useProjectStore.setState({ currentId: "default" });
+    });
+
+    /** Two projects' surfaces kept — the default project's, then project B's, which is on screen. */
+    async function twoSurfaces() {
+      const { useProjectStore } = await import("@/lib/projects");
+      mocks.create.mockReset();
+      mocks.create.mockImplementation(async (projectId: string) => ({
+        ...binding, frameId: `frame-${projectId}`, frameUrl: `https://host.example:8443/__evimed/f/frame-${projectId}/`,
+      }));
+      const view = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(view.container.querySelectorAll("iframe")).toHaveLength(1));
+      // A switch, and the admission that follows it a promise later, inside act.
+      const switchTo = async (projectId: string) => {
+        await act(async () => {
+          useProjectStore.setState({ currentId: projectId });
+          await settle();
+        });
+      };
+      await switchTo("project-b");
+      await waitFor(() => expect(view.container.querySelectorAll("iframe")).toHaveLength(2));
+      return { ...view, switchTo };
+    }
+    /** Lets promise chains and the timers they set run out (real timers only). */
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+    /** The cover the host draws while no surface of the current project exists yet. */
+    const hostCover = (container: HTMLElement) => container.querySelector("[data-session-surface] > [data-frame-skeleton]");
+
+    it("lets the least recently used surface go and waits for its release before the next project's runtime starts", async () => {
+      const { container, switchTo } = await twoSurfaces();
+      let confirm!: () => void;
+      mocks.release.mockImplementation(() => new Promise<void>((resolve) => { confirm = resolve; }));
+      await switchTo("project-c");
+      await waitFor(() => expect(mocks.release).toHaveBeenCalledWith("frame-default"));
+      // Released, not yet confirmed: nothing of project C has started, and the
+      // conversation area says it is opening.
+      expect(container.querySelectorAll("iframe")).toHaveLength(1);
+      expect(mocks.create).not.toHaveBeenCalledWith("project-c");
+      expect(mocks.start).not.toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-c" }));
+      expect(hostCover(container)).toHaveTextContent("正在打开…");
+
+      await act(async () => { confirm(); await settle(); });
+      await waitFor(() => expect(mocks.start).toHaveBeenCalledWith({ projectId: "project-c", opening: true }));
+      expect(mocks.create).toHaveBeenCalledWith("project-c");
+      const startedC = mocks.start.mock.calls.findIndex(([options]) => options?.projectId === "project-c");
+      expect(mocks.release.mock.invocationCallOrder[0]).toBeLessThan(mocks.start.mock.invocationCallOrder[startedC]);
+      await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(2));
+      expect(hostCover(container)).toBeNull();
+    });
+
+    it("does not wait on a release that never answers for longer than its bound", async () => {
+      await twoSurfaces();
+      mocks.release.mockImplementation(() => new Promise<void>(() => {}));
+      // Fake from here, so the bound can be walked up to; `switchTo` waits on
+      // a real timer and cannot be used past this line.
+      vi.useFakeTimers();
+      const { useProjectStore } = await import("@/lib/projects");
+      await act(async () => { useProjectStore.setState({ currentId: "project-c" }); await vi.advanceTimersByTimeAsync(0); });
+      expect(mocks.release).toHaveBeenCalledWith("frame-default");
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_900); });
+      expect(mocks.create).not.toHaveBeenCalledWith("project-c");
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(mocks.create).toHaveBeenCalledWith("project-c");
+      expect(mocks.start).toHaveBeenCalledWith({ projectId: "project-c", opening: true });
+    });
+
+    it("switching project off the conversation also lets a surface go first, then warms the new project past an earlier refusal", async () => {
+      const { container, switchTo } = await twoSurfaces();
+      await userEvent.click(screen.getByText("Knowledge"));
+      await waitFor(() => expect(screen.getByText("knowledge base")).toBeInTheDocument());
+      mocks.warm.mockReset();
+      await switchTo("project-c");
+      await waitFor(() => expect(mocks.warm).toHaveBeenCalledWith("project-c", { afterRelease: true }));
+      expect(mocks.release).toHaveBeenCalledWith("frame-default");
+      expect(mocks.release.mock.invocationCallOrder[0]).toBeLessThan(mocks.warm.mock.invocationCallOrder[0]);
+      // Off the conversation no frame is built for it; the one kept is B's.
+      expect(container.querySelectorAll("iframe")).toHaveLength(1);
+      expect(mocks.create).not.toHaveBeenCalledWith("project-c");
+    });
+
+    it("lets go of the surface shown longest ago, which is not always the first one mounted", async () => {
+      const { container, switchTo } = await twoSurfaces();
+      await switchTo("default");
+      await waitFor(() => expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "visible"));
+      await switchTo("project-c");
+      await waitFor(() => expect(mocks.release).toHaveBeenCalledTimes(1));
+      expect(mocks.release).toHaveBeenCalledWith("frame-project-b");
+      await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("project-c"));
+    });
+
+    it("goes back to a project it still keeps at once: nothing let go, and no frame moved in the document (a moved iframe reloads)", async () => {
+      const { container, switchTo } = await twoSurfaces();
+      const kept = [...container.querySelectorAll("iframe")];
+      await switchTo("default");
+      await waitFor(() => expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "visible"));
+      expect([...container.querySelectorAll("iframe")]).toEqual(kept);
+      expect(mocks.release).not.toHaveBeenCalled();
+      expect(hostCover(container)).toBeNull();
+    });
   });
 
   // Switching conversation inside a live runtime is not a cold start, and

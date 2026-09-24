@@ -6,6 +6,7 @@ import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } fr
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
+import { conversationTitle } from "@/lib/conversationTitles";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
@@ -78,11 +79,13 @@ function refusedFrame(error: unknown): FrameFailure {
  *  starts sometimes take longer" — a retry loop against a limit that no wait
  *  could lift. What helps is a running conversation ending, or stopping one —
  *  which is done in the conversation itself, from its own composer or from the
- *  menu on its row in the sidebar. */
-const RUNTIME_SLOT_CAP_TEXT = "同时运行的研究环境已达本部署上限，这次没有为你新开一个。等正在进行的对话结束，或在侧栏里停掉一个，再重试。";
+ *  menu on its row in the sidebar. The frame's own notice page says the same
+ *  words (`runtimeUiServer.mjs`). */
+const RUNTIME_SLOT_CAP_TEXT = "同时进行的研究已达上限，先结束一个再试。";
 
-function noticedFrame(code: string, detail: string): FrameFailure {
-  const text = detail || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
+function noticedFrame(code: string, detail: string, title: string): FrameFailure {
+  // A notice whose title says it all sends no detail (「项目正忙，请稍后再试」).
+  const text = detail || title || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
   const capped = errorCodeOutcome(code) === "capped";
   return { text, retryable: true, capped, concurrency: capped };
 }
@@ -115,30 +118,14 @@ function artifactPath(value: unknown): string | null {
 }
 
 /**
- * The moments of opening a conversation, in the order they happen. The first three are
- * the runtime's own start as the control plane reports it (plan §3.1 #8):
- * 准备环境, 同步文件 and 启动内核. A local container mounts the project's
- * files, so only a remote session has the second one, and the Docker provider
- * never shows it.
+ * The moments of opening a conversation that have a deadline of their own.
+ * The first three are the runtime's start as the control plane reports it
+ * (`startStage`: preparing, carrying a remote session's files over, the
+ * kernel coming up); `interface` is the kernel's application loading in the
+ * frame. They time the wait and are never shown: the reader sees one quiet
+ * line, not the machinery (UI plan §2.2 #3).
  */
-export type OpenStep = "environment" | "sync" | "kernel" | "interface" | "task";
-const OPEN_STEP_LABELS: Record<OpenStep, string> = {
-  environment: "准备环境", sync: "同步文件", kernel: "启动内核", interface: "载入界面", task: "打开对话",
-};
-/** What each moment is doing, said once it has taken five seconds. */
-const OPEN_STEP_NOTES: Record<OpenStep, string> = {
-  environment: "正在为这个项目准备研究环境；已在运行的环境会直接复用。",
-  sync: "正在把项目文件同步到研究环境；文件较多时会久一些。",
-  kernel: "研究环境已就绪，正在启动研究内核。",
-  interface: "研究内核已启动，正在载入对话界面；网络较慢时会多等一会儿。",
-  task: "正在读取这条对话的完整记录；进行了很久的对话，记录会大一些。",
-};
-/** The steps a provider goes through. */
-export function openSteps(provider: string | null): OpenStep[] {
-  return provider === "agentbay"
-    ? ["environment", "sync", "kernel", "interface", "task"]
-    : ["environment", "kernel", "interface", "task"];
-}
+type OpenMoment = "environment" | "sync" | "kernel" | "interface";
 
 /**
  * How long a moment may take before this surface stops waiting, counted from
@@ -153,15 +140,11 @@ export function openSteps(provider: string | null): OpenStep[] {
  * interface is the download, and the frame reporting that its bridge booted
  * restarts the count. Opening the task has its own 20 s deadline below.
  */
-const OPEN_STEP_DEADLINES_MS: Record<Exclude<OpenStep, "task">, number> = {
+const OPEN_DEADLINES_MS: Record<OpenMoment, number> = {
   environment: 90_000, sync: 90_000, kernel: 90_000, interface: 60_000,
 };
-const OPEN_STEP_TIMEOUTS: Record<Exclude<OpenStep, "task">, string> = {
-  environment: "研究环境 90 秒内没有准备好；重试会重新建立连接。",
-  sync: "项目文件 90 秒内没有同步完成；重试会重新建立连接。",
-  kernel: "研究内核 90 秒内没有启动完成；重试会重新建立连接。",
-  interface: "对话界面 60 秒内没有载入完成，可能是网络较慢；重试会重新建立连接。",
-};
+/** One sentence for every stalled moment: which one stalled goes to the console, for whoever diagnoses it. */
+const OPEN_TIMEOUT_TEXT = "打开超时，请重试";
 
 /**
  * How a renewal that failed is retried: silently, and at widening intervals.
@@ -175,64 +158,21 @@ const OPEN_STEP_TIMEOUTS: Record<Exclude<OpenStep, "task">, string> = {
 const RENEW_RETRY_MS = [1_000, 3_000, 10_000, 30_000] as const;
 
 /**
- * The wait before a conversation is on screen, drawn as what it is: the composer the
- * reader is about to type into, and the moments the opening goes through, each
- * advanced by the event that ends it — the control plane's account of the
- * runtime start, the kernel's page booting and reporting ready, the task's
- * acknowledgement. A single sentence used to stand for all of them, so a slow
- * kernel, a slot the deployment had run out of and a slow read looked the
- * same, and none said which it was. After five seconds in one moment a line
- * says what that moment is doing.
- */
-export function FrameWaiting({ step, provider = null, line }: { step: OpenStep; provider?: string | null; line?: string }) {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    setSlow(false);
-    const timer = setTimeout(() => setSlow(true), 5_000);
-    return () => clearTimeout(timer);
-  }, [step]);
-  const steps = openSteps(provider);
-  const current = Math.max(0, steps.indexOf(step));
-  return (
-    <div role="status" aria-live="polite" data-open-stage={current} data-open-step={step} className="absolute inset-0 z-10 flex flex-col bg-bg">
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <ol aria-label="打开进度" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-ui-sm">
-          {steps.map((key, index) => (
-            <li
-              key={key}
-              aria-current={index === current ? "step" : undefined}
-              className={index < current ? "text-ok" : index === current ? "font-medium text-text" : "text-muted"}
-            >
-              {index < current ? `✓ ${OPEN_STEP_LABELS[key]}` : OPEN_STEP_LABELS[key]}
-            </li>
-          ))}
-        </ol>
-        <p className="text-ui-sm text-muted">{line ?? `正在${OPEN_STEP_LABELS[step]}…`}</p>
-        {slow && <p className="max-w-content-narrow text-caption text-muted">{OPEN_STEP_NOTES[step]}</p>}
-      </div>
-      <div aria-hidden="true" className="mx-auto mb-6 w-full max-w-content px-4">
-        <div className="h-24 animate-pulse rounded-card border border-border bg-surface" />
-      </div>
-    </div>
-  );
-}
-
-/**
- * A wait with nothing to say about it.
+ * What covers the conversation area while a conversation opens: its title,
+ * when the shell knows it, and one quiet line. When it is ready the
+ * conversation simply appears.
  *
- * Shown when the frame's own document is loading: the four moments above
- * describe a runtime starting, and a reader who has one running reads them as
- * a cold start that is not happening (plan §3.11).
+ * Until 2026-09-23 a cold start showed its moments as a checklist — 准备环境 ·
+ * 启动内核 · 载入界面 · 打开对话 — with a sentence about each after five
+ * seconds. That described the machinery rather than the conversation, named
+ * the kernel, and made every project switch read as a restart (UI plan §2.2
+ * #3); how long each moment may take still decides when this gives up.
  */
-export function FrameSkeleton({ line = "正在打开对话…" }: { line?: string }) {
+export function FrameSkeleton({ title = null, line = "正在打开…" }: { title?: string | null; line?: string }) {
   return (
-    <div role="status" aria-live="polite" data-frame-skeleton="" className="absolute inset-0 z-10 flex flex-col bg-bg">
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-ui-sm text-muted">{line}</p>
-      </div>
-      <div aria-hidden="true" className="mx-auto mb-6 w-full max-w-content px-4">
-        <div className="h-24 animate-pulse rounded-card border border-border bg-surface" />
-      </div>
+    <div role="status" aria-live="polite" data-frame-skeleton="" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg px-6 text-center">
+      {title && <p className="line-clamp-2 max-w-content-narrow text-ui font-medium text-text">{title}</p>}
+      <p className="text-ui text-muted">{line}</p>
     </div>
   );
 }
@@ -249,7 +189,7 @@ export function FrameSkeleton({ line = "正在打开对话…" }: { line?: strin
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = true, suspended = false }: {
+export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = true, suspended = false, onRelease }: {
   projectId: string;
   origin: string;
   /** The conversation this surface should be showing, from the address. */
@@ -258,9 +198,15 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   /** The address does not yet name a conversation and the shell is finding
    *  one: hold the opening request, but let the runtime warm up meanwhile. */
   suspended?: boolean;
+  /** Handed each release of this frame's binding as it goes out. The control
+   *  plane answers once the frame's connections are closed, which is when its
+   *  runtime's slot is free for another project (`SessionFrameHost`). */
+  onRelease?: (released: Promise<void>) => void;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const onReleaseRef = useRef(onRelease);
+  onReleaseRef.current = onRelease;
   const mirroredSession = useRef<{ sessionId: string; attempt: number } | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
@@ -340,9 +286,14 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     const release = (id: string) => {
       if (released.has(id)) return;
       released.add(id);
-      void releaseWebRuntimeUiFrame(id).catch(() => {
-        // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
+      const done = releaseWebRuntimeUiFrame(id).catch((cause: unknown) => {
+        // Not the authority boundary — login expiry and revocation are — and
+        // the browser closes the frame's connections itself once its document
+        // is gone. What a failure can cost is the next project's start being
+        // refused while the server still counts them, which that start says.
+        console.warn("EviMed: a conversation frame's release was not confirmed", cause);
       });
+      onReleaseRef.current?.(done);
     };
     setBinding(null); setReady(false); setBooted(0); setFrameTask(null); setPending(false); setNavigated(false); setError(null);
     setLeaseFailure(null); setLeaseExpired(false); setNativeError(null); setRenewing(false); setStartStatus(null);
@@ -406,7 +357,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         // The renewal answers with the same envelope the creation does, so an
         // expired login or a revoked project says so instead of arriving as a
         // sentence about the connection.
-        setLeaseFailure({ text: webErrorMessage(cause, { fallback: "研究连接暂时无法续期，正在自动重连" }), final: expiredLogin });
+        setLeaseFailure({ text: webErrorMessage(cause, { fallback: "连接中断，正在重连…" }), final: expiredLogin });
         if (!expiredLogin) after(RENEW_RETRY_MS[Math.min(failures - 1, RENEW_RETRY_MS.length - 1)]);
       }).finally(() => {
         inFlight = null;
@@ -448,39 +399,33 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // The runtime is up once the control plane says so or the kernel's own page
   // has booted inside the frame, whichever is heard first.
   const runtimeUp = navigated || ready || booted > 0 || startStatus?.running === true;
-  // Whether this opening had to start a runtime, decided once and kept: it is
-  // what says which cover the reader gets, and a cover that changed its mind
-  // halfway would be the cold-start theatre this removes (plan §3.11).
-  const [coldStart, setColdStart] = useState<boolean | null>(null);
-  useEffect(() => { setColdStart(null); }, [projectId, attempt]);
-  useEffect(() => {
-    // Only once there is an answer: a runtime already running reports so on
-    // the first status read, and a frame whose page boots proves it too.
-    setColdStart((known) => (known !== null || (!startStatus && !runtimeUp) ? known : !runtimeUp));
-  }, [startStatus, runtimeUp]);
-  const runtimeStep: OpenStep = startStatus?.startStage ?? "environment";
   // Which moment the opening is in, for its deadline; opening the task (a
   // request in flight) is timed by its own deadline further down.
-  const deadlineStep: Exclude<OpenStep, "task"> | null = navigated || pending || ready ? null
-    : runtimeUp && binding ? "interface" : runtimeStep === "sync" || runtimeStep === "kernel" ? runtimeStep : "environment";
-  const displayStep: OpenStep = pending || ready ? "task" : runtimeUp ? "interface" : runtimeStep;
+  const runtimeMoment = startStatus?.startStage ?? "environment";
+  const deadlineMoment: OpenMoment | null = navigated || pending || ready ? null
+    : runtimeUp && binding ? "interface" : runtimeMoment;
   useEffect(() => {
-    if (error || deadlineStep === null) return;
+    if (error || deadlineMoment === null) return;
     // A slow start is not a failure while it is moving: each moment the
     // control plane reports, and the frame's bridge booting, restarts the
-    // count (see OPEN_STEP_DEADLINES_MS).
-    const timeout = setTimeout(() => setError(frameFailure(OPEN_STEP_TIMEOUTS[deadlineStep])), OPEN_STEP_DEADLINES_MS[deadlineStep]);
+    // count (see OPEN_DEADLINES_MS).
+    const timeout = setTimeout(() => {
+      console.warn(`EviMed: opening a conversation stalled at "${deadlineMoment}" for ${OPEN_DEADLINES_MS[deadlineMoment] / 1000} s`, { projectId });
+      setError(frameFailure(OPEN_TIMEOUT_TEXT));
+    }, OPEN_DEADLINES_MS[deadlineMoment]);
     return () => clearTimeout(timeout);
-  }, [error, attempt, deadlineStep, booted]);
+  }, [error, attempt, deadlineMoment, booted, projectId]);
 
   // This opening's own start. The frame document starts the runtime too, and
   // the two join one start on the server; this call is made because its answer
   // can be read — a start refused into a frame is a page this shell cannot see
   // the status of — and because it belongs to this attempt, a refusal from an
-  // earlier one cannot fail the retry.
+  // earlier one cannot fail the retry. It is the opening (`startWebRuntime`):
+  // the shell has already let go of the surface it chose to let go of, and an
+  // idle runtime of this researcher that a tab still holds yields to it.
   useEffect(() => {
     let live = true;
-    void startWebRuntime().catch((cause: unknown) => {
+    void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
       const refusal = live ? refusedStart(cause) : null;
       if (refusal) setError(refusal);
     });
@@ -524,7 +469,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       // then blamed a slow cold start for a ceiling the server had already
       // named (2026-09-15 walk, A8).
       if (message?.type === "evimed.runtime-ui.notice" && message.version === 1 && typeof message.code === "string") {
-        setError(noticedFrame(message.code, typeof message.detail === "string" ? message.detail : ""));
+        setError(noticedFrame(message.code, typeof message.detail === "string" ? message.detail.slice(0, 200) : "",
+          typeof message.title === "string" ? message.title.slice(0, 200) : ""));
         return;
       }
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
@@ -794,21 +740,12 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => clearTimeout(timeout);
   }, [pending, error, attempt, intent?.requestId]);
 
-  // What covers the conversation, and when.
-  //
-  // The four moments belong to a runtime that is actually starting, so they
-  // are shown only for an opening that had to start one. When it was already
-  // running, a document still loading gets a neutral skeleton; and once this
-  // frame has opened a conversation at all, switching to another one shows
-  // nothing — the kernel is on screen and keeps its own composer. Until
-  // 2026-09-20 every opening got the four steps, so a conversation switch
-  // inside a live runtime read as a cold start that was not happening (walk,
-  // 「每次点会话都要冷启动」).
-  const opening = !navigated || pending;
-  const cover = !opening ? null
-    : coldStart ? <FrameWaiting step={displayStep} provider={startStatus?.provider ?? null} />
-      : !navigated ? <FrameSkeleton />
-        : null;
+  // What covers the conversation, and when: until this frame has opened one,
+  // the conversation's title and 「正在打开…」, cold start or warm alike. Once
+  // it has, switching to another shows nothing — the kernel is on screen and
+  // keeps its own composer (a switch inside a live runtime used to read as a
+  // cold start: walk of 2026-09-20, 「每次点会话都要冷启动」).
+  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} />;
   // A renewal that failed is only worth saying once the lease it renews has
   // actually run out — or when it is an expired login, which no retry fixes.
   const leaseAlert = leaseFailure && (leaseFailure.final || leaseExpired) ? leaseFailure.text : null;
@@ -817,17 +754,18 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   return (
     <div className="relative h-full w-full">
       {error ? (
-        <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui-sm text-error">
+        <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
           <p>{error.text}</p>
           {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
           {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
-          {error.capped && !error.concurrency && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}
+          {/* The usage section of settings, where a spend ceiling is stated. */}
+          {error.capped && !error.concurrency && <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>查看用量</Button>}
         </div>
       ) : (
         <>
           {navigated && (connectionNotice || !ready) && (
-            <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui-sm text-muted">
-              <p>{connectionNotice ?? "正在恢复研究连接…"}</p>
+            <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
+              <p>{connectionNotice ?? "正在重连…"}</p>
               {connectionNotice && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
             </div>
           )}
