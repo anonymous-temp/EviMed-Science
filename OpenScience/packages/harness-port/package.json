@@ -26,8 +26,7 @@
     "./runtime-ui-toolviews": "./src/runtimeUiToolviews.mjs",
     "./runtime-ui-transcript": "./src/runtimeUiTranscript.mjs",
     "./runtime-ui-panels": "./src/runtimeUiPanels.mjs",
-    "./runtime-ui-styles": "./src/runtimeUiStyles.mjs",
-    "./runtime-ui-controls": "./src/runtimeUiControls.mjs"
+    "./runtime-ui-styles": "./src/runtimeUiStyles.mjs"
   },
   "scripts": {
     "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",

@@ -14,8 +14,10 @@
  * What the pack rephrases, and why:
  *
  *  - Copy written for a coding agent: "describe what you want to build", a
- *    "Preview" badge that describes the kernel's release stage, a local-build
- *    label, a workspace chooser this deployment binds for you.
+ *    "Preview" badge that describes the kernel's release stage, a workspace
+ *    chooser this deployment binds for you. (The kernel's local-build label,
+ *    `brand.localBuild`, is drawn only by the left column this deployment
+ *    removes, and is left to the kernel.)
  *  - The vendor's name used as a verb (「深度求索中」, DeepSeek's own Chinese
  *    name) for the working indicator.
  *  - One object with three names: the kernel says 「{count} 个 subagent」 in the
@@ -25,6 +27,16 @@
  *  - English left inside Chinese sentences (`token`, `surface`, a trailing
  *    `s`), and a key error written for a laptop user who owns the key — a
  *    hosted runtime holds none, so the reader can do nothing about "API 密钥".
+ *  - Copy that explains the machinery (整改方案 §4, 清单 C §1.3): the
+ *    placeholders say what to type and nothing about commands, a truncated
+ *    answer says how to go on, a retry says that it is retrying — not which
+ *    attempt of how many, nor after how many seconds.
+ *  - What Enter does while a run is working. The composer queues a message on
+ *    plain Enter and steers it into the running turn on Ctrl/⌘+Enter
+ *    (`resolveSubmitMode`, preference `busyEnter`, default `queue`), and the
+ *    send button's tooltip — `input.send.queue` while a typed message waits
+ *    on a running agent — is where that is said, instead of a line above the
+ *    composer for the whole run.
  *
  * `<html lang>`: the locale runtime writes the active language onto the
  * document on every change, and it special-cases only the exact id `zh` (→
@@ -58,25 +70,38 @@ export function evimedDictionaries() {
     conversation: {
       'hero.headline': '从一个研究问题开始',
       'hero.preview': '',
-      'placeholder.hero': '描述你的研究问题或任务… / 调用指令，@ 引用文件或会话',
-      'placeholder.default': '继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话',
+      'placeholder.hero': '描述你的研究问题…',
+      'placeholder.default': '继续提问…',
       // Shown while the composer waits for its workspace; here the control
       // plane binds it, so there is nothing to choose.
-      'placeholder.workspace': '正在连接本项目的工作区…',
+      'placeholder.workspace': '正在连接…',
       // The generic row title of the kernel's code-execution tool.
       'tool.title.code': '运行代码',
+      // The send button's tooltip and accessible name while a typed message
+      // waits on a running agent (see the module note).
+      'input.send.queue': '排队发送 · Ctrl/⌘+Enter 插话',
     },
     chat: {
       // The working indicator under the last message. The kernel's copy is its
       // vendor's Chinese name plus 中; the product's own name goes there.
       'chat.deepDiving': 'EviMed 思考中…',
+      // The folded process of a finished turn counts its delegations by this
+      // name (「171 次工具调用 · 3 个子任务」).
       'message.turnProcess.subagents.one': '{count} 个子任务',
       'message.turnProcess.subagents.other': '{count} 个子任务',
       'message.maxTokens': '这一轮的输出达到了长度上限',
-      'message.maxTokens.hint': '回答被截断，已写出的内容保留在对话中。发送“继续”即可接着写。',
-      'message.failure.auth': '模型服务暂时无法认证。请稍后重试；持续出现请联系管理员。',
+      'message.maxTokens.hint': '发送“继续”接着写',
+      'message.failure.auth': '服务暂时不可用，请稍后重试',
+      // Only an operator's transcript draws an event no renderer knows; a
+      // researcher's hides the row (the transcript body).
       'message.unknownSurface': '无法显示的事件：{type}',
-      'message.retry.status': '{label}（{retry}/{maximum}）· {seconds} 秒',
+      // A retry says that it is retrying. The row keeps its state words and
+      // drops the attempt count and the countdown.
+      'message.retry.status': '{label}',
+      'message.retry.active': '正在重试…',
+      'message.retry.scheduled': '正在重试…',
+      'message.retry.started': '已重试',
+      'message.retry.cancelled': '已取消重试',
     },
     subagent: {
       'count.total.one': '{count} 个子任务',
@@ -90,7 +115,9 @@ export function evimedDictionaries() {
       'load.error': '无法加载子任务',
       'branch.collapse': '收起 {label} 的下级子任务',
       'branch.expand': '展开 {label} 的下级子任务',
-      'diagnostic.unsupported': '子任务记录版本不受支持',
+      // The kernel names the record format it could not read; the reader
+      // needs to know only that this one cannot be shown.
+      'diagnostic.unsupported': '这条子任务记录暂时无法显示',
       'readonly.oneShot.title': '一次性子任务记录',
       'readonly.title': '此子任务暂时只读',
     },
@@ -107,11 +134,6 @@ export function evimedDictionaries() {
     // summary of the same run in fewer words).
     trajectory: {
       'view.trajectory': '运行',
-    },
-    // `common` is where every namespace's fallback pass looks last, so a key
-    // here surfaces wherever a package asks for it.
-    common: {
-      'brand.localBuild': 'EviMed 研究运行时',
     },
   };
 }
