@@ -1,0 +1,165 @@
+{
+  "dependency": "typesafe",
+  "model": "jev-1.13.0",
+  "apiBase": "https://api.typesafe.ai/v1",
+  "observedAt": "2026-09-24T00:35:31.402Z",
+  "observedOn": "the dev box",
+  "firstRecorded": "2026-09-21, the Jev probe: 403 on a missing key, 400 api_usage_error for a bad request and an unknown model, no rate-limit or request-id headers; all unchanged when re-recorded",
+  "sample": {
+    "reply": "心电图是胸痛评估的最佳初始检查 [1]。\n高敏肌钙蛋白检测需要 12 小时以上才能排除心肌梗死 [2]。\n胸痛患者中女性更常报告恶心 [1]。\n\n参考文献：\n1. Electrocardiography in the evaluation of chest pain. doi:10.1000/ecg\n2. High-sensitivity cardiac troponin. doi:10.1000/tn",
+    "sources": {
+      "1": "Electrocardiography in the evaluation of chest pain.\nThe electrocardiogram (ECG) remains the best initial test for chest pain evaluation because it is rapid, inexpensive, and provides critical diagnostic and prognostic information.",
+      "2": "High-sensitivity cardiac troponin.\nHigh-sensitivity cardiac troponin assays allow myocardial infarction to be ruled in or ruled out within 1 to 2 hours of presentation."
+    }
+  },
+  "fixtures": {
+    "answer.json": {
+      "request": {
+        "method": "POST",
+        "path": "/systemone",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "model": "jev-1.13.0",
+          "state": {
+            "items": {
+              "S0": {
+                "sentence": "心电图是胸痛评估的最佳初始检查 [1]。",
+                "sources": {
+                  "[1]": "Electrocardiography in the evaluation of chest pain.\nThe electrocardiogram (ECG) remains the best initial test for chest pain evaluation because it is rapid, inexpensive, and provides critical diagnostic and prognostic information."
+                }
+              },
+              "S1": {
+                "sentence": "高敏肌钙蛋白检测需要 12 小时以上才能排除心肌梗死 [2]。",
+                "sources": {
+                  "[2]": "High-sensitivity cardiac troponin.\nHigh-sensitivity cardiac troponin assays allow myocardial infarction to be ruled in or ruled out within 1 to 2 hours of presentation."
+                }
+              },
+              "S2": {
+                "sentence": "胸痛患者中女性更常报告恶心 [1]。",
+                "sources": {
+                  "[1]": "Electrocardiography in the evaluation of chest pain.\nThe electrocardiogram (ECG) remains the best initial test for chest pain evaluation because it is rapid, inexpensive, and provides critical diagnostic and prognostic information."
+                }
+              }
+            }
+          },
+          "questions": {
+            "S0": {
+              "type": "choice",
+              "instructions": "How do the passages in `items.S0.sources` relate to the sentence `items.S0.sentence`? The sentence may be in Chinese and the passages in English; judge meaning, not wording.",
+              "criteria": {
+                "supports": "The passages state the sentence or directly imply that it is true, including every number in the sentence",
+                "contradicts": "The passages state the opposite of the sentence, or give a different number, direction or recommendation than the sentence",
+                "says_nothing": "The passages do not address what the sentence asserts, either way"
+              }
+            },
+            "S1": {
+              "type": "choice",
+              "instructions": "How do the passages in `items.S1.sources` relate to the sentence `items.S1.sentence`? The sentence may be in Chinese and the passages in English; judge meaning, not wording.",
+              "criteria": {
+                "supports": "The passages state the sentence or directly imply that it is true, including every number in the sentence",
+                "contradicts": "The passages state the opposite of the sentence, or give a different number, direction or recommendation than the sentence",
+                "says_nothing": "The passages do not address what the sentence asserts, either way"
+              }
+            },
+            "S2": {
+              "type": "choice",
+              "instructions": "How do the passages in `items.S2.sources` relate to the sentence `items.S2.sentence`? The sentence may be in Chinese and the passages in English; judge meaning, not wording.",
+              "criteria": {
+                "supports": "The passages state the sentence or directly imply that it is true, including every number in the sentence",
+                "contradicts": "The passages state the opposite of the sentence, or give a different number, direction or recommendation than the sentence",
+                "says_nothing": "The passages do not address what the sentence asserts, either way"
+              }
+            }
+          }
+        }
+      },
+      "status": 200,
+      "ms": 666,
+      "responseHeaders": {
+        "content-type": "application/json",
+        "server": "istio-envoy"
+      }
+    },
+    "unknown-model.json": {
+      "request": {
+        "method": "POST",
+        "path": "/systemone",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "model": "jev-0.0.0",
+          "state": "x",
+          "questions": {
+            "q": {
+              "type": "noul",
+              "instructions": "x is a letter"
+            }
+          }
+        }
+      },
+      "status": 400,
+      "ms": 523,
+      "responseHeaders": {
+        "content-type": "application/json",
+        "server": "istio-envoy"
+      }
+    },
+    "invalid-request.json": {
+      "request": {
+        "method": "POST",
+        "path": "/systemone",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "model": "jev-1.13.0",
+          "state": "x",
+          "questions": {
+            "q": {
+              "type": "ranking",
+              "instructions": "x"
+            }
+          }
+        }
+      },
+      "status": 400,
+      "ms": 248,
+      "responseHeaders": {
+        "content-type": "application/json",
+        "server": "istio-envoy"
+      }
+    },
+    "unauthenticated.json": {
+      "request": {
+        "method": "POST",
+        "path": "/systemone",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "model": "jev-1.13.0",
+          "state": "x",
+          "questions": {
+            "q": {
+              "type": "noul",
+              "instructions": "x is a letter"
+            }
+          }
+        }
+      },
+      "status": 401,
+      "ms": 200,
+      "responseHeaders": {
+        "content-type": "application/json",
+        "server": "istio-envoy"
+      }
+    }
+  }
+}

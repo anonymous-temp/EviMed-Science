@@ -97,6 +97,7 @@ import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierG
 // run's submission asks, the module that reviews, and its reply-check worker.
 import { REVIEW_GATEWAY_PREFIX, createReviewGatewayHandler } from "./reviewGateway.mjs";
 import { ReviewService, replyOfRun, reviewMetricFamilies } from "./reviewService.mjs";
+import { providerRefusalMetricFamily } from "./providerRefusals.mjs";
 import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
@@ -5817,6 +5818,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Refusals by model provider and status; 402 is an exhausted balance and
+  // pages (providerRefusals.mjs, alert ModelProviderBalanceExhausted).
+  const refusals = providerRefusalMetricFamily();
+  addMetric(lines, refusals.name, refusals.help, refusals.type, refusals.series);
 
   return `${lines.join("\n")}\n`;
 }

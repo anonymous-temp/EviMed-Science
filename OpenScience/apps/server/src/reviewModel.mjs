@@ -19,8 +19,10 @@
  *   connection — no chunk for `IDLE_MS` — as the failure it is.
  *
  * Same ledger discipline as every metered call: reserve before, settle on the
- * provider's own count, mark uncertain when a dispatched request was lost,
- * release one that never left. Purpose `review`, charged to the run reviewed.
+ * provider's own count, release one that never left or that the provider
+ * refused outright (a 4xx before any output), mark uncertain one that was sent
+ * and lost (`closeUnsettledReservation`). Purpose `review`, charged to the run
+ * reviewed.
  * The key is the operator's DashScope key, the same file the reranker and the
  * embedder read; it never reaches a runtime.
  *
@@ -30,6 +32,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { REFERENCE_PRICE_LIST, isPeak, priceUsage } from "@evimed/domain";
 import { estimateModelReservation } from "./modelGateway.mjs";
+import { PAYMENT_REQUIRED, recordProviderRefusal } from "./providerRefusals.mjs";
+import { closeUnsettledReservation } from "./usageLedger.mjs";
 
 /** A stream that says nothing for this long has stalled. */
 const IDLE_MS = 120_000;
@@ -59,9 +63,18 @@ function networkCause(error) {
   return /^[A-Za-z0-9_]{1,40}$/.test(code) ? code : "unknown";
 }
 
+/**
+ * DashScope's answer for an account in arrears: HTTP 400 with this code, never
+ * a 402 (help.aliyun.com/zh/model-studio/error-code, read 2026-09-24).
+ */
+const ARREARS = "Arrearage";
+
 /** @param {number} status @param {string} providerCode */
 function failureFor(status, providerCode) {
   if (status === 401 || status === 403) return new ReviewModelError("review_model_auth_failed", "The reviewer's key was refused.", { status });
+  if (status === 402 || providerCode === ARREARS) {
+    return new ReviewModelError("review_model_payment_required", "The reviewer's DashScope account cannot pay: its balance is exhausted or in arrears.", { status });
+  }
   if (status === 404 || providerCode === "model_not_found") return new ReviewModelError("review_model_unavailable", "The reviewer model is not available to this account.", { status });
   if (status === 429) return new ReviewModelError("review_model_rate_limited", "The reviewer model is rate limited.", { status, retryable: true });
   if (status === 400) return new ReviewModelError("review_model_request_invalid", `The reviewer refused the request (${providerCode || "bad request"}).`, { status });
@@ -129,6 +142,8 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
   const onOuterAbort = () => controller.abort(call.signal?.reason ?? new ReviewModelError("review_cancelled", "The review was cancelled."));
   call.signal?.addEventListener?.("abort", onOuterAbort, { once: true });
   let dispatched = false;
+  /** The status of an answer that came back without output, 0 while none has. */
+  let refusedStatus = 0;
   try {
     let response;
     try {
@@ -146,6 +161,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     }
     dispatched = true;
     if (!response.ok) {
+      refusedStatus = response.status;
       let providerCode = "";
       try {
         const payload = JSON.parse(await response.text());
@@ -153,6 +169,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
       } catch {
         providerCode = "";
       }
+      recordProviderRefusal("dashscope", providerCode === ARREARS ? PAYMENT_REQUIRED : response.status);
       throw failureFor(response.status, providerCode);
     }
     let content = "";
@@ -233,8 +250,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     call.signal?.removeEventListener?.("abort", onOuterAbort);
     if (usageLedger && reservation) {
       try {
-        if (dispatched) await usageLedger.markUncertain(call.userId, reservation.id, "provider_response_incomplete", {});
-        else await usageLedger.release(call.userId, reservation.id, "provider_not_accepted");
+        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus });
       } catch {
         process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
       }

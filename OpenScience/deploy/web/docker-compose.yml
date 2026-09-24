@@ -414,6 +414,13 @@ services:
       OPEN_SCIENCE_REVIEW_REPLY_CONCURRENCY:
       OPEN_SCIENCE_REVIEW_POLL_MS:
       OPEN_SCIENCE_REVIEW_REFERENCE_TIMEOUT_MS:
+      # TypeSafe's Jev, the reply check's first pass (replyCheckJev.mjs): on
+      # wherever its key file below is mounted. Value-less: unset keeps
+      # config.mjs's defaults. The controller gets none of it — no runtime
+      # ever talks to Jev.
+      OPEN_SCIENCE_REVIEW_JEV_ENABLED:
+      OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS:
+      OPEN_SCIENCE_TYPESAFE_API_KEY_FILE: /run/secrets/typesafe-api-key
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN:-}
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:-}
       OPEN_SCIENCE_BACKUP_MODE: ${OPEN_SCIENCE_BACKUP_MODE:-disabled}
@@ -772,6 +779,13 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
         target: /run/secrets/edge-proxy-credentials
+        read_only: true
+      # TypeSafe's key, for Jev (owner-only, like the DashScope key). Optional:
+      # a deployment without one binds /dev/null, which config.mjs reads as no
+      # key, and the reply check asks the reviewer model about every sentence.
+      - type: bind
+        source: ${OPEN_SCIENCE_TYPESAFE_API_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/typesafe-api-key
         read_only: true
     depends_on:
       evimed-postgres:

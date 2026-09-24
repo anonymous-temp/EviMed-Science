@@ -54,7 +54,6 @@ import {
   REVIEW_FINDING_KIND_LABELS_ZH,
   acceptEditorChecks,
   acceptEditorFindings,
-  acceptReplyVerdicts,
   acceptReviewResponses,
   clinicalSafetyCautionHits,
   deliverableReviewTier,
@@ -76,6 +75,8 @@ import {
   studyTypeLabel,
 } from "@evimed/domain";
 import { callReviewModel, ReviewModelError } from "./reviewModel.mjs";
+import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
+import { judgeCitedSentences } from "./replyCheckJev.mjs";
 import { migrateReview } from "./reviewPersistence.mjs";
 import { createReferenceResolver } from "./referenceResolver.mjs";
 import { openScopedFileNoFollow } from "./security.mjs";
@@ -318,6 +319,19 @@ export class ReviewService {
       /** @type {Record<string, number>} */ responses: {}, replyChecks: 0, replyFailures: 0,
       /** @type {Record<string, number>} */ replyVerdicts: {}, safetyAlerts: 0,
     };
+    /**
+     * The reply check's first pass (replyCheckJev.mjs): requests by outcome,
+     * failures by code, sentences by outcome. The known outcomes start at zero
+     * so their series exist before the first event — an alert comparing
+     * `failed` with `answered` needs both.
+     */
+    this.jevCounts = {
+      /** @type {Record<string, number>} */ requests: { answered: 0, failed: 0, too_large: 0 },
+      /** @type {Record<string, number>} */ failures: {},
+      /** @type {Record<string, number>} */ sentences: { decided: 0, escalated: 0, medicine: 0, failed: 0, too_large: 0 },
+    };
+    /** The first pass's last failure, cleared by its next answer. @type {string | null} */
+    this.jevLastError = null;
     /** @type {string | null} */
     this.lastError = null;
   }
@@ -330,6 +344,11 @@ export class ReviewService {
   /** Whether the reviewer has a key to call its model with. */
   get configured() {
     return Boolean(String(this.config.dashscopeApiKey ?? ""));
+  }
+
+  /** Whether the reply check asks Jev first: its lever on and its key present. */
+  get jevEnabled() {
+    return Boolean(this.config.reviewJevEnabled && String(this.config.typesafeApiKey ?? ""));
   }
 
   /** The schema, and runs a restart interrupted marked as such. */
@@ -794,23 +813,35 @@ export class ReviewService {
     /** @type {any[]} */
     let verdicts = [];
     let cost = 0;
+    /** @type {string | null} */
     let model = null;
     if (sentences.length) {
       const cited = references.filter((reference) => sentences.some((sentence) => sentence.numbers.includes(reference.number)));
       const readable = await this.resolver.sourceTexts(cited);
-      const answer = readable.size
-        ? await callReviewModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
+      const ledger = { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl };
+      // Jev first where it may settle a sentence; the reviewer model for the
+      // rest, or for all of them when Jev is off or fails (replyCheckJev.mjs).
+      const judged = await judgeCitedSentences({
+        sentences, references: cited, readable,
+        threshold: Number(this.config.reviewJevSupportConfidence),
+        jev: this.jevEnabled
+          ? (request) => callJev({ ...ledger, retryDelayMs: Math.min(this.retryDelayMs, JEV_RETRY_DELAY_MS) }, {
+            userId: row.user_id, projectId: row.project_id, runId: row.run_id, purpose: "review", ...request,
+          })
+          : null,
+        reviewer: ({ sentences: rest, references: restReferences }) => callReviewModel(ledger, {
           userId: row.user_id, projectId: row.project_id, runId: row.run_id,
           messages: [
             { role: "system", content: replySystemPrompt() },
-            { role: "user", content: replyMessage({ sentences, references: cited, readable }) },
+            { role: "user", content: replyMessage({ sentences: rest, references: restReferences, readable }) },
           ],
           schema: REPLY_CHECK_OUTPUT_SCHEMA, schemaName: "reply_check",
           thinking: { enabled: false }, maxTokens: 4_000,
           timeoutMs: Number(this.config.reviewReplyTimeoutMs ?? 90_000),
-        })
-        : null;
-      verdicts = acceptReplyVerdicts(answer?.value ?? { verdicts: [] }, { sentences, readable }).map((verdict) => {
+        }),
+        onJev: (summary) => this.#countJev(summary),
+      });
+      verdicts = judged.verdicts.map((verdict) => {
         const sentence = sentences[verdict.sentence];
         const source = cited.find((reference) => sentence?.numbers.includes(reference.number));
         return {
@@ -820,8 +851,8 @@ export class ReviewService {
           source: source ? { number: source.number, title: clip(source.text, 200), url: sourceUrl(source) } : null,
         };
       });
-      cost = answer?.cost ?? 0;
-      model = answer?.model ?? null;
+      cost = judged.cost;
+      model = judged.models.join("+") || null;
     }
     const counts = { ...replyCheckCounts(verdicts), cautions: cautions.length };
     for (const verdict of verdicts) this.counts.replyVerdicts[verdict.verdict] = (this.counts.replyVerdicts[verdict.verdict] ?? 0) + 1;
@@ -831,6 +862,31 @@ export class ReviewService {
     [row.id, JSON.stringify(sentences.map((sentence) => ({ index: sentence.index, numbers: sentence.numbers }))), JSON.stringify(verdicts),
       JSON.stringify(cautions), JSON.stringify(counts), model, cost]);
     if (counts.contradictedSafety > 0 && !row.notified) await this.#alertSafety(row, verdicts.filter((verdict) => verdict.safety === "contradicted"));
+  }
+
+  /**
+   * What the reply check's first pass did, into its counters: a request made
+   * (answered, failed, or not sent for being over Jev's ceiling), a failure by
+   * its code, and each sentence by what became of it.
+   * @param {import("./replyCheckJev.mjs").JevPassSummary} summary
+   */
+  #countJev(summary) {
+    if (summary.outcome === "off") return;
+    const add = (/** @type {Record<string, number>} */ map, /** @type {string} */ key, count = 1) => {
+      if (count > 0) map[key] = (map[key] ?? 0) + count;
+    };
+    if (summary.outcome !== "none") add(this.jevCounts.requests, summary.outcome);
+    if (summary.outcome === "answered") this.jevLastError = null;
+    if (summary.code) {
+      add(this.jevCounts.failures, summary.code);
+      // Over the ceiling is a reply too long for Jev, not Jev failing.
+      if (summary.outcome === "failed") this.jevLastError = summary.code;
+      this.report(summary.code);
+    }
+    add(this.jevCounts.sentences, "decided", summary.decided);
+    add(this.jevCounts.sentences, "escalated", summary.escalated);
+    add(this.jevCounts.sentences, "medicine", summary.medicine);
+    if (summary.code) add(this.jevCounts.sentences, summary.outcome === "too_large" ? "too_large" : "failed", summary.asked);
   }
 
   /**
@@ -880,6 +936,7 @@ export class ReviewService {
         evidence: verdict.evidence,
         safety: verdict.safety,
         source: verdict.source,
+        ...(verdict.by ? { by: verdict.by } : {}),
       })),
       createdAt: row.created_at,
       finishedAt: row.finished_at,
@@ -896,6 +953,10 @@ export class ReviewService {
       editorsActive: this.editors.active,
       editorsQueued: this.editors.queued,
       references: this.resolver?.stats?.() ?? null,
+      jev: {
+        enabled: this.jevEnabled,
+        requests: { ...this.jevCounts.requests }, failures: { ...this.jevCounts.failures }, sentences: { ...this.jevCounts.sentences },
+      },
     };
   }
 
@@ -913,7 +974,22 @@ export class ReviewService {
     } catch (error) {
       throw readinessError("review_migration_failed", { reason: typeof error?.code === "string" ? error.code : "migration_error" });
     }
-    return { required: true, enabled: true, model: this.config.reviewModel, ...(this.lastError ? { warning: this.lastError } : {}) };
+    return { required: true, enabled: true, model: this.config.reviewModel, jev: this.#jevReadiness(), ...(this.lastError ? { warning: this.lastError } : {}) };
+  }
+
+  /**
+   * The first pass's line in readiness: on with its pinned model, or off and
+   * why. Never red — without Jev every sentence goes to the reviewer model, as
+   * before — but a key file that could not be read says so by name.
+   */
+  #jevReadiness() {
+    if (this.jevEnabled) return { enabled: true, model: this.config.reviewJevModel, ...(this.jevLastError ? { warning: this.jevLastError } : {}) };
+    const keyError = this.config.typesafeApiKeyError ?? null;
+    return {
+      enabled: false,
+      reason: keyError ? "key_unreadable" : String(this.config.typesafeApiKey ?? "") ? "switched_off" : "no_key",
+      ...(keyError ? { warning: String(keyError) } : {}),
+    };
   }
 }
 
@@ -1279,6 +1355,19 @@ export function reviewMetricFamilies(enabled, stats) {
       { value: stats.editorsQueued, labels: { state: "editor_queued" } },
     ] },
   );
+  // The reply check's first pass (replyCheckJev.mjs): whether it is on, what
+  // its requests came to and why they failed, and what became of each
+  // sentence — escalated / (decided + escalated) is the share the reviewer
+  // model still judges; a failing Jev costs money and time, never a verdict.
+  const jev = stats.jev;
+  if (jev) {
+    families.push(
+      { name: "open_science_review_jev_enabled", help: "Whether the reply check asks TypeSafe's Jev first: its lever on and its key present.", type: "gauge", series: [{ value: jev.enabled ? 1 : 0 }] },
+      { name: "open_science_review_jev_requests_total", help: "Jev requests of the reply check, by outcome: answered, failed, or too_large (not sent: over Jev's per-request ceiling).", type: "counter", series: split(jev.requests, "outcome") },
+      { name: "open_science_review_jev_failures_total", help: "Jev requests that failed or were not sent, by code; each reply fell back to the reviewer model for every sentence.", type: "counter", series: split(jev.failures, "code") },
+      { name: "open_science_review_jev_sentences_total", help: "Cited sentences by what the first pass did: decided (Jev, confident support), escalated (to the reviewer model), medicine (never put to Jev), failed or too_large (their request failed, or was not sent).", type: "counter", series: split(jev.sentences, "outcome") },
+    );
+  }
   return families;
 }
 
