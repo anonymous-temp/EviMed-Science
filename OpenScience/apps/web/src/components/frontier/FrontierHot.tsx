@@ -65,37 +65,41 @@ export type HotState = { board: FrontierHotBoard | null; error: string | null } 
  * heat — the one number — over its 24-hour trend. 当前 · 本周 · 本月 above,
  * when the ranking was taken at the right, and 「热度怎么算」 folded below.
  *
- * The window chips appear once the server stamps its rankings (`takenAt`): a
- * server without them answers every window with the current list, and a
- * chip that changed nothing would say something false.
+ * The window chips appear once the server stamps its rankings (`windows`,
+ * from a `takenAt` it sent): a server without them answers every window with
+ * the current list, and a chip that changed nothing would say something
+ * false. They stay while another window's ranking is read.
  */
-export function HotBoard({ state, window, onWindow, onRetry }: {
+export function HotBoard({ state, window, windows, onWindow, onRetry }: {
   state: HotState;
   window: FrontierHotWindow;
+  windows: boolean;
   onWindow: (window: FrontierHotWindow) => void;
   onRetry: () => void;
 }) {
-  if (!state) return <FrontierSkeleton />;
-  if (state.error && !state.board) return <LoadError message={state.error} onRetry={onRetry} />;
-  const board = state.board;
-  if (!board) return <EmptyState icon={Flame} title="热榜还在准备" />;
+  const board = state?.board ?? null;
+  const body = !state ? <FrontierSkeleton />
+    : state.error && !board ? <LoadError message={state.error} onRetry={onRetry} />
+      : !board ? <EmptyState icon={Flame} title="热榜还在准备" />
+        : board.events.length === 0 ? <EmptyState icon={Flame} title="暂无热点" />
+          : (
+            <ol aria-label="热榜" className="mt-1">
+              {board.events.map((event) => <HotRow key={event.id} event={event} />)}
+            </ol>
+          );
   return (
     <div>
-      {board.takenAt && (
+      {windows && (
         <FilterChips
           label="时间范围"
           options={WINDOW_OPTIONS}
           value={window}
           onChange={onWindow}
-          trailing={<span className="text-caption text-text-3">{hotBoardStamp(board.window, board.takenAt)}</span>}
+          trailing={board?.takenAt ? <span className="text-caption text-text-3">{hotBoardStamp(board.window, board.takenAt)}</span> : undefined}
         />
       )}
-      {board.events.length === 0 ? <EmptyState icon={Flame} title="暂无热点" /> : (
-        <ol aria-label="热榜" className="mt-1">
-          {board.events.map((event) => <HotRow key={event.id} event={event} />)}
-        </ol>
-      )}
-      {board.events.some((event) => event.heat !== null) && (
+      {body}
+      {board?.events.some((event) => event.heat !== null) && (
         <Disclosure className="mt-4" summary={<span className="text-caption">热度怎么算</span>}>
           <div className="max-w-measure space-y-2 text-caption text-text-2">
             {HEAT_METHOD_ZH.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}

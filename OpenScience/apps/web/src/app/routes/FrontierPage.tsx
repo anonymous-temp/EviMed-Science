@@ -530,7 +530,15 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const main = (() => {
     switch (view) {
       case "hot":
-        return <HotBoard state={hot[hotWindow] ?? null} window={hotWindow} onWindow={setHotWindow} onRetry={() => setHotAttempt((value) => value + 1)} />;
+        return (
+          <HotBoard
+            state={hot[hotWindow] ?? null}
+            window={hotWindow}
+            windows={Object.values(hot).some((entry) => Boolean(entry?.board?.takenAt))}
+            onWindow={setHotWindow}
+            onRetry={() => setHotAttempt((value) => value + 1)}
+          />
+        );
       case "daily":
         return <DailyIssue state={daily} onDay={openDay} />;
       case "foryou":
@@ -573,7 +581,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         />
       )}
     >
-      <Tabs label="前沿动态" items={VIEWS} value={view} onChange={setView} panelId="frontier-view" />
+      <Tabs label="视图" items={VIEWS} value={view} onChange={setView} panelId="frontier-view" />
       <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${view}`} className="mt-5">
         {ready ? main : <FrontierSkeleton />}
       </div>

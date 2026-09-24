@@ -546,17 +546,24 @@ describe("热榜", () => {
     expect(document.body.textContent).not.toContain("爆");
   });
 
-  it("reads this week's ranking when asked, with each row's own count", async () => {
-    client.fetchFrontierHotBoard.mockImplementation(async (window: string) => (window === "week"
-      ? board([hotEvent(1, { heat: null, trend: null, period: { institutions: 9, reports: 14, hoursOnList: 31, bestRank: 2 }, primary: "official", hasPrimary: true })], { window: "week" })
-      : board(events)));
+  it("reads this week's ranking when asked, with each row's own count, and keeps the chips while it reads", async () => {
+    let release: () => void = () => {};
+    const week = new Promise<void>((resolve) => { release = resolve; });
+    client.fetchFrontierHotBoard.mockImplementation(async (window: string) => {
+      if (window !== "week") return board(events);
+      await week;
+      return board([hotEvent(1, { heat: null, trend: null, period: { institutions: 9, reports: 14, hoursOnList: 31, bestRank: 2 }, primary: "official", hasPrimary: true })], { window: "week" });
+    });
     renderPage("/app/frontier?view=hot");
     await screen.findByRole("list", { name: "热榜" });
     expect(screen.getByRole("button", { name: "当前" })).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(screen.getByRole("button", { name: "本周" }));
     await waitFor(() => expect(client.fetchFrontierHotBoard).toHaveBeenLastCalledWith("week"));
     expect(location()).toBe("/app/frontier?view=hot&window=week");
+    expect(screen.getByRole("button", { name: "本周" })).toHaveAttribute("aria-pressed", "true");
+    release();
     expect(await screen.findByText("9 家机构报道 · 含官方公告 · 在榜 31 小时 · 最高第 2 名")).toBeInTheDocument();
+    expect(screen.getByText(/^近 7 天 · \d{2}:\d{2} 更新$/)).toBeInTheDocument();
     expect(screen.queryByText("热度")).not.toBeInTheDocument();
   });
 

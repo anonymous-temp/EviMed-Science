@@ -68,16 +68,20 @@ describe("a card", () => {
     for (const score of ["87", "29", "17", "13"]) expect(card.textContent).not.toContain(score);
   });
 
-  it("puts the editorial score at the top right in its band's colour, and says what it is", () => {
+  it("puts the editorial score at the top right, a grey number after a dot in its band's colour, and says what it is", () => {
     renderCard(scored());
     const score = screen.getByTitle("编辑评分 · 满分 100");
     expect(score).toHaveTextContent("编辑评分86");
-    expect(score).toHaveClass("tabular-nums", "text-accent");
+    expect(score).toHaveClass("tabular-nums", "text-text-3");
+    expect(score.querySelector("[data-band]")).toHaveClass("bg-accent");
   });
 
-  it("gives a score below the line the secondary grey, and a low one the faint grey", () => {
-    renderCard(scored({ score: 68, scoreBand: "medium" }));
-    expect(screen.getByTitle("编辑评分 · 满分 100")).toHaveClass("text-text-2");
+  it.each([
+    ["medium", 68, "bg-text-2"],
+    ["low", 42, "bg-text-3"],
+  ])("dots a %s score in its own grey", (band, value, dot) => {
+    renderCard(scored({ score: value, scoreBand: band }));
+    expect(screen.getByTitle("编辑评分 · 满分 100").querySelector("[data-band]")).toHaveClass(dot);
   });
 
   it("scores no safety notice, and says 安全警示 first", () => {
