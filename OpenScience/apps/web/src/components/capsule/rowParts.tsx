@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 
@@ -8,10 +8,10 @@ import { Textarea } from "@/components/ui/Input";
  * line; the one mark a memory keeps; and the row as it is while being edited.
  */
 
-/** The left column: 关于你, 做法, or a project's name — 128 px of quiet text. */
+/** The left column: 关于你, 做法, or a project's name — 128 px of quiet text, 64 on a phone. */
 export function RowOrigin({ label }: { label: string }) {
   return (
-    <span title={label} className="w-32 self-start truncate pt-px text-caption text-text-3">
+    <span title={label} className="w-16 self-start truncate pt-px text-caption text-text-3 sm:w-32">
       {label}
     </span>
   );
@@ -34,6 +34,9 @@ export function EditingRow({ origin, label, value, busy, onChange, onCancel, onS
   onSave: () => void;
   maxLength?: number;
 }) {
+  // 编辑 was a hover icon on the row this replaced, so the field takes the focus.
+  const field = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { field.current?.focus(); }, []);
   return (
     <li className="flex items-start gap-3 rounded px-2 py-3">
       <RowOrigin label={origin} />
@@ -42,6 +45,7 @@ export function EditingRow({ origin, label, value, busy, onChange, onCancel, onS
         onSubmit={(event) => { event.preventDefault(); if (value.trim()) onSave(); }}
       >
         <Textarea
+          ref={field}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           aria-label={label}

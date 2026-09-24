@@ -214,27 +214,33 @@ export function MemoryRecordRow({
         onOpen={opens ? () => setOpen((current) => !current) : undefined}
         expanded={opens ? open : undefined}
         muted={forgotten}
-        meta={opens && open ? (
-          <RowDetail>
-            {record.evidence.slice(-3).reverse().map((evidence) => (
-              <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
-                <p className="text-ui text-text-2">“{evidence.quote}”</p>
-                {evidence.observedAt && <p>{when(evidence.observedAt)}</p>}
-              </div>
-            ))}
-            {[...record.revisions].reverse().slice(0, 5).map((revision) => (
-              <p key={revision.version}>
-                {[when(revision.changedAt), revision.by ? REVISION_BY[revision.by] : ""].filter(Boolean).join(" · ")}
-                {revision.changedAt || revision.by ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
-              </p>
-            ))}
-            {source && <Link to={chatPath(source.sessionId)} className="inline-block text-accent hover:underline">来源对话</Link>}
-          </RowDetail>
-        ) : undefined}
-        trailing={pending ? (
+        meta={pending || (opens && open) ? (
           <>
-            <Tag tone="safety">待确认（用药安全）</Tag>
-            <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>
+            {/* The hold is said under the sentence, where it can never squeeze
+                it, and above the row's stretched target so 确认 is a button. */}
+            {pending && (
+              <div className="relative z-10 mt-1 flex flex-wrap items-center gap-2">
+                <Tag tone="safety">待确认（用药安全）</Tag>
+                <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>
+              </div>
+            )}
+            {opens && open && (
+              <RowDetail>
+                {record.evidence.slice(-3).reverse().map((evidence) => (
+                  <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
+                    <p className="text-ui text-text-2">“{evidence.quote}”</p>
+                    {evidence.observedAt && <p>{when(evidence.observedAt)}</p>}
+                  </div>
+                ))}
+                {[...record.revisions].reverse().slice(0, 5).map((revision) => (
+                  <p key={revision.version}>
+                    {[when(revision.changedAt), revision.by ? REVISION_BY[revision.by] : ""].filter(Boolean).join(" · ")}
+                    {revision.changedAt || revision.by ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
+                  </p>
+                ))}
+                {source && <Link to={chatPath(source.sessionId)} className="inline-block text-accent hover:underline">来源对话</Link>}
+              </RowDetail>
+            )}
           </>
         ) : undefined}
         actions={forgotten ? (
