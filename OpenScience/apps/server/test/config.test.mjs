@@ -483,12 +483,14 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
       writeFile(path.join(secretsDir, "model-gateway.signing"), "model-signing-secret-with-at-least-32-bytes\n", { mode: 0o600 }),
       writeFile(path.join(secretsDir, "evimed-workload.signing"), "workload-signing-secret-with-at-least-32-bytes\n", { mode: 0o600 }),
       writeFile(path.join(secretsDir, "dashscope.api-key"), "test-dashscope-key\n", { mode: 0o600 }),
+      writeFile(path.join(secretsDir, "typesafe.api-key"), "apikey_test-typesafe\n", { mode: 0o600 }),
       writeFile(path.join(secretsDir, "bootstrap-password"), "local-password-with-at-least-16-bytes\n", { mode: 0o600 }),
     ]);
 
     const disabled = loadConfig({ rootDir, localAutoConfig: false });
     assert.equal(disabled.deepseekProviderEnabled, false);
     assert.equal(disabled.dashscopeApiKey, "");
+    assert.equal(disabled.typesafeApiKey, "");
 
     const enabled = loadConfig({ rootDir, localAutoConfig: true });
     assert.equal(enabled.deepseekProviderEnabled, true);
@@ -497,6 +499,8 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
     assert.equal(enabled.modelGatewaySigningSecretSource, "file");
     assert.equal(enabled.evimedWorkloadSigningSecretSource, "file");
     assert.equal(enabled.dashscopeApiKeySource, "file");
+    assert.equal(enabled.typesafeApiKeySource, "file");
+    assert.equal(enabled.typesafeApiKey, "apikey_test-typesafe");
     assert.equal(enabled.bootstrapPasswordSource, "file");
   } finally {
     await rm(parent, { recursive: true, force: true });
@@ -606,6 +610,54 @@ test("the reranker defaults to the pins the index's own compatibility is recorde
   assert.equal(config.memoryRerankModel, pins.openviking.rerank.model);
   assert.equal(config.memoryRerankApiBase, pins.openviking.rerank.apiBase);
   assert.equal(config.memoryRerankTimeoutMs, pins.openviking.rerank.timeoutMs);
+});
+
+test("Jev's model, gate and ceilings are the pin and nothing else, and it is on wherever its key is", async () => {
+  const pins = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "evimed-typesafe-config-"));
+  const saved = { enabled: process.env.OPEN_SCIENCE_REVIEW_JEV_ENABLED, timeout: process.env.OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS };
+  try {
+    const none = loadConfig({ rootDir: repoRoot });
+    assert.equal(none.reviewJevModel, pins.typesafe.review.model);
+    assert.match(none.reviewJevModel, /^jev-\d+\.\d+\.\d+$/, "a version, never an alias");
+    assert.equal(none.reviewJevApiBase, pins.typesafe.review.apiBase);
+    assert.equal(none.reviewJevSupportConfidence, pins.typesafe.review.supportConfidence);
+    assert.equal(none.reviewJevMaxRequestTokens, pins.typesafe.review.maxRequestTokens);
+    assert.equal(none.reviewJevMaxStateTokens, pins.typesafe.review.maxStateTokens);
+    assert.equal(none.reviewJevTimeoutMs, 15_000);
+    assert.equal(none.reviewJevEnabled, false, "no key, no Jev");
+
+    const keyFile = path.join(root, "typesafe.api-key");
+    await writeFile(keyFile, "apikey_test-typesafe\n", { mode: 0o600 });
+    const keyed = loadConfig({ rootDir: repoRoot, typesafeApiKeyFile: keyFile });
+    assert.equal(keyed.typesafeApiKey, "apikey_test-typesafe");
+    assert.equal(keyed.typesafeApiKeySource, "file");
+    assert.equal(keyed.reviewJevEnabled, true, "a key present turns it on");
+    process.env.OPEN_SCIENCE_REVIEW_JEV_ENABLED = "false";
+    assert.equal(loadConfig({ rootDir: repoRoot, typesafeApiKeyFile: keyFile }).reviewJevEnabled, false, "the lever keeps the key and stops the calls");
+    delete process.env.OPEN_SCIENCE_REVIEW_JEV_ENABLED;
+
+    // A key others can read is refused by name, and Jev stays off.
+    const loose = path.join(root, "loose.api-key");
+    await writeFile(loose, "apikey_test-typesafe\n", { mode: 0o644 });
+    const refused = loadConfig({ rootDir: repoRoot, typesafeApiKeyFile: loose });
+    assert.equal(refused.typesafeApiKey, "");
+    assert.equal(refused.typesafeApiKeyError, "typesafe_api_key_file_permissions");
+    assert.equal(refused.reviewJevEnabled, false);
+
+    process.env.OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS = "30000";
+    assert.equal(loadConfig({ rootDir: repoRoot }).reviewJevTimeoutMs, 30_000);
+    process.env.OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS = "";
+    assert.equal(loadConfig({ rootDir: repoRoot }).reviewJevTimeoutMs, 15_000, "empty reads as unset");
+    process.env.OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS = "500";
+    assert.throws(() => loadConfig({ rootDir: repoRoot }), /OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000/);
+  } finally {
+    for (const [name, value] of [["OPEN_SCIENCE_REVIEW_JEV_ENABLED", saved.enabled], ["OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS", saved.timeout]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("the thinking effort is a closed vocabulary, refused at load rather than upstream", () => {

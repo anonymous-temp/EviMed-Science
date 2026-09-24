@@ -342,6 +342,53 @@ function reviewConfigured(overrides) {
   return overrides.reviewEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_ENABLED", false);
 }
 
+/**
+ * TypeSafe's Jev as the first pass of the reply check (reviewService.mjs;
+ * plan 2026-09-22 §6, the owner's decision of 2026-09-24).
+ *
+ * - The model, its endpoint, its confidence gate and its two request ceilings
+ *   are the pin (`typesafe.review` in deps-version.json) and nothing else. A
+ *   gate is calibrated per version, so a model named from `.env` would carry
+ *   a threshold nobody measured; a pin that is an alias, or no version at all,
+ *   stops the process at start.
+ * - On wherever a key is present, off without one. The lever turns it off
+ *   with a key in place, and the reply check then asks the reviewer model
+ *   about every sentence, as it did before Jev (principle 15: the reason is
+ *   cost and latency, the counter is `open_science_review_jev_requests_total`).
+ * - The timeout is how long a reply check waits for Jev before the reviewer
+ *   takes every sentence. Jev answered in 0.2–1.3 s in the 2026-09-21 probes,
+ *   so fifteen seconds is an outage, not a slow answer.
+ *
+ * @param {Record<string, any>} overrides @param {boolean} keyPresent
+ */
+function reviewJevSettings(overrides, keyPresent) {
+  const pin = depsVersions.typesafe?.review ?? {};
+  const model = String(pin.model ?? "");
+  if (!/^jev-\d+\.\d+\.\d+$/.test(model)) {
+    throw new Error(`deps-version.json typesafe.review.model must be one Jev version (jev-X.Y.Z), got ${JSON.stringify(model)}.`);
+  }
+  const threshold = Number(pin.supportConfidence);
+  const maxRequestTokens = Number(pin.maxRequestTokens);
+  const maxStateTokens = Number(pin.maxStateTokens);
+  if (!(threshold > 0 && threshold <= 1) || !Number.isSafeInteger(maxRequestTokens) || !Number.isSafeInteger(maxStateTokens) || maxStateTokens > maxRequestTokens) {
+    throw new Error("deps-version.json typesafe.review must carry supportConfidence in (0, 1] and the two request ceilings.");
+  }
+  const timeoutValue = overrides.reviewJevTimeoutMs ?? (process.env.OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS || 15_000);
+  const timeoutMs = Number(timeoutValue);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
+    throw new Error(`OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS must be a whole number from 1000 to 120000, got ${JSON.stringify(timeoutValue)}.`);
+  }
+  return {
+    reviewJevEnabled: overrides.reviewJevEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_JEV_ENABLED", keyPresent),
+    reviewJevModel: model,
+    reviewJevApiBase: String(pin.apiBase ?? "").replace(/\/+$/, ""),
+    reviewJevSupportConfidence: threshold,
+    reviewJevMaxRequestTokens: maxRequestTokens,
+    reviewJevMaxStateTokens: maxStateTokens,
+    reviewJevTimeoutMs: timeoutMs,
+  };
+}
+
 export function loadConfig(overrides = {}) {
   const rootDir = overrides.rootDir ?? process.cwd();
   const port = Number(overrides.port ?? process.env.OPEN_SCIENCE_PORT ?? 8787);
@@ -619,6 +666,22 @@ export function loadConfig(overrides = {}) {
     codePrefix: "dashscope_api_key",
     defaultFile: localSecretFile("dashscope.api-key"),
   });
+  // TypeSafe's key, for Jev, the reply check's first pass (reviewService.mjs).
+  // Control plane only, like the DashScope key: no runtime ever receives it.
+  // Optional: compose binds /dev/null where a deployment has none, which reads
+  // as no key rather than as a broken secret, and the reply check then asks
+  // the reviewer model about every sentence, as it did before Jev.
+  const typesafeSecret = (() => {
+    const loaded = preferredFileSecret(overrides, {
+      overrideValue: "typesafeApiKey",
+      overrideFile: "typesafeApiKeyFile",
+      valueEnv: "OPEN_SCIENCE_TYPESAFE_API_KEY",
+      fileEnv: "OPEN_SCIENCE_TYPESAFE_API_KEY_FILE",
+      codePrefix: "typesafe_api_key",
+      defaultFile: localSecretFile("typesafe.api-key"),
+    });
+    return loaded.error === "typesafe_api_key_file_not_regular" ? { value: "", source: "none", error: null } : loaded;
+  })();
   const openVikingSecret = preferredFileSecret(overrides, {
     overrideValue: "openVikingApiKey",
     overrideFile: "openVikingApiKeyFile",
@@ -1403,6 +1466,9 @@ export function loadConfig(overrides = {}) {
     dashscopeApiKey: dashscopeSecret.value,
     dashscopeApiKeySource: dashscopeSecret.source,
     dashscopeApiKeyError: dashscopeSecret.error,
+    typesafeApiKey: typesafeSecret.value,
+    typesafeApiKeySource: typesafeSecret.source,
+    typesafeApiKeyError: typesafeSecret.error,
     memoryRerankModel: String(
       overrides.memoryRerankModel ?? process.env.OPEN_SCIENCE_MEMORY_RERANK_MODEL
       ?? depsVersions.openviking?.rerank?.model ?? "",
@@ -1519,6 +1585,7 @@ export function loadConfig(overrides = {}) {
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
     ...reviewSettings(overrides),
+    ...reviewJevSettings(overrides, Boolean(typesafeSecret.value)),
     // The learning loop's own knobs.
     //
     // On by default since 2026-09-08, and the reason it was off is worth keeping

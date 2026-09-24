@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 import { REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { callModelForControlPlane, createModelGatewayHandler, issueModelGatewayBudgetMarker } from "../src/modelGateway.mjs";
+import { providerRefusalCount } from "../src/providerRefusals.mjs";
 
 const signingSecret = "test-only-model-gateway-signing-secret-32-bytes";
 
@@ -107,6 +108,7 @@ test("provider refusal releases the reservation and budget refusal never calls u
   }, ledger(events), { messages: [{ role: "user", content: "Provider refuses." }] });
   assert.equal(refused.status, 429);
   assert.deepEqual(events.map((event) => event.type), ["reserve", "release"]);
+  assert.equal(events[1].code, "provider_refused_429", "released under the status the provider refused with");
 
   let upstreamCalls = 0;
   const deniedEvents = [];
@@ -116,6 +118,24 @@ test("provider refusal releases the reservation and budget refusal never calls u
   assert.equal(denied.status, 402);
   assert.equal(upstreamCalls, 0);
   assert.deepEqual(deniedEvents.map((event) => event.type), ["reserve"]);
+});
+
+test("a refusal before any output is released and a 5xx is uncertain, at the gateway as everywhere", async (t) => {
+  // One rule for every metered client (usageLedger.mjs closeUnsettledReservation):
+  // a spent balance (402) or a malformed request (400) declined the call in
+  // writing; a 5xx may come from an edge while the model kept working.
+  for (const [status, expected] of [[402, ["release", "provider_refused_402"]], [400, ["release", "provider_refused_400"]],
+    [503, ["uncertain", "provider_response_incomplete"]], [500, ["uncertain", "provider_response_incomplete"]]]) {
+    const events = [];
+    const response = await call(t, async (req, res) => {
+      for await (const _chunk of req) { /* consume */ }
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end('{"error":{"message":"no"}}');
+    }, ledger(events), { messages: [{ role: "user", content: `Provider answers ${status}.` }] });
+    await response.text();
+    assert.deepEqual(events.map((event) => event.type), ["reserve", expected[0]], String(status));
+    assert.equal(events[1].code, expected[1], String(status));
+  }
 });
 
 test("an ambiguous connection loss after dispatch stays uncertain for reconciliation", async (t) => {
@@ -469,9 +489,36 @@ test("a refused control-plane call carries the provider's own status, not only t
       body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }),
     (error) => error.code === "model_gateway_upstream_error" && error.status === 502 && error.upstreamStatus === 503,
   );
-  // Reached the provider, so uncertain rather than released (the extraction
-  // test "a provider that refuses ..." holds the reason).
+  // A 5xx reached the provider and may have been worked on: uncertain.
   assert.deepEqual(events.map((event) => event.type), ["reserve", "uncertain"]);
+  assert.equal(events[1].code, "provider_response_incomplete");
+});
+
+test("a control-plane call the provider refuses outright is released, not held as possibly spent", async () => {
+  // Production 2026-09-23: the DeepSeek balance ran out for two hours and every
+  // frontier call was answered 402. They were booked uncertain — 569 rows
+  // held at their reserved ceilings against the feed's daily budget — for calls
+  // the provider had declined before producing a token.
+  for (const status of [402, 401, 400, 404, 413, 422, 429]) {
+    const events = [];
+    await assert.rejects(
+      callModelForControlPlane({
+        config: config("https://api.deepseek.com"), usageLedger: ledger(events),
+        fetchImpl: async () => Response.json({ error: { message: "Insufficient Balance" } }, { status }),
+      }, { userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", limits: { daily: 0, weekly: 0 },
+        body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "Screen." }] } }),
+      (error) => error.upstreamStatus === status,
+    );
+    assert.deepEqual(events.map((event) => event.type), ["reserve", "release"], String(status));
+    assert.equal(events[1].code, `provider_refused_${status}`);
+  }
+  // Never sent at all is released as before.
+  const lost = [];
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger(lost),
+    fetchImpl: async () => { throw new TypeError("fetch failed"); },
+  }, { userId: "usage-owner", projectId: "default", body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }));
+  assert.deepEqual(lost.map((event) => [event.type, event.code]).slice(1), [["release", "provider_not_accepted"]]);
 });
 
 test("an attached image is reserved by its pixels, not by the length of its base64", async (t) => {
@@ -504,4 +551,38 @@ test("an attached image is reserved by its pixels, not by the length of its base
   const forText = cost(asText) - cost(alone);
   assert.ok(forImage > 0, "an image still costs something");
   assert.ok(forImage * 5 < forText, `an image added ${forImage}, the same bytes as text ${forText}`);
+});
+
+test("an exhausted DeepSeek balance is named, counted by provider, and released, on both gateway paths", async (t) => {
+  // 2026-09-23: DeepSeek answered every call 402 for two hours and nothing
+  // alerted. The alert reads open_science_model_provider_refusals_total.
+  const before = providerRefusalCount("deepseek", 402);
+  const events = [];
+  const response = await call(t, async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(402, { "content-type": "application/json" });
+    res.end('{"error":{"message":"Insufficient Balance","type":"unknown_error"}}');
+  }, ledger(events), { messages: [{ role: "user", content: "Spent." }] });
+  const body = await response.json();
+  assert.equal(body.error.code, "model_gateway_payment_required", "the runtime is told the balance is exhausted, not a generic refusal");
+  assert.deepEqual(events.map((event) => [event.type, event.code]).slice(1), [["release", "provider_refused_402"]]);
+  assert.equal(providerRefusalCount("deepseek", 402), before + 1);
+
+  // The control plane's own calls (the frontier feed's path) the same way.
+  const frontier = [];
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger(frontier),
+    fetchImpl: async () => Response.json({ error: { message: "Insufficient Balance" } }, { status: 402 }),
+  }, { userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", limits: { daily: 0, weekly: 0 },
+    body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "Screen." }] } }),
+  (error) => error.code === "model_gateway_payment_required" && error.upstreamStatus === 402);
+  assert.deepEqual(frontier.map((event) => [event.type, event.code]).slice(1), [["release", "provider_refused_402"]]);
+  assert.equal(providerRefusalCount("deepseek", 402), before + 2);
+  // A 5xx is not a refusal and is not counted as one.
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger([]),
+    fetchImpl: async () => new Response("down", { status: 503 }),
+  }, { userId: "usage-owner", projectId: "default", body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }),
+  (error) => error.code === "model_gateway_upstream_error");
+  assert.equal(providerRefusalCount("deepseek", 503), 0);
 });

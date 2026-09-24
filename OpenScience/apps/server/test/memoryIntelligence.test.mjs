@@ -1090,10 +1090,12 @@ test("a provider that refuses releases the reservation instead of leaving it aga
   assert.equal(result.source, "model");
   assert.equal(result.extracted, 0, "a failed extraction writes no guesses in its place");
   assert.ok(result.extractionError);
-  // Dispatched and then refused: the provider answered, so the call reached it
-  // and `uncertain` is the honest terminal state — a release would claim the
-  // provider never saw it.
-  assert.equal(ledgerCalls.find((entry) => entry[0] === "uncertain")?.[3], "provider_response_incomplete");
+  // Refused outright before any output: the provider declined the call in
+  // writing and billed nothing, so the reservation is released under the
+  // status it refused with (usageLedger.mjs closeUnsettledReservation). It
+  // used to be `uncertain`, which held the reserved ceiling as possibly spent.
+  assert.equal(ledgerCalls.find((entry) => entry[0] === "release")?.[3], "provider_refused_429");
+  assert.equal(ledgerCalls.some((entry) => entry[0] === "uncertain"), false);
 });
 
 test("the run's own brief is never read as something the researcher said", async () => {
