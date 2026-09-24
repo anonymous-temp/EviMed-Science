@@ -9,6 +9,7 @@
  * suite holds the real store to those; what the unit tests here need is the
  * shape of each record and the conflicts a revision mismatch raises.
  */
+import { productInteger } from "../../src/productPersistence.mjs";
 import { HttpError } from "../../src/security.mjs";
 
 /** @param {any} payload @param {Record<string, any>} filter */
@@ -41,6 +42,7 @@ export function productDocumentsDouble() {
       return row && (includeDeleted || !row.deletedAt) ? publicRow(row) : null;
     },
     async list(userId, kind, { limit = 50, projectId = undefined, filter = {}, deleted = false, fields = null } = {}) {
+      productInteger(limit, 1, 100); // the real store's page bound
       const items = [...rows.values()]
         .filter((row) => row.userId === userId && row.kind === kind && Boolean(row.deletedAt) === deleted)
         .filter((row) => projectId === undefined || (row.projectId ?? null) === (projectId ?? null))

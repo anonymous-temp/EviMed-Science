@@ -8,13 +8,17 @@ import { AutopilotService, parseVerificationResult, recomputationVerdict, splitE
 import { AutopilotWorker } from "../src/autopilotWorker.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
+import { productInteger } from "../src/productPersistence.mjs";
 import { HttpError, resolveScopedPath, sendError } from "../src/security.mjs";
 
 class MemoryDocuments {
   constructor() { this.rows = new Map(); }
   key(userId, kind, id) { return `${userId}:${kind}:${id}`; }
   async get(userId, kind, id) { return this.rows.get(this.key(userId, kind, id)) ?? null; }
-  async list(userId, kind, { projectId, filter = {} } = {}) {
+  async list(userId, kind, { projectId, filter = {}, limit = 50 } = {}) {
+    // The real store's bound (productStore.list): a page above it is a 400,
+    // which is what every 主动科研 page load got from a limit of 200 (2026-09-24).
+    productInteger(limit, 1, 100);
     const items = [...this.rows.values()].filter((row) => row.userId === userId && row.kind === kind
       && (projectId === undefined || row.projectId === projectId)
       && Object.entries(filter).every(([key, value]) => row.payload[key] === value));
@@ -74,6 +78,10 @@ test("opening an owned digest records reading without treating list or get as ac
   assert.equal(before.payload.lastDigestOpenedAt, null, "creating an agenda is not a digest read");
   at = new Date("2026-09-12T01:00:00Z");
   await service.listDigests("user-one", { projectId: agenda.projectId });
+  // The page's own reads, within the store's page bound.
+  await service.list("user-one", { projectId: agenda.projectId });
+  await service.listEpisodes("user-one", { projectId: agenda.projectId });
+  await service.listEpisodes("user-one", { projectId: agenda.projectId, agendaId: agenda.id });
   await service.getDigest("user-one", digest.id);
   assert.equal((await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt, before.payload.lastDigestOpenedAt);
   assert.equal((await service.getDigest("user-one", digest.id)).payload.openedAt, null);
