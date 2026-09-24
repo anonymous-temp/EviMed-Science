@@ -1743,6 +1743,49 @@ test("an opening that joins a start already under way still makes room as an ope
   await manager.closeAll();
 });
 
+test("a speculative warm-up takes free room only: it retires nothing, leaves no start error, and an opening that joins it makes room", async () => {
+  // Production, 2026-09-24: opening one project's group in the sidebar warmed
+  // it by retiring the researcher's other idle runtime, and the click into
+  // that other project that followed was refused and not usable in 60 s.
+  const manager = new RuntimeManager({
+    runtimeMode: "kernel",
+    runtimeSandboxMode: "docker",
+    maxRunningRuntimes: 10,
+    maxRunningRuntimesPerUser: 1,
+  }, { hasRunningRuns: async () => false });
+  manager.startKernel = async (currentProject) => ({ ...fakeRuntime(`${currentProject.userId}-${currentProject.id}`, currentProject.workspaceDir), project: currentProject });
+  manager.runtimeBusy = async () => false;
+  const stopped = [];
+  manager.stopIdleRuntime = async (stopping) => { stopped.push(stopping.id); manager.runtimes.delete(manager.key(stopping)); };
+  const projectB = { ...project, id: "paper2", workspaceDir: "/srv/open-science/users/alice/projects/paper2/workspace" };
+  await manager.start(project);
+
+  await assert.rejects(() => manager.start(projectB, { speculative: true }), (err) => err.code === "runtime_limit_exceeded");
+  assert.deepEqual(stopped, [], "the idle runtime of the project the researcher may click next stays up");
+  assert.equal(manager.startFailures.has(manager.key(projectB)), false, "a guess refused for room is not the project's start error");
+  assert.equal(manager.speculativeStarts.size, 0);
+
+  // In free room a guess starts as any warm-up does.
+  const roomy = new RuntimeManager({ runtimeMode: "kernel", runtimeSandboxMode: "docker", maxRunningRuntimes: 10, maxRunningRuntimesPerUser: 2 });
+  roomy.startKernel = manager.startKernel;
+  await roomy.start(project);
+  assert.equal((await roomy.start(projectB, { speculative: true })).url, "http://127.0.0.1/alice-paper2");
+  await roomy.closeAll();
+
+  // A guess the frame's own start joins before room is made is an opening.
+  let measured;
+  manager.enforceProjectQuota = () => new Promise((resolve) => { measured = resolve; });
+  const guess = manager.start(projectB, { speculative: true });
+  for (let i = 0; i < 20 && !measured; i++) await sleep(1);
+  const opening = manager.start(projectB, { opening: true });
+  measured();
+  const [guessed, opened] = await Promise.all([guess, opening]);
+  assert.equal(guessed, opened, "one start, joined");
+  assert.deepEqual(stopped, ["paper1"]);
+  assert.equal(manager.speculativeStarts.size, 0, "nothing is left marked once the start settles");
+  await manager.closeAll();
+});
+
 test("an opening held only by the deployment's ceiling takes another researcher's long-idle runtime before its owner's hidden one", async () => {
   const manager = new RuntimeManager({
     runtimeMode: "kernel",

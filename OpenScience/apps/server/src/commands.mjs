@@ -315,8 +315,11 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
     async start_runtime(args, ctx) {
       // `opening`: the shell's conversation frame starting the runtime it is
       // about to show — the one start that may take the researcher's own idle
-      // runtime a tab still holds (`makeRoomFor`). A warm-up says nothing.
-      await runtimeManager.start(ctx.project, { opening: args?.opening === true });
+      // runtime a tab still holds (`makeRoomFor`). `speculative`: the sidebar
+      // guessing from a pointer — free room only, nothing retired for it. A
+      // warm-up for the project the shell just switched to says neither.
+      const opening = args?.opening === true;
+      await runtimeManager.start(ctx.project, { opening, speculative: !opening && args?.speculative === true });
       return `${publicApiBase(ctx)}/runtime`;
     },
 

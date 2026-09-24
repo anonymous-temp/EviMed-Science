@@ -273,17 +273,18 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   });
 
   // Hovering is the cheapest moment to start a cold runtime: by the click it
-  // may already be up. Never for the project the shell is already in.
+  // may already be up. Never for the project the shell is already in, and
+  // only as a guess — free room only, nothing stopped for it (2026-09-24).
   it("warms another project's runtime when the pointer or keyboard reaches its group", async () => {
     renderBrowser();
     const other = await screen.findByRole("button", { name: "Paper 1" });
 
     await userEvent.hover(other);
-    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1");
+    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1", { speculative: true });
 
     mocks.warmWebRuntime.mockClear();
     act(() => screen.getByRole("button", { name: "在「心衰」新建对话" }).focus());
-    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("p-heart");
+    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("p-heart", { speculative: true });
 
     mocks.warmWebRuntime.mockClear();
     await userEvent.hover(screen.getByRole("button", { name: /^我的研究\s*（当前项目）$/ }));
@@ -301,7 +302,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
 
     await userEvent.keyboard("{Enter}");
     expect(other).toHaveAttribute("aria-expanded", "true");
-    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1");
+    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1", { speculative: true });
   });
 
   // The everyday two: search and a new project. Export, rename and delete

@@ -1968,8 +1968,9 @@ export async function startWebRuntime({ projectId, opening = false }: { projectI
   return parseApiResponse<string>(res);
 }
 
-/** When each project's runtime was last asked to warm, by project id. */
+/** When each project's runtime was last asked to warm, by project id; guesses apart. */
 const warmedAt = new Map<string, number>();
+const guessedAt = new Map<string, number>();
 
 /**
  * Start a project's research runtime ahead of the moment it is needed, and
@@ -1986,16 +1987,23 @@ const warmedAt = new Map<string, number>();
  * `afterRelease`: the caller has just released another project's surface to
  * make room, so a warm-up refused earlier in the minute — by the ceiling that
  * release lifted — must not hold this one back.
+ *
+ * `speculative`: a guess from a pointer over a project the researcher has not
+ * opened. The control plane starts it only in free room and stops nothing for
+ * it — a guess that retired the runtime of the project they then clicked made
+ * that click wait (2026-09-24). A guess does not hold back the warm-up of a
+ * real switch.
  */
-export function warmWebRuntime(projectId: string = getWebProjectId(), { afterRelease = false }: { afterRelease?: boolean } = {}): void {
+export function warmWebRuntime(projectId: string = getWebProjectId(), { afterRelease = false, speculative = false }: { afterRelease?: boolean; speculative?: boolean } = {}): void {
   if (!hasWebApi || !projectId) return;
   const now = Date.now();
-  if (!afterRelease && now - (warmedAt.get(projectId) ?? 0) < 60_000) return;
-  warmedAt.set(projectId, now);
+  const asked = speculative ? guessedAt : warmedAt;
+  if (!afterRelease && now - (asked.get(projectId) ?? 0) < 60_000) return;
+  asked.set(projectId, now);
   void fetchWithWebAuth(commandUrl("start_runtime"), {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
-    body: "{}",
+    body: speculative ? JSON.stringify({ speculative: true }) : "{}",
   }).then((res) => res.body?.cancel()).catch(() => {
     // Best effort by design; see above.
   });

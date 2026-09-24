@@ -805,6 +805,20 @@ describe("apiClient", () => {
     await vi.waitFor(() => expect(warms()).toBe(2));
   });
 
+  it("says a guess is a guess, and a guess does not hold back a real switch's warm-up", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => (
+      String(url).endsWith("/api/me") ? csrfMeResponse() : responseJson("https://science.example/api/runtime")
+    ));
+    const client = await loadClient("https://science.example/api");
+    const starts = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/commands/start_runtime"));
+    client.warmWebRuntime("paper3", { speculative: true });
+    await vi.waitFor(() => expect(starts()).toHaveLength(1));
+    expect(JSON.parse(String(starts()[0][1]?.body))).toEqual({ speculative: true });
+    client.warmWebRuntime("paper3");
+    await vi.waitFor(() => expect(starts()).toHaveLength(2));
+    expect(JSON.parse(String(starts()[1][1]?.body))).toEqual({});
+  });
+
   it("remembers what each conversation is called from the ledger reads, the newest run first", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => responseJson([
       { sessionId: "ses_a", title: "ASPREE试验主要结论", question: "ASPREE 的主要结论是什么？" },

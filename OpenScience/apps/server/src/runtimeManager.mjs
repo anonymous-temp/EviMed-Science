@@ -3141,6 +3141,10 @@ export class RuntimeManager {
      *  read when that start makes room (`makeRoomFor`), so an opening that
      *  finds a warm-up's start under way still counts as one. */
     this.openingStarts = new Set();
+    /** Pending starts only a speculative warm-up has asked for, by project
+     *  key: `makeRoomFor` retires nothing for them. Any other caller that
+     *  joins takes its key out. */
+    this.speculativeStarts = new Set();
     /** The last start of each project that was refused, by project key, for
      *  the status the waiting shell polls: `{ code, status, at }`. */
     this.startFailures = new Map();
@@ -3463,13 +3467,19 @@ export class RuntimeManager {
    *   frame) rather than a request of a surface that is already open — see
    *   `makeRoomFor`. It shapes only a start this call begins; one already
    *   under way is joined as it is.
+   *   `speculative`: the shell guessing a project will be opened (a pointer
+   *   over it in the sidebar) — a start that takes free room only. It must
+   *   not retire the researcher's other idle runtime: on 2026-09-24 opening
+   *   one project's group in the sidebar stopped the warm runtime of another,
+   *   and the click into that other one was refused (429) and not usable in
+   *   60 s. A caller that is not speculative joining the start lifts it.
    */
   async start(project, options = {}) {
     return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
 
-  /** @param {Record<string, any>} project @param {{ opening?: boolean }} [options] */
-  async startAdmitted(project, { opening = false } = {}) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean }} [options] */
+  async startAdmitted(project, { opening = false, speculative = false } = {}) {
     const key = this.key(project);
     await this.runtimeQuotaStops.get(key);
     let existing = this.runtimes.get(key);
@@ -3495,7 +3505,11 @@ export class RuntimeManager {
     }
     if (opening) this.openingStarts.add(key);
     const pending = this.starts.get(key);
-    if (pending) return pending;
+    if (pending) {
+      if (!speculative) this.speculativeStarts.delete(key);
+      return pending;
+    }
+    if (speculative && !opening) this.speculativeStarts.add(key);
 
     const started = (async () => {
       this.noteStartStage(project, "environment");
@@ -3504,7 +3518,7 @@ export class RuntimeManager {
       // instead of beginning a second container. Its own entry in `starts` is
       // not counted against the ceilings it checks.
       await this.enforceProjectQuota(project);
-      await this.makeRoomFor(project, { opening: this.openingStarts.has(key) });
+      await this.makeRoomFor(project, { opening: this.openingStarts.has(key), speculative: this.speculativeStarts.has(key) });
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
@@ -3586,16 +3600,21 @@ export class RuntimeManager {
       // runtime slot this deployment had was shown as "cold starts sometimes
       // take longer", and the retry looped forever. The status it polls says
       // what happened instead.
-      this.startFailures.set(key, {
-        code: typeof error?.code === "string" ? error.code : "runtime_start_failed",
-        status: Number.isSafeInteger(error?.status) ? error.status : 502,
-        at: Date.now(),
-      });
+      // A guess refused for want of room is no answer to anyone waiting: the
+      // frame that opens this project next makes its own room.
+      if (!(this.speculativeStarts.has(key) && error?.code === "runtime_limit_exceeded")) {
+        this.startFailures.set(key, {
+          code: typeof error?.code === "string" ? error.code : "runtime_start_failed",
+          status: Number.isSafeInteger(error?.status) ? error.status : 502,
+          at: Date.now(),
+        });
+      }
       throw error;
     } finally {
       this.starts.delete(key);
       this.startProgress.delete(key);
       this.openingStarts.delete(key);
+      this.speculativeStarts.delete(key);
     }
   }
 
@@ -4801,11 +4820,12 @@ export class RuntimeManager {
    *
    * An `opening` — the researcher opening a conversation in this project —
    * may also take their own idle runtime that a tab still holds open; see
-   * the second pass below.
+   * the second pass below. A `speculative` start takes free room only and
+   * retires nothing (see `start`).
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean }} [options]
+   * @param {{ opening?: boolean, speculative?: boolean }} [options]
    */
-  async makeRoomFor(project, { opening = false } = {}) {
+  async makeRoomFor(project, { opening = false, speculative = false } = {}) {
     // Background work waits for room; it never takes a researcher's idle
     // runtime to make some. The capacity check refuses it and its job defers.
     if (isInternalProject(project.id)) return;
@@ -4817,7 +4837,7 @@ export class RuntimeManager {
     const globalFull = () => maxGlobal != null && this.runtimeCount() - self() >= maxGlobal;
     const userFull = () => maxPerUser != null && this.runtimeCountForUser(project.userId) - self() >= maxPerUser;
     const full = () => globalFull() || userFull();
-    if (!full()) return;
+    if (!full() || speculative) return;
     const prefix = `${project.userId}:`;
     const lastUse = (/** @type {string} */ key) => Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0);
     // Unset, the thirty minutes `loadConfig` defaults to: a manager built from
