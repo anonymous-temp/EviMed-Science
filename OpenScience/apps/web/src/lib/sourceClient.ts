@@ -116,6 +116,8 @@ export interface SourcePayload {
     failed: number; percent: number; omissionRate: number | null; parserFailureRate?: number;
   };
   outputs: { summary?: string; facts?: number; methods?: number; artifactPath?: string };
+  /** Set once the document's understanding is in; `outputs.summary` is then its summary. */
+  currentUnderstandingId?: string | null;
   // `message` is the control plane's own English literal — `recordFailure` is
   // called with "Source analysis failed." for every failure, so it carries no
   // information and cannot be shown. `code` is the fact; `@evimed/domain` is
@@ -161,7 +163,16 @@ export function listSourceUnderstandingHistory(id: string, cursor?: string | nul
   if (cursor) query.set("cursor", cursor);
   return productRequest<ProductPage<SourceUnderstanding>>(`/sources/${encodeURIComponent(id)}/understanding/history?${query}`);
 }
-export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string };
+/**
+ * A source as the knowledge base page reads it. `readable` is the server's
+ * answer to the one question the page asks (`sourceReadable`): can the
+ * assistant use this document yet? It is true as soon as the text is read,
+ * while the understanding still runs, so the page never says what the
+ * pipeline is doing behind that.
+ */
+export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; readable?: boolean };
+/** What the page filters by, in the words a row says (`SOURCE_STATES`). */
+export type SourceListState = "reading" | "ready" | "attention";
 export interface OpenListEntry {
   path: string;
   name: string;
@@ -171,9 +182,10 @@ export interface OpenListEntry {
   providerHash: string | null;
 }
 
-export function listSources(projectId: string, { status = "" }: { status?: string } = {}) {
+export function listSources(projectId: string, { status = "", state }: { status?: string; state?: SourceListState } = {}) {
   const query = new URLSearchParams({ projectId });
-  if (status) query.set("status", status);
+  if (state) query.set("state", state);
+  else if (status) query.set("status", status);
   return productRequest<ProductPage<SourceRecord>>(`/sources?${query}`);
 }
 export function overrideSource(id: string, input: { expectedRevision: number; docType: string; depth: string; reason: string }) {

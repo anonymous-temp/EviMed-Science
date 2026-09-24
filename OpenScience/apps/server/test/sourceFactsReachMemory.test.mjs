@@ -9,13 +9,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { LibraryService, PUBLICATION_RECORD_TYPE, libraryCapsuleEntries } from "../src/libraryService.mjs";
+import { LibraryService, PUBLICATION_RECORD_TYPE, PUBLICATION_RULE, libraryCapsuleEntries } from "../src/libraryService.mjs";
 
 const USER = "usr_1";
 const SOURCE = `src_${"a".repeat(32)}`;
 
 const understanding = {
   generation: 1,
+  summary: "非瓣膜性房颤的抗凝指南。",
   slots: { design: { state: "known", value: "随机对照试验", evidence: [{ quote: "randomised controlled trial" }] } },
   claims: [{ id: "c1", statement: "利伐沙班推荐 20 mg 每日一次", evidence: [{ quote: "rivaroxaban 20 mg once daily", start: 10, end: 38 }] }],
   methods: [{ id: "m1", title: "剂量核对", description: "按肾功能核对", steps: [], checks: [], evidence: [] }],
@@ -74,9 +75,9 @@ function fixture({ understandingFor = async () => ({ current: understanding }) }
 
 test("the facts a document yields carry their quotes and their source, which is what the page labels 来自资料", () => {
   const written = libraryCapsuleEntries({ title: "抗凝指南", sourceId: SOURCE, understanding });
-  assert.ok(written.length >= 2);
+  assert.equal(written.length, 2, "the summary and the one anchored claim; no template field, no method draft");
   for (const entry of written) {
-    assert.match(entry.content, /据资料《抗凝指南》|方法草稿/);
+    assert.match(entry.content, /^(资料《抗凝指南》的摘要|据资料《抗凝指南》)：/);
     for (const item of entry.provenance) {
       assert.equal(item.type, "source", "the provenance the row reads 「来自资料」 from");
       assert.ok(String(item.id).startsWith(SOURCE));
@@ -92,12 +93,17 @@ test("understanding a document puts its facts in the capsule, once, with no butt
   for (const entry of added) {
     assert.equal(entry.layer, "sources");
     assert.equal(entry.origin, "inferred", "the platform read it; the researcher did not say it");
+    // Stamped with its document and that document's project: it is recalled
+    // there and nowhere else, and the capsule page does not list it.
+    assert.deepEqual(entry.derivedFrom, { sourceId: SOURCE, projectId: "prj_1" });
   }
   // The bookkeeping is keyed by the document, not by a library entry: this
   // happens to every document the platform reads.
   const ledger = rows.get(`source-publication:${SOURCE}`);
   assert.equal(ledger.payload.recordType, PUBLICATION_RECORD_TYPE);
   assert.equal(ledger.payload.sourceId, SOURCE);
+  assert.equal(ledger.payload.projectId, "prj_1");
+  assert.equal(ledger.payload.rule, PUBLICATION_RULE, "what the republication script reads to skip a document already current");
 
   // Idempotent, so the worker may call it more than once for one generation.
   const again = await library.publishSourceUnderstanding(USER, SOURCE);

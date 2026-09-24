@@ -1,6 +1,6 @@
 id: source-understanding
 visibility: internal
-version: 1.0.0
+version: 1.1.0
 title: Source Understanding
 category: Source Analysis
 description: Distill one immutable source into typed known or unknown slots, precisely anchored claims and optional method drafts.

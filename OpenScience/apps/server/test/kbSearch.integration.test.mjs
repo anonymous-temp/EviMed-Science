@@ -37,7 +37,8 @@ test("every term question is answered first by the keyword leg alone, with its p
       const source = sources.find((entry) => entry.id === hit.sourceId);
       const capture = await app.sourceService.loadCapture(user.id, source);
       assert.equal(capture.input.text.slice(hit.start, hit.end), hit.snippet, question.id);
-      assert.match(hit.path, /^\.evimed-knowledge\/\.evimed-derived\/src_[a-f0-9]{32}\/generation-\d+-.+\/index\.md$/);
+      // The attempt's read copy, beside (never inside) its understanding run's directory.
+      assert.match(hit.path, /^\.evimed-knowledge\/\.evimed-derived\/src_[a-f0-9]{32}\/read-\d+-.+\/index\.md$/);
     }
     assert.ok(asked >= 4, `only ${asked} questions ran`);
   } finally { await context.close(); }

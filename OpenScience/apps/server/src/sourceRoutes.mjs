@@ -115,6 +115,8 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
       return reply(await service.list(user.id, {
         projectId,
         status: url.searchParams.get("status"),
+        // What the page says about a document (`SOURCE_STATES`), when asked by that.
+        ...(url.searchParams.has("state") ? { state: url.searchParams.get("state") } : {}),
         familyId: url.searchParams.get("familyId"),
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),

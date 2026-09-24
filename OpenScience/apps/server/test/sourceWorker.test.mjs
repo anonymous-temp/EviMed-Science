@@ -29,6 +29,13 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration
     },
     loadCapture: async () => null,
     freezeCapture: async (_job, result) => ({ ...result, input: { text: result.text, units: result.units } }),
+    recordReadable: async (...args) => {
+      calls.push({ method: "recordReadable", args });
+      source.revision += 1;
+      source.payload.analysis = { ...source.payload.analysis, generation: source.payload.generation, readAt: "2026-09-24T00:00:00.000Z" };
+      source.payload.outputs = { ...source.payload.outputs, artifactPath: args[1] };
+      return { ...source, payload: { ...source.payload } };
+    },
     publishUnderstanding: async (...args) => { calls.push({ method: "publishUnderstanding", args }); return { ...source, revision: source.revision + 1 }; },
     recordFailure: async (...args) => { calls.push({ method: "recordFailure", args }); return { ...source, revision: source.revision + 1 }; },
   };
@@ -121,6 +128,59 @@ test("an expired lease never publishes a parsed artifact", async () => {
   assert.equal(calls.some((call) => call.method === "materialize"), true);
   assert.equal(calls.some((call) => call.method === "discard"), true);
   assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
+});
+
+test("a document is readable as soon as it is read, while its understanding still runs", async () => {
+  // 2026-09-24: a PDF stayed unsearchable for the one to four minutes its
+  // understanding run took, because its text was written out only after it.
+  const { calls, source, sources, worker } = fixture();
+  source.payload.depth = "structured";
+  let runs = 0;
+  worker.understandingRuns = { execute: async () => {
+    runs += 1;
+    calls.push({ method: "understand" });
+    return runs === 1 ? { state: "pending", runId: "run-one", sessionId: "session-one", dispatchId: "dispatch-one" }
+      : { state: "complete", runId: "run-one", sessionId: "session-one", dispatchId: "dispatch-one", output: { summary: "指南" } };
+  } };
+  sources.deferIngestion = async (...args) => { calls.push({ method: "deferIngestion", args }); return { deferred: true }; };
+  /** @type {string[]} */
+  const readable = [];
+  worker.onReadable = (job) => { readable.push(job.id); };
+  await worker.tick();
+  assert.deepEqual(calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "materialize", "recordReadable", "understand", "deferIngestion"],
+    "the text is written and recorded before the understanding is dispatched");
+  assert.equal(calls.find((call) => call.method === "recordReadable").args[1], "knowledge-base/.evimed-derived/source-one/index.md");
+  assert.deepEqual(readable, ["job-one"], "the index is told the document can be searched now");
+
+  // The deferred job comes back: the capture is there and the text already
+  // written, so nothing is parsed or written twice, and the understanding is
+  // published against the copy that was recorded.
+  calls.length = 0;
+  sources.loadCapture = async () => ({ input: { text: "Parsed research source.", units: [] }, extractor: { name: "plain-text" } });
+  await worker.tick();
+  assert.deepEqual(calls.map((call) => call.method), ["beginIngestion", "understand", "publishUnderstanding"]);
+  const publication = calls.find((call) => call.method === "publishUnderstanding").args;
+  assert.equal(publication[2].state, "complete");
+  assert.equal(publication[3], "knowledge-base/.evimed-derived/source-one/index.md");
+  assert.deepEqual(readable, ["job-one"], "a copy already recorded is not announced again");
+});
+
+test("an understanding that fails after the document was read keeps the text it was read into", async () => {
+  const { calls, source, worker } = fixture();
+  source.payload.depth = "structured";
+  worker.understandingRuns = { execute: async () => { throw Object.assign(new Error("invalid"), { code: "source_understanding_invalid" }); } };
+  await worker.tick();
+  const methods = calls.map((call) => call.method);
+  assert.ok(methods.includes("recordReadable"));
+  assert.ok(methods.includes("recordFailure"), "the failure is said on the source");
+  assert.equal(methods.includes("discard"), false, "the recorded copy is the source's, not the attempt's to discard");
+  assert.equal(calls.find((call) => call.method === "fail").args[4].retry, false);
+});
+
+test("an index-only document is written out and published in one step, as before", async () => {
+  const { calls, worker } = fixture();
+  await worker.tick();
+  assert.equal(calls.some((call) => call.method === "recordReadable"), false, "complete already says it: nothing runs after it");
 });
 
 test("a folder sync runs on the existing ingest lease and finishes with its own summary", async () => {

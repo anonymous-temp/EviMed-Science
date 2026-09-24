@@ -146,7 +146,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/recall": {
         post: {
           summary: "Search this account's memory",
-          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes) and the facts of its active capsules — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone.",
+          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes) and the facts of its active capsules — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone. A fact read out of a knowledge-base document is returned only to a recall in that document's project.",
           security: [{ agentApiKey: ["memory.read"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/RecallRequest" }),
           responses: { 200: { description: "Matching memory, hydrated from the record store." }, 400: errorResponse("Malformed request."), ...common },

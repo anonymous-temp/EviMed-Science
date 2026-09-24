@@ -56,7 +56,7 @@ describe("知识库", () => {
     expect(await screen.findByText("ASPREE.pdf")).toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "搜索资料" })).toBeInTheDocument();
     const filters = screen.getByRole("group", { name: "资料状态" });
-    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "需要处理", "分析中", "已完成"]);
+    expect(within(filters).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "需要处理", "读取中", "已读取"]);
     // No progress box above the list: a row says its own state.
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });

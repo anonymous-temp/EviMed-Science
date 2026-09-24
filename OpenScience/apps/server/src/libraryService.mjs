@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { sourceFileFormat } from "@evimed/domain";
-import { SOURCE_PUBLICATION_RECORD_TYPE, withdrawDerivedMemory } from "./derivedMemory.mjs";
+import { DOCUMENT_MEMORY_LAYER, SOURCE_PUBLICATION_RECORD_TYPE, withdrawDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { HttpError, assertNoSymlinkPath, readJson, safeId, sendJson, writeFileAtomicNoFollow } from "./security.mjs";
-import { sourceIndexDocument, sourceParserRevision } from "./sourceService.mjs";
+import { sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
 
 /**
  * The personal library (plan §3.2 #4–5): the documents a researcher keeps
@@ -33,12 +33,13 @@ import { sourceIndexDocument, sourceParserRevision } from "./sourceService.mjs";
  * - Publishing into the capsule is automatic and labelled (plan §3.10), and
  *   keyed by the document rather than by a library entry: it happens to every
  *   document the platform reads, whether or not the researcher chose to keep
- *   that one across projects. What a document says becomes a fact carrying its
- *   verbatim quotes and saying in its own words whose it is — never a
- *   preference, never an instruction. It
+ *   that one across projects. What a document says — its summary and its key
+ *   claims — becomes a fact carrying its verbatim quotes and saying in its
+ *   own words whose it is — never a preference, never an instruction. It
  *   all lands in the capsule's `sources` layer, which no method mount and no
- *   share reads (`capsuleMethods.mjs`, `NEVER_SHARED_LAYERS`), so a method the
- *   document describes is a draft a recall can show, not a skill a run loads.
+ *   share reads (`capsuleMethods.mjs`, `NEVER_SHARED_LAYERS`), stamped with
+ *   the document's project: it is recalled there and nowhere else, and the
+ *   capsule page does not list it (2026-09-24).
  *   Every entry is a capsule revision the capsule's own undo takes back.
  */
 
@@ -58,7 +59,6 @@ function publicationId(sourceId) {
 const COPY_FILE = "index.md";
 const SOURCE_ID = /^src_[a-f0-9]{32}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
-const READY_STATUSES = Object.freeze(["complete", "needs_attention"]);
 const PROCESSING_STATUSES = Object.freeze(["queued", "parsing"]);
 /** Copies one convergence pass rewrites; the rest wait for the next pass. */
 const COPIES_PER_PASS = 10;
@@ -68,28 +68,17 @@ const PAGE = 100;
 const ENTRY_MAX_CHARS = 20_000;
 /** The most anchors one entry carries, as the understanding contract allows. */
 const ENTRY_MAX_ANCHORS = 8;
-
-/** How a known slot of an understanding is named in the capsule. */
-const SLOT_LABELS = Object.freeze({
-  doi: "DOI",
-  design: "研究设计",
-  population: "研究人群",
-  interventionExposure: "干预或暴露",
-  outcomes: "结局指标",
-  effectEstimates: "效应估计",
-  limitations: "局限",
-  purpose: "目的",
-  applicability: "适用范围",
-  inputs: "所需输入",
-  steps: "步骤",
-  checks: "核查",
-  pitfalls: "容易出错的地方",
-  topic: "主题",
-  decisions: "决定",
-  actions: "行动项",
-  openQuestions: "待解决的问题",
-  keyInformation: "关键信息",
-});
+/** The most entries one document puts in the capsule: its summary and its
+ *  first eleven claims. */
+export const DOCUMENT_MEMORY_MAX_ENTRIES = 12;
+/**
+ * Which rule a publication was written under, kept on its ledger. 2 (from
+ * 2026-09-24): the summary and the quote-anchored claims, capped, each
+ * stamped with its document and project. 1 (unmarked): every template field
+ * and claim plus the method drafts, unstamped.
+ * `scripts/ops/republish-source-memory.mjs` brings older ones up to it.
+ */
+export const PUBLICATION_RULE = 2;
 
 /** @param {string} value */
 function digest(value) {
@@ -159,15 +148,15 @@ function resolveSource(candidates, record) {
   if (!candidates?.length) return null;
   const wanted = record.payload.source?.id ?? record.payload.sourceId;
   const own = candidates.find((candidate) => candidate.id === wanted);
-  if (own && [...READY_STATUSES, ...PROCESSING_STATUSES].includes(own.payload.status)) return own;
-  return candidates.find((candidate) => READY_STATUSES.includes(candidate.payload.status)) ?? own ?? candidates[0];
+  if (own && (sourceReadable(own.payload) || PROCESSING_STATUSES.includes(own.payload.status))) return own;
+  return candidates.find((candidate) => sourceReadable(candidate.payload)) ?? own ?? candidates[0];
 }
 
 /** @param {any} record @param {any} source @returns {"ready" | "processing" | "failed" | "detached"} */
 function entryStatus(record, source) {
   const status = source?.payload.status;
   if (!source || status === "missing") return record.payload.copy ? "detached" : "failed";
-  if (READY_STATUSES.includes(status)) return record.payload.copy?.key === copyKey(source) ? "ready" : "processing";
+  if (sourceReadable(source.payload)) return record.payload.copy?.key === copyKey(source) ? "ready" : "processing";
   if (PROCESSING_STATUSES.includes(status)) return "processing";
   return "failed";
 }
@@ -206,38 +195,29 @@ function bounded(value) {
   return `${value.slice(0, end)}…`;
 }
 
-/** @param {string} label @param {any} method */
-function methodDraft(label, method) {
-  /** @param {unknown} items @param {boolean} numbered */
-  const list = (items, numbered) => (Array.isArray(items) ? items : [])
-    .filter((item) => typeof item === "string" && item.trim())
-    .map((item, index) => `${numbered ? `${index + 1}.` : "-"} ${String(item).trim()}`);
-  const steps = list(method.steps, true);
-  const checks = list(method.checks, false);
-  const pitfalls = list(method.pitfalls, false);
-  return [
-    `方法草稿（整理自资料${label}；这是这份资料的做法，不是你的方法，也没有验证过）：${String(method.title).trim()}`,
-    ...(typeof method.description === "string" && method.description.trim() ? [method.description.trim()] : []),
-    ...(typeof method.whenToUse === "string" && method.whenToUse.trim() ? [`适用情形：${method.whenToUse.trim()}`] : []),
-    ...(steps.length ? ["步骤：", ...steps] : []),
-    ...(checks.length ? ["核查：", ...checks] : []),
-    ...(pitfalls.length ? ["容易出错的地方：", ...pitfalls] : []),
-  ].join("\n");
-}
-
 /**
- * What one understanding of a document becomes in a capsule: its known slots
- * and its claims as facts (`project_fact`), its methods as labelled drafts
- * (`analysis`), each carrying the verbatim quotes it rests on — and nothing
- * else. Every entry says whose words it holds in its own text, so a recall
- * that shows only the content still reads 「据资料《…》」 and never as the
- * researcher's own view (principle 18).
+ * What one understanding of a document becomes in a capsule: its summary, and
+ * its key claims each with the verbatim quotes it rests on — at most
+ * `DOCUMENT_MEMORY_MAX_ENTRIES`, all `project_fact`, and nothing else. Every
+ * entry says whose words it holds in its own text, so a recall that shows
+ * only the content still reads 「据资料《…》」 and never as the researcher's own
+ * view (principle 18).
+ *
+ * What it no longer carries, and why (2026-09-24): the template fields — 研究
+ * 设计, 研究人群, 效应估计, 局限 … — became one entry each, and a document
+ * that was not a paper filled them with sentences about their own absence
+ * (「据资料《8.11医学测评.pdf》，研究设计：本文档没有研究设计——它不是研究
+ * 报告…」, thirty entries from one product-test record). A template field is a
+ * column of the understanding, shown with the document; a memory is a fact
+ * worth recalling in a conversation. Method drafts went with them: they were
+ * listed under 「关于你」, as if the document's procedure were the
+ * researcher's own.
  *
  * Keyed by content, so publishing one understanding twice adds nothing and a
  * re-read document replaces exactly what changed.
  *
  * @param {{ title: string, sourceId: string, understanding: any }} input
- * @returns {{ key: string, factKind: "project_fact" | "analysis", content: string, provenance: { type: "source", id: string, excerpt: string }[] }[]}
+ * @returns {{ key: string, factKind: "project_fact", content: string, provenance: { type: "source", id: string, excerpt: string }[] }[]}
  */
 export function libraryCapsuleEntries({ title, sourceId, understanding }) {
   const label = `《${String(title ?? "").trim() || sourceId}》`;
@@ -247,27 +227,26 @@ export function libraryCapsuleEntries({ title, sourceId, understanding }) {
     .slice(0, ENTRY_MAX_ANCHORS)
     .map((anchor) => ({ type: /** @type {const} */ ("source"), id: `${sourceId}#${anchor.start}-${anchor.end}`, excerpt: anchor.quote.trim().slice(0, 2000) }));
   const seen = new Set();
-  /** @type {{ key: string, factKind: "project_fact" | "analysis", content: string, provenance: { type: "source", id: string, excerpt: string }[] }[]} */
+  /** @type {{ key: string, factKind: "project_fact", content: string, provenance: { type: "source", id: string, excerpt: string }[] }[]} */
   const entries = [];
-  /** @param {"project_fact" | "analysis"} factKind @param {string} content @param {unknown} evidence */
-  const push = (factKind, content, evidence) => {
+  /** @param {string} content @param {{ type: "source", id: string, excerpt: string }[]} provenance */
+  const push = (content, provenance) => {
+    if (entries.length >= DOCUMENT_MEMORY_MAX_ENTRIES) return;
     const body = bounded(content);
-    const key = digest(`${factKind}\0${body}`).slice(0, 24);
+    const key = digest(`project_fact\0${body}`).slice(0, 24);
     if (seen.has(key)) return;
     seen.add(key);
-    entries.push({ key, factKind, content: body, provenance: anchors(evidence) });
+    entries.push({ key, factKind: "project_fact", content: body, provenance });
   };
-  for (const [slot, value] of Object.entries(understanding?.slots ?? {})) {
-    if (value?.state !== "known" || typeof value.value !== "string" || !value.value.trim()) continue;
-    push("project_fact", `据资料${label}，${SLOT_LABELS[/** @type {keyof typeof SLOT_LABELS} */ (slot)] ?? slot}：${value.value.trim()}`, value.evidence);
-  }
+  const summary = typeof understanding?.summary === "string" ? understanding.summary.trim() : "";
+  if (summary) push(`资料${label}的摘要：${summary}`, []);
   for (const claim of Array.isArray(understanding?.claims) ? understanding.claims : []) {
     if (typeof claim?.statement !== "string" || !claim.statement.trim()) continue;
-    push("project_fact", `据资料${label}：${claim.statement.trim()}`, claim.evidence);
-  }
-  for (const method of Array.isArray(understanding?.methods) ? understanding.methods : []) {
-    if (typeof method?.title !== "string" || !method.title.trim()) continue;
-    push("analysis", methodDraft(label, method), method.evidence);
+    // A key claim is a quote-anchored one; the contract already demands an
+    // anchor for every claim, and one that lost its anchors is not written.
+    const provenance = anchors(claim.evidence);
+    if (provenance.length === 0) continue;
+    push(`据资料${label}：${claim.statement.trim()}`, provenance);
   }
   return entries;
 }
@@ -425,7 +404,7 @@ export class LibraryService {
       for (const record of records) {
         const candidates = live.get(record.payload.sha256) ?? [];
         const source = resolveSource(candidates, record);
-        if (!source || !READY_STATUSES.includes(source.payload.status)) continue;
+        if (!source || !sourceReadable(source.payload)) continue;
         if (record.payload.copy?.key === copyKey(source) && present.has(record.payload.sourceId)) continue;
         if (budget <= 0) break;
         budget -= 1;
@@ -464,8 +443,11 @@ export class LibraryService {
 
   /**
    * A document's current understanding, in the researcher's memory capsule:
-   * facts with their quotes, methods as labelled drafts, all in the `sources`
-   * layer and in effect at once.
+   * its summary and its key claims with their quotes (`libraryCapsuleEntries`),
+   * all in the `sources` layer, in effect at once, and each stamped with the
+   * document and its project — so it is recalled in that project only, and is
+   * shown with its document rather than listed on the capsule page
+   * (`CapsuleService.recall`, `CapsuleService.mine`).
    *
    * Called by the source worker when an understanding is published, never by a
    * button. There was a button — 「放进胶囊」, once per document, beside
@@ -512,8 +494,9 @@ export class LibraryService {
           kept += 1;
           continue;
         }
-        let written = await this.capsules.addEntry(userId, capsule.id, { factKind: entry.factKind, layer: "sources",
-          content: entry.content, origin: "inferred", provenance: entry.provenance });
+        let written = await this.capsules.addEntry(userId, capsule.id, { factKind: entry.factKind, layer: DOCUMENT_MEMORY_LAYER,
+          content: entry.content, origin: "inferred", provenance: entry.provenance,
+          derivedFrom: { sourceId: id, projectId: source.projectId } });
         if (written.payload.status !== "approved") {
           written = await this.capsules.updateEntry(userId, capsule.id, written.id, { status: "approved", expectedRevision: written.revision });
         }
@@ -531,14 +514,16 @@ export class LibraryService {
           if (/** @type {any} */ (error)?.code !== "product_revision_conflict") throw error;
         }
       }
-      const facts = entries.filter((entry) => entry.factKind === "project_fact").length;
-      const methods = entries.length - facts;
+      const facts = entries.length;
+      // Method drafts are not published any more (`libraryCapsuleEntries`);
+      // the count stays in the answer for the callers that read it.
+      const methods = 0;
       // The bookkeeping is keyed by the document, not by a library entry: the
       // personal library is a place a researcher chooses to put something, and
       // this happens to every document the platform reads.
       const latest = await this.documents.get(userId, RECORD_KIND, ledgerId);
       await this.documents.put(userId, RECORD_KIND, ledgerId, {
-        recordType: PUBLICATION_RECORD_TYPE, sourceId: id, capsuleId: capsule.id,
+        recordType: PUBLICATION_RECORD_TYPE, sourceId: id, projectId: source.projectId, capsuleId: capsule.id, rule: PUBLICATION_RULE,
         generation: understanding.generation, at: this.now().toISOString(), facts, methods, entries: entryIds,
       }, { expectedRevision: latest?.revision ?? 0 });
       this.counters.published += 1;
@@ -668,7 +653,7 @@ export class LibraryService {
    */
   async #refresh(userId, record, candidates, present = null) {
     const source = resolveSource(candidates, record);
-    if (!source || !READY_STATUSES.includes(source.payload.status)) return record;
+    if (!source || !sourceReadable(source.payload)) return record;
     const key = copyKey(source);
     const exists = present ? present.has(record.payload.sourceId) : await this.#copyExists(userId, record.payload.sourceId);
     if (record.payload.copy?.key === key && exists) return record;

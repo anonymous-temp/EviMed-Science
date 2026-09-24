@@ -186,7 +186,9 @@ describe("the @ menu's knowledge-base answer", () => {
     expect(await searchKnowledgeSources("default", "华法林")).toEqual([expect.objectContaining({ id: "src_a1" })]);
     expect((await searchKnowledgeSources("default", "")).map((item) => item.id)).toEqual(["src_a1", "src_b2"]);
     expect(mocks.listSources).toHaveBeenCalledTimes(1);
-    expect(mocks.listSources).toHaveBeenCalledWith("default", { status: "complete" });
+    // Readable, not understood: a document can be named once its text is read,
+    // while its understanding still runs (2026-09-24).
+    expect(mocks.listSources).toHaveBeenCalledWith("default", { state: "ready" });
   });
 });
 

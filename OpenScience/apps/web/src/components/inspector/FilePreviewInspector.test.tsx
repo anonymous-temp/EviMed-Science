@@ -180,6 +180,25 @@ describe("FilePreviewInspector — HTML sandbox", () => {
   });
 });
 
+describe("FilePreviewInspector — a knowledge-base document", () => {
+  // 2026-09-24: an uploaded PDF was tagged 「报告」 (`extToKind("pdf")`), as if
+  // a run had produced it, and nothing about the document sat with it.
+  it("names the document's format instead of an artifact kind, and puts what is known about it above the preview", async () => {
+    const pdf: FilePreviewInspectorT = { variant: "file", path: "knowledge-base/指南.pdf", filename: "指南.pdf", artifact: "report", root: "base" };
+    const { unmount } = render(<FilePreviewInspector data={pdf} kindLabel="PDF" lead={<p>摘要：一份抗凝指南。</p>} onClose={() => {}} />);
+    expect(await screen.findByText("PDF")).toBeInTheDocument();
+    expect(screen.queryByText("报告")).not.toBeInTheDocument();
+    expect(screen.getByText("摘要：一份抗凝指南。")).toBeInTheDocument();
+    unmount();
+    // `null` shows no tag at all; an unset label keeps the artifact kind.
+    const bare = render(<FilePreviewInspector data={pdf} kindLabel={null} onClose={() => {}} />);
+    expect(bare.container.textContent).not.toMatch(/报告|PDF/);
+    bare.unmount();
+    render(<FilePreviewInspector data={md} onClose={() => {}} />);
+    expect(await screen.findByText("报告")).toBeInTheDocument();
+  });
+});
+
 describe("PreviewError", () => {
   it("shows a helpful card with Open-externally for a too-large file", async () => {
     const onOpen = vi.fn();

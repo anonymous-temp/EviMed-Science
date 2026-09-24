@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { removeSourceCopies, sourceAttemptId } from "../src/sourceFiles.mjs";
+import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "../src/sourceFiles.mjs";
 
 const sourceId = `src_${"a".repeat(32)}`;
 const options = { skip: process.platform !== "linux" && "Descriptor-relative deletion runs in the hosted Linux environment" };
@@ -88,4 +88,25 @@ test("unpublished-attempt cleanup preserves a new lease's index and staging copy
   await removeSourceCopies({ projectRoot: f.projectRoot, sourceId, jobIds: ["job-one"] });
   for (const file of freshFiles) await assert.rejects(fs.stat(file), { code: "ENOENT" });
   for (const target of f.kept) assert.ok((await fs.stat(target)).isFile());
+});
+
+test("the text a document is read into outlives its understanding run's cleanup, and goes only when asked for by name", options, async t => {
+  // 2026-09-24: the text is written before the understanding is dispatched
+  // now, and the run's cleanup — on a dispatch that found no free runtime, or
+  // a cancel — removes the attempt's run directory. The text lives beside it.
+  const f = await fixture(t);
+  const attempt = sourceAttemptId({ leaseToken: "read-lease" });
+  const directory = sourceReadCopyDirectory({ sourceId, generation: 2, jobId: "job-one", attemptId: attempt });
+  assert.equal(directory, `knowledge-base/.evimed-derived/${sourceId}/read-2-job-one-${attempt}`);
+  const text = await f.file(`project/${directory}/index.md`);
+  const run = await f.file(`project/knowledge-base/.evimed-derived/${sourceId}/generation-2-job-one-${attempt}/input.json`);
+  await removeSourceCopies({ projectRoot: f.projectRoot, sourceId, jobIds: ["job-one"], generation: 2, attemptId: attempt });
+  await assert.rejects(fs.stat(run), { code: "ENOENT" });
+  assert.ok((await fs.stat(text)).isFile(), "the run's cleanup never reaches the text");
+  await removeSourceCopies({ projectRoot: f.projectRoot, sourceId, jobIds: ["job-one"], generation: 2, attemptId: attempt, readCopy: true });
+  await assert.rejects(fs.stat(text), { code: "ENOENT" });
+  for (const target of f.kept) assert.ok((await fs.stat(target)).isFile());
+  await assert.rejects(removeSourceCopies({ projectRoot: f.projectRoot, sourceId, jobIds: ["job-one"], readCopy: true }), { code: "source_cleanup_path_invalid" });
+  await assert.rejects(removeSourceCopies({ projectRoot: f.projectRoot, sourceId, jobIds: ["job-one"], generation: 2, attemptId: attempt, readCopy: true, stagingOnly: true }),
+    { code: "source_cleanup_path_invalid" });
 });

@@ -84,13 +84,22 @@ export function FilePreviewInspector({
   data,
   onClose,
   controls,
+  kindLabel,
+  lead,
 }: {
   data: FilePreviewInspectorT;
   onClose: () => void;
   /** Pane-level header buttons (e.g. maximize), rendered before Close. */
   controls?: React.ReactNode;
+  /** The tag's words when the caller knows better than the artifact kind: a
+   *  knowledge-base document names its format (「PDF」), never 「报告」 — it is
+   *  the researcher's upload, not something a run produced. `null` shows none. */
+  kindLabel?: string | null;
+  /** What is known about the file, above its preview (a document's 摘要). */
+  lead?: React.ReactNode;
 }) {
   const kind = previewKindForName(data.filename);
+  const tag = kindLabel === undefined ? labelFor(ARTIFACT_KIND_LABEL, data.artifact, "文件") : kindLabel;
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html" || kind === "video";
   const needsText =
     kind === "table" || kind === "text" || kind === "html" || kind === "markdown" ||
@@ -194,7 +203,7 @@ export function FilePreviewInspector({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <span className="truncate text-ui font-medium text-text">{data.filename}</span>
-        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{labelFor(ARTIFACT_KIND_LABEL, data.artifact, "文件")}</span>
+        {tag && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{tag}</span>}
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
@@ -228,6 +237,8 @@ export function FilePreviewInspector({
           <X size={16} aria-hidden="true" />
         </button>
       </header>
+
+      {lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
 
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto bg-surface-2">
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}

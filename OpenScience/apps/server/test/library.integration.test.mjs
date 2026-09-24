@@ -157,7 +157,7 @@ test("one document added from two projects is one entry, read from a third, and 
   } finally { await context.close(); }
 });
 
-test("understanding a document writes its facts and method drafts into the researcher's own capsule, labelled and once", { skip }, async () => {
+test("understanding a document writes its summary and key claims into the researcher's own capsule, labelled, stamped and once", { skip }, async () => {
   const context = await signedIn();
   try {
     const { app, user, base, headers } = context;
@@ -175,32 +175,40 @@ test("understanding a document writes its facts and method drafts into the resea
     // This is what the source worker calls when an understanding is published:
     // no route, no button, and the researcher is not asked.
     const result = await publish();
+    // The summary and the one claim: the template field and the method draft
+    // are the understanding's, shown with the document, not memories.
     assert.deepEqual({ facts: result.facts, methods: result.methods, added: result.added, kept: result.kept, retired: result.retired },
-      { facts: 2, methods: 1, added: 3, kept: 0, retired: 0 });
+      { facts: 2, methods: 0, added: 2, kept: 0, retired: 0 });
     assert.equal(result.capsuleTitle, "我的记忆胶囊");
     const active = await app.capsuleService.active(user.id, null);
     assert.deepEqual(active.items.map((item) => [item.capsuleId, item.mode]).sort(),
       [[result.capsuleId, "own"], [reference.id, "guest"]].sort());
 
     const entries = (await app.capsuleService.entries(user.id, result.capsuleId)).items;
-    assert.equal(entries.length, 3);
+    assert.equal(entries.length, 2);
     for (const entry of entries) {
       assert.equal(entry.payload.layer, "sources", "never a layer a method mount or a share reads");
       assert.equal(entry.payload.status, "approved", "in effect at once, without a confirmation");
       assert.equal(entry.payload.origin, "inferred");
-      assert.equal(entry.payload.provenance[0].type, "source", "what the row reads 「来自资料」 from");
-      assert.ok(entry.payload.provenance[0].id.startsWith(`${source.id}#`));
+      assert.equal(entry.payload.factKind, "project_fact");
+      // Stamped with its document and that document's project: recalled there only.
+      assert.equal(entry.payload.sourceId, source.id);
+      assert.equal(entry.payload.projectId, source.projectId);
     }
+    const summary = entries.find((entry) => entry.payload.content.startsWith("资料《"));
+    assert.equal(summary.payload.content, `资料《${titleOf(GUIDELINE)}》的摘要：房颤抗凝治疗指南。`);
     const claim = entries.find((entry) => entry.payload.content.includes("20 mg"));
-    assert.equal(claim.payload.factKind, "project_fact");
     assert.equal(claim.payload.content, `据资料《${titleOf(GUIDELINE)}》：利伐沙班推荐 20 mg 每日一次，随餐服用`);
+    assert.equal(claim.payload.provenance[0].type, "source", "what the row reads 「来自资料」 from");
+    assert.ok(claim.payload.provenance[0].id.startsWith(`${source.id}#`));
     assert.equal(claim.payload.provenance[0].excerpt, "推荐剂量为20 mg，每日一次，随餐服用");
-    const method = entries.find((entry) => entry.payload.factKind === "analysis");
-    assert.match(method.payload.content, /^方法草稿（整理自资料《/);
+    assert.equal(entries.some((entry) => /方法草稿|规范非瓣膜性房颤患者的抗凝治疗/.test(entry.payload.content)), false);
+    // And none of it is listed among the researcher's memories.
+    assert.deepEqual((await app.capsuleService.mine(user.id)).entries, []);
 
     // Idempotent, so the worker may call it more than once for one generation.
     const repeated = await publish();
-    assert.deepEqual({ added: repeated.added, kept: repeated.kept, retired: repeated.retired }, { added: 0, kept: 3, retired: 0 });
+    assert.deepEqual({ added: repeated.added, kept: repeated.kept, retired: repeated.retired }, { added: 0, kept: 2, retired: 0 });
     assert.equal(repeated.capsuleId, result.capsuleId);
 
     // More publications at once than the pool has connections: each one runs or
@@ -211,14 +219,14 @@ test("understanding a document writes its facts and method drafts into the resea
       assert.ok(outcome.status === "fulfilled" || outcome.reason?.code === "library_publish_busy",
         JSON.stringify(outcome.reason?.code ?? outcome.status));
     }
-    assert.equal((await app.capsuleService.entries(user.id, result.capsuleId)).items.length, 3);
+    assert.equal((await app.capsuleService.entries(user.id, result.capsuleId)).items.length, 2);
     assert.equal((await call("/api/library")).status, 200, "the account is served again at once");
 
     // The document read again says something else: that one fact is replaced,
     // the old one kept as retired.
     await giveUnderstanding(app, user, source, { statement: "达比加群酯剂量 150 mg，每日两次", quote: "剂量150 mg，每日两次" });
     const changed = await publish();
-    assert.deepEqual({ added: changed.added, kept: changed.kept, retired: changed.retired }, { added: 1, kept: 2, retired: 1 });
+    assert.deepEqual({ added: changed.added, kept: changed.kept, retired: changed.retired }, { added: 1, kept: 1, retired: 1 });
     const retired = await app.sourceService.documents.get(user.id, "fact", claim.id);
     assert.equal(retired.payload.status, "retired");
   } finally { await context.close(); }
