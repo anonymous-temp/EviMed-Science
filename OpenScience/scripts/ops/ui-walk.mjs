@@ -10,7 +10,9 @@
  *     model ids, SHOUTED capability keys, `undefined`, `NaN`, `[object …]`,
  *     leftover `<!-- claim:… -->` markers), and none of the back office the
  *     2026-09-23 plan took off the pages (已交付, 核对 N 条, 用过 N 次,
- *     起生效, token, 缓存命中, tok/s, feed and API names);
+ *     起生效, token, 缓存命中, tok/s, feed and API names — a feed's name,
+ *     「openFDA 药品召回（enforcement）API」, not the data source 「openFDA」
+ *     a researcher sets a key for in 设置 → 数据源);
  *   - every visible control has a name;
  *   - the page has its own title (not the bare product name), and its header
  *     carries no subtitle;
@@ -92,7 +94,7 @@ const LEAKS = [
  */
 const BACK_OFFICE = [
   /已交付/, /核对\s*\d+\s*条/, /已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
-  /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /（[^）]*\bAPI）/, /openFDA/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
+  /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /（[^）]*\bAPI）/, /openFDA\s*(药品|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
 ];
 
 /**
