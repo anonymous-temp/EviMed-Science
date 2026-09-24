@@ -331,6 +331,27 @@ test('what the shell sends in is validated once and handed to the bodies through
   f.ctx.dispose();
 });
 
+test("a reply check is rebuilt from a closed shape, keeping the source's own words and only an https link", async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  shellSends(f, { type: 'evimed.runtime-ui.reply-check', seq: 1, sessionId: 'session-a', checks: [{
+    id: 'rc-1', runId: 'run-1', turnSeq: 12, status: 'done', counts: { unsupported: 1 }, medicines: ['华法林'],
+    verdicts: [{ sentence: '华法林与布洛芬合用无妨 [2]。', verdict: 'unsupported', warning: true, reason: '来源说增加出血',
+      evidence: 'NSAIDs increased the risk of major bleeding'.repeat(20), safety: 'contradicted', source: { number: 2, title: 'Warfarin', url: 'javascript:alert(1)' }, extra: 'x' }],
+    cautions: [{ ruleId: 'r1', title: '华法林：出血风险', message: '合用 NSAID 增加出血。' }],
+  }] });
+  const [check] = hub.getState().replyChecks.checks;
+  assert.deepEqual(Object.keys(check).sort(), ['cautions', 'status', 'turnSeq', 'verdicts']);
+  const [verdict] = check.verdicts;
+  assert.deepEqual(Object.keys(verdict).sort(), ['evidence', 'reason', 'safety', 'sentence', 'source', 'verdict']);
+  assert.equal(verdict.evidence.length, 600, 'the quotation is kept, bounded');
+  assert.ok(verdict.evidence.startsWith('NSAIDs increased the risk of major bleeding'));
+  assert.equal(verdict.source.url, '', 'never a script link');
+  shellSends(f, { type: 'evimed.runtime-ui.reply-check', seq: 2, sessionId: '../x', checks: [] });
+  assert.equal(hub.getState().replyChecks.sessionId, 'session-a', 'a session id that is not an id is not delivered');
+  f.ctx.dispose();
+});
+
 test('a body leaves only through a closed vocabulary, and an artifact path cannot climb out', async () => {
   const f = fixture(); const hub = createHub(f.target);
   apply(f.ctx, {}, f.target, undefined, { hub }); await settle();

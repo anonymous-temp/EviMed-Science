@@ -386,6 +386,12 @@
       ],
       "note": "The session's own jump loader (`ISession.loadThrough`, the call `ui-chat`'s turn rail makes). The transcript body reads a finished conversation to its first event with it, because the chat folds a closed turn's process only once `hasMore` is false."
     },
+    "chatNodeHooks": {
+      "turnData": "useTurnData('turn-tail')",
+      "chat": "useChat(selector)",
+      "resource": "useResource('dsh-resource://file/session/<sessionId>/<path>')",
+      "note": "Hooks every `conversation.chat.node` occupant receives: the turn's own published values (the closing answer `ui-chat` chose, which its own answer row reads the same way), the chat snapshot (`timeline.turnOrder`), and the kernel's `file` resource (a workspace file's stat, `bytes`). The delivered-files body reads all three."
+    },
     "inputMethod": "conversation.input.for(scope).setDraft",
     "generation": "connection.generation",
     "failureMarker": "dshRemoteStreamFailure",

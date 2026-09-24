@@ -87,16 +87,22 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   // registration's `label` is read through the kernel's own label resolver and
   // may be a thunk, so it re-reads on a language change.
   'conversation.view': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
-  // Above the composer card: `main.conversation`'s children table.
+  // Above the composer card: `main.conversation`'s children table. Nothing of
+  // ours sits there since 2026-09-23 (the delivery card became the files after
+  // the answer; the queue/steer hint the send button's tooltip). An occupant
+  // must hold itself to the composer's width, as the kernel's queue dock does.
   'conversation.input.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
-  // Below the composer card, one centred 13 px pill row: `ui-chat` holds the
-  // session statistics there (`stats`, order 0); an entry of ours sits
-  // beside them. Declared by the composer bar's own children table.
+  // Below the composer card, one centred row: `ui-chat` holds the session
+  // statistics there (`stats`, order 0, hidden by the shell stylesheet); the
+  // tool chip sits after them. Declared by the composer bar's own children
+  // table.
   'conversation.composer.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The composer: `conversation.composer.bar`'s children table.
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
-  // The transcript: the `chat` view's children table.
+  // The transcript: the `chat` view's children table. `assistant-step` is
+  // taken over twice, each below the last — the reply check at -1, the
+  // delivered files at -2 — and each draws the entry it shadows first.
   'conversation.chat.node': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-chat', shippedKeys: CHAT_NODE_KINDS }),
   // One tool call's row: ui-tool's `tool-call` chat node declares it.
   'tool.call.toolview': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-tool', shippedKeys: SHIPPED_TOOL_VIEW_KEYS }),

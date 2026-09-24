@@ -1,7 +1,16 @@
 /**
- * The reply check (L1) as a row under the answer it is about: 「依据核对 ✓ 3 ·
- * ⚠ 1」, opened into one line per cited sentence — the verdict, the reviewer's
- * reason, the source.
+ * The reply check (L1) as a row under the answer it is about — and only when
+ * the check found something: 「⚠ 2 处引用待核对」, opened into one entry per
+ * flagged sentence with the reviewer's verdict, its one-line reason, the
+ * source's own words and the source.
+ *
+ * Until 2026-09-23 the row was there for every checked answer — 「依据核对
+ * ✓ 3 · ⚠ 1」, 「依据核对中…」 while the reviewer worked, 「依据核对没有完成」
+ * when it failed — beside a sentence about how the check works. The owner's
+ * ruling (整改方案 §5.3) follows what Claude Science does with its reviewer:
+ * nothing is shown while checking, when everything checked out, or when the
+ * check itself failed; a finding appears under the message it refers to, and
+ * there is no tally of what passed.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client (`ui-chat`):
  *
@@ -11,11 +20,10 @@
  *    (survey 2026-09-23 §1.5).
  *  - Every chat node renders through the keyed slot `conversation.chat.node`;
  *    `ui-chat` holds `assistant-step` at priority 0, and the lowest priority
- *    renders. This body takes the key over below it and renders the kernel's
- *    own component — found through the slot ledger's `entries()`, the
- *    documented inspection surface, exactly as the transcript body does for a
- *    recall row — then adds its row after the one answer a check is about.
- *    Every other assistant step renders as it would without this body.
+ *    renders. This body takes the key over below it (-1) and renders the row
+ *    it shadows first (`kit.shadowed`), then its own after the one answer a
+ *    check is about. The delivered-files body sits below this one and does
+ *    the same, so an answer can carry both.
  *  - Which answer: the check carries the event sequence of the closing
  *    assistant message the control plane read the reply from; the kernel's
  *    node carries the same sequence as `finalNode.seq`. Both sides read it
@@ -26,7 +34,7 @@
  *    re-renders the row, nothing else.
  *
  * Nothing here holds, hides or changes the answer (principle 13): the row
- * comes after it, and says what the reviewer could and could not find.
+ * comes after it, and says what the reviewer could not find in the sources.
  *
  * @module @evimed/harness-port/runtime-ui-reply-checks
  */
@@ -51,46 +59,39 @@ export function replyCheckFor(state, node) {
 }
 
 /**
- * What the row says: its tone, its one-line summary, and one entry per
- * sentence and pharmacist caution.
+ * What the row says, or null when there is nothing to say: a check still
+ * running, one that failed, and one that found every cited sentence
+ * supported all draw nothing. A problem is a sentence its source does not
+ * support or could not be opened for, or a medicine statement the source
+ * contradicts; a pharmacist caution on a medicine the answer names is one
+ * too, and is never hidden.
  * @param {any} check
- * @returns {{ tone: 'ok'|'warn'|'active'|'muted', text: string, items: { mark: string, tone: string, sentence: string, reason: string, source: string, url: string }[], cautions: { title: string, message: string }[] }}
+ * @returns {{ text: string, items: { sentence: string, reason: string, evidence: string, source: string, url: string }[], cautions: { title: string, message: string }[] } | null}
  */
 export function replyCheckSummary(check) {
-  const verdicts = Array.isArray(check?.verdicts) ? check.verdicts : [];
-  const cautions = (Array.isArray(check?.cautions) ? check.cautions : [])
+  if (!check || check.status !== 'done') return null;
+  const words = /** @type {Record<string, string>} */ ({
+    supported: '来源支持', partial: '来源部分支持', unsupported: '来源不支持', unresolvable: '来源打不开', uncertain: '无法判断',
+  });
+  const items = (Array.isArray(check.verdicts) ? check.verdicts : [])
+    .filter((/** @type {any} */ verdict) => verdict && (verdict.verdict === 'unsupported' || verdict.verdict === 'unresolvable' || verdict.safety === 'contradicted'))
+    .map((/** @type {any} */ verdict) => {
+      const word = words[String(verdict.verdict)] ?? words.uncertain;
+      const safety = verdict.safety === 'contradicted' ? '（用药说法与来源相反）' : '';
+      return {
+        sentence: String(verdict.sentence ?? ''),
+        reason: `${word}${safety}${verdict.reason ? `：${String(verdict.reason)}` : ''}`,
+        evidence: String(verdict.evidence ?? '').trim(),
+        source: verdict.source?.number ? `[${verdict.source.number}] ${String(verdict.source.title ?? '')}` : '',
+        url: /^https:\/\//.test(String(verdict.source?.url ?? '')) ? String(verdict.source.url) : '',
+      };
+    });
+  const cautions = (Array.isArray(check.cautions) ? check.cautions : [])
     .map((/** @type {any} */ caution) => ({ title: String(caution?.title ?? ''), message: String(caution?.message ?? '') }))
     .filter((/** @type {{ title: string, message: string }} */ caution) => caution.title || caution.message);
-  if (check?.status === 'queued' || check?.status === 'running') {
-    return { tone: 'active', text: '依据核对中…', items: [], cautions: [] };
-  }
-  if (check?.status === 'failed') return { tone: 'muted', text: '依据核对没有完成', items: [], cautions: [] };
-  const marks = /** @type {Record<string, { mark: string, tone: string, word: string }>} */ ({
-    supported: { mark: '✓', tone: 'ok', word: '来源支持' },
-    partial: { mark: '◐', tone: 'active', word: '来源部分支持' },
-    unsupported: { mark: '⚠', tone: 'warn', word: '来源不支持' },
-    unresolvable: { mark: '⚠', tone: 'warn', word: '来源打不开' },
-    uncertain: { mark: '·', tone: 'muted', word: '无法判断' },
-  });
-  const items = verdicts.map((/** @type {any} */ verdict) => {
-    const known = marks[String(verdict?.verdict)] ?? marks.uncertain;
-    const safety = verdict?.safety === 'contradicted' ? '（用药说法与来源相反）' : '';
-    return {
-      mark: known.mark,
-      tone: known.tone,
-      sentence: String(verdict?.sentence ?? ''),
-      reason: `${known.word}${safety}${verdict?.reason ? `：${String(verdict.reason)}` : ''}`,
-      source: verdict?.source?.number ? `[${verdict.source.number}] ${String(verdict.source.title ?? '')}` : '',
-      url: /^https:\/\//.test(String(verdict?.source?.url ?? '')) ? String(verdict.source.url) : '',
-    };
-  });
-  const ok = items.filter((/** @type {any} */ item) => item.mark === '✓').length;
-  const warn = items.filter((/** @type {any} */ item) => item.mark === '⚠').length;
-  const parts = [];
-  if (items.length) parts.push(`依据核对 ✓ ${ok}${warn ? ` · ⚠ ${warn}` : ''}${items.length - ok - warn ? ` · 其他 ${items.length - ok - warn}` : ''}`);
-  if (cautions.length) parts.push(`用药提示 ${cautions.length} 条`);
-  if (!parts.length) return { tone: 'muted', text: '', items, cautions };
-  return { tone: warn || cautions.length ? 'warn' : 'ok', text: parts.join(' · '), items, cautions };
+  if (!items.length && !cautions.length) return null;
+  const parts = [items.length ? `${items.length} 处引用待核对` : null, cautions.length ? `用药提示 ${cautions.length} 条` : null].filter(Boolean);
+  return { text: `⚠ ${parts.join(' · ')}`, items, cautions };
 }
 
 /**
@@ -105,48 +106,39 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   const h = kit.h;
   const react = kit.react;
   const slot = 'conversation.chat.node';
-  const styles = frameStyles();
+  const { text, meta, card, tone, textButton, link } = frameStyles();
 
-  /** The kernel's own renderer for an assistant step: the next entry below ours. */
-  function shippedAssistantStep() {
-    const entries = typeof ctx.slots?.entries === 'function' ? ctx.slots.entries(slot) : [];
-    const entry = (Array.isArray(entries) ? entries : []).find((/** @type {any} */ candidate) => candidate
-      && candidate.options && candidate.options.key === 'assistant-step' && candidate.component !== AssistantStep
-      && (candidate.options.priority ?? 0) >= 0);
-    return entry ? entry.component : null;
-  }
-
-  /** @param {{ check: any }} props */
-  function ReplyCheckRow({ check }) {
+  /** @param {{ model: NonNullable<ReturnType<typeof replyCheckSummary>> }} props */
+  function ReplyCheckRow({ model }) {
     const [open, setOpen] = react.useState(false);
-    const model = replyCheckSummary(check);
-    if (!model.text) return null;
-    const expandable = model.items.length > 0 || model.cautions.length > 0;
-    return h('div', { style: { ...styles.card, margin: '4px 0 2px' }, 'data-evimed-reply-check': model.tone },
-      h('div', { style: styles.line },
-        h('span', { style: styles.pill(model.tone) }, model.text),
-        h('span', { style: styles.quiet }, '独立审查按来源原文逐句核对，不改动回答'),
-        expandable ? h('button', { type: 'button', style: styles.button, onClick: () => setOpen(!open), 'aria-expanded': open }, open ? '收起' : '查看') : null),
-      open ? h('div', { style: { marginTop: '6px' } },
-        ...model.items.map((item, index) => h('div', { key: `s${index}`, style: { ...styles.secondary, margin: '6px 0' } },
-          h('div', { style: { color: 'var(--dsw-alias-label-primary)' } }, h('span', { style: { ...styles.pill(item.tone), marginRight: '6px' } }, item.mark), item.sentence),
-          h('div', { style: { color: 'var(--dsw-alias-label-secondary)' } }, item.reason),
-          item.source ? h('div', { style: styles.quiet }, item.url ? h('a', { href: item.url, target: '_blank', rel: 'noopener noreferrer' }, item.source) : item.source) : null)),
-        ...model.cautions.map((caution, index) => h('div', { key: `c${index}`, style: { ...styles.secondary, margin: '6px 0' } },
-          h('span', { style: { ...styles.pill('warn'), marginRight: '6px' } }, '用药提示'),
-          h('span', { style: { color: 'var(--dsw-alias-label-primary)' } }, caution.title),
-          caution.message ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)' } }, caution.message) : null))) : null);
+    const entry = (/** @type {string} */ key, /** @type {any[]} */ ...children) => h('div', { key, style: { margin: '8px 0' } }, ...children);
+    return h('div', { style: { marginTop: '8px' }, 'data-evimed-reply-check': 'warn' },
+      h('button', {
+        type: 'button', 'aria-expanded': open, onClick: () => setOpen(!open),
+        style: { ...textButton, ...text, display: 'inline-flex', alignItems: 'center', gap: '4px', color: tone('warn') },
+      }, model.text,
+      h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+        style: { transform: open ? 'rotate(90deg)' : 'none' } }, h('path', { d: 'm9 18 6-6-6-6' }))),
+      open ? h('div', { style: { ...card, marginTop: '4px' } },
+        ...model.items.map((item, index) => entry(`s${index}`,
+          h('div', { style: { color: 'var(--dsw-alias-label-primary)' } }, item.sentence),
+          h('div', { style: { ...meta, color: 'var(--dsw-alias-label-secondary)' } }, item.reason),
+          item.evidence ? h('div', { style: { ...meta, whiteSpace: 'pre-wrap' } }, `原文：「${item.evidence}」`) : null,
+          item.source ? h('div', { style: meta }, item.url ? h('a', { href: item.url, target: '_blank', rel: 'noopener noreferrer', style: link }, item.source) : item.source) : null)),
+        ...model.cautions.map((caution, index) => entry(`c${index}`,
+          h('div', { style: { color: 'var(--dsw-alias-label-primary)' } }, `用药提示：${caution.title}`),
+          caution.message ? h('div', { style: { ...meta, color: 'var(--dsw-alias-label-secondary)' } }, caution.message) : null))) : null);
   }
 
   /** @param {any} props */
   function AssistantStep(props) {
-    const Shipped = shippedAssistantStep();
+    const Shadowed = kit.shadowed(slot, 'assistant-step', AssistantStep);
     const state = kit.useFrameState((/** @type {any} */ frameState) => frameState.replyChecks);
-    let check = null;
-    try { check = replyCheckFor(state, props?.node); } catch { check = null; }
-    const own = Shipped ? h(Shipped, props) : null;
-    if (!check) return own;
-    return h(react.Fragment, null, own, h(ReplyCheckRow, { check }));
+    let model = null;
+    try { model = replyCheckSummary(replyCheckFor(state, props?.node)); } catch { model = null; }
+    const own = Shadowed ? h(Shadowed, props) : null;
+    if (!model) return own;
+    return h(react.Fragment, null, own, h(ReplyCheckRow, { model }));
   }
 
   kit.guarded('reply check row', () => kit.occupy({ slot, key: 'assistant-step', priority: -1, locale: 'chat' }, AssistantStep));

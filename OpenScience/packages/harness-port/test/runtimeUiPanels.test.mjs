@@ -1,185 +1,265 @@
-// The delivery card above the composer and the right column opening on the
-// kernel's own file tree: what the card draws from the shell's run state and
-// evidence, where it sits, and when the column opens on its own. The product's
-// own 运行 view and 文件 tab left on 2026-09-22 for the kernel's trajectory
-// view and file tree.
+// What a finished run hands back, in the conversation: its files as cards
+// after the answer that delivered them (and nothing above the composer), and
+// the right column opening on the kernel's own file tree. The product's own
+// 运行 view and 文件 tab left on 2026-09-22; the delivery card above the
+// composer on 2026-09-23.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
-  apply, artifactKind, artifactModel, BODY, composerColumnStyle, deliveryModel, evidenceModel, KERNEL_FILES_TAB, runStateText,
+  apply, BODY, documentNameOf, fileAddress, fileCardsModel, fileTypeOf, formatBytes, hasReport, KERNEL_FILES_TAB, turnCarriesRun,
 } from '../src/runtimeUiPanels.mjs';
-import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
+import { apply as applyReplyChecks } from '../src/runtimeUiReplyChecks.mjs';
+import { fakeCtx, fakeTarget, kernelSlots, kitFor, realReact, renderStatic } from './helpers/frameFakes.mjs';
 
-const CAPABILITIES = [{ id: 'clinical-evidence-synthesis', title: '临床证据综合', category: '证据综合', brief: 'b' }];
+const TURN_START = Date.parse('2026-09-22T10:00:00.000Z');
+const TURN_END = Date.parse('2026-09-22T10:25:00.000Z');
+const iso = (/** @type {number} */ ms) => new Date(ms).toISOString();
 
-function kit() {
-  const target = fakeTarget({ frame: { capabilities: CAPABILITIES } });
-  return kitFor(fakeCtx(), target);
-}
-
-const LIVE = {
-  runId: 'run-1', sessionId: 'session-a', state: 'running', title: '老年房颤抗凝',
-  artifacts: [],
-  unverifiedArtifacts: [],
+const DELIVERED = {
+  runId: 'run-1', sessionId: 'session-a', state: 'succeeded', verification: 'unverified', title: '老年房颤抗凝',
+  artifacts: ['deliverables/evidence/reporting-checklist.md', 'deliverables/evidence/clinical-evidence-matrix.json', 'deliverables/evidence/clinical-evidence-report.md', 'deliverables/evidence/screening.xlsx'],
+  unverifiedArtifacts: ['deliverables/evidence/revision-notes.md', 'deliverables/evidence/clinical-evidence-report.md', '../escape.md', '/etc/passwd'],
   progress: {
-    deliverables: [
-      { id: 'evidence', title: '老年房颤抗凝证据综述', capability: 'clinical-evidence-synthesis', status: 'rejected', attempts: 2, lastVerdict: 'issues', mustFixCount: 3, childSessionId: 'child-1' },
-      { id: 'brief', title: '临床决策简报', status: 'planned', attempts: 0 },
-    ],
-    phaseCounts: { search: 4, screen: 2, fulltext: 1, claims: 0, write: 0, deliver: 0 },
-    // What the control plane sends since it decides both: the phases reached,
-    // in order, and the furthest of them.
-    reachedPhases: ['search', 'screen', 'fulltext'],
-    currentPhase: 'fulltext',
-    sources: { searched: 120, included: 18, fullText: 6 },
-    claims: { total: 0, verified: 0 },
-    children: [{ childSessionId: 'child-1', deliverableId: 'evidence', state: 'running', lastActivityAt: null }],
-    usage: { requests: 40, inputTokens: 1, cachedInputTokens: 1, outputTokens: 1, costCny: 0.4218 },
-    startedAt: new Date(1_000_000).toISOString(),
-    updatedAt: new Date(1_300_000).toISOString(),
+    deliverables: [{ id: 'evidence', title: '老年房颤抗凝证据综述', status: 'accepted', attempts: 2 }],
+    claims: { total: 15, verified: 15 },
+    usage: { costCny: 4.81 },
+    startedAt: iso(TURN_START + 2_000),
+    updatedAt: iso(TURN_END + 20_000),
   },
 };
 
-const EVIDENCE = {
-  runId: 'run-1',
-  reportPath: 'deliverables/evidence/clinical-evidence-report.md',
-  claims: [
-    { claimId: 'CLM-001', claim: '利伐沙班降低卒中风险。', claimType: 'direct', status: 'verified', sourceTitle: 'ROCKET AF' },
-    { claimId: 'CLM-002', claim: '老年患者大出血风险相近。', claimType: 'direct', status: 'quote_not_found', sourceTitle: 'ARISTOTLE' },
-    { claimId: 'CLM-003', claim: '换算 NNT 约为 90。', claimType: 'derived', status: 'derived' },
-  ],
-  sources: [
-    { title: 'ROCKET AF', identifier: 'PMID:21830957', url: 'https://pubmed.ncbi.nlm.nih.gov/21830957/', sourceType: 'rct', claims: 1 },
-    { title: '2023 ACC/AHA 房颤指南', sourceType: 'guideline', claims: 2, url: 'javascript:alert(1)' },
-  ],
-};
-
-test('the run is read in the words every surface uses for it', () => {
+test('a delivered file is named by its type, and sorts the report first', () => {
   assert.equal(KERNEL_FILES_TAB, 'files', "the kernel's own file-tree tab, which stays the column's only guide entry");
-  assert.deepEqual(runStateText({ state: 'running' }), { text: '进行中', tone: 'active' });
-  assert.deepEqual(runStateText({ state: 'succeeded', verification: 'unverified' }), { text: '已交付 · 有结论未逐字核对', tone: 'warn' });
-  assert.deepEqual(runStateText({ state: 'canceled' }), { text: '已停止', tone: 'muted' });
+  assert.deepEqual(fileTypeOf('deliverables/evidence/clinical-evidence-report.md'), { name: 'clinical-evidence-report.md', type: 'Markdown', icon: 'doc', rank: 0 });
+  assert.deepEqual(fileTypeOf('deliverables/evidence/clinical-evidence-matrix.json'), { name: 'clinical-evidence-matrix.json', type: 'JSON', icon: 'data', rank: 1 });
+  // A completed reporting checklist matches `report` and is not the report.
+  assert.equal(fileTypeOf('deliverables/section/reporting-checklist.md').rank, 2);
+  assert.equal(fileTypeOf('deliverables/study/feasibility-matrix.md').rank, 2, 'only a matrix table is the evidence table');
+  assert.equal(fileTypeOf('deliverables/brief/summary.docx').type, 'Word');
+  assert.equal(fileTypeOf('a/screening.xlsx').type, 'Excel');
+  assert.equal(fileTypeOf('a/figure.png').type, '图片');
+  assert.equal(fileTypeOf('a/Makefile').type, '文件');
+  assert.equal(formatBytes(512), '512 B');
+  assert.equal(formatBytes(24_576), '24 KB');
+  assert.equal(formatBytes(3 * 1024 * 1024 + 200_000), '3.2 MB');
+  assert.equal(formatBytes(undefined), null, 'a size the backend did not report is not a size');
+  assert.equal(fileAddress('session-a', 'deliverables/证据 表.md'), 'dsh-resource://file/session/session-a/deliverables/%E8%AF%81%E6%8D%AE%20%E8%A1%A8.md');
 });
 
-test('a delivered file is named by what the contract calls it', () => {
-  assert.equal(artifactKind('deliverables/evidence/clinical-evidence-report.md').label, '报告');
-  assert.equal(artifactKind('deliverables/evidence/clinical-evidence-matrix.json').label, '证据表');
-  assert.equal(artifactKind('deliverables/evidence/revision-notes.md').label, '修订说明');
-  assert.equal(artifactKind('deliverables/brief/summary.docx').label, '文档');
-  assert.equal(artifactKind('deliverables/brief/data.csv').label, '文件');
+test('the cards are the run\'s files once it finished — accepted or not, each once, never a path that climbs', () => {
+  const model = /** @type {any} */ (fileCardsModel(DELIVERED));
+  assert.equal(model.runId, 'run-1');
+  assert.deepEqual(model.files.map((/** @type {any} */ file) => [file.path, file.label]), [
+    ['deliverables/evidence/clinical-evidence-report.md', '证据分析报告'],
+    ['deliverables/evidence/clinical-evidence-matrix.json', '证据矩阵'],
+    ['deliverables/evidence/reporting-checklist.md', '报告规范清单'],
+    ['deliverables/evidence/screening.xlsx', 'screening.xlsx'],
+  ], 'report, evidence table, the rest, each by the name the reader gives it; revision notes are backstage and stay in the file tree');
+  assert.equal(fileCardsModel({ ...DELIVERED, state: 'running' }), null, 'a running run has nothing to hand back yet');
+  assert.equal(fileCardsModel({ ...DELIVERED, artifacts: [], unverifiedArtifacts: [] }), null, 'neither has one that wrote nothing');
+  assert.ok(fileCardsModel({ ...DELIVERED, state: 'failed' }), 'a failed run keeps what it wrote');
+  assert.equal(hasReport(DELIVERED), true);
+  assert.equal(hasReport({ artifacts: ['a/screening.xlsx'] }), false);
 });
 
-test('the files group by the piece of work that wrote them, and say which were not checked', () => {
-  const live = { ...LIVE, artifacts: ['deliverables/evidence/clinical-evidence-matrix.json', 'deliverables/evidence/clinical-evidence-report.md', 'notes.md'],
-    unverifiedArtifacts: ['deliverables/brief/clinical-decision-brief.md', 'deliverables/evidence/clinical-evidence-report.md'] };
-  const model = /** @type {any} */ (artifactModel(live));
-  assert.equal(model.produced, true);
-  assert.deepEqual(model.groups.map((/** @type {any} */ group) => [group.title, group.files.map((/** @type {any} */ file) => `${file.label}:${file.name}:${file.verified ? '✓' : '·'}`)]), [
-    ['老年房颤抗凝证据综述', ['报告:clinical-evidence-report.md:✓', '证据表:clinical-evidence-matrix.json:✓']],
-    ['其他文件', ['文档:notes.md:✓']],
-    ['临床决策简报', ['文档:clinical-decision-brief.md:·']],
-  ]);
-  assert.equal(/** @type {any} */ (artifactModel(LIVE)).produced, false);
+test('a completed reporting checklist is never taken for the report: it follows the section it lists', () => {
+  // manuscript-support delivers `manuscript-section.md` beside its CONSORT
+  // checklist; only the checklist's name contains `report`.
+  const delivered = { ...DELIVERED, artifacts: ['deliverables/results/reporting-checklist.md', 'deliverables/results/manuscript-section.md'], unverifiedArtifacts: [] };
+  assert.deepEqual(/** @type {any} */ (fileCardsModel(delivered)).files.map((/** @type {any} */ file) => file.label), ['论文章节', '报告规范清单']);
+  assert.equal(hasReport(delivered), false, 'a checklist alone does not open the file tree as a report would');
+  const withReport = { ...delivered, artifacts: [...delivered.artifacts, 'deliverables/evidence/clinical-evidence-report.md'] };
+  assert.equal(/** @type {any} */ (fileCardsModel(withReport)).files[0].label, '证据分析报告');
 });
 
-test('each conclusion carries what the check found, and only for the run on screen', () => {
-  const model = /** @type {any} */ (evidenceModel(EVIDENCE, LIVE));
-  assert.equal(model.summary, '3 条结论：✓ 1 条已核对，⚠ 1 条待核对');
-  assert.deepEqual(model.claims.map((/** @type {any} */ claim) => [claim.mark, claim.text, claim.statusText]), [
-    ['✓', '利伐沙班降低卒中风险。', '引文已在保存的原文中核对'],
-    ['⚠', '老年患者大出血风险相近。', '引文未在保存的原文中找到'],
-    ['·', '换算 NNT 约为 90。', '推算结果，本身没有引文'],
-  ]);
-  assert.equal(evidenceModel({ ...EVIDENCE, runId: 'run-0' }, LIVE), null, 'evidence of an earlier run is not this run');
+test("a card names a document exactly as the shell's reader does, from a table held equal to the shell's", async () => {
+  // The frame's copy exists because a body may import nothing; this is what
+  // keeps it from drifting from `apps/web/src/lib/artifactNames.ts`.
+  const source = await readFile(new URL('../../../apps/web/src/lib/artifactNames.ts', import.meta.url), 'utf8');
+  const table = source.slice(source.indexOf('DOCUMENT_NAMES'), source.indexOf('});', source.indexOf('DOCUMENT_NAMES')));
+  const shell = [...table.matchAll(/^\s*"([^"]+)":\s*"([^"]+)",?\s*$/gm)].map((match) => [match[1], match[2]]);
+  assert.ok(shell.length >= 20, `only ${shell.length} names were read from the shell's table; the parse walked nothing`);
+  for (const [file, name] of shell) assert.equal(documentNameOf(`deliverables/x/${file}`), name, `${file}`);
+  // And nothing the shell does not name.
+  const frame = BODY.parts.find((part) => part.name === 'documentNameOf')?.toString() ?? '';
+  const named = [...frame.matchAll(/'([^']+\.[a-z]+)': '/g)].map((match) => match[1]);
+  assert.deepEqual(named.sort(), shell.map(([file]) => file).sort());
+  assert.equal(documentNameOf('deliverables/x/screening.xlsx'), null, 'a file with no document name keeps its own');
 });
 
-/** A frame with the right column's two services. */
-function column({ failFirstOpen = false } = {}) {
+test('a turn carries the run when it began before the run finished and ended after it began', () => {
+  assert.equal(turnCarriesRun({ start: TURN_START, end: TURN_END }, DELIVERED), true);
+  assert.equal(turnCarriesRun({ start: TURN_END + 10 * 60_000, end: TURN_END + 11 * 60_000 }, DELIVERED), false, 'a later question');
+  assert.equal(turnCarriesRun({ start: TURN_START - 60 * 60_000, end: TURN_START - 50 * 60_000 }, DELIVERED), false, 'an earlier one');
+  assert.equal(turnCarriesRun({}, DELIVERED), true, 'a time neither side knows does not decide');
+});
+
+/** A kernel whose answer row is a real component, so what is drawn around it can be seen. */
+function kernel() {
+  const slots = kernelSlots();
+  const { React } = realReact();
+  const KernelAnswer = (/** @type {any} */ props) => React.createElement('div', { 'data-kernel-answer': props.node.data.finalNode?.seq ?? 'streaming' }, 'answer');
+  const shipped = /** @type {any} */ (slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.chat.node' && entry.options.key === 'assistant-step'));
+  shipped.component = KernelAnswer;
+  return slots;
+}
+
+/**
+ * A frame with the right column's two services, and the bodies named.
+ * @param {{ failFirstOpen?: boolean, replyChecks?: boolean }} [options]
+ */
+function column({ failFirstOpen = false, replyChecks = false } = {}) {
   /** @type {any[]} */
   const definitions = [];
   /** @type {string[]} */
   const opened = [];
   let failures = failFirstOpen ? 1 : 0;
   const ctx = fakeCtx({
-    slots: kernelSlots(),
+    slots: kernel(),
     sessions: { list: { getSnapshot: () => ({ current: 'session-a', subagentsByParent: {} }), subscribe: () => () => {} }, refreshSubagents() {}, openSubagent() {} },
     sidebarRightTabs: { register(/** @type {any} */ definition) { definitions.push(definition); return () => {}; } },
     sidebarRight: { openTab(/** @type {string} */ kind) { if (failures > 0) { failures--; throw new Error('no seat mounted'); } opened.push(kind); } },
   });
-  const target = fakeTarget({ frame: { capabilities: CAPABILITIES } });
+  const target = fakeTarget();
   const frameKit = kitFor(ctx, target);
+  /** @type {any[]} */
+  const sent = [];
+  frameKit.hub.attach((/** @type {string} */ type, /** @type {any} */ fields) => { sent.push([type, fields]); });
+  if (replyChecks) applyReplyChecks(ctx, {}, target, undefined, frameKit);
   apply(ctx, {}, target, undefined, frameKit);
   frameKit.hub.deliver('session', { sessionId: 'session-a' });
-  return { ctx, target, kit: frameKit, definitions, opened };
+  const answerRow = () => ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.chat.node' && entry.options.key === 'assistant-step')
+    .sort((/** @type {any} */ a, /** @type {any} */ b) => (a.options.priority ?? 0) - (b.options.priority ?? 0))[0];
+  return { ctx, target, kit: frameKit, definitions, opened, sent, answerRow };
 }
 
-test("nothing of the product's is registered in the view ring or as a column tab: both are the kernel's", () => {
+/**
+ * The props the chat hands an answer row: the node, and the slot's own hooks
+ * — the turn's published tail, the chat snapshot, the kernel's resources.
+ * @param {{ seq?: number, turn?: number, turns?: number[], closingSeq?: number | null, sizes?: Record<string, number> }} [at]
+ */
+function answerProps({ seq = 40, turn = 2, turns = [1, 2], closingSeq = 40, sizes = { 'clinical-evidence-report.md': 24_576 } } = {}) {
+  /** @type {string[]} */
+  const asked = [];
+  return {
+    asked,
+    props: {
+      node: { kind: 'assistant-step', data: { turn, step: 5, finalNode: { seq } }, location: { kind: 'step', turn: { turn, start: { time: TURN_START } } } },
+      useTurnData: (/** @type {string} */ key) => (key === 'turn-tail' && closingSeq !== null ? { turn, time: TURN_END, closing: { finalNode: { seq: closingSeq } } } : undefined),
+      useChat: (/** @type {(snapshot: any) => any} */ selector) => selector({ timeline: { turnOrder: turns } }),
+      useResource: (/** @type {string} */ address) => {
+        asked.push(address);
+        const name = decodeURIComponent(address.split('/').pop() ?? '');
+        return name in sizes ? { status: 'live', value: { absolutePath: `/workspace/${name}`, version: 'v', bytes: sizes[name] } } : { status: 'loading' };
+      },
+    },
+  };
+}
+
+test("nothing of the product's is registered above the composer, in the view ring or as a column tab", () => {
   const f = column();
   assert.deepEqual(f.definitions, [], 'no tab type: a second guide entry would turn the column into the kernel 「开始」 compass');
-  assert.deepEqual(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'sidebar.right.pane.tab'), []);
-  assert.deepEqual(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.view'), [],
-    "the kernel's trajectory view is the 运行 tab (relabelled by the language pack)");
+  for (const name of ['sidebar.right.pane.tab', 'conversation.view', 'conversation.input.dock']) {
+    assert.deepEqual(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === name), [], `${name} is not ours`);
+  }
+  const ours = f.answerRow();
+  assert.equal(ours.options.priority, -2, 'below the reply check (-1), below the kernel (0)');
+  assert.equal(ours.options.locale, 'chat', "the kernel's answer is drawn with the chat namespace's translator");
   assert.deepEqual(f.target.warnings, []);
   assert.equal(BODY.name, 'panels');
 });
 
+test('the delivering answer ends with its files: name, type · size, one way to open — and nothing about the run', () => {
+  const f = column();
+  f.kit.hub.deliver('run-state', DELIVERED);
+  const { props, asked } = answerProps();
+  const html = renderStatic(f.answerRow().component, props);
+  assert.match(html, /^<div data-kernel-answer="40">answer<\/div>/, 'the kernel draws the answer first, as it would without this body');
+  assert.match(html, /data-evimed-files="run-1"/);
+  assert.match(html, />证据分析报告</, "the document's name, as the reader titles it");
+  assert.match(html, /title="clinical-evidence-report\.md"/, "the file's own name is the tooltip");
+  assert.match(html, /aria-label="打开证据分析报告"/);
+  assert.match(html, />报告规范清单</);
+  assert.match(html, /Markdown · 24 KB/, 'the size the kernel stat reports');
+  assert.match(html, />JSON</, 'a size not yet known: the type alone');
+  assert.match(html, /Excel/);
+  assert.match(html, /grid-template-columns:repeat\(2, minmax\(0, 1fr\)\)/, 'two columns');
+  assert.doesNotMatch(html, /已交付|已核对|结论|用时|¥|revision-notes|修订说明|条待核对/);
+  assert.ok(asked.includes('dsh-resource://file/session/session-a/deliverables/evidence/clinical-evidence-report.md'));
+  // One file is one full-width card.
+  f.kit.hub.deliver('run-state', { ...DELIVERED, artifacts: ['deliverables/evidence/clinical-evidence-report.md'], unverifiedArtifacts: [] });
+  assert.match(renderStatic(f.answerRow().component, answerProps().props), /grid-template-columns:minmax\(0, 1fr\)/);
+});
+
+test('only the closing answer of the newest turn that belongs to the run wears the files', () => {
+  const f = column();
+  const Row = f.answerRow().component;
+  const bare = '<div data-kernel-answer="40">answer</div>';
+  assert.equal(renderStatic(Row, answerProps().props), bare, 'no run state: nothing');
+  f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running' });
+  assert.equal(renderStatic(Row, answerProps().props), bare, 'still running: nothing yet');
+  f.kit.hub.deliver('run-state', DELIVERED);
+  assert.equal(renderStatic(Row, answerProps({ closingSeq: 41 }).props), bare, 'a step before the answer the turn closed on');
+  assert.equal(renderStatic(Row, answerProps({ closingSeq: null }).props), bare, 'a turn still open');
+  assert.equal(renderStatic(Row, answerProps({ turns: [1, 2, 3] }).props), bare, 'a later question was asked');
+  f.kit.hub.deliver('run-state', { ...DELIVERED, progress: { ...DELIVERED.progress, startedAt: iso(TURN_END + 60 * 60_000), updatedAt: iso(TURN_END + 70 * 60_000) } });
+  assert.equal(renderStatic(Row, answerProps().props), bare, 'a run that began after this turn ended is not this turn\'s');
+  f.kit.hub.deliver('run-state', DELIVERED);
+  f.kit.hub.deliver('session', { sessionId: 'child-1', subagent: true, rootSessionId: 'session-a' });
+  assert.equal(renderStatic(Row, answerProps().props), bare, "a delegated child's view is the same run, and shows none of its files");
+  f.kit.hub.deliver('session', { sessionId: 'session-a' });
+  assert.match(renderStatic(Row, answerProps().props), /data-evimed-files/);
+});
+
+test('past four files the rest wait behind one control', () => {
+  const f = column();
+  f.kit.hub.deliver('run-state', { ...DELIVERED, artifacts: ['a/1.md', 'a/2.md', 'a/3.md', 'a/4.md', 'a/5.md', 'a/6.csv'], unverifiedArtifacts: [] });
+  const html = renderStatic(f.answerRow().component, answerProps().props);
+  assert.equal((html.match(/data-evimed-file="/g) ?? []).length, 4);
+  assert.match(html, /显示全部 6 个文件/);
+});
+
+test('an answer can carry both the reply check and the files, each drawing what it shadows first', () => {
+  const f = column({ replyChecks: true });
+  f.kit.hub.deliver('run-state', DELIVERED);
+  f.kit.hub.deliver('reply-check', { sessionId: 'session-a', checks: [{ turnSeq: 40, status: 'done', verdicts: [
+    { sentence: '华法林与布洛芬合用无妨 [2]。', verdict: 'unsupported', reason: '来源说增加出血', safety: 'none', source: null },
+  ], cautions: [] }] });
+  const html = renderStatic(f.answerRow().component, answerProps().props);
+  const answer = html.indexOf('data-kernel-answer');
+  const check = html.indexOf('data-evimed-reply-check');
+  const files = html.indexOf('data-evimed-files');
+  assert.ok(answer === 5 && check > answer && files > check, `answer, then its check, then its files: ${html}`);
+});
+
 test("the kernel's file tree opens when a report appears while the reader watches, not on a visit to a finished task", () => {
   const watching = column();
-  watching.kit.hub.deliver('run-state', { ...LIVE, state: 'running', progress: { ...LIVE.progress, children: [], deliverables: [] } });
+  watching.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', artifacts: [], unverifiedArtifacts: [] });
   assert.deepEqual(watching.opened, []);
-  watching.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
+  watching.kit.hub.deliver('run-state', DELIVERED);
   assert.deepEqual(watching.opened, ['files']);
-  watching.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', updatedAt: 'later', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
+  watching.kit.hub.deliver('run-state', { ...DELIVERED, updatedAt: 'later' });
   assert.deepEqual(watching.opened, ['files'], 'once per run');
   const visiting = column();
-  visiting.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
+  visiting.kit.hub.deliver('run-state', DELIVERED);
   assert.deepEqual(visiting.opened, [], 'a finished task already has its files; the column does not jump out');
 });
 
 test('the column retries its open while no seat is mounted', () => {
   const f = column({ failFirstOpen: true });
-  f.kit.hub.deliver('run-state', { ...LIVE, state: 'running', artifacts: [] });
+  f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', artifacts: [], unverifiedArtifacts: [] });
   assert.deepEqual(f.opened, []);
-  f.kit.hub.deliver('run-state', { ...LIVE, artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
+  f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running' });
   assert.deepEqual(f.opened, [], 'the first open had no seat');
-  f.kit.hub.deliver('run-state', { ...LIVE, updatedAt: 'later', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
+  f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', updatedAt: 'later' });
   assert.deepEqual(f.opened, ['files']);
 });
 
-test('a finished run says so at the end of the turn that delivered it', () => {
-  const delivered = { ...LIVE, state: 'succeeded', verification: 'unverified',
-    artifacts: ['deliverables/evidence/clinical-evidence-report.md', 'deliverables/evidence/clinical-evidence-matrix.json'] };
-  const model = /** @type {any} */ (deliveryModel(delivered, EVIDENCE, 9_999_999_999, kit()));
-  assert.equal(model.state.text, '已交付 · 有结论未逐字核对');
-  assert.equal(model.title, '老年房颤抗凝');
-  assert.equal(model.reportPath, 'deliverables/evidence/clinical-evidence-report.md');
-  assert.equal(model.claims, '结论 3 条，已核对 1 条，2 条待核对');
-  assert.equal(model.fileCount, 2);
-  assert.equal(model.attention, 1);
-  assert.equal(model.elapsed, '5 分 00 秒');
-  assert.equal(model.cost, '约 ¥0.42');
-  assert.equal(deliveryModel(LIVE, EVIDENCE, 0, kit()), null, 'a running run has nothing to hand back yet');
-  assert.equal(deliveryModel({ ...LIVE, state: 'succeeded' }, null, 0, kit()), null, 'neither has one that produced nothing');
-});
-
-test('the card sits above the composer, once, and says nothing before there is anything to hand back', () => {
-  const f = column();
-  const entry = f.ctx.slots.registrations.find((/** @type {any} */ item) => item.name === 'conversation.input.dock' && item.options.id === 'evimed-delivery');
-  assert.ok(entry, 'one seat, in the list above the composer');
-  assert.equal(renderStatic(entry.component), '', 'a conversation with no finished run says nothing');
-  f.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
-  f.kit.hub.deliver('evidence', EVIDENCE);
-  const card = renderStatic(entry.component);
-  assert.match(card, /打开报告/);
-  assert.match(card, /结论 3 条，已核对 1 条/);
-  assert.match(card, /引用前请在报告里核对带 ⚠ 的结论/);
-  assert.match(card, /收起/);
-  assert.doesNotMatch(card, /javascript:/);
-  // The seat above the composer spans the frame; the card holds itself to
-  // the composer's own centred width, as the kernel's queue dock does, or it
-  // sits at the left edge beside a centred composer (2026-09-22).
-  assert.match(card, /max-width:calc\(var\(--dsh-composer-card-max-width, ?952px\) - 2 \* var\(--dsh-composer-dock-inset, ?8px\)\)/);
-  assert.match(card, /margin:0 auto/);
-  assert.equal(composerColumnStyle().margin, '0 auto');
+test('outside a frame nothing is taken over', () => {
+  const ctx = fakeCtx({ slots: kernel() });
+  const target = fakeTarget({ framed: false });
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => (entry.options.priority ?? 0) < 0).length, 0);
 });
