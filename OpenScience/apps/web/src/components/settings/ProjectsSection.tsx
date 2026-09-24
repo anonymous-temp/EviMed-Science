@@ -16,6 +16,7 @@ import { useProjectStore } from "@/lib/projects";
 import { PROJECT_NAME_MAX, projectErrorMessage, projectMetaLine, projectNameProblem } from "@/lib/projectNames";
 import { announceRunsChanged, relativeTime, runMoment, runTitle } from "@/lib/runPresentation";
 import { chatPath } from "@/lib/runLocation";
+import { groupConversations, type Conversation } from "@/lib/conversations";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -294,10 +295,13 @@ function ArchivedConversations() {
   }, [projectId]);
   useEffect(() => { void load(); }, [load]);
 
-  const restore = async (run: WebAgentRun) => {
-    setBusy(run.id);
+  // One row per conversation, as in the sidebar: archiving put away every
+  // turn of it, and restoring brings every turn back.
+  const conversations = runs === null ? null : groupConversations(runs);
+  const restore = async (conversation: Conversation) => {
+    setBusy(conversation.sessionId);
     try {
-      await archiveWebAgentRun(run.id, false);
+      for (const run of conversation.runs) await archiveWebAgentRun(run.id, false);
       announceRunsChanged();
       toast.success("已恢复到对话列表");
       await load();
@@ -312,22 +316,22 @@ function ArchivedConversations() {
     <Panel title="已归档的对话">
       {error ? (
         <PanelRow label={<span role="alert">{error}</span>} control={<Button variant="text" onClick={() => void load()}>重试</Button>} />
-      ) : runs === null ? (
+      ) : conversations === null ? (
         <PanelRow label={<span className="text-text-3">正在读取…</span>} />
-      ) : runs.length === 0 ? (
+      ) : conversations.length === 0 ? (
         <PanelRow label={<span className="text-text-3">没有归档的对话</span>} />
       ) : (
         <List label="已归档的对话" divided>
-          {runs.map((run) => (
+          {conversations.map((conversation) => (
             <ListRow
-              key={run.id}
+              key={conversation.sessionId}
               className={PANEL_ROW}
-              title={runTitle(run)}
-              to={chatPath(run.sessionId)}
-              meta={relativeTime(runMoment(run))}
+              title={runTitle(conversation.titleRun)}
+              to={chatPath(conversation.sessionId)}
+              meta={relativeTime(runMoment(conversation.lead))}
               actions={(
-                <IconButton icon={ArchiveRestore} label={`恢复「${runTitle(run)}」`} size="sm" disabled={busy !== null}
-                  onClick={() => void restore(run)} />
+                <IconButton icon={ArchiveRestore} label={`恢复「${runTitle(conversation.titleRun)}」`} size="sm" disabled={busy !== null}
+                  onClick={() => void restore(conversation)} />
               )}
             />
           ))}

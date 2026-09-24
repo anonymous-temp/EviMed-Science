@@ -7,6 +7,7 @@ import { useProjectStore } from "@/lib/projects";
 import { PROJECT_NAME_MAX, projectErrorMessage, projectNameProblem } from "@/lib/projectNames";
 import { chatPath } from "@/lib/runLocation";
 import { compactTime, runMoment, runTitle } from "@/lib/runPresentation";
+import { groupConversations, type Conversation } from "@/lib/conversations";
 import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
@@ -74,9 +75,10 @@ function without<T>(map: Record<string, T>, key: string): Record<string, T> {
   return next;
 }
 
-/** One row's identity across the tree and the search results. */
+/** One row's identity across the tree and the search results: a
+ *  conversation, which keeps it when a follow-up adds a run to it. */
 function taskKey(projectId: string, run: WebAgentRun): string {
-  return `${projectId}\u0000${run.id}`;
+  return `${projectId}\u0000${run.sessionId}`;
 }
 
 /** Where a click is going: a path, and router state minted at the moment of arrival. */
@@ -300,13 +302,15 @@ export function ProjectBrowser() {
   const needle = query.trim().toLowerCase();
   const results = useMemo(() => {
     if (!needle) return [];
-    const found: Array<{ project: WebProject; run: WebAgentRun }> = [];
+    const found: Array<{ project: WebProject; conversation: Conversation }> = [];
     for (const project of listed) {
       const entry = byProject[project.id];
       if (entry?.status !== "ready") continue;
-      for (const run of entry.runs) if (taskTarget(run) && runTitle(run).toLowerCase().includes(needle)) found.push({ project, run });
+      for (const conversation of groupConversations(entry.runs.filter((run) => taskTarget(run) != null))) {
+        if (conversation.runs.some((run) => runTitle(run).toLowerCase().includes(needle))) found.push({ project, conversation });
+      }
     }
-    return found.sort((a, b) => runMoment(b.run) - runMoment(a.run));
+    return found.sort((a, b) => runMoment(b.conversation.lead) - runMoment(a.conversation.lead));
   }, [needle, listed, byProject]);
   // The search reads what has been loaded; the rest is one click away rather
   // than read behind the reader's back on every keystroke.
@@ -317,7 +321,9 @@ export function ProjectBrowser() {
     // Back in the tree, the task is where the reader can see it: its group
     // open, and the long list unfolded if it sits past the first rows.
     const entry = byProject[project.id];
-    const index = entry?.status === "ready" ? entry.runs.findIndex((candidate) => candidate.id === run.id) : -1;
+    const index = entry?.status === "ready"
+      ? groupConversations(entry.runs.filter((candidate) => taskTarget(candidate) != null)).findIndex((candidate) => candidate.sessionId === run.sessionId)
+      : -1;
     setExpanded((map) => ({ ...map, [project.id]: true }));
     if (index >= COLLAPSED_TASK_ROWS) setShowAll((set) => new Set(set).add(project.id));
     const to = taskTarget(run);
@@ -429,16 +435,16 @@ export function ProjectBrowser() {
             ))}
             {results.length > 0 && (
               <ul aria-label="搜索结果" className="flex flex-col">
-                {results.slice(0, SEARCH_RESULTS_MAX).map(({ project, run }) => (
-                  <li key={taskKey(project.id, run)}>
+                {results.slice(0, SEARCH_RESULTS_MAX).map(({ project, conversation }) => (
+                  <li key={taskKey(project.id, conversation.lead)}>
                     <TaskRow
-                      run={run}
+                      conversation={conversation}
                       projectId={project.id}
                       projectName={project.name}
                       current={project.id === currentId}
-                      active={project.id === currentId && isOpenTask(run, location.pathname)}
+                      active={project.id === currentId && isOpenTask(conversation.lead, location.pathname)}
                       withProject
-                      onOpen={(row) => openResult(project, run, row)}
+                      onOpen={(row) => openResult(project, conversation.lead, row)}
                       onWarm={() => warm(project.id)}
                     />
                   </li>
@@ -461,7 +467,7 @@ export function ProjectBrowser() {
             )}
             <ConversationMatches
               query={query}
-              shownSessionIds={new Set(results.filter(({ project }) => project.id === currentId).map(({ run }) => run.sessionId))}
+              shownSessionIds={new Set(results.filter(({ project }) => project.id === currentId).map(({ conversation }) => conversation.sessionId))}
             />
           </>
         ) : (
@@ -596,8 +602,9 @@ function ProjectGroup({
     }
   };
 
-  // A run whose session was never recorded has no conversation to open.
-  const rows = runs?.status === "ready" ? runs.runs.filter((run) => taskTarget(run) != null) : [];
+  // One row per conversation; a run whose session was never recorded has no
+  // conversation to open.
+  const rows = runs?.status === "ready" ? groupConversations(runs.runs.filter((run) => taskTarget(run) != null)) : [];
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_TASK_ROWS);
   const hidden = rows.length - Math.min(rows.length, COLLAPSED_TASK_ROWS);
   const status = [current && !standIn && "当前项目", switching && "正在切换", running && "有对话正在运行"].filter(Boolean).join("，");
@@ -705,15 +712,15 @@ function ProjectGroup({
           {runs?.status === "ready" && rows.length === 0 && (
             <li className="py-1 pl-11 pr-2 text-caption text-muted">还没有对话</li>
           )}
-          {shown.map((run) => (
-            <li key={run.id}>
+          {shown.map((conversation) => (
+            <li key={conversation.sessionId}>
               <TaskRow
-                run={run}
+                conversation={conversation}
                 projectId={project.id}
                 projectName={project.name}
                 current={current}
-                active={isOpen(run)}
-                onOpen={(row) => onOpenTask(run, row)}
+                active={isOpen(conversation.lead)}
+                onOpen={(row) => onOpenTask(conversation.lead, row)}
               />
             </li>
           ))}
@@ -751,7 +758,7 @@ function ProjectGroup({
  * one of those acts on that project's runtime.
  */
 function TaskRow({
-  run,
+  conversation,
   projectId,
   projectName,
   current,
@@ -760,7 +767,7 @@ function TaskRow({
   onOpen,
   onWarm,
 }: {
-  run: WebAgentRun;
+  conversation: Conversation;
   projectId: string;
   projectName: string;
   /** The conversation belongs to the project the shell is in. */
@@ -771,18 +778,19 @@ function TaskRow({
   onOpen: (row: HTMLElement | null) => void;
   onWarm?: () => void;
 }) {
+  const run = conversation.lead;
   useRunsSeenVersion();
   useEffect(() => {
     if (active) markRunSeen(run);
   }, [active, run]);
   const target = taskTarget(run);
   if (!target) return null;
-  const running = isRunning(run);
+  const running = conversation.runs.some(isRunning);
   const unseen = !active && isRunUnseen(run);
   const className = "flex h-8 w-full items-center gap-2 rounded pl-7 pr-2 text-left hover:bg-surface-2 aria-[current=page]:bg-surface-2";
   const content = (
     <>
-      <span className={cn("min-w-0 flex-1 truncate text-ui", unseen ? "font-medium text-text" : "text-text")}>{runTitle(run)}</span>
+      <span className={cn("min-w-0 flex-1 truncate text-ui", unseen ? "font-medium text-text" : "text-text")}>{runTitle(conversation.titleRun)}</span>
       {running ? (
         <Loader2 size={16} className="shrink-0 animate-spin text-text-3 motion-reduce:animate-none" aria-label="进行中" />
       ) : (
@@ -830,7 +838,7 @@ function TaskRow({
     <div className="group/task relative">
       {row}
       <span className="absolute inset-y-0 right-1 flex items-center opacity-0 group-hover/task:opacity-100 group-focus-within/task:opacity-100 max-lg:opacity-100">
-        <ConversationMenu run={run} />
+        <ConversationMenu conversation={conversation} />
       </span>
     </div>
   );

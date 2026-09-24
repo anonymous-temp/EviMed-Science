@@ -381,13 +381,34 @@ describe("ProjectBrowser — task rows", () => {
   });
 
   // The controls the run ledger page held for one conversation, on its row.
-  it("offers stop, rename and the identifiers on a running conversation's row", async () => {
+  it("offers stop and rename on a running conversation's row, and the identifiers to operators only", async () => {
     mocks.runs.default = [run({ id: "run-1", question: "进行中的研究", status: "running", finishedAt: null })];
-    renderBrowser();
+    const view = renderBrowser();
     await userEvent.click(await screen.findByRole("button", { name: "「进行中的研究」的操作" }));
     expect(await screen.findByRole("menuitem", { name: "停止" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "复制诊断信息" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "复制诊断信息" })).toBeNull();
+    view.unmount();
+
+    const researcher = mocks.fetchWebMe.getMockImplementation();
+    mocks.fetchWebMe.mockImplementation(async (options: { projectId?: string } = {}) => ({ ...(await researcher?.(options)), operator: true }));
+    renderBrowser();
+    await userEvent.click(await screen.findByRole("button", { name: "「进行中的研究」的操作" }));
+    expect(await screen.findByRole("menuitem", { name: "复制诊断信息" })).toBeInTheDocument();
+  });
+
+  // The ledger records a run per turn; the list shows a conversation once
+  // (production, 2026-09-24: a question and its follow-up were two rows).
+  it("lists a conversation with a follow-up as one row, named by its first question", async () => {
+    mocks.runs.default = [
+      run({ id: "turn-2", sessionId: "ses-shared", question: "那 65–69 岁呢？", startedAt: "2026-09-24T02:50:00Z", finishedAt: "2026-09-24T02:50:40Z", createdAt: "2026-09-24T02:50:00Z" }),
+      run({ id: "turn-1", sessionId: "ses-shared", question: "阿司匹林一级预防的获益与风险", startedAt: "2026-09-24T02:48:00Z", finishedAt: "2026-09-24T02:49:20Z", createdAt: "2026-09-24T02:48:00Z" }),
+    ];
+    renderBrowser();
+    const rows = await screen.findAllByRole("link", { name: /阿司匹林一级预防的获益与风险/ });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("href", "/app/chat/ses-shared");
+    expect(screen.queryByRole("link", { name: /那 65–69 岁呢/ })).toBeNull();
   });
 
   it("does not offer 停止 on a conversation that has finished", async () => {
