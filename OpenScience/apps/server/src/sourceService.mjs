@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
+import { withdrawDerivedMemory, withdrawOrphanedDerivedMemory } from "./derivedMemory.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
 import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput,
   sourceUnderstandingAuditSample, sourceUnderstandingOmissionNotice } from "@evimed/domain";
@@ -1363,7 +1364,7 @@ export class SourceService {
       await client.query(`UPDATE evimed_product.jobs SET status='canceled',finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
         WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2 AND payload->>'action' IS DISTINCT FROM 'source-delete' AND status IN ('queued','running')`, [userId, sourceId]);
       // Keep audit content, but hide units and retire all explicitly linked
-      // understanding. Fact revisions enqueue the existing memory-index outbox.
+      // understanding.
       await client.query(`WITH changed AS (
         UPDATE evimed_product.documents SET revision=revision+1,updated_at=clock_timestamp(),
           deleted_at=CASE WHEN kind='source-unit' THEN clock_timestamp() ELSE deleted_at END,
@@ -1373,7 +1374,14 @@ export class SourceService {
           AND (payload->>'sourceId'=$2 OR payload @> jsonb_build_object('provenance',jsonb_build_array(jsonb_build_object('type','source','id',$2::text))))
         RETURNING user_id,kind,id,revision,payload,deleted_at
       ) INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM changed`,
-      [userId, sourceId, ["source-unit", "fact", "method", "knowledge", "profile"]]);
+      [userId, sourceId, ["source-unit", "method", "knowledge", "profile"]]);
+      // The memories the document yielded — 「来自资料」 in the capsule — go in
+      // this same transaction, keyed on the publication ledger and on the
+      // anchors they carry (`derivedMemory.mjs`). The statement above matched
+      // a capsule entry only by an exact `{type:"source",id}` that the library
+      // never writes, so every one of them outlived its document. Their
+      // revisions enqueue the memory-index outbox.
+      await withdrawDerivedMemory(client, userId, { sourceIds: [sourceId], reason: "source_deleted" });
       const deletionPayload = JSON.stringify({ action: "source-delete", sourceId, sourceGeneration, deletionRevision, accountCreatedAt: generation });
       if (legacy) {
         await client.query(`UPDATE evimed_product.jobs SET kind='ingest',payload=$3::jsonb,status='queued',attempts=0,error=NULL,result=NULL,
@@ -1538,6 +1546,23 @@ export class SourceService {
         void item.tail.finally(() => { if (registrationLocks.get(item.key) === item.tail) registrationLocks.delete(item.key); });
       }
     }
+  }
+
+  /**
+   * Withdraw the memories still derived from a document or a project that no
+   * longer exists (`derivedMemory.mjs`): those left by deletions before the
+   * withdrawal ran inside them, and those a publication wrote while its
+   * document was being deleted. Idempotent and bounded; the worker runs it on
+   * its repair cycle.
+   * @param {{ limit?: number }} [options]
+   * @returns {Promise<{ sources: number, projects: number, entries: number, ledgers: number }>}
+   */
+  async withdrawOrphanedMemory({ limit = 100 } = {}) {
+    const database = this.documents.database;
+    if (!database) return { sources: 0, projects: 0, entries: 0, ledgers: 0 };
+    await migrateProductStore(database);
+    const { sources, projects, entries, ledgers } = await withdrawOrphanedDerivedMemory(database, { limit });
+    return { sources, projects, entries, ledgers };
   }
 
   /** Repair missing intake jobs; an exhausted generation remains stopped until

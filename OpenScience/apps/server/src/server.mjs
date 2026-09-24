@@ -49,6 +49,7 @@ import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usag
 import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
+import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
 import { sessionDispatchNotes } from "./memorySessions.mjs";
@@ -1139,6 +1140,13 @@ export function createWebApiApp(overrides = {}) {
     parser: documentParser,
     pollMs: config.sourceIngestionPollMs,
     leaseMs: config.sourceIngestionLeaseMs,
+    // The orphan sweep's own line: what it withdrew, or why it could not.
+    report: (event, detail) => {
+      const failed = event === "derived_memory_sweep_failed";
+      void securityAudit(config, "memory.derived.sweep", failed ? "failed" : "completed", failed
+        ? { code: detail.code }
+        : { code: event, detail: `sources=${detail.sources} projects=${detail.projects} entries=${detail.entries} ledgers=${detail.ledgers}` });
+    },
     understandingRuns: new SourceUnderstandingRuns({
       dispatch: request => sourceUnderstandingRuntime.dispatch(request),
       readResult: identity => sourceUnderstandingRuntime.readResult(identity),
@@ -4058,7 +4066,18 @@ export function createWebApiApp(overrides = {}) {
           // derived copy that survives holds no original data and goes with the
           // next rebuild, so failing here would report a deletion that did.
           await memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
-          const data = await store.deleteProject(user, projectId);
+          // What the project's documents and runs put in the account's own
+          // capsule — 「来自资料」 above all — is account-level and outlived
+          // every project deletion until 2026-09-24 (62 such memories were
+          // cleared by hand on production the day before). Withdrawn inside
+          // the deletion's own transaction, so the two commit together; the
+          // update is also what tells the recall index (`derivedMemory.mjs`).
+          if (productDatabase) await migrateProductStore(productDatabase);
+          const data = await store.deleteProject(user, projectId, {
+            beforeDelete: async (client) => {
+              if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
+            },
+          });
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
           return;

@@ -170,3 +170,43 @@ test("a document waits for a runtime or budget instead of failing when none is f
     assert.equal(methods.includes("fail"), false, `${code}: the job is not spent`);
   }
 });
+
+test("the repair cycle sweeps memory whose document or project is gone, and says what it did or why it could not", async () => {
+  // Plan 2026-09-23 §5.6: the deletions withdraw in their own transaction;
+  // this is what catches a publication that raced one, and what a deletion
+  // before 2026-09-24 left behind.
+  const { sources } = fixture();
+  const order = [];
+  /** @type {any[]} */
+  const reported = [];
+  sources.reconcileJobs = async () => { order.push("jobs"); throw Object.assign(new Error("jobs down"), { code: "product_state_unavailable" }); };
+  sources.withdrawOrphanedMemory = async () => { order.push("sweep"); return { sources: 2, projects: 1, entries: 5, ledgers: 2 }; };
+  const worker = new SourceIngestionWorker({ jobs: {}, sources, parser: {}, resolveSource: async () => "", materialize: async () => "",
+    report: (event, detail) => { reported.push({ event, detail }); } });
+  await worker.reconcile();
+  assert.deepEqual(order, ["jobs", "sweep"], "a failed job repair does not stop the sweep");
+  assert.deepEqual(reported, [{ event: "derived_memory_withdrawn", detail: { sources: 2, projects: 1, entries: 5, ledgers: 2 } }]);
+  assert.equal(worker.status().orphanSweep.entries, 5);
+  assert.equal(worker.status().orphanSweep.error, null);
+
+  // A sweep with nothing to do is quiet; one that fails is on the status and the report.
+  sources.withdrawOrphanedMemory = async () => ({ sources: 0, projects: 0, entries: 0, ledgers: 0 });
+  await worker.reconcile();
+  assert.equal(reported.length, 1);
+  sources.withdrawOrphanedMemory = async () => { throw Object.assign(new Error("db down"), { code: "product_state_unavailable" }); };
+  const throwingReport = new SourceIngestionWorker({ jobs: {}, sources, parser: {}, resolveSource: async () => "", materialize: async () => "",
+    report: () => { throw new Error("the audit ledger is full"); } });
+  await throwingReport.reconcile();
+  assert.equal(throwingReport.status().orphanSweep.error, "product_state_unavailable", "a report that throws does not hide the failure");
+  await worker.reconcile();
+  assert.deepEqual(reported.at(-1), { event: "derived_memory_sweep_failed", detail: { code: "product_state_unavailable" } });
+  // One cycle at a time: a second call while one runs joins it.
+  /** @type {() => void} */
+  let release = () => {};
+  sources.withdrawOrphanedMemory = () => new Promise((resolve) => { release = () => resolve({ sources: 0, projects: 0, entries: 0, ledgers: 0 }); });
+  const first = worker.reconcile();
+  assert.equal(worker.reconcile(), first);
+  await new Promise((resolve) => setImmediate(resolve));
+  release();
+  await first;
+});
