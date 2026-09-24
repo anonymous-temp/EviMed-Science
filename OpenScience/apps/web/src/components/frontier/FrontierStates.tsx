@@ -12,8 +12,8 @@ export const FRONTIER_OFF_SENTENCE = "前沿动态还没有在这个工作空间
  */
 export function FrontierOffPage() {
   return (
-    <PageShell title="前沿动态" width="wide">
-      <EmptyState icon={Newspaper} title={FRONTIER_OFF_SENTENCE} className="rounded-card border border-dashed border-border" />
+    <PageShell title="前沿动态">
+      <EmptyState icon={Newspaper} title={FRONTIER_OFF_SENTENCE} />
     </PageShell>
   );
 }
