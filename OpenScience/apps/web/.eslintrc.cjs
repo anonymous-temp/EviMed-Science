@@ -171,7 +171,6 @@ module.exports = {
       // bordered pill or button goes.
       files: [
         "src/app/routes/FrontierPage.tsx",
-        "src/app/routes/SourcesPage.tsx",
         "src/components/frontier/FrontierFilters.tsx",
         "src/components/inspector/FilePreviewInspector.tsx",
         "src/components/markdown-viewer/ClaimAppraisal.tsx",
