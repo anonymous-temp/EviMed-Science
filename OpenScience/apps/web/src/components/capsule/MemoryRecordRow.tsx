@@ -14,7 +14,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ListRow } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
-import { EditingRow, InferredMark, RowDetail, RowOrigin } from "./rowParts";
+import { EditingRow, RowDetail, RowOrigin, RowSentence } from "./rowParts";
 
 /** Who made a change, in the researcher's words. */
 const REVISION_BY: Record<string, string> = {
@@ -55,12 +55,13 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * row keeps (principle 18). Nothing else is said about it: not how often it
  * was seen or used, not since when it holds (2026-09-23 plan §5.6).
  *
- * 编辑 and 忘记 appear on hover. Opening the row shows what it rests on — the
- * words it was said in, the versions it has had, the conversation it came
- * from; its 「⋯」 holds the same history, the undo of its last change, and 「不对」
- * on an inference. 忘记 archives, as a revision the toast takes back and 已忘记
- * 的内容 restores; 不对 deletes and stops the extractor inferring it again, so
- * it is the one that asks first. A record held for a medicine-safety check
+ * 编辑 and 忘记 appear on hover. Opening the row shows the whole sentence and
+ * what it rests on — the words it was said in, the versions it has had, the
+ * conversation it came from; its 「⋯」 holds the same history, the undo of its
+ * last change, and 「不对」 on an inference. 忘记 archives, as a revision the
+ * toast takes back and 已忘记的内容 restores; 不对 deletes and stops the
+ * extractor inferring it again, so it is the one that asks first. A record
+ * held for a medicine-safety check
  * says so and asks to be confirmed, and a sensitive one says what confirming
  * does before it does it.
  */
@@ -207,8 +208,7 @@ export function MemoryRecordRow({
         leading={<RowOrigin label={origin} />}
         title={(
           <span ref={anchor} data-record-id={record.id}>
-            {memoryExcerpt(record.summary || record.value)}
-            {inferred && <InferredMark />}
+            <RowSentence text={memoryExcerpt(record.summary || record.value)} inferred={inferred} clamp={opens && !open} />
           </span>
         )}
         onOpen={opens ? () => setOpen((current) => !current) : undefined}

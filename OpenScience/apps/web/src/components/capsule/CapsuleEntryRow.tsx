@@ -7,7 +7,7 @@ import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { EditingRow, InferredMark, RowOrigin } from "./rowParts";
+import { EditingRow, RowOrigin, RowSentence } from "./rowParts";
 
 /**
  * One entry of the researcher's own capsule, as a memory row like any other:
@@ -83,7 +83,7 @@ export function CapsuleEntryRow({ entry, origin, onChanged }: {
   return (
     <ListRow
       leading={<RowOrigin label={origin} />}
-      title={<>{memoryExcerpt(entry.payload.content)}{entry.payload.origin !== "explicit" && <InferredMark />}</>}
+      title={<RowSentence text={memoryExcerpt(entry.payload.content)} inferred={entry.payload.origin !== "explicit"} />}
       muted={retired}
       actions={retired ? (
         <IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy} onClick={() => void undo("已恢复")} />
