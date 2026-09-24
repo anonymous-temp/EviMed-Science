@@ -3,17 +3,16 @@ import test from 'node:test'
 
 import { METHODS_SECTION_NAME, METHODS_SECTION_ORDER, apply, methodsSectionText, mountedMethodDescription } from '../plugins/capsule.mjs'
 
-// The review a method gets is one sentence in the reply (spec §19.7). Since the
-// in-chat background panel was removed, the registered description is the only
-// place that sentence can come from — and it must never touch the file, whose
-// bytes are the digest a method is attributed by.
+// The registered description says where a method came from and asks nothing
+// of the reply: the sentence spec §19.7 had the model add is the back office
+// the owner struck on 2026-09-24. It never touches the file, whose bytes are
+// the digest a method is attributed by.
 
-test('a learned method tells the model to say, in the user\'s words, that it was used', () => {
+test('a learned method says it was learnt from the user, and owes the reply nothing', () => {
   const text = mountedMethodDescription({ name: 'grade-first', description: 'Reports GRADE before effect sizes.', directory: `_lm${'a'.repeat(32)}` })
   assert.match(text, /^Reports GRADE before effect sizes\.\n/, 'the method\'s own description comes first, unedited')
   assert.match(text, /学到的做法/)
-  assert.match(text, /在回复里用用户的语言加一句/)
-  assert.match(text, /不要念技能名/)
+  assert.doesNotMatch(text, /回复|告诉你|加一句/)
 })
 
 test('a method from an enabled capsule says it came from the capsule', () => {
@@ -23,10 +22,10 @@ test('a method from an enabled capsule says it came from the capsule', () => {
   assert.doesNotMatch(text, /学到的做法/)
 })
 
-test('a long description is shortened, never the sentence the reader is owed', () => {
+test('a long description is shortened, never the note on where it came from', () => {
   const text = mountedMethodDescription({ name: 'long', description: 'x'.repeat(5000), directory: `_lm${'b'.repeat(32)}` })
   assert.ok(text.length <= 1024)
-  assert.match(text, /不对可以直接告诉你。$/)
+  assert.match(text, /学到的做法。$/)
 })
 
 test('mounted methods are listed in one prompt section, each with the file the model reads', () => {

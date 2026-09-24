@@ -285,7 +285,10 @@ test("the user's language is the thinking's and the narration's too, and the ans
   const start = text.indexOf("## 对用户说话");
   const rule = text.slice(start, text.indexOf("\n## ", start + 1));
   assert.match(rule, /用用户的语言回答和说明进展，思考和过程叙述也用这种语言。/);
-  assert.match(rule, /最终回答只写结论、交付物、需要用户决定的事和局限，不讲内部做了哪些检查（提交、冻结、独立审查、提交前检查）。/);
+  // What the reply holds, and that how the run worked is not part of it
+  // (owner, 2026-09-24: 「本次任务我按既往习惯核对了…」 is the back office).
+  assert.match(rule, /回答只写对读者有用的：结论、依据、交付物、需要用户决定的事；证据强弱写进它所支撑的那句话，不另立小节。/);
+  assert.match(rule, /做过哪些检索与核对、参考了哪条记忆或做法、哪些没取到，都不写进回答/);
   assert.ok(rule.length < 400, `the rule stays short: ${rule.length} characters`);
   // The delegated child reads the same rule, not a copy.
   const child = buildChildGuidanceText({ capsuleActive: false });

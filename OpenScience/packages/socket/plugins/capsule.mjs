@@ -181,23 +181,21 @@ async function loadMethods(ctx, directory) {
 const LEARNED_METHOD_DIRECTORY = /^_lm[0-9a-f]{32}$/
 
 /**
- * What the model is told a mounted method is, and the one sentence it owes the
- * researcher when it uses one.
- *
- * The sentence is the review (spec §19.7: 「本次按你的新方法 X 执行，如不对请说」):
- * a method takes effect without anyone approving it, and since the in-chat
- * background panel was removed (owner, 2026-09-20) nothing else tells the
- * researcher that their learnt way of working was applied. Added here, at
- * registration, and never to the file: the file's bytes are the digest the
- * receipt and the usage counters attribute by.
+ * What the model is told a mounted method is: where it came from, and nothing
+ * it owes the reply. The sentence spec §19.7 had it add (「本次按你的新方法 X
+ * 执行，如不对请说」) read as the back office in the answer, and the owner
+ * struck it (2026-09-24, quoting 「本次任务我按既往习惯核对了…不对的地方直接
+ * 说」): a researcher reviews their methods on 记忆胶囊 › 做法, where each can
+ * be removed. Added here, at registration, and never to the file: the file's
+ * bytes are the digest the receipt and the usage counters attribute by.
  *
  * @param {{ name: string, description: string, directory?: string }} method
  * @returns {string}
  */
 export function mountedMethodDescription(method) {
   const note = LEARNED_METHOD_DIRECTORY.test(String(method.directory ?? ''))
-    ? '这是 EviMed 从这位用户以往的研究里学到的做法。按它做的时候，在回复里用用户的语言加一句，概括本次按用户的哪条做法做了什么（不要念技能名），并说不对可以直接告诉你。'
-    : '这是用户启用的记忆胶囊里的做法。按它做的时候，在回复里用用户的语言加一句，说明本次参考了胶囊里的哪条做法。'
+    ? '这是 EviMed 从这位用户以往的研究里学到的做法。'
+    : '这是用户启用的记忆胶囊里的做法。'
   const own = method.description || `用户自己的方法：${method.name}`
   return `${own.slice(0, Math.max(0, 1024 - note.length - 1))}\n${note}`
 }
