@@ -61,13 +61,29 @@ describe("LoginPage", () => {
   it("opens as a Chinese username/password login and enters the workbench", async () => {
     renderLogin();
 
-    await userEvent.type(await screen.findByPlaceholderText("请输入账号"), "alice");
-    expect(screen.getByText(/不替代临床诊疗或专业判断/)).toBeInTheDocument();
-    await userEvent.type(screen.getByPlaceholderText("请输入密码"), "secret");
+    await userEvent.type(await screen.findByLabelText("账号"), "alice");
+    await userEvent.type(screen.getByLabelText("密码"), "secret");
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => expect(mocks.loginWeb).toHaveBeenCalledWith("alice", "secret"));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/chat");
+  });
+
+  // 2026-09-23 plan §5.10, mockup m12: the brand once, two labelled fields and
+  // one button. No eyebrow, no sentence about the workspace, no disclaimer,
+  // no icon or placeholder inside a field.
+  it("shows the brand once, the fields by their labels alone, and nothing else", async () => {
+    const { container } = renderLogin();
+    const account = await screen.findByLabelText("账号");
+    expect(screen.getAllByText("EviMed")).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1, name: "登录" })).toBeInTheDocument();
+    for (const field of [account, screen.getByLabelText("密码")]) {
+      expect(field).not.toHaveAttribute("placeholder");
+      expect(field.parentElement?.querySelector("svg")).toBeNull();
+    }
+    expect(container.textContent).not.toMatch(/循证医学科研智能体|个人知识库|科研工作空间|不替代临床诊疗/);
+    // The form's primary button is the one 40 px control.
+    expect(screen.getByRole("button", { name: "登录" })).toHaveClass("h-10");
   });
 
   it("redirects an existing session straight into the workbench", async () => {
@@ -81,7 +97,7 @@ describe("LoginPage", () => {
   // the link anyway would put a button here that answers 403.
   it("offers no way to register when the deployment does not accept accounts", async () => {
     renderLogin();
-    await screen.findByPlaceholderText("请输入账号");
+    await screen.findByLabelText("账号");
     expect(screen.queryByRole("button", { name: /注册/ })).not.toBeInTheDocument();
   });
 
@@ -90,10 +106,10 @@ describe("LoginPage", () => {
     renderLogin();
 
     await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
-    expect(screen.getByRole("heading", { name: "注册 EviMed" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "注册" })).toBeInTheDocument();
 
-    await userEvent.type(screen.getByPlaceholderText("请输入账号"), "bob");
-    await userEvent.type(screen.getByPlaceholderText("请输入密码"), "another correct horse");
+    await userEvent.type(screen.getByLabelText("账号"), "bob");
+    await userEvent.type(screen.getByLabelText("密码"), "another correct horse");
     await userEvent.click(screen.getByRole("button", { name: "注册并进入" }));
 
     await waitFor(() => expect(mocks.registerWeb).toHaveBeenCalledWith("bob", "another correct horse"));
@@ -115,8 +131,8 @@ describe("LoginPage", () => {
       const { unmount } = renderLogin();
 
       await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
-      await userEvent.type(screen.getByPlaceholderText("请输入账号"), "bob");
-      await userEvent.type(screen.getByPlaceholderText("请输入密码"), "whatever");
+      await userEvent.type(screen.getByLabelText("账号"), "bob");
+      await userEvent.type(screen.getByLabelText("密码"), "whatever");
       await userEvent.click(screen.getByRole("button", { name: "注册并进入" }));
 
       expect(await screen.findByRole("alert")).toHaveTextContent(message);
@@ -130,6 +146,6 @@ describe("LoginPage", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
     await userEvent.click(screen.getByRole("button", { name: "已有账号？返回登录" }));
-    expect(screen.getByRole("heading", { name: "登录 EviMed" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 });
