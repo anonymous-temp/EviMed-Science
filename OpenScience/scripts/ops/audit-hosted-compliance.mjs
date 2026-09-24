@@ -1172,9 +1172,10 @@ async function checkHostedDesktopBoundary() {
   // accident, plus the half that was never about the frontend: the server
   // still refuses the mutations a browser must not make.
   const frontend = await readTree("apps/web/src", /\.(ts|tsx)$/);
-  const settings = await read("apps/web/src/app/routes/SettingsPage.tsx");
+  // 「设置」 is `AccountPage` since 2026-09-23; the projects page it replaced was `SettingsPage`.
+  const settings = await read("apps/web/src/app/routes/AccountPage.tsx");
   const commands = await read("apps/server/src/commands.mjs");
-  const settingsTests = await read("apps/web/src/app/routes/SettingsPage.test.tsx");
+  const settingsTests = await read("apps/web/src/app/routes/AccountPage.test.tsx");
   const serverTests = await read("apps/server/test/server.test.mjs");
 
   if (

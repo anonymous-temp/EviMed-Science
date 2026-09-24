@@ -117,7 +117,7 @@ const [
   read("apps/server/src/config.mjs"),
   read("apps/server/src/server.mjs"),
   read("apps/server/src/runtimeManager.mjs"),
-  read("apps/web/src/app/routes/SettingsPage.tsx"),
+  read("apps/web/src/app/routes/AccountPage.tsx"),
   read("apps/web/src/app/routes/OpsPage.tsx"),
   read("deploy/web/docker-compose.yml"),
   read("deploy/web/docker-compose.saas.yml"),
@@ -149,7 +149,9 @@ requireBoundary(/OPEN_SCIENCE_TENANT_ID/.test(runtime), "runtime_tenant", "Runti
 // readiness board and a security ledger. What matters to this audit is
 // unchanged: every one of these cards is reachable somewhere in the hosted
 // build. A card that exists in no surface is a control the SaaS dropped.
-for (const component of ["WebProjectsCard"]) {
+// 2026-09-23: the settings page is 「设置」 (`AccountPage`), and the projects
+// card became its 项目 section.
+for (const component of ["ProjectsSection"]) {
   requireBoundary(account.includes(component), `settings_${component}`, `Hosted settings surface is missing ${component}.`);
 }
 for (const component of ["WebResourcesCard", "WebReadinessCard", "WebTasksCard", "WebAuditCard", "WebSecurityCard"]) {

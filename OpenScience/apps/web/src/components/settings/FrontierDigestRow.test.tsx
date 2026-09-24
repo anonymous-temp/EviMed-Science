@@ -2,12 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
+import type { FrontierFeature } from "@/lib/frontierClient";
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
-import { FrontierDigestCard } from "./FrontierDigestCard";
+import { FrontierDigestRow } from "./FrontierDigestRow";
 
 const client = vi.hoisted(() => ({
-  useFrontierFeature: vi.fn(),
   fetchFrontierDigestSwitch: vi.fn(),
   setFrontierDigestSwitch: vi.fn(),
 }));
@@ -17,60 +17,59 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   ...client,
 }));
 
-function renderCard() {
-  return render(<><FrontierDigestCard /><Toaster /></>);
+function renderRow(feature: FrontierFeature = "on") {
+  return render(<><FrontierDigestRow feature={feature} /><Toaster /></>);
 }
 
 describe("the daily's switch under 通知", () => {
   beforeEach(() => {
     Object.values(client).forEach((mock) => mock.mockReset());
     useToastStore.setState({ toasts: [] });
-    client.useFrontierFeature.mockReturnValue("on");
     client.fetchFrontierDigestSwitch.mockResolvedValue(true);
   });
 
   it("is not there where the feed is not offered, and asks nothing", () => {
-    client.useFrontierFeature.mockReturnValue("off");
-    const { container } = renderCard();
+    const { container } = renderRow("off");
     expect(container.textContent).toBe("");
     expect(client.fetchFrontierDigestSwitch).not.toHaveBeenCalled();
   });
 
-  it("shows the switch as the inbox has it and says the push carries nothing personal", async () => {
-    renderCard();
-    expect(screen.getByText("前沿动态日报")).toBeInTheDocument();
-    expect(screen.getByText("推送里只有当天的条数和头条，不含你的个人信息。")).toBeInTheDocument();
-    const button = await screen.findByRole("button", { name: "已开启" });
-    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+  it("is one row with a switch, and no sentence about what the push carries", async () => {
+    renderRow();
+    expect(screen.getByText("前沿日报")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "true"));
+    expect(screen.queryByText(/不含你的个人信息|只推给近两周/)).not.toBeInTheDocument();
   });
 
   it("turns the push off and on through the inbox preferences", async () => {
     client.setFrontierDigestSwitch.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    renderCard();
-    await waitFor(() => expect(screen.getByRole("button", { name: "已开启" })).toHaveAttribute("aria-pressed", "true"));
-    await userEvent.click(screen.getByRole("button", { name: "已开启" }));
+    renderRow();
+    const toggle = await screen.findByRole("switch", { name: "前沿日报" });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await userEvent.click(toggle);
     expect(client.setFrontierDigestSwitch).toHaveBeenCalledWith(false);
-    expect(await screen.findByRole("button", { name: "已关闭" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText("已关闭前沿日报的推送，前沿动态页面照常可看。")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "已关闭" }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "false"));
+    expect(screen.getByText("已关闭前沿日报推送")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("switch", { name: "前沿日报" }));
     expect(client.setFrontierDigestSwitch).toHaveBeenLastCalledWith(true);
-    expect(await screen.findByRole("button", { name: "已开启" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "true"));
   });
 
   it("says so when the preference cannot be read, and reads again on retry", async () => {
     client.fetchFrontierDigestSwitch.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null })).mockResolvedValueOnce(false);
-    renderCard();
+    renderRow();
     expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByRole("button", { name: "已关闭" })).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "false"));
   });
 
   it("keeps the switch as it was when the write is refused", async () => {
     client.setFrontierDigestSwitch.mockRejectedValue(new WebApiError("conflict", { status: 409, code: "notification_revision_conflict" }));
-    renderCard();
-    await waitFor(() => expect(screen.getByRole("button", { name: "已开启" })).toHaveAttribute("aria-pressed", "true"));
-    await userEvent.click(screen.getByRole("button", { name: "已开启" }));
+    renderRow();
+    const toggle = await screen.findByRole("switch", { name: "前沿日报" });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await userEvent.click(toggle);
     await waitFor(() => expect(useToastStore.getState().toasts.length).toBeGreaterThan(0));
-    expect(screen.getByRole("button", { name: "已开启" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "true");
   });
 });

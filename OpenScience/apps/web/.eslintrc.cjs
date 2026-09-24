@@ -174,7 +174,6 @@ module.exports = {
         "src/app/routes/FrontierPage.tsx",
         "src/app/routes/SourcesPage.tsx",
         "src/components/frontier/FrontierFilters.tsx",
-        "src/components/settings/WebAccountCard.tsx",
       ],
       rules: {
         "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...iconRules, ...errorTextRules],
