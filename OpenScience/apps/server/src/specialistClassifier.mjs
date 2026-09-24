@@ -195,7 +195,7 @@ export class SpecialistClassifier {
       });
     } catch (error) {
       return this.declined(error?.name === "AbortError" ? "timeout"
-        : error?.code === "model_gateway_upstream_error" ? `http_${error.upstreamStatus ?? error.status}`
+        : error?.code === "model_gateway_upstream_error" || error?.code === "model_gateway_payment_required" ? `http_${error.upstreamStatus ?? error.status}`
           : `error_${error?.code ?? "unknown"}`, trace);
     } finally {
       clearTimeout(timeout);

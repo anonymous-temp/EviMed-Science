@@ -96,6 +96,11 @@ test("a run that ends is on /api/ops/metrics, counted by the control plane", asy
     assert.ok(has(text, "evimed_run_metric_failures_total 0"));
     // No usage ledger on a file-state deployment, so no cost is claimed.
     assert.equal(text.includes("evimed_run_cost_cny_count{"), false);
+    // Refusals by model provider: the balance alert's 402 series are there
+    // before the first refusal, so the first one shows as an increase.
+    for (const provider of ["deepseek", "dashscope", "typesafe"]) {
+      assert.match(text, new RegExp(`^open_science_model_provider_refusals_total\\{provider="${provider}",status="402"\\} \\d+$`, "m"), provider);
+    }
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });

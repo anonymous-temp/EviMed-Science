@@ -32,6 +32,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { REFERENCE_PRICE_LIST, isPeak, priceUsage } from "@evimed/domain";
 import { estimateModelReservation } from "./modelGateway.mjs";
+import { PAYMENT_REQUIRED, recordProviderRefusal } from "./providerRefusals.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 
 /** A stream that says nothing for this long has stalled. */
@@ -62,9 +63,18 @@ function networkCause(error) {
   return /^[A-Za-z0-9_]{1,40}$/.test(code) ? code : "unknown";
 }
 
+/**
+ * DashScope's answer for an account in arrears: HTTP 400 with this code, never
+ * a 402 (help.aliyun.com/zh/model-studio/error-code, read 2026-09-24).
+ */
+const ARREARS = "Arrearage";
+
 /** @param {number} status @param {string} providerCode */
 function failureFor(status, providerCode) {
   if (status === 401 || status === 403) return new ReviewModelError("review_model_auth_failed", "The reviewer's key was refused.", { status });
+  if (status === 402 || providerCode === ARREARS) {
+    return new ReviewModelError("review_model_payment_required", "The reviewer's DashScope account cannot pay: its balance is exhausted or in arrears.", { status });
+  }
   if (status === 404 || providerCode === "model_not_found") return new ReviewModelError("review_model_unavailable", "The reviewer model is not available to this account.", { status });
   if (status === 429) return new ReviewModelError("review_model_rate_limited", "The reviewer model is rate limited.", { status, retryable: true });
   if (status === 400) return new ReviewModelError("review_model_request_invalid", `The reviewer refused the request (${providerCode || "bad request"}).`, { status });
@@ -159,6 +169,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
       } catch {
         providerCode = "";
       }
+      recordProviderRefusal("dashscope", providerCode === ARREARS ? PAYMENT_REQUIRED : response.status);
       throw failureFor(response.status, providerCode);
     }
     let content = "";

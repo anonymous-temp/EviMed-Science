@@ -2,6 +2,7 @@
 // settled, and every failure named (reviewModel.mjs).
 import assert from "node:assert/strict";
 import test from "node:test";
+import { providerRefusalCount } from "../src/providerRefusals.mjs";
 import { callReviewModel, ReviewModelError } from "../src/reviewModel.mjs";
 
 const config = {
@@ -127,6 +128,29 @@ test("a refusal is released under its status, and a 5xx stays uncertain (the 202
     assert.deepEqual(ledger.calls.map((entry) => entry[0]), ["reserve", expected[0]], String(status));
     assert.equal(ledger.calls.at(-1)[2], expected[1], String(status));
   }
+});
+
+test("an exhausted DashScope account is named, counted as the 402 it means, and released", async () => {
+  // DashScope answers an account in arrears 400 `Arrearage`, never 402
+  // (help.aliyun.com/zh/model-studio/error-code); both read as the balance.
+  const before = providerRefusalCount("dashscope", 402);
+  for (const [status, payload, released] of [
+    [400, { error: { message: "Access denied, please make sure your account is in good standing.", type: "Arrearage", param: null, code: "Arrearage" } }, "provider_refused_400"],
+    [402, { error: { code: "PaymentRequired" } }, "provider_refused_402"],
+  ]) {
+    const ledger = fakeLedger();
+    await assert.rejects(callReviewModel({ config, usageLedger: ledger, fetchImpl: /** @type {any} */ (async () => Response.json(payload, { status: /** @type {number} */ (status) })) }, call),
+      (error) => error instanceof ReviewModelError && error.code === "review_model_payment_required", String(status));
+    assert.deepEqual(ledger.calls.map((entry) => entry[0]), ["reserve", "release"], String(status));
+    assert.equal(ledger.calls[1][2], released);
+  }
+  assert.equal(providerRefusalCount("dashscope", 402), before + 2, "both are counted where the balance alert reads");
+  // Any other 400 is the request's fault, not the balance's.
+  const other = providerRefusalCount("dashscope", 400);
+  await assert.rejects(callReviewModel({ config, usageLedger: fakeLedger(), fetchImpl: /** @type {any} */ (async () => Response.json({ error: { code: "invalid_parameter" } }, { status: 400 })) }, call),
+    (error) => error instanceof ReviewModelError && error.code === "review_model_request_invalid");
+  assert.equal(providerRefusalCount("dashscope", 400), other + 1);
+  assert.equal(providerRefusalCount("dashscope", 402), before + 2);
 });
 
 test("no key is refused before anything is reserved or sent", async () => {
