@@ -33,11 +33,15 @@ import {
   deliverableIdOfPath,
   isGateImplementationPath,
   PROTECTED_WRITE_PREFIXES,
+  REPORTING_CHECKLIST_FILE,
+  STUDY_TYPES,
   isProtectedWritePath,
   layeredIssues,
   matchedClinicalTriggers,
   normalizeWorkspacePath,
+  reportingGuidelineFor,
   runGate,
+  studyTypeLabel,
   validateTaskPlan,
   workspaceLayout,
 } from '@evimed/domain'
@@ -306,6 +310,47 @@ export function stepPolicy(budget, limits) {
 }
 
 /**
+ * The parameters of `evimed_plan`, as the kernel compiles them.
+ *
+ * Here rather than inline in the plugin so a test can compile them with the
+ * kernel's own schema DSL: the kernel validates every call against them before
+ * the tool runs, and a keyword its DSL refuses would throw at registration on
+ * a real kernel while the fake registry the plugin suites use stayed green.
+ * `studyType` is an enum of the domain's vocabulary, so a value outside it is
+ * refused at the call with the allowed values named, and the domain's own
+ * check (`validateTaskPlan`) covers a plan read back from the workspace.
+ * @returns {Record<string, any>}
+ */
+export function planToolParameters() {
+  return {
+    action: { type: 'string', enum: ['write', 'status'], required: true, description: 'write 写下或修订计划，status 读回进度。' },
+    clarifications: { type: 'array', items: { type: 'string' }, description: '问过的问题或采用的假设，逐条写。' },
+    deliverables: {
+      type: 'array',
+      description: '交付物清单。',
+      items: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          id: { type: 'string' },
+          contractKind: { type: 'string' },
+          capability: { type: 'string' },
+          title: { type: 'string' },
+          dependsOn: { type: 'array', items: { type: 'string' } },
+          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：交付文件里能核对到的具体内容。' },
+          studyType: {
+            type: 'string',
+            enum: [...STUDY_TYPES],
+            description: '交付物报告或设计的是某一项具体研究时填（一篇试验论文、一个预测模型研究、一篇系统评价稿件、一份研究方案），据此挂上对应的报告规范；证据综述报告、药品评价、审稿意见与简报省略此字段。',
+          },
+        },
+      },
+    },
+    reason: { type: 'string', description: '当 deliverables 为空时，说明为什么这次不需要产出文件。' },
+  }
+}
+
+/**
  * Validates and indexes a plan the model just wrote.
  * @param {unknown} raw parsed task-plan.json
  * @returns {{ ok: boolean, plan: any, items: Record<string, any>[], issues: any[] }}
@@ -319,6 +364,7 @@ export function indexPlan(raw) {
     title: deliverable.title,
     dependsOn: [...deliverable.dependsOn],
     acceptance: [...(deliverable.acceptance ?? [])],
+    ...(deliverable.studyType ? { studyType: deliverable.studyType } : {}),
     status: 'planned',
     childSessionId: null,
     receiptDigest: null,
@@ -788,6 +834,37 @@ function methodSection(input) {
 }
 
 /**
+ * What the one doing a deliverable is told about the reporting checklist it
+ * carries: the design the plan declared, its guideline, the guideline's item
+ * table, and the file to write. Empty unless the declared study type has a
+ * guideline and the deliverable's contract lists `reporting-checklist.md`
+ * among its outputs — the manifest is the one definition of what a capability
+ * writes, and a file it does not declare is a file neither the gate nor the
+ * reviewer reads.
+ *
+ * The item table is the guideline's own published checklist, shipped with the
+ * capability skills; `skillsDir` makes its path absolute where the deployment
+ * says where they are, and it is left relative to that root where it does not.
+ *
+ * @param {{ item: Record<string, any> | null | undefined, outputs: readonly { path: string }[], skillsDir?: string }} input
+ * @returns {string[]}
+ */
+export function reportingChecklistLines({ item, outputs, skillsDir = '' }) {
+  const guideline = reportingGuidelineFor(item?.studyType)
+  if (!item || !guideline || !outputs.some((output) => output.path === REPORTING_CHECKLIST_FILE)) return []
+  const root = String(skillsDir ?? '').replace(/\/+$/, '')
+  const template = root ? `${root}/${guideline.template}` : guideline.template
+  return [
+    `交付物「${item.id}」报告或设计的是一项${studyTypeLabel(item.studyType)}，适用 ${guideline.name}：把 \`${template}\` 的条目表抄进 \`deliverables/${item.id}/${REPORTING_CHECKLIST_FILE}\`，逐条写明在交付物的哪一节（标题）报告，没有报告的写「未报告：原因」。独立审查会拿它对照正文。`,
+  ]
+}
+
+/** A paragraph of a Markdown message and the blank line after it; nothing for none. @param {readonly string[]} lines @returns {string[]} */
+function withBlankLine(lines) {
+  return lines.length ? [...lines, ''] : []
+}
+
+/**
  * The same method, persona and file list a delegated child would receive, as a
  * block injected into the session that is doing the work itself.
  *
@@ -802,7 +879,7 @@ function methodSection(input) {
  *
  * @param {{ manifest: Record<string, any>, item?: Record<string, any> | null, contractKind?: string,
  *   skillBodies: readonly { name: string, body: string }[], deferredSections?: readonly { name: string }[],
- *   capsuleMethods?: readonly { name: string, body: string }[], reviewEnabled?: boolean }} input
+ *   capsuleMethods?: readonly { name: string, body: string }[], reviewEnabled?: boolean, skillsDir?: string }} input
  * @returns {string}
  */
 export function buildInlineMethod(input) {
@@ -822,6 +899,7 @@ export function buildInlineMethod(input) {
       ? outputs.map((/** @type {any} */ output) => `- \`deliverables/${input.item?.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`)
       : ['- 计划里写下交付物之后，文件写在 `deliverables/<交付物 id>/` 下。']),
     '',
+    ...withBlankLine(reportingChecklistLines({ item: input.item, outputs, skillsDir: input.skillsDir })),
     `写完调用 \`evimed_submit_deliverable\`：它会先整理编号与参考文献表，再跑门禁${input.reviewEnabled ? '，再请独立审查，一次返回三者的结果；标了「需回应」的审查发现，下次提交时在 responses 里回 fixed 或 declined（附理由）' : '，一次返回裁定'}。未通过就按 issues 修好再提交；本轮对话结束前文件都还能改。`,
     '',
     '</evimed-method>',
@@ -905,7 +983,7 @@ export function buildDelegation(input) {
     ...methodSection(input),
     '## 你的任务',
     '',
-    `你负责一件交付物：${input.item.title ?? input.item.id}（契约种类 ${input.item.contractKind}）。`,
+    `你负责一件交付物：${input.item.title ?? input.item.id}（契约种类 ${input.item.contractKind}${input.item.studyType ? `；研究类型 ${studyTypeLabel(input.item.studyType)}` : ''}）。`,
     '',
     '## 题面（相关部分）',
     '',
@@ -915,6 +993,7 @@ export function buildDelegation(input) {
     '',
     ...outputs.map((/** @type {any} */ output) => `- \`deliverables/${input.item.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`),
     '',
+    ...withBlankLine(reportingChecklistLines({ item: input.item, outputs, skillsDir: input.skillsDir })),
     `全部文件必须写在 \`deliverables/${input.item.id}/\` 下。写完后调用 \`evimed_submit_deliverable{deliverableId:"${input.item.id}"}\`，它会当场返回裁定；未通过就按 issues 修好再提交，直到通过。提交次数有限，\`evimed_package_check\` 给出同一份裁定而不占提交次数。`,
     '',
     // Where things are, said once. Measured on the 2026-09-18 aspirin runs:
