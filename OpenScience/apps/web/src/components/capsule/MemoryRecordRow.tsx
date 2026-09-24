@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router";
-import { Check, Pencil, Undo2, X } from "lucide-react";
-import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebMemoryUsage, type WebStructuredMemory } from "@/lib/apiClient";
-import { cn } from "@/lib/cn";
+import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged, archiveMemoryRecord, undoMemoryRecord } from "@/lib/memoryClient";
-import { MEMORY_BASIS_LABELS, STATED_BASES, looksInjected, memoryExcerpt, memoryStrength, memoryUsage } from "@/lib/memoryText";
+import { isInference, memoryExcerpt } from "@/lib/memoryText";
+import { chatPath } from "@/lib/runLocation";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Disclosure } from "@/components/ui/Disclosure";
-import { Textarea } from "@/components/ui/Input";
+import { IconButton } from "@/components/ui/IconButton";
+import { ListRow } from "@/components/ui/ListRow";
+import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { Tag } from "@/components/ui/Tag";
+import { EditingRow, InferredMark, RowDetail, RowOrigin } from "./rowParts";
 
 /** Who made a change, in the researcher's words. */
 const REVISION_BY: Record<string, string> = {
@@ -26,13 +30,6 @@ function when(value: string | null | undefined) {
   return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function day(value: string | null | undefined) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return formatDateTime(date, { month: "long", day: "numeric" });
-}
-
 function failed(error: unknown) {
   return webErrorMessage(error, { fallback: "操作未完成，请重试。" });
 }
@@ -41,8 +38,8 @@ function failed(error: unknown) {
  * The conversation a memory came out of: the session its first evidence names.
  *
  * An evidence `sourceRef` is `sessions/<id>/messages/<n>`, which is also the
- * address the conversation opens at — so 「来自 9月12日《…》」 is a link back to
- * the place the memory was said, and not a claim the page cannot honour.
+ * address the conversation opens at — so 「来源对话」 is a link back to the
+ * place the memory was said, and not a claim the page cannot honour.
  */
 export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null } | null {
   for (const item of record.evidence) {
@@ -53,40 +50,45 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
 }
 
 /**
- * One memory as a line of the list: the sentence in the researcher's own
- * language, where it came from, how established it is — counted, never a
- * percentage — how often it has actually been used, and the conversation it
- * was said in. Opened, the words it rests on and every version it has had.
+ * One memory as one row: where it belongs on the left, the sentence on the
+ * right, and 「推断」 after it when EviMed inferred it — the one annotation a
+ * row keeps (principle 18). Nothing else is said about it: not how often it
+ * was seen or used, not since when it holds (2026-09-23 plan §5.6).
  *
- * Three actions and no more (owner ruling 2026-09-20): 改 and 忘记 on every
- * row, and 不对 on one EviMed inferred. 忘记 archives, as a revision the toast
- * takes back; 不对 deletes, which is the one irreversible act here and the only
- * one that also stops the extractor inferring it again — so it is the only one
- * that asks first.
+ * 编辑 and 忘记 appear on hover. Opening the row shows what it rests on — the
+ * words it was said in, the versions it has had, the conversation it came
+ * from; its 「⋯」 holds the same history, the undo of its last change, and 「不对」
+ * on an inference. 忘记 archives, as a revision the toast takes back and 已忘记
+ * 的内容 restores; 不对 deletes and stops the extractor inferring it again, so
+ * it is the one that asks first. A record held for a medicine-safety check
+ * says so and asks to be confirmed, and a sensitive one says what confirming
+ * does before it does it.
  */
 export function MemoryRecordRow({
   record,
+  origin,
   highlighted = false,
-  conversationTitle = "",
-  usage,
   onChanged,
 }: {
   record: WebStructuredMemory;
+  /** The left column: 关于你, 做法, or the project's name. */
+  origin: string;
+  /** Named by an inbox notice (`?record=`): scrolled to, opened and marked. */
   highlighted?: boolean;
-  /** What the conversation it came from was about, when the page knows. */
-  conversationTitle?: string;
-  usage?: WebMemoryUsage;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(record.summary || record.value);
   const [busy, setBusy] = useState(false);
-  const [confirmingSensitive, setConfirmingSensitive] = useState<null | { value?: string }>(null);
+  const [open, setOpen] = useState(highlighted);
+  const [confirmingSensitive, setConfirmingSensitive] = useState<null | { value?: string; status?: "active" }>(null);
   const [rejecting, setRejecting] = useState(false);
-  const row = useRef<HTMLLIElement>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (highlighted) row.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (!highlighted) return;
+    setOpen(true);
+    anchor.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
   }, [highlighted]);
   useEffect(() => { if (!editing) setValue(record.summary || record.value); }, [record.summary, record.value, editing]);
 
@@ -110,7 +112,7 @@ export function MemoryRecordRow({
       ...(next.status ? { status: next.status } : {}),
     });
     setEditing(false);
-    toast.success(next.status && !text ? "已确认这条记忆" : "已改好，之后的对话按新的来");
+    toast.success(next.status && !text ? "已确认" : "已保存");
   });
   const confirmOrSave = (next: { value?: string; status?: "active" }) => {
     // The truth, not a promise the code does not keep: a sensitive record is
@@ -120,13 +122,17 @@ export function MemoryRecordRow({
   };
   const forget = () => run(async () => {
     const archived = await archiveMemoryRecord(record.id, record.version);
-    toast.success("好的，之后不再提这条", {
-      action: { label: "撤销", onClick: () => void undoMemoryRecord(record.id, archived.version).then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(failed(error))) },
+    toast.success("已忘记", {
+      action: {
+        label: "撤销",
+        onClick: () => void undoMemoryRecord(record.id, archived.version)
+          .then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(failed(error))),
+      },
     });
   });
   const restore = () => run(async () => {
     await updateStructuredMemory(record, { status: "active" });
-    toast.success("已恢复这条记忆");
+    toast.success("已恢复");
   });
   const undo = () => run(async () => {
     const result = await undoMemoryRecord(record.id, record.version);
@@ -135,109 +141,113 @@ export function MemoryRecordRow({
   const reject = () => run(async () => {
     setRejecting(false);
     await deleteStructuredMemory(record.id);
-    toast.success("已记下这条是错的，之后不会再推断出来");
+    toast.success("已删除");
   });
 
-  const text = memoryExcerpt(record.summary || record.value);
-  const expires = record.expiresAt ? when(record.expiresAt) : "";
-  const inferred = !STATED_BASES.has(record.provenance?.basis ?? "inferred");
-  const source = memorySource(record);
   const forgotten = record.status === "archived";
-  return (
-    <li
-      ref={row}
-      className={cn("px-4 py-3", highlighted && "bg-accent-soft")}
-      data-record-id={record.id}
-    >
-      {editing ? (
-        <div>
-          <Textarea value={value} onChange={(event) => setValue(event.target.value)} aria-label="改这条记忆" rows={3} className="bg-bg text-ui" />
-          <div className="mt-2 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={16} aria-hidden="true" />取消</Button>
-            <Button size="sm" loading={busy} disabled={!value.trim()} onClick={() => confirmOrSave({ value, status: "active" })}>保存</Button>
-          </div>
-        </div>
-      ) : (
-        <p className={cn("text-ui", forgotten ? "text-muted line-through decoration-muted" : "text-text")}>{text}</p>
-      )}
-      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
-        {record.provenance && (
-          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-text">{MEMORY_BASIS_LABELS[record.provenance.basis]}</span>
-        )}
-        <span>{memoryStrength(record.provenance, record.evidenceCount)}</span>
-        {source && (
-          <Link to={`/app/chat/${encodeURIComponent(source.sessionId)}`} className="underline underline-offset-2 hover:text-text">
-            来自 {day(source.at)}{conversationTitle ? `《${memoryExcerpt(conversationTitle, 24)}》` : "的对话"}
-          </Link>
-        )}
-        <span>{memoryUsage(usage, day)}</span>
-        {record.status === "pending" && <span className="text-warn-strong">涉及用药安全，等你看过</span>}
-        {record.sensitive && <span>敏感 · 不会被自动调取</span>}
-        {expires && record.status === "active" && <span>短期 · {expires} 前有效</span>}
-        {looksInjected(record.summary || record.value) && <span className="text-warn-strong">疑似任务题面，非你的陈述</span>}
-      </p>
-      {(record.evidence.length > 0 || record.revisions.length > 0) && (
-        <Disclosure summary="依据与改动" className="mt-2" summaryClassName="text-caption">
-          <div className="space-y-2 border-l border-border pl-3 text-caption text-muted">
-            {record.evidence.slice(-3).reverse().map((evidence) => (
-              <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
-                <p className="text-text">“{evidence.quote}”</p>
-                <p className="mt-0.5">{evidence.observedAt ? when(evidence.observedAt) : ""}</p>
-              </div>
-            ))}
-            {[...record.revisions].reverse().slice(0, 5).map((revision) => (
-              <p key={revision.version}>
-                第 {revision.version} 版：{memoryExcerpt(revision.summary || revision.value, 120)}
-                {revision.by ? ` · ${REVISION_BY[revision.by] ?? ""}` : ""}{revision.changedAt ? ` · ${when(revision.changedAt)}` : ""}
-              </p>
-            ))}
-          </div>
-        </Disclosure>
-      )}
-      {!editing && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {record.status === "pending" && (
-            <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => confirmOrSave({ status: "active" })}>
-              <Check size={16} aria-hidden="true" />是这样
-            </Button>
-          )}
-          {forgotten ? (
-            <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => void restore()}>
-              <Undo2 size={16} aria-hidden="true" />恢复
-            </Button>
-          ) : (
-            <>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={16} aria-hidden="true" />改</Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void forget()}>忘记</Button>
-              {inferred && (
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => setRejecting(true)}>不对</Button>
-              )}
-              {record.revisions.length > 0 && (
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={16} aria-hidden="true" />撤销上次改动</Button>
-              )}
-            </>
-          )}
-        </div>
-      )}
-      {confirmingSensitive && (
+  const pending = record.status === "pending";
+  const inferred = isInference(record);
+  const source = memorySource(record);
+  const hasHistory = record.evidence.length > 0 || record.revisions.length > 0 || source != null;
+  const opens = hasHistory && !forgotten;
+
+  const dialogs = (
+    <>
+      {confirmingSensitive && createPortal(
         <ConfirmDialog
           title="确认这条敏感记忆？"
-          body={`确认后它保留为已生效，你可以随时查看、修改或删除；但出于隐私保护，敏感记忆不会被自动调取到后续研究中：${memoryExcerpt(confirmingSensitive.value || record.summary || record.value, 120)}`}
+          body={`确认后它保留为已生效；出于隐私保护，敏感记忆不会被自动调取到后续研究中：${memoryExcerpt(confirmingSensitive.value || record.summary || record.value, 120)}`}
           confirmLabel="确认保留"
           tone="primary"
           onConfirm={() => { const next = confirmingSensitive; setConfirmingSensitive(null); void save(next); }}
           onCancel={() => setConfirmingSensitive(null)}
-        />
+        />,
+        document.body,
       )}
-      {rejecting && (
+      {rejecting && createPortal(
         <ConfirmDialog
           title="这条推断不对？"
-          body="这条会被删除，它的依据和改动记录一并删除，之后的研究不会再用它。EviMed 也不会再凭推断把它记回来，只有你以后亲口再说时才会重新记下。产生它的对话和报告不受影响。想只是先不用，选「忘记」——那一步随时可以恢复。"
+          body="删除这条推断，之后也不再推断出来；只想暂时不用，请选「忘记」。"
           confirmLabel="删除"
           onConfirm={() => void reject()}
           onCancel={() => setRejecting(false)}
-        />
+        />,
+        document.body,
       )}
-    </li>
+    </>
+  );
+
+  if (editing) {
+    return (
+      <>
+        <EditingRow
+          origin={origin}
+          label="编辑这条记忆"
+          value={value}
+          busy={busy}
+          onChange={setValue}
+          onCancel={() => setEditing(false)}
+          onSave={() => confirmOrSave({ value, status: "active" })}
+        />
+        {dialogs}
+      </>
+    );
+  }
+
+  const menu: MenuEntry[] = forgotten ? [] : [
+    ...(hasHistory ? [{ label: "历史版本", onSelect: () => setOpen(true) }] : []),
+    ...(record.revisions.length > 0 ? [{ label: "撤销上次改动", onSelect: () => void undo() }] : []),
+    ...(inferred ? [{ label: "不对", destructive: true, onSelect: () => setRejecting(true) }] : []),
+  ];
+
+  return (
+    <>
+      <ListRow
+        className={highlighted ? "bg-accent-soft" : undefined}
+        leading={<RowOrigin label={origin} />}
+        title={(
+          <span ref={anchor} data-record-id={record.id}>
+            {memoryExcerpt(record.summary || record.value)}
+            {inferred && <InferredMark />}
+          </span>
+        )}
+        onOpen={opens ? () => setOpen((current) => !current) : undefined}
+        expanded={opens ? open : undefined}
+        muted={forgotten}
+        meta={opens && open ? (
+          <RowDetail>
+            {record.evidence.slice(-3).reverse().map((evidence) => (
+              <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
+                <p className="text-ui text-text-2">“{evidence.quote}”</p>
+                {evidence.observedAt && <p>{when(evidence.observedAt)}</p>}
+              </div>
+            ))}
+            {[...record.revisions].reverse().slice(0, 5).map((revision) => (
+              <p key={revision.version}>
+                {[when(revision.changedAt), revision.by ? REVISION_BY[revision.by] : ""].filter(Boolean).join(" · ")}
+                {revision.changedAt || revision.by ? "：" : ""}{memoryExcerpt(revision.summary || revision.value, 120)}
+              </p>
+            ))}
+            {source && <Link to={chatPath(source.sessionId)} className="inline-block text-accent hover:underline">来源对话</Link>}
+          </RowDetail>
+        ) : undefined}
+        trailing={pending ? (
+          <>
+            <Tag tone="safety">待确认（用药安全）</Tag>
+            <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>
+          </>
+        ) : undefined}
+        actions={forgotten ? (
+          <IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy} onClick={() => void restore()} />
+        ) : (
+          <>
+            <IconButton icon={Pencil} label="编辑" size="sm" disabled={busy} onClick={() => setEditing(true)} />
+            <IconButton icon={Trash2} label="忘记" size="sm" destructive disabled={busy} onClick={() => void forget()} />
+          </>
+        )}
+        menu={menu.length > 0 ? <Menu label="更多" items={menu} /> : undefined}
+      />
+      {dialogs}
+    </>
   );
 }
