@@ -448,6 +448,18 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => { live = false; clearTimeout(timer); };
   }, [error, runtimeUp, attempt, projectId]);
 
+  // 重新连接: the reader asking for this conversation back. Its runtime may
+  // have yielded to a project opened in another tab, and the frame's own
+  // reconnects may not take a runtime back (`makeRoomFor`), so the button is
+  // an opening as well as a renewal; a start still refused says why.
+  const reconnect = useCallback(() => {
+    void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
+      const refusal = refusedStart(cause);
+      if (refusal) setError(refusal);
+    });
+    renewBinding.current?.();
+  }, [projectId]);
+
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
     if (!frameId) return;
@@ -766,7 +778,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           {navigated && (connectionNotice || !ready) && (
             <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
               <p>{connectionNotice ?? "正在重连…"}</p>
-              {connectionNotice && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
+              {connectionNotice && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
             </div>
           )}
           {cover}
