@@ -6,7 +6,9 @@
  * Pure functions only, so each is tested once here and the components stay
  * about layout. Nothing here explains how the feed works (plan 2026-09-23
  * §4): the one explanation the page keeps is 「热度怎么算」, folded, because
- * a number on screen needs a way to find out what it counts.
+ * a number on screen needs a way to find out what it counts — and its words
+ * are `@evimed/domain`'s `FRONTIER_HEAT_METHOD_ZH`, stated from the numbers
+ * the control plane computes heat with.
  */
 import type {
   FrontierDaily,
@@ -256,18 +258,6 @@ export function hotBoardStamp(window: FrontierHotWindow, takenAt: string | null)
   const taken = clock(takenAt);
   return taken ? `${WINDOW_SPANS[window]} · ${taken} 更新` : WINDOW_SPANS[window];
 }
-
-/**
- * 「热度怎么算」, paragraph by paragraph, with the numbers the control plane
- * computes heat with (`apps/server/src/frontierEvents.mjs`; research B §8 #7).
- * Heat counts attention, not evidence, and the text says so.
- */
-export const HEAT_METHOD_ZH: readonly string[] = Object.freeze([
-  "热度按报道这件事的独立机构计算：同一机构的多个渠道只算一次，每家机构按来源权威加权（期刊、监管机构高于媒体），它的分数随最近一次报道的时间衰减，每 36 小时减半；有论文、官方公告或指南原文时乘以 1.5，中文和英文来源都有报道时再乘以 1.3。页面上的热度数是这个分数乘以 10 后取整。",
-  "热度衡量关注程度，不衡量证据强弱；证据强弱看每条报道的证据类型。近 72 小时内至少 2 家独立机构报道，或者有一条高分的监管公告，才进热榜。",
-  "走势是近 24 小时的热度，每 4 小时一个点；热度记录不足 6 小时的事件不画走势。「新」是首次报道在 12 小时以内，「升温」是名次或热度比 6 小时前高。",
-  "本周榜和本月榜按窗口内报道它的独立机构数排，一样多时有一手材料的在前，再看它在热榜上到过的最高名次。",
-]);
 
 /**
  * A trend as an SVG polyline in a `width` × `height` box: the points with a

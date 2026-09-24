@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Flame } from "lucide-react";
+import { FRONTIER_HEAT_METHOD_ZH } from "@evimed/domain";
 import { cn } from "@/lib/cn";
 import { FRONTIER_HOT_WINDOWS, type FrontierHotBoard, type FrontierHotEvent, type FrontierHotWindow } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -10,7 +11,7 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { Sparkline } from "./Sparkline";
-import { HEAT_METHOD_ZH, INLINE_ACTION, hotBoardStamp, hotRowMeta, rankChangeLabel, rankLabel, rankTone } from "./frontierText";
+import { INLINE_ACTION, hotBoardStamp, hotRowMeta, rankChangeLabel, rankLabel, rankTone } from "./frontierText";
 
 const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)}`;
 
@@ -102,7 +103,7 @@ export function HotBoard({ state, window, windows, onWindow, onRetry }: {
       {board?.events.some((event) => event.heat !== null) && (
         <Disclosure className="mt-4" summary={<span className="text-caption">热度怎么算</span>}>
           <div className="max-w-measure space-y-2 text-caption text-text-2">
-            {HEAT_METHOD_ZH.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+            {FRONTIER_HEAT_METHOD_ZH.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
           </div>
         </Disclosure>
       )}
