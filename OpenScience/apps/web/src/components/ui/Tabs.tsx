@@ -65,8 +65,10 @@ export function Tabs<V extends string>({
             onClick={() => onChange(item.value)}
             onKeyDown={onKeyDown}
             className={cn(
-              "-mb-px inline-flex h-10 items-center gap-1 border-b-2 text-ui outline-none transition-colors duration-fast",
-              selected ? "border-text font-medium text-text" : "border-transparent text-text-3 hover:text-text",
+              // One weight for every tab: the selected one is told by its
+              // colour and its rule, so a tab list is one kind of control.
+              "-mb-px inline-flex h-10 items-center gap-1 border-b-2 text-ui font-medium outline-none transition-colors duration-fast",
+              selected ? "border-text text-text" : "border-transparent text-text-3 hover:text-text",
             )}
           >
             {item.label}
