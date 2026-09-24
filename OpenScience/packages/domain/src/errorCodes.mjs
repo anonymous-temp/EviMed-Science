@@ -862,8 +862,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_duplicate: '这份资料已经存在。',
   source_missing: '原始库里找不到这份资料了，派生内容已保留。',
   credits_exhausted: '额度已用尽，充值后即可继续。',
-  credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「账户与额度」调高上限。',
-  credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在「账户与额度」调高上限。',
+  credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「设置 → 用量」调高上限。',
+  credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在「设置 → 用量」调高上限。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -964,7 +964,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '报告声明做了证据分级，但 GRADE 等级与降级理由不自洽，等于分级没有真正执行。补齐或订正分级理由即可。',
 
   // ——— Refusals a person meets before anything runs ———
-  usage_budget_exceeded: '这次请求会超出账户设定的用量上限，因此没有开始，也没有产生费用。可在「账户与额度」查看已用与上限。',
+  usage_budget_exceeded: '这次请求会超出账户设定的用量上限，因此没有开始，也没有产生费用。可在「设置 → 用量」查看已用与上限。',
   runtime_reserved_for_autopilot:
     '这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。'
     + '等这一轮结束后即可继续，或在「主动研究」里先暂停它。',
@@ -1276,38 +1276,6 @@ export function runOutcomeKind(run) {
   }
   if (status === 'canceled') return 'stopped'
   return 'unknown'
-}
-
-/**
- * The three words a finished run may be described with, anywhere it is
- * described (plan §3.8 #5).
- *
- * 已交付 / 已交付 · N 条未能逐字核对 / 未完成 — and nothing else. The surfaces
- * used to disagree on their own vocabulary: the inbox said 「待你复核」, the
- * runs page 「已交付，待人工复核」, the in-container panel 「已交付 · 未核验」,
- * and the notice body 「N 项自证未通过」. Four sentences for one fact, three of
- * which ask the reader for work nobody can do — a package is delivered; what a
- * reader may still want is which of its conclusions could not be matched to
- * their source word for word.
- *
- * `qualified` is the only class that takes a number, and it takes it only when
- * the run actually counted claims; a run that produced no matrix says the same
- * thing without one.
- *
- * @param {{ status?: string | null, errorCode?: string | null, verification?: string | null,
- *   claimSummary?: { total?: number | null, verified?: number | null, unverified?: number | null } | null }} run
- * @returns {string}
- */
-export function runVerdictText(run) {
-  const kind = runOutcomeKind(run)
-  if (kind === 'delivered') return '已交付'
-  if (kind !== 'qualified') return '未完成'
-  const summary = run?.claimSummary ?? null
-  const unverified = Number(summary?.unverified)
-  const counted = Number.isFinite(unverified)
-    ? Math.max(0, Math.trunc(unverified))
-    : Math.max(0, Math.trunc(Number(summary?.total) || 0) - Math.trunc(Number(summary?.verified) || 0))
-  return counted > 0 ? `已交付 · ${counted} 条未能逐字核对` : '已交付 · 部分结论未能逐字核对'
 }
 
 /**

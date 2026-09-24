@@ -182,15 +182,6 @@ module.exports = {
       },
     },
     {
-      // The frame bridge and the session route belong to the frame stream
-      // (2026-09-18 file ownership); they still say text-ui-sm, which renders
-      // as text-ui through the retired alias.
-      files: ["src/app/routes/RuntimeUiFrame.tsx", "src/app/routes/SessionRoute.tsx"],
-      rules: {
-        "no-restricted-syntax": ["error", ...tokenRules, ...errorTextRules],
-      },
-    },
-    {
       // Surfaces whose colors are content, not chrome: the canvas / WebGL
       // viewers hand hex values to a renderer rather than to CSS. (The report
       // viewer used to be here with its own palette; it reads the tokens now.)

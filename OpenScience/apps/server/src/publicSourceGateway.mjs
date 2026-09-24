@@ -952,7 +952,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
             throw gatewayError(
               503,
               `public_source_${request.credentialProfile.replaceAll("-", "_")}_credential_missing`,
-              `No ${request.credentialProfile} credential is configured for this deployment or this account; one can be added under 账户与额度 → 数据源凭据.`,
+              `No ${request.credentialProfile} credential is configured for this deployment or this account; one can be added under 设置 → 数据源.`,
             );
           }
           if (profile.header) {

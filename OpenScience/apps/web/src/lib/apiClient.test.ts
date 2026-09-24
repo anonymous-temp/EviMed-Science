@@ -1172,7 +1172,7 @@ describe("apiClient budget refusals", () => {
     // the moment the oldest charge in the rolling window ages out, which frees
     // that one charge's worth and no more.
     expect(client.webErrorMessage(error)).toBe(
-      "今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「账户与额度」调高上限。"
+      "今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「设置 → 用量」调高上限。"
       + "约 3 小时 12 分钟后额度开始释放（按滚动窗口逐笔释放，不是整点清零）。",
     );
   });

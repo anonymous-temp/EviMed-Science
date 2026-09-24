@@ -366,7 +366,7 @@ async function walkChat(page, base) {
       if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null };
     }
     const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
-    if (/秒内没有载入完成|无法载入|载入失败/.test(shell)) return { loaded: false, state: shell.split("\n").find((line) => /载入/.test(line))?.slice(0, 80) };
+    if (/秒内没有载入完成|无法载入|载入失败|打开超时|暂时无法打开|无法连接/.test(shell)) return { loaded: false, state: shell.split("\n").find((line) => /载入|超时|无法/.test(line))?.slice(0, 80) };
   }
   return { loaded: false, state: "no composer within two minutes" };
 }
