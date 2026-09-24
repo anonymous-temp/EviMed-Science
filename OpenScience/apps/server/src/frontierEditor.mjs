@@ -193,27 +193,32 @@ export const FRONTIER_SAME_EVENT_INSTRUCTIONS = [
 ].join("\n");
 
 /**
- * The profile instructions (plan §6.5, §10.5.3): a researcher's own stated or
- * confirmed memories become specialties and interest phrases, each phrase
- * naming the memory it came from — the 「因为你在做……」 a reader sees.
+ * The profile instructions (plan §6.5, §10.5.3; widened 2026-09-24): what a
+ * researcher has shown interest in — their memory of every provenance, the
+ * questions they asked lately, the frontier items they starred or opened —
+ * becomes specialties and interest phrases, each phrase naming the piece it
+ * came from. The three kinds are told apart for the model, which weighs them;
+ * nothing in code ranks one over another.
  */
 export const FRONTIER_PROFILE_INSTRUCTIONS = [
-  "你是 EviMed「前沿动态」的个性化编辑。你会收到一位医学研究者自己说过或确认过的记忆，每条有一个 id。",
+  "你是 EviMed「前沿动态」的个性化编辑。你会收到一位医学研究者的三类材料，每条有一个 id：",
+  "memories 是记下的这位研究者的情况；questions 是他最近在对话里问过的问题；items 是他收藏或打开过的前沿动态的标题，starred 为 true 的是收藏。",
   "请从中提取两样东西，用来从每天的医学新消息里挑出和这位研究者相关的条目。只输出 JSON。",
   "",
-  "1. specialties：这位研究者从事或关注的专科，从专科词表里选，按相关程度排列；记忆里看不出来就给空数组，不要猜。",
-  "2. phrases：至多 10 条兴趣短语。每条是一个具体的研究方向、在做的课题、关注的药物或疾病，写成 4 到 30 个字的名词短语，例如「SGLT2 抑制剂与心衰的 Meta 分析」「GLP-1 受体激动剂的减重研究」。每条都必须用 memory_id 注明它来自哪一条记忆。",
+  "1. specialties：这位研究者从事或关注的专科，从专科词表里选，按相关程度排列；材料里看不出来就给空数组，不要猜。",
+  "2. phrases：至多 10 条兴趣短语。每条是一个具体的研究方向、在做的课题、关注的药物或疾病，写成 4 到 30 个字的名词短语，例如「SGLT2 抑制剂与心衰的 Meta 分析」「GLP-1 受体激动剂的减重研究」。每条都必须用 source_id 注明它来自哪一条材料。",
   "",
   "原则：",
-  "1. 只写记忆里明确写着的内容，不补充、不推测、不合并两条记忆。",
-  "2. 工作习惯、写作偏好、格式要求这类与研究内容无关的记忆不产生短语。",
-  "3. 不写人名、联系方式等个人信息。",
-  "4. 数字照记忆原文写；记忆里没有的数字一个也不要写。",
+  "1. 只写材料里明确写着的内容，不补充、不推测、不合并两条材料。",
+  "2. 在几条材料里反复出现的方向、收藏过的条目，比只出现一次的更能说明兴趣，先写它们；短语之间不要重复同一个方向。",
+  "3. 工作习惯、写作偏好、格式要求、操作求助这类与研究内容无关的材料不产生短语。",
+  "4. 不写人名、联系方式等个人信息。",
+  "5. 数字照材料原文写；材料里没有的数字一个也不要写。",
   "",
   `专科词表：${SPECIALTY_LINE}。`,
   "",
-  "输出格式：{\"specialties\":[\"cardiology\"],\"phrases\":[{\"text\":\"\",\"memory_id\":\"\"}]}",
-  "只能使用专科词表里的英文键；memory_id 原样照抄收到的 id；不要输出任何解释。",
+  "输出格式：{\"specialties\":[\"cardiology\"],\"phrases\":[{\"text\":\"\",\"source_id\":\"\"}]}",
+  "只能使用专科词表里的英文键；source_id 原样照抄收到的 id；不要输出任何解释。",
 ].join("\n");
 
 /**
@@ -251,8 +256,13 @@ const WRITING_INPUT_CHARS = 9_000;
 // change to them re-keys no item.
 /** Earlier reports one same-event call weighs against a new one. */
 export const FRONTIER_SAME_EVENT_CANDIDATES = 3;
-/** One interest phrase, in code points; the prompt asks for 4 to 30. */
-export const FRONTIER_PHRASE_LIMITS = Object.freeze({ min: 2, max: 40, phrases: 10, memories: 40, memoryChars: 300 });
+/**
+ * One interest phrase, in code points (the prompt asks for 4 to 30), and what
+ * one profile call is shown at most: 40 memories, 30 questions and 30 item
+ * titles, each clipped — about 12,000 characters in the worst case.
+ */
+export const FRONTIER_PHRASE_LIMITS = Object.freeze({ min: 2, max: 40, phrases: 10, memories: 40, memoryChars: 300,
+  questions: 30, questionChars: 200, items: 30, itemChars: 200 });
 /** The Chinese abstract, in code points; the source text it may be written from. */
 export const FRONTIER_ABSTRACT_LIMITS = Object.freeze({ output: 1_600, input: 6_000 });
 // Three verdicts of a dozen tokens; ten phrases of thirty characters; an
@@ -713,33 +723,67 @@ export function validateSameEvent(count, answer) {
 
 /**
  * @typedef {{ id: string, kind: string, text: string }} FrontierProfileMemory
- * @typedef {{ text: string, memoryId: string }} FrontierProfilePhrase
+ * @typedef {{ text: string }} FrontierProfileQuestion
+ * @typedef {{ text: string, starred?: boolean }} FrontierProfileItem
+ * @typedef {"memory" | "question" | "frontier-item"} FrontierProfileSourceKind
+ * @typedef {{ id: string, source: FrontierProfileSourceKind, memoryId: string, kind: string, text: string, starred?: boolean }} FrontierProfileSource
+ *   One piece of what a profile is read from, under the short id the model is
+ *   shown (`m1`, `q1`, `f1`); `memoryId` is the memory's own id, empty for the rest.
+ * @typedef {{ text: string, source: FrontierProfileSourceKind, memoryId: string, kind: string }} FrontierProfilePhrase
  */
 
 /**
- * Exactly what one profile call shows the model: the memories, each with its
- * id, kind and at most 300 characters of its own words.
- * @param {{ memories: FrontierProfileMemory[] }} input
+ * The pieces one profile call reads, in the model's order and within its
+ * bounds: memories (in the order given — by importance), then questions, then
+ * items, each clipped to what the model is shown. What a phrase's numbers are
+ * checked against is exactly this text.
+ * @param {{ memories?: FrontierProfileMemory[], questions?: FrontierProfileQuestion[], items?: FrontierProfileItem[] }} input
+ * @returns {FrontierProfileSource[]}
  */
-export function buildProfileInput({ memories }) {
+export function frontierProfileSources({ memories = [], questions = [], items = [] }) {
+  const limits = FRONTIER_PHRASE_LIMITS;
+  /** @type {FrontierProfileSource[]} */
+  const sources = [];
+  (memories ?? []).filter((memory) => memory?.id && clip(memory?.text, limits.memoryChars)).slice(0, limits.memories).forEach((memory, index) => {
+    sources.push({ id: `m${index + 1}`, source: "memory", memoryId: String(memory.id), kind: String(memory.kind || "profile"),
+      text: clip(memory.text, limits.memoryChars) });
+  });
+  (questions ?? []).filter((question) => clip(question?.text, limits.questionChars)).slice(0, limits.questions).forEach((question, index) => {
+    sources.push({ id: `q${index + 1}`, source: "question", memoryId: "", kind: "question", text: clip(question.text, limits.questionChars) });
+  });
+  (items ?? []).filter((item) => clip(item?.text, limits.itemChars)).slice(0, limits.items).forEach((item, index) => {
+    sources.push({ id: `f${index + 1}`, source: "frontier-item", memoryId: "", kind: "frontier-item", text: clip(item.text, limits.itemChars),
+      starred: item.starred === true });
+  });
+  return sources;
+}
+
+/**
+ * Exactly what one profile call shows the model: the three kinds of pieces,
+ * each with its short id and its own words.
+ * @param {FrontierProfileSource[]} sources `frontierProfileSources`
+ */
+export function buildProfileInput(sources) {
+  const of = (/** @type {FrontierProfileSourceKind} */ kind) => sources.filter((entry) => entry.source === kind);
   return JSON.stringify({
-    memories: memories.slice(0, FRONTIER_PHRASE_LIMITS.memories)
-      .map((memory) => ({ id: memory.id, kind: memory.kind, text: clip(memory.text, FRONTIER_PHRASE_LIMITS.memoryChars) })),
+    memories: of("memory").map((entry) => ({ id: entry.id, kind: entry.kind, text: entry.text })),
+    questions: of("question").map((entry) => ({ id: entry.id, text: entry.text })),
+    items: of("frontier-item").map((entry) => ({ id: entry.id, text: entry.text, ...(entry.starred ? { starred: true } : {}) })),
   });
 }
 
 /**
  * What one profile answer says, checked piece by piece. A specialty outside
- * the vocabulary and a phrase that fails its checks — no memory it names, a
- * link, a length out of bounds, a number its memory does not state — are
+ * the vocabulary and a phrase that fails its checks — no piece it names, a
+ * link, a length out of bounds, a number its piece does not state — are
  * dropped one by one and listed in `dropped`; the rest stands. Null when the
  * answer is not the shape at all (the caller asks once more).
- * @param {any} answer @param {FrontierProfileMemory[]} memories
+ * @param {any} answer @param {FrontierProfileSource[]} sources
  * @returns {{ specialties: string[], phrases: FrontierProfilePhrase[], dropped: Array<{ text: string, reason: string }> } | null}
  */
-export function verifyProfile(answer, memories) {
+export function verifyProfile(answer, sources) {
   if (!answer || typeof answer !== "object" || !Array.isArray(answer.specialties) || !Array.isArray(answer.phrases)) return null;
-  const known = new Map(memories.map((memory) => [memory.id, memory]));
+  const known = new Map(sources.map((entry) => [entry.id, entry]));
   const specialties = [...new Set(answer.specialties.filter((key) => FRONTIER_SPECIALTIES.includes(key)))];
   /** @type {FrontierProfilePhrase[]} */
   const phrases = [];
@@ -748,17 +792,17 @@ export function verifyProfile(answer, memories) {
   const seen = new Set();
   for (const entry of answer.phrases) {
     const text = typeof entry?.text === "string" ? entry.text.replace(/\s+/g, " ").trim() : "";
-    const memoryId = typeof entry?.memory_id === "string" ? entry.memory_id.trim() : typeof entry?.memoryId === "string" ? entry.memoryId.trim() : "";
-    const memory = known.get(memoryId);
+    const named = [entry?.source_id, entry?.sourceId, entry?.memory_id, entry?.memoryId].find((value) => typeof value === "string");
+    const piece = known.get(typeof named === "string" ? named.trim() : "");
     const reason = !text ? "empty"
       : codePoints(text) < FRONTIER_PHRASE_LIMITS.min || codePoints(text) > FRONTIER_PHRASE_LIMITS.max ? "length"
         : LINK.test(text) ? "link"
-          : !memory ? "unknown-memory"
-            : checkNumbers({ text }, memory.text).missing.length ? "number"
+          : !piece ? "unknown-source"
+            : checkNumbers({ text }, piece.text).missing.length ? "number"
               : seen.has(text.toLowerCase()) ? "duplicate" : null;
-    if (reason) { dropped.push({ text: clip(text, 60), reason }); continue; }
+    if (reason || !piece) { dropped.push({ text: clip(text, 60), reason: reason ?? "unknown-source" }); continue; }
     seen.add(text.toLowerCase());
-    phrases.push({ text, memoryId });
+    phrases.push({ text, source: piece.source, memoryId: piece.memoryId, kind: piece.kind });
     if (phrases.length >= FRONTIER_PHRASE_LIMITS.phrases) break;
   }
   return { specialties, phrases, dropped };
@@ -1179,18 +1223,20 @@ export class FrontierEditor {
   }
 
   /**
-   * A researcher's interest profile from their own stated or confirmed
-   * memories (plan §6.5, §10.5.3): specialties from the vocabulary and at most
-   * ten phrases, each naming the memory it came from. A piece that fails its
-   * check is dropped, never repaired; an answer without the shape is asked for
-   * once more. `phrases` empty is an answer, not a failure.
-   * @param {{ memories: FrontierProfileMemory[] }} input
+   * A researcher's interest profile (plan §6.5, §10.5.3; widened 2026-09-24)
+   * from their memory, their recent questions and the frontier items they
+   * starred or opened: specialties from the vocabulary and at most ten
+   * phrases, each naming the piece it came from. One call, however many
+   * pieces (within `FRONTIER_PHRASE_LIMITS`). A phrase that fails its check is
+   * dropped, never repaired; an answer without the shape is asked for once
+   * more. `phrases` empty is an answer, not a failure.
+   * @param {{ memories?: FrontierProfileMemory[], questions?: FrontierProfileQuestion[], items?: FrontierProfileItem[] }} input
    * @returns {Promise<{ specialties: string[], phrases: FrontierProfilePhrase[], dropped: Array<{ text: string, reason: string }>,
    *                     error: string | null, attempts: number, modelInputSha256: string }>}
    */
-  async extractProfile({ memories }) {
-    const usable = (memories ?? []).filter((memory) => memory?.id && memory?.text).slice(0, FRONTIER_PHRASE_LIMITS.memories);
-    const input = buildProfileInput({ memories: usable });
+  async extractProfile({ memories = [], questions = [], items = [] }) {
+    const usable = frontierProfileSources({ memories, questions, items });
+    const input = buildProfileInput(usable);
     const empty = { specialties: [], phrases: [], dropped: [], error: null, attempts: 0, modelInputSha256: sha256(input) };
     if (!usable.length) return empty;
     const messages = [{ role: "system", content: FRONTIER_PROFILE_INSTRUCTIONS }, { role: "user", content: input }];

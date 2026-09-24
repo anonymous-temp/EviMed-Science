@@ -15,7 +15,7 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, isResearcherRun, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -1274,7 +1274,7 @@ export function createWebApiApp(overrides = {}) {
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   composer: FrontierComposer, actions: FrontierActions } | null} */
+   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
     const client = new KnowledgePluginClient({
@@ -1301,7 +1301,21 @@ export function createWebApiApp(overrides = {}) {
     const events = new FrontierEvents({ database: productDatabase, editor, embedder, config, budget });
     const daily = new FrontierDaily({ database: productDatabase, jobs: productJobs, notifications: notificationService, editor, events, config,
       owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
-    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget });
+    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget,
+      // 与我相关 reads a reader's own recent questions: their runs across
+      // their projects, the platform's internal ones left out. Asked in the
+      // background, a few readers a round, never on a request.
+      conversations: async (userId) => {
+        const user = await store.userById(userId);
+        if (!user || !agentRuns) return [];
+        const runs = [];
+        for (const listed of await store.listProjects(user)) {
+          if (isInternalProject(listed.id)) continue;
+          const project = await store.requireProject(user, listed.id);
+          for (const run of await agentRuns.researcherRuns(project)) runs.push({ projectId: project.id, run });
+        }
+        return runs;
+      } });
     const actions = new FrontierActions({ database: productDatabase, editor, config, budget,
       // 存入知识库 writes the way an upload writes (`writeProjectUpload`).
       library: sourceService ? {
@@ -1326,7 +1340,7 @@ export function createWebApiApp(overrides = {}) {
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions };
+    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles };
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
@@ -1725,6 +1739,9 @@ export function createWebApiApp(overrides = {}) {
       // A run started or ended: which one a model request belongs to may
       // have changed.
       runAttribution.delete(`${project.userId}\0${project.id}`);
+      // A researcher's new question, or a conversation deleted, is what
+      // 与我相关 is read from: their profile is due at the next round.
+      if (frontier && !isInternalProject(project.id) && isResearcherRun(run)) frontier.profiles.noteConversation(project.userId, run);
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as

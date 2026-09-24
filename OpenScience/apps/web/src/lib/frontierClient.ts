@@ -273,13 +273,16 @@ export interface FrontierFollow {
  */
 
 /**
- * `GET /api/frontier/for-you`. `basis: "tags"` means ranked without vectors, and the block says so.
- * A reason's `topic` is the reader's own phrase alone — what 「与我相关」 groups items under and
- * heads a group with — and `text` the older sentence around it (「因为你在做：…」).
+ * `GET /api/frontier/for-you`: at most eight items, each under one of the reader's interests.
+ * A reason's `topic` is that interest alone — what 「与我相关」 groups items under and heads a
+ * group with — and `text` the older sentence around it (「因为你在做：…」). `basis` (ranked by
+ * meaning or by keywords) is read and never shown. `paused`: the reader switched their memory off,
+ * so the block has nothing for them until they switch it on.
  */
 export interface FrontierForYou {
   state: "available" | "unavailable" | "off";
   basis: "vector" | "tags" | null;
+  paused: boolean;
   items: Array<{ item: FrontierItem; reason: { text: string; topic: string | null; memoryId: string | null } }>;
 }
 
@@ -973,10 +976,11 @@ export function fetchFrontierForYou(): Promise<FrontierForYou | null> {
       const reason = record(row?.reason);
       const because = text(reason?.text);
       return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) } }] : [];
-    }).slice(0, 5);
+    }).slice(0, 8);
     return {
       state: oneOf(raw.state ?? raw.status, ["available", "unavailable", "off"] as const, "off"),
       basis: orNull(raw.basis, ["vector", "tags"] as const),
+      paused: raw.paused === true,
       items,
     };
   });

@@ -3569,6 +3569,18 @@ function runSideActivitySignature(projection) {
   ].join(":");
 }
 
+/**
+ * Whether a run is a researcher's own turn rather than work a machine started
+ * — an evaluation, an autopilot episode, a lesson or a source being read.
+ * What "last open" reopens (`lastSessionId`) and what 与我相关 reads a
+ * researcher's questions from (`frontierProfiles.mjs`) are both this.
+ * @param {Record<string, any> | null | undefined} run @returns {boolean}
+ */
+export function isResearcherRun(run) {
+  if (!run || run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) return false;
+  return usagePurposeOfRun(run) === "kernel";
+}
+
 export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
@@ -3837,8 +3849,7 @@ export class AgentRunStore {
     let latest = null;
     let at = "";
     for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
-      if (run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) continue;
-      if (usagePurposeOfRun(run) !== "kernel") continue;
+      if (!isResearcherRun(run)) continue;
       const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
       if (moved > at) {
         at = moved;
@@ -3846,6 +3857,17 @@ export class AgentRunStore {
       }
     }
     return latest;
+  }
+
+  /**
+   * The researcher's own runs in this project (`isResearcherRun`), deleted
+   * ones included and marked, folded without the phase walk `list` adds —
+   * what 与我相关 reads a researcher's recent questions from, in the
+   * background, for every project of an account at once.
+   * @param {any} project @returns {Promise<Record<string, any>[]>}
+   */
+  async researcherRuns(project) {
+    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()].filter(isResearcherRun);
   }
 
   /**
