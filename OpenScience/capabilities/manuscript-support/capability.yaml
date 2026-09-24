@@ -9,7 +9,7 @@
 # required rather than optional because the ban on backstage prose in the
 # section is only defensible while the prose has somewhere else to go.
 id: manuscript-support
-version: 1.0.0
+version: 1.1.0
 title: Manuscript Support
 category: Manuscript Writing
 description: Draft or revise one section of a research manuscript — introduction, methods, results,
@@ -33,6 +33,7 @@ skills:
 - citation-integrity
 - manuscript-humanize
 - biomedical-database-search
+- reporting-guidelines
 tools:
 - mcp__evimed__literature_search
 - mcp__evimed__biomedical_source_search
@@ -62,6 +63,15 @@ produces:
   # matching the ledger every other capability writes.
   - path: citation-ledger.csv
     required: true
+  # The completed reporting checklist of the study the section belongs to —
+  # every item of its guideline, and where it is reported — when the plan
+  # declared the study type and that type has a guideline (@evimed/domain
+  # studyTypes.mjs; owner ruling 2026-09-24). A submission artifact a journal
+  # asks for, not backstage prose. Optional twice over: a section with no
+  # declared type or no guideline has none, and the ratchet puts a new file at
+  # `required: false` first either way.
+  - path: reporting-checklist.md
+    required: false
   # The designated backstage channel, and the reason this capability may forbid
   # revision notes, reviewer replies and process narration in the section at
   # all. A ban with nowhere to put the banned thing is a ban runs work around.
