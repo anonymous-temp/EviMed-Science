@@ -138,6 +138,22 @@ test("the meta versions are seeded as numbers and move by one inside the caller'
   await assert.rejects(database.transaction((client) => bumpFrontierVersion(client, "plugin_cursor")), /Unknown frontier version key/);
 });
 
+test("a schema migrated before snapshots recorded heat takes the heats column on the next start; its old rows read as no history", options, async () => {
+  const first = open();
+  await migrateFrontier(first, { dimension: 1024 });
+  // The table as a deployment of 2026-09-22 holds it.
+  await first.query("ALTER TABLE evimed_frontier.hot_snapshots DROP COLUMN IF EXISTS heats");
+  await first.query("INSERT INTO evimed_frontier.hot_snapshots (taken_at, ranking) VALUES ('2001-01-01T00:00:00Z', '[]'::jsonb) ON CONFLICT DO NOTHING");
+  const next = open();
+  await migrateFrontier(next, { dimension: 1024 });
+  const column = (await next.query(`SELECT data_type, is_nullable, column_default FROM information_schema.columns
+    WHERE table_schema = 'evimed_frontier' AND table_name = 'hot_snapshots' AND column_name = 'heats'`)).rows[0];
+  assert.deepEqual([column?.data_type, column?.is_nullable], ["jsonb", "NO"]);
+  const old = (await next.query("SELECT heats FROM evimed_frontier.hot_snapshots WHERE taken_at = '2001-01-01T00:00:00Z'")).rows[0];
+  assert.deepEqual(old.heats, {});
+  await next.query("DELETE FROM evimed_frontier.hot_snapshots WHERE taken_at = '2001-01-01T00:00:00Z'");
+});
+
 test("metaNumber reads what a writer may have left and never throws", () => {
   assert.equal(metaNumber(7), 7);
   assert.equal(metaNumber("12"), 12);

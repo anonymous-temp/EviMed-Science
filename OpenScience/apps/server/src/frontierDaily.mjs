@@ -34,20 +34,27 @@
  * - **The issue's structure is frozen; its items are read live.** The lead,
  *   the sections and the Markdown are what was decided at 07:30; the page
  *   reads the items themselves when it opens, so a retraction flag shows and a
- *   withdrawn item leaves (it never holds a retracted claim up as news).
+ *   withdrawn item leaves (it never holds a retracted claim up as news). The
+ *   Markdown a reader copies is rendered again from those live items
+ *   (`FrontierService.dailyIssue`), so it says what the page says; the stored
+ *   copy is the record of what was composed.
+ * - **Sources are named as a reader knows them** — the institution, never the
+ *   feed (`frontierSourceDisplayName`, plan 2026-09-23 §6.5 #5) — in the
+ *   issue, its Markdown and the AI minute's input alike.
  * - **The push is the platform's digest, not a new channel** (plan §10.5.5):
  *   a `notify` inbox item with source `digest`, id and idempotency key
  *   `frontier-daily:<day>`, at the reader's own `digestTime`, behind the
  *   `frontier` notification switch (on unless turned off). Only to people who
  *   opened the page in the last 14 days or follow something, only once a day
  *   (`user_prefs.last_push_day`), and only to accounts the module's audience
- *   admits. Its body carries no personal reason: a Feishu binding may be a
- *   group chat.
+ *   admits. Its body is the lead's title and, when there are any, the count
+ *   of safety alerts — no lane counts, no instructions — and no personal
+ *   reason: a Feishu binding may be a group chat.
  *
  * @module frontierDaily
  */
 
-import { FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH } from "@evimed/domain";
+import { FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 
@@ -66,6 +73,8 @@ export const FRONTIER_DAILY_SAFETY_MAX = 10;
 export const FRONTIER_DAILY_AI_MAX = 12;
 /** Readers pushed per scan (the scan runs every minute). */
 export const FRONTIER_PUSH_BATCH = 50;
+/** The pace an issue's reading time is estimated at: characters of Chinese prose a minute (「约 9 分钟」). */
+export const FRONTIER_READING_CHARS_PER_MINUTE = 400;
 /** A reader who opened the page in this long, or follows something, is pushed to. */
 export const FRONTIER_PUSH_ACTIVE_MS = 14 * DAY;
 const JOB_KIND = "frontier-daily";
@@ -143,7 +152,14 @@ export function frontierDailyWindow(day, { timeZone, dailyTime }) {
  *             event_title?: string | null, event_reports?: number | null, event_digest?: string | null }} FrontierDailyRow
  */
 
-/** @param {FrontierDailyRow} row */
+/**
+ * What one line of the Markdown reads of an item — a composed row, or an item
+ * as the page reads it now (`FrontierService.dailyIssue`).
+ * @typedef {{ id: string | number, title_raw: string, title_zh?: string | null, summary_zh?: string | null, canonical_url: string,
+ *             source_name: string }} FrontierDailyLine
+ */
+
+/** @param {FrontierDailyLine} row */
 const titleOf = (row) => String(row.title_zh || row.title_raw);
 
 /** Higher score first, then the newer, then the higher id. @param {FrontierDailyRow} left @param {FrontierDailyRow} right */
@@ -199,15 +215,16 @@ function momentLabel(at, timeZone) {
 }
 
 /**
- * The issue as Markdown, the way 「复制为 Markdown」 hands it to a department
- * chat: the lead, the safety alerts, the sections, the AI minute, each item
- * with its source and a link to the original.
- * @param {{ day: string, window: { start: Date, end: Date }, timeZone: string, lead: FrontierDailyRow | null, leadText: string | null,
- *           safety: FrontierDailyRow[], sections: Array<{ lane: string, rows: FrontierDailyRow[] }>, aiMinute: string | null }} issue
+ * The issue as Markdown, the way 「复制」 hands it to a department chat: the
+ * lead, the safety alerts, the sections, the AI minute, each item with its
+ * institution (`frontierSourceDisplayName`, never the feed it came through)
+ * and a link to the original; signed 「来源：EviMed 前沿动态」.
+ * @param {{ day: string, window: { start: Date, end: Date }, timeZone: string, lead: FrontierDailyLine | null, leadText: string | null,
+ *           safety: FrontierDailyLine[], sections: Array<{ lane: string, rows: FrontierDailyLine[] }>, aiMinute: string | null }} issue
  */
 export function frontierDailyMarkdown({ day, window, timeZone, lead, leadText, safety, sections, aiMinute }) {
   const count = new Set([lead, ...safety, ...sections.flatMap((section) => section.rows)].filter(Boolean).map((row) => String(row?.id))).size;
-  const line = (/** @type {FrontierDailyRow} */ row) => `- **${markdownText(titleOf(row))}**（${markdownText(row.source_name)}）${row.summary_zh ? `：${markdownText(row.summary_zh)}` : ""} [原文](${row.canonical_url})`;
+  const line = (/** @type {FrontierDailyLine} */ row) => `- **${markdownText(titleOf(row))}**（${markdownText(row.source_name)}）${row.summary_zh ? `：${markdownText(row.summary_zh)}` : ""} [原文](${row.canonical_url})`;
   const parts = [
     `# EviMed 医学前沿日报 · ${dayLabel(day)}`,
     "",
@@ -223,23 +240,33 @@ export function frontierDailyMarkdown({ day, window, timeZone, lead, leadText, s
     parts.push("", `## ${FRONTIER_LANE_LABELS_ZH[/** @type {keyof typeof FRONTIER_LANE_LABELS_ZH} */ (section.lane)] ?? section.lane}`, "", ...section.rows.map(line));
   }
   if (aiMinute) parts.push("", "## AI 一分钟", "", markdownText(aiMinute));
-  parts.push("", "---", "", "由 EviMed「前沿动态」编辑。导读由模型根据原文写成，数字已逐字核对；引用前请阅读原文。", "");
+  parts.push("", "---", "", "来源：EviMed 前沿动态", "");
   return parts.join("\n");
 }
 
 /**
- * The inbox item a day's issue is pushed as. Counts and the lead's title, and
- * nothing about the reader: the same text reaches a Feishu group chat.
+ * How long an issue takes to read, in whole minutes and at least one: its
+ * characters, whitespace aside, at 400 a minute (plan 2026-09-23 §6.2).
+ * @param {unknown[]} texts @returns {number}
+ */
+export function frontierReadingMinutes(texts) {
+  let characters = 0;
+  for (const text of texts) if (typeof text === "string") characters += [...text.replace(/\s+/gu, "")].length;
+  return Math.max(1, Math.round(characters / FRONTIER_READING_CHARS_PER_MINUTE));
+}
+
+/**
+ * The inbox item a day's issue is pushed as (plan 2026-09-23 C §1.13): the
+ * title with the day and the selected count, the lead's title as the body,
+ * and — the one count kept — how many safety alerts the issue holds. Nothing
+ * about the reader: the same text reaches a Feishu group chat.
  * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[] }} issue
  */
 export function frontierDailyNotice({ day, lead, sections, safety }) {
   const selected = (lead ? 1 : 0) + sections.reduce((sum, section) => sum + section.itemIds.length, 0);
-  const lanes = sections.map((section) => `${FRONTIER_LANE_LABELS_ZH[/** @type {keyof typeof FRONTIER_LANE_LABELS_ZH} */ (section.lane)] ?? section.lane} ${section.itemIds.length} 条`);
   const body = [
-    lead?.title ? `头条：${String(lead.title).slice(0, 120)}` : null,
+    lead?.title ? String(lead.title).slice(0, 120) : null,
     safety.length ? `安全警示 ${safety.length} 条` : null,
-    lanes.length ? lanes.join(" · ") : null,
-    "打开「前沿动态」看完整日报，可以复制为 Markdown 转给同事。",
   ].filter(Boolean).join("\n");
   const [, month, date] = day.split("-").map(Number);
   return {
@@ -388,16 +415,20 @@ export class FrontierDaily {
   async compose(day) {
     if (!DAY_PATTERN.test(day)) throw Object.assign(new Error("The daily's day is invalid."), { code: "frontier_daily_day_invalid" });
     const window = frontierDailyWindow(day, { timeZone: this.timeZone, dailyTime: this.dailyTime });
+    // Each row names its source as a reader knows it — the institution, not
+    // the feed (plan 2026-09-23 §6.5 #5): the safety block used to append
+    // 「（openFDA 药品召回（enforcement）API）」 to every recall.
     /** @type {FrontierDailyRow[]} */
-    const rows = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.safety_alert,
-        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.name AS source_name,
+    const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.safety_alert,
+        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner,
         e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest
       FROM evimed_frontier.items i
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       LEFT JOIN evimed_frontier.events e ON e.id = i.event_id AND e.merged_into IS NULL
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz AND i.visible_at < $2::timestamptz
         AND i.verification IN ('passed', 'repaired') AND i.summary_zh IS NOT NULL AND (i.selected OR i.safety_alert OR i.lane = 'ai')
-      ORDER BY i.visible_at DESC, i.id DESC LIMIT 500`, [window.start, window.end])).rows ?? [];
+      ORDER BY i.visible_at DESC, i.id DESC LIMIT 500`, [window.start, window.end])).rows ?? [])
+      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner }) }));
     /** @type {string[]} */
     let hotEventIds = [];
     try {
@@ -505,12 +536,19 @@ export class FrontierDaily {
       itemCount: Number(row.items ?? 0), generatedAt: iso(row.generated_at) }));
   }
 
-  /** One issue as it was frozen, or null. @param {string} day */
+  /**
+   * One issue as it was frozen, with the issues on either side of it (a quiet
+   * day has none, so they are the nearest ones: 「前一日 / 后一日」), or null.
+   * @param {string} day
+   */
   async read(day) {
     if (!DAY_PATTERN.test(String(day ?? ""))) return null;
     await this.ready();
     const row = (await this.database.query(`SELECT day::text AS day, window_start, window_end, lead, sections, safety, ai_minute, markdown,
-        cardinality(item_ids) AS items, generated_at FROM evimed_frontier.dailies WHERE day = $1::date`, [day])).rows?.[0];
+        cardinality(item_ids) AS items, generated_at,
+        (SELECT max(d.day)::text FROM evimed_frontier.dailies d WHERE d.day < $1::date) AS previous_day,
+        (SELECT min(d.day)::text FROM evimed_frontier.dailies d WHERE d.day > $1::date) AS next_day
+      FROM evimed_frontier.dailies WHERE day = $1::date`, [day])).rows?.[0];
     if (!row) return null;
     return {
       day: row.day, windowStart: iso(row.window_start), windowEnd: iso(row.window_end), generatedAt: iso(row.generated_at),
@@ -518,6 +556,7 @@ export class FrontierDaily {
       sections: Array.isArray(row.sections) ? row.sections : [],
       safety: Array.isArray(row.safety) ? row.safety : [],
       aiMinute: row.ai_minute ?? null, markdown: row.markdown, itemCount: Number(row.items ?? 0),
+      previousDay: row.previous_day ?? null, nextDay: row.next_day ?? null,
     };
   }
 

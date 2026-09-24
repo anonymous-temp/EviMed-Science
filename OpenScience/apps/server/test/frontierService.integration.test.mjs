@@ -92,10 +92,12 @@ test("the selected view lists selected, published items of enabled sources, newe
   assert.deepEqual(card.specialties, [{ key: "cardiology", label: "心血管" }], "an unknown specialty never reaches a card");
   assert.deepEqual(card.flags, [{ key: "preprint", label: "未经同行评议" }]);
   assert.deepEqual(card.levels, { authority: "high", impact: "medium", novelty: "low", relevance: null });
-  assert.equal(JSON.stringify(card).includes("score"), false, "no score number is ever served");
+  assert.deepEqual([card.score, card.scoreBand], [null, null], "an item not scored in full has no total to show");
+  assert.equal(/"score(Authority|Impact|Novelty|Relevance|s)"|"scoreTotal"/.test(JSON.stringify(card)), false, "the four dimensions stay internal");
   assert.deepEqual(card.openAccess, { status: "gold", pdfUrl: "https://example.org/a.pdf" });
   assert.deepEqual(card.alsoReportedBy, [{ sourceId: "lancet", sourceName: "The Lancet", url: "https://lancet.example.org/1" }],
     "the primary source never reports itself");
+  assert.equal(card.alsoReportedCount, 1);
   assert.deepEqual(card.source, { id: "nejm", name: "NEJM Journal", homepage: "https://nejm.example.org/" });
   assert.deepEqual(card.state, { starred: false, hidden: false, read: false });
   assert.equal(card.selectedRule, "threshold");
@@ -365,6 +367,80 @@ test("the sources page reads the mirror, maps unknown health to degraded, and na
   assert.deepEqual(listing.plugin, { version: "0.2.0", contract: "1.1.0", fields: { entry: ["summary"], facts: [], enrichment: ["publication_types"] } });
   const odd = listing.sources.find((source) => source.id === "odd");
   assert.deepEqual([odd.health, odd.healthLabel], ["degraded", "退化"]);
-  assert.deepEqual(Object.keys(odd).sort(), ["access", "egress", "enabled", "entries7d", "health", "healthLabel", "homepage", "id", "lane",
-    "laneLabel", "lastNewEntryAt", "lastOkAt", "launchTier", "name", "retired", "sourceType", "sourceTypeLabel"]);
+  assert.deepEqual(Object.keys(odd).sort(), ["access", "displayName", "egress", "enabled", "entries7d", "health", "healthLabel", "homepage", "id", "lane",
+    "laneLabel", "lastNewEntryAt", "lastOkAt", "launchTier", "name", "retired", "selected30d", "sourceType", "sourceTypeLabel"]);
+});
+
+test("the sources list names each feed and its institution, with its selected items of the last 30 days", options, async () => {
+  await insertSource(database, "openfda-drug-enforcement-api", { name: "openFDA 药品召回（enforcement）API", lane: "safety", source_type: "regulator",
+    owner_entity: "U.S. Food and Drug Administration" });
+  await database.query("UPDATE evimed_frontier.sources SET selected_30d = 7 WHERE id = 'openfda-drug-enforcement-api'");
+  const listing = await serviceFor().sources(reader);
+  const fda = listing.sources.find((source) => source.id === "openfda-drug-enforcement-api");
+  assert.deepEqual([fda.name, fda.displayName, fda.selected30d], ["openFDA 药品召回（enforcement）API", "FDA", 7],
+    "the list is a list of feeds, so it keeps the feed's name — and says whose it is");
+  const nejm = listing.sources.find((source) => source.id === "nejm");
+  assert.deepEqual([nejm.displayName, nejm.selected30d], ["NEJM Journal", 0], "an institution the table does not name keeps the registry's name");
+});
+
+test("a card carries the editorial total and its band against the selection line; a safety alert carries neither", options, async () => {
+  const scored = async (title, total, overrides = {}) => {
+    const row = await insertItem(database, { title, selected: true, ...overrides });
+    await database.query("UPDATE evimed_frontier.items SET score_total = $2 WHERE id = $1", [row.id, total]);
+    return row;
+  };
+  await scored("Top", 86, { timelineAt: "2026-09-22T03:00:00Z" });
+  await scored("Middle", 64, { timelineAt: "2026-09-22T02:00:00Z" });
+  await scored("Low", 41, { timelineAt: "2026-09-22T01:00:00Z" });
+  await scored("Alert", 90, { timelineAt: "2026-09-22T00:30:00Z", safetyAlert: true, selectedRule: "safety-bypass" });
+  const cards = async (config) => Object.fromEntries((await serviceFor({ config }).listItems(reader, params({ view: "all" }))).body.items
+    .map((item) => [item.titleRaw, [item.score, item.scoreBand]]));
+  assert.deepEqual(await cards({}), { Top: [86, "high"], Middle: [64, "medium"], Low: [41, "low"], Alert: [null, null] },
+    "at or above the line (70 unless set) is high, from 60 medium, below low");
+  assert.deepEqual((await cards({ frontierSelectThreshold: 90 })).Top, [86, "medium"], "the band reads the deployment's own line");
+});
+
+test("a source reaches a reader by its institution: the card, and 「另有 N 家」 counted by institution, never a feed of the card's own", options, async () => {
+  await insertSource(database, "openfda-drug-enforcement-api", { name: "openFDA 药品召回（enforcement）API", lane: "safety", source_type: "regulator",
+    owner_entity: "U.S. Food and Drug Administration" });
+  await insertSource(database, "fda-medwatch-safety-alerts", { name: "美国FDA MedWatch 安全警示 MedWatch Safety Alerts", lane: "safety",
+    source_type: "regulator", owner_entity: "U.S. Food and Drug Administration" });
+  await insertSource(database, "mhra-alerts-recalls", { name: "英国MHRA 警示与召回 Alerts and recalls", lane: "safety", source_type: "regulator",
+    owner_entity: "Medicines and Healthcare products Regulatory Agency" });
+  await insertSource(database, "stat-biotech", { name: "STAT Biotech 频道", source_type: "media", owner_entity: "Boston Globe Media" });
+  await insertSource(database, "stat-news", { name: "STAT News", source_type: "media", owner_entity: "Boston Globe Media" });
+  await insertItem(database, { title: "Class I recall", sourceId: "openfda-drug-enforcement-api", sourceType: "regulator", lane: "safety",
+    safetyAlert: true, selected: true, mentions: [
+      { sourceId: "fda-medwatch-safety-alerts", url: "https://fda.example.org/medwatch", publishedAt: "2026-09-22T02:30:00Z" },
+      { sourceId: "mhra-alerts-recalls", url: "https://mhra.example.org/1", publishedAt: "2026-09-22T02:00:00Z" },
+      { sourceId: "stat-biotech", url: "https://stat.example.org/b", publishedAt: "2026-09-22T01:00:00Z" },
+      { sourceId: "stat-news", url: "https://stat.example.org/n", publishedAt: "2026-09-22T01:30:00Z" },
+    ] });
+  const [card] = (await serviceFor().listItems(reader, params({ safety: "1", view: "all" }))).body.items;
+  assert.equal(card.source.name, "FDA", "not 「openFDA 药品召回（enforcement）API」");
+  assert.deepEqual(card.alsoReportedBy.map((mention) => [mention.sourceName, mention.url]),
+    [["英国 MHRA", "https://mhra.example.org/1"], ["STAT", "https://stat.example.org/n"]],
+    "one row per other institution, its latest mention; the FDA's own second feed is not another report");
+  assert.equal(card.alsoReportedCount, 2);
+});
+
+test("search by time: the items the words match, newest first; by relevance otherwise; the order is part of the cursor", options, async () => {
+  await insertItem(database, { title: "Semaglutide heart failure outcomes", titleZh: "司美格鲁肽心衰结局", timelineAt: "2026-09-20T00:00:00Z" });
+  await insertItem(database, { title: "Semaglutide kidney trial", titleZh: "司美格鲁肽肾脏试验", timelineAt: "2026-09-22T00:00:00Z" });
+  await insertItem(database, { title: "Semaglutide semaglutide weight semaglutide", titleZh: "司美格鲁肽 司美格鲁肽 减重", timelineAt: "2026-09-21T00:00:00Z" });
+  await insertItem(database, { title: "Unrelated oncology", titleZh: "肿瘤", timelineAt: "2026-09-22T03:00:00Z" });
+  const service = serviceFor();
+  const byTime = await service.listItems(reader, params({ view: "all", q: "司美格鲁肽", sort: "time" }));
+  assert.equal(byTime.body.mode, "keyword");
+  assert.deepEqual(byTime.body.items.map((item) => item.titleRaw),
+    ["Semaglutide kidney trial", "Semaglutide semaglutide weight semaglutide", "Semaglutide heart failure outcomes"]);
+  const byRelevance = await service.listItems(reader, params({ view: "all", q: "司美格鲁肽" }));
+  assert.equal(byRelevance.body.items.length, 3);
+  const paged = await service.listItems(reader, params({ view: "all", q: "司美格鲁肽", sort: "time", limit: "2" }));
+  assert.deepEqual(paged.body.items.map((item) => item.titleRaw), ["Semaglutide kidney trial", "Semaglutide semaglutide weight semaglutide"]);
+  const next = await service.listItems(reader, params({ view: "all", q: "司美格鲁肽", sort: "time", limit: "2", cursor: paged.body.nextCursor }));
+  assert.deepEqual(next.body.items.map((item) => item.titleRaw), ["Semaglutide heart failure outcomes"]);
+  await assert.rejects(service.listItems(reader, params({ view: "all", q: "司美格鲁肽", limit: "2", cursor: paged.body.nextCursor })),
+    { code: "invalid_cursor" }, "a cursor of the time order is not one of the relevance order");
+  await assert.rejects(service.listItems(reader, params({ sort: "random" })), { code: "frontier_query_invalid" });
 });
