@@ -74,6 +74,13 @@ export function artifactKind(path) {
   const name = String(path).split('/').pop()?.toLowerCase() ?? '';
   if (/matrix.*\.json$/.test(name)) return { kind: 'matrix', label: '证据表' };
   if (/revision-notes?\.md$/.test(name)) return { kind: 'notes', label: '修订说明' };
+  // A deliverable's completed reporting checklist (CONSORT 2025, TRIPOD+AI…:
+  // every item and where it is reported). Its name matches `report`, and read
+  // as a report it would be the file the delivery card opens as 「报告」 in
+  // place of the section it lists. The name is @evimed/domain's
+  // REPORTING_CHECKLIST_FILE, written out because this function is shipped
+  // into the frame on its own.
+  if (name === 'reporting-checklist.md') return { kind: 'document', label: '报告规范清单' };
   if (/report.*\.(md|docx|pdf|html)$/.test(name)) return { kind: 'report', label: '报告' };
   if (/\.(md|docx|pdf|html)$/.test(name)) return { kind: 'document', label: '文档' };
   return { kind: 'file', label: '文件' };
