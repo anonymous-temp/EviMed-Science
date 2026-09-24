@@ -1,13 +1,20 @@
 /**
  * The frame bodies' shared look: inline style objects over the kernel's own
- * tokens, so a card sits in the transcript and a tab in the right column the
- * way the kernel's own rows do, in both schemes, under the theme layer.
+ * tokens, so a card in the transcript reads as the shell's own card, in both
+ * schemes, under the theme layer.
  *
  * Inline styles, not a stylesheet: the bodies reach the page as serialized
  * functions with no asset pipeline, and a style object dies with the element
- * that carries it. The sizes are the kernel tool row's own
- * (`--dsh-content-font-size-secondary`, `--dsh-content-font-delta`), so the
- * reader's font-size setting moves these with everything else.
+ * that carries it.
+ *
+ * The geometry is the shell's (`@evimed/domain/design-tokens`, 整改方案 §4),
+ * written here as numbers because a body may import nothing: a card is 12 px
+ * round, a control 8 and 24 px high inline, a tag 4 and 20 px high, every edge
+ * one 1 px hairline, and text 14 px with 12 px for metadata. Colour arrives
+ * only through the kernel's `--dsw-*` roles, which the theme body points at
+ * the shell's tokens — never a literal, so a token moved in the shell moves
+ * here too. Body text follows the kernel's own content size
+ * (`--dsh-content-font-size`, 14 px by default), as the rows around it do.
  *
  * Emitted into each body that lists it among its parts.
  *
@@ -17,9 +24,9 @@
 /**
  * @returns {{
  *   tone: (name: string) => string,
- *   secondary: Record<string, any>, card: Record<string, any>, line: Record<string, any>,
- *   title: Record<string, any>, quiet: Record<string, any>, pill: (name: string) => Record<string, any>,
- *   button: Record<string, any>, section: Record<string, any>, empty: Record<string, any>,
+ *   text: Record<string, any>, meta: Record<string, any>, card: Record<string, any>, line: Record<string, any>,
+ *   title: Record<string, any>, quiet: Record<string, any>, tag: Record<string, any>,
+ *   button: Record<string, any>, textButton: Record<string, any>, link: Record<string, any>,
  * }}
  */
 export function frameStyles() {
@@ -31,37 +38,45 @@ export function frameStyles() {
   };
   /** @param {string} name */
   const tone = (name) => /** @type {Record<string, string>} */ (tones)[name] ?? tones.muted;
-  const secondary = { fontSize: 'var(--dsh-content-font-size-secondary, 13px)', lineHeight: 'calc(22px + var(--dsh-content-font-delta, 0px))' };
+  const text = { fontSize: 'var(--dsh-content-font-size, 14px)', lineHeight: 'calc(22px + var(--dsh-content-font-delta, 0px))' };
+  const meta = { fontSize: '12px', lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' };
+  const ellipsis = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   return {
     tone,
-    secondary,
+    text,
+    meta,
     card: {
-      ...secondary,
-      border: '0.5px solid var(--dsw-alias-border-l2)',
-      borderRadius: '10px',
-      background: 'var(--dsw-alias-bg-layer-1)',
+      ...text,
+      border: '1px solid var(--dsw-alias-border-l2)',
+      borderRadius: '12px',
       padding: '8px 12px',
       margin: '2px 0',
       color: 'var(--dsw-alias-label-secondary)',
       minWidth: 0,
+      boxSizing: 'border-box',
     },
-    line: { ...secondary, display: 'flex', alignItems: 'baseline', gap: '8px', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' },
-    title: { color: 'var(--dsw-alias-label-primary)', fontWeight: 500, flex: 'none' },
-    quiet: { color: 'var(--dsw-alias-label-tertiary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-    pill: (name) => ({ color: tone(name), flex: 'none', fontWeight: 500 }),
+    line: { ...text, display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' },
+    title: { ...ellipsis, color: 'var(--dsw-alias-label-primary)', fontWeight: 500 },
+    quiet: { ...ellipsis, color: 'var(--dsw-alias-label-tertiary)' },
+    // A tag that nothing clicks: grey, 20 px high, radius 4. Colour is for
+    // clinical safety alone (整改方案 §4), so a state is words on grey.
+    tag: {
+      flex: 'none', display: 'inline-block', height: '20px', padding: '0 6px', borderRadius: '4px',
+      fontSize: '12px', lineHeight: '20px', whiteSpace: 'nowrap',
+      background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)',
+    },
+    // The secondary button: a grey fill, no outline, 24 px high inline.
     button: {
-      ...secondary,
-      marginLeft: 'auto',
-      flex: 'none',
-      border: '0.5px solid var(--dsw-alias-border-l4)',
-      borderRadius: '6px',
-      background: 'transparent',
-      color: 'var(--dsw-alias-label-secondary)',
-      padding: '0 8px',
-      cursor: 'pointer',
-      font: 'inherit',
+      flex: 'none', height: '24px', padding: '0 8px', borderRadius: '8px', border: 'none',
+      fontFamily: 'inherit', fontSize: '12px', lineHeight: '24px', cursor: 'pointer',
+      background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
     },
-    section: { ...secondary, color: 'var(--dsw-alias-label-tertiary)', margin: '12px 0 4px', fontWeight: 500 },
-    empty: { ...secondary, color: 'var(--dsw-alias-label-tertiary)', padding: '24px 16px', textAlign: 'center' },
+    // The text button: no fill until hovered, the same height.
+    textButton: {
+      flex: 'none', height: '24px', padding: '0 4px', borderRadius: '8px', border: 'none',
+      fontFamily: 'inherit', fontSize: 'inherit', lineHeight: '24px', cursor: 'pointer',
+      background: 'transparent', color: 'inherit',
+    },
+    link: { color: 'var(--dsw-alias-link)', textDecoration: 'none' },
   };
 }

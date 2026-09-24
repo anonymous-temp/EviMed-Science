@@ -48,13 +48,13 @@ function frame({ commandUi = true, inputTriggers = true } = {}) {
   return { ctx, target, kit, commands, sources, drafts, sent };
 }
 
-test('the slash popup lists the public tools, with category, summary and duration to search by', () => {
+test('the slash popup lists the public tools, with category and summary to search by and no duration', () => {
   const options = capabilityOptions(/** @type {any} */ (kitFor(fakeCtx(), fakeTarget({ frame: { capabilities: CATALOGUE } })).frame).capabilities);
   assert.deepEqual(options, [
-    { id: 'clinical-evidence-synthesis', label: '临床证据深度分析', detail: '临床证据 · 围绕一个临床问题检索并综合证据。 · 约 20–40 分钟' },
-    { id: 'comprehensive-drug-evaluation', label: '综合药品评价', detail: '临床证据 · 多维度评价一个药品。 · 约 30 分钟' },
+    { id: 'clinical-evidence-synthesis', label: '临床证据深度分析', detail: '临床证据 · 围绕一个临床问题检索并综合证据。' },
+    { id: 'comprehensive-drug-evaluation', label: '综合药品评价', detail: '临床证据 · 多维度评价一个药品。' },
     { id: 'research-topic-selection', label: '科研选题', detail: '研究规划 · 提出可落地的选题。' },
-  ]);
+  ], 'how long a tool takes is said once, on 科研工具');
 });
 
 test('a tool\'s page reads from the catalogue, and an internal capability has none', () => {
@@ -71,7 +71,7 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   assert.equal(f.commands.length, 1);
   const command = f.commands[0];
   assert.equal(command.name, '工具');
-  assert.match(command.description(), /科研工具/);
+  assert.equal(command.description(), '选择科研工具');
   assert.equal(command.available({ sessionId: 'session-a' }), true);
   assert.equal(command.ui.kind, 'popupSelect');
   const options = await command.ui.options({ sessionId: 'session-a' }, new globalThis.AbortController().signal);
@@ -95,7 +95,7 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   assert.equal(renderStatic(hero.component), '', 'nothing between the headline and the composer');
   assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.input.dock'), false);
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
-  assert.ok(chip, 'in the pill row under the composer, beside the kernel statistics');
+  assert.ok(chip, 'in the row under the composer, where the kernel keeps its (hidden) statistics');
   assert.ok(chip.options.order > 0, "after the kernel's stats pill (order 0)");
   // The starters live on the hero only: under a reply they would be noise.
   assert.equal(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock').length, 1);
@@ -104,9 +104,11 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
   assert.match(drawn, /临床证据深度分析/);
-  assert.match(drawn, /约 20–40 分钟/);
-  assert.match(drawn, /围绕一个临床问题检索并综合证据/, "the summary is the chip's tooltip, not a block above the composer");
-  assert.doesNotMatch(drawn, /你会拿到|做不到/);
+  // The tool's name alone: its duration and summary were said on 科研工具.
+  assert.doesNotMatch(drawn, /分钟|围绕一个临床问题|你会拿到|做不到/);
+  assert.match(drawn, /aria-label="移除「临床证据深度分析」"/);
+  assert.match(drawn, /title="移除"/);
+  assert.doesNotMatch(drawn, /0\.5px/, 'every edge is one 1 px hairline, or none');
   // The hero seat draws the chip and the starters within the composer's width.
   const heroDrawn = renderStatic(hero.component);
   assert.match(heroDrawn, /max-width:var\(--dsh-composer-card-max-width, ?952px\)/);

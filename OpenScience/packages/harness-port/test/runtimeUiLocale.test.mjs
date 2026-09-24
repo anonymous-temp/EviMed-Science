@@ -60,11 +60,11 @@ test('the product language is a private-use pack over zh, registered and selecte
   assert.deepEqual(evimedDictionaries(), JSON.parse(JSON.stringify(EVIMED_DICTIONARIES)));
 });
 
-test('the product face is Chinese: EviMed is the one Latin word a string of the pack may carry', () => {
+test('the product face is Chinese: EviMed and the names printed on keys are the only Latin words a string of the pack may carry', () => {
   for (const [ns, dict] of Object.entries(EVIMED_DICTIONARIES)) {
     for (const [key, value] of Object.entries(dict)) {
       // Interpolation names (`{count}`) are the kernel's syntax, not copy.
-      const copy = value.replaceAll('EviMed', '').replace(/\{\w+\}/g, '');
+      const copy = value.replaceAll('EviMed', '').replace(/\b(?:Ctrl|Enter)\b/g, '').replace(/\{\w+\}/g, '');
       assert.doesNotMatch(copy, /[A-Za-z]{2,}/, `${ns}/${key} carries a Latin word: ${value}`);
     }
   }
@@ -87,15 +87,30 @@ test('a delegated child is called a sub-task, everywhere the kernel names it', (
   }
 });
 
-test('the strings written for a coding agent on a laptop are rephrased for a hosted research bench', () => {
-  assert.equal(EVIMED_DICTIONARIES.common['brand.localBuild'], 'EviMed 研究运行时', 'every namespace falls back through common');
+test('the strings written for a coding agent on a laptop are rephrased for a hosted research bench, and short', () => {
+  assert.equal(/** @type {any} */ (EVIMED_DICTIONARIES).common, undefined, "the kernel's local-build label is drawn only by the left column this deployment removes");
   assert.equal(EVIMED_DICTIONARIES.conversation['tool.title.code'], '运行代码');
-  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.workspace'], '正在连接本项目的工作区…');
-  assert.match(EVIMED_DICTIONARIES.chat['message.maxTokens.hint'], /继续/);
+  // What to type, and nothing about the machinery.
+  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.hero'], '描述你的研究问题…');
+  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.default'], '继续提问…');
+  assert.equal(EVIMED_DICTIONARIES.conversation['placeholder.workspace'], '正在连接…');
+  assert.equal(EVIMED_DICTIONARIES.chat['message.maxTokens.hint'], '发送“继续”接着写');
   assert.doesNotMatch(EVIMED_DICTIONARIES.chat['message.maxTokens'], /token/i);
-  assert.doesNotMatch(EVIMED_DICTIONARIES.chat['message.failure.auth'], /API|密钥/, 'a hosted runtime holds no key the reader could fix');
+  assert.equal(EVIMED_DICTIONARIES.chat['message.failure.auth'], '服务暂时不可用，请稍后重试', 'a hosted runtime holds no key the reader could fix');
   assert.equal(EVIMED_DICTIONARIES.chat['chat.deepDiving'], 'EviMed 思考中…');
   assert.equal(EVIMED_DICTIONARIES.conversation['hero.preview'], '');
+  // A retry says that it is retrying — no attempt count, no countdown.
+  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.status'], '{label}');
+  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.active'], '正在重试…');
+  assert.equal(EVIMED_DICTIONARIES.chat['message.retry.scheduled'], '正在重试…');
+  // The kernel's record format is not the reader's business.
+  assert.doesNotMatch(EVIMED_DICTIONARIES.subagent['diagnostic.unsupported'], /版本/);
+});
+
+test('what Enter does while a run works is the send button\'s tooltip', () => {
+  // `input.send.queue` is the primary button's label and tooltip while a
+  // typed message waits on a running agent; Ctrl/⌘+Enter steers instead.
+  assert.equal(EVIMED_DICTIONARIES.conversation['input.send.queue'], '排队发送 · Ctrl/⌘+Enter 插话');
 });
 
 test('the document says zh-CN while the pack is active, after every publish of the locale runtime', () => {

@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  createHub, formatDuration, parseToolText, partialArgField, toolCallState, validFrame, verdictOf,
+  createFrameKit, createHub, parseToolText, partialArgField, toolCallState, validFrame,
 } from '../src/runtimeUiKit.mjs';
+import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
+import { fakeCtx, fakeTarget, kernelSlots } from './helpers/frameFakes.mjs';
 
 // Verbatim from a production transcript, 2026-09-16 (project
 // eval-memory-ablation-v7-545d9b64) — the same samples the control plane's
@@ -69,20 +71,22 @@ test('a call is read the same way whether it is still streaming or settled', () 
   assert.equal(cut.startedAt, null);
 });
 
-test('a verdict reaches the reader as three words, never as the validator text', () => {
-  assert.deepEqual(verdictOf(parseToolText('ok\n{"deliverableId":"d1","notices":["a","b"]}')), { verdict: 'pass', mustFix: 0, advice: 2 });
-  assert.deepEqual(verdictOf(parseToolText(LIVE_FAILED)), { verdict: 'issues', mustFix: 2, advice: 0 });
-  // A refusal that names nothing the run must fix is not "N items to check":
-  // it is a package nobody verified.
-  assert.deepEqual(verdictOf(parseToolText('failed: deliverable_rejected\n- (advisory) citation_style 参考文献格式可以统一。')), { verdict: 'unverified', mustFix: 0, advice: 1 });
-  assert.deepEqual(verdictOf(null), { verdict: 'unverified', mustFix: 0, advice: 0 });
-});
-
-test('durations read the way the product writes them', () => {
-  assert.equal(formatDuration(45_000), '45 秒');
-  assert.equal(formatDuration(192_000), '3 分 12 秒');
-  assert.equal(formatDuration(3_900_000), '1 小时 05 分');
-  assert.equal(formatDuration(-5), '0 秒');
+test('a takeover draws the row it shadows: the next entry above its own, whichever bodies are on', () => {
+  const ctx = fakeCtx({ slots: kernelSlots() });
+  const kit = createFrameKit(ctx, fakeTarget(), undefined, FRAME_VOCABULARY);
+  const slot = 'conversation.chat.node';
+  function Checks() { return null; }
+  function Files() { return null; }
+  // Alone, below the kernel: the kernel's own row.
+  kit.occupy({ slot, key: 'assistant-step', priority: -2 }, Files);
+  assert.equal(kit.shadowed(slot, 'assistant-step', Files), 'shipped');
+  // With a second takeover between them: that one, which draws the kernel's.
+  kit.occupy({ slot, key: 'assistant-step', priority: -1 }, Checks);
+  assert.equal(kit.shadowed(slot, 'assistant-step', Files), Checks);
+  assert.equal(kit.shadowed(slot, 'assistant-step', Checks), 'shipped');
+  // Another key's entries are not in the cell; an unregistered component shadows nothing.
+  assert.equal(kit.shadowed(slot, 'context', Files), null);
+  assert.equal(kit.shadowed(slot, 'assistant-step', () => null), null);
 });
 
 test('the bootstrap object is validated field by field', () => {

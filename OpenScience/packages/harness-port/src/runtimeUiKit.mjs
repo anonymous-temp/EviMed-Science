@@ -19,7 +19,8 @@
  *  - React, from the loader's `require` — the kernel's own copy, never a
  *    second one;
  *  - `occupy`, the one registration path, which refuses a slot misuse loudly
- *    before the kernel can refuse it silently;
+ *    before the kernel can refuse it silently, and `shadowed`, the row a
+ *    takeover draws before what it adds;
  *  - the hub: the in-frame channel between the navigation bridge (which owns
  *    the postMessage transport and its sequence counter) and the bodies that
  *    render what the shell sends in — theme, the bound run's progress, query
@@ -321,53 +322,6 @@ export function partialArgField(argsRaw, field) {
 }
 
 /**
- * A span of time the way the product's Chinese face writes it.
- * @param {number} ms
- * @returns {string}
- */
-export function formatDuration(ms) {
-  const total = Math.max(0, Math.round(Number(ms) / 1000));
-  if (!Number.isFinite(total)) return '';
-  if (total < 60) return `${total} 秒`;
-  const minutes = Math.floor(total / 60);
-  if (minutes < 60) return `${minutes} 分 ${String(total % 60).padStart(2, '0')} 秒`;
-  return `${Math.floor(minutes / 60)} 小时 ${String(minutes % 60).padStart(2, '0')} 分`;
-}
-
-/**
- * The product name of a capability id, from the catalogue the control plane
- * handed the frame, or null. An id is never shown as a title.
- * @param {any} frame @param {unknown} id
- * @returns {string | null}
- */
-export function capabilityTitleOf(frame, id) {
-  const key = String(id ?? '');
-  if (!key || !frame || !Array.isArray(frame.capabilities)) return null;
-  const entry = frame.capabilities.find((/** @type {any} */ capability) => capability.id === key);
-  return entry ? entry.title : null;
-}
-
-/**
- * The verdict a submission or a package check came back with, in the three
- * words a reader acts on: passed, needs checking (and how many), or could not
- * be verified. Never the validator's own text, which is English and written
- * for the run.
- * @param {ReturnType<typeof parseToolText>} result
- * @returns {{ verdict: 'pass' | 'issues' | 'unverified', mustFix: number, advice: number }}
- */
-export function verdictOf(result) {
-  if (!result) return { verdict: 'unverified', mustFix: 0, advice: 0 };
-  if (result.ok) {
-    const notices = Array.isArray(result.data?.notices) ? result.data.notices.length : 0;
-    return { verdict: 'pass', mustFix: 0, advice: notices };
-  }
-  const issues = Array.isArray(result.issues) ? result.issues : [];
-  const mustFix = issues.filter((issue) => ['required', 'safety', 'blocking'].includes(String(issue.severity))).length;
-  const advice = issues.length - mustFix;
-  return mustFix > 0 ? { verdict: 'issues', mustFix, advice } : { verdict: 'unverified', mustFix: 0, advice };
-}
-
-/**
  * The kit itself.
  *
  * @param {any} ctx the socket plugin's native client context
@@ -444,6 +398,36 @@ export function createFrameKit(ctx, target, require, vocabulary) {
   }
 
   /**
+   * The component a takeover shadows: in a keyed slot, the entry for the same
+   * key at the next priority above the takeover's own.
+   *
+   * A takeover renders what it shadows first and adds its own after it, so
+   * two bodies can each add something after one kernel row — the reply check
+   * and the delivered files both follow an answer — without either knowing
+   * about the other, and with either switched off (or retired by the renderer
+   * after a crash) the other still renders the kernel's own row. Read off the
+   * slot ledger's `entries()`, the documented inspection surface.
+   *
+   * @param {string} slot @param {string} key @param {any} component the takeover's own component
+   * @returns {any} the shadowed component, or null
+   */
+  function shadowed(slot, key, component) {
+    const entries = typeof ctx.slots?.entries === 'function' ? ctx.slots.entries(slot) : [];
+    const cell = (Array.isArray(entries) ? entries : []).filter((/** @type {any} */ entry) => entry && entry.options && entry.options.key === key);
+    const own = cell.find((/** @type {any} */ entry) => entry.component === component);
+    if (!own) return null;
+    const floor = own.options.priority ?? 0;
+    /** @type {any} */
+    let next = null;
+    for (const entry of cell) {
+      const priority = entry.options.priority ?? 0;
+      if (entry.component === component || priority <= floor) continue;
+      if (!next || priority < (next.options.priority ?? 0)) next = entry;
+    }
+    return next ? next.component : null;
+  }
+
+  /**
    * Cosmetic work must never sink the bodies that share this bundle.
    * @template T @param {string} label @param {() => T} fn @returns {T | undefined}
    */
@@ -489,13 +473,10 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     guarded,
     withServices,
     useFrameState,
+    shadowed,
     parseToolText,
     toolCallState,
     partialArgField,
-    formatDuration,
-    verdictOf,
-    /** @param {unknown} id */
-    capabilityTitle(id) { return capabilityTitleOf(frame, id); },
   };
 }
 
@@ -509,8 +490,5 @@ export const KIT_PARTS = Object.freeze([
   parseToolText,
   toolCallState,
   partialArgField,
-  formatDuration,
-  capabilityTitleOf,
-  verdictOf,
   createFrameKit,
 ]);

@@ -23,7 +23,7 @@ import test from "node:test";
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
 import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, STUDY_TYPES, workspaceLayout } from "@evimed/domain";
 
-import { GUIDANCE_SECTION_NAME, buildGuidanceText } from "../src/guidanceText.mjs";
+import { GUIDANCE_SECTION_NAME, buildChildGuidanceText, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
 import { evidenceFromOutcome } from "../src/evidenceIngest.mjs";
 import { skillBodyDigestAsync } from "../src/digest.mjs";
@@ -273,6 +273,23 @@ test("recalled context is named as data, not as an instruction", () => {
   assert.ok(text.includes("也不是权威"), "and as non-authoritative, which is the part that survives a stale memory");
   assert.ok(/核实/.test(text), "and it must say what to do instead: verify before relying on it");
   assert.ok(text.includes("evimed_capsule_recall"), "the tool that returns it is named, not only the tags");
+});
+
+test("the user's language is the thinking's and the narration's too, and the answer does not narrate our checks", () => {
+  // Two sentences added to the one language rule (整改方案 §5.3): the process
+  // a running turn shows was English because the method is, and a finished
+  // report's reply closed on a paragraph about submitting, freezing and
+  // independent review. Short and stable (principle 16): one rule, no list of
+  // past failures.
+  const text = buildGuidanceText([], { askUserEnabled: false, capsuleActive: false, reviewEnabled: true });
+  const start = text.indexOf("## 对用户说话");
+  const rule = text.slice(start, text.indexOf("\n## ", start + 1));
+  assert.match(rule, /用用户的语言回答和说明进展，思考和过程叙述也用这种语言。/);
+  assert.match(rule, /最终回答只写结论、交付物、需要用户决定的事和局限，不讲内部做了哪些检查（提交、冻结、独立审查、提交前检查）。/);
+  assert.ok(rule.length < 400, `the rule stays short: ${rule.length} characters`);
+  // The delegated child reads the same rule, not a copy.
+  const child = buildChildGuidanceText({ capsuleActive: false });
+  assert.ok(child.includes(rule.trim()), "the child's rule is the root's own text");
 });
 
 test("ordinary orchestration guidance excludes internal source pipelines and their contract catalogue", () => {

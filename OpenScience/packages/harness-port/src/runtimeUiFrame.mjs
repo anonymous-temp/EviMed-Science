@@ -39,7 +39,6 @@ import {
 
 import { BODY as BRIDGE } from './runtimeUiBridge.mjs';
 import { BODY as COMMANDS } from './runtimeUiCommands.mjs';
-import { BODY as CONTROLS } from './runtimeUiControls.mjs';
 import { KIT_PARTS } from './runtimeUiKit.mjs';
 import { BODY as LOCALE } from './runtimeUiLocale.mjs';
 import { BODY as PANELS } from './runtimeUiPanels.mjs';
@@ -60,10 +59,12 @@ import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
 /**
  * The bodies, in the order they start. The bridge first, because the others
  * reach the shell through the hub it attaches; the language and the palette
- * before anything that renders.
+ * before anything that renders. (The composer's queue/steer hint was a body of
+ * its own, `controls`, until 2026-09-23; it is the send button's tooltip now,
+ * in the language pack.)
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, COMMANDS, CONTROLS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));

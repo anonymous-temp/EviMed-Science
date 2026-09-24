@@ -1,5 +1,6 @@
-// The run's tool calls as cards: what each one says to a researcher, from the
-// call alone and with the bound run's live state.
+// The run's tool calls as the conversation shows them: the plan as the list
+// of what will be handed back, each delegation as one line, and the delivery
+// gate's own calls not at all — unless one was refused outright.
 //
 // The blocks are the kernel's two call forms (`RunningToolCall` while the
 // arguments stream, the `tool-result` node once settled) and the results are
@@ -10,7 +11,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  apply, awaitView, BODY, claimView, delegateView, liveRunFor, planView, refusalOf, reviewSummaryText, verdictView,
+  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf,
 } from '../src/runtimeUiToolviews.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -43,7 +44,7 @@ const PLAN_ARGS = {
     { id: 'drug-eval', contractKind: 'drug-evaluation-report', capability: 'drug-evaluation', title: '利伐沙班综合评价', dependsOn: ['evidence'] },
   ],
 };
-const PLAN_RESULT = ok({ runId: 'run-1', revision: 1, deliverables: PLAN_ARGS.deliverables.map((item) => ({ ...item, status: 'planned', attempts: 0, issues: [] })) });
+const PLAN_RESULT = ok({ runId: 'run-1', revision: 2, deliverables: PLAN_ARGS.deliverables.map((item) => ({ ...item, status: 'planned', attempts: 0, issues: [] })) });
 
 const LIVE = {
   runId: 'run-1', sessionId: 'session-a', state: 'running', title: '老年房颤抗凝',
@@ -52,19 +53,19 @@ const LIVE = {
       { id: 'evidence', title: '老年房颤抗凝证据综述', capability: 'clinical-evidence-synthesis', status: 'rejected', attempts: 2, lastVerdict: 'issues', mustFixCount: 3, childSessionId: 'child-1' },
       { id: 'drug-eval', title: '利伐沙班综合评价', capability: 'drug-evaluation', status: 'planned', attempts: 0 },
     ],
-    phaseCounts: { search: 4, screen: 2, fulltext: 1, claims: 0, write: 0, deliver: 0 },
     currentPhase: 'screen',
     sources: { searched: 120, included: 18, fullText: 6 },
-    claims: { total: 0, verified: 0 },
     children: [{ childSessionId: 'child-1', deliverableId: 'evidence', state: 'running', lastActivityAt: null }],
     startedAt: '2026-09-18T01:00:00.000Z',
     updatedAt: '2026-09-18T01:05:00.000Z',
   },
 };
 
-/** No Latin word of three letters or more: the validator's English never reaches a card. */
-function assertNoEnglish(/** @type {string} */ text) {
-  assert.doesNotMatch(text.replace(/EviMed|RCT|Meta/g, ''), /[A-Za-z]{3,}/, `English reached the card: ${text}`);
+/** Nothing of the run's machinery or the validator's English reaches a row. */
+function assertReaderWords(/** @type {string} */ html) {
+  const text = html.replace(/<[^>]+>/g, ' ');
+  assert.doesNotMatch(text.replace(/EviMed/g, ''), /[A-Za-z]{3,}/, `English reached a row: ${text}`);
+  assert.doesNotMatch(text, /第 \d+ 版|要交付|依赖|契约|临床证据综述|已用时|纳入|全文|提交|核对|审查|内核|已交付|已通过|需修改/, `the run's machinery reached a row: ${text}`);
 }
 
 test('the run state counts for the conversation it belongs to, and for its children', () => {
@@ -75,170 +76,65 @@ test('the run state counts for the conversation it belongs to, and for its child
   assert.equal(liveRunFor(LIVE, null), LIVE, 'before the bridge has said which session is open');
 });
 
-test('a plan is its deliverables, dependencies by name, and no stale 「待开始」', () => {
+test('a plan is what will be handed back and where each piece stands — no revision, kind, dependency or clarification', () => {
   const view = planView(settled('evimed_plan', PLAN_ARGS, PLAN_RESULT), null, kit());
   assert.equal(view.kind, 'written');
-  assert.deepEqual(view.deliverables.map((/** @type {any} */ item) => [item.title, item.capability, item.kind, item.dependsOn]), [
-    ['老年房颤抗凝证据综述', '临床证据综合', '临床证据综述', []],
-    ['利伐沙班综合评价', '药品综合评价', '药品综合评价', ['老年房颤抗凝证据综述']],
-  ]);
-  // The result's own `planned` is a snapshot from when it was written.
-  assert.ok(view.deliverables.every((/** @type {any} */ item) => item.status === null));
-  assert.deepEqual(view.clarifications, ['人群限定为 65 岁以上', '结局采用全因死亡']);
-  // With the live run, each item says where it stands now.
+  assert.deepEqual(view.deliverables, [
+    { id: 'evidence', title: '老年房颤抗凝证据综述', status: null },
+    { id: 'drug-eval', title: '利伐沙班综合评价', status: null },
+  ], "the result's own `planned` is a snapshot from when it was written");
   const live = planView(settled('evimed_plan', PLAN_ARGS, PLAN_RESULT), LIVE, kit());
-  assert.deepEqual(live.deliverables.map((/** @type {any} */ item) => item.status?.text), ['需修改', '待开始']);
-  // A read-back is the state at that moment and says so.
-  const status = planView(settled('evimed_plan', { action: 'status' }, ok({ runId: 'run-1', revision: 1, items: [{ id: 'evidence', title: 'T', status: 'accepted' }] })), null, kit());
-  assert.equal(status.kind, 'status');
-  assert.equal(status.deliverables[0].status?.text, '已通过');
+  assert.deepEqual(live.deliverables.map((/** @type {any} */ item) => item.status), ['进行中', '待开始'], 'a package under repair is still in progress to a reader');
+  const done = planView(settled('evimed_plan', PLAN_ARGS, PLAN_RESULT), { ...LIVE, progress: { ...LIVE.progress, deliverables: [{ id: 'evidence', status: 'delivered' }, { id: 'drug-eval', status: 'failed' }] } }, kit());
+  assert.deepEqual(done.deliverables.map((/** @type {any} */ item) => item.status), ['已完成', '未完成']);
+  // A read-back is the run checking itself.
+  assert.equal(planView(settled('evimed_plan', { action: 'status' }, ok({ items: [{ id: 'evidence', status: 'accepted' }] })), null, kit()).kind, 'status');
 });
 
 test('a plan still streaming shows what is written so far, and a refused one says so in Chinese', () => {
-  assert.equal(planView(running('evimed_plan', '{"action":"write","clarifications":["人'), null, kit()).kind, 'writing');
+  const writing = planView(running('evimed_plan', '{"action":"write","deliverables":[{"id":"evidence","title":"老年房颤'), null, kit());
+  assert.equal(writing.kind, 'writing');
   const refused = planView(settled('evimed_plan', PLAN_ARGS, 'failed: plan_invalid\n- (required) deliverable_missing_capability Deliverable d1 has no capability.'), null, kit());
   assert.equal(refused.kind, 'refused');
-  assert.equal(refused.text, '计划需要修改');
+  assert.equal(/** @type {any} */ (refused).text, '计划需要修改');
 });
 
-test('a blocking delegation that settled is a finished card with its duration', () => {
-  const block = settled('evimed_delegate', { deliverableId: 'evidence' },
-    ok({ deliverableId: 'evidence', childSessionId: 'child-1', report: { deliverableId: 'evidence', submitted: true, summary: 'done' }, status: 'accepted' }),
-    { callTime: 1_000_000, time: 1_000_000 + 192_000 });
-  const view = delegateView(block, null, 9_999_999_999, kit(), new Map([['evidence', '老年房颤抗凝证据综述']]));
-  assert.equal(view.state, 'done');
-  assert.equal(view.stateText, '已通过');
-  assert.equal(view.tone, 'ok');
-  assert.equal(view.title, '老年房颤抗凝证据综述');
-  assert.equal(view.elapsed, '3 分 12 秒', 'the call was open exactly as long as its child worked');
-  assert.equal(view.childSessionId, 'child-1');
-  // The blocking call's retried shape has no status; it is still finished.
-  const retried = delegateView(settled('evimed_delegate', { deliverableId: 'evidence' }, ok({ deliverableId: 'evidence', childSessionId: 'child-2', report: null, retried: true })), null, 9_999_999_999, kit());
-  assert.equal(retried.state, 'done');
-  assert.notEqual(retried.elapsed, null);
-});
-
-test('a non-blocking delegation follows its child in the live run', () => {
+test('a delegation is its piece of work and where it stands', () => {
   const started = settled('evimed_delegate', { deliverableId: 'evidence' },
     ok({ handle: 'h-1', deliverableId: 'evidence', childSessionId: 'child-1', status: 'started' }), { callTime: 1_000_000, time: 1_000_500 });
-  const view = delegateView(started, LIVE, 1_000_000 + 125_000, kit());
-  assert.equal(view.state, 'running');
-  assert.equal(view.stateText, '进行中');
-  assert.equal(view.tone, 'active');
-  assert.equal(view.elapsed, '2 分 05 秒');
-  assert.equal(view.phase, '筛选');
-  assert.equal(view.sources, '纳入 18 篇 · 全文 6 篇');
-  assert.deepEqual(view.submission, { attempt: 2, verdict: { text: '⚠ 3 项需核对', tone: 'warn' } });
-  assert.equal(view.capability, '临床证据综合');
-  // Without live news it says only that it started, with no clock that
-  // would count hours on an old task.
-  const quiet = delegateView(started, null, 9_999_999_999, kit());
-  assert.equal(quiet.state, 'started');
-  assert.equal(quiet.stateText, '已启动');
-  assert.equal(quiet.elapsed, null);
-  // Finished: the duration stops at the child's last activity.
+  const working = delegateView(started, LIVE, kit());
+  assert.deepEqual(working, { deliverableId: 'evidence', title: '老年房颤抗凝证据综述', childSessionId: 'child-1', state: 'running', stateText: '进行中' });
+  assert.deepEqual(delegateView(started, null, kit(), new Map([['evidence', '老年房颤抗凝证据综述']])).stateText, '已启动', 'with no live news it says only that it started');
   const finished = { ...LIVE, progress: { ...LIVE.progress,
-    deliverables: [{ ...LIVE.progress.deliverables[0], status: 'accepted', lastVerdict: 'pass', mustFixCount: 0 }],
-    children: [{ childSessionId: 'child-1', deliverableId: 'evidence', state: 'done', lastActivityAt: new Date(1_000_000 + 600_000).toISOString() }] } };
-  const done = delegateView(started, finished, 9_999_999_999, kit());
-  assert.equal(done.state, 'done');
-  assert.equal(done.stateText, '已通过');
-  assert.equal(done.elapsed, '10 分 00 秒');
-  assert.deepEqual(done.submission?.verdict, { text: '✓ 通过', tone: 'ok' });
-});
-
-test('with two children at work the run-level phase and counts are not pinned on one card', () => {
-  const two = { ...LIVE, progress: { ...LIVE.progress, children: [
-    { childSessionId: 'child-1', deliverableId: 'evidence', state: 'running', lastActivityAt: null },
-    { childSessionId: 'child-2', deliverableId: 'drug-eval', state: 'running', lastActivityAt: null },
-  ] } };
-  const view = delegateView(running('evimed_delegate', { deliverableId: 'evidence' }), two, 1_060_000, kit());
-  assert.equal(view.phase, null);
-  assert.equal(view.sources, null);
-  assert.equal(view.state, 'running');
-});
-
-test('a refused delegation names its reason, and a streaming one its deliverable already', () => {
+    deliverables: [{ ...LIVE.progress.deliverables[0], status: 'accepted' }],
+    children: [{ childSessionId: 'child-1', deliverableId: 'evidence', state: 'done', lastActivityAt: null }] } };
+  assert.equal(delegateView(started, finished, kit()).stateText, '已完成');
+  // The blocking delegate's settled shape: finished, by its own word.
+  const blocking = settled('evimed_delegate', { deliverableId: 'evidence' },
+    ok({ deliverableId: 'evidence', childSessionId: 'child-1', report: { submitted: true }, status: 'accepted' }));
+  assert.equal(delegateView(blocking, null, kit()).state, 'done');
+  // A refused delegation names its reason; a streaming one its deliverable already.
   const refused = delegateView(settled('evimed_delegate', { deliverableId: 'drug-eval' },
-    'failed: deliverable_dependency_pending\n- (required) deliverable_dependency_pending 它依赖 evidence，等这些通过后再委派。'), null, 0, kit());
-  assert.equal(refused.state, 'refused');
-  assert.equal(refused.stateText, '它依赖的那一件还没有通过');
-  const streaming = delegateView(running('evimed_delegate', '{"deliverableId":"drug-eval","brief":"比较'), LIVE, 1_030_000, kit());
-  assert.equal(streaming.title, '利伐沙班综合评价');
-  assert.equal(streaming.state, 'running');
+    'failed: deliverable_dependency_pending\n- (required) deliverable_dependency_pending 它依赖 evidence。'), null, kit());
+  assert.deepEqual([refused.state, refused.stateText], ['refused', '它依赖的那一件还没有完成']);
+  const streaming = delegateView(running('evimed_delegate', '{"deliverableId":"drug-eval","brief":"比较'), LIVE, kit());
+  assert.deepEqual([streaming.title, streaming.state], ['利伐沙班综合评价', 'running']);
 });
 
-test('an await lists what came back, in Chinese', () => {
-  assert.equal(awaitView(running('evimed_await', { handles: ['h-1', 'h-2'] }), null, kit()).handles, 2);
-  const view = awaitView(settled('evimed_await', { handles: ['h-1', 'h-2'] }, ok({ results: [
-    { handle: 'h-1', deliverableId: 'evidence', childSessionId: 'child-1', status: 'completed', summary: 'Evidence synthesis done.', submission: { attempts: 2, verdict: 'pass' } },
-    { handle: 'h-2', deliverableId: 'drug-eval', childSessionId: 'child-2', status: 'running' },
-  ] })), LIVE, kit());
-  assert.equal(view.kind, 'settled');
-  assert.deepEqual(view.results.map((/** @type {any} */ entry) => [entry.title, entry.status, entry.verdict?.text ?? null]), [
-    ['老年房颤抗凝证据综述', '已完成', '✓ 通过'],
-    ['利伐沙班综合评价', '仍在进行', null],
-  ]);
-  assertNoEnglish(view.results.map((/** @type {any} */ entry) => [entry.status, entry.verdict?.text ?? '']).flat().join(' '));
-});
-
-test('a submission is a verdict in three words, never the validator text', () => {
-  const failed = 'failed: specialist_evidence_traceability_failed\n'
-    + '- (required) specialist_evidence_traceability_failed Evidence matrix claim CLM-S01 is not cited by the report.\n'
-    + '- (required) quote_not_in_source The quotation for CLM-S07 is not in the source it names.\n'
-    + '- (advisory) citation_style Reference style is inconsistent.';
-  const issues = verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, failed), LIVE, kit());
-  assert.equal(issues.kind, 'judged');
-  assert.deepEqual(issues.verdict, { text: '⚠ 2 项需核对', tone: 'warn' });
-  assert.equal(issues.title, '老年房颤抗凝证据综述');
-  // One finding carries its own code at the top too; it is still a verdict.
-  const single = verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' },
-    'failed: quote_not_in_source\n- (required) quote_not_in_source The quotation for CLM-S07 is not in the source it names.'), null, kit());
-  assert.deepEqual(single.verdict, { text: '⚠ 1 项需核对', tone: 'warn' });
-  const pass = verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' },
-    ok({ deliverableId: 'evidence', contractKind: 'clinical-evidence-report', label: '临床证据综述', metrics: {}, notices: ['a', 'b'] })), null, kit());
-  assert.deepEqual(pass.verdict, { text: '✓ 通过', tone: 'ok' });
-  assert.equal(pass.advice, 2);
-  assert.equal(pass.title, '临床证据综述', 'with nothing better, the contract kind names it');
-  const refused = verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' },
-    'failed: deliverable_not_owned\n- (required) deliverable_not_owned 此能力子代理只负责交付物「x」。'), null, kit());
-  assert.equal(refused.kind, 'refused');
-  assert.equal(/** @type {any} */ (refused).text, '这一件不由当前子任务负责');
-  assert.equal(verdictView(running('evimed_submit_deliverable', { deliverableId: 'evidence' }), null, kit()).kind, 'judging');
+test("the gate's own calls say nothing, unless the call itself was refused", () => {
+  const verdict = 'failed: specialist_evidence_traceability_failed\n- (required) specialist_evidence_traceability_failed Evidence matrix claim CLM-S01 is not cited by the report.';
+  assert.equal(gateRefusal(settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, verdict), LIVE, kit()), null, 'a verdict on the work is not a refusal');
+  assert.equal(gateRefusal(settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, ok({ deliverableId: 'evidence', notices: ['a'] })), LIVE, kit()), null);
+  assert.equal(gateRefusal(running('evimed_package_check', { deliverableId: 'evidence' }), LIVE, kit()), null);
+  assert.equal(gateRefusal(settled('evimed_claim_upsert', { deliverableId: 'evidence' }, ok({ status: 'verified', totals: { total: 12, verified: 10 } })), LIVE, kit()), null);
+  assert.equal(gateRefusal(settled('evimed_await', { handles: ['h-1'] }, ok({ results: [] })), LIVE, kit()), null);
+  assert.deepEqual(gateRefusal(settled('evimed_submit_deliverable', { deliverableId: 'evidence' },
+    'failed: deliverable_attempts_spent\n- (required) deliverable_attempts_spent No attempts left.'), LIVE, kit()), { title: '老年房颤抗凝证据综述', text: '这一件的提交次数已用完' });
   assert.equal(refusalOf({ ok: false, code: 'quote_not_in_source', issues: [{ code: 'quote_not_in_source' }] }), null);
 });
 
-test('a registered claim shows its wording, whether it checked out, and the running tally', () => {
-  const claim = { deliverableId: 'evidence', claim: { id: 'CLM-003', type: 'direct', text: '与华法林相比，利伐沙班使老年患者大出血风险降低。', sources: ['src_1'] } };
-  const verified = claimView(settled('evimed_claim_upsert', claim, ok({ claimId: 'CLM-003', status: 'verified', issues: [], totals: { total: 12, verified: 10 } })), kit());
-  assert.equal(verified.statement, '与华法林相比，利伐沙班使老年患者大出血风险降低。');
-  assert.deepEqual(verified.status, { text: '✓ 已核对', tone: 'ok' });
-  assert.equal(verified.totals, '已核对 10/12');
-  const unverified = claimView(settled('evimed_claim_upsert', claim, ok({ claimId: 'CLM-003', status: 'unverified', issues: [{ code: 'quote_not_found', message: 'Quote not found in src_1.' }], totals: { total: 12, verified: 10 } })), kit());
-  assert.deepEqual(unverified.status, { text: '⚠ 未核对', tone: 'warn' });
-  assert.equal(claimView(running('evimed_claim_upsert', '{"deliverableId":"evidence","claim":{"text":"与华法林'), kit()).kind, 'recording');
-});
-
-test('every card is registered under its tool name, in the conversation namespace', () => {
-  const ctx = fakeCtx({ slots: kernelSlots(), sessions: { list: { getSnapshot: () => ({}), subscribe: () => () => {} } } });
-  const target = fakeTarget({ frame: { capabilities: CAPABILITIES } });
-  apply(ctx, {}, target, undefined, kitFor(ctx, target));
-  const views = ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'tool.call.toolview' && entry.component !== 'shipped');
-  assert.deepEqual(views.map((/** @type {any} */ entry) => entry.options.key).sort(),
-    ['evimed_await', 'evimed_claim_upsert', 'evimed_delegate', 'evimed_package_check', 'evimed_plan', 'evimed_submit_deliverable']);
-  assert.ok(views.every((/** @type {any} */ entry) => entry.options.locale === 'conversation'));
-  assert.deepEqual(target.warnings, []);
-  assert.equal(BODY.name, 'toolviews');
-});
-
-test('outside a frame nothing is registered', () => {
-  const ctx = fakeCtx({ slots: kernelSlots() });
-  const target = fakeTarget({ framed: false });
-  apply(ctx, {}, target, undefined, kitFor(ctx, target));
-  assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.component !== 'shipped').length, 0);
-});
-
-test('the cards render Chinese markup, and a call of an unknown shape draws a plain row instead of throwing', () => {
+/** A frame with the catalogue listing child-1, and the views applied. */
+function frame() {
   const ctx = fakeCtx({ slots: kernelSlots(), sessions: {
     list: { getSnapshot: () => ({ current: 'session-a', subagentsByParent: { 'session-a': { entries: [{ id: 'child-1', kind: 'child', mode: 'one-shot' }] } } }), subscribe: () => () => {} },
     refreshSubagents() {}, openSubagent() {},
@@ -249,48 +145,65 @@ test('the cards render Chinese markup, and a call of an unknown shape draws a pl
   frameKit.hub.deliver('session', { sessionId: 'session-a' });
   frameKit.hub.deliver('run-state', LIVE);
   const view = (/** @type {string} */ key) => ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'tool.call.toolview' && entry.options.key === key).component;
+  return { ctx, target, view };
+}
 
-  const plan = renderStatic(view('evimed_plan'), { block: settled('evimed_plan', PLAN_ARGS, PLAN_RESULT) });
-  assert.match(plan, /研究计划/);
-  assert.match(plan, /依赖：老年房颤抗凝证据综述/);
-  assert.match(plan, /需修改/);
-
-  const delegate = renderStatic(view('evimed_delegate'), { block: settled('evimed_delegate', { deliverableId: 'evidence' }, ok({ handle: 'h-1', deliverableId: 'evidence', childSessionId: 'child-1', status: 'started' })) });
-  assert.match(delegate, /子任务/);
-  assert.match(delegate, /老年房颤抗凝证据综述/);
-  assert.match(delegate, /第 2 次提交/);
-  assert.match(delegate, /查看子任务/);
-  assert.doesNotMatch(delegate, /disabled/, 'the catalogue lists the child, so the link is live');
-
-  const failed = 'failed: specialist_evidence_traceability_failed\n- (required) specialist_evidence_traceability_failed Evidence matrix claim CLM-S01 is not cited by the report.';
-  const submit = renderStatic(view('evimed_submit_deliverable'), { block: settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, failed) });
-  assert.match(submit, /⚠ 1 项需核对/);
-  assert.doesNotMatch(submit, /Evidence matrix|specialist_evidence/);
-
-  const check = renderStatic(view('evimed_package_check'), { block: settled('evimed_package_check', { deliverableId: 'evidence' }, ok({ deliverableId: 'evidence', notices: [] })) });
-  assert.match(check, /自检/);
-  assert.match(check, /✓ 通过/);
-
-  // A result node with content blocks of a shape nobody expected.
-  const odd = renderStatic(view('evimed_await'), { block: { kind: 'tool-result', call: { name: 'evimed_await', argsRaw: '{}' }, content: 'not-an-array', time: 1 } });
-  assert.match(odd, /等待子任务/);
-  // A call the model of which cannot even be read: a plain row and a warning,
-  // not a throw that would retire the view for every later call.
-  const unreadable = { get kind() { throw new Error('a shape from a newer kernel'); } };
-  assert.match(renderStatic(view('evimed_delegate'), { block: unreadable }), /子任务/);
-  assert.ok(target.warnings.some((/** @type {any[]} */ entry) => String(entry[0]).includes('delegate view could not read a call')));
-  assert.deepEqual(target.warnings.filter((/** @type {any[]} */ entry) => String(entry[0]).includes('did not start')), []);
+test('every view is registered under its tool name, in the conversation namespace', () => {
+  const f = frame();
+  const views = f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'tool.call.toolview' && entry.component !== 'shipped');
+  assert.deepEqual(views.map((/** @type {any} */ entry) => entry.options.key).sort(),
+    ['evimed_await', 'evimed_claim_upsert', 'evimed_delegate', 'evimed_package_check', 'evimed_plan', 'evimed_submit_deliverable']);
+  assert.ok(views.every((/** @type {any} */ entry) => entry.options.locale === 'conversation'));
+  assert.deepEqual(f.target.warnings, []);
+  assert.equal(BODY.name, 'toolviews');
 });
 
-test('a submission says what the reviewer found, and how many references it checked', () => {
-  const summary = reviewSummaryText;
-  assert.equal(summary(null), null, 'no review, no phrase');
-  assert.equal(summary({ unavailable: true }), '独立审查未完成');
-  assert.equal(summary({ findings: 0, answerRequired: 0, resolved: 0, withIdentifier: 0, unresolvable: 0 }), '审查未发现问题');
-  assert.equal(summary({ findings: 5, answerRequired: 2, resolved: 30, withIdentifier: 31, unresolvable: 1 }), '审查发现 5 条（2 条需回应） · 文献核对 30/31，1 条查无此条');
-  // The view reads it off the submission's own answer, issue lines and all.
-  const text = `ok\n${JSON.stringify({ deliverableId: 'evidence', notices: [], review: { status: 'done', findings: 3, answerRequired: ['F01'], references: { resolved: 9, withIdentifier: 10, unresolvable: 1 } } }, null, 2)}\n- (advisory) review_contradiction [F01]（需回应） 与来源矛盾（CLM-001）`;
-  const model = /** @type {any} */ (verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, text), null, kit()));
-  assert.equal(model.kind, 'judged');
-  assert.deepEqual(model.review, { findings: 3, answerRequired: 1, resolved: 9, withIdentifier: 10, unresolvable: 1 });
+test('the plan card is its list; the subtask card its title, state and 「查看」', () => {
+  const f = frame();
+  const plan = renderStatic(f.view('evimed_plan'), { block: settled('evimed_plan', PLAN_ARGS, PLAN_RESULT) });
+  assert.match(plan, /研究计划/);
+  assert.match(plan, /老年房颤抗凝证据综述/);
+  assert.match(plan, /进行中/);
+  assert.match(plan, /待开始/);
+  assert.doesNotMatch(plan, /澄清|人群限定/, 'the clarifications are the run\'s own notes');
+  assertReaderWords(plan);
+  assert.equal(renderStatic(f.view('evimed_plan'), { block: settled('evimed_plan', { action: 'status' }, ok({ items: [] })) }), '', 'a read-back draws nothing');
+
+  const delegate = renderStatic(f.view('evimed_delegate'), { block: settled('evimed_delegate', { deliverableId: 'evidence' }, ok({ handle: 'h-1', deliverableId: 'evidence', childSessionId: 'child-1', status: 'started' })) });
+  assert.match(delegate, /老年房颤抗凝证据综述/);
+  assert.match(delegate, /进行中/);
+  assert.match(delegate, />查看</);
+  assert.match(delegate, /aria-label="查看「老年房颤抗凝证据综述」"/);
+  assert.doesNotMatch(delegate, /disabled/, 'the catalogue lists the child, so the link is live');
+  assert.doesNotMatch(delegate, /title=/, 'no tooltip about the kernel');
+  assertReaderWords(delegate);
+});
+
+test("the gate's rows are empty — their call row is removed by the shell — and a refusal is one plain line", () => {
+  const f = frame();
+  const failed = 'failed: specialist_evidence_traceability_failed\n- (required) specialist_evidence_traceability_failed Evidence matrix claim CLM-S01 is not cited by the report.';
+  assert.equal(renderStatic(f.view('evimed_submit_deliverable'), { block: settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, failed) }), '');
+  assert.equal(renderStatic(f.view('evimed_package_check'), { block: settled('evimed_package_check', { deliverableId: 'evidence' }, ok({ notices: [] })) }), '');
+  assert.equal(renderStatic(f.view('evimed_claim_upsert'), { block: settled('evimed_claim_upsert', { deliverableId: 'evidence', claim: { text: 'x' } }, ok({ status: 'verified', totals: { total: 1, verified: 1 } })) }), '');
+  assert.equal(renderStatic(f.view('evimed_await'), { block: running('evimed_await', { handles: ['h-1', 'h-2'] }) }), '', 'no 「正在等待 N 个子任务…」: the subtask cards say where each stands');
+  const refused = renderStatic(f.view('evimed_submit_deliverable'), { block: settled('evimed_submit_deliverable', { deliverableId: 'evidence' },
+    'failed: deliverable_not_owned\n- (required) deliverable_not_owned 此能力子代理只负责交付物「x」。') });
+  assert.match(refused, /老年房颤抗凝证据综述 · 这一件不由当前子任务负责/);
+  assert.match(refused, /data-evimed-toolview="refused"/);
+});
+
+test('a call of an unknown shape draws a plain row instead of throwing', () => {
+  const f = frame();
+  const unreadable = { get kind() { throw new Error('a shape from a newer kernel'); } };
+  assert.match(renderStatic(f.view('evimed_delegate'), { block: unreadable }), /子任务/);
+  assert.ok(f.target.warnings.some((/** @type {any[]} */ entry) => String(entry[0]).includes('delegate view could not read a call')));
+  assert.equal(renderStatic(f.view('evimed_await'), { block: unreadable }), '', 'a gate row stays empty either way');
+  assert.deepEqual(f.target.warnings.filter((/** @type {any[]} */ entry) => String(entry[0]).includes('did not start')), []);
+});
+
+test('outside a frame nothing is registered', () => {
+  const ctx = fakeCtx({ slots: kernelSlots() });
+  const target = fakeTarget({ framed: false });
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  assert.equal(ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.component !== 'shipped').length, 0);
 });
