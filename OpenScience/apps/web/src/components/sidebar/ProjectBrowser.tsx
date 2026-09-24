@@ -193,7 +193,7 @@ export function ProjectBrowser() {
    *  group, so opening one of its conversations does not wait for a cold start. Called
    *  on every hover: the rate is `warmWebRuntime`'s own to keep. */
   const warm = useCallback((projectId: string) => {
-    if (projectId !== useProjectStore.getState().currentId) warmWebRuntime(projectId);
+    if (projectId !== useProjectStore.getState().currentId) warmWebRuntime(projectId, { speculative: true });
   }, []);
 
   /**
