@@ -50,6 +50,9 @@ export function reloadPage(): void {
  */
 export function reloadForNewRelease(reload: () => void = reloadPage): boolean {
   if (reloading) return true;
+  // Offline is not stale: a reload would trade the shell for the browser's
+  // own offline page. The error element offers the reload by hand instead.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return false;
   const now = Date.now();
   try {
     const elapsed = now - Number(window.sessionStorage.getItem(RELOADED_AT_KEY) ?? 0);
