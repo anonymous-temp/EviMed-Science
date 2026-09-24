@@ -427,11 +427,28 @@
       ]
     },
     {
+      "name": "evimed-model-providers",
+      "rules": [
+        {
+          "alert": "ModelProviderBalanceExhausted",
+          "expr": "sum by (provider) (increase(open_science_model_provider_refusals_total{status=\"402\"}[10m])) > 0",
+          "for": "0m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "模型服务商 {{ $labels.provider }} 余额已用尽：对它的每一次调用都会失败，直到充值为止",
+            "description": "过去 10 分钟内 {{ $labels.provider }} 以「余额不足」拒绝了调用（DeepSeek 为 HTTP 402；DashScope 的欠费应答 400 Arrearage 也计在 402 下）。deepseek：所有研究运行、前沿动态、路由、标题与记忆提取都会失败；dashscope：独立审查、重排序与嵌入会失败；typesafe：回复核查全部改由审查模型判断。充值后下一次调用即恢复，无需重启；处置见运维手册 ModelProviderBalanceExhausted。"
+          }
+        }
+      ]
+    },
+    {
       "name": "evimed-review",
       "rules": [
         {
           "alert": "ReviewEditorFailing",
-          "expr": "increase(open_science_review_editor_calls_total{outcome=\"called\"}[1h]) >= 3 and increase(open_science_review_editor_calls_total{outcome=\"failed\"}[1h]) / clamp_min(increase(open_science_review_editor_calls_total{outcome=\"called\"}[1h]), 1) > 0.5",
+          "expr": "sum(increase(open_science_review_editor_calls_total{outcome=\"called\"}[1h])) >= 3 and sum(increase(open_science_review_editor_calls_total{outcome=\"failed\"}[1h])) / clamp_min(sum(increase(open_science_review_editor_calls_total{outcome=\"called\"}[1h])), 1) > 0.5",
           "for": "15m",
           "labels": {
             "severity": "warning"
@@ -443,7 +460,7 @@
         },
         {
           "alert": "ReviewReplyChecksFailing",
-          "expr": "increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h]) >= 3 and increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h]) > increase(open_science_review_reply_checks_total{outcome=\"done\"}[1h])",
+          "expr": "sum(increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h])) >= 3 and sum(increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h])) > sum(increase(open_science_review_reply_checks_total{outcome=\"done\"}[1h]))",
           "for": "15m",
           "labels": {
             "severity": "warning"
@@ -451,6 +468,18 @@
           "annotations": {
             "summary": "Reply checks are failing more often than they finish",
             "description": "Cited answers are shown without their check row. The registries (Crossref, PubMed) or the reviewer model are the usual cause."
+          }
+        },
+        {
+          "alert": "ReviewJevFailing",
+          "expr": "sum(increase(open_science_review_jev_requests_total{outcome=\"failed\"}[1h])) >= 3 and sum(increase(open_science_review_jev_requests_total{outcome=\"failed\"}[1h])) > (sum(increase(open_science_review_jev_requests_total{outcome=\"answered\"}[1h])) or vector(0))",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Jev, the reply check's first pass, fails more often than it answers",
+            "description": "Reply checks go on: the reviewer model judges every sentence, as before Jev, at its own price and pace. open_science_review_jev_failures_total{code} names why — the TypeSafe key, the account's credit, rate limits, or the pinned version withdrawn; see the runbook's reviewer section."
           }
         },
         {
