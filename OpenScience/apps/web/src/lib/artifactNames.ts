@@ -13,6 +13,7 @@ const DOCUMENT_NAMES: Readonly<Record<string, string>> = Object.freeze({
   "safety-report.md": "安全性分析报告",
   "signals.csv": "信号数据表",
   "revision-notes.md": "修订说明",
+  "reporting-checklist.md": "报告规范清单",
   "delivery-summary.md": "交付摘要",
   "comprehensive-evaluation-report.md": "综合评价报告",
   "drug-selection-report.md": "遴选评价报告",

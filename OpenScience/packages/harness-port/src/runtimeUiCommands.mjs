@@ -23,17 +23,18 @@
  *    (`dsh-client-ui-commands`) adds a client-owned slash command. A
  *    `popupSelect` opens the kernel's own searchable popup; its rows are a
  *    label and one line of detail, filtered by substring over both — so the
- *    category, the one-line summary and the typical duration go in the detail,
- *    and typing 「证据」 or 「分钟」 finds rows by them. A contribution whose
- *    name collides with a host command fails loud at candidate synthesis and
- *    takes the whole menu with it; host commands are ASCII identifiers, and
+ *    category and the one-line summary go in the detail, and typing 「证据」
+ *    finds rows by them. How long a tool usually takes is said once, on 科研工具
+ *    where it is chosen, and nowhere after (整改方案 §5.3). A contribution
+ *    whose name collides with a host command fails loud at candidate synthesis
+ *    and takes the whole menu with it; host commands are ASCII identifiers, and
  *    this one's name is not.
  *  - `conversation.composer.dock` is a list seat directly under the composer
- *    card: one centred row of 13 px pills, which the kernel's own session
- *    statistics already occupy (`stats`, order 0). The chip and the starters
- *    sit beside them, at the composer's own width by construction — the seat
- *    above the card (`conversation.input.dock`) spans the frame and put the
- *    chip at the left edge beside a centred composer.
+ *    card: one centred row, where the kernel keeps its session statistics
+ *    (`stats`, order 0 — hidden by the shell stylesheet). The chip sits there,
+ *    at the composer's own width by construction — the seat above the card
+ *    (`conversation.input.dock`) spans the frame and put the chip at the left
+ *    edge beside a centred composer.
  *  - `ctx.inputTriggers.registerSource({ trigger: '@', … })` adds a group to
  *    the `@` menu. A pick inserts a reference chip; `codec.serialize` is what
  *    the model receives for it at send time. The page cannot read the
@@ -57,17 +58,6 @@ import { frameStyles } from './runtimeUiStyles.mjs';
 export const inject = ['slots', 'sessions', 'conversation'];
 
 /**
- * A capability's typical duration, as the cards and the popup say it.
- * @param {any} entry
- * @returns {string | null}
- */
-export function toolMinutes(entry) {
-  const minutes = entry && Array.isArray(entry.minutes) && entry.minutes.length === 2 ? entry.minutes : null;
-  if (!minutes) return null;
-  return minutes[0] === minutes[1] ? `约 ${minutes[0]} 分钟` : `约 ${minutes[0]}–${minutes[1]} 分钟`;
-}
-
-/**
  * The slash popup's rows: every public tool, in catalogue order (which is by
  * category), the category first in the detail line.
  * @param {any[]} capabilities the frame's validated catalogue
@@ -79,15 +69,15 @@ export function capabilityOptions(capabilities) {
     .map((entry) => ({
       id: String(entry.id),
       label: String(entry.title),
-      detail: [entry.category, entry.summary, toolMinutes(entry)].filter((part) => typeof part === 'string' && part).join(' · '),
+      detail: [entry.category, entry.summary].filter((part) => typeof part === 'string' && part).join(' · '),
     }));
 }
 
 /**
  * The tool this conversation runs, as the chip and the starters read it: its
- * name, what it does, how long it usually takes, and three questions to start
- * from. What it hands back, needs and cannot do stays on 科研工具, where the
- * tool was chosen.
+ * name and three questions to start from. What it does, how long it takes,
+ * what it hands back, needs and cannot do stays on 科研工具, where the tool
+ * was chosen.
  * @param {any[]} capabilities @param {unknown} id
  */
 export function toolPageModel(capabilities, id) {
@@ -99,7 +89,6 @@ export function toolPageModel(capabilities, id) {
     title: String(entry.title),
     category: String(entry.category || ''),
     summary: String(entry.summary || ''),
-    minutes: toolMinutes(entry),
     outputs: Array.isArray(entry.outputs) ? entry.outputs : [],
     limits: Array.isArray(entry.limits) ? entry.limits : [],
     materials: typeof entry.materials === 'string' ? entry.materials : '',
@@ -170,7 +159,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   if (!kit || !kit.ours || !kit.h) return;
   const h = kit.h;
   const React = kit.react;
-  const { quiet, button, secondary } = frameStyles();
+  const { text: textStyle, textButton } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
 
@@ -247,7 +236,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (!options.length) return;
     scope.effect(() => scope.commandUi.register({
       name: '工具',
-      description: () => '选择一项科研工具，这次对话就按它来做',
+      description: () => '选择科研工具',
       available: () => true,
       ui: {
         kind: 'popupSelect',
@@ -259,38 +248,43 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   });
 
   if (React && catalogue.length) {
-    const { pill: pillTone } = frameStyles();
-    // One 13 px pill, as the kernel's statistics pills beside it are drawn:
-    // the same radius, the same secondary ink, on the layer-1 background.
-    const chipStyle = {
-      ...secondary,
-      display: 'inline-flex', alignItems: 'center', gap: '6px', minWidth: 0,
-      padding: '1px 8px', borderRadius: '24px',
-      border: '0.5px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)',
-      color: 'var(--dsw-alias-label-secondary)',
-    };
-    const starterStyle = { ...chipStyle, cursor: 'pointer', font: 'inherit', maxWidth: '100%' };
     const starterText = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+    // The chip: a 24 px capsule in the accent's soft fill — the page's one
+    // accent (整改方案 §4) — with no outline.
+    const chipStyle = {
+      display: 'inline-flex', alignItems: 'center', gap: '2px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box',
+      height: '24px', padding: '0 4px 0 8px', borderRadius: '999px', fontSize: '12px', lineHeight: '24px',
+      background: 'var(--dsw-alias-state-business-tertiary)', color: 'var(--dsw-alias-state-business-primary)',
+    };
+    // A starter: a 32 px capsule with the one hairline, in the secondary ink.
+    const starterStyle = {
+      ...textStyle, display: 'inline-flex', alignItems: 'center', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box',
+      height: '32px', padding: '0 12px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'inherit',
+      border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-secondary)',
+    };
 
     /**
      * The chip under the composer: which tool this conversation runs, and the
      * way out of it. In a session the hero is gone, so this is the only place
-     * that says it; its tooltip is the tool's one-line summary.
+     * that says it. Its name alone: what the tool does and how long it takes
+     * were said on 科研工具, where it was chosen. Under the composer card it
+     * keeps the 8 px the kernel's own dock row kept there.
+     * @param {{ docked?: boolean }} props
      */
-    const ToolChip = () => {
+    const ToolChip = ({ docked = false }) => {
       const id = useTool();
       const model = id ? toolPageModel(catalogue, id) : null;
       if (!model) return null;
-      return h('span', { 'data-evimed-tool-chip': model.id, title: model.summary || undefined, style: chipStyle },
-        h('span', { style: { ...pillTone('active'), fontWeight: 500, ...starterText } }, model.title),
-        model.minutes ? h('span', { style: { ...quiet, flex: 'none' } }, model.minutes) : null,
+      return h('span', { 'data-evimed-tool-chip': model.id, style: docked ? { ...chipStyle, marginTop: '8px' } : chipStyle },
+        h('span', { style: { ...starterText, fontWeight: 500 } }, model.title),
         h('button', {
-          type: 'button', 'aria-label': `不再用「${model.title}」`, title: '换一个工具，或不用工具',
-          style: { ...button, marginLeft: 0, border: 'none', padding: '0 2px', lineHeight: 1 },
+          type: 'button', 'aria-label': `移除「${model.title}」`, title: '移除',
+          style: { ...textButton, height: '20px', lineHeight: '20px', padding: '0 4px', borderRadius: '999px', fontSize: '14px' },
           onClick: () => bind(null),
         }, '×'));
     };
-    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, ToolChip));
+    const DockedChip = () => h(ToolChip, { docked: true });
+    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, DockedChip));
 
     /**
      * The tool's example questions, as pills the reader can start from. Drawn
@@ -325,7 +319,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (!model) return null;
       return h('div', {
         'data-evimed-hero-tools': model.id,
-        style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '4px auto 0', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px', minWidth: 0 },
+        style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '8px auto 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
       }, h(ToolChip), h(Starters));
     };
     kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
@@ -369,5 +363,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'commands',
   inject,
-  parts: Object.freeze([frameStyles, toolMinutes, capabilityOptions, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
+  parts: Object.freeze([frameStyles, capabilityOptions, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
 });

@@ -286,6 +286,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      * the control plane: one per checked answer, keyed by the closing
      * message's sequence. Every field is rebuilt from a closed shape — this is
      * another origin's payload — and a link is kept only when it is https.
+     * `evidence` is the source's own words the reviewer rested a verdict on
+     * (verbatim, and checked against the source by the control plane).
      * @param {any} data
      */
     'reply-check'(data) {
@@ -302,6 +304,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
             sentence: text(verdict?.sentence, 400),
             verdict: verdictWords.includes(verdict?.verdict) ? verdict.verdict : 'uncertain',
             reason: text(verdict?.reason, 400),
+            evidence: text(verdict?.evidence, 600),
             safety: ['none', 'consistent', 'contradicted'].includes(verdict?.safety) ? verdict.safety : 'none',
             source: verdict?.source && typeof verdict.source === 'object' ? {
               number: Number.isInteger(verdict.source.number) ? verdict.source.number : null,
