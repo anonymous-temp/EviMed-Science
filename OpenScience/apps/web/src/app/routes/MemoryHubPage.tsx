@@ -167,13 +167,12 @@ export function MemoryHubPage() {
       title="记忆胶囊"
       actions={<MemoryControls onReset={reload} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
     >
-      <FilterChips
-        label="筛选记忆"
-        options={FILTERS}
-        value={filter}
-        onChange={setFilter}
-        trailing={<SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="w-60" />}
-      />
+      {/* One row; on a phone the search box takes its own line rather than
+          squeezing the filters out of sight. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <FilterChips label="筛选记忆" options={FILTERS} value={filter} onChange={setFilter} />
+        <SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="w-full sm:w-60" />
+      </div>
       {failed && (
         <LoadError
           className="mt-4"

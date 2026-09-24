@@ -108,7 +108,8 @@ export function ListRow({
       </div>
       {(trailing || actions || menu) && (
         // Above the stretched title, so its own controls stay clickable.
-        <div className="relative z-10 flex shrink-0 items-center gap-1 self-center">
+        // An open row keeps its controls on its first line, beside the title.
+        <div className={cn("relative z-10 flex shrink-0 items-center gap-1", expanded ? "self-start" : "self-center")}>
           {actions && (
             <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast group-hover/row:opacity-100 group-focus-within/row:opacity-100 max-lg:opacity-100">
               {actions}
