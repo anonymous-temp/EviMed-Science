@@ -559,14 +559,13 @@ export class GeoOrchestrator {
   /** A person asking again gives the runs that serve the step two more tries. @param {any} project @param {string} step */
   async #allowRetries(project, step) {
     const keys = step === "sources" ? ["run:insight", "run:strategy"] : ["distribution", "content"].includes(step) ? ["run:insight", "run:strategy"] : ["run:insight"];
+    // The state stays: a finished run's key takes a new dispatch id on its next try.
     for (const key of keys) {
-      await this.store.query(`UPDATE evimed_geo.schedule_marks SET detail = detail || jsonb_build_object('allowed', attempts + $3::integer),
-          state = CASE WHEN state = 'failed' THEN 'pending' ELSE state END, updated_at = now()
+      await this.store.query(`UPDATE evimed_geo.schedule_marks SET detail = detail || jsonb_build_object('allowed', attempts + $3::integer), updated_at = now()
         WHERE geo_project_id = $1 AND key = $2 AND state IN ('failed', 'done')`, [project.id, key, GEO_RUN_RULES.attempts]);
     }
     if (step === "content") {
-      await this.store.query(`UPDATE evimed_geo.schedule_marks SET detail = detail || jsonb_build_object('allowed', attempts + $2::integer),
-          state = 'pending', updated_at = now()
+      await this.store.query(`UPDATE evimed_geo.schedule_marks SET detail = detail || jsonb_build_object('allowed', attempts + $2::integer), updated_at = now()
         WHERE geo_project_id = $1 AND kind = 'run' AND starts_with(key, 'run:content:') AND state = 'failed'`, [project.id, GEO_RUN_RULES.attempts]);
     }
   }
@@ -1159,7 +1158,8 @@ export class GeoOrchestrator {
     } catch (error) {
       const code = codeOf(error);
       if (TERMINAL_DISPATCH.has(code)) {
-        await this.#update(project.id, spec.key, { state: "failed", detail: { lastError: code } }, ["claimed"]);
+        // No try is left: it waits for a person to ask again (`runStep`).
+        await this.#update(project.id, spec.key, { state: "failed", detail: { lastError: code, allowed: Number(mark.attempts ?? 0) } }, ["claimed"]);
         for (const step of spec.steps) current = await this.#step(current, step, { status: "failed" });
         this.counters.dispatchFailed += 1;
         this.lastError = code;
