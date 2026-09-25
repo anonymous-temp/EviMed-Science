@@ -9,6 +9,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler } from "../src/geoGateway.mjs";
 import { GEO_ANSWER_TEXT_LIMIT, GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
+import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -27,6 +28,10 @@ let database = null;
 /** @type {http.Server | null} */
 let server = null;
 let base = "";
+/** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
+let isolated = null;
+/** What the run ledger answers for an article's deliverable, as the composition's `articleGate` does. */
+const ledgerAsked = /** @type {any[]} */ ([]);
 /** @type {GeoStore} */
 let store;
 /** @type {any} */
@@ -34,7 +39,8 @@ let project = null;
 
 before(async () => {
   if (!databaseUrl) return;
-  database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
+  isolated = await createGeoTestDatabase(databaseUrl, "geogateway");
+  database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   store = new GeoStore({ database });
   const service = new GeoService({ store, config });
   await service.ready();
@@ -43,7 +49,8 @@ before(async () => {
     if (token !== "runtime-token") throw new Error("inactive");
     return { userId: USER, projectId: PROJECT };
   } };
-  const handler = createGeoGatewayHandler(config, runtimeManager, { geo: { store, service, social: null } });
+  const articleGate = async (/** @type {any} */ target, /** @type {any} */ ref) => { ledgerAsked.push([target.id, ref.path]); return "passed"; };
+  const handler = createGeoGatewayHandler(config, runtimeManager, { geo: { store, service, social: null, articleGate } });
   server = http.createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server?.listen(0, "127.0.0.1", () => resolve(undefined)));
   base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
@@ -52,6 +59,7 @@ before(async () => {
 after(async () => {
   if (server) await new Promise((resolve) => server?.close(() => resolve(undefined)));
   if (database) await database.close();
+  await isolated?.drop();
 });
 
 /** @param {string} operation @param {unknown} body */
@@ -111,4 +119,15 @@ test("answer text is cut at 4,000 characters, and a long list pages at fifty", o
     "roundId", "scope", "variant"]);
   const unknownRound = await call("read", { what: "diagnosis", filter: { round: `r-nope-${run}` } });
   assert.deepEqual([unknownRound.status, unknownRound.body.code], [400, "geo_read_filter_invalid"]);
+});
+
+test("an article written through the gateway takes its gate from the platform's ledger, not from the run", options, async () => {
+  const map = await call("write", { what: "questions", data: { groups: [{ pool: "P2", name: "群", questions: [{ text: "问", isMeasured: true }] }] } });
+  const written = await call("write", { what: "articles", items: [{ path: "deliverables/geo-content/qa-1.md", layer: "qa", groupId: map.body.data.ids[0],
+    claimIds: [], safety: "clear", contentSha256: "c".repeat(64), gate: "failed" }] });
+  assert.equal(written.status, 200, JSON.stringify(written.body));
+  assert.deepEqual(written.body.data.articles.map((/** @type {any} */ entry) => entry.gate), ["passed"], "the run's own 'failed' is not what counts either");
+  assert.deepEqual(ledgerAsked, [[project.id, "deliverables/geo-content/qa-1.md"]]);
+  const read = await call("read", { what: "articles" });
+  assert.deepEqual(read.body.data.articles.map((/** @type {any} */ article) => [article.gate, article.status]), [["passed", "publishable"]]);
 });
