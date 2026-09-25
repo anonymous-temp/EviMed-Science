@@ -31,6 +31,12 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
   listWebResearchAgents: mocks.listAgents, listWebResearchSessions: mocks.listSessions, putWebResearchSession: mocks.putSession,
 }));
+// 循证 GEO's two calls: which GEO project this is, and writing an option to it.
+const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn() }));
+vi.mock("@/lib/geoClient", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/geoClient")>()),
+  listGeoProjects: geo.listGeoProjects, patchGeoProject: geo.patchGeoProject,
+}));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
   const navigate = useNavigate();
@@ -1114,6 +1120,83 @@ describe("which research tool a conversation runs", () => {
     emit(frame, { type: "evimed.runtime-ui.bind-capability", seq: 5, capabilityId: "not-a-tool", sessionId: "session-a" });
     await act(async () => { await Promise.resolve(); });
     expect(mocks.putSession).not.toHaveBeenCalled();
+    view.unmount();
+  });
+});
+
+describe("循证 GEO in the conversation", () => {
+  const project = {
+    id: "geo_1", projectId: "default", name: "玛仕度肽注射液", product: { brandName: "信尔美", genericName: "玛仕度肽注射液" },
+    coverageDays: 90, engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"], status: "active", steps: {},
+    headline: { gvi: { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "not_measurable", dataType: "measured", target: null, trend: [] },
+      mention: { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "not_measurable", dataType: "measured" } },
+    alert: { wrongOurs: 0, safety: 0, text: null }, updatedAt: "2026-09-25T00:00:00Z",
+  };
+
+  async function openGeoConversation(capability = "geo-insight") {
+    geo.listGeoProjects.mockReset(); geo.listGeoProjects.mockResolvedValue([project]);
+    geo.patchGeoProject.mockReset(); geo.patchGeoProject.mockResolvedValue({});
+    mocks.listSessions.mockResolvedValue([{ sessionId: "session-a", mode: "specialist", agentId: capability, agentVersion: "1.0.0" }]);
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await Promise.resolve(); });
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.booted" });
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
+    const command = post.mock.calls.map(call => call[0]).find(data => data.type === "evimed.runtime-ui.navigate");
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: command.requestId, ok: true, sessionId: "session-a" });
+    const geoPosts = () => post.mock.calls.map(call => call[0]).filter(data => data.type === "evimed.runtime-ui.geo");
+    return { view, frame, post, geoPosts };
+  }
+
+  it("tells the chip the project's coverage window, engines and single-step starters", async () => {
+    const { view, geoPosts } = await openGeoConversation("geo-strategy");
+    await waitFor(() => expect(geoPosts()).toHaveLength(1));
+    const [options] = geoPosts();
+    expect(options).toMatchObject({ sessionId: "session-a", controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
+      engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"] });
+    expect(options.offered.map((engine: { name: string }) => engine.name)).toEqual(["豆包", "千问", "DeepSeek", "元宝", "Kimi"]);
+    expect(options.starters.map((starter: { label: string }) => starter.label))
+      .toEqual(["完整方案", "AI 怎么说我的产品", "信源分析与预期", "优化已有稿件", "去 AI 味", "持续监测"]);
+    expect(options.starters[0].draft).toMatch(/产品是信尔美。$/);
+    view.unmount();
+  });
+
+  it("writes a changed option to the project and tells the chip what the project now holds", async () => {
+    const { view, frame, geoPosts } = await openGeoConversation();
+    await waitFor(() => expect(geoPosts()).toHaveLength(1));
+    emit(frame, { type: "evimed.runtime-ui.geo-options", seq: 4, sessionId: "session-a", coverageDays: 180 });
+    await waitFor(() => expect(geo.patchGeoProject).toHaveBeenCalledWith("geo_1", { coverageDays: 180 }));
+    await waitFor(() => expect(geoPosts().at(-1)).toMatchObject({ coverageDays: 180 }));
+    emit(frame, { type: "evimed.runtime-ui.geo-options", seq: 5, sessionId: "session-a", engines: ["kimi", "doubao", "not-an-engine"] });
+    await waitFor(() => expect(geo.patchGeoProject).toHaveBeenLastCalledWith("geo_1", { engines: ["kimi", "doubao"] }));
+    // A refused write puts the project's value back in the chip.
+    geo.patchGeoProject.mockRejectedValueOnce(new WebApiError("no", { status: 503, code: "geo_unavailable" }));
+    emit(frame, { type: "evimed.runtime-ui.geo-options", seq: 6, sessionId: "session-a", coverageDays: 30 });
+    await waitFor(() => expect(geoPosts().at(-1)).toMatchObject({ coverageDays: 180 }));
+    // Another conversation's change is not this project's to write.
+    geo.patchGeoProject.mockClear();
+    emit(frame, { type: "evimed.runtime-ui.geo-options", seq: 7, sessionId: "session-z", coverageDays: 60 });
+    await act(async () => { await Promise.resolve(); });
+    expect(geo.patchGeoProject).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("sends a conversation that is not a GEO one no GEO options", async () => {
+    const { view, post, geoPosts } = await openGeoConversation("adr-analysis");
+    await waitFor(() => expect(post.mock.calls.map(call => call[0]).some(data => data.type === "evimed.runtime-ui.capability")).toBe(true));
+    expect(geoPosts()).toHaveLength(0);
+    expect(geo.listGeoProjects).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("opens this project's GEO tab when the frame asks for one", async () => {
+    const { view, frame } = await openGeoConversation();
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "geo", tab: "diagnosis" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo_1/diagnosis"));
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 5, destination: "geo", tab: "../../account" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/geo\/geo_1$/));
     view.unmount();
   });
 });

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   createWebProject: vi.fn(),
   renameWebProject: vi.fn(),
   warmWebRuntime: vi.fn(),
+  listGeoProjects: vi.fn(),
 }));
 
 // The real store drives the component; only the network is replaced, and the
@@ -40,6 +41,11 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: mocks.warmWebRuntime }));
+
+vi.mock("@/lib/geoClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoClient")>()),
+  listGeoProjects: mocks.listGeoProjects,
+}));
 
 function run(overrides: Partial<WebAgentRun> & { id: string }): WebAgentRun {
   return {
@@ -619,5 +625,29 @@ describe("ProjectBrowser — creating and renaming", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("请给项目起个名字。");
     expect(mocks.renameWebProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProjectBrowser — GEO projects", () => {
+  // A GEO project is an ordinary project with a GEO row: it sits among the
+  // others, with the radar where the folder would be.
+  it("gives a GEO project the radar icon when the module is offered", async () => {
+    mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "p-heart", name: "心衰" }]);
+    render(
+      <MemoryRouter initialEntries={["/app/chat"]}>
+        <ProjectBrowser geo />
+      </MemoryRouter>,
+    );
+    const heart = await screen.findByRole("button", { name: "心衰" });
+    await waitFor(() => expect(heart.querySelector("svg.lucide-radar")).not.toBeNull());
+    expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-radar")).toBeNull();
+    expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-folder")).not.toBeNull();
+  });
+
+  it("reads no GEO list when the module is not offered", async () => {
+    renderBrowser();
+    await screen.findByRole("button", { name: "心衰" });
+    expect(mocks.listGeoProjects).not.toHaveBeenCalled();
+    expect(document.querySelector("svg.lucide-radar")).toBeNull();
   });
 });

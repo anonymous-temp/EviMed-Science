@@ -7,6 +7,7 @@ import {
   Newspaper,
   Orbit,
   PanelLeft,
+  Radar,
   Settings,
   SquarePen,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { InboxBell } from "@/components/sidebar/InboxBell";
 import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
 import { useFrontierFeature } from "@/lib/frontierClient";
+import { useGeoFeature } from "@/lib/geoClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
@@ -31,7 +33,7 @@ interface NavItem {
 }
 
 /**
- * Five destinations (six with the frontier feed), plus the account in the footer.
+ * Five destinations (six with the frontier feed, seven with 循证 GEO), plus the account in the footer.
  *
  * It was ten here and two in the footer, with no grouping and no hierarchy, and
  * three of the ten were the same body of material seen three ways while two
@@ -66,6 +68,21 @@ const NAV: NavItem[] = [
  */
 const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon: <Newspaper size={16} aria-hidden="true" /> };
 
+/**
+ * 「循证 GEO」, directly below 「科研工具」 — and, like the frontier feed, only
+ * where `/api/me` offers the module to this account (`features.geo`).
+ */
+const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar size={16} aria-hidden="true" /> };
+
+/** The rows in order: the frontier feed after 「新对话」, GEO after 「科研工具」. */
+function navRows({ frontier, geo }: { frontier: boolean; geo: boolean }): NavItem[] {
+  return NAV.flatMap((item) => [
+    item,
+    ...(frontier && item.to === "/app/chat" ? [FRONTIER_NAV] : []),
+    ...(geo && item.to === "/app/capabilities" ? [GEO_NAV] : []),
+  ]);
+}
+
 export function Sidebar() {
   const location = useLocation();
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } = useUiStore();
@@ -74,13 +91,14 @@ export function Sidebar() {
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragging = dragWidth !== null;
   const frontier = useFrontierFeature() === "on";
+  const geo = useGeoFeature() === "on";
   const [accountName, setAccountName] = useState("");
   useEffect(() => {
     let live = true;
     void fetchWebMe().then((me) => { if (live && me) setAccountName(me.user.name); }).catch(() => {});
     return () => { live = false; };
   }, []);
-  const rows = frontier ? [NAV[0], FRONTIER_NAV, ...NAV.slice(1)] : NAV;
+  const rows = navRows({ frontier, geo });
 
   const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -151,7 +169,7 @@ export function Sidebar() {
           * project a group, its conversations inside, any of them one click
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
-        <ProjectBrowser />
+        <ProjectBrowser geo={geo} />
 
         {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
           * plan §5.2). The count of data sources without a credential used to
