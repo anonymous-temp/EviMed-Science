@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { brandRegistry } from "../src/geoParse.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { GEO_MEASURED_RANGE, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -128,6 +129,17 @@ test("the product merges field by field, a competitor is refused alone, and a br
   assert.equal(again.ok, true);
   const merged = await store.getProject(USER, project.id);
   assert.deepEqual([merged?.product.brandName, merged?.product.holder], ["玛仕度肽", "信达生物"], "a later write adds, it does not replace");
+  // Aliases are what the parser matches a rival by; a list whose every entry
+  // is refused leaves the registered rivals alone, and only [] clears them.
+  await write(/** @type {any} */ (merged), "product", { data: { competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] }] } });
+  const aliased = await store.getProject(USER, project.id);
+  assert.deepEqual(brandRegistry(aliased?.product, aliased?.competitors).filter((entry) => entry.competitor).map((entry) => entry.aliases),
+    [["穆峰达", "替尔泊肽", "mounjaro"]], "folded, as the parser matches them");
+  const refused = await write(/** @type {any} */ (aliased), "product", { data: { competitors: [{ name: "诺和盈" }] } });
+  assert.ok(refused.issues.some((/** @type {any} */ issue) => issue.code === "missing"));
+  assert.deepEqual((await store.getProject(USER, project.id))?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["穆峰达"]);
+  await write(/** @type {any} */ (aliased), "product", { data: { competitors: [] } });
+  assert.deepEqual((await store.getProject(USER, project.id))?.competitors, []);
   assert.equal((await write(/** @type {any} */ (merged), "product", { data: { rx: "maybe" } })).ok, false);
 });
 

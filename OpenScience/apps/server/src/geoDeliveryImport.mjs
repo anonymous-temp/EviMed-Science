@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
-import { deliverableDir } from "@evimed/domain";
+import { deliverableDir, deliverableIdOfPath } from "@evimed/domain";
 import { geoRuntimeWrite, GEO_WRITE_LIMITS } from "./geoWrites.mjs";
 import { readFileNoFollow, resolveScopedPath } from "./security.mjs";
 
@@ -54,6 +54,31 @@ export function claimChunks(items) {
   }
   if (current.length) chunks.push(current);
   return chunks;
+}
+
+/**
+ * A delivered competitor in the tool's shape. The first production run
+ * (2026-09-25) wrote `{ name: "司美格鲁肽注射液（诺和盈/Wegovy）", manufacturer,
+ * role, … }`, which the write refused whole for having no brand or generic
+ * name, so no rival was ever registered. The label's own layout is read: the
+ * name before the brackets is the generic name, the first name inside them
+ * the brand and the rest aliases. An entry already in the tool's shape passes.
+ * @param {Record<string, any>} entry
+ */
+export function competitorForWrite(entry) {
+  if (entry.brandName || entry.genericName) return entry;
+  const name = typeof entry.name === "string" ? entry.name.trim() : "";
+  if (!name) return entry;
+  const match = /^(.+?)\s*[（(]([^（）()]+)[）)]$/.exec(name);
+  const inner = match ? match[2].split(/[/／、,，]/).map((part) => part.trim()).filter(Boolean) : [];
+  return {
+    genericName: match ? match[1].trim() : name,
+    brandName: inner[0] ?? null,
+    aliases: inner.slice(1),
+    holder: entry.holder ?? entry.manufacturer ?? null,
+    indication: entry.indication ?? null,
+    reason: entry.reason ?? entry.role ?? null,
+  };
 }
 
 /**
@@ -135,14 +160,13 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       // parser recognises a rival only by a registered name, so without them
       // share of voice and the rival cells are never computed (production,
       // 2026-09-25: a baseline measured with competitors []).
-      const rivals = Array.isArray(parsed?.competitors) ? parsed.competitors.filter((entry) => entry && typeof entry === "object") : [];
+      const rivals = Array.isArray(parsed?.competitors)
+        ? parsed.competitors.filter((entry) => entry && typeof entry === "object").map(competitorForWrite) : [];
       if (rivals.length && !(geoProject.competitors ?? []).length) {
         try {
-          const result = await geoRuntimeWrite({ store, project: geoProject, what: "product", body: { data: { competitors: rivals.slice(0, GEO_WRITE_LIMITS.competitors) } } });
-          if (result.ok) {
-            geoProject.competitors = result.product ? (await store.projectByControlProject(project.userId, project.id))?.competitors ?? [] : geoProject.competitors;
-            report(`competitors imported ${rivals.length}`);
-          }
+          await geoRuntimeWrite({ store, project: geoProject, what: "product", body: { data: { competitors: rivals.slice(0, GEO_WRITE_LIMITS.competitors) } } });
+          geoProject.competitors = (await store.projectByControlProject(project.userId, project.id))?.competitors ?? [];
+          report(`competitors imported ${geoProject.competitors.length} of ${rivals.length}`);
         } catch (error) {
           report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_competitors_import_failed");
         }
@@ -167,7 +191,14 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
     let located = 0;
     const folders = await listDeliverableFolders(project.workspaceDir);
     for (const article of await store.listArticles(geoProject.id)) {
-      if (!article.path || article.path.startsWith("deliverables/")) continue;
+      if (!article.path) continue;
+      if (article.path.startsWith("deliverables/")) {
+        // At its workspace path but with no run: the page opens an article by both.
+        const deliverableId = article.deliverableId ?? deliverableIdOfPath(article.path);
+        const runId = !article.runId && deliverableId && articleRunId ? await articleRunId(geoProject, deliverableId).catch(() => null) : null;
+        if (runId && await store.attachArticleRun(geoProject.id, article.id, runId)) located += 1;
+        continue;
+      }
       /** @type {Array<{ folder: string, same: boolean }>} */
       const found = [];
       for (const folder of folders) {
@@ -189,7 +220,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       const path = `${deliverableDir(match.folder)}/${article.path}`;
       if (await store.relocateArticle(geoProject.id, article.id, { path, deliverableId: match.folder, runId })) located += 1;
     }
-    if (located) report(`articles located ${located}`);
+    if (located) report(`articles located or given their run ${located}`);
     // The articles written in this run have a verdict now (production,
     // 2026-09-25: five articles stayed 「draft · unverified」 after their
     // deliverable was delivered with a pass, so nothing was publishable).

@@ -856,6 +856,18 @@ export class GeoStore {
   }
 
   /**
+   * The run an article was written in, when it was registered without one (a
+   * run does not know its own id; the page opens an article by run and path).
+   * @param {string} geoId @param {string} articleId @param {string} runId
+   * @returns {Promise<boolean>}
+   */
+  async attachArticleRun(geoId, articleId, runId) {
+    const update = await this.query(`UPDATE evimed_geo.articles SET run_id = $3, updated_at = now()
+      WHERE geo_project_id = $1 AND id = $2 AND run_id IS NULL RETURNING id`, [geoId, articleId, runId]);
+    return update.rows.length > 0;
+  }
+
+  /**
    * An article's gate as the run ledger now records it, and the status that
    * follows (publishable exactly when passed and no safety finding is open; a
    * placed or published article keeps its status). Articles are registered

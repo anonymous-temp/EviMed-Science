@@ -1,6 +1,6 @@
 {
   "id": "geo-insight",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "title": "GEO Insight",
   "description": "Steps 1–3 of an evidence-based GEO project for one medicine — verified identity and label, a claim library of verbatim-quoted statements, patient subtypes, journey and care nodes, and a four-pool question map with control groups, registered in the project and locked for measurement.",
   "whenToUse": "「循证 GEO」项目的证据、旅程、问题三步交给我：输入一个药品名，我核验产品身份与说明书、建主张库、画患者旅程与就医节点、采真实问法并锁定四池测量问句。用户要完整方案时，对话里也只委派我这一步：问句锁定后平台自己批量测量（夜间），再按顺序自动安排信源、写稿、投放与监测，不要在同一次对话里委派后面的步骤。",

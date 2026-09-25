@@ -238,7 +238,7 @@ function notAnObject(item, index, issues) {
 const PRODUCT_TEXT_FIELDS = Object.freeze({ brandName: 80, genericName: 120, approvalNo: 60, holder: 120, form: 60, strength: 120,
   indication: 4000, labelRef: 500 });
 const PRODUCT_LIST_FIELDS = Object.freeze({ aliases: [30, 80], misspellings: [30, 80] });
-const COMPETITOR_FIELDS = Object.freeze(["brandName", "genericName", "holder", "indication", "reason"]);
+const COMPETITOR_FIELDS = Object.freeze(["brandName", "genericName", "aliases", "holder", "indication", "reason"]);
 
 /** @param {Record<string, any>} data @param {GeoIssue[]} issues */
 function validatedProduct(data, issues) {
@@ -277,7 +277,7 @@ function validatedProduct(data, issues) {
       product.variants = data.variants;
     }
   }
-  /** @type {Record<string, string | null>[] | undefined} */
+  /** @type {Array<Record<string, string | string[] | null>> | undefined} */
   let competitors;
   if ("competitors" in data) {
     if (!Array.isArray(data.competitors) || data.competitors.length > GEO_WRITE_LIMITS.competitors) {
@@ -288,13 +288,19 @@ function validatedProduct(data, issues) {
         if (notAnObject(entry, index, issues)) return;
         const item = fields(/** @type {Record<string, any>} */ (entry), issues, { index });
         item.unknown(COMPETITOR_FIELDS);
+        // `aliases`: the other names an answer uses for it (the generic
+        // name's short form, the English brand) — the parser recognises a
+        // rival only by a registered name.
         const competitor = {
-          brandName: item.text("brandName", 80), genericName: item.text("genericName", 120), holder: item.text("holder", 120),
-          indication: item.text("indication", 1000, { multiline: true }), reason: item.text("reason", 300),
+          brandName: item.text("brandName", 80), genericName: item.text("genericName", 120), aliases: item.texts("aliases", 10, 80) ?? [],
+          holder: item.text("holder", 120), indication: item.text("indication", 1000, { multiline: true }), reason: item.text("reason", 300),
         };
         if (!competitor.brandName && !competitor.genericName) item.refuse("brandName", "missing", "A competitor needs a brand or generic name.");
-        if (!item.refused) competitors?.push(/** @type {Record<string, string | null>} */ (competitor));
+        if (!item.refused) competitors?.push(/** @type {any} */ (competitor));
       });
+      // Only a list given empty clears the project's rivals; a list whose
+      // every entry was refused leaves them as they were.
+      if (!competitors?.length && data.competitors.length) competitors = undefined;
     }
   }
   return { product, competitors };
