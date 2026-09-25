@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS evimed_geo.claims (
   UNIQUE (geo_project_id, claim_key, version)
 );
 
+CREATE TABLE IF NOT EXISTS evimed_geo.question_sets (
+  geo_project_id text NOT NULL,
+  version        integer NOT NULL,
+  user_id        text NOT NULL,
+  locked_at      timestamptz,
+  measured_count integer,
+  note           text,
+  run_id         text,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (geo_project_id, version)
+);
+
 CREATE TABLE IF NOT EXISTS evimed_geo.question_groups (
   id               text PRIMARY KEY,
   user_id          text NOT NULL,
