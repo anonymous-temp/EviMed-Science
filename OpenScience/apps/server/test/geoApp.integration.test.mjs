@@ -185,6 +185,15 @@ test("an article's gate is read from the project's run ledger: the newest run ho
     const named = await geoRuntimeWrite({ store: geo.store, project, what: "articles",
       body: { items: [{ ...item("geo-content"), path: "deliverables/geo-content/card-2.md", runId: "run_old" }] }, articleGate: geo.articleGate });
     assert.deepEqual(named.articles.map((/** @type {any} */ entry) => entry.gate), ["passed"], "a named run is the one asked");
+    // The skill's `articles/<id>.md` is relative to the deliverable folder:
+    // the same file name in two batches is two articles, at workspace paths.
+    const relative = await geoRuntimeWrite({ store: geo.store, project, what: "articles", articleGate: geo.articleGate,
+      body: { items: [{ ...item("geo-content"), path: "articles/card.md", deliverableId: "geo-content" },
+        { ...item("geo-other"), path: "articles/card.md", deliverableId: "geo-other" }] } });
+    assert.deepEqual(relative.articles.map((/** @type {any} */ entry) => [entry.path, entry.gate]),
+      [["deliverables/geo-content/articles/card.md", "unverified"], ["deliverables/geo-other/articles/card.md", "failed"]]);
+    assert.equal(new Set(relative.ids).size, 2);
+    assert.equal(await geo.articleRunId(project, "geo-content"), "run_new", "the newest run holding the deliverable");
     assert.ok(listed.every((id) => id === created.body.data.projectId), "the ledger read is the GEO project's own");
   } finally {
     context.app.agentRuns.list = original;

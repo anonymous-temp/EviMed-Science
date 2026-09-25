@@ -838,6 +838,24 @@ export class GeoStore {
   }
 
   /**
+   * Give an article registered by its path inside the deliverable folder
+   * (`articles/<id>.md`) its workspace path, its deliverable and its run.
+   * @param {string} geoId @param {string} articleId
+   * @param {{ path: string, deliverableId: string, runId: string | null }} location
+   * @returns {Promise<boolean>} false when another article already holds that path (this one stays as it was)
+   */
+  async relocateArticle(geoId, articleId, { path, deliverableId, runId }) {
+    try {
+      const update = await this.query(`UPDATE evimed_geo.articles SET path = $3, deliverable_id = $4, run_id = coalesce($5, run_id), updated_at = now()
+        WHERE geo_project_id = $1 AND id = $2 AND path IS DISTINCT FROM $3 RETURNING id`, [geoId, articleId, path, deliverableId, runId]);
+      return update.rows.length > 0;
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === "23505") return false;
+      throw error;
+    }
+  }
+
+  /**
    * An article's gate as the run ledger now records it, and the status that
    * follows (publishable exactly when passed and no safety finding is open; a
    * placed or published article keeps its status). Articles are registered

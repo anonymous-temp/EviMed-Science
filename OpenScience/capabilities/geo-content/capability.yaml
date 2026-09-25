@@ -9,7 +9,7 @@
 # articles themselves. Hidden from 科研工具 by `display.listed: false`: the GEO
 # module's orchestrator dispatches it in batches.
 id: geo-content
-version: 2.0.1
+version: 2.0.2
 title: GEO Content
 category: Content Production
 description: Step 6 of an evidence-based GEO project — layered articles (deep analysis, evidence card, popular

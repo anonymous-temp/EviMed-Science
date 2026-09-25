@@ -317,7 +317,7 @@ test("an article's gate is the run ledger's verdict, never the run's own claim",
   const answered = await write(project, "articles", { items: [item("two", { runId: "run_1" }), item("three", { deliverableId: "geo-content" })] }, null, ledger);
   assert.deepEqual(answered.articles.map((/** @type {any} */ entry) => entry.gate), ["passed", "failed"]);
   assert.deepEqual(asked, [
-    { runId: "run_1", deliverableId: null, path: "deliverables/geo-content/two.md" },
+    { runId: "run_1", deliverableId: "geo-content", path: "deliverables/geo-content/two.md" },
     { runId: null, deliverableId: "geo-content", path: "deliverables/geo-content/three.md" },
   ]);
   assert.deepEqual((await store.listArticles(project.id)).map((row) => [row.path.split("/").pop(), row.gate, row.status]),

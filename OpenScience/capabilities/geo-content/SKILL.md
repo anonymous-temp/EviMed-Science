@@ -84,7 +84,9 @@ default with its reason in `assumptions[]`.
 ## Tools
 
 - `mcp__evimed__geo_read`, `geo_write articles` and `geo_write step`. Register each article
-  with `path` (`articles/<id>.md`), `layer`, `title`, `groupId` (the id of the question group it
+  with `deliverableId` (this deliverable's id — the name of its `deliverables/<id>/` folder; the
+  platform finds the file and its verdict by it), `path` (`articles/<id>.md`), `layer`, `title`,
+  `groupId` (the id of the question group it
   answers, from `geo_read questions` — required for every layer but `correction`), `claimIds`
   (ids from `geo_read claims`), `contentSha256` (of the file as written) and `safety`
   (`clear` or `open`). Do not send a gate verdict: the platform takes it from this

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { deliverableDir } from "@evimed/domain";
 import { geoRuntimeWrite, GEO_WRITE_LIMITS } from "./geoWrites.mjs";
@@ -56,26 +57,33 @@ export function claimChunks(items) {
 }
 
 /**
- * The project's deliverable folders that hold an insight pack. Real
- * directories only; a symlinked folder is not followed.
+ * The project's deliverable folders. Real directories only; a symlinked
+ * folder is not followed.
+ * @param {string} workspaceDir
+ * @returns {Promise<string[]>}
+ */
+async function deliverableFolders(workspaceDir) {
+  try {
+    const entries = await fs.readdir(resolveScopedPath(workspaceDir, "deliverables"), { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The project's deliverable folders that hold an insight pack.
  * @param {string} workspaceDir
  * @returns {Promise<string[]>}
  */
 async function insightFolders(workspaceDir) {
-  try {
-    const root = resolveScopedPath(workspaceDir, "deliverables");
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    /** @type {string[]} */
-    const found = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const names = await fs.readdir(resolveScopedPath(workspaceDir, deliverableDir(entry.name))).catch(() => []);
-      if (names.includes("claims.json") && names.includes("question-map.json")) found.push(entry.name);
-    }
-    return found;
-  } catch {
-    return [];
+  /** @type {string[]} */
+  const found = [];
+  for (const name of await deliverableFolders(workspaceDir)) {
+    const names = await fs.readdir(resolveScopedPath(workspaceDir, deliverableDir(name))).catch(() => []);
+    if (names.includes("claims.json") && names.includes("question-map.json")) found.push(name);
   }
+  return found;
 }
 
 /**
@@ -91,16 +99,18 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
  *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
- *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null }} deps
+ *   listDeliverableFolders?: (workspaceDir: string) => Promise<string[]>,
+ *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null,
+ *   articleRunId?: ((project: any, deliverableId: string) => Promise<string | null>) | null }} deps
  */
 export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
-  articleGate = null }) {
+  listDeliverableFolders = deliverableFolders, articleGate = null, articleRunId = null }) {
   /** Runs already imported by this process; the writes are idempotent either way. */
   const seen = new Set();
   /**
    * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
    * @param {Record<string, any>} run
-   * @returns {Promise<{ imported: number, issues: number, gated?: number } | null>}
+   * @returns {Promise<{ imported: number, issues: number, located: number, gated: number } | null>}
    */
   return async function importDelivery(project, run) {
     if (!run?.id || !TERMINAL.has(String(run.status ?? "")) || seen.has(run.id)) return null;
@@ -149,6 +159,37 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       }
     }
     if (imported || issues) report(`claims imported ${imported}, refused ${issues}`);
+    // Articles registered by their path inside the deliverable folder, as the
+    // skill used to say (`articles/<id>.md`): with no workspace path and no
+    // run, the gate could not be read, the page could not open them and the
+    // market could not send them. Found by that path under one deliverable
+    // folder — the one whose file has the registered hash when two have it.
+    let located = 0;
+    const folders = await listDeliverableFolders(project.workspaceDir);
+    for (const article of await store.listArticles(geoProject.id)) {
+      if (!article.path || article.path.startsWith("deliverables/")) continue;
+      /** @type {Array<{ folder: string, same: boolean }>} */
+      const found = [];
+      for (const folder of folders) {
+        let bytes;
+        try {
+          bytes = await readFile(project.workspaceDir, `${deliverableDir(folder)}/${article.path}`);
+        } catch {
+          continue;
+        }
+        found.push({ folder, same: createHash("sha256").update(bytes).digest("hex") === article.contentSha256 });
+      }
+      const exact = found.filter((entry) => entry.same);
+      const match = exact.length === 1 ? exact[0] : exact.length === 0 && found.length === 1 ? found[0] : null;
+      if (!match) {
+        if (found.length) report("geo_article_location_ambiguous");
+        continue;
+      }
+      const runId = articleRunId ? await articleRunId(geoProject, match.folder).catch(() => null) : null;
+      const path = `${deliverableDir(match.folder)}/${article.path}`;
+      if (await store.relocateArticle(geoProject.id, article.id, { path, deliverableId: match.folder, runId })) located += 1;
+    }
+    if (located) report(`articles located ${located}`);
     // The articles written in this run have a verdict now (production,
     // 2026-09-25: five articles stayed 「draft · unverified」 after their
     // deliverable was delivered with a pass, so nothing was publishable).
@@ -165,6 +206,6 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       }
       if (gated) report(`article gates refreshed ${gated}`);
     }
-    return { imported, issues, gated };
+    return { imported, issues, located, gated };
   };
 }

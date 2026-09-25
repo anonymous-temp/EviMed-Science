@@ -2,7 +2,7 @@
 // delivered claims.json (geoDeliveryImport.mjs) — the production run of
 // 2026-09-25 delivered 80 claims and registered 3.
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -63,7 +63,7 @@ test("a finished insight run's claims.json is registered in full, once, through 
     "a run still going is not imported");
   const result = await importDelivery(project, { id: "run_1", status: "succeeded", deliverables: [{ id: "geo-insight", capability: "geo-insight" },
     { id: "other", capability: "clinical-evidence-synthesis" }] });
-  assert.deepEqual(result, { imported: 80, issues: 1, gated: 0 }, "every valid claim, extra fields dropped; the one without a quote refused alone");
+  assert.deepEqual(result, { imported: 80, issues: 1, located: 0, gated: 0 }, "every valid claim, extra fields dropped; the one without a quote refused alone");
   assert.equal((await store.listClaims(created.id)).length, 80);
 
   // A second finished run that delivered the same file: no new versions.
@@ -80,7 +80,7 @@ test("a run that ended before the import existed is picked up when the project's
     readFile: async (_root, file) => { if (file !== "deliverables/geo-insight/claims.json") throw new Error("missing"); return JSON.stringify({ claims: [claim(1), claim(2)] }); },
     listInsightFolders: async () => ["geo-insight"] });
   const result = await importDelivery({ id: `q-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "later", status: "succeeded", deliverables: [] });
-  assert.deepEqual(result, { imported: 2, issues: 0, gated: 0 });
+  assert.deepEqual(result, { imported: 2, issues: 0, located: 0, gated: 0 });
   assert.equal((await store.listClaims(created.id)).length, 2);
 });
 
@@ -129,4 +129,35 @@ test("an article registered before its deliverable was submitted takes the gate'
   assert.equal(result?.gated, 1);
   const article = await store.getArticle(created.id, articleId);
   assert.deepEqual([article?.gate, article?.status], ["passed", "publishable"]);
+});
+
+test("an article registered by its path inside the deliverable folder is found there, takes its run and its gate", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `t-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  await database.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name) VALUES ($1, $2, $3, 1, 'P2', 'g')`,
+    [`gt-${run}`, USER, created.id]);
+  const body = "# 卡片\n";
+  const files = new Map([
+    ["deliverables/geo-content-b2/articles/b.md", body],
+    ["deliverables/geo-content/articles/same.md", "one"],
+    ["deliverables/geo-content-b2/articles/same.md", "two"],
+  ]);
+  const article = (/** @type {string} */ name, /** @type {string} */ sha) => ({ path: `articles/${name}`, layer: "card", title: name, groupId: `gt-${run}`,
+    claimIds: [], gate: "unverified", safety: "clear", contentSha256: sha });
+  const [found, ambiguous] = await store.registerArticles(USER, created.id, [
+    article("b.md", createHash("sha256").update(body).digest("hex")), article("same.md", "f".repeat(64))]);
+  /** @type {string[]} */
+  const reports = [];
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => [],
+    listDeliverableFolders: async () => ["geo-content", "geo-content-b2", "geo-insight"],
+    readFile: async (_root, file) => { const text = files.get(file); if (text == null) throw new Error("absent"); return Buffer.from(text); },
+    articleRunId: async (_project, deliverableId) => (deliverableId === "geo-content-b2" ? "run_b2" : null),
+    articleGate: async (_project, ref) => (ref.runId === "run_b2" && ref.deliverableId === "geo-content-b2" ? "passed" : "unverified") });
+  const result = await importDelivery({ id: `t-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "run_later", status: "succeeded", deliverables: [] });
+  assert.deepEqual([result?.located, result?.gated], [1, 1]);
+  const moved = await store.getArticle(created.id, found);
+  assert.deepEqual([moved?.path, moved?.deliverableId, moved?.runId, moved?.gate, moved?.status],
+    ["deliverables/geo-content-b2/articles/b.md", "geo-content-b2", "run_b2", "passed", "publishable"]);
+  const left = await store.getArticle(created.id, ambiguous);
+  assert.equal(left?.path, "articles/same.md", "two folders hold it and neither has its hash: left where it was");
+  assert.ok(reports.includes("geo_article_location_ambiguous"));
 });
