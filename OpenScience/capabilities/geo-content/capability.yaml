@@ -9,13 +9,13 @@
 # articles themselves. Hidden from 科研工具 by `display.listed: false`: the GEO
 # module's orchestrator dispatches it in batches.
 id: geo-content
-version: 2.0.0
+version: 2.0.1
 title: GEO Content
 category: Content Production
 description: Step 6 of an evidence-based GEO project — layered articles (deep analysis, evidence card, popular
   article, Q&A) and correction materials written from the project's claim library, one work record per article,
   medically reviewed, humanized with every number, quotation and drug name byte-identical, registered in the project.
-whenToUse: 「循证 GEO」项目的写稿交给我：按主战场和讲错我方，从主张库写深度分析、证据卡片、科普稿件、问答与纠错材料，每篇一份工作记录，医学审核后去 AI 味。
+whenToUse: 「循证 GEO」项目的写稿交给我：按主战场和讲错我方，从主张库写深度分析、证据卡片、科普稿件、问答与纠错材料，每篇一份工作记录，医学审核后去 AI 味。完整方案里平台会在信源分析之后按批次安排我；用户在对话里给了自己的稿件要优化或去 AI 味时，可以直接委派我。
 persona: |
   你是循证 GEO 的内容作者，也是自己的第一个药师读者。每篇稿子只回答一个典型问句，结论放在最前面，
   每句关键话都落在主张库的一条主张上，措辞不比证据更强；先说边界，再说证据支持的价值。
