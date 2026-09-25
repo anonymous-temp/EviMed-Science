@@ -8,7 +8,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { claimChunks, createGeoDeliveryImport, readWorkspaceFile } from "../src/geoDeliveryImport.mjs";
+import { claimChunks, competitorForWrite, createGeoDeliveryImport, readWorkspaceFile } from "../src/geoDeliveryImport.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -143,8 +143,9 @@ test("an article registered by its path inside the deliverable folder is found t
   ]);
   const article = (/** @type {string} */ name, /** @type {string} */ sha) => ({ path: `articles/${name}`, layer: "card", title: name, groupId: `gt-${run}`,
     claimIds: [], gate: "unverified", safety: "clear", contentSha256: sha });
-  const [found, ambiguous] = await store.registerArticles(USER, created.id, [
-    article("b.md", createHash("sha256").update(body).digest("hex")), article("same.md", "f".repeat(64))]);
+  const [found, ambiguous, placed] = await store.registerArticles(USER, created.id, [
+    article("b.md", createHash("sha256").update(body).digest("hex")), article("same.md", "f".repeat(64)),
+    { ...article("c.md", "c".repeat(64)), path: "deliverables/geo-content-b2/articles/c.md", deliverableId: "geo-content-b2" }]);
   /** @type {string[]} */
   const reports = [];
   const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => [],
@@ -153,11 +154,37 @@ test("an article registered by its path inside the deliverable folder is found t
     articleRunId: async (_project, deliverableId) => (deliverableId === "geo-content-b2" ? "run_b2" : null),
     articleGate: async (_project, ref) => (ref.runId === "run_b2" && ref.deliverableId === "geo-content-b2" ? "passed" : "unverified") });
   const result = await importDelivery({ id: `t-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "run_later", status: "succeeded", deliverables: [] });
-  assert.deepEqual([result?.located, result?.gated], [1, 1]);
+  assert.deepEqual([result?.located, result?.gated], [2, 2]);
+  assert.equal((await store.getArticle(created.id, placed))?.runId, "run_b2", "at its workspace path, it is given its run");
   const moved = await store.getArticle(created.id, found);
   assert.deepEqual([moved?.path, moved?.deliverableId, moved?.runId, moved?.gate, moved?.status],
     ["deliverables/geo-content-b2/articles/b.md", "geo-content-b2", "run_b2", "passed", "publishable"]);
   const left = await store.getArticle(created.id, ambiguous);
   assert.equal(left?.path, "articles/same.md", "two folders hold it and neither has its hash: left where it was");
   assert.ok(reports.includes("geo_article_location_ambiguous"));
+});
+
+test("a competitor delivered as one label is read as generic name, brand and aliases; one in the tool's shape passes", () => {
+  assert.deepEqual(competitorForWrite({ name: "司美格鲁肽注射液（诺和盈/Wegovy）", manufacturer: "丹麦诺和诺德公司", approvalNumber: "国药准字SJ20240022",
+    indication: "长期体重管理", role: "同适应症的主要竞品" }), {
+    genericName: "司美格鲁肽注射液", brandName: "诺和盈", aliases: ["Wegovy"], holder: "丹麦诺和诺德公司", indication: "长期体重管理", reason: "同适应症的主要竞品",
+  });
+  assert.deepEqual(competitorForWrite({ name: "奥利司他" }), { genericName: "奥利司他", brandName: null, aliases: [], holder: null, indication: null, reason: null });
+  const shaped = { brandName: "穆峰达", genericName: "替尔泊肽注射液" };
+  assert.equal(competitorForWrite(shaped), shaped);
+});
+
+test("the first production run's competitor labels become registered rivals", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `u-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  /** @type {string[]} */
+  const reports = [];
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code), listInsightFolders: async () => ["geo-insight"],
+    listDeliverableFolders: async () => [],
+    readFile: async () => JSON.stringify({ competitors: [
+      { name: "司美格鲁肽注射液（诺和盈/Wegovy）", manufacturer: "丹麦诺和诺德公司", role: "同适应症、同给药途径的主要竞品" },
+      { name: "替尔泊肽注射液（穆峰达/MOUNJARO）", manufacturer: "美国ELI LILLY AND COMPANY", role: "BMI 门槛与本品相同" }], claims: [] }) });
+  await importDelivery({ id: `u-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "legacy-rivals", status: "succeeded", deliverables: [] });
+  const saved = await store.getProject(USER, created.id);
+  assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => [entry.brandName, entry.aliases]), [["诺和盈", ["Wegovy"]], ["穆峰达", ["MOUNJARO"]]]);
+  assert.ok(reports.includes("competitors imported 2 of 2"));
 });
