@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
-  "capability": "geo-content",
-  "version": "sha256:82ad9b430302fe3788e2d403e11de22cf88765c144955d48f2f686cae77845fc",
+  "capability": "geo-insight",
+  "version": "sha256:05d1fc03862bbc3636d206273ffb85e7cc9982e9f21a990d4f74cf85d5bfc9ad",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 30,
-    "edges": 9,
+    "nodes": 32,
+    "edges": 10,
     "byVia": {
-      "schema": 9,
+      "schema": 10,
       "model": 0,
       "executed": 0
     },
@@ -1279,6 +1279,121 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__social_posts_search",
+      "source": "mcp",
+      "description": "Collect how real people phrase a health question on six Chinese social platforms (小红书, 抖音, 知乎, 微博, B站, 视频号): excerpts with the post's link, engagement and collection time. A status other than collected means no signal (无信号), never zero.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "platforms": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {
+              "type": "string",
+              "enum": [
+                "xhs",
+                "douyin",
+                "zhihu",
+                "weibo",
+                "bilibili",
+                "wechat_channels"
+              ]
+            }
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "hot",
+              "latest"
+            ],
+            "default": "hot"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__term_normalize",
+      "source": "mcp",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "general",
+              "drug",
+              "disease",
+              "indication",
+              "adverse_event"
+            ]
+          },
+          "annotate": {
+            "type": "boolean"
+          },
+          "mesh": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "term"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "normalized.term",
+            "type": "mesh_term"
+          }
+        ]
+      },
+      "typeTags": [
+        "mesh_term"
+      ],
+      "requiredTypeTags": [
+        "mesh_term"
+      ],
+      "outputTypeTags": [
+        "mesh_term"
+      ],
+      "stateEffect": "none"
+    },
+    {
       "name": "mcp__evimed__web_read",
       "source": "mcp",
       "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
@@ -1591,6 +1706,18 @@
       "stateEffect": "writes_workspace",
       "matchedTypes": [
         "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__term_normalize",
+      "to": "mcp__evimed__drug_term_normalize",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "mesh_term"
       ]
     },
     {
