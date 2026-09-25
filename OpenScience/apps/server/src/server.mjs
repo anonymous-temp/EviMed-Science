@@ -1456,7 +1456,8 @@ export function createWebApiApp(overrides = {}) {
       orchestrator: null,
       market: null,
       exporter: null,
-      importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`) }),
+      importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`),
+        articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified") }),
       // A project made before its brand was known is named by the brand once
       // the run writes it; a name the researcher chose is left alone.
       renameProject: async (userId, projectId, name) => {
