@@ -83,6 +83,49 @@ export async function tickMetrics(deps) {
   return counts;
 }
 
+/**
+ * @typedef {{ questionId?: string | null, engine: string, repeatIndex?: number | null, status: string, askedAt?: string | null, facts?: object | null }} BalanceRow
+ */
+
+/**
+ * One answer per job, and the questions answered on every engine that
+ * answered anything in the round.
+ *
+ * - `deduped`: every row, with at most one in-denominator answer (a judged
+ *   valid answer, or a refusal) per question × engine × repeat — the latest.
+ *   Suspect and failed asks are kept: they are the valid-rate's denominator.
+ * - `rows`: `deduped` restricted to the questions that have such an answer on
+ *   every engine for every repeat — the balanced set the cross-engine scopes
+ *   are computed on.
+ * @template {BalanceRow} T
+ * @param {T[]} rows
+ */
+export function balanceRows(rows) {
+  const answered = (/** @type {T} */ row) => (row.status === "valid" && Boolean(row.facts)) || row.status === "refusal";
+  const key = (/** @type {T} */ row) => `${row.questionId}\u0000${row.engine}\u0000${row.repeatIndex ?? 0}`;
+  /** @type {Map<string, T>} */
+  const latest = new Map();
+  for (const row of rows) {
+    if (!answered(row) || !row.questionId) continue;
+    const previous = latest.get(key(row));
+    if (!previous || String(row.askedAt ?? "") >= String(previous.askedAt ?? "")) latest.set(key(row), row);
+  }
+  const deduped = rows.filter((row) => !answered(row) || !row.questionId || latest.get(key(row)) === row);
+  const engines = [...new Set([...latest.values()].map((row) => row.engine))].sort();
+  const repeats = [...new Set(rows.map((row) => row.repeatIndex ?? 0))];
+  const questions = [...new Set(rows.map((row) => row.questionId).filter((id) => typeof id === "string"))];
+  const complete = new Set(questions.filter((questionId) => engines.every((engine) => repeats.every((repeat) =>
+    latest.has(`${questionId}\u0000${engine}\u0000${repeat}`)))));
+  return {
+    deduped,
+    rows: deduped.filter((row) => row.questionId && complete.has(row.questionId)),
+    engines,
+    questions: questions.length,
+    kept: complete.size,
+    dropped: questions.filter((questionId) => !complete.has(/** @type {string} */ (questionId))),
+  };
+}
+
 /** @param {string} metricId @param {{ value: number | null, measured: boolean, reason: string | null }} band @param {number} snapshots */
 function noiseRow(metricId, band, snapshots) {
   return {
@@ -94,7 +137,7 @@ function noiseRow(metricId, band, snapshots) {
 /**
  * Compute one round and write its rows.
  * @param {GeoMetricsDeps} deps @param {string} roundId
- * @returns {Promise<{ geoProjectId: string, kind: string, cells: number, noise: number, net: number, sources: number } | null>}
+ * @returns {Promise<{ geoProjectId: string, kind: string, cells: number, noise: number, net: number, sources: number, balanceDropped: number } | null>}
  */
 export async function measureRound(deps, roundId) {
   const { store } = deps;
@@ -104,7 +147,7 @@ export async function measureRound(deps, roundId) {
   const project = await store.project(round.geoProjectId);
   if (!project) return null;
   const rows = await store.roundFactRows(roundId);
-  const out = { geoProjectId: project.id, kind: round.kind, cells: 0, noise: 0, net: 0, sources: 0 };
+  const out = { geoProjectId: project.id, kind: round.kind, cells: 0, noise: 0, net: 0, sources: 0, balanceDropped: 0 };
 
   if (round.kind === "noise") {
     const noise = GEO_METRICS.platform.noise_band_metric_ids.map((metricId) => noiseRow(metricId, noiseBand(rows, { metricId }), rows.length));
@@ -120,18 +163,29 @@ export async function measureRound(deps, roundId) {
   /** @type {Map<string, boolean>} */
   const groups = new Map();
   for (const row of kept) if (row.groupId) groups.set(row.groupId, row.isControl);
-  const arms = {
-    pilot: [...groups].filter(([, control]) => !control).map(([id]) => id),
-    control: [...groups].filter(([id, control]) => control && !contaminated.has(id)).map(([id]) => id),
-  };
-  const result = computeGeoMetrics(kept, {
+  const options = {
     engines: round.engines.length ? round.engines : project.engines,
     competitors: project.competitors.map((competitor) => String(competitor?.brandName || competitor?.genericName || "")).filter(Boolean),
     owned: context?.owned ?? {},
-    arms,
-  });
-  await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: result.cells });
-  out.cells = result.cells.length;
+    arms: {
+      pilot: [...groups].filter(([, control]) => !control).map(([id]) => id),
+      control: [...groups].filter(([id, control]) => control && !contaminated.has(id)).map(([id]) => id),
+    },
+  };
+  // Per engine, every answer counts. Across engines (project, pool, group,
+  // arm) only questions answered on every engine: one failed ask would
+  // otherwise give its question fewer valid answers than the rest, and the
+  // domain withdraws the whole pool's rates as uneven_denominators.
+  const balance = balanceRows(kept);
+  const perEngine = computeGeoMetrics(/** @type {any[]} */ (balance.deduped), { ...options, scopes: ["engine", "pool_engine"] });
+  const across = computeGeoMetrics(/** @type {any[]} */ (balance.rows), { ...options, scopes: ["project", "pool", "group", "arm"] });
+  const cells = [...across.cells, ...perEngine.cells];
+  await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });
+  await store.noteRoundBalance(roundId, { questions: balance.questions, kept: balance.kept, dropped: balance.dropped.length,
+    droppedQuestionIds: balance.dropped.slice(0, 50), engines: balance.engines });
+  out.cells = cells.length;
+  out.balanceDropped = balance.dropped.length;
+  const arms = options.arms;
 
   if (NET_ROUND_KINDS.has(round.kind)) {
     const net = await netEffectRows(store, { project, round, controlGroups: arms.control.length });

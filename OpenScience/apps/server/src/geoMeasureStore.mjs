@@ -543,7 +543,9 @@ export class GeoMeasureStore {
         answer_sha256, citations, screenshot_sha256, surface, latency_ms, warnings, probe_job_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13::jsonb, $14, $15::jsonb, $16)`,
     [row.id, row.userId, row.roundId, row.geoProjectId, row.questionId, row.engine, row.askedAt.toISOString(), row.status, row.answerText,
-      row.answerSha256, JSON.stringify(row.citations), row.screenshotSha256, JSON.stringify(row.surface), row.latencyMs,
+      row.answerSha256, JSON.stringify(row.citations), row.screenshotSha256, JSON.stringify(row.surface),
+      // latency_ms is an integer column; the probe reports fractions.
+      row.latencyMs === null || !Number.isFinite(Number(row.latencyMs)) ? null : Math.round(Number(row.latencyMs)),
       JSON.stringify(row.warnings), row.probeJobId]);
   }
 
@@ -690,9 +692,15 @@ export class GeoMeasureStore {
     return result.rows.map((row) => ({ ...errorRow(row), roundStatus: String(row.round_status) }));
   }
 
-  /** Errors with no confirmation round yet (created while one could not be queued). @param {number} limit */
-  async errorsWithoutConfirm(limit) {
-    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE confirm IS NULL AND status <> 'closed' ORDER BY created_at LIMIT $1`, [limit]);
+  /**
+   * Errors with no confirmation round yet (created while one could not be
+   * queued), created before `before`: the parse loop queues a new error's
+   * round itself right after creating it, and must not race a second one.
+   * @param {number} limit @param {Date} before
+   */
+  async errorsWithoutConfirm(limit, before) {
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE confirm IS NULL AND status <> 'closed' AND created_at < $2
+      ORDER BY created_at LIMIT $1`, [limit, before.toISOString()]);
     return result.rows.map(errorRow);
   }
 
@@ -809,6 +817,16 @@ export class GeoMeasureStore {
         mentionsOurs: row.mentions_ours ?? null,
       };
     });
+  }
+
+  /**
+   * Record on the round how its cross-engine cells were balanced: questions
+   * asked, questions kept (answered on every engine), and those dropped.
+   * @param {string} roundId @param {Record<string, unknown>} balance
+   */
+  async noteRoundBalance(roundId, balance) {
+    await this.query(`UPDATE evimed_geo.rounds SET ref = coalesce(ref, '{}'::jsonb) || jsonb_build_object('balance', $2::jsonb) WHERE id = $1`,
+      [roundId, JSON.stringify(balance)]);
   }
 
   /** Engines whose jobs a round skipped because the engine was paused or unreachable (not a single missing question). @param {string} roundId */
