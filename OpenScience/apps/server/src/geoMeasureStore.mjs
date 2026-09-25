@@ -578,23 +578,26 @@ export class GeoMeasureStore {
 
   /**
    * Write a snapshot's facts row (once), and the snapshot's status when the
-   * judge found a refusal.
+   * judge found a refusal. `at` stamps the row on the caller's clock: a round
+   * is re-measured when its newest facts are newer than its metrics, and the
+   * metrics are stamped on that same clock.
    * @param {{ id: string, userId: string, geoProjectId: string }} snapshot
-   * @param {Record<string, any>} facts @param {{ status?: string | null }} [options]
+   * @param {Record<string, any>} facts @param {{ status?: string | null, at?: Date | null }} [options]
    * @returns {Promise<boolean>} false when a facts row already existed
    */
-  async writeFacts(snapshot, facts, { status = null } = {}) {
+  async writeFacts(snapshot, facts, { status = null, at = null } = {}) {
     return this.transaction(async (client) => {
       const result = await client.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours,
           recommended_ours, position_ours, brands_mentioned, retrieval_triggered, cites_ours, cites_ours_in_body, care_hint, statements,
-          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit)
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb)
+          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at)
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
+          coalesce($21::timestamptz, now()))
         ON CONFLICT (snapshot_id) DO NOTHING RETURNING snapshot_id`,
       [snapshot.id, snapshot.userId, snapshot.geoProjectId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null,
         facts.recommendedOurs ?? null, facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null,
         facts.citesOurs ?? null, facts.citesOursInBody ?? null, facts.careHint ?? null, JSON.stringify(facts.statements ?? []),
         facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null, JSON.stringify(facts.redFlagExpected ?? []),
-        JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? [])]);
+        JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
       return true;

@@ -569,7 +569,7 @@ export async function tickParse(deps) {
       redFlagHits: judged?.redFlagHits ?? [],
       safetyTermsHit: judged?.safetyTermsHit ?? [],
     };
-    const written = await store.writeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null });
+    const written = await store.writeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() });
     if (!written) continue;
     counts.parsed += 1;
     if (!judged) counts.unjudged += 1;
