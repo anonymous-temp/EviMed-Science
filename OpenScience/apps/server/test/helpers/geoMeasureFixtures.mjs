@@ -8,7 +8,7 @@ import http from "node:http";
 export const FAKE_PNG = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.from("fake-screenshot")]);
 
 /**
- * @typedef {{ status?: number, answer?: string, rawStatus?: string, searchResults?: any[], screenshot?: string | null, delayMs?: number, error?: string }} FakeReply
+ * @typedef {{ status?: number, answer?: string, rawStatus?: string, searchResults?: any[], screenshot?: string | null, delayMs?: number, error?: string, latencyMs?: number }} FakeReply
  */
 
 /**
@@ -67,7 +67,7 @@ export async function startFakeProbe(script) {
         answer: reply.answer ?? "",
         search_results: reply.searchResults ?? [],
         screenshot_url: reply.screenshot === null ? "" : `http://127.0.0.1/screenshots/${reply.screenshot ?? "shot-1.png"}`,
-        latency_ms: 1200,
+        latency_ms: reply.latencyMs ?? 1200,
         ...(reply.error ? { error: reply.error } : {}),
       }] });
       return;
