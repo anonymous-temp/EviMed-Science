@@ -47,6 +47,7 @@ import displayTable from './capability-display.json' with { type: 'json' }
  * @property {string} title
  * @property {string} category
  * @property {string} description
+ * @property {false} [listed] Present, and false, when the capability is kept out of the lists a researcher picks from.
  * @property {string[]} starterPrompts
  * @property {string} [materials] What the researcher has to provide first, when the capability works on their material.
  * @property {{ min: number, max: number }} estimatedMinutes How long it usually takes.

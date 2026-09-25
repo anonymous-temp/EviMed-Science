@@ -16,6 +16,7 @@ import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contra
 import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
+import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { statConsistencyFindings } from './statConsistency.mjs'
@@ -105,6 +106,18 @@ export const GATE_CHECK_IDS = Object.freeze([
   'grant-requirement-coverage',
   'geo-measurement',
   'geo-probe-host',
+  // The 「循证 GEO」 contracts (`geoContracts.mjs`). Three raise a required
+  // finding where the method pack's own `platform_tier` says blocking — a
+  // claim bound to nothing (geo-claim-source), a composed question passed off
+  // as a real one (geo-question-map), a number labelled with a data type it
+  // cannot have (geo-data-type); every other finding of theirs is a notice.
+  'geo-claim-source',
+  'geo-claim-schema',
+  'geo-question-map',
+  'geo-data-type',
+  'geo-strategy-shape',
+  'geo-article-shape',
+  'geo-proposal-shape',
   // A report's own statistics against themselves: a p value its test
   // statistic cannot produce, an interval and a p that disagree about
   // significance, an estimate outside its own interval. Arithmetic over
@@ -715,7 +728,11 @@ const VALIDATORS = Object.freeze({
     manuscriptSectionFindings(input),
   ),
   'grant-proposal-package': validateGrantProposalPackage,
-  'geo-content-pack': validateGeoContentPack,
+  // 「循证 GEO」: steps 1–3, step 5, step 6, and the client package.
+  'geo-insight-pack': (input) => validateGeoPack(input, geoInsightFindings),
+  'geo-strategy-pack': (input) => validateGeoPack(input, geoStrategyFindings),
+  'geo-content-pack': (input) => validateGeoPack(input, geoContentFindings, { ownSafetyRules: true }),
+  'geo-proposal-pack': (input) => validateGeoPack(input, geoProposalFindings),
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   'episode-plan': (input) => validateJsonShaped(input, { file: 'episode-plan.json', check: checkEpisodePlan }),
   'agenda-delta': (input) => validateJsonShaped(input, { file: 'agenda-delta.json', check: checkAgendaDelta }),
@@ -1208,136 +1225,6 @@ function validateMethodRelationsPackage(input) {
 }
 
 /**
- * Reads the probe ledger: one JSON object per line, one line per probe call.
- *
- * Malformed lines are counted rather than thrown away. A ledger that half
- * parses is the shape this codebase keeps rediscovering — the run looks
- * complete and the count is quietly short — so the number of unreadable lines
- * is reported as its own finding instead of silently reducing the denominator.
- * @param {GateInput} input
- * @returns {{ rounds: any[], unreadable: number, present: boolean }}
- */
-function probeLedger(input) {
-  // input.files directly, not text(): that helper collapses a missing file and
-  // an empty one to the same '', and those are the two facts this whole
-  // function exists to keep apart.
-  const raw = input.files.get('geo-probe-log.jsonl')
-  if (raw == null) return { rounds: [], unreadable: 0, present: false }
-  const rounds = []
-  let unreadable = 0
-  for (const line of String(raw).split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    try {
-      const parsed = JSON.parse(trimmed)
-      if (isRecord(parsed)) rounds.push(parsed)
-      else unreadable += 1
-    } catch {
-      unreadable += 1
-    }
-  }
-  return { rounds, unreadable, present: true }
-}
-
-/**
- * Measurement honesty, as notices.
- *
- * Everything else in this file grades a document. These grade a number, and a
- * number has a failure the document does not: a visibility rate computed over
- * rounds that never happened is wrong in a way that is invisible on the page.
- * "The vendor answered and did not mention us", "the vendor errored" and "the
- * vendor was never logged in" are three different facts that produce one
- * identical-looking absence, and collapsing them inflates the finding.
- *
- * These are advisory on purpose. The system blocks in six places; a seventh
- * needs an observed distribution first, and this capability has produced no
- * real runs yet. The metrics beside them are how that distribution gets
- * collected. When the shape of real failures is known, the ones that earn it
- * can be promoted — and the argument will be made from data rather than from
- * how bad the failure sounds.
- * @param {GateInput} input @returns {{ issues: GateIssue[], metrics: Record<string, unknown> }}
- */
-function geoMeasurementNotices(input) {
-  /** @type {GateIssue[]} */
-  const issues = []
-  /** @param {string} code @param {string} message */
-  const notice = (code, message) => issues.push(issue(code, message, { severity: 'advisory', path: 'geo-probe-log.jsonl', check: 'geo-measurement' }))
-  const { rounds, unreadable, present } = probeLedger(input)
-  const measured = rounds.filter((row) => row.inDenominator === true)
-  const failed = rounds.filter((row) => row.inDenominator !== true)
-
-  if (!present) {
-    notice('geo_measurement_absent', 'geo-probe-log.jsonl is not in the deliverable, so no number in this pack can be recomputed from what was actually asked.')
-  } else if (!measured.length) {
-    notice(
-      'geo_measurement_absent',
-      rounds.length
-        ? `all ${rounds.length} probe round(s) failed, so nothing was measured. A pack built on zero measurements states what the engines were not observed to say.`
-        : 'the probe ledger is empty, so nothing was measured.',
-    )
-  }
-  if (unreadable) {
-    notice('geo_probe_log_unreadable', `${unreadable} line(s) of geo-probe-log.jsonl could not be parsed; every rate computed from it is short by an unknown amount.`)
-  }
-
-  // A round that failed and was counted anyway. The two fields disagree, and
-  // whichever is right the rate is wrong.
-  const countedFailures = rounds.filter((row) => row.inDenominator === true && String(row.status ?? 'ok') !== 'ok')
-  if (countedFailures.length) {
-    notice('geo_failed_round_counted', `${countedFailures.length} probe round(s) are marked as counting toward the denominator while their status is not ok. A failed probe is not a measurement.`)
-  }
-
-  // The surface is part of the finding: the same question in deep mode from a
-  // fresh session is a different claim about the vendor than one from a warm
-  // session, and a client reproducing it on a phone sees a contradiction.
-  const surfaceless = measured.filter((row) => {
-    const surface = isRecord(row.surface) ? row.surface : {}
-    return !String(surface.mode ?? '').trim() || !String(surface.session ?? '').trim()
-  })
-  if (surfaceless.length) {
-    notice('geo_surface_undeclared', `${surfaceless.length} measured round(s) do not record both a mode and a session. Without the surface the measurement cannot be reproduced or compared with the next one.`)
-  }
-
-  // The declared denominator against the one the ledger supports. Compared as
-  // numbers from a JSON field rather than read out of prose: a denominator
-  // typed into a sentence is a number nobody can re-derive.
-  const pack = json(input, 'geo-content-pack.json')
-  const declared = isRecord(pack) && isRecord(pack.measurement) ? pack.measurement : null
-  if (declared && Number.isFinite(Number(declared.measured)) && Number(declared.measured) > measured.length) {
-    notice(
-      'geo_denominator_overstated',
-      `the pack declares ${Number(declared.measured)} measured round(s) but the ledger contains ${measured.length}. A denominator that includes rounds which did not happen overstates every rate built on it.`,
-    )
-  }
-
-  // The probe host, leaked into client-facing prose. The shared leakage rule
-  // already covers tool names, gateway words and retrieval narration — it is
-  // derived from toolNames.mjs, so geo_visibility_probe came under it the
-  // moment the tool was registered. A bare address is the one shape it does not
-  // match, and it is specific to this capability because no other deliverable
-  // has an infrastructure host anywhere near it.
-  for (const path of proseFilesOf(input)) {
-    const found = /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/.exec(text(input, path))
-    if (found) {
-      issues.push(issue('geo_probe_host_in_prose', `${path} contains what looks like a probe host (${found[0]}). The reader needs the finding, not the machine it came from.`, { severity: 'advisory', path, check: 'geo-probe-host' }))
-    }
-  }
-
-  const platforms = [...new Set(measured.map((row) => String(row.provider ?? '').trim()).filter(Boolean))].sort()
-  return {
-    issues,
-    metrics: {
-      geoProbeRounds: rounds.length,
-      geoMeasuredRounds: measured.length,
-      geoFailedRounds: failed.length,
-      geoUnreadableLedgerLines: unreadable,
-      geoPlatformsMeasured: platforms,
-      geoQuestionsMeasured: new Set(measured.map((row) => String(row.question ?? ''))).size,
-    },
-  }
-}
-
-/**
  * A grant package, graded on the two things a reviewer cannot recover for
  * themselves.
  *
@@ -1415,103 +1302,60 @@ function validateGrantProposalPackage(input) {
 }
 
 /**
- * GEO content blocks are mechanically checkable, so they block (§9.11).
- * @param {GateInput} input @returns {GateVerdict}
+ * The four 「循证 GEO」 contracts, composed the one way.
+ *
+ * The shared required-output pass stays here (a declared file that is missing
+ * or empty is the unreadable package every kind blocks on); the prose hygiene
+ * every report-shaped kind runs is raised as advice, because a reader can see
+ * machinery named in prose or a citation number that does not resolve; and
+ * each kind adds only what it owns (`geoContracts.mjs`, where the reason for
+ * each required finding is written down). Per-article work records are
+ * backstage and are not scanned as prose.
+ *
+ * The clinical safety rules are the content pack's own and required there —
+ * an article is written to be quoted by a machine that will not add the
+ * caveat back. The three analysis packs get the advisory pass every other
+ * clinical report kind gets.
+ * @param {GateInput} input
+ * @param {(input: GateInput, prose: readonly string[]) => { issues: GateIssue[], metrics: Record<string, unknown> }} findingsOf
+ * @param {{ ownSafetyRules?: boolean }} [options]
+ * @returns {GateVerdict}
  */
-function validateGeoContentPack(input) {
-  const issues = [...requiredOutputIssues(input), ...proseHygieneIssues(input, proseFilesOf(input))]
-  const pack = json(input, 'geo-content-pack.json')
-  if (pack === undefined) {
-    issues.push(issue('deliverable_rejected', 'geo-content-pack.json is not valid JSON.', { path: 'geo-content-pack.json' }))
-  } else if (!isRecord(pack)) {
-    issues.push(issue('required_output_missing', 'geo-content-pack.json is missing.', { path: 'geo-content-pack.json' }))
-  } else {
-    const blocks = Array.isArray(pack.blocks) ? pack.blocks : []
-    if (!blocks.length) issues.push(issue('deliverable_rejected', 'the pack contains no content blocks.'))
-    blocks.forEach((block, index) => {
-      const where = `blocks[${index}]`
-      if (!isRecord(block)) { issues.push(issue('deliverable_rejected', `${where} must be an object.`)); return }
-      for (const field of ['conclusion', 'basis', 'conditions']) {
-        if (!String(block[field] ?? '').trim()) issues.push(issue('deliverable_rejected', `${where} is missing its ${field} paragraph.`))
-      }
-      const citations = Array.isArray(block.citations) ? block.citations : []
-      if (citations.length < 2) issues.push(issue('deliverable_rejected', `${where} needs at least two resolvable citations.`))
-      if (!block.jsonLd) issues.push(issue('deliverable_rejected', `${where} is missing its schema.org JSON-LD.`))
-      if (!block.author || !block.updatedAt) issues.push(issue('deliverable_rejected', `${where} needs an author credential and an update date.`))
-    })
-    if (!String(pack.llmsTxt ?? '').trim()) issues.push(issue('deliverable_rejected', 'the pack is missing its llms.txt fragment.'))
-    if (!Array.isArray(pack.faq) || !pack.faq.length) issues.push(issue('deliverable_rejected', 'the pack is missing its FAQ block.'))
-  }
-  // The clinical half of the contract. A content block is written to be quoted
-  // by a machine that will not add the caveat back, so the same rules that
-  // govern a clinical report's practical advice govern it — the pack's prose is
-  // both the report and the practical section, and there is no originating
-  // question, which is exactly why `entity_requires_question_mention` does not
-  // fire: it asks whether a medicine was dragged into an answer that was not
-  // about it, and a brand's own content block is about that brand.
-  //
-  // Called, not reimplemented. A "GEO version" of these rules is how the pair
-  // that drifted three times got started.
-  // The blocks themselves, not only the rendered Markdown. The content lives in
-  // geo-content-pack.json and `proseFilesOf` yields .md files, so a pack whose
-  // Markdown is a stub — "三段见 JSON" — would have had its every block go
-  // unexamined while the check reported clean. Found by writing a test whose
-  // assertion could not fail and then asking what it should have asserted.
-  //
-  // One pass per file and per block rather than one over the concatenation,
-  // so a hit says which file, which line and which words. The concatenated
-  // pass raised the same rule three times against a pack whose author could
-  // not find the sentence among six files and every block.
-  /** @type {{ path: string, label: string, body: string }[]} */
-  const packPieces = proseFilesOf(input).map((path) => ({ path, label: path, body: text(input, path) }))
-  for (const [index, block] of /** @type {any[]} */ (Array.isArray(pack?.blocks) ? pack.blocks : []).entries()) {
-    if (!isRecord(block)) continue
-    const id = typeof block.id === 'string' && block.id ? block.id : `#${index + 1}`
-    for (const field of ['conclusion', 'basis', 'conditions']) {
-      const body = String(block[field] ?? '')
-      if (body) packPieces.push({ path: 'geo-content-pack.json', label: `geo-content-pack.json block ${id} ${field}`, body })
-    }
-  }
-  const seen = new Set()
-  /** Where each required-sentence rule's trigger first appears, by rule id. */
-  /** @type {Map<string, { piece: { path: string, label: string }, line: number | null, match: string | null }>} */
-  const triggerSites = new Map()
-  for (const piece of packPieces) {
-    for (const hit of clinicalSafetyRuleHits({ reportText: piece.body, practical: piece.body })) {
-      // A required sentence may live in any one piece, so that kind (`where:
-      // "trigger"`) is judged over the whole pack below; here only its trigger's
-      // first location is kept, so the finding can still say where it was set off.
-      if (hit.where === 'trigger') {
-        if (!triggerSites.has(hit.ruleId)) triggerSites.set(hit.ruleId, { piece, line: hit.line, match: hit.match })
-        continue
-      }
-      const key = `${hit.ruleId}\u0000${piece.label}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      const where = `${piece.label}${hit.line ? ` line ${hit.line}` : ''}${hit.match ? ` (matched "${hit.match}")` : ''}`
-      issues.push(issue('clinical_safety_rule', `${where}: ${hit.message}`, { path: piece.path, check: checkIdOf(clinicalSafetyRuleHits), rule: hit.ruleId, line: hit.line ?? undefined }))
-    }
-  }
-  const packProse = packPieces.map((piece) => piece.body).join('\n')
-  for (const hit of clinicalSafetyRuleHits({ reportText: packProse, practical: packProse })) {
-    if (hit.where !== 'trigger') continue
-    const site = triggerSites.get(hit.ruleId)
-    const where = site ? `${site.piece.label}${site.line ? ` line ${site.line}` : ''}${site.match ? ` (triggered by "${site.match}")` : ''}: ` : ''
-    issues.push(issue('clinical_safety_rule', `${where}${hit.message}`, { path: site?.piece.path, check: checkIdOf(clinicalSafetyRuleHits), rule: hit.ruleId, line: site?.line ?? undefined }))
-  }
-
-  const measurement = geoMeasurementNotices(input)
-  issues.push(...measurement.issues)
+function validateGeoPack(input, findingsOf, options = {}) {
+  const prose = proseFilesOf(input).filter((path) => !path.startsWith(GEO_RECORDS_PREFIX))
+  const found = findingsOf(input, prose)
+  const issues = [
+    ...requiredOutputIssues(input),
+    ...geoProseNotices(input, prose),
+    ...(options.ownSafetyRules ? [] : clinicalSafetyIssues(input, prose)),
+    ...statConsistencyIssues(input, prose),
+    ...found.issues,
+  ]
+  const required = issues.filter((item) => item.severity === 'required')
   return {
-    // By severity, not by count. Written as `issues.length === 0` this validator
-    // would have turned its own first notice into a rejection, which is exactly
-    // how "ships as a notice first" quietly becomes a seventh blocking point.
-    ok: issues.every((item) => item.severity !== 'required'),
+    // By severity, not by count: a notice must never become a rejection.
+    ok: required.length === 0,
     contractKind: input.contractKind,
     issues,
-    metrics: measurement.metrics,
-    errorCode: issues.some((item) => item.severity === 'required') ? 'deliverable_rejected' : null,
+    metrics: found.metrics,
+    errorCode: required.length ? 'deliverable_rejected' : null,
   }
+}
+
+/**
+ * Files beyond a manifest's declared outputs that a contract's own index
+ * names, for the reader of a deliverable to bring in before the gate runs.
+ *
+ * A manifest can declare fixed paths only, and a GEO article is
+ * `articles/<id>.md` with an id the run chooses. The index is read from the
+ * declared files already in hand; every path returned stays inside the
+ * deliverable directory. Kinds with no index return nothing.
+ * @param {string} contractKind @param {Map<string, string> | Record<string, string>} files
+ * @returns {string[]}
+ */
+export function contractCompanionPaths(contractKind, files) {
+  const map = files instanceof Map ? files : new Map(Object.entries(files ?? {}))
+  return geoCompanionPaths(String(contractKind ?? ''), map)
 }
 
 /** Codes that mean the gate could not read the package, not that the work is wrong. */

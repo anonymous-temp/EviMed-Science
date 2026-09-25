@@ -231,7 +231,7 @@ export function validateCapabilityManifest(value) {
  * The fields a `display:` block may carry, and nothing else: a key this list
  * does not name is a typo that would otherwise render as nothing.
  */
-const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'starterPrompts', 'materials', 'estimatedMinutes', 'outputs', 'knownLimits'])
+const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'listed', 'starterPrompts', 'materials', 'estimatedMinutes', 'outputs', 'knownLimits'])
 
 /**
  * `display:` — what a researcher is shown about the capability: its name,
@@ -249,6 +249,14 @@ const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'start
  * generator refuses a public capability in the tree that has none.
  * `estimatedMinutes` is `{ min, max }` — the reader's "usually" — and not the
  * `[min, max]` budget estimate above, which the orchestrator plans with.
+ *
+ * `listed: false` keeps a public capability out of the lists a researcher picks
+ * from — 科研工具 and the kernel frame's tool list — while it stays public, so
+ * a session can still be bound to it by id and its chip still has a name. The
+ * four 「循证 GEO」 capabilities are opened by their own module (build spec
+ * 2026-09-25 §6); `visibility: internal` would make that binding answer 403.
+ * Absent means listed, and only `false` is written back, so a manifest that
+ * says nothing about it generates exactly what it did before.
  *
  * @param {unknown} value
  * @param {ManifestIssue[]} issues
@@ -294,10 +302,14 @@ function normalizeDisplay(value, issues) {
   if (!minutesValid) issues.push({ code: 'capability_invalid', message: 'display.estimatedMinutes must be { min, max }: whole minutes, 1 ≤ min ≤ max ≤ 480.', field: 'display' })
 
   const materials = text('materials', 80, false)
+  if (raw.listed != null && typeof raw.listed !== 'boolean') {
+    issues.push({ code: 'capability_invalid', message: 'display.listed must be true or false.', field: 'display' })
+  }
   return {
     title: text('title', 40, true),
     category: text('category', 16, true),
     description: text('description', 200, true),
+    ...(raw.listed === false ? { listed: false } : {}),
     starterPrompts: list('starterPrompts', 1, 4, 160),
     ...(materials ? { materials } : {}),
     estimatedMinutes: minutesValid ? { min, max } : null,

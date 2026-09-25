@@ -59,6 +59,27 @@
       ]
     },
     {
+      "id": "geo-insight",
+      "safetyClass": "clinical",
+      "contractKinds": [
+        "geo-insight-pack"
+      ]
+    },
+    {
+      "id": "geo-proposal",
+      "safetyClass": "clinical",
+      "contractKinds": [
+        "geo-proposal-pack"
+      ]
+    },
+    {
+      "id": "geo-strategy",
+      "safetyClass": "clinical",
+      "contractKinds": [
+        "geo-strategy-pack"
+      ]
+    },
+    {
       "id": "manuscript-support",
       "safetyClass": "clinical",
       "contractKinds": [

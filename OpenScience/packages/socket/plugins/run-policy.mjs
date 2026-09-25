@@ -35,6 +35,7 @@ import {
   SOCKET_TOOL_NAMES,
   canTransition,
   claimAppraisal,
+  contractCompanionPaths,
   contractKindLabel,
   delegationToolFilter,
   deliverableDir,
@@ -988,7 +989,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       }
       const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
       const expectedOutputs = manifest?.produces?.find((/** @type {any} */ produced) => produced.contractKind === item.contractKind)?.outputs ?? []
-      const files = await digestFiles(await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs), item.id)
+      const files = await digestFiles(await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs, item.contractKind), item.id)
       const same = files.length === (receiptEntry.files ?? []).length && files.every((file) => (receiptEntry.files ?? []).some((/** @type {any} */ recorded) => (
         recorded.path === file.path && recorded.sha256 === file.sha256 && recorded.bytes === file.bytes
       )))
@@ -1666,7 +1667,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const judgeDeliverable = async (entry, item, call) => {
     const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
     const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
-    const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs)
+    const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs, item.contractKind)
     const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
     const matrix = parseJson(files.get('clinical-evidence-matrix.json'))
     const verdict = gateDeliverable({
@@ -2231,7 +2232,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
           const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
           const cwd = entry.cwd || call.cwd
-          const files = await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs)
+          const files = await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs, item.contractKind)
           const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
           const priorReceipt = Array.isArray(receipt?.entries) ? receipt.entries.find((/** @type {any} */ candidate) => candidate.deliverableId === item.id) : null
           const currentDigests = await digestFiles(files, item.id)
@@ -2402,17 +2403,32 @@ async function digestFiles(files, deliverableId) {
 }
 
 /**
+ * A deliverable's files as the gate and the receipt read them: every output
+ * the manifest declares, then every file the contract's own index names.
+ *
+ * The second half exists for the GEO content pack, whose articles are
+ * `articles/<id>.md` with ids the run chooses — a manifest can only declare
+ * fixed paths, so `articles.json` names them and the domain says which of its
+ * paths to read (`contractCompanionPaths`, inside the deliverable only). Read
+ * here, the articles are what the gate judges and what the receipt freezes,
+ * rather than an index pointing at files neither ever opened.
  * @param {any} ctx @param {string} cwd @param {string} deliverableId
  * @param {readonly {path: string, required: boolean}[]} expectedOutputs
+ * @param {string} [contractKind]
  * @returns {Promise<Map<string, string>>}
  */
-async function readDeliverableFiles(ctx, cwd, deliverableId, expectedOutputs) {
+async function readDeliverableFiles(ctx, cwd, deliverableId, expectedOutputs, contractKind = '') {
   /** @type {Map<string, string>} */
   const files = new Map()
   const base = deliverableDir(deliverableId)
   for (const output of expectedOutputs) {
     const text = await readFileAt(ctx, cwd, `${base}/${output.path}`)
     if (text != null) files.set(output.path, text)
+  }
+  for (const relative of contractCompanionPaths(contractKind, files)) {
+    if (files.has(relative)) continue
+    const text = await readFileAt(ctx, cwd, `${base}/${relative}`)
+    if (text != null) files.set(relative, text)
   }
   return files
 }
