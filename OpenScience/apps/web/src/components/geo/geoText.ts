@@ -129,6 +129,22 @@ export const GEO_STEP_EMPTY: Readonly<Record<GeoStepKey, string>> = Object.freez
   monitoring: "还没有开始持续监测。",
 });
 
+/**
+ * What a requested step that has not started yet says: when it will start,
+ * in the reader's terms. The program runs the steps in order, so a step asked
+ * for is usually waiting for the one before it, not being worked on.
+ */
+export const GEO_STEP_WAITING: Readonly<Record<GeoStepKey, string>> = Object.freeze({
+  evidence: "马上开始整理说明书、证据和主张。",
+  journey: "证据整理好后开始画旅程。",
+  questions: "证据整理好后开始列问题。",
+  diagnosis: "问题定下来后开始问各家 AI，结果一般在第二天上午前出来。",
+  sources: "诊断做完后开始分析信源和能做到什么程度。",
+  content: "信源分析做完后开始写稿。",
+  distribution: "有可发布的稿件、设好投放预算后开始投放。",
+  monitoring: "首批稿件发布后，每周一复测一次。",
+});
+
 /* ------------------------------------------------------------------ metrics */
 
 /** The overview's four numbers (metrics package mapping, M report). */

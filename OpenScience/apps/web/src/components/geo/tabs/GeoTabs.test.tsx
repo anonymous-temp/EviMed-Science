@@ -89,7 +89,17 @@ describe("a tab with nothing yet", () => {
   it("says one quiet line while the step is being worked on", async () => {
     client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] });
     renderTab(<EvidenceTab {...props(geoProject({ evidence: "running" }))} />);
-    expect(await screen.findByText("AI 正在做这一步，做完会显示在这里。")).toBeInTheDocument();
+    expect(await screen.findByText("正在进行，做完会显示在这里。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+  });
+
+  it("says when a step asked for but waiting on the one before it will start, and offers nothing to press", async () => {
+    client.getGeoArticles.mockResolvedValue({ articles: [] });
+    const project = geoProject({});
+    project.steps.content = { status: "none", requested: true };
+    renderTab(<ContentTab {...props(project)} />);
+    expect(await screen.findByText("信源分析做完后开始写稿。")).toBeInTheDocument();
+    expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
   });
 

@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
 import { GeoCellText } from "../GeoCellText";
-import { GEO_STEP_EMPTY, type GeoUnit } from "../geoText";
+import { GEO_STEP_EMPTY, GEO_STEP_WAITING, type GeoUnit } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { answerPath } from "./geoTabText";
 
@@ -94,11 +94,16 @@ export function TabError({ message, onRetry }: { message: string; onRetry: () =>
 
 /* -------------------------------------------------------------------- steps */
 
-/** Whether the step has been asked for and is still being worked on. */
+/** Whether the step is being worked on right now. */
 export function stepInProgress(project: GeoProject, step: GeoStepKey): boolean {
   const state = project.steps[step];
-  if (!state) return false;
-  return state.status === "running" || state.status === "queued" || (state.status === "none" && state.requested);
+  return state?.status === "running" || state?.status === "queued";
+}
+
+/** Whether the step was asked for and waits for the one before it. */
+export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
+  const state = project.steps[step];
+  return state?.status === "none" && state.requested === true;
 }
 
 /**
@@ -115,9 +120,12 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
     return (
       <p data-geo-step-running={step} className="flex items-center justify-center gap-2 py-12 text-ui text-text-3">
         <span aria-hidden="true" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />
-        AI 正在做这一步，做完会显示在这里。
+        正在进行，做完会显示在这里。
       </p>
     );
+  }
+  if (stepWaiting(project, step)) {
+    return <p data-geo-step-waiting={step} className="py-12 text-center text-ui text-text-3">{GEO_STEP_WAITING[step]}</p>;
   }
   const run = () => {
     setBusy(true);
