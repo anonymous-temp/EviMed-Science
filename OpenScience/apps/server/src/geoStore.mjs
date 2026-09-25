@@ -396,9 +396,11 @@ export class GeoStore {
         }
         const id = randomId("gcl_");
         const version = latest ? Number(latest.version) + 1 : 1;
+        // clock_timestamp, not the transaction's now(): a write of thirty
+        // claims lists them in the order they were written.
         await client.query(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref,
-            source_kind, evidence_level, population, in_label, elements, verified_at, valid_until, status, run_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17)`,
+            source_kind, evidence_level, population, in_label, elements, verified_at, valid_until, status, run_id, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, clock_timestamp(), clock_timestamp())`,
         [id, userId, geoId, item.claimKey, version, item.statement, item.quote, item.sourceRef, ...values]);
         written.push({ id, claimKey: item.claimKey, version, change: latest ? "versioned" : "created" });
       }
@@ -421,9 +423,9 @@ export class GeoStore {
   /** The groups of one set version, each with its questions. @param {string} geoId @param {number} version */
   async questionMap(geoId, version) {
     const groups = (await this.query(`SELECT * FROM evimed_geo.question_groups WHERE geo_project_id = $1 AND set_version = $2
-      ORDER BY pool NULLS LAST, created_at, id`, [geoId, version])).rows.map(questionGroupFromRow);
+      ORDER BY pool NULLS LAST, position, id`, [geoId, version])).rows.map(questionGroupFromRow);
     const questions = (await this.query(`SELECT * FROM evimed_geo.questions WHERE geo_project_id = $1 AND set_version = $2
-      ORDER BY created_at, id`, [geoId, version])).rows.map(questionFromRow);
+      ORDER BY position, id`, [geoId, version])).rows.map(questionFromRow);
     const byGroup = new Map(groups.map((group) => [group.id, /** @type {ReturnType<typeof questionFromRow>[]} */ ([])]));
     for (const question of questions) byGroup.get(question.groupId)?.push(question);
     return groups.map((group) => ({ ...group, questions: byGroup.get(group.id) ?? [] }));
@@ -462,12 +464,12 @@ export class GeoStore {
     const groupIds = [];
     /** @type {string[][]} */
     const questionIds = [];
-    for (const group of groups) {
+    for (const [position, group] of groups.entries()) {
       const id = randomId("ggr_");
       groupIds.push(id);
       groupRows.push({ id, pool: group.pool ?? null, name: group.name ?? null, typical_question: group.typicalQuestion ?? null,
         journey_stage: group.journeyStage ?? null, audience: group.audience ?? null, bridge: group.bridge ?? null,
-        weight: group.weight ?? null, is_control: group.isControl === true, signal: group.signal ?? null });
+        weight: group.weight ?? null, is_control: group.isControl === true, signal: group.signal ?? null, position });
       /** @type {string[]} */
       const ids = [];
       for (const question of group.questions ?? []) {
@@ -475,23 +477,24 @@ export class GeoStore {
         ids.push(questionId);
         questionRows.push({ id: questionId, group_id: id, text: question.text, kind: question.kind ?? null,
           pool: question.pool ?? group.pool ?? null, platform: question.platform ?? null, source_url: question.sourceUrl ?? null,
-          collected_at: question.collectedAt ?? null, is_measured: question.isMeasured === true, retired_at: question.retiredAt ?? null });
+          collected_at: question.collectedAt ?? null, is_measured: question.isMeasured === true, retired_at: question.retiredAt ?? null,
+          position: questionRows.length });
       }
       questionIds.push(ids);
     }
     if (groupRows.length) {
       await client.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name, typical_question,
-          journey_stage, audience, bridge, weight, is_control, signal)
-        SELECT g.id, $2, $3, $4, g.pool, g.name, g.typical_question, g.journey_stage, g.audience, g.bridge, g.weight, g.is_control, g.signal
+          journey_stage, audience, bridge, weight, is_control, signal, position)
+        SELECT g.id, $2, $3, $4, g.pool, g.name, g.typical_question, g.journey_stage, g.audience, g.bridge, g.weight, g.is_control, g.signal, g.position
         FROM jsonb_to_recordset($1::jsonb) AS g(id text, pool text, name text, typical_question text, journey_stage text, audience text,
-          bridge text, weight numeric, is_control boolean, signal text)`, [JSON.stringify(groupRows), userId, geoId, version]);
+          bridge text, weight numeric, is_control boolean, signal text, position integer)`, [JSON.stringify(groupRows), userId, geoId, version]);
     }
     if (questionRows.length) {
       await client.query(`INSERT INTO evimed_geo.questions (id, user_id, geo_project_id, group_id, set_version, text, kind, pool, platform,
-          source_url, collected_at, is_measured, retired_at)
-        SELECT q.id, $2, $3, q.group_id, $4, q.text, q.kind, q.pool, q.platform, q.source_url, q.collected_at, q.is_measured, q.retired_at
+          source_url, collected_at, is_measured, retired_at, position)
+        SELECT q.id, $2, $3, q.group_id, $4, q.text, q.kind, q.pool, q.platform, q.source_url, q.collected_at, q.is_measured, q.retired_at, q.position
         FROM jsonb_to_recordset($1::jsonb) AS q(id text, group_id text, text text, kind text, pool text, platform text, source_url text,
-          collected_at timestamptz, is_measured boolean, retired_at timestamptz)`, [JSON.stringify(questionRows), userId, geoId, version]);
+          collected_at timestamptz, is_measured boolean, retired_at timestamptz, position integer)`, [JSON.stringify(questionRows), userId, geoId, version]);
     }
     return { version, groupIds, questionIds };
   }
@@ -670,7 +673,7 @@ export class GeoStore {
 
   /** @param {string} geoId */
   async listArticles(geoId) {
-    const result = await this.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id = $1 ORDER BY created_at, id LIMIT 2000`, [geoId]);
+    const result = await this.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id = $1 ORDER BY created_at, path, id LIMIT 2000`, [geoId]);
     return result.rows.map(geoArticleFromRow);
   }
 
@@ -696,8 +699,8 @@ export class GeoStore {
       for (const item of items) {
         const status = geoArticlePublishable(item) ? "publishable" : "draft";
         const result = await client.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, run_id, deliverable_id, path, layer, title,
-            group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15)
+            group_id, claim_ids, gate, safety, content_sha256, protected_sha256, status, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp())
           ON CONFLICT (geo_project_id, path) WHERE path IS NOT NULL DO UPDATE SET run_id = coalesce(EXCLUDED.run_id, articles.run_id),
             deliverable_id = coalesce(EXCLUDED.deliverable_id, articles.deliverable_id), layer = EXCLUDED.layer, title = EXCLUDED.title,
             group_id = EXCLUDED.group_id, claim_ids = EXCLUDED.claim_ids, gate = EXCLUDED.gate, safety = EXCLUDED.safety,

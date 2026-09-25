@@ -119,15 +119,25 @@ class GeoReadTests(_GatewayCase):
         self.assertEqual(seen["body"], {"what": "metrics", "filter": {"engine": "deepseek", "limit": 10}})
 
     def test_the_gateway_s_own_codes_reach_the_run_and_nothing_else_does(self):
-        _Gateway.answers["read"] = (404, {"error": "This conversation is not in a 循证 GEO project.", "code": "geo_no_project"})
+        _Gateway.answers["read"] = (429, {"error": "Too many GEO calls in a minute.", "code": "geo_gateway_rate_limited"})
         result = self.server.call_tool("geo_read", {"what": "project"})
         self.assertEqual(result["status"], "error")
-        self.assertEqual(result["error"]["code"], "geo_no_project")
-        self.assertFalse(result["error"]["retryable"])
+        self.assertEqual(result["error"]["code"], "geo_gateway_rate_limited")
+        self.assertTrue(result["error"]["retryable"])
         _Gateway.answers["read"] = (502, {"error": "bad gateway", "code": "proxy_exploded"})
         result = self.server.call_tool("geo_read", {"what": "project"})
         self.assertEqual(result["error"]["code"], "geo_upstream_error")
         self.assertTrue(result["error"]["retryable"])
+
+    def test_outside_a_geo_project_a_read_or_write_is_a_warning_that_names_why(self):
+        _Gateway.answers["read"] = (404, {"error": "This conversation is not in a 循证 GEO project.", "code": "geo_no_project"})
+        _Gateway.answers["write"] = (404, {"error": "This conversation is not in a 循证 GEO project.", "code": "geo_no_project"})
+        read = self.server.call_tool("geo_read", {"what": "claims"})
+        self.assertEqual(read["status"], "warning")
+        self.assertEqual(read["data"]["code"], "geo_no_project")
+        write = self.server.call_tool("geo_write", {"what": "step", "data": {"step": "diagnosis", "status": "none"}})
+        self.assertEqual(write["status"], "warning")
+        self.assertIn("no step to write", write["summary"])
 
     def test_a_what_outside_the_vocabulary_never_leaves_the_runtime(self):
         result = self.server.call_tool("geo_read", {"what": "passwords"})

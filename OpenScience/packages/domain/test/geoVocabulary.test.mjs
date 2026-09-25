@@ -16,7 +16,7 @@ import {
   GEO_FAILURE_MODE_LABELS_ZH,
   GEO_GAP_CLASSES,
   GEO_GAP_CLASS_LABELS_ZH,
-  GEO_METRIC_IDS,
+  GEO_VIEW_METRIC_IDS,
   GEO_OVERVIEW_METRICS,
   GEO_POOLS,
   GEO_POOL_LABELS_ZH,
@@ -61,6 +61,7 @@ test("every GEO vocabulary is a frozen list of distinct plain words, and the wal
 });
 
 test("every word a reader can meet has a Chinese label, and no label names a word that does not exist", () => {
+  /** @type {Array<[readonly string[], Readonly<Record<string, string>>]>} */
   const pairs = [
     [GEO_POOLS, GEO_POOL_LABELS_ZH], [GEO_ENGINES, GEO_ENGINE_LABELS_ZH], [GEO_STEPS, GEO_STEP_LABELS_ZH],
     [GEO_FAILURE_MODES, GEO_FAILURE_MODE_LABELS_ZH], [GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH],
@@ -70,16 +71,18 @@ test("every word a reader can meet has a Chinese label, and no label names a wor
   ];
   for (const [words, labels] of pairs) {
     assert.deepEqual(Object.keys(labels).sort(), [...words].sort());
-    for (const word of words) assert.ok(/** @type {Record<string, string>} */ (labels)[word]?.trim(), word);
+    for (const word of words) assert.ok(labels[word]?.trim(), word);
   }
 });
 
 test("the default engines are measurable engines, the overview reads four metrics, and M-01S is the headline mention", () => {
   for (const engine of GEO_DEFAULT_ENGINES) assert.ok(GEO_ENGINES.includes(engine), engine);
-  assert.equal(GEO_DEFAULT_ENGINES.includes("wenxin"), false, "wenxin is measured through the inclusion channel only");
+  assert.ok(GEO_ENGINES.includes("baidu"), "文心 carries the owner's yaml id");
+  assert.equal(GEO_DEFAULT_ENGINES.includes("baidu"), false, "baidu is measured through the inclusion channel only");
   assert.deepEqual(GEO_OVERVIEW_METRICS.map((entry) => entry.key), ["gvi", "mention", "accuracy", "citation"]);
-  assert.equal(GEO_OVERVIEW_METRICS[1].metricId, GEO_METRIC_IDS.mentionHeadline);
-  assert.equal(GEO_METRIC_IDS.mentionHeadline, "M-01S");
+  assert.deepEqual(GEO_OVERVIEW_METRICS.map((entry) => entry.metricId), ["M-19", "M-01S", "M-06", "M-08"],
+    "the index is M-19, mention is M-01S over P2 and P3");
+  assert.equal(GEO_OVERVIEW_METRICS[1].metricId, GEO_VIEW_METRIC_IDS.mentionHeadline);
 });
 
 test("an article is publishable only with a passed gate and no open safety finding", () => {

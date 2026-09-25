@@ -1608,3 +1608,71 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
   assert.ok(app.frontier.actions.library, "存入知识库 writes through the upload's own helper");
   assert.equal(app.frontier.actions.capabilities().saveToLibrary, true);
 });
+
+// 「循证 GEO」 (build spec 2026-09-25): composed only when switched on with a
+// product database, visible to its audience in `/api/me`, its routes and its
+// runtime gateway dispatched, and — since its worker is another package's —
+// a `geo.worker` slot that the recurring work starts, pauses and closes with
+// the rest the moment something fills it.
+test("循证 GEO is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID] });
+  const { app } = fixture;
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  assert.ok(app.geo, "an enabled module with a product database is composed");
+  assert.equal(app.geoService, app.geo.service);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["exporter", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
+  assert.equal(app.geo.worker, null, "the worker slot waits for the orchestration package");
+  const me = await (await fetch(`${base}/api/me`, { headers })).json();
+  assert.equal(me.data.features.geo, true);
+
+  // The other packages attach after composition; the routes find them then.
+  let runs = 0;
+  app.geo.orchestrator = { async runStep() { runs += 1; return { sessionId: "s", runId: null }; } };
+  const unknownProject = await fetch(`${base}/api/geo/projects/geo_missing/run`, {
+    method: "POST", headers: { ...headers, "content-type": "application/json", "x-open-science-csrf": "composition-csrf" },
+    body: JSON.stringify({ step: "evidence" }),
+  });
+  assert.equal(unknownProject.status, 404, "the route is dispatched and resolves the project first");
+  assert.equal((await unknownProject.json()).code, "geo_project_not_found");
+  assert.equal(runs, 0);
+
+  const gateway = await fetch(`${base}/internal/geo/v1/read`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  assert.equal(gateway.status, 401, "the runtime gateway is dispatched before the API routes");
+  assert.equal((await gateway.json()).code, "geo_gateway_token_missing");
+
+  const worker = {
+    timer: /** @type {any} */ (null), started: 0, closed: 0,
+    start() { this.started += 1; this.timer = setInterval(() => {}, 3_600_000); },
+    async close() { this.closed += 1; clearInterval(this.timer); this.timer = null; },
+    status() { return { running: false }; },
+  };
+  app.geo.worker = worker;
+  const armedAtStartup = live(fixture.armed).length;
+  await app.maintenanceService.request({ requestId: "geo-pause", ttlSeconds: 60 });
+  assert.equal(worker.timer, null, "maintenance stops the GEO worker's loop with the others");
+  await app.maintenanceService.release({ requestId: "geo-pause" });
+  assert.ok(await waitFor(() => worker.started > 0 && live(fixture.armed).length >= armedAtStartup, 10_000), "reopening never started the GEO worker");
+  await fixture.close();
+  assert.equal(worker.closed, 1, "close() closes the GEO worker");
+});
+
+test("循证 GEO off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const off = await composedApp(t);
+  assert.equal(off.app.geo, null);
+  const offBase = `http://127.0.0.1:${off.app.server.address().port}`;
+  const listed = await fetch(`${offBase}/api/geo/projects`, { headers });
+  assert.equal(listed.status, 404);
+  assert.equal((await listed.json()).code, "geo_not_enabled");
+  const gateway = await fetch(`${offBase}/internal/geo/v1/read`, { method: "POST", headers: { authorization: "Bearer nope", "content-type": "application/json" }, body: "{}" });
+  assert.equal(gateway.status, 401, "an inactive token is refused before the module's state is told");
+
+  const operatorsOnly = await composedApp(t, { geoEnabled: true, geoAudience: "operators", operatorUsers: ["someone-else"] });
+  const base = `http://127.0.0.1:${operatorsOnly.app.server.address().port}`;
+  const me = await (await fetch(`${base}/api/me`, { headers })).json();
+  assert.equal(me.data.features.geo, false);
+  const hidden = await fetch(`${base}/api/geo/projects`, { headers });
+  assert.equal(hidden.status, 404);
+  assert.equal((await hidden.json()).code, "geo_not_enabled");
+});

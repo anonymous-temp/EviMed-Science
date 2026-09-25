@@ -386,7 +386,7 @@ function geoSettings(overrides) {
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 120_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
     // Engines measured through the marketplace's inclusion check instead of the
-    // probe (spec §7.4) — only `wenxin` is meant to be here.
+    // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
     mediaMarketUrl: origin("mediaMarketUrl", "OPEN_SCIENCE_MEDIA_MARKET_URL"),
     mediaMarketApiKeyFile: keyFile,

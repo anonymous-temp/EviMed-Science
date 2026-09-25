@@ -1437,7 +1437,8 @@ export function createWebApiApp(overrides = {}) {
       // A project made before its brand was known is named by the brand once
       // the run writes it; a name the researcher chose is left alone.
       renameProject: async (userId, projectId, name) => {
-        const owner = { id: userId };
+        const owner = await store.userById(userId);
+        if (!owner) return;
         const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
         if (current?.name === GEO_DEFAULT_PROJECT_NAME) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
       },
