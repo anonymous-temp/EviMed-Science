@@ -95,6 +95,8 @@ export const GEO_SCHEDULE = Object.freeze({
   noiseQuestions: 10,
   noiseRepeat: 5,
   metricsGraceMinutes: 30,
+  /** The rounds that measure the whole question set; only their rows choose sentinel engines. */
+  fullRoundKinds: Object.freeze(["baseline", "weekly", "single_step"]),
   stalePlacementWeeks: 8,
 });
 /** Runs: at most five articles a batch, two tries a run, a claim that stalls for ten minutes is retried. */
@@ -1362,10 +1364,15 @@ export class GeoOrchestrator {
       const sentinelKey = `sentinel:${sentinel.day}`;
       if (sentinel.due && !(await this.#mark(project.id, sentinelKey))) {
         // The questions are the measurement's (the ten highest-weight measured
-        // ones); the two engines are chosen here, by retrieval rate.
-        const retrieval = (await this.store.query(`SELECT DISTINCT ON (engine) engine, value, denominator, status FROM evimed_geo.metrics
-          WHERE geo_project_id = $1 AND scope = 'engine' AND metric_id = 'M-10' AND pool IS NULL AND variant IS NULL AND rival IS NULL
-            AND group_id IS NULL AND arm IS NULL ORDER BY engine, computed_at DESC`, [project.id])).rows
+        // ones); the two engines are chosen here, by retrieval rate — from the
+        // latest full measurement (baseline, weekly, single step), never from a
+        // sentinel's or a post-publication check's own sliver.
+        const plain = "m.scope = 'engine' AND m.metric_id = 'M-10' AND m.pool IS NULL AND m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL AND m.arm IS NULL";
+        const retrieval = (await this.store.query(`SELECT DISTINCT ON (m.engine) m.engine, m.value, m.denominator, m.status FROM evimed_geo.metrics m
+          WHERE m.geo_project_id = $1 AND ${plain} AND m.round_id = (SELECT m.round_id FROM evimed_geo.metrics m
+            JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($2::text[])
+            WHERE m.geo_project_id = $1 AND ${plain} ORDER BY m.computed_at DESC LIMIT 1)
+          ORDER BY m.engine, m.computed_at DESC`, [project.id, [...GEO_SCHEDULE.fullRoundKinds]])).rows
           .map((/** @type {any} */ row) => ({ engine: String(row.engine), value: row.value == null ? null : Number(row.value),
             denominator: row.denominator == null ? null : Number(row.denominator), status: String(row.status) }));
         const engines = sentinelEngines(retrieval, project.engines.filter((/** @type {string} */ engine) => !(this.config.geoInclusionEngines ?? []).includes(engine)));

@@ -469,6 +469,28 @@ test("a diagnosis marked done on a round with no answer (before this rule) is me
   assert.equal((await statuses(project.id)).diagnosis, "running");
 });
 
+test("the sentinel engines come from the latest full measurement's retrieval rates, never a sentinel's own", options, async () => {
+  const { world, project, userId } = await lockedProgram();
+  const baseline = world.enqueued[0].id;
+  await finishRound(baseline, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  const later = `gr_sentinel_${project.id}`;
+  await q(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status, done, finished_at) VALUES ($1, $2, $3, 'sentinel', 'done', 4, now())`,
+    [later, userId, project.id]);
+  const rows = [[baseline, "kimi", 80, "2026-09-20T13:00:00Z"], [baseline, "doubao", 62, "2026-09-20T13:00:00Z"], [baseline, "deepseek", 50, "2026-09-20T13:00:00Z"],
+    // A sentinel measured only two engines on ten questions; its rows are newer and must not choose.
+    [later, "deepseek", 99, "2026-09-26T13:00:00Z"]];
+  for (const [roundId, engine, value, at] of rows) {
+    await q(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, engine, metric_id, status, value, denominator, computed_at)
+      VALUES ($1, $2, $3, $4, 'engine', $5, 'M-10', 'ok', $6, 40, $7)`, [`m10-${roundId}-${engine}`, userId, project.id, roundId, engine, value, at]);
+  }
+  world.setClock("2026-09-29T00:10:00Z"); // 08:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const sentinel = world.enqueued.find((entry) => entry.kind === "sentinel");
+  assert.deepEqual(sentinel?.engines, ["kimi", "doubao"]);
+});
+
 test("a paused project runs nothing new; 「让 AI 做」 says so", options, async () => {
   const world = harness();
   const { project, user, userId } = await newProject();
