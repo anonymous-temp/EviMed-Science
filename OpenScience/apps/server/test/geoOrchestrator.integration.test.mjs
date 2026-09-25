@@ -504,6 +504,34 @@ test("a paused project runs nothing new; 「让 AI 做」 says so", options, asy
   await assert.rejects(world.orchestrator.runStep({ id: "someone-else" }, project, "evidence"), { status: 404, code: "geo_project_not_found" });
 });
 
+test("a pause that lands while a tick is under way still holds the run it was about to dispatch", options, async () => {
+  const world = harness();
+  const { project, userId } = await newProject();
+  await store.setStep(project.id, "evidence", { requested: true });
+  // The tick's own reads of the project happen before the pause commits (as a
+  // 暂停 clicked while the tick folds the last run); the dispatch comes after.
+  const query = store.query.bind(store);
+  let reads = 0;
+  store.query = async (/** @type {string} */ sql, /** @type {unknown[]} */ values) => {
+    const rows = await query(sql, values);
+    if (/^SELECT \* FROM evimed_geo\.projects WHERE id = \$1/.test(sql) && values?.[0] === project.id && ++reads === 2) {
+      await query(`UPDATE evimed_geo.projects SET status = 'paused' WHERE id = $1`, [project.id]);
+    }
+    return rows;
+  };
+  try {
+    const result = await world.orchestrator.advance(project.id);
+    assert.equal(result.dispatched, null);
+  } finally {
+    store.query = query;
+  }
+  assert.equal(world.dispatched.length, 0, "nothing went out after the pause");
+  assert.equal((await reload(project.id)).status, "paused");
+  await store.updateProject(userId, project.id, { status: "active" });
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 1, "and it goes out once the project is resumed");
+});
+
 test("a conversation that locks a set with nothing requested starts the program; the worker's leases and daily claims hold", options, async () => {
   const world = harness();
   const { project } = await newProject();
