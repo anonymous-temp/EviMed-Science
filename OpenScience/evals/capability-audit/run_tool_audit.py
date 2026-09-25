@@ -67,6 +67,15 @@ TASK_FIXTURES = {
     # a deployment that does not run 「前沿动态」 declares the tool not offered
     # (it is in `server.OPTIONAL_TOOLS`).
     "frontier_search": {"mode": "all", "limit": 3},
+    # Added 2026-09-25 with 「循证 GEO」's tools. Neither changes anything: the
+    # probe's project is not a GEO project, so both answer the warning
+    # `geo_no_project` (the route and the token certified), and in a GEO
+    # project the write is a platform step a run may not mark, refused item by
+    # item. The social search is one small real crawl. A deployment that does
+    # not run the module declares all three not offered (`OPTIONAL_TOOLS`).
+    "geo_read": {"what": "project"},
+    "geo_write": {"what": "step", "data": {"step": "diagnosis", "status": "none"}},
+    "social_posts_search": {"query": "降糖药", "platforms": ["xhs"], "limit": 3},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,

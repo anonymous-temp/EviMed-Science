@@ -122,6 +122,19 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   assert.equal(withFrontier?.frontier, "https://evimed.example/runtime-gateway/frontier/v1/search");
   assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/frontier/v1/search"), { kind: "internal", url: "/internal/frontier/v1/search" });
   assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/frontier/%2e%2e/%2e%2e/api/me"), null);
+  // 循证 GEO: one base, three operations under it, offered only when the module is on.
+  assert.equal(urls?.geo, "", "循证 GEO is off here, so its tools are not offered there");
+  const withGeo = publicRuntimeGatewayUrls({
+    runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
+    geoEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
+  });
+  assert.equal(withGeo?.geo, "https://evimed.example/runtime-gateway/geo/v1");
+  for (const operation of ["read", "write", "social"]) {
+    assert.deepEqual(resolveRuntimeGatewayPath(`/runtime-gateway/geo/v1/${operation}`), { kind: "internal", url: `/internal/geo/v1/${operation}` });
+  }
+  assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/geo/%2e%2e/%2e%2e/api/me"), null);
+  // `geo` and `geo-probe` are two gateways: a prefix of one is never the other.
+  assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/geo-probe/v1"), { kind: "internal", url: "/internal/geo-probe/v1" });
 });
 
 test("only an active runtime's token passes, and the request goes on to its gateway", async (t) => {
