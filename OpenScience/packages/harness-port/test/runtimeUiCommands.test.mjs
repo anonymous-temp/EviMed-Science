@@ -57,6 +57,20 @@ test('the slash popup lists the public tools, with category and summary to searc
   ], 'how long a tool takes is said once, on 科研工具');
 });
 
+test('a tool its own module opens is not a row in the popup, and still has a chip', () => {
+  // 「循证 GEO」 (build spec 2026-09-25 §6): kept public so its module can bind
+  // a conversation to it by id, kept out of the list by `display.listed: false`,
+  // and named by its chip in the conversation it runs.
+  const catalogue = /** @type {any} */ (kitFor(fakeCtx(), fakeTarget({ frame: { capabilities: [
+    ...CATALOGUE,
+    { id: 'geo-insight', title: '循证 GEO', category: '写作与传播', brief: 'b', summary: '一句话', starters: ['做一套完整的方案。'], listed: false },
+  ] } })).frame).capabilities;
+  assert.equal(capabilityOptions(catalogue).some((option) => option.id === 'geo-insight'), false);
+  assert.equal(capabilityOptions(catalogue).length, 3, 'every listed public tool is still a row');
+  const page = /** @type {any} */ (toolPageModel(catalogue, 'geo-insight'));
+  assert.equal(page?.title, '循证 GEO', 'a bound conversation still names its tool');
+});
+
 test('a tool\'s page reads from the catalogue, and an internal capability has none', () => {
   // Through the bootstrap reader, as the frame sees it: that is what turns
   // `visibility: internal` into the flag the page filters on.

@@ -217,6 +217,22 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  // The 「循证 GEO」 capabilities stay public — their module binds a
+  // conversation to one by id, and an internal one would answer 403 — and are
+  // not tools to pick here (build spec 2026-09-25 §6, `display.listed: false`).
+  it("leaves out a capability its own module opens, while the catalogue still carries it", async () => {
+    const geo = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"].map((id) => ({ ...agents[3], id, skill: id, runtimeAgent: `evimed-${id}` }));
+    for (const entry of geo) expect(CAPABILITY_DISPLAY[entry.id]?.listed, entry.id).toBe(false);
+    mocks.listWebResearchAgents.mockResolvedValue([...agents, ...geo]);
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    expect(card("论文审稿")).toBeInTheDocument();
+    for (const entry of geo) {
+      expect(screen.queryByRole("button", { name: `用「${CAPABILITY_DISPLAY[entry.id].title}」开始一次对话` })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(/循证 GEO/)).not.toBeInTheDocument();
+  });
+
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
     mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
     renderPage();

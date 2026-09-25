@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
@@ -257,7 +257,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    * manifest's typical duration, which the frame's `/能力` command shows beside
    * the title (2026-09-18 plan, §7.3).
    *
-   * @returns {Promise<{ id: string, title: string, category: string, brief: string, summary: string, minutes: readonly number[] }[]>}
+   * @returns {Promise<{ id: string, title: string, category: string, brief: string, summary: string, minutes: readonly number[], listed: boolean }[]>}
    */
   let capabilityCards = null;
   async function heroCapabilities() {
@@ -282,6 +282,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           outputs: (display.outputs ?? []).slice(0, 4),
           limits: (display.knownLimits ?? []).slice(0, 4),
           materials: typeof display.materials === "string" ? display.materials : "",
+          // Kept in the catalogue so a session bound to it by id still shows
+          // its chip, and left out of the frame's tool list: the 「循证 GEO」
+          // capabilities are opened by their own module (`display.listed`).
+          listed: capabilityListed(agent.id),
         }))
         .sort((left, right) => left.category.localeCompare(right.category, "zh") || left.title.localeCompare(right.title, "zh"));
     } catch {
