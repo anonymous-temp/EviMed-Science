@@ -788,3 +788,34 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
+// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
+// provenance), the probe sanity markers (`geo/sanity.json`), and the pure
+// computation — per-scope cells with Wilson intervals and the no-fake-number
+// statuses, the composite index with its redistribution declared, the noise
+// band, the rolling trend, the net effect, the two hard lines and the
+// T/CAACCHINA names; CPython-exact rounding and summation, so a number here
+// equals the owner's tooling to the last digit. The pool and engine
+// vocabularies are geoVocabulary's.
+export {
+  GEO_METRICS,
+  GEO_METRIC_IDS,
+  GEO_METRIC_POOL_IDS,
+  GEO_METRIC_SCOPES,
+  GEO_PROBE_SANITY,
+  canonicalGeoUrl,
+  computeGeoMetrics,
+  computeGvi,
+  geoCellRows,
+  geoConstant,
+  geoMetricDefinition,
+  hardLines,
+  isOurCitation,
+  netEffect,
+  noiseBand,
+  pythonRound,
+  pythonSum,
+  rollingTrend,
+  standardName,
+  wilsonInterval,
+} from './src/geoMetrics.mjs'
