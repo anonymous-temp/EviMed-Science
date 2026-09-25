@@ -37,8 +37,7 @@
 import {
   GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_ENGINES, GEO_GAP_CLASSES,
   GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS, GEO_RX_CLASSES, GEO_SOURCE_KINDS,
-  GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS,
-} from "@evimed/domain";
+  GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS, geoConstant } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** @typedef {{ index?: number, group?: number, field?: string, code: string, message: string }} GeoIssue */
@@ -617,6 +616,13 @@ function validatedTargets(items, issues) {
       horizonWeeks: read.number("horizonWeeks", 1, 104, { integer: true }), placements: read.number("placements", 0, 10_000, { integer: true }),
       budgetCny: read.number("budgetCny", 0, 10_000_000), dataType,
     };
+    // Factual accuracy is a hard line in every tier, not a number that climbs
+    // with the budget (the owner's ACCURACY_HARD_LINE; production 2026-09-25:
+    // a strategy wrote 76 / 84 / 90 %).
+    const hardLine = Number(geoConstant("ACCURACY_HARD_LINE")) * 100;
+    if (!read.refused && metricId === "M-06" && typeof target.target === "number" && target.target < hardLine) {
+      read.refuse("target", "below_hard_line", `事实准确率在每一档都是硬线：目标不低于 ${hardLine}%。`);
+    }
     const key = `${target.tier}\u0000${metricId}\u0000${pool}`;
     if (!read.refused && seen.has(key)) read.refuse("metricId", "duplicate", "This tier, metric and pool appear twice in this write.");
     if (read.refused) return;
