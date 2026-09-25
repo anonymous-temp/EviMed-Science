@@ -6,7 +6,7 @@
 # never computes one. Hidden from 科研工具 by `display.listed: false`; the GEO
 # module's orchestrator dispatches it once the baseline round is in.
 id: geo-strategy
-version: 1.0.2
+version: 1.0.3
 title: GEO Strategy
 category: Content Production
 description: Step 5 of an evidence-based GEO project — the measured answers read into a source table with the
