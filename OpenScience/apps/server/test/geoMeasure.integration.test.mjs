@@ -8,6 +8,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
@@ -31,10 +32,28 @@ let database;
 let store;
 /** @type {string} */
 let dataDir;
+/** @type {pg.Client | null} */
+let admin = null;
+/** @type {string} */
+let isolatedName = "";
+/** @type {string} */
+let isolatedUrl = "";
 
+// Its own database: the queue is global (it leases any project's jobs, parses
+// any project's answers) and each scenario starts from empty tables, so
+// sharing a database with the other suites — node runs test files in
+// parallel — would let each see, and truncate, the other's rows.
 before(async () => {
   if (!databaseUrl) return;
-  database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
+  const source = new URL(databaseUrl);
+  isolatedName = `${decodeURIComponent(source.pathname.slice(1))}_geomeasure_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  assert.match(isolatedName, /^evimed_test_[a-z0-9_]+$/);
+  admin = new pg.Client({ connectionString: databaseUrl });
+  await admin.connect();
+  await admin.query(`CREATE DATABASE "${isolatedName}"`);
+  source.pathname = `/${isolatedName}`;
+  isolatedUrl = source.href;
+  database = new ControlPlaneDatabase({ databaseUrl: isolatedUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
   store = new GeoMeasureStore(database);
   await store.ready();
   dataDir = await mkdtemp(path.join(os.tmpdir(), "geo-measure-"));
@@ -42,6 +61,10 @@ before(async () => {
 
 after(async () => {
   await database?.close();
+  if (admin) {
+    await admin.query(`DROP DATABASE IF EXISTS "${isolatedName}" WITH (FORCE)`);
+    await admin.end();
+  }
   if (dataDir) await rm(dataDir, { recursive: true, force: true });
 });
 
@@ -396,7 +419,7 @@ test("the advisory lock keeps a second prober from asking at the same time", opt
   await reset();
   await seed("geo_d");
   const h = await harness({ answers: () => ({ answer: A_Q3, delayMs: 150 }) });
-  const other = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
+  const other = new ControlPlaneDatabase({ databaseUrl: isolatedUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   try {
     await enqueueRound(h.deps, { geoProjectId: "geo_d", kind: "sentinel" });
     // Held elsewhere: this worker asks nothing.
