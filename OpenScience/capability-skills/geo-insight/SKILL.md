@@ -60,6 +60,13 @@ probe host, a social crawler or a marketplace.
   step that is done and not stale); `mcp__evimed__geo_write` to register what you produce —
   `product`, `claims`, `journey`, `questions`, then `lock_questions`, then
   `step`. A write answers item by item; fix the refused items and write again.
+  The project page shows the journey as four columns, so every `journey` stage
+  carries all four: `emotion`, `thinking`, `questions` (the questions a patient
+  at that stage asks an AI — take them from the question map's typical
+  questions and real phrasings) and `infoSources` (where they look: 小红书、
+  抖音、百度、公众号、医生、药师 …). An empty list is an empty column. Give each
+  claim `sourceRefLabel`, the source as a reader names it (「玛仕度肽注射液说明书
+  （国家药监局 2025）」); the page never shows a preserved page's id.
 - Measurement is the platform's. Never batch-probe inside a run: once the set
   is locked the platform runs the baseline on its own. `mcp__evimed__geo_visibility_probe`
   is only for a single question the user asks about in the conversation.
