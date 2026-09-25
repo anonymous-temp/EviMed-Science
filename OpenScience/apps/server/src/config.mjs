@@ -68,7 +68,15 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
-function readSecretFile(file, codePrefix) {
+/**
+ * @param {string} file @param {string} codePrefix
+ * @param {{ allowGroupRead?: boolean }} [options] a key the knowledge plugin
+ *   shares by design (root:10002 0440 on the host: the control plane reads it
+ *   as owner, the plugin through its group) may be group-readable; group write
+ *   and any access by others are still refused. Every other secret stays
+ *   owner-only.
+ */
+function readSecretFile(file, codePrefix, { allowGroupRead = false } = {}) {
   let handle;
   try {
     handle = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
@@ -77,7 +85,7 @@ function readSecretFile(file, codePrefix) {
     // A secret may carry one LF or CRLF terminator. Bound the content after
     // removing that terminator so every caller agrees on the same 8 KiB value.
     if (stat.size > 8 * 1024 + 2) return { value: "", error: `${codePrefix}_file_too_large` };
-    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
+    if (process.platform !== "win32" && (stat.mode & (allowGroupRead ? 0o037 : 0o077)) !== 0) {
       return { value: "", error: `${codePrefix}_file_permissions` };
     }
     const value = fs.readFileSync(handle, "utf8").replace(/\r?\n$/, "");
@@ -145,10 +153,11 @@ function preferredFileSecret(overrides, {
   fileEnv,
   codePrefix,
   defaultFile = "",
+  allowGroupRead = false,
 }) {
   const file = overrides[overrideFile] ?? process.env[fileEnv] ?? defaultFile;
   if (file) {
-    const loaded = readSecretFile(file, codePrefix);
+    const loaded = readSecretFile(file, codePrefix, { allowGroupRead });
     return { ...loaded, source: "file" };
   }
   const direct = Object.hasOwn(overrides, overrideValue)
@@ -790,6 +799,8 @@ export function loadConfig(overrides = {}) {
       fileEnv: "OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_FILE",
       codePrefix: "edge_proxy_credentials",
       defaultFile: localSecretFile("edge-proxy.credentials"),
+      // Shared with the knowledge plugin since 2026-09-22 (its relay exit).
+      allowGroupRead: true,
     });
     return loaded.error === "edge_proxy_credentials_file_not_regular" ? { value: "", source: "none", error: null } : loaded;
   })();
@@ -819,6 +830,10 @@ export function loadConfig(overrides = {}) {
         fileEnv: `${valueEnv}_FILE`,
         codePrefix: `public_source_${profile.replaceAll(/([A-Z])/g, "_$1").toLowerCase()}`,
         defaultFile: localSecretFile(localFile),
+        // The EviMed evidence key is shared with the knowledge plugin since
+        // 2026-09-22 (its evimed-api exit); refusing its group bit silently
+        // turned every EviMed evidence call into `credential_missing`.
+        allowGroupRead: profile === "evimedEvidence",
       }),
     ]),
   );

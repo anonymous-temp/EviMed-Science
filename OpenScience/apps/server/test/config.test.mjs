@@ -667,3 +667,30 @@ test("the thinking effort is a closed vocabulary, refused at load rather than up
   // there, one run at a time, with a provider error nobody had configured.
   assert.throws(() => loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "highest" }), /OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of low, high, max/);
 });
+
+test("a key shared with the knowledge plugin may be group-readable; every other secret stays owner-only", async () => {
+  // 2026-09-22 made evimed.api-key and edge-proxy.credentials root:10002 0440 so
+  // the plugin reads them through its group; the owner-only rule then refused
+  // both here, and every EviMed evidence call answered `credential_missing`.
+  const root = await mkdtemp(path.join(os.tmpdir(), "os-shared-keys-"));
+  try {
+    const shared = path.join(root, "evimed.api-key");
+    await writeFile(shared, "evimed-test-key\n", { mode: 0o440 });
+    const config = loadConfig({ rootDir: repoRoot, evimedApiKeyFile: shared, semanticScholarApiKeyFile: shared });
+    assert.equal(config.publicSourceCredentials.evimedEvidence, "evimed-test-key");
+    assert.equal(config.publicSourceCredentialErrors.evimedEvidence, null);
+    assert.equal(config.publicSourceCredentials.semanticScholar ?? "", "", "another source's key is still owner-only");
+    assert.equal(config.publicSourceCredentialErrors.semanticScholar, "public_source_semantic_scholar_file_permissions");
+
+    const world = path.join(root, "world.api-key");
+    await writeFile(world, "evimed-test-key\n", { mode: 0o444 });
+    assert.equal(loadConfig({ rootDir: repoRoot, evimedApiKeyFile: world }).publicSourceCredentialErrors.evimedEvidence,
+      "public_source_evimed_evidence_file_permissions", "readable by others is refused");
+
+    const edge = path.join(root, "edge-proxy.credentials");
+    await writeFile(edge, "user:secret\n", { mode: 0o440 });
+    assert.notEqual(loadConfig({ rootDir: repoRoot, edgeProxyCredentialsFile: edge }).edgeProxyCredentialsError, "edge_proxy_credentials_file_permissions");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
