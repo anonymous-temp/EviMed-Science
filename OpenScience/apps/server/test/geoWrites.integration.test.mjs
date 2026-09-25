@@ -49,6 +49,13 @@ async function freshProject() {
   return /** @type {any} */ (project);
 }
 
+/** A finished baseline, which the strategy and the tiers are read from. @param {any} project */
+async function measured(project) {
+  await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status, surface) VALUES ($1, $2, $3, 'baseline', 'done', '{}'::jsonb)`,
+    [`rb-${project.id}`, USER, project.id]);
+  return project;
+}
+
 /** @param {any} project @param {string} what @param {Record<string, any>} body @param {any} [renameProject] @param {any} [articleGate] */
 const write = (project, what, body, renameProject = null, articleGate = null) => geoRuntimeWrite({ store, project, what, body, renameProject, articleGate });
 /** The run ledger's verdict, as a composition hands it in: every deliverable passed. */
@@ -210,7 +217,7 @@ test("the lock rule is a pure function of the set", () => {
 });
 
 test("targets are forecasts or commercial, three tiers, no duplicates; sources and articles check what they point at", options, async () => {
-  const project = await freshProject();
+  const project = await measured(await freshProject());
   const targets = await write(project, "targets", { items: [
     { tier: "1", metricId: "M-19", target: 25, dataType: "forecast" },
     { tier: "2", metricId: "M-19", target: 30, dataType: "measured" },
@@ -345,7 +352,7 @@ test("a run reports its thinking steps; the platform's steps and the questions' 
 });
 
 test("journey, strategy and placement preferences are versions, and each refused entry is named", options, async () => {
-  const project = await freshProject();
+  const project = await measured(await freshProject());
   const journey = await write(project, "journey", { data: {
     subtypes: [{ name: "单纯性肥胖", size: 12000000 }, { size: "no name" }],
     stages: [{ stage: "确诊前", emotion: "焦虑", questions: ["减肥针安全吗"], infoSources: ["小红书"] }],
@@ -388,4 +395,18 @@ test("a claim keeps the reader's name for its source, from the method's sourceRe
   const [claim] = await store.listClaims(project.id);
   assert.equal(claim.sourceRef, "web-page:e1edc04a1ac28750");
   assert.equal(claim.sourceLabel, "玛仕度肽注射液说明书（国家药监局 2025）");
+});
+
+test("no strategy, tiers or 信源 step before the project has a finished baseline", options, async () => {
+  const project = await freshProject();
+  const strategy = await write(project, "strategy", { data: { summary: "早了" } });
+  assert.equal(strategy.ok, false);
+  assert.deepEqual(strategy.issues.map((/** @type {any} */ issue) => issue.code), ["baseline_missing"]);
+  const targets = await write(project, "targets", { items: [{ tier: "2", metricId: "M-19", target: 30, dataType: "forecast" }] });
+  assert.equal(targets.ok, false);
+  const step = await write(project, "step", { data: { step: "sources", status: "done" } });
+  assert.equal(step.ok, false);
+  assert.equal(await store.latestStrategy(project.id), null);
+  await measured(project);
+  assert.equal((await write(project, "strategy", { data: { summary: "测完了" } })).ok, true);
 });

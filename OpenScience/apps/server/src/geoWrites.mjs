@@ -702,6 +702,25 @@ function validatedPlacementPlan(data, issues) {
 }
 
 /**
+ * Whether the project has a finished measurement the strategy can be read
+ * from: a baseline, or a single step's own round. The strategy, the three
+ * tiers and the 信源 step are calibrated against it by definition; written
+ * before it, they are numbers with nothing under them, and the program would
+ * take the step as done and never write it from the measurement (production,
+ * 2026-09-25: a conversation delegated the strategy an hour before the
+ * baseline was due and wrote 24 targets).
+ * @param {{ query: (sql: string, values: unknown[]) => Promise<{ rows: any[] }> }} store @param {string} geoProjectId
+ */
+async function baselineMeasured(store, geoProjectId) {
+  const result = await store.query(`SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'single_step')
+    AND status IN ('done', 'partial') LIMIT 1`, [geoProjectId]);
+  return result.rows.length > 0;
+}
+
+const BASELINE_MISSING = Object.freeze({ code: "baseline_missing",
+  message: "This project has no finished baseline yet. The platform measures the locked questions first and then schedules the strategy on its own; nothing to do in this run." });
+
+/**
  * One `geo_write` call against a resolved GEO project.
  * @param {{ store: import("./geoStore.mjs").GeoStore, project: any, what: string, body: Record<string, any>,
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
@@ -774,6 +793,7 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
     }
     case "strategy": {
       const data = dataOf(body);
+      if (!(await baselineMeasured(store, project.id))) { issues.push({ ...BASELINE_MISSING }); return done([]); }
       const strategy = validatedStrategy(data, issues);
       /** @type {string[]} */
       let sourceIds = [];
@@ -796,6 +816,7 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
       return done(sources.length ? await store.upsertSources(userId, project.id, sources) : []);
     }
     case "targets": {
+      if (!(await baselineMeasured(store, project.id))) { itemsOf(body, GEO_WRITE_LIMITS.targets); issues.push({ ...BASELINE_MISSING }); return done([]); }
       const targets = validatedTargets(itemsOf(body, GEO_WRITE_LIMITS.targets), issues);
       if (!targets.length) return done([]);
       const tiers = new Set(targets.map((target) => target.tier));
@@ -833,6 +854,9 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
       if (step && !GEO_RUN_STEPS.includes(step)) read.refuse("step", "refused", `${step} is marked by the platform, not by a run.`);
       if (step === "questions" && (status === "done" || status === "minimal")) {
         read.refuse("status", "refused", "The questions step is done when the set is locked (what: lock_questions).");
+      }
+      if (step === "sources" && status !== "none" && !read.refused && !(await baselineMeasured(store, project.id))) {
+        read.refuse("status", BASELINE_MISSING.code, BASELINE_MISSING.message);
       }
       if (read.refused || !step || !status) return done([]);
       const updated = await store.setStep(project.id, step, { status, ...(note ? { note } : {}) });
