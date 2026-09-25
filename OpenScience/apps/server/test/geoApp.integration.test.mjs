@@ -126,7 +126,9 @@ test("readiness names the module and what it is waiting for; the metrics say it 
   const geo = ready.data.checks.geo;
   assert.equal(geo.ok, true, JSON.stringify(geo));
   assert.equal(geo.audience, "operators");
-  assert.ok(geo.warnings.includes("geo_worker_missing"), "the worker slot is empty until its package fills it");
+  assert.equal(geo.warnings.includes("geo_worker_missing"), false, "the worker is composed with the module");
+  assert.deepEqual(geo.worker.missing, [], "every loop of the worker has its function");
+  assert.ok(geo.warnings.includes("geo_market_unconfigured"), "what lives outside the platform is still a warning");
   const text = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   assert.match(text, /^open_science_geo_enabled 1$/m);
   assert.match(text, /^open_science_geo_tables_readable 1$/m);
