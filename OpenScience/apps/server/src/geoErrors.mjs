@@ -56,6 +56,8 @@ function catalogue(name, fallback) {
 /** Severities that notify when detected. */
 export const GEO_NOTIFY_SEVERITIES = Object.freeze(SEVERITIES.slice(Math.max(0, SEVERITIES.indexOf(String(catalogue("EC_NOTIFY_MIN_SEVERITY", "S3"))))));
 const STABLE_SHARE = Number(catalogue("EC_STABLE_MIN_SHARE", 0.5));
+/** How old an error without a confirmation round must be before the housekeeping queues one. */
+export const CONFIRM_GRACE_MS = 60_000;
 
 /** What each source attribute calls for, and who acts (the owner's route table). */
 const ROUTES = Object.freeze({
@@ -319,7 +321,8 @@ export async function tickErrors(deps) {
     }
   }
 
-  for (const error of await store.errorsWithoutConfirm(20)) {
+  // A minute's grace: a new error's own parse tick queues its confirmation.
+  for (const error of await store.errorsWithoutConfirm(20, new Date(now.getTime() - CONFIRM_GRACE_MS))) {
     const confirm = await confirmationFor(deps, error);
     if (!confirm) continue;
     await store.updateError(error.id, { confirm });
