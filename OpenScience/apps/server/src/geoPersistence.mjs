@@ -435,6 +435,7 @@ CREATE TABLE IF NOT EXISTS evimed_geo.media (
   PRIMARY KEY (media_type, resource_id)
 );
 CREATE INDEX IF NOT EXISTS geo_media_domain_idx ON evimed_geo.media (domain);
+CREATE INDEX IF NOT EXISTS geo_media_available_idx ON evimed_geo.media (available, blacklisted, price_cny);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.media_outcomes (
   media_type  text NOT NULL,
@@ -467,6 +468,7 @@ CREATE TABLE IF NOT EXISTS evimed_geo.orders (
 );
 CREATE INDEX IF NOT EXISTS geo_orders_project_idx ON evimed_geo.orders (geo_project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS geo_orders_state_idx ON evimed_geo.orders (state);
+CREATE INDEX IF NOT EXISTS geo_orders_outlet_idx ON evimed_geo.orders (media_type, resource_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.order_events (
   id         text PRIMARY KEY,
@@ -490,6 +492,8 @@ CREATE TABLE IF NOT EXISTS evimed_geo.ledger (
 );
 CREATE INDEX IF NOT EXISTS geo_ledger_project_idx ON evimed_geo.ledger (geo_project_id, created_at);
 CREATE INDEX IF NOT EXISTS geo_ledger_order_idx ON evimed_geo.ledger (order_id);
+CREATE INDEX IF NOT EXISTS geo_ledger_kind_idx ON evimed_geo.ledger (geo_project_id, kind);
+CREATE INDEX IF NOT EXISTS geo_ledger_created_idx ON evimed_geo.ledger (created_at);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.topups (
   id             text PRIMARY KEY,
