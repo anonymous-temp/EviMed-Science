@@ -6,7 +6,7 @@ import test from "node:test";
 import { geoConstant } from "@evimed/domain";
 import { GEO_JUDGE_INSTRUCTIONS, GeoJudge, judgeFailureIsTheAnswers } from "../src/geoJudge.mjs";
 import { balanceRows } from "../src/geoMetricsJob.mjs";
-import { GEO_PROBE_BREAK_AFTER, GeoProbeBreaker } from "../src/geoProbeQueue.mjs";
+import { GEO_PROBE_BREAK_AFTER, GeoProbeBreaker, engineAnswers } from "../src/geoProbeQueue.mjs";
 
 test("the circuit breaker's threshold is the owner's five, read from the domain's table", () => {
   assert.equal(geoConstant("PROBE_CIRCUIT_BREAK_CONSECUTIVE"), 5);
@@ -80,4 +80,13 @@ test("balanced rows keep only questions answered on every engine, one answer per
   assert.equal(balance.rows.filter((entry) => entry.questionId === "q3" && entry.engine === "doubao").length, 1);
   assert.equal(balance.rows.find((entry) => entry.questionId === "q3" && entry.engine === "doubao")?.askedAt, "t2");
   assert.equal(balance.deduped.length, rows.length - 1, "per engine every answer counts, only the duplicate goes");
+});
+
+test("a paused engine resumes only when a test ask comes back, not because its tab exists", async () => {
+  const stuck = { ask: async () => ({ results: [{ status: "failed", answer: "", error: "发问后 45000ms 内未出现用户气泡" }] }) };
+  const answering = { ask: async (/** @type {any} */ request) => ({ results: [{ status: "ok", answer: `你好！有什么可以帮你？（${request.providers[0]}）` }] }) };
+  const busy = { ask: async () => { throw Object.assign(new Error("busy"), { code: "geo_probe_busy" }); } };
+  assert.equal(await engineAnswers(stuck, "doubao", 1_000), false, "a stuck tab stays paused");
+  assert.equal(await engineAnswers(busy, "doubao", 1_000), false, "a busy host is checked again later");
+  assert.equal(await engineAnswers(answering, "doubao", 1_000), true);
 });
