@@ -369,8 +369,9 @@ test("an engine that keeps returning a login page is paused, holds its round unt
   await seed("geo_c");
   /** @type {Record<string, string>} */
   let tabs = { deepseek: "tab_found", doubao: "no_tab" };
+  let doubaoAnswer = LOGIN;
   const h = await harness({
-    answers: ({ engine }) => (engine === "doubao" ? { answer: LOGIN } : { answer: A_Q3 }),
+    answers: ({ engine }) => (engine === "doubao" ? { answer: doubaoAnswer } : { answer: A_Q3 }),
     providers: () => tabs,
   });
   try {
@@ -412,8 +413,14 @@ test("an engine that keeps returning a login page is paused, holds its round unt
     assert.deepEqual(pick(cell(cells, { metric_id: "M-20", scope: "project", variant: null })), { numerator: 3, denominator: 3, status: "insufficient" },
       "the paused engine's answers are out of the round altogether");
 
-    // Logged in again: resumed at the next re-check.
+    // The tab is listed again but still shows the login page: a listed tab is not enough.
     tabs = { deepseek: "tab_found", doubao: "tab_found" };
+    h.clock.advance(10 * 60_000);
+    const listedOnly = await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.deepEqual(listedOnly.resumed, [], "a tab that exists but does not answer stays paused");
+
+    // Logged in again: the test ask answers, and it resumes at the next re-check.
+    doubaoAnswer = A_Q3;
     h.clock.advance(10 * 60_000);
     const resumed = await tickProbe({ ...h.deps, maxAsks: 1 });
     assert.deepEqual(resumed.resumed, ["doubao"]);

@@ -538,7 +538,12 @@ async function probePass(deps, state, upstream, counts) {
       ready = (await upstream.providers({ signal: AbortSignal.timeout(Math.min(timeoutMs, 60_000)) })).ready;
     } catch { /* still paused; checked again in ten minutes */ }
     for (const engine of due) {
-      if (state.breaker.checked(engine, start.getTime(), ready.includes(engine))) counts.resumed.push(engine);
+      // The providers list says only that a tab exists. A tab can exist and be
+      // stuck (production, 2026-09-25: 豆包's tab answered every ask with
+      // 「45000ms 内未出现用户气泡」 while /providers kept saying tab_found), so an
+      // engine resumes only when one short test ask actually comes back.
+      const healthy = ready.includes(engine) && await engineAnswers(upstream, engine, Math.min(timeoutMs, 120_000));
+      if (state.breaker.checked(engine, start.getTime(), healthy)) counts.resumed.push(engine);
     }
   }
 
@@ -563,6 +568,25 @@ async function probePass(deps, state, upstream, counts) {
     await store.startRound(job.roundId, at, zonedDay(at, zoneOf(config)));
     const next = await askJob(deps, state, upstream, job, counts, timeoutMs);
     if (next === "stop") return;
+  }
+}
+
+/**
+ * Whether an engine answers at all: one short question on a new chat, and a
+ * valid answer back. Busy, failed, suspect or thrown all read as "not yet".
+ * @param {{ ask: (request: Record<string, any>) => Promise<{ results: any[] }> }} upstream @param {string} engine @param {number} timeoutMs
+ * @returns {Promise<boolean>}
+ */
+export async function engineAnswers(upstream, engine, timeoutMs) {
+  try {
+    const asked = await upstream.ask({ question: "请用一句话介绍一下你自己。", providers: [engine], deep: 0, newChat: 1, signal: AbortSignal.timeout(timeoutMs) });
+    const row = asked?.results?.[0];
+    // A short self-introduction is an answer; an empty shell, a login or
+    // captcha page, a capacity notice or bare page chrome is not.
+    const verdict = classifyProbeAnswer({ rawStatus: row?.status, answer: String(row?.answer ?? "") });
+    return verdict.status === "valid" || verdict.status === "refusal" || verdict.reason === "too_short";
+  } catch {
+    return false;
   }
 }
 
