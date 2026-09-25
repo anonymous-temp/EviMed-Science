@@ -91,6 +91,46 @@ export const AUTOPILOT_TASK_TYPES = Object.freeze([
   'signal-monitoring',
 ])
 
+/**
+ * Which capability an autopilot episode of each task type runs.
+ *
+ * An agenda names task types, never a capability, so this table is the whole
+ * of the choice — and a capability that declares a task type the table sends
+ * elsewhere has declared something that never happens. `geo-content` declared
+ * `signal-monitoring` for GEO citation monitoring while the table sent that
+ * type to adverse-event analysis, so a GEO agenda item ran `adr-analysis` and
+ * GEO monitoring never ran at all (build spec 2026-09-25 §1). GEO monitoring
+ * is now the 「循证 GEO」 module's own scheduler, `geo-content` declares no
+ * task type, and `apps/server/test/autopilotEpisodeCapabilities.test.mjs`
+ * holds every declaration against this table.
+ *
+ * Kept as a table rather than derived from the declarations because several
+ * capabilities declare the same type (`evidence-update`: evidence synthesis and
+ * meta-analysis) and which one an unattended episode runs is a product
+ * decision, not a tie to break by sort order.
+ * @type {Readonly<Record<typeof AUTOPILOT_TASK_TYPES[number], string>>}
+ */
+export const AUTOPILOT_EPISODE_CAPABILITIES = Object.freeze({
+  'literature-sentinel': 'clinical-evidence-synthesis',
+  'evidence-update': 'clinical-evidence-synthesis',
+  'data-prospecting': 'dataset-research-scoping',
+  'hypothesis-suggestion': 'research-topic-selection',
+  'writing-pipeline': 'manuscript-support',
+  'signal-monitoring': 'adr-analysis',
+})
+
+/**
+ * The capability an episode of this task type runs, or null for a type the
+ * allocator does not know.
+ * @param {string} taskType @returns {string | null}
+ */
+export function autopilotEpisodeCapability(taskType) {
+  const key = String(taskType ?? '')
+  return Object.hasOwn(AUTOPILOT_EPISODE_CAPABILITIES, key)
+    ? AUTOPILOT_EPISODE_CAPABILITIES[/** @type {keyof typeof AUTOPILOT_EPISODE_CAPABILITIES} */ (key)]
+    : null
+}
+
 /** Cost classes used by the daily allocator. */
 export const COST_CLASSES = Object.freeze(['low', 'medium', 'high'])
 
