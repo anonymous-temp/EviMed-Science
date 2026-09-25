@@ -31,7 +31,7 @@ test("the defaults are the build spec's: off, operators only once on, five engin
   assert.deepEqual(pick(configUnder({})), {
     geoEnabled: false, geoAudience: "operators", geoPreviewUsers: [], geoPollMs: 5_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 20,
     geoEngines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"], geoNightWindow: "22-07", geoTimeZone: "Asia/Shanghai",
-    geoWeeklyAskCap: 1_500, geoSocialUrl: "", geoSocialTimeoutMs: 120_000, geoInclusionEngines: [], mediaMarketUrl: "", mediaMarketApiKeyFile: "",
+    geoWeeklyAskCap: 1_500, geoSocialUrl: "", geoSocialTimeoutMs: 140_000, geoInclusionEngines: [], mediaMarketUrl: "", mediaMarketApiKeyFile: "",
     mediaMarketBalanceCapCny: null,
   });
 });

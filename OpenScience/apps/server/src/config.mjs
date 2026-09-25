@@ -385,7 +385,7 @@ function geoSettings(overrides) {
     // Asks one project may make in a week (spec §5): the probe host is shared.
     geoWeeklyAskCap: integer("geoWeeklyAskCap", "OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP", 1_500, 0, 1_000_000),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
-    geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 120_000, 5_000,
+    geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.

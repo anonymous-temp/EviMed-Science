@@ -88,8 +88,9 @@ class GeoToolDefinitionTests(unittest.TestCase):
         self.assertEqual(definitions["geo_read"]["inputSchema"]["properties"]["what"]["enum"], list(geo_platform.READ_WHATS))
         self.assertEqual(definitions["geo_write"]["inputSchema"]["properties"]["what"]["enum"], list(geo_platform.WRITE_WHATS))
         social = definitions["social_posts_search"]["inputSchema"]
-        self.assertEqual(social["required"], ["query"])
-        self.assertEqual(social["properties"]["platforms"]["items"]["enum"], list(geo_platform.SOCIAL_PLATFORMS))
+        self.assertEqual(social["required"], ["query", "platform"])
+        self.assertEqual(social["properties"]["platform"]["enum"], list(geo_platform.SOCIAL_PLATFORMS))
+        self.assertIn("One platform per call", definitions["social_posts_search"]["description"])
         self.assertIn("never zero", definitions["social_posts_search"]["description"])
 
     def test_without_a_route_every_tool_says_disabled_without_asking(self):
@@ -97,7 +98,7 @@ class GeoToolDefinitionTests(unittest.TestCase):
             for call in (
                 lambda: geo_platform.read({"what": "claims"}),
                 lambda: geo_platform.write({"what": "step", "data": {"step": "evidence", "status": "running"}}),
-                lambda: geo_platform.social_search({"query": "降糖药"}),
+                lambda: geo_platform.social_search({"query": "降糖药", "platform": "xhs"}),
             ):
                 with self.assertRaises(geo_platform.GeoPlatformError) as caught:
                     call()
@@ -179,7 +180,7 @@ class SocialPostsTests(_GatewayCase):
                 "engagement": {"likes": 3, "favs": 1, "shares": 0, "comments": 2}, "collectedAt": "2026-09-25T02:00:00.000Z", "comments": ["饭后"]}
         _Gateway.answers["social"] = (200, {"data": {"query": "二甲双胍", "sort": "hot", "status": "collected",
             "platforms": [{"platform": "xhs", "status": "collected", "posts": 1}], "posts": [post]}})
-        result = self.server.call_tool("social_posts_search", {"query": "二甲双胍", "platforms": ["xhs"], "limit": 5})
+        result = self.server.call_tool("social_posts_search", {"query": "二甲双胍", "platform": "xhs", "limit": 5})
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["data"]["posts"], [post])
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/geo/v1/social")
@@ -188,14 +189,14 @@ class SocialPostsTests(_GatewayCase):
     def test_a_channel_that_did_not_answer_is_no_signal_never_zero(self):
         _Gateway.answers["social"] = (200, {"data": {"status": "request_failed", "platforms": [{"platform": "xhs", "status": "request_failed", "posts": 0}],
             "posts": []}})
-        result = self.server.call_tool("social_posts_search", {"query": "降糖药"})
+        result = self.server.call_tool("social_posts_search", {"query": "降糖药", "platform": "zhihu"})
         self.assertEqual(result["status"], "warning")
         self.assertIn("无信号", " ".join(result["warnings"]))
         self.assertEqual(result["data"]["status"], "request_failed")
 
     def test_an_unconfigured_channel_is_not_retried(self):
         _Gateway.answers["social"] = (503, {"error": "The social channel is not configured.", "code": "social_posts_unconfigured"})
-        result = self.server.call_tool("social_posts_search", {"query": "降糖药"})
+        result = self.server.call_tool("social_posts_search", {"query": "降糖药", "platform": "zhihu"})
         self.assertEqual(result["error"]["code"], "social_posts_unconfigured")
         self.assertFalse(result["error"]["retryable"])
 

@@ -8,7 +8,7 @@
 # own tool list by `display.listed: false` — `visibility: internal` would make
 # that binding answer 403.
 id: geo-insight
-version: 1.0.2
+version: 1.0.3
 title: GEO Insight
 category: Content Production
 description: Steps 1–3 of an evidence-based GEO project for one medicine — verified identity and label, a claim
