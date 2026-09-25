@@ -180,9 +180,21 @@ function fields(source, issues, where) {
       }
       return out;
     },
-    /** @param {readonly string[]} allowed */
+    /**
+     * Fields the platform does not store are dropped with one notice, and the
+     * item is still written: the owner's method keeps richer records than the
+     * project's tables (a claim carries its expiry triggers, reviewer, three
+     * screens …), and refusing the whole item for them lost 77 of 80 claims
+     * on the first production run (2026-09-25). The full record stays in the
+     * deliverable's own files.
+     * @param {readonly string[]} allowed
+     */
     unknown(allowed) {
-      for (const key of Object.keys(source)) if (!allowed.includes(key)) refuse(key, "unknown_field", `${key} is not a field of this item.`);
+      const ignored = Object.keys(source).filter((key) => !allowed.includes(key));
+      if (ignored.length) {
+        issues.push({ ...where, field: ignored.slice(0, 20).join(","), code: "ignored_fields",
+          message: `Not stored by the platform (kept only in the files): ${ignored.slice(0, 20).join(", ")}${ignored.length > 20 ? " …" : ""}.` });
+      }
     },
   };
 }

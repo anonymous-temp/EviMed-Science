@@ -80,11 +80,11 @@ test("a write's calls it cannot read are refused whole; its items are refused on
     { claimKey: "extra", statement: "s", quote: "q", sourceRef: "r", secret: true },
   ] });
   assert.equal(result.ok, true);
-  assert.equal(result.ids.length, 1, "only the valid claim is written");
+  assert.equal(result.ids.length, 2, "the valid claim and the one with an extra field are written");
   const refusals = result.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]);
   assert.deepEqual(refusals, [
     [1, "claimKey", "invalid"], [1, "sourceKind", "unknown_value"], [2, "quote", "missing"], [3, "claimKey", "duplicate"], [4, undefined, "invalid"],
-    [5, "secret", "unknown_field"],
+    [5, "secret", "ignored_fields"],
   ]);
 });
 
@@ -112,7 +112,7 @@ test("the product merges field by field, a competitor is refused alone, and a br
     competitors: [{ brandName: "替尔泊肽", reason: "同适应证" }, { reason: "no name" }], dosage: "2mg",
   } }, async (/** @type {string} */ userId, /** @type {string} */ projectId, /** @type {string} */ name) => { renamed.push([userId, projectId, name]); });
   assert.equal(result.ok, true);
-  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["dosage", "unknown_field"], ["brandName", "missing"]]);
+  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["dosage", "ignored_fields"], ["brandName", "missing"]]);
   const saved = await store.getProject(USER, project.id);
   assert.equal(saved?.product.brandName, "玛仕度肽");
   assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["替尔泊肽"]);
@@ -229,9 +229,11 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
     { domain: "39.net", kind: "news" },
     { domain: "fake-times.cn", impostor: true, blacklistReason: "冒名站", layer: "anchor", cited: { deepseek: 9 } },
   ] });
-  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[1, "invalid"], [2, "duplicate"], [3, "unknown_field"]],
-    "measured counts are the platform's, not the run's");
-  assert.deepEqual((await store.listSources(project.id)).map((source) => source.domain), ["39.net"]);
+  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[1, "invalid"], [2, "duplicate"], [3, "ignored_fields"]],
+    "measured counts are the platform's, not the run's: dropped, the rest of the source kept");
+  const listed = await store.listSources(project.id);
+  assert.deepEqual(listed.map((source) => source.domain).sort(), ["39.net", "fake-times.cn"]);
+  assert.deepEqual(listed.find((source) => source.domain === "fake-times.cn")?.cited ?? {}, {}, "no count came from the run");
 
   const claims = await write(project, "claims", { items: [{ claimKey: "c", statement: "s", quote: "q", sourceRef: "r" }] });
   await write(project, "questions", { data: { groups: [{ pool: "P1", name: "g", questions: [{ text: "q", isMeasured: true }] }] } });

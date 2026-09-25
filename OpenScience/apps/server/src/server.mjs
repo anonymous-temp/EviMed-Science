@@ -143,6 +143,7 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // measurement, market and orchestration packages attach to the composed
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
+import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -1440,7 +1441,8 @@ export function createWebApiApp(overrides = {}) {
   // each route or loop that needs one reads it at the moment it is needed.
   /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
-   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string> } | null} */
+   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
+   *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase });
@@ -1454,6 +1456,7 @@ export function createWebApiApp(overrides = {}) {
       orchestrator: null,
       market: null,
       exporter: null,
+      importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`) }),
       // A project made before its brand was known is named by the brand once
       // the run writes it; a name the researcher chose is left alone.
       renameProject: async (userId, projectId, name) => {
@@ -1900,6 +1903,11 @@ export function createWebApiApp(overrides = {}) {
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
       if (frontier && !isInternalProject(project.id) && isResearcherRun(run)) frontier.profiles.noteConversation(project.userId, run);
+      // A finished run in a GEO project: the claim library its geo-insight
+      // deliverable holds is registered from the file (geoDeliveryImport.mjs).
+      if (geo && !isInternalProject(project.id)) {
+        geo.importDelivery(project, run).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
+      }
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as
