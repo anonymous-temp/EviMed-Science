@@ -1150,6 +1150,11 @@ export class GeoOrchestrator {
   async #dispatch(project, spec) {
     const claim = await this.store.transaction(async (/** @type {any} */ client) => {
       await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-run:' || $1))`, [project.id]);
+      // Read again here: a tick reads the project when it starts, and a pause
+      // that lands while it folds the last run must still hold the next one
+      // (production, 2026-09-25: batch 4 went out four seconds after 暂停).
+      const status = await client.query(`SELECT status FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, [project.id]);
+      if (status.rows[0]?.status !== "active") return { busy: true };
       const active = await client.query(`SELECT key FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND kind = 'run'
         AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2))) LIMIT 1`, [project.id, GEO_RUN_RULES.staleClaimMinutes]);
       if (active.rows.length) return { busy: true };
