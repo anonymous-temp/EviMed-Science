@@ -25,8 +25,10 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  public feed on its own schedule, billed to an operator's internal project
  *  and held by the module's own daily budget: counted against that operator's
  *  caps, the feed would spend their research allowance, and their research
- *  would starve the feed. Bound as a query parameter, never spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier"]);
+ *  would starve the feed. 「循证 GEO」's rows (`geo`) are the same: the
+ *  platform parsing and judging measured answers on its own schedule, held by
+ *  the module's own daily budget. Bound as a query parameter, never spliced. */
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /**
