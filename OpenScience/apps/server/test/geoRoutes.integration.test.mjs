@@ -147,6 +147,9 @@ async function seededProject() {
   const questions = await write("questions", { data: { groups } });
   const lock = await write("lock_questions", { data: {} });
   assert.equal(lock.ok, true, JSON.stringify(lock.issues));
+  // The strategy and the tiers are written from a finished baseline.
+  await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status, surface) VALUES ($1, $2, $3, 'baseline', 'done', '{}'::jsonb)`,
+    [`rb-${project.id}`, ALICE, project.id]);
   await write("strategy", { data: {
     battlefield: { groups: ["语义群 2"], reason: "证据最硬" },
     expectations: [{ engine: "deepseek", promise: "讲对，不承诺提及", layers: ["anchor", "coverage"] }],
@@ -155,6 +158,8 @@ async function seededProject() {
   await write("targets", { items: ["1", "2", "3"].flatMap((tier) => [
     { tier, metricId: "M-19", baseline: 20, target: 20 + Number(tier) * 5, placements: 5 * Number(tier), budgetCny: 1_000 * Number(tier), dataType: "forecast" },
   ]) });
+  // The stand-in baseline has done its job; the measurement tests seed their own rounds.
+  await database.query(`DELETE FROM evimed_geo.rounds WHERE id = $1`, [`rb-${project.id}`]);
   const articles = await write("articles", { items: [
     { path: "deliverables/geo-content/articles/card-1.md", layer: "card", title: "玛仕度肽怎么用", groupId: questions.ids[0], claimIds: [claims.ids[0]],
       safety: "clear", contentSha256: "a".repeat(64) },
