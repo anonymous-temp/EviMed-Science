@@ -63,7 +63,7 @@ test("a finished insight run's claims.json is registered in full, once, through 
     "a run still going is not imported");
   const result = await importDelivery(project, { id: "run_1", status: "succeeded", deliverables: [{ id: "geo-insight", capability: "geo-insight" },
     { id: "other", capability: "clinical-evidence-synthesis" }] });
-  assert.deepEqual(result, { imported: 80, issues: 1 }, "every valid claim, extra fields dropped; the one without a quote refused alone");
+  assert.deepEqual(result, { imported: 80, issues: 1, gated: 0 }, "every valid claim, extra fields dropped; the one without a quote refused alone");
   assert.equal((await store.listClaims(created.id)).length, 80);
 
   // A second finished run that delivered the same file: no new versions.
@@ -80,7 +80,7 @@ test("a run that ended before the import existed is picked up when the project's
     readFile: async (_root, file) => { if (file !== "deliverables/geo-insight/claims.json") throw new Error("missing"); return JSON.stringify({ claims: [claim(1), claim(2)] }); },
     listInsightFolders: async () => ["geo-insight"] });
   const result = await importDelivery({ id: `q-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "later", status: "succeeded", deliverables: [] });
-  assert.deepEqual(result, { imported: 2, issues: 0 });
+  assert.deepEqual(result, { imported: 2, issues: 0, gated: 0 });
   assert.equal((await store.listClaims(created.id)).length, 2);
 });
 
@@ -115,4 +115,18 @@ test("the run's competitors come with its claims when the project has none", opt
   await importDelivery({ id: `r-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "with-rivals", status: "succeeded", deliverables: [] });
   const saved = await store.getProject(USER, created.id);
   assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["诺和盈"]);
+});
+
+test("an article registered before its deliverable was submitted takes the gate's verdict when the run ends", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `s-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  await database.query(`INSERT INTO evimed_geo.question_groups (id, user_id, geo_project_id, set_version, pool, name) VALUES ($1, $2, $3, 1, 'P2', 'g')`,
+    [`gg-${run}`, USER, created.id]);
+  const [articleId] = await store.registerArticles(USER, created.id, [{ path: "deliverables/geo-content/articles/a.md", layer: "card", title: "t",
+    groupId: `gg-${run}`, claimIds: [], gate: "unverified", safety: "clear", contentSha256: "a".repeat(64), runId: "run_c", deliverableId: "geo-content" }]);
+  const importDelivery = createGeoDeliveryImport({ store, readFile: async () => { throw new Error("none"); }, listInsightFolders: async () => [],
+    articleGate: async (_project, ref) => (ref.deliverableId === "geo-content" ? "passed" : "unverified") });
+  const result = await importDelivery({ id: `s-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "run_c", status: "succeeded", deliverables: [] });
+  assert.equal(result?.gated, 1);
+  const article = await store.getArticle(created.id, articleId);
+  assert.deepEqual([article?.gate, article?.status], ["passed", "publishable"]);
 });

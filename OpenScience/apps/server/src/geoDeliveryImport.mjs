@@ -90,15 +90,17 @@ export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFol
 /**
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
- *   listInsightFolders?: (workspaceDir: string) => Promise<string[]> }} deps
+ *   listInsightFolders?: (workspaceDir: string) => Promise<string[]>,
+ *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null }} deps
  */
-export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders }) {
+export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders,
+  articleGate = null }) {
   /** Runs already imported by this process; the writes are idempotent either way. */
   const seen = new Set();
   /**
    * @param {{ id: string, userId: string, workspaceDir: string }} project the control-plane project
    * @param {Record<string, any>} run
-   * @returns {Promise<{ imported: number, issues: number } | null>}
+   * @returns {Promise<{ imported: number, issues: number, gated?: number } | null>}
    */
   return async function importDelivery(project, run) {
     if (!run?.id || !TERMINAL.has(String(run.status ?? "")) || seen.has(run.id)) return null;
@@ -147,6 +149,22 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       }
     }
     if (imported || issues) report(`claims imported ${imported}, refused ${issues}`);
-    return { imported, issues };
+    // The articles written in this run have a verdict now (production,
+    // 2026-09-25: five articles stayed 「draft · unverified」 after their
+    // deliverable was delivered with a pass, so nothing was publishable).
+    let gated = 0;
+    if (articleGate) {
+      for (const article of await store.listArticles(geoProject.id)) {
+        if (article.gate === "passed" || !["draft", "publishable"].includes(String(article.status))) continue;
+        try {
+          const gate = await articleGate(geoProject, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path });
+          if (["passed", "unverified", "failed"].includes(String(gate)) && await store.refreshArticleGate(geoProject.id, article.id, /** @type {any} */ (gate))) gated += 1;
+        } catch (error) {
+          report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_article_gate_failed");
+        }
+      }
+      if (gated) report(`article gates refreshed ${gated}`);
+    }
+    return { imported, issues, gated };
   };
 }

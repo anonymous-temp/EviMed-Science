@@ -838,6 +838,27 @@ export class GeoStore {
   }
 
   /**
+   * An article's gate as the run ledger now records it, and the status that
+   * follows (publishable exactly when passed and no safety finding is open; a
+   * placed or published article keeps its status). Articles are registered
+   * while their run is still going, before the deliverable is submitted, so
+   * the first read is `unverified`; the run's end is when the verdict exists.
+   * @param {string} geoId @param {string} articleId @param {"passed" | "unverified" | "failed"} gate
+   * @returns {Promise<ReturnType<typeof geoArticleFromRow> | null>} null when nothing changed
+   */
+  async refreshArticleGate(geoId, articleId, gate) {
+    const update = await this.query(`UPDATE evimed_geo.articles
+      SET gate = $3,
+          status = CASE WHEN status IN ('draft', 'publishable')
+            THEN CASE WHEN $3 = 'passed' AND safety IN ('clear', 'released') THEN 'publishable' ELSE 'draft' END
+            ELSE status END,
+          updated_at = now()
+      WHERE geo_project_id = $1 AND id = $2 AND gate IS DISTINCT FROM $3
+      RETURNING *`, [geoId, articleId, gate]);
+    return update.rows[0] ? geoArticleFromRow(update.rows[0]) : null;
+  }
+
+  /**
    * Move an article's status or safety, only from the states given (a
    * compare-and-set, so a market transition in between is not overwritten).
    * @param {string} geoId @param {string} articleId
