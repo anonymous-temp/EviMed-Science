@@ -170,6 +170,8 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   ]);
   assert.deepEqual(user.map((input) => input.idempotencyKey), ["geo:geo_1:diagnosis:r1", "geo:geo_1:targets:1", "geo:geo_1:first-publishable",
     "geo:geo_1:first-cited", "geo:wrong_ours:e1:first", "geo:wrong_ours:e2:first", "geo:article-safety:a1"]);
+  assert.deepEqual([user[2].body, user[2].source.id], ["3 篇稿件可以发布了，可以在「内容」里查看。", "geo_1/content"],
+    "with no media market configured, no budget is asked for");
   assert.deepEqual(user[4].source, { type: "geo", id: "geo_1/answers/s1" }, "a 讲错我方 opens on its answer");
   assert.equal(user[4].groupKey, undefined, "an S3 stands alone");
   assert.match(String(user[5].groupKey), /^geo-wrong:geo_1:\d{4}-\d{2}-\d{2}$/, "lower severities fold into one line a day");
