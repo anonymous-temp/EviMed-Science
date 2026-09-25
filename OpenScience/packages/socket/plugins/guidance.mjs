@@ -54,6 +54,7 @@ export const inject = ['systemPrompt']
  * @property {boolean} askUserEnabled
  * @property {boolean} capsuleActive
  * @property {boolean} reviewEnabled
+ * @property {string} [disabledToolsFile]
  * @property {string} answerPersonaDir
  */
 
@@ -89,7 +90,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
-  const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(await readDisabledTools(ctx, config.disabledToolsFile)))
+  const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(await readDisabledTools(ctx, config.disabledToolsFile ?? '')))
   const text = buildGuidanceText(capabilities, {
     askUserEnabled: config.askUserEnabled,
     capsuleActive: config.capsuleActive,
