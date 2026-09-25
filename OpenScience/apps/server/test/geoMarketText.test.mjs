@@ -82,3 +82,12 @@ test("a number glued to more digits in the page is not a match, and multiplicity
   assert.equal(compareProtectedSpans(extractProtectedSpans("| 1-4 | 0.25 mg |", { terms: [] }), "1-4\n0.25 mg").missing.length, 0,
     "cells on separate lines are not glued");
 });
+
+test("extraction is linear: a 700 KB body with sixty thousand spans takes well under a second", () => {
+  const text = "司美格鲁肽每周注射一次，每次 0.5 mg。".repeat(30_000);
+  const started = performance.now();
+  const spans = extractProtectedSpans(text, { terms });
+  const elapsed = performance.now() - started;
+  assert.ok(elapsed < 1_500, `took ${Math.round(elapsed)} ms`);
+  assert.equal(spans.find((span) => span.text === "司美格鲁肽")?.count, 30_000);
+});

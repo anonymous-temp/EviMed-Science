@@ -5,6 +5,11 @@
 // geoMarketScenarios.mjs run against this double and against PostgreSQL alike.
 import {
   ARTICLE_STATUSES,
+  EPSILON_CNY,
+  GEO_ORDER_ARTICLE_LIVE_STATES,
+  articleLiveError,
+  dailyReserved,
+  projectMoney,
   GEO_MARKET_STORE_LIMITS,
 
   MEDIA_TYPES,
@@ -45,6 +50,7 @@ export class GeoMarketStoreDouble {
     /** @type {any[]} */ this.ledger = [];
     /** @type {Map<string, any>} */ this.topups = new Map();
     /** @type {Map<string, any>} */ this.reconciliations = new Map();
+    /** @type {Set<string>} projects whose market lock is held */ this.locks = new Set();
   }
 
   async ready() {}
@@ -278,7 +284,52 @@ export class GeoMarketStoreDouble {
       acceptedAt: first((event) => event.toState === "accepted" && event.fromState !== "accepted"),
       publishedAt: first((event) => event.toState === "published" && event.fromState !== "published"),
       stateAt: last((event) => event.toState === order.state && event.fromState !== event.toState),
+      stateReason: events.filter((event) => event.toState === order.state && event.fromState !== event.toState)
+        .sort((a, b) => byTime(a.at, b.at) || (a.id < b.id ? -1 : 1)).at(-1)?.detail?.reason ?? null,
+      refundSeenAt: first((event) => event.detail?.phase === "refund_seen"),
     };
+  }
+
+  /** The partial unique index: one order per article in a live state. @param {string} articleId @param {string} state @param {string} [exceptId] */
+  #checkArticleLive(articleId, state, exceptId) {
+    if (!GEO_ORDER_ARTICLE_LIVE_STATES.includes(state)) return;
+    for (const other of this.orders.values()) {
+      if (other.id !== exceptId && other.articleId === articleId && GEO_ORDER_ARTICLE_LIVE_STATES.includes(other.state)) throw articleLiveError();
+    }
+  }
+
+  /** @param {string} orderId @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any> }} move */
+  async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {} }) {
+    const when = assertAt(at);
+    const since = assertAt(dayStart);
+    assertDetail(reserveDetail);
+    assertDetail(sendDetail);
+    assertOrderPatch(patch);
+    const order = this.orders.get(String(orderId));
+    if (!order || order.state !== "planned") return null;
+    const project = this.projects.get(order.geoProjectId);
+    if (!project || project.deletedAt) return { refused: "project_missing" };
+    const money = projectMoney(project, await this.ledgerSums({ geoProjectId: order.geoProjectId }));
+    if (money.availableCny == null || money.availableCny + EPSILON_CNY < order.reserveCny) return { refused: "budget_exhausted" };
+    if (money.dailyCny != null && dailyReserved(await this.ledgerSums({ geoProjectId: order.geoProjectId, since })) + order.reserveCny > money.dailyCny + EPSILON_CNY) {
+      return { refused: "daily_cap_reached" };
+    }
+    Object.assign(order, clone(patch), { state: "reserved", updatedAt: when });
+    this.events.push({ id: orderedId("ge_"), orderId: order.id, at: when, fromState: "planned", toState: "reserved", detail: clone(reserveDetail) });
+    this.events.push({ id: orderedId("ge_"), orderId: order.id, at: when, fromState: "reserved", toState: "reserved", detail: { ...clone(sendDetail), phase: "send_started" } });
+    this.ledger.push(assertLedgerRow({ kind: "reserve", amountCny: order.reserveCny, userId: order.userId, geoProjectId: order.geoProjectId, orderId: order.id }, when));
+    return { order: this.#orderView(order) };
+  }
+
+  /** @template T @param {string} geoProjectId @param {() => Promise<T>} operation */
+  async withProjectLock(geoProjectId, operation) {
+    if (this.locks.has(geoProjectId)) return { locked: false };
+    this.locks.add(geoProjectId);
+    try {
+      return { locked: true, value: await operation() };
+    } finally {
+      this.locks.delete(geoProjectId);
+    }
   }
 
   /** @param {Array<Record<string, any>>} orders @param {string} at */
@@ -290,6 +341,13 @@ export class GeoMarketStoreDouble {
       mediaType: assertOneOf(order.mediaType, MEDIA_TYPES, "media type"), resourceId: String(order.resourceId),
       priceCny: assertAmount(order.priceCny), reserveCny: assertAmount(order.reserveCny), detail: assertDetail(order.detail ?? {}),
     }));
+    // One transaction: every row is checked before any is written.
+    const seen = new Set();
+    for (const row of rows) {
+      if (seen.has(row.articleId)) throw articleLiveError();
+      seen.add(row.articleId);
+      this.#checkArticleLive(row.articleId, "planned");
+    }
     const created = [];
     for (const row of rows) {
       if (this.orders.has(row.id)) throw storeError("duplicate key value violates unique constraint");
@@ -325,6 +383,7 @@ export class GeoMarketStoreDouble {
     const order = this.orders.get(String(orderId));
     if (!order || !from.includes(order.state)) return null;
     this.#checkNidUnique(patch, order.id);
+    this.#checkArticleLive(order.articleId, to, order.id);
     const fromState = order.state;
     Object.assign(order, clone(patch), { state: to, updatedAt: when });
     this.events.push({ id: orderedId("ge_"), orderId: order.id, at: when, fromState, toState: to, detail: clone(detail) });
@@ -332,16 +391,17 @@ export class GeoMarketStoreDouble {
     return this.#orderView(order);
   }
 
-  /** @param {string} orderId @param {{ at: string, detail: Record<string, any>, patch?: Record<string, any> }} note */
-  async annotateOrder(orderId, { at, detail, patch = {} }) {
+  /** @param {string} orderId @param {{ at: string, detail: Record<string, any>, patch?: Record<string, any>, expectState?: string }} note */
+  async annotateOrder(orderId, { at, detail, patch = {}, expectState }) {
     const when = assertAt(at);
     assertDetail(detail);
     assertOrderPatch(patch);
+    if (expectState != null) assertOneOf(expectState, ORDER_STATES, "order state");
     for (const key of ["vendorOrderNid", "reserveCny", "settledCny"]) {
       if (Object.hasOwn(patch, key)) throw storeError(`An annotation cannot set ${key}.`);
     }
     const order = this.orders.get(String(orderId));
-    if (!order) return null;
+    if (!order || (expectState != null && order.state !== expectState)) return null;
     Object.assign(order, clone(patch), { updatedAt: when });
     const event = { id: orderedId("ge_"), orderId: order.id, at: when, fromState: order.state, toState: order.state, detail: clone(detail) };
     this.events.push(event);
