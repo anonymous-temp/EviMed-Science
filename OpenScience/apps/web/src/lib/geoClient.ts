@@ -66,6 +66,11 @@ export interface GeoCell {
   ciHigh: number | null;
   status: GeoCellStatus;
   dataType: GeoDataType;
+  /**
+   * The answers the number rests on (build spec §0 ruling 8), when the server
+   * sends them: the first is where a click on the number lands.
+   */
+  snapshotIds?: string[];
 }
 
 /** One step of the program (`projects.steps[key]`, SPEC §2.2). */
@@ -298,7 +303,15 @@ export interface GeoAnswer {
     /** The screenshot's content address, when the server sends it. */
     screenshotSha256?: string | null;
   };
-  siblings: Array<{ engine: GeoEngine; snapshotId: string | null; status: GeoSnapshotStatus | "absent" }>;
+  siblings: Array<{
+    engine: GeoEngine;
+    snapshotId: string | null;
+    status: GeoSnapshotStatus | "absent";
+    /** What that engine's answer did for us, when the server says: 「提及」「讲错 1 处」「引用你」. */
+    mentionsOurs?: boolean | null;
+    wrongOurs?: number | null;
+    citesOurs?: boolean | null;
+  }>;
   facts: { brands: GeoBrandFact[]; statements: GeoStatementFact[] } | null;
   errors: GeoErrorRow[];
   history: Array<{ sampleDate: string; snapshotId: string }>;
@@ -423,6 +436,9 @@ export function readGeoCell(raw: unknown): GeoCell {
     ciHigh: finite(value.ciHigh),
     status,
     dataType: typeof value.dataType === "string" && DATA_TYPES.has(value.dataType) ? value.dataType as GeoDataType : "measured",
+    ...(Array.isArray(value.snapshotIds)
+      ? { snapshotIds: value.snapshotIds.filter((snapshot): snapshot is string => typeof snapshot === "string" && snapshot.length > 0) }
+      : {}),
   };
 }
 
