@@ -106,22 +106,32 @@ function validatedRequest(body) {
     throw gatewayError(400, "geo_probe_op_invalid", `The GEO probe op must be one of: ${[...allowedOperations].join(", ")}.`);
   }
   if (op === "providers") return { op };
+  if (op === "screenshot") return { op, name: validatedScreenshotName(body.name) };
+  return { op, ...validatedAsk(body) };
+}
 
-  if (op === "screenshot") {
-    // Not trimmed. Trimming would validate one string and use another, and a
-    // caller sending "run-1.png\n" would get a working answer while its own
-    // name-building bug stayed invisible. The name is machine-generated; there
-    // is no whitespace to be liberal about.
-    const name = String(body.name ?? "");
-    // The name is pasted into a URL path, so it is matched against a whole
-    // pattern rather than scanned for "..": a denylist here is a traversal
-    // waiting for an encoding nobody thought of.
-    if (!screenshotName.test(name)) {
-      throw gatewayError(400, "geo_probe_screenshot_name_invalid", "The GEO probe screenshot name is invalid.");
-    }
-    return { op, name };
+/** A screenshot name the probe may be asked for.
+ *  @param {unknown} value @returns {string} */
+function validatedScreenshotName(value) {
+  // Not trimmed. Trimming would validate one string and use another, and a
+  // caller sending "run-1.png\n" would get a working answer while its own
+  // name-building bug stayed invisible. The name is machine-generated; there
+  // is no whitespace to be liberal about.
+  const name = String(value ?? "");
+  // The name is pasted into a URL path, so it is matched against a whole
+  // pattern rather than scanned for "..": a denylist here is a traversal
+  // waiting for an encoding nobody thought of.
+  if (!screenshotName.test(name)) {
+    throw gatewayError(400, "geo_probe_screenshot_name_invalid", "The GEO probe screenshot name is invalid.");
   }
+  return name;
+}
 
+/** One ask, checked against the closed vocabulary: a question, one or more
+ *  providers, and the two surface flags as 0 or 1.
+ *  @param {{ question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown }} body
+ *  @returns {{ question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }} */
+function validatedAsk(body) {
   const question = typeof body.question === "string" ? body.question.trim() : "";
   if (!question || question.length > maxQuestionLength || /[\0]/.test(question)) {
     throw gatewayError(400, "geo_probe_question_invalid", "The GEO probe question is missing or malformed.");
@@ -136,6 +146,7 @@ function validatedRequest(body) {
   if (new Set(providers).size !== providers.length) {
     throw gatewayError(400, "geo_probe_provider_invalid", "The GEO probe providers contain a duplicate.");
   }
+  /** @param {unknown} value @param {0 | 1} fallback @returns {0 | 1} */
   const flag = (value, fallback) => {
     if (value == null) return fallback;
     if (value === 0 || value === 1) return value;
@@ -145,7 +156,7 @@ function validatedRequest(body) {
   };
   // new_chat defaults to 1 because a measurement that inherits a previous
   // turn's context is measuring the conversation, not the question.
-  return { op, question, providers, deep: flag(body.deep, 0), newChat: flag(body.newChat, 1) };
+  return { question, providers, deep: flag(body.deep, 0), newChat: flag(body.newChat, 1) };
 }
 
 /** The probe origin this deployment is configured with.
@@ -313,7 +324,148 @@ function normalizeProviders(payload) {
   return rows.map((row) => ({ ...row, ready: row.state.toLowerCase() === "tab_found" }));
 }
 
+/** A directory URL of the origin, so a relative path resolves beneath it. @param {URL} origin */
+function originDirectory(origin) {
+  return origin.pathname.endsWith("/") ? origin : new URL(`${origin.pathname}/`, origin);
+}
+
+/**
+ * The probe host as a client: the three operations of the upstream contract,
+ * one request each, with the transport rules this module enforces (the origin
+ * check, the signature, the size limits, the error codes that say whether a
+ * failure is a reason to wait). The runtime's gateway below and the control
+ * plane's own measurement queue (`geoProbeQueue.mjs`) both reach the probe
+ * through it, so there is one account of what an answer from the probe is.
+ *
+ * Every method throws a `GeoProbeGatewayError` (`status`, `code`) on failure
+ * and never reads a failure as an empty result. The caller passes its own
+ * `signal`; an abort whose reason is a `TimeoutError` reads `geo_probe_timeout`.
+ *
+ * - `providers({ signal })` → `{ providers: [{ provider, state, ready }], ready: string[], integrity }`
+ * - `ask({ question, providers | provider, deep, newChat, signal })` →
+ *   `{ question, surface, results, raw, integrity }`. `results` are the
+ *   normalized answers the gateway hands a run; `raw` are the upstream's own
+ *   result rows in the same order — their status word and per-citation
+ *   fields, which the measurement queue reads and a run is never shown.
+ * - `screenshot({ name, signal })` → `{ name, contentType, bytes: Buffer, sha256 }`
+ *
+ * @param {Record<string, any>} config @param {{ fetchImpl?: typeof fetch }} [options]
+ */
+export function probeUpstream(config, { fetchImpl = fetch } = {}) {
+  const secret = () => String(config.geoProbeSigningSecret ?? "");
+
+  /**
+   * GET /providers or POST /ask: the parsed JSON object and the digests.
+   * @param {"providers" | "ask"} op @param {string | null} payload @param {AbortSignal | undefined} signal
+   */
+  async function exchange(op, payload, signal) {
+    const origin = probeOrigin(config);
+    const method = op === "providers" ? "GET" : "POST";
+    const bodyDigest = sha256(payload ?? "");
+    const target = new URL(op === "providers" ? "providers" : "ask", originDirectory(origin));
+    let upstream;
+    try {
+      upstream = await fetchImpl(target, {
+        method,
+        headers: {
+          accept: "application/json",
+          ...(payload ? { "content-type": "application/json" } : {}),
+          ...signedHeaders(secret(), { method, path: target.pathname, bodyDigest }),
+        },
+        body: payload ?? undefined,
+        redirect: "error",
+        signal,
+      });
+    } catch {
+      if (signal?.reason?.name === "TimeoutError") {
+        throw gatewayError(504, "geo_probe_timeout", "The GEO probe timed out. This is a measurement failure, not a result.");
+      }
+      throw gatewayError(502, "geo_probe_unavailable", "The GEO probe is unreachable. This is a measurement failure, not a result.");
+    }
+    if (!upstream.ok) throw upstreamError(upstream.status);
+
+    const text = await readBoundedText(upstream, maxJsonResponseBytes, "geo_probe_response_too_large");
+    let body;
+    try {
+      body = JSON.parse(text);
+      // Valid JSON that is not an object is a protocol violation, not an
+      // answer. Reading it as "zero vendors ready" would turn a broken probe
+      // into the finding that no vendor mentions the brand.
+      if (body == null || typeof body !== "object") throw new Error("not an object");
+    } catch {
+      throw gatewayError(502, "geo_probe_response_invalid", "The GEO probe returned a malformed response.");
+    }
+    // A digest of exactly what arrived. Over an unauthenticated hop it is the
+    // difference between "this number is wrong" and "this number is wrong and
+    // here is the record that proves it changed".
+    return { body, responseDigest: sha256(text), requestDigest: bodyDigest, transport: origin.protocol === "http:" ? "plaintext" : "tls" };
+  }
+
+  return {
+    /** @param {{ signal?: AbortSignal }} [options] */
+    async providers({ signal } = {}) {
+      const { body, responseDigest, transport } = await exchange("providers", null, signal);
+      const providers = normalizeProviders(body);
+      return {
+        providers,
+        ready: providers.filter((row) => row.ready).map((row) => row.provider),
+        integrity: { responseDigest, signed: Boolean(secret()), transport },
+      };
+    },
+
+    /** @param {{ question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown, signal?: AbortSignal }} request */
+    async ask(request) {
+      const { question, providers, deep, newChat } = validatedAsk(request);
+      const payload = JSON.stringify({ question, providers, deep, new_chat: newChat });
+      const { body, responseDigest, requestDigest, transport } = await exchange("ask", payload, request.signal);
+      const rows = Array.isArray(body?.results) ? body.results : [body];
+      const results = rows.map((row, index) => normalizeAnswer(row, String(row?.provider ?? providers[index] ?? providers[0])));
+      return {
+        question,
+        // The probe surface is part of the finding, not diagnostics: an answer
+        // from a fresh chat in deep mode is a different claim about the
+        // vendor than one from a warm chat in fast mode, and a report that
+        // omits which it was cannot be reproduced by a client with a phone.
+        surface: { mode: deep === 1 ? "deep" : "default", session: newChat === 1 ? "new_chat" : "continued" },
+        results,
+        raw: rows,
+        integrity: { responseDigest, requestDigest, signed: Boolean(secret()), transport },
+      };
+    },
+
+    /** @param {{ name?: unknown, signal?: AbortSignal }} request */
+    async screenshot({ name: requested, signal }) {
+      const name = validatedScreenshotName(requested);
+      const origin = probeOrigin(config);
+      const target = new URL(`screenshots/${name}`, originDirectory(origin));
+      const upstream = await fetchImpl(target, {
+        method: "GET",
+        headers: { accept: "image/png,image/jpeg,image/webp", ...signedHeaders(secret(), { method: "GET", path: target.pathname, bodyDigest: sha256("") }) },
+        redirect: "error",
+        signal,
+      });
+      if (!upstream.ok) throw upstreamError(upstream.status);
+      const declared = Number(upstream.headers.get("content-length") ?? 0);
+      if (Number.isFinite(declared) && declared > maxScreenshotBytes) {
+        await upstream.body?.cancel().catch(() => {});
+        throw gatewayError(502, "geo_probe_screenshot_too_large", "The GEO probe screenshot exceeded the gateway limit.");
+      }
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      if (bytes.length > maxScreenshotBytes) {
+        throw gatewayError(502, "geo_probe_screenshot_too_large", "The GEO probe screenshot exceeded the gateway limit.");
+      }
+      return {
+        name,
+        contentType: String(upstream.headers.get("content-type") ?? "application/octet-stream").split(";")[0].trim(),
+        bytes,
+        sha256: sha256(bytes),
+      };
+    },
+  };
+}
+
 export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
+  const upstream = probeUpstream(config, { fetchImpl });
   return async function geoProbeGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -333,96 +485,31 @@ export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl
         throw gatewayError(401, "geo_probe_gateway_token_invalid", "GEO probe authentication failed.");
       }
       const request = validatedRequest(await readJsonBody(req, 64 * 1024));
-      const origin = probeOrigin(config);
-      const secret = String(config.geoProbeSigningSecret ?? "");
-      const plaintext = origin.protocol === "http:";
 
       if (request.op === "screenshot") {
-        const target = new URL(`screenshots/${request.name}`, origin.pathname.endsWith("/") ? origin : new URL(`${origin.pathname}/`, origin));
-        const upstream = await fetchImpl(target, {
-          method: "GET",
-          headers: { accept: "image/png,image/jpeg,image/webp", ...signedHeaders(secret, { method: "GET", path: target.pathname, bodyDigest: sha256("") }) },
-          redirect: "error",
-          signal: controller.signal,
-        });
-        if (!upstream.ok) throw upstreamError(upstream.status);
-        const declared = Number(upstream.headers.get("content-length") ?? 0);
-        if (Number.isFinite(declared) && declared > maxScreenshotBytes) {
-          await upstream.body?.cancel().catch(() => {});
-          throw gatewayError(502, "geo_probe_screenshot_too_large", "The GEO probe screenshot exceeded the gateway limit.");
-        }
-        const bytes = Buffer.from(await upstream.arrayBuffer());
-        if (bytes.length > maxScreenshotBytes) {
-          throw gatewayError(502, "geo_probe_screenshot_too_large", "The GEO probe screenshot exceeded the gateway limit.");
-        }
+        const shot = await upstream.screenshot({ name: request.name, signal: controller.signal });
         sendJson(res, 200, {
           data: {
-            name: request.name,
-            contentType: String(upstream.headers.get("content-type") ?? "application/octet-stream").split(";")[0].trim(),
-            bytes: bytes.length,
+            name: shot.name,
+            contentType: shot.contentType,
+            bytes: shot.bytes.length,
             // The digest is what a report cites and what a recount verifies;
             // the base64 is what a run embeds. Both, so neither has to be
             // recomputed from the other later and get it wrong.
-            sha256: sha256(bytes),
-            dataBase64: bytes.toString("base64"),
+            sha256: shot.sha256,
+            dataBase64: shot.bytes.toString("base64"),
           },
           measurement: "ok",
         });
         return;
       }
 
-      const path = request.op === "providers" ? "/providers" : "/ask";
-      const payload = request.op === "providers" ? null : JSON.stringify({
-        question: request.question,
-        providers: request.providers,
-        deep: request.deep,
-        new_chat: request.newChat,
-      });
-      const bodyDigest = sha256(payload ?? "");
-      const target = new URL(path.slice(1), origin.pathname.endsWith("/") ? origin : new URL(`${origin.pathname}/`, origin));
-      let upstream;
-      try {
-        upstream = await fetchImpl(target, {
-          method: request.op === "providers" ? "GET" : "POST",
-          headers: {
-            accept: "application/json",
-            ...(payload ? { "content-type": "application/json" } : {}),
-            ...signedHeaders(secret, { method: request.op === "providers" ? "GET" : "POST", path: target.pathname, bodyDigest }),
-          },
-          body: payload ?? undefined,
-          redirect: "error",
-          signal: controller.signal,
-        });
-      } catch {
-        if (controller.signal.reason?.name === "TimeoutError") {
-          throw gatewayError(504, "geo_probe_timeout", "The GEO probe timed out. This is a measurement failure, not a result.");
-        }
-        throw gatewayError(502, "geo_probe_unavailable", "The GEO probe is unreachable. This is a measurement failure, not a result.");
-      }
-      if (!upstream.ok) throw upstreamError(upstream.status);
-
-      const text = await readBoundedText(upstream, maxJsonResponseBytes, "geo_probe_response_too_large");
-      let body;
-      try {
-        body = JSON.parse(text);
-        // Valid JSON that is not an object is a protocol violation, not an
-        // answer. Reading it as "zero vendors ready" would turn a broken probe
-        // into the finding that no vendor mentions the brand.
-        if (body == null || typeof body !== "object") throw new Error("not an object");
-      } catch {
-        throw gatewayError(502, "geo_probe_response_invalid", "The GEO probe returned a malformed response.");
-      }
-      // A digest of exactly what arrived. Over an unauthenticated hop it is the
-      // difference between "this number is wrong" and "this number is wrong and
-      // here is the record that proves it changed".
-      const responseDigest = sha256(text);
-
       if (request.op === "providers") {
-        const providers = normalizeProviders(body);
+        const { providers, ready, integrity } = await upstream.providers({ signal: controller.signal });
         sendJson(res, 200, {
-          data: { providers, ready: providers.filter((row) => row.ready).map((row) => row.provider) },
+          data: { providers, ready },
           measurement: "ok",
-          integrity: { responseDigest, signed: Boolean(secret), transport: plaintext ? "plaintext" : "tls" },
+          integrity,
           warnings: providers.some((row) => !row.ready)
             ? ["A vendor that is not ready was never asked; that is not evidence the brand is absent from it."]
             : [],
@@ -430,26 +517,22 @@ export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl
         return;
       }
 
-      const rows = Array.isArray(body?.results) ? body.results : [body];
-      const results = rows.map((row, index) => normalizeAnswer(row, String(row?.provider ?? request.providers[index] ?? request.providers[0])));
+      const answer = await upstream.ask({ ...request, signal: controller.signal });
+      const { results, integrity } = answer;
       sendJson(res, 200, {
         data: {
-          question: request.question,
-          // The probe surface is part of the finding, not diagnostics: an answer
-          // from a fresh chat in deep mode is a different claim about the
-          // vendor than one from a warm chat in fast mode, and a report that
-          // omits which it was cannot be reproduced by a client with a phone.
-          surface: { mode: request.deep === 1 ? "deep" : "default", session: request.newChat === 1 ? "new_chat" : "continued" },
+          question: answer.question,
+          surface: answer.surface,
           results,
           inDenominator: results.filter((row) => row.inDenominator).map((row) => row.provider),
         },
         measurement: results.some((row) => row.inDenominator) ? "ok" : "failed",
-        integrity: { responseDigest, requestDigest: bodyDigest, signed: Boolean(secret), transport: plaintext ? "plaintext" : "tls" },
+        integrity,
         warnings: [
           ...(results.some((row) => !row.inDenominator)
             ? ["A failed probe is not a measurement: it must be retried, and must not enter the denominator or be cached as a result."]
             : []),
-          ...(plaintext && !secret
+          ...(integrity.transport === "plaintext" && !integrity.signed
             ? ["This measurement crossed an unauthenticated plaintext hop. The response digest is recorded, but nothing prevented it from being altered in transit."]
             : []),
         ],
@@ -479,3 +562,4 @@ export function verifyProbeSignature(secret, { method, path, body, timestamp, si
 export const GEO_PROBE_GATEWAY_PATH = gatewayPath;
 export const GEO_PROBE_ALLOWED_OPERATIONS = allowedOperations;
 export const GEO_PROBE_ALLOWED_PROVIDERS = allowedProviders;
+export { GeoProbeGatewayError };
