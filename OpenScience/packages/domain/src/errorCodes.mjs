@@ -806,6 +806,8 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_topup_not_found',
   'geo_operator_required',
   'geo_unavailable',
+  // A paused project runs nothing: 「让 AI 做」 and 导出 wait until it is resumed.
+  'geo_project_paused',
 ])
 
 /**
@@ -870,6 +872,7 @@ export function turnEndErrorCode(kind) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
   runtime_canceled: '运行已被取消。可以重新发起，或从某一步分叉后继续。',
   runtime_stopped: '运行进程中断，已按中断记录收尾。重试即可继续。',
   runtime_deliverable_never_submitted:

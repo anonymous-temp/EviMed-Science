@@ -39,6 +39,13 @@
  *   wrote them in), and the metrics package's `facts.red_flag_expected`,
  *   `red_flag_hits`, `safety_terms_hit` and `metrics.variant`, `rival`,
  *   `reason`.
+ * - **The orchestrator's own bookkeeping** (`schedule_marks`, package F): one
+ *   row per thing it did or decided once — a dispatched run, an enqueued
+ *   round, a notice sent, an export asked for — keyed per project by a key
+ *   that names the period it belongs to (`weekly:2026-09-28`,
+ *   `postpub:<article>:w4`, `run:insight`). The primary key is what makes
+ *   every schedule idempotent across ticks, restarts and processes: a key is
+ *   claimed by inserting it, and a second claimer finds it taken.
  *
  * @module geoPersistence
  */
@@ -62,7 +69,7 @@ export const GEO_SCHEMA = "evimed_geo";
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
-  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations",
+  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks",
 ]);
 
 const migrations = new WeakMap();
@@ -531,6 +538,29 @@ ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
 -- rows of one statement share their created_at.
 ALTER TABLE evimed_geo.question_groups ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
 ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+
+-- The orchestrator's marks (package F): what it dispatched, enqueued, sent or
+-- skipped, once per key. \`state\`: pending (asked for, not started), claimed
+-- (being started), running, done, failed, skipped.
+CREATE TABLE IF NOT EXISTS evimed_geo.schedule_marks (
+  geo_project_id text NOT NULL,
+  key            text NOT NULL,
+  user_id        text NOT NULL,
+  kind           text NOT NULL CHECK (kind IN ('run', 'round', 'notice', 'request')),
+  state          text NOT NULL CHECK (state IN ('pending', 'claimed', 'running', 'done', 'failed', 'skipped')),
+  run_id         text,
+  session_id     text,
+  dispatch_id    text,
+  round_id       text,
+  attempts       integer NOT NULL DEFAULT 0,
+  detail         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  done_at        timestamptz,
+  PRIMARY KEY (geo_project_id, key)
+);
+CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_marks (geo_project_id, kind, state)
+  WHERE state IN ('pending', 'claimed', 'running');
 `;
 }
 
