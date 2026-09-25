@@ -1,12 +1,24 @@
 // The market against PostgreSQL on the evimed_geo DDL: every scenario the
 // double runs (geoMarket.test.mjs), plus what only a database can show —
-// compare-and-set under two writers at once, CHECK constraints, and the same
-// bounds refused before a query is sent.
+// compare-and-set under two writers at once, CHECK and unique constraints,
+// the same bounds refused before a query is sent — and the GEO service's
+// own reads of the market's money.
+//
+// Its own database: the media catalogue, the reconciliations and the top-ups
+// are platform tables every scenario starts empty, and node runs test files in
+// parallel — sharing a database with the other GEO suites would let each
+// truncate the other's rows.
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { randomUUID } from "node:crypto";
+import { after, before, test } from "node:test";
+import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { cancelOrder, tickOrders, tickPoll } from "../src/geoMarket.mjs";
 import { GeoMarketStore, assertLedgerRow } from "../src/geoMarketStore.mjs";
-import { defineGeoMarketScenarios } from "./helpers/geoMarketScenarios.mjs";
+import { GEO_TABLES } from "../src/geoPersistence.mjs";
+import { GeoService } from "../src/geoService.mjs";
+import { GeoStore } from "../src/geoStore.mjs";
+import { defineGeoMarketMoneyPathScenarios, defineGeoMarketScenarios, orders, world } from "./helpers/geoMarketScenarios.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -18,23 +30,37 @@ const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not c
 
 /** @type {ControlPlaneDatabase | null} */
 let database = null;
-const open = () => {
-  database ??= new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
-  return database;
-};
+/** @type {pg.Client | null} */
+let admin = null;
+let isolatedName = "";
+
+before(async () => {
+  if (!databaseUrl) return;
+  const source = new URL(databaseUrl);
+  isolatedName = `${decodeURIComponent(source.pathname.slice(1))}_geomarket_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  assert.match(isolatedName, /^evimed_test_[a-z0-9_]+$/);
+  admin = new pg.Client({ connectionString: databaseUrl });
+  await admin.connect();
+  await admin.query(`CREATE DATABASE "${isolatedName}"`);
+  source.pathname = `/${isolatedName}`;
+  database = new ControlPlaneDatabase({ databaseUrl: source.href, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
+});
 
 after(async () => {
   await database?.close();
+  if (admin) {
+    await admin.query(`DROP DATABASE IF EXISTS "${isolatedName}" WITH (FORCE)`);
+    await admin.end();
+  }
 });
 
-const TABLES = ["projects", "question_groups", "targets", "sources", "articles", "media", "media_outcomes", "order_events", "orders",
-  "ledger", "topups", "reconciliations"];
+const open = () => /** @type {ControlPlaneDatabase} */ (database);
 
 async function fixture() {
   const db = open();
   const store = new GeoMarketStore(db);
   await store.ready();
-  await db.query(`TRUNCATE ${TABLES.map((table) => `evimed_geo.${table}`).join(", ")} CASCADE`);
+  await db.query(`TRUNCATE ${GEO_TABLES.map((table) => `evimed_geo.${table}`).join(", ")} CASCADE`);
   const now = () => new Date().toISOString();
   return {
     store,
@@ -77,6 +103,7 @@ async function fixture() {
 }
 
 defineGeoMarketScenarios(test, fixture, options);
+defineGeoMarketMoneyPathScenarios(test, fixture, options);
 
 test("two writers moving one order: exactly one wins, and one event is written", options, async () => {
   const { store, seed } = await fixture();
@@ -107,4 +134,47 @@ test("the database refuses what the store refuses, and more", options, async () 
   await assert.rejects(db.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, state) VALUES ('bad', 'u', 'g', 'shipped')`), /violates check constraint/);
   await assert.rejects(db.query(`INSERT INTO evimed_geo.ledger (id, kind, amount_cny) VALUES ('bad', 'gift', 1)`), /violates check constraint/);
   assert.equal(await store.transitionOrder("missing", { from: ["planned"], to: "reserved", at: new Date().toISOString() }), null);
+  // One live order per article, whoever writes it.
+  await db.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, state) VALUES ('live1', 'u', 'g', 'art', 'submitted')`);
+  await assert.rejects(db.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, state) VALUES ('live2', 'u', 'g', 'art', 'planned')`),
+    /geo_orders_live_article_key/);
+  await db.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, state) VALUES ('done1', 'u', 'g', 'art', 'refunded')`);
+});
+
+/** The GEO service over the same database, as the 投放 tab reads it. */
+const service = () => new GeoService({ store: new GeoStore({ database: open() }), config: { geoEnabled: true, geoAudience: "all" } });
+
+test("投放 tab: the money shown is the ledger's, including reserves held by a rejected order awaiting its refund", options, async () => {
+  const w = await world(fixture);
+  try {
+    const p = await w.project();
+    await tickOrders(w.deps);
+    const [order] = await orders(w.fixture.store, p.id);
+    w.fake.setOrder(order.vendorOrderNid, { status: 4 });
+    await tickPoll(w.deps);
+    assert.equal((await w.fixture.store.getOrder(order.id)).state, "rejected");
+    const view = await service().distribution({ id: p.userId }, p.id);
+    assert.equal(view.reservedCny, 110, "the reserve stays held until the refund is in the balance");
+    assert.equal(view.spentCny, 0);
+  } finally { await w.close(); }
+});
+
+test("撤单 then 撤回: a placed article whose order the user cancelled can be withdrawn, and is not placed again", options, async () => {
+  const w = await world(fixture);
+  try {
+    const p = await w.project();
+    await tickOrders(w.deps);
+    const [order] = await orders(w.fixture.store, p.id);
+    assert.equal((await w.fixture.store.getArticles([p.articleIds[0]]))[0].status, "placed");
+    await cancelOrder(w.deps, { userId: p.userId, geoProjectId: p.id, orderId: order.id });
+    const withdrawn = await service().withdrawArticle({ id: p.userId }, p.id, p.articleIds[0]);
+    assert.equal(withdrawn.status, "withdrawn");
+    await tickOrders(w.deps);
+    assert.equal((await orders(w.fixture.store, p.id)).length, 1, "nothing new is placed for a withdrawn article");
+
+    // An article with a live order is still refused.
+    const q = await w.project({ id: "geo_live", userId: "u5" });
+    await tickOrders(w.deps);
+    await assert.rejects(service().withdrawArticle({ id: q.userId }, q.id, q.articleIds[0]), { code: "geo_article_state_invalid" });
+  } finally { await w.close(); }
 });

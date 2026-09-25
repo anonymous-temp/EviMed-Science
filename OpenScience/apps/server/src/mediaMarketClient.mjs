@@ -19,11 +19,13 @@ import { HttpError } from "./security.mjs";
  *   third-party self-media under `/api/zi_media_api/*`. Balance and the 「GEO
  *   查收录」 trio live under `/api/geo/*`.
  * - `send` has no idempotency key and there is no list-orders endpoint. So a
- *   send is attempted exactly once: a timeout, a dropped connection, a 5xx or
- *   an unreadable answer after the form may have reached the vendor is
- *   `media_market_send_unknown` — the caller records the order as `unknown`
- *   and never sends it again. Only a failure that provably happened before a
- *   connection existed (refused, no DNS answer, no route) is "not sent".
+ *   send is attempted exactly once: a timeout, a dropped connection, and any
+ *   answer that is not the vendor's envelope (a 5xx, a gateway's 401 or 429,
+ *   an unreadable or oversized body) is `media_market_send_unknown` — the
+ *   caller records the order as `unknown` and never sends it again. Only the
+ *   envelope's own refusal (`code: 0`), a failure that provably happened
+ *   before a connection existed (refused, no DNS answer, no route) or a
+ *   request this client refused to build is "not created".
  *   Reads (catalogue, order info, balance, fields, task status) are retried
  *   once on a network failure or a 502/503/504; no mutation is ever retried.
  * - `order_info` is documented as returning an array and exemplified with a
@@ -113,6 +115,32 @@ export async function readMediaMarketKey(file) {
   } finally {
     await handle?.close();
   }
+}
+
+/**
+ * Whether a key file could be read as a key: a regular file (not a link, not
+ * the `/dev/null` compose binds where a deployment has no key), not empty,
+ * bounded, owner-only. The same tests `readMediaMarketKey` applies, short of
+ * reading the content.
+ * @param {string | null | undefined} file
+ */
+export function keyFileUsable(file) {
+  if (!file) return false;
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_KEY_BYTES + 2) return false;
+    return process.platform === "win32" || (stat.mode & 0o077) === 0;
+  } catch { return false; }
+}
+
+/**
+ * The one definition of "the media marketplace is configured": a base URL and
+ * a usable key. The client, the GEO service and the readiness line all ask it.
+ * @param {Record<string, any> | null | undefined} config
+ */
+export function mediaMarketConfigured(config) {
+  if (!String(config?.mediaMarketUrl ?? "").trim()) return false;
+  return Boolean(config?.mediaMarketApiKey) || keyFileUsable(config?.mediaMarketApiKeyFile);
 }
 
 /** A bounded, trimmed string, or "" (tabs and control characters removed). @param {unknown} value @param {number} max */
@@ -298,10 +326,7 @@ export class MediaMarketClient {
    * unusable still reads as configured, and every call then names the defect.
    */
   get configured() {
-    if (!this.baseUrl) return false;
-    if (this.apiKey) return true;
-    if (!this.apiKeyFile) return false;
-    try { return fs.lstatSync(this.apiKeyFile).isFile(); } catch { return false; }
+    return Boolean(this.baseUrl) && (Boolean(this.apiKey) || keyFileUsable(this.apiKeyFile));
   }
 
   /** @returns {MediaMarketStatus} */
@@ -403,9 +428,14 @@ export class MediaMarketClient {
       try {
         raw = await boundedBody(response, this.maxResponseBytes);
       } catch (error) {
-        if (mutation && /** @type {any} */ (error)?.code !== "media_market_response_too_large") throw unknown("answer cut off");
+        // An answer exists, so the form reached something: a send cannot be
+        // said not to have created an order.
+        if (send || (mutation && /** @type {any} */ (error)?.code !== "media_market_response_too_large")) throw unknown("answer cut off or too large");
         throw error;
       }
+      // Whatever answered — a gateway's 401, a 429, a 404 — answered after the
+      // form was sent. Only the vendor's own envelope says what happened.
+      if (send && !response.ok) throw unknown(`HTTP ${response.status}`);
       if (response.status === 401 || response.status === 403) {
         throw marketError(502, "media_market_unauthorized", "The media marketplace refused this deployment's key.");
       }

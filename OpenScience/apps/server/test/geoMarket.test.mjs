@@ -20,7 +20,7 @@ import {
   zonedDayStart,
 } from "../src/geoMarket.mjs";
 import { ORDER_STATES, assertLedgerRow } from "../src/geoMarketStore.mjs";
-import { defineGeoMarketScenarios } from "./helpers/geoMarketScenarios.mjs";
+import { defineGeoMarketMoneyPathScenarios, defineGeoMarketScenarios } from "./helpers/geoMarketScenarios.mjs";
 import { GeoMarketStoreDouble } from "./helpers/geoMarketStoreDouble.mjs";
 
 const admitted = {
@@ -133,6 +133,13 @@ test("reserve, money view and the ledger identity", () => {
   assert.deepEqual(projectIdentityBreaks(orders, [...sums, { orderId: "o1", kind: "refund", amountCny: 101 }]), [{ orderId: "o1", problem: "refund_above_settle" }]);
 });
 
+test("money written off above its reserve counts in full and leaves no negative reserve", () => {
+  const project = { budget: { totalCny: 1000, dailyCny: 200 } };
+  const sums = [{ orderId: "o1", kind: "reserve", amountCny: 110 }, { orderId: "o1", kind: "settle", amountCny: 150 }];
+  assert.deepEqual(projectMoney(project, sums), { budgetCny: 1000, dailyCny: 200, reservedCny: 0, settledCny: 150, refundedCny: 0, spentCny: 150, availableCny: 850 });
+  assert.deepEqual(projectIdentityBreaks([{ id: "o1", state: "lost", reserveCny: 110, settledCny: 150, vendorOrderNid: "1" }], sums), []);
+});
+
 test("the transition table and the vendor mapping only name real states", () => {
   for (const [from, targets] of Object.entries(ORDER_TRANSITIONS)) {
     assert.ok(ORDER_STATES.includes(from), from);
@@ -191,7 +198,8 @@ test("the double refuses what the database refuses", async () => {
   assert.throws(() => assertLedgerRow({ kind: "reserve", amountCny: 1e11 }, new Date().toISOString()), { code: "geo_market_store_invalid" });
 });
 
-defineGeoMarketScenarios(test, async () => {
+/** A fresh double with the scenarios' seeding hooks. */
+async function doubleFixture() {
   const store = new GeoMarketStoreDouble();
   return {
     store,
@@ -207,4 +215,7 @@ defineGeoMarketScenarios(test, async () => {
     },
     async close() {},
   };
-});
+}
+
+defineGeoMarketScenarios(test, doubleFixture);
+defineGeoMarketMoneyPathScenarios(test, doubleFixture);

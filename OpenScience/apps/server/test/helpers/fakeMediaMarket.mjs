@@ -49,8 +49,10 @@ export async function startFakeMediaMarket({ apiKey = "fake-key-0123456789", cat
     tasks: new Map(),
     /** @type {Array<{ path: string, form: Record<string, string | string[]> }>} */
     requests: [],
-    /** Behaviour of the next sends: "ok" | "refuse" | "timeout" | "http500" | "echo_key". */
+    /** Behaviour of the next sends: "ok" | "refuse" | "timeout" | "http500" | "http429" | "http401" | "echo_key". */
     sendMode: "ok",
+    /** Behaviours for the next sends, one each, before `sendMode` applies again. @type {string[]} */
+    sendQueue: [],
     /** Answer of get_balance: "ok" | "http503". */
     balanceMode: "ok",
     nextNid: 2026092500001,
@@ -103,7 +105,7 @@ export async function startFakeMediaMarket({ apiKey = "fake-key-0123456789", cat
       return;
     }
     if (mediaType && op === "send") {
-      const mode = state.sendMode;
+      const mode = state.sendQueue.length ? String(state.sendQueue.shift()) : state.sendMode;
       const row = state.catalogue[/** @type {"website" | "wemedia"} */ (mediaType)].find((item) => String(item.resource_id) === String(fieldsSeen.resource_id));
       if (mode === "refuse") { reply(0, "该媒体不接医疗类稿件"); return; }
       if (mode === "echo_key") { reply(0, `投稿失败：api_key=${state.apiKey} 无权限`); return; }
@@ -119,6 +121,9 @@ export async function startFakeMediaMarket({ apiKey = "fake-key-0123456789", cat
       });
       if (mode === "timeout") { state.hanging.add(res); return; }
       if (mode === "http500") { res.writeHead(500); res.end("upstream error"); return; }
+      // A gateway in front of the vendor answering after the vendor already took the order.
+      if (mode === "http429") { res.writeHead(429); res.end("slow down"); return; }
+      if (mode === "http401") { res.writeHead(401); res.end("unauthorized"); return; }
       reply(1, "投稿成功", { order_nid: nid });
       return;
     }

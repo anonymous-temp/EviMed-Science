@@ -3,6 +3,9 @@
 // project hook answering 503 by name — and the module's readiness and metric
 // families, off and on.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { ALL_ERROR_CODES, GEO_ROUTE_ERROR_CODES } from "@evimed/domain";
@@ -97,9 +100,15 @@ test("readiness: off is green and says so; on it is red only for the module's ow
   assert.equal(answer.required, true);
   assert.deepEqual(answer.warnings, ["geo_worker_missing", "geo_social_unconfigured", "geo_market_unconfigured"],
     "what lives outside the platform, or in another package, is a warning on a green check");
-  const wired = await geoReadiness({ config: { ...config, geoSocialUrl: "http://social:9966", mediaMarketUrl: "https://m", mediaMarketApiKeyFile: "/k" },
-    geo: { ...healthy, worker: { status: () => ({ running: false }) } }, database: {} });
-  assert.equal(wired.warning, undefined);
+  // Wired means a usable key file, not a path (mediaMarketConfigured).
+  const keyDir = mkdtempSync(path.join(os.tmpdir(), "geo-routes-key-"));
+  try {
+    const keyFile = path.join(keyDir, "media-market-api-key");
+    writeFileSync(keyFile, "k-123456\n", { mode: 0o600 });
+    const wired = await geoReadiness({ config: { ...config, geoSocialUrl: "http://social:9966", mediaMarketUrl: "https://m", mediaMarketApiKeyFile: keyFile },
+      geo: { ...healthy, worker: { status: () => ({ running: false }) } }, database: {} });
+    assert.equal(wired.warning, undefined);
+  } finally { rmSync(keyDir, { recursive: true, force: true }); }
 });
 
 test("metric families: one line off, the module's counts on", () => {

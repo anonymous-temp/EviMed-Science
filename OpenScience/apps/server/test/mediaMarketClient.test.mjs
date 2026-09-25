@@ -8,14 +8,63 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { loadConfig } from "../src/config.mjs";
+import { geoMarketReadiness } from "../src/geoMarket.mjs";
+import { geoMarketConfigured } from "../src/geoService.mjs";
 import {
   MediaMarketClient,
   createMediaMarketClient,
+  mediaMarketConfigured,
   mediaMarketMetricFamilies,
   normalizeMediaRow,
   normalizeOrderRow,
 } from "../src/mediaMarketClient.mjs";
 import { startFakeMediaMarket, vendorRow } from "./helpers/fakeMediaMarket.mjs";
+
+test("a send that got any answer but a clean envelope is unknown, whatever the status", async () => {
+  for (const status of [401, 403, 404, 413, 429]) {
+    const answered = scriptedFetch([new Response("no", { status })]);
+    const client = new MediaMarketClient({ baseUrl: "https://market.example.cn", apiKey: "k-123456", fetchImpl: answered.fetchImpl, ...quick });
+    await assert.rejects(client.send("website", { resourceId: "1", title: "t", contentHtml: "<p>x</p>", thirdId: "go_1" }), { code: "media_market_send_unknown" },
+      `HTTP ${status} after the form was sent`);
+    assert.equal(answered.calls.length, 1);
+  }
+  const huge = scriptedFetch([new Response("x".repeat(8_192), { status: 200 })]);
+  const hugeClient = new MediaMarketClient({ baseUrl: "https://market.example.cn", apiKey: "k-123456", fetchImpl: huge.fetchImpl, maxResponseBytes: 2_048, ...quick });
+  await assert.rejects(hugeClient.send("website", { resourceId: "1", title: "t", contentHtml: "<p>x</p>", thirdId: "go_1" }), { code: "media_market_send_unknown" });
+  // A refusal in the vendor's own envelope is a refusal: nothing was created.
+  const refused = scriptedFetch([new Response(JSON.stringify({ code: 0, msg: "敏感词", time: "1", data: null }), { status: 200 })]);
+  const refusedClient = new MediaMarketClient({ baseUrl: "https://market.example.cn", apiKey: "k-123456", fetchImpl: refused.fetchImpl, ...quick });
+  await assert.rejects(refusedClient.send("website", { resourceId: "1", title: "t", contentHtml: "<p>x</p>", thirdId: "go_1" }), { code: "media_market_refused" });
+});
+
+test("configured means a URL and a usable key file, one definition everywhere", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "media-market-configured-"));
+  try {
+    const good = path.join(dir, "key");
+    fs.writeFileSync(good, "k-123456\n", { mode: 0o600 });
+    const loose = path.join(dir, "loose");
+    fs.writeFileSync(loose, "k-123456\n", { mode: 0o644 });
+    fs.chmodSync(loose, 0o644);
+    const empty = path.join(dir, "empty");
+    fs.writeFileSync(empty, "", { mode: 0o600 });
+    const url = "https://market.example.cn";
+    const cases = [
+      [{ mediaMarketUrl: url, mediaMarketApiKeyFile: good }, true],
+      [{ mediaMarketUrl: url, mediaMarketApiKeyFile: "/dev/null" }, false],
+      [{ mediaMarketUrl: url, mediaMarketApiKeyFile: loose }, false],
+      [{ mediaMarketUrl: url, mediaMarketApiKeyFile: empty }, false],
+      [{ mediaMarketUrl: url, mediaMarketApiKeyFile: path.join(dir, "missing") }, false],
+      [{ mediaMarketUrl: "", mediaMarketApiKeyFile: good }, false],
+    ];
+    for (const [config, expected] of cases) {
+      const label = JSON.stringify(config);
+      assert.equal(mediaMarketConfigured(config), expected, `helper ${label}`);
+      assert.equal(geoMarketConfigured(config), expected, `service ${label}`);
+      assert.equal(createMediaMarketClient(config).configured, expected, `client ${label}`);
+      assert.equal(geoMarketReadiness(config, createMediaMarketClient(config)).configured, expected, `readiness ${label}`);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 const quick = { minIntervalMs: 0, sleep: async () => {} };
 
