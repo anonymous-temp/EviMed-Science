@@ -11,6 +11,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { GEO_CAPABILITY_IDS } from "@/components/geo/geoText";
 
 /**
  * The groups in the product's order — evidence, pharmacy, study design and
@@ -70,7 +71,9 @@ export function CapabilitiesPage() {
     return () => { active = false; };
   }, [reloads]);
 
-  const catalogue = useMemo(() => agents.map(researchAgentUi), [agents]);
+  // 循证 GEO's capabilities are entered from its own sidebar row, never picked
+  // here (plan 2026-09-24 §5.1: 「科研工具里的 GEO 卡片去掉，入口只留这一个」).
+  const catalogue = useMemo(() => agents.filter((agent) => !GEO_CAPABILITY_IDS.includes(agent.id)).map(researchAgentUi), [agents]);
   const categories = useMemo(
     () => [...new Set(catalogue.map((ui) => ui.category))]
       .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),
