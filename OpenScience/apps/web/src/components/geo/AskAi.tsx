@@ -69,6 +69,9 @@ export function AskAi({
 }) {
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
+  // Asked about a number that is not there yet (未测, 样本不足 with no value):
+  // there is nothing to explain, so there is no button.
+  if (draft == null && cell !== undefined && (cell == null || cell.value == null)) return null;
   const text = draft ?? geoNumberDraft({ product, scope, name: name ?? "", cell, unit, date });
   return (
     <button
