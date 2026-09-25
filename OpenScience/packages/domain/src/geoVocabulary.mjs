@@ -11,14 +11,17 @@
  *   up as a round nobody can filter or an order state the ledger refuses.
  * - **The words are the owner's geo-skills vocabulary** (P1–P4, S0–S4, the four
  *   failure modes, anchor/coverage/owned, the five data types). The metric ids
- *   `M-01` … are the owner's `metrics.yaml` ids; `GVI`, `NET` and `NOISE` are
- *   the ids this platform gives the three computed rows that yaml names but
- *   does not number (the composite index, the net effect, the noise band). The
- *   metrics package owns the computation; the ids live here so the overview,
- *   the measurement worker and the page agree on which row is which.
+ *   `M-01` … `M-21` are the owner's `metrics.yaml` ids, whose table and
+ *   computation are `geoMetrics.mjs` (it exports the full id list as
+ *   `GEO_METRIC_IDS` and the scopes as `GEO_METRIC_SCOPES`, which is why the
+ *   two lists here have other names). `GEO_VIEW_METRIC_IDS` names the rows the
+ *   platform's own views read — the index is M-19 — plus `NET` and `NOISE`,
+ *   the ids this platform gives the net-effect and noise-band rows the
+ *   measurement worker writes from `netEffect` and `noiseBand`, which the yaml
+ *   defines without numbering.
  * - **Engines are the probe host's tab names** (`geoProbeGateway.mjs`), plus
- *   `wenxin`, which is measured only through the vendor's inclusion channel
- *   until the probe host has a Baidu tab (spec §7.4).
+ *   `baidu` (文心), the owner's yaml id, measured only through the vendor's
+ *   inclusion channel until the probe host has a Baidu tab (spec §7.4).
  * - Labels are UI text (Simplified Chinese); ids never reach a reader.
  *
  * @module @evimed/domain/geoVocabulary
@@ -32,11 +35,11 @@ export const GEO_POOLS = frozen(['P1', 'P2', 'P3', 'P4'])
 export const GEO_POOL_LABELS_ZH = Object.freeze({ P1: '品牌明确类', P2: '通用名与品类类', P3: '泛症状场景类', P4: '风险监测类' })
 
 /** Every engine the platform can measure. */
-export const GEO_ENGINES = frozen(['doubao', 'qianwen', 'deepseek', 'yuanbao', 'kimi', 'wenxin'])
+export const GEO_ENGINES = frozen(['doubao', 'qianwen', 'deepseek', 'yuanbao', 'kimi', 'baidu'])
 /** The five a new project measures unless told otherwise (`OPEN_SCIENCE_GEO_ENGINES`). */
 export const GEO_DEFAULT_ENGINES = frozen(['doubao', 'qianwen', 'deepseek', 'yuanbao', 'kimi'])
 export const GEO_ENGINE_LABELS_ZH = Object.freeze({
-  doubao: '豆包', qianwen: '千问', deepseek: 'DeepSeek', yuanbao: '元宝', kimi: 'Kimi', wenxin: '文心',
+  doubao: '豆包', qianwen: '千问', deepseek: 'DeepSeek', yuanbao: '元宝', kimi: 'Kimi', baidu: '文心',
 })
 
 /** The eight steps of a program (`projects.steps` keys), in order. */
@@ -108,7 +111,8 @@ export const GEO_ERROR_STATUSES = frozen(['open', 'acting', 'awaiting_remeasure'
 export const GEO_SOURCE_ATTRIBUTES = frozen(['owned', 'partner', 'encyclopedia', 'farm', 'impostor', 'none'])
 
 /** Metrics rows. */
-export const GEO_METRIC_SCOPES = frozen(['project', 'pool', 'engine', 'pool_engine', 'group', 'arm'])
+/** `metrics.scope`: the same words as geoMetrics' `GEO_METRIC_SCOPES`, named apart so the two modules never export one name twice. */
+export const GEO_METRIC_ROW_SCOPES = frozen(['project', 'pool', 'engine', 'pool_engine', 'group', 'arm'])
 export const GEO_ARMS = frozen(['pilot', 'control'])
 /** A number cell's state: `insufficient` under 30 valid answers (「样本不足」), `absent` not measured (「未测」), never zero. */
 export const GEO_CELL_STATUSES = frozen(['ok', 'insufficient', 'not_measurable', 'absent'])
@@ -119,12 +123,15 @@ export const GEO_TARGET_DATA_TYPES = frozen(['forecast', 'commercial'])
 
 /**
  * The metric ids the platform's own views read. `M-*` are the owner's
- * `metrics.yaml` ids; the three others number what that yaml defines without an
- * id. `mentionHeadline` is M-01S — mention over P2 and P3 only, the home row's
- * and the overview's 品牌提及率 (a branded question naming us is no signal).
+ * `metrics.yaml` ids (M-19 is the composite index); `NET` and `NOISE` number
+ * the net-effect and noise-band rows. `mentionHeadline` is M-01S — mention
+ * over P2 and P3 only, the home row's and the overview's 品牌提及率 (a branded
+ * question naming us is no signal). A view reads a row whose `variant` and
+ * `rival` are null: M-01S's top1/top3 and M-16/M-17's per-rival rows are
+ * other cells.
  */
-export const GEO_METRIC_IDS = Object.freeze({
-  gvi: 'GVI',
+export const GEO_VIEW_METRIC_IDS = Object.freeze({
+  gvi: 'M-19',
   mention: 'M-01',
   mentionHeadline: 'M-01S',
   accuracy: 'M-06',
@@ -135,17 +142,17 @@ export const GEO_METRIC_IDS = Object.freeze({
 })
 /** The overview's four blocks, in order, and the metric each reads. */
 export const GEO_OVERVIEW_METRICS = Object.freeze([
-  Object.freeze({ key: 'gvi', metricId: GEO_METRIC_IDS.gvi }),
-  Object.freeze({ key: 'mention', metricId: GEO_METRIC_IDS.mentionHeadline }),
-  Object.freeze({ key: 'accuracy', metricId: GEO_METRIC_IDS.accuracy }),
-  Object.freeze({ key: 'citation', metricId: GEO_METRIC_IDS.citation }),
+  Object.freeze({ key: 'gvi', metricId: GEO_VIEW_METRIC_IDS.gvi }),
+  Object.freeze({ key: 'mention', metricId: GEO_VIEW_METRIC_IDS.mentionHeadline }),
+  Object.freeze({ key: 'accuracy', metricId: GEO_VIEW_METRIC_IDS.accuracy }),
+  Object.freeze({ key: 'citation', metricId: GEO_VIEW_METRIC_IDS.citation }),
 ])
-/** The metric the pilot and control lines of 监测 are drawn with. */
-export const GEO_ARM_METRIC_ID = GEO_METRIC_IDS.mention
+/** The metric the pilot and control lines of 监测 are drawn with: the arm-scope index (pool null). */
+export const GEO_ARM_METRIC_ID = GEO_VIEW_METRIC_IDS.gvi
 /** The minimum valid answers behind a rate (团体标准: every smallest cell ≥ 30). */
 export const GEO_MIN_CELL_SAMPLES = 30
 export const GEO_METRIC_LABELS_ZH = Object.freeze({
-  GVI: '综合可见度指数', 'M-01': '品牌提及率', 'M-01S': '品牌提及率', 'M-06': '事实准确率', 'M-08': '引用命中率', 'M-10': '检索触发率',
+  'M-19': '综合可见度指数', 'M-01': '品牌提及率', 'M-01S': '品牌提及率', 'M-06': '事实准确率', 'M-08': '引用命中率', 'M-10': '检索触发率',
   NET: '净效应', NOISE: '噪声区间',
 })
 
@@ -251,7 +258,7 @@ export const GEO_VOCABULARIES = Object.freeze({
   errorAction: GEO_ERROR_ACTIONS,
   errorStatus: GEO_ERROR_STATUSES,
   sourceAttribute: GEO_SOURCE_ATTRIBUTES,
-  metricScope: GEO_METRIC_SCOPES,
+  metricScope: GEO_METRIC_ROW_SCOPES,
   arm: GEO_ARMS,
   cellStatus: GEO_CELL_STATUSES,
   dataType: GEO_DATA_TYPES,

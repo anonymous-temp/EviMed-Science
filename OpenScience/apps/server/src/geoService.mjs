@@ -11,11 +11,16 @@
  *   beside a table (failure modes, the most-mentioned competitor) are tallies
  *   of fact rows, not metrics. So the pages and the weekly report can never
  *   disagree about a number: they read the same row.
- * - **Which row is which** is `GEO_METRIC_IDS` in the domain: the overview's
- *   four blocks read `GVI`, `M-01S` (mention over P2 and P3 only), `M-06` and
- *   `M-08`; 诊断 reads the engine- and pool-scoped `M-01`/`M-06`/`M-08`/`M-10`;
- *   监测 draws the arms with `M-01` and reads the net effect from `NET` and
- *   the noise band from `NOISE`. A row's date is its round's sample date.
+ * - **Which row is which** is `GEO_VIEW_METRIC_IDS` in the domain: the
+ *   overview's four blocks read `M-19` (the index), `M-01S` (mention over P2
+ *   and P3 only), `M-06` and `M-08`; 诊断 reads the engine- and pool-scoped
+ *   `M-01`/`M-06`/`M-08`/`M-10`; 监测 draws the arms with the arm-scope `M-19`
+ *   and reads the net effect from `NET` and the noise band from `NOISE`. A
+ *   view reads the row whose `variant` and `rival` are null (M-01S's top1/top3
+ *   and M-16/M-17's per-rival rows are other cells, listed under 更多). A row's
+ *   date is its round's sample date. A cell carries the row's `reason` code
+ *   when it is not a number; an `insufficient` cell keeps its value for the
+ *   record, and a reader is shown 「样本不足」, never that value.
  * - **Ownership is the project lookup.** Every method resolves the GEO project
  *   for the account first and answers 404 `geo_project_not_found` for anything
  *   else — another account's project reads exactly like one that never
@@ -35,16 +40,17 @@
 
 import path from "node:path";
 import {
-  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
+  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
   GEO_ORDER_OPEN_STATES, GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
- *   status: string, dataType: string }} GeoCell */
+ *   status: string, dataType: string, reason: string | null }} GeoCell */
 
 /** The cell no row speaks for: 「未测」, never zero. */
-export const GEO_ABSENT_CELL = Object.freeze({ value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent", dataType: "measured" });
+export const GEO_ABSENT_CELL = Object.freeze({ value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent", dataType: "measured",
+  reason: null });
 
 /** Snapshot text handed to a run, per item (spec §4). */
 export const GEO_ANSWER_TEXT_LIMIT = 4_000;
@@ -103,7 +109,7 @@ export function geoCellFromRow(row) {
   if (!row) return { ...GEO_ABSENT_CELL };
   return {
     value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low), ciHigh: num(row.ci_high),
-    status: String(row.status), dataType: String(row.data_type ?? "measured"),
+    status: String(row.status), dataType: String(row.data_type ?? "measured"), reason: text(row.reason),
   };
 }
 
@@ -159,9 +165,13 @@ function errorView(row) {
 function metricView(row, name) {
   return {
     metricId: String(row.metric_id), name: name(String(row.metric_id)), scope: String(row.scope), pool: text(row.pool), engine: text(row.engine),
-    groupId: text(row.group_id), arm: text(row.arm), roundId: text(row.round_id), computedAt: iso(row.computed_at), cell: geoCellFromRow(row),
+    groupId: text(row.group_id), arm: text(row.arm), variant: text(row.variant), rival: text(row.rival), roundId: text(row.round_id),
+    computedAt: iso(row.computed_at), cell: geoCellFromRow(row),
   };
 }
+
+/** The plain cell of a metric: not a top1/top3 variant, not one rival's row, not a group's. */
+const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL";
 
 export class GeoService {
   /**
@@ -214,7 +224,7 @@ export class GeoService {
     if (!geoIds.length) return byProject;
     const result = await this.store.query(`SELECT DISTINCT ON (m.geo_project_id, m.metric_id) m.*, r.sample_date
       FROM evimed_geo.metrics m LEFT JOIN evimed_geo.rounds r ON r.id = m.round_id
-      WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = 'project' AND m.metric_id = ANY($2::text[])
+      WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = 'project' AND m.metric_id = ANY($2::text[]) AND m.arm IS NULL AND ${PLAIN_ROW}
       ORDER BY m.geo_project_id, m.metric_id, m.computed_at DESC`, [geoIds, [...metricIds]]);
     for (const row of result.rows) {
       const map = byProject.get(row.geo_project_id) ?? new Map();
@@ -240,7 +250,7 @@ export class GeoService {
         SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""})
           m.*, r.sample_date
         FROM evimed_geo.metrics m LEFT JOIN evimed_geo.rounds r ON r.id = m.round_id
-        WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[])
+        WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${PLAIN_ROW}
         ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.computed_at DESC
       ) latest ORDER BY computed_at`, [geoIds, [...metricIds], scope]);
     for (const row of result.rows) {
@@ -269,10 +279,10 @@ export class GeoService {
   async listProjects(user) {
     const projects = await this.store.listProjects(String(user.id));
     const ids = projects.map((project) => project.id);
-    const headline = [GEO_METRIC_IDS.gvi, GEO_METRIC_IDS.mentionHeadline];
+    const headline = [GEO_VIEW_METRIC_IDS.gvi, GEO_VIEW_METRIC_IDS.mentionHeadline];
     const [latest, series, names, alerts, targets] = await Promise.all([
       this.#latestProjectMetrics(ids, headline),
-      this.#series(ids, [GEO_METRIC_IDS.gvi]),
+      this.#series(ids, [GEO_VIEW_METRIC_IDS.gvi]),
       this.#controlProjectNames(String(user.id), projects.map((project) => project.projectId)),
       this.#alerts(ids),
       Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
@@ -280,7 +290,7 @@ export class GeoService {
     return {
       projects: projects.map((project, index) => {
         const metrics = latest.get(project.id) ?? new Map();
-        const trend = (series.get(project.id)?.get(GEO_METRIC_IDS.gvi) ?? []).map((point) => point.value).filter((value) => value != null);
+        const trend = (series.get(project.id)?.get(GEO_VIEW_METRIC_IDS.gvi) ?? []).map((point) => point.value).filter((value) => value != null);
         const alert = alerts.get(project.id) ?? { wrongOurs: 0, safety: 0, text: null };
         return {
           id: project.id,
@@ -292,8 +302,8 @@ export class GeoService {
           status: project.status,
           steps: project.steps,
           headline: {
-            gvi: { ...geoCellFromRow(metrics.get(GEO_METRIC_IDS.gvi)), target: this.#target(targets[index], project.tier, GEO_METRIC_IDS.gvi), trend },
-            mention: geoCellFromRow(metrics.get(GEO_METRIC_IDS.mentionHeadline)),
+            gvi: { ...geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.gvi)), target: this.#target(targets[index], project.tier, GEO_VIEW_METRIC_IDS.gvi), trend },
+            mention: geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.mentionHeadline)),
           },
           alert,
           updatedAt: project.updatedAt,
@@ -554,7 +564,7 @@ export class GeoService {
     const errors = (await this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1
       ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT 100`, [project.id])).rows.map(errorView);
     const noiseRow = (await this.store.query(`SELECT value, computed_at FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project'
-      AND metric_id = $2 ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_METRIC_IDS.noiseBand])).rows[0];
+      AND metric_id = $2 ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand])).rows[0];
     const engines = round && Array.isArray(round.engines) && round.engines.length ? round.engines.map(String) : project.engines;
     /** @type {Map<string, any>} */
     const cells = new Map();
@@ -564,14 +574,20 @@ export class GeoService {
     /** @type {any[]} */
     let more = [];
     if (round) {
-      const rows = (await this.store.query(`SELECT DISTINCT ON (scope, coalesce(pool, ''), coalesce(engine, ''), metric_id) *
-        FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id = $2 AND scope IN ('project', 'engine', 'pool')
-        ORDER BY scope, coalesce(pool, ''), coalesce(engine, ''), metric_id, computed_at DESC`, [project.id, round.id])).rows;
-      for (const row of rows) cells.set(`${row.scope}\u0000${row.pool ?? ""}\u0000${row.engine ?? ""}\u0000${row.metric_id}`, row);
+      const rows = (await this.store.query(`SELECT DISTINCT ON (m.scope, coalesce(m.pool, ''), coalesce(m.engine, ''), m.metric_id,
+          coalesce(m.variant, ''), coalesce(m.rival, '')) *
+        FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.round_id = $2 AND m.scope IN ('project', 'engine', 'pool')
+          AND m.group_id IS NULL AND m.arm IS NULL
+        ORDER BY m.scope, coalesce(m.pool, ''), coalesce(m.engine, ''), m.metric_id, coalesce(m.variant, ''), coalesce(m.rival, ''), m.computed_at DESC`,
+      [project.id, round.id])).rows;
+      for (const row of rows) {
+        if (row.variant == null && row.rival == null) cells.set(`${row.scope}\u0000${row.pool ?? ""}\u0000${row.engine ?? ""}\u0000${row.metric_id}`, row);
+      }
       /** @type {Set<string>} */
-      const hidden = new Set([...GEO_OVERVIEW_METRICS.map((entry) => entry.metricId), GEO_METRIC_IDS.netEffect, GEO_METRIC_IDS.noiseBand]);
-      more = rows.filter((row) => row.scope === "project" && !hidden.has(String(row.metric_id)))
-        .map((row) => ({ metricId: String(row.metric_id), name: this.metricName(String(row.metric_id)), cell: geoCellFromRow(row) }));
+      const hidden = new Set([...GEO_OVERVIEW_METRICS.map((entry) => entry.metricId), GEO_VIEW_METRIC_IDS.netEffect, GEO_VIEW_METRIC_IDS.noiseBand]);
+      more = rows.filter((row) => row.scope === "project" && !(hidden.has(String(row.metric_id)) && row.variant == null && row.rival == null))
+        .map((row) => ({ metricId: String(row.metric_id), name: this.metricName(String(row.metric_id)), variant: text(row.variant), rival: text(row.rival),
+          cell: geoCellFromRow(row) }));
       const modes = (await this.store.query(`SELECT f.failure_mode, count(*)::integer AS n FROM evimed_geo.facts f
         JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
         WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal') GROUP BY f.failure_mode`, [round.id, project.id])).rows;
@@ -606,13 +622,13 @@ export class GeoService {
       rounds: rounds.map((/** @type {any} */ row) => ({ id: String(row.id), kind: String(row.kind), sampleDate: row.sample_date ? rowDay(row, this.timeZone) : null })),
       byEngine: engines.map((engine) => ({
         engine,
-        mention: cell("engine", "", engine, GEO_METRIC_IDS.mention),
-        accuracy: cell("engine", "", engine, GEO_METRIC_IDS.accuracy),
-        citation: cell("engine", "", engine, GEO_METRIC_IDS.citation),
-        retrieval: cell("engine", "", engine, GEO_METRIC_IDS.retrieval),
+        mention: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.mention),
+        accuracy: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.accuracy),
+        citation: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.citation),
+        retrieval: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.retrieval),
       })),
       byPool: GEO_POOLS.map((pool) => ({
-        pool, mention: cell("pool", pool, "", GEO_METRIC_IDS.mention),
+        pool, mention: cell("pool", pool, "", GEO_VIEW_METRIC_IDS.mention),
         topCompetitor: pools.get(pool)?.competitor ?? null, mainIssue: pools.get(pool)?.issue ?? null,
       })),
       failureModes,
@@ -691,8 +707,8 @@ export class GeoService {
       this.store.listSources(project.id),
       this.store.latestStrategy(project.id),
       this.store.latestTargets(project.id),
-      this.store.query(`SELECT DISTINCT ON (engine) * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'engine' AND metric_id = $2
-        ORDER BY engine, computed_at DESC`, [project.id, GEO_METRIC_IDS.retrieval]),
+      this.store.query(`SELECT DISTINCT ON (m.engine) * FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2
+        AND m.pool IS NULL AND ${PLAIN_ROW} ORDER BY m.engine, m.computed_at DESC`, [project.id, GEO_VIEW_METRIC_IDS.retrieval]),
     ]);
     const retrievalByEngine = new Map(retrieval.rows.map((/** @type {any} */ row) => [String(row.engine), row]));
     const stated = Array.isArray(strategy?.expectations) ? strategy.expectations.filter((/** @type {any} */ entry) => entry && typeof entry === "object") : [];
@@ -834,11 +850,11 @@ export class GeoService {
     const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline] = await Promise.all([
       this.#series([project.id], metricIds),
       this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm"),
-      this.#series([project.id], [GEO_METRIC_IDS.mention], "engine", "engine"),
+      this.#series([project.id], [GEO_VIEW_METRIC_IDS.mention], "engine", "engine"),
       this.store.query(`SELECT * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2
-        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_METRIC_IDS.netEffect]),
+        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.netEffect]),
       this.store.query(`SELECT value FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2
-        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_METRIC_IDS.noiseBand]),
+        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand]),
       this.store.query(`SELECT o.article_id, a.title, s.engine, min(s.asked_at) AS first_seen
         FROM evimed_geo.orders o JOIN evimed_geo.snapshots s ON s.geo_project_id = o.geo_project_id
           LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
@@ -867,7 +883,7 @@ export class GeoService {
         netEffect: { ...geoCellFromRow(netRow), noiseBand: noise.rows[0] ? num(noise.rows[0].value) : null },
       },
       byEngine: project.engines.map((engine) => ({
-        engine, points: (engineSeries.get(`${GEO_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value }) => ({ date, value })),
+        engine, points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value }) => ({ date, value })),
       })),
       cited: cited.rows.map((/** @type {any} */ row) => ({ articleId: text(row.article_id), title: text(row.title), engine: text(row.engine), firstSeen: iso(row.first_seen) })),
       newErrors: newErrors.rows.map(errorView),

@@ -50,7 +50,7 @@ WRITE_WHATS = (
     "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
     "articles", "placement_plan", "step",
 )
-ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "wenxin")
+ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
 POOLS = ("P1", "P2", "P3", "P4")
 SOCIAL_PLATFORMS = ("xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels")
 SOCIAL_SORTS = ("hot", "latest")
@@ -218,6 +218,19 @@ def _post(operation: str, payload: dict, timeout: int) -> dict:
     return data
 
 
+def _outside_a_project(error: GeoPlatformError, what: str, verb: str) -> dict:
+    """A conversation outside a GEO project: the tool worked, there is simply
+    no project data here -- a warning the run reads and moves on from, never
+    a failure it has to explain."""
+    return {
+        "status": "warning",
+        "summary": "This conversation is not in a 循证 GEO project, so there is no %s to %s." % (what, verb),
+        "data": {"what": what, "code": error.code},
+        "warnings": [str(error)],
+        "next_actions": ["Go on without the platform's GEO data, or work in the GEO project's own conversation."],
+    }
+
+
 def read(arguments: dict) -> dict:
     what = arguments.get("what")
     if what not in READ_WHATS:
@@ -225,7 +238,12 @@ def read(arguments: dict) -> dict:
     payload = {"what": what}
     if isinstance(arguments.get("filter"), dict) and arguments["filter"]:
         payload["filter"] = arguments["filter"]
-    data = _post("read", payload, TIMEOUT_SECONDS)
+    try:
+        data = _post("read", payload, TIMEOUT_SECONDS)
+    except GeoPlatformError as error:
+        if error.code == "geo_no_project":
+            return _outside_a_project(error, what, "read")
+        raise
     warnings = []
     next_actions = []
     if data.get("more") is True:
@@ -250,7 +268,12 @@ def write(arguments: dict) -> dict:
     for key in ("items", "data"):
         if key in arguments:
             payload[key] = arguments[key]
-    data = _post("write", payload, TIMEOUT_SECONDS)
+    try:
+        data = _post("write", payload, TIMEOUT_SECONDS)
+    except GeoPlatformError as error:
+        if error.code == "geo_no_project":
+            return _outside_a_project(error, what, "write")
+        raise
     issues = [issue for issue in data.get("issues") or [] if isinstance(issue, dict)]
     refused = [issue for issue in issues if issue.get("code") != "notice"]
     notices = [issue for issue in issues if issue.get("code") == "notice"]

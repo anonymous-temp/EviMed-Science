@@ -34,7 +34,11 @@
  * - **Two tables the spec does not list**, both versioned products the runtime
  *   writes through `geo_write` and the spec gives no home: `journeys` (the
  *   旅程 summary) and `placement_plans` (the run's outlet preferences, which
- *   the control plane reads and still decides against).
+ *   the control plane reads and still decides against). And columns it does
+ *   not list: `position` on question groups and questions (the order the run
+ *   wrote them in), and the metrics package's `facts.red_flag_expected`,
+ *   `red_flag_hits`, `safety_terms_hit` and `metrics.variant`, `rival`,
+ *   `reason`.
  *
  * @module geoPersistence
  */
@@ -42,7 +46,7 @@
 import {
   GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_AUDIENCES, GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
-  GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_SCOPES, GEO_ORDER_STATES, GEO_POOLS,
+  GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES, GEO_POOLS,
   GEO_PROBE_JOB_STATUSES, GEO_PROJECT_STATUSES, GEO_QUESTION_KINDS, GEO_RECONCILIATION_STATUSES, GEO_ROUND_KINDS,
   GEO_ROUND_STATUSES, GEO_SEVERITIES, GEO_SNAPSHOT_STATUSES, GEO_SOURCE_LAYERS, GEO_TIERS, GEO_TOPUP_STATUSES,
 } from "@evimed/domain";
@@ -144,6 +148,7 @@ CREATE TABLE IF NOT EXISTS evimed_geo.question_groups (
   weight           numeric,
   is_control       boolean NOT NULL DEFAULT false,
   signal           text CHECK (signal IN ${inList(GEO_GROUP_SIGNALS)}),
+  position         integer NOT NULL DEFAULT 0,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS geo_question_groups_set_idx ON evimed_geo.question_groups (geo_project_id, set_version);
@@ -162,6 +167,7 @@ CREATE TABLE IF NOT EXISTS evimed_geo.questions (
   collected_at   timestamptz,
   is_measured    boolean NOT NULL DEFAULT false,
   retired_at     timestamptz,
+  position       integer NOT NULL DEFAULT 0,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS geo_questions_set_idx ON evimed_geo.questions (geo_project_id, set_version);
@@ -255,6 +261,9 @@ CREATE TABLE IF NOT EXISTS evimed_geo.facts (
   cites_ours_in_body  boolean,
   care_hint           boolean,
   statements          jsonb NOT NULL DEFAULT '[]'::jsonb,
+  red_flag_expected   jsonb NOT NULL DEFAULT '[]'::jsonb,
+  red_flag_hits       jsonb NOT NULL DEFAULT '[]'::jsonb,
+  safety_terms_hit    jsonb NOT NULL DEFAULT '[]'::jsonb,
   failure_mode        text CHECK (failure_mode IN ${inList(GEO_FAILURE_MODES)}),
   parser_version      text,
   judged_at           timestamptz,
@@ -295,12 +304,15 @@ CREATE TABLE IF NOT EXISTS evimed_geo.metrics (
   user_id        text NOT NULL,
   geo_project_id text NOT NULL,
   round_id       text,
-  scope          text NOT NULL CHECK (scope IN ${inList(GEO_METRIC_SCOPES)}),
+  scope          text NOT NULL CHECK (scope IN ${inList(GEO_METRIC_ROW_SCOPES)}),
   pool           text,
   engine         text,
   group_id       text,
   arm            text CHECK (arm IN ${inList(GEO_ARMS)}),
   metric_id      text NOT NULL,
+  variant        text,
+  rival          text,
+  reason         text,
   numerator      numeric,
   denominator    numeric,
   value          numeric,
@@ -500,6 +512,21 @@ CREATE TABLE IF NOT EXISTS evimed_geo.reconciliations (
   details    jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Added after the first cut, for the metrics package's cells (M-11 and M-12
+-- read the red-flag and safety-term extractions; a cell carries its variant,
+-- its rival and why it is not a number). In the tables above for a new schema,
+-- and here for one created before them.
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_expected jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_hits jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS safety_terms_hit jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS variant text;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS rival text;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
+-- The order the run wrote a question map in: one write is one statement, and
+-- rows of one statement share their created_at.
+ALTER TABLE evimed_geo.question_groups ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
 `;
 }
 

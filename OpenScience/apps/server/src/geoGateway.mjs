@@ -13,11 +13,14 @@
 //
 // Hidden knowledge:
 //
-// - Switched off, or not open to this account, answers `geo_disabled`; a
-//   conversation outside a GEO project answers `geo_no_project`. The runtime
-//   is normally not even given the address then (`runtimeManager.mjs`); these
-//   answers are for a runtime started before the switch moved. Either way the
-//   run goes on with its other tools.
+// - Switched off, or not open to this account, answers `geo_disabled`; a read
+//   or write from a conversation outside a GEO project answers
+//   `geo_no_project` (the tool reports that as a warning: nothing is wrong,
+//   there is simply no project data here). The social search reads no project
+//   data and answers in any conversation of an account the module is open to.
+//   The runtime is normally not even given the address when the module is off
+//   (`runtimeManager.mjs`); `geo_disabled` is for a runtime started before the
+//   switch moved. Either way the run goes on with its other tools.
 // - A write refuses item by item: a 200 with `ok: false` and the issues is a
 //   write that wrote nothing, not an error. An error code here means the call
 //   itself could not be read — a `what` outside the vocabulary, a payload of
@@ -67,15 +70,25 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-/** @param {any} req @param {number} maxBytes */
+/** Past this, a body is not drained but cut off. */
+const drainLimit = 4 * 1024 * 1024;
+
+/**
+ * A request body as one JSON object. A body over the limit is drained (up to
+ * four megabytes) before the 413 goes out: answering mid-upload resets the
+ * connection, and the run would read a reset as an unreachable gateway — a
+ * retry — instead of a write it has to make smaller.
+ * @param {any} req @param {number} maxBytes
+ */
 async function readJsonBody(req, maxBytes) {
   const chunks = [];
   let total = 0;
   for await (const chunk of req) {
     total += chunk.length;
-    if (total > maxBytes) throw gatewayError(413, "geo_request_too_large", "The GEO request was too large.");
-    chunks.push(chunk);
+    if (total > drainLimit) throw gatewayError(413, "geo_request_too_large", "The GEO request was too large.");
+    if (total <= maxBytes) chunks.push(chunk);
   }
+  if (total > maxBytes) throw gatewayError(413, "geo_request_too_large", "The GEO request was too large.");
   try {
     const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("not an object");
@@ -231,8 +244,8 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
         throw gatewayError(429, "geo_gateway_rate_limited", "Too many GEO calls in a minute.");
       }
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
-      const project = await geo.store.projectByControlProject(String(identity.userId), String(identity.projectId));
-      if (!project) {
+      const project = operation === "social" ? null : await geo.store.projectByControlProject(String(identity.userId), String(identity.projectId));
+      if (operation !== "social" && !project) {
         throw gatewayError(404, "geo_no_project", "This conversation is not in a 循证 GEO project; open the GEO project's conversation to read or write its data.");
       }
       let work;
