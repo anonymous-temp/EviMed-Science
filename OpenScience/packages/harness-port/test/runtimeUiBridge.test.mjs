@@ -369,6 +369,69 @@ test('a body leaves only through a closed vocabulary, and an artifact path canno
   assert.equal(hub.send('open-artifact', { runId: 'run_abc', path: 'a.md' }), false, 'the channel closes with the bridge');
 });
 
+// The tool chip's × and `/工具` send `bind-capability`; until 2026-09-25 it was
+// not in the closed list and every one of them was dropped at this exit.
+test('choosing or leaving a tool reaches the shell, validated', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  hub.send('bind-capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a', draft: '老年房颤该不该抗凝？' });
+  hub.send('bind-capability', { capabilityId: null, sessionId: 'session-a', draft: 'x'.repeat(100_001) });
+  hub.send('bind-capability', { capabilityId: '../admin', sessionId: 'session-a' });
+  hub.send('bind-capability', { capabilityId: 'geo-insight', sessionId: 'bad id' });
+  const bound = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.bind-capability').map(row => row.message);
+  assert.deepEqual(bound.map(message => [message.capabilityId, message.sessionId, message.draft]), [
+    ['clinical-evidence-synthesis', 'session-a', '老年房颤该不该抗凝？'],
+    [null, 'session-a', ''],
+    ['geo-insight', null, ''],
+  ]);
+  f.ctx.dispose();
+});
+
+test("循证 GEO's options come in rebuilt from a closed shape, and a change goes out validated", async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  /** @type {any[]} */ const delivered = [];
+  hub.on('geo', (data) => delivered.push(data));
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  shellSends(f, { type: 'evimed.runtime-ui.geo', seq: 1, sessionId: 'session-a', controls: true, coverageDays: 90,
+    coverageOptions: [30, 60, 90, 180, -1, 1.5], engines: ['doubao', 'kimi', 'EVIL', 'baidu'],
+    offered: [{ id: 'doubao', name: '豆包' }, { id: 'kimi', name: 'Kimi' }, { id: '<b>', name: 'x' }, { id: 'qianwen' }],
+    starters: [{ label: '完整方案', draft: '做一套完整的 GEO 方案'.repeat(40) }, { label: '', draft: 'x' }], extra: 'dropped' });
+  assert.deepEqual(delivered[0], {
+    sessionId: 'session-a', controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
+    engines: ['doubao', 'kimi'], offered: [{ id: 'doubao', name: '豆包' }, { id: 'kimi', name: 'Kimi' }],
+    starters: [{ label: '完整方案', draft: '做一套完整的 GEO 方案'.repeat(40).slice(0, 400) }],
+  });
+  shellSends(f, { type: 'evimed.runtime-ui.geo', seq: 2, sessionId: 'session-a', clear: true });
+  assert.deepEqual(delivered[1], { sessionId: 'session-a', starters: null });
+
+  hub.send('geo-options', { sessionId: 'session-a', coverageDays: 180 });
+  hub.send('geo-options', { sessionId: 'session-a', engines: ['doubao', 'DROP', 'kimi'] });
+  hub.send('geo-options', { sessionId: 'session-a', coverageDays: 0 });
+  hub.send('geo-options', { sessionId: 'session-a', engines: [] });
+  const changes = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.geo-options').map(row => row.message);
+  assert.deepEqual(changes.map(({ sessionId, coverageDays, engines }) => ({ sessionId, coverageDays, engines })), [
+    { sessionId: 'session-a', coverageDays: 180, engines: undefined },
+    { sessionId: 'session-a', coverageDays: undefined, engines: ['doubao', 'kimi'] },
+  ], 'a change that says nothing valid is not sent');
+  f.ctx.dispose();
+});
+
+test('the frame can send the reader to 循证 GEO, at a tab named from a closed list', async () => {
+  const f = fixture(); apply(f.ctx, {}, f.target); await settle();
+  const shell = /** @type {any} */ (f.target).__EVIMED_SHELL__;
+  shell.navigate('geo', undefined, { tab: 'diagnosis' });
+  shell.navigate('geo', undefined, { tab: '../../admin' });
+  shell.navigate('geo');
+  shell.navigate('knowledge', undefined, { tab: 'diagnosis' });
+  const moves = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.shell-navigate')
+    .map(row => ({ destination: row.message.destination, tab: row.message.tab }));
+  assert.deepEqual(moves, [
+    { destination: 'geo', tab: 'diagnosis' }, { destination: 'geo', tab: undefined },
+    { destination: 'geo', tab: undefined }, { destination: 'knowledge', tab: undefined },
+  ]);
+  f.ctx.dispose();
+});
+
 test('the shell can search this project\'s sessions through the frame', async () => {
   const f = fixture();
   /** @type {any[]} */ const queries = [];

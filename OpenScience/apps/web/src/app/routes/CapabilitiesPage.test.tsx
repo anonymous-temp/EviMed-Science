@@ -139,6 +139,20 @@ describe("CapabilitiesPage", () => {
     mocks.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
   });
 
+  // 循证 GEO has its own row in the sidebar; its capabilities are not tools
+  // one picks here, whatever the catalogue lists.
+  it("offers no 循证 GEO capability", async () => {
+    mocks.listWebResearchAgents.mockResolvedValue([
+      ...agents,
+      { ...agents[0], id: "geo-content", title: "GEO 答案引擎优化", category: "写作与传播" },
+      { ...agents[0], id: "geo-insight", title: "GEO 洞察", category: "写作与传播" },
+    ]);
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    expect(screen.queryByText("GEO 答案引擎优化")).not.toBeInTheDocument();
+    expect(screen.queryByText("GEO 洞察")).not.toBeInTheDocument();
+  });
+
   it("shows the grid's shape while the catalogue loads", () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
