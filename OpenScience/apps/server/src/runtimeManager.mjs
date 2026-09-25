@@ -1482,6 +1482,23 @@ export async function refreshEviMedWorkloadToken(
 }
 
 /**
+ * `EVIMED_DISABLED_TOOLS` for the kernel process, which the guidance row reads
+ * to keep a capability out of the catalogue when its module's tools are off.
+ * The value is the MCP server's own (`evimedMcpEnvironment`), so the two cannot
+ * disagree. A configuration that makes that function throw fails the launch
+ * where the profile is written (`dshProfileInput`), with its own error; here
+ * the plain configured list stands in so the argv can still be built.
+ * @param {Record<string, any>} config @param {Record<string, any>} project @param {string} sandboxMode
+ */
+function kernelDisabledTools(config, project, sandboxMode) {
+  try {
+    return evimedMcpEnvironment(config, project, { proxyWorkspaceDir: "/workspace", sandboxMode, gateways: null }).EVIMED_DISABLED_TOOLS ?? "";
+  } catch {
+    return String(config.evimedDisabledTools ?? "");
+  }
+}
+
+/**
  * @param {any} config @param {any} project @param {any} plan
  * @param {{ workloadTokenPath?: string }} [options] `workloadTokenPath` is the
  *   container path of the MCP's workload token file. It is passed in rather
@@ -2461,6 +2478,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           publicSourceGatewayUrl,
           webSearchGatewayUrl,
           pluginConfig,
+          // Derived by the same function that tells the MCP server, so the
+          // catalogue the kernel offers and the tools it can call agree.
+          disabledTools: kernelDisabledTools(config, project, sandboxMode),
           // The API owns issuance; the isolated controller owns this argv and
           // deliberately has no signing keys. Both processes name the same
           // fixed files. Bootstrap writes them empty when signing is absent.
