@@ -76,8 +76,8 @@ function harness({ at = null } = /** @type {{ at?: string | null }} */ ({})) {
   /** @type {Error[]} */ const failures = [];
   let clock = at ? Date.parse(at) : null;
   const orchestrator = new GeoOrchestrator({
-    store, config: { geoTimeZone: "Asia/Shanghai", operatorUsers: [] },
-    notifier: createGeoNotifier({ store, notifications: { async create(/** @type {string} */ userId, /** @type {any} */ input) {
+    store, config: { geoTimeZone: "Asia/Shanghai", operatorUsers: ["ops"] },
+    notifier: createGeoNotifier({ store, config: { operatorUsers: ["ops"] }, notifications: { async create(/** @type {string} */ userId, /** @type {any} */ input) {
       notices.push({ userId, ...input });
       return { id: `n${notices.length}` };
     } } }),
@@ -143,12 +143,36 @@ async function insightRunWrites(project, { minimal = false } = {}) {
 }
 
 /** A round finished by the measurement, its metrics in. @param {string} roundId @param {{ finishedAt?: string }} [options] */
-async function finishRound(roundId, { finishedAt } = {}) {
+async function finishRound(roundId, { finishedAt, answers = 2, metrics = true } = /** @type {{ finishedAt?: string, answers?: number, metrics?: boolean }} */ ({})) {
   const round = (await q(`SELECT * FROM evimed_geo.rounds WHERE id = $1`, [roundId]))[0];
-  await q(`UPDATE evimed_geo.rounds SET status = 'done', done = 10, sample_date = current_date, finished_at = coalesce($2::timestamptz, now()) WHERE id = $1`,
-    [roundId, finishedAt ?? null]);
+  await q(`UPDATE evimed_geo.rounds SET status = 'done', done = $3, sample_date = current_date, finished_at = coalesce($2::timestamptz, now()) WHERE id = $1`,
+    [roundId, finishedAt ?? null, answers]);
+  for (let index = 0; index < answers; index += 1) {
+    await q(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status, answer_text)
+      VALUES ($1, $2, $3, $4, 'deepseek', now(), 'valid', '回答')`, [`s-${roundId}-${index}`, round.user_id, roundId, round.geo_project_id]);
+  }
+  if (metrics) await measured(roundId);
+}
+
+/** The measurement's metrics for a round. @param {string} roundId */
+async function measured(roundId) {
+  const round = (await q(`SELECT * FROM evimed_geo.rounds WHERE id = $1`, [roundId]))[0];
   await q(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, metric_id, status, value, numerator, denominator)
     VALUES ($1, $2, $3, $4, 'project', 'M-19', 'ok', 31.5, NULL, NULL)`, [`m-${roundId}`, round.user_id, round.geo_project_id, roundId]);
+}
+
+/** A program that wants the diagnosis and the strategy, its full question set locked. */
+async function lockedProgram() {
+  const world = harness();
+  const made = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"]) {
+    await store.setStep(made.project.id, step, { requested: true });
+  }
+  await insightRunWrites(made.project);
+  for (const step of ["evidence", "journey"]) await store.setStep(made.project.id, step, { status: "done" });
+  await world.orchestrator.advance(made.project.id);
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["baseline"]);
+  return { world, ...made };
 }
 
 /** The ledger's completion of a dispatched run. @param {ReturnType<typeof harness>} world @param {any} control @param {number} index @param {string} status */
@@ -392,6 +416,57 @@ test("the runtime cap defers the dispatch to the next tick, with the same dispat
   assert.equal((await statuses(other.project.id)).evidence, "failed");
   await world.orchestrator.advance(other.project.id);
   assert.equal(world.dispatched.filter((entry) => entry.geoProjectId === other.project.id).length, 0);
+});
+
+test("a baseline that measured no answer fails the diagnosis: no 「诊断完成」, no noise, no strategy; 「让 AI 做」 measures again", options, async () => {
+  const { world, project, user } = await lockedProgram();
+  const first = world.enqueued[0].id;
+  // Every engine skipped: the round closes with nothing asked (metrics rows may still exist, all absent).
+  await finishRound(first, { answers: 0 });
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "failed");
+  const titles = world.notices.filter((notice) => notice.userId !== "ops").map((notice) => notice.title);
+  assert.deepEqual(titles, ["玛仕度肽：诊断没有测到回答"], "a clear notice, never 「诊断完成」");
+  assert.equal(world.notices.filter((notice) => notice.userId === "ops").length, 1, "operators are alerted once");
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["baseline"], "no noise round");
+  assert.equal(world.dispatched.length, 0, "no strategy run");
+  // 「让 AI 做」 on the diagnosis: a new baseline, not the empty one again.
+  await world.orchestrator.runStep(user, project, "diagnosis");
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["baseline", "baseline"]);
+  assert.notEqual(world.enqueued[1].id, first);
+  assert.equal((await statuses(project.id)).diagnosis, "running");
+  await finishRound(world.enqueued[1].id);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  assert.equal(world.notices.filter((notice) => notice.title === "玛仕度肽：诊断完成").length, 1);
+});
+
+test("a diagnosis is done only when its metrics exist; past the grace operators are alerted and the program waits", options, async () => {
+  const { world, project } = await lockedProgram();
+  const round = world.enqueued[0].id;
+  await finishRound(round, { metrics: false, finishedAt: new Date(Date.now() - 2 * 3_600_000).toISOString() });
+  for (let index = 0; index < 3; index += 1) await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "running", "no metrics, no diagnosis — whatever the clock says");
+  assert.deepEqual(world.enqueued.map((entry) => entry.kind), ["baseline"]);
+  assert.equal(world.dispatched.length, 0);
+  assert.equal(world.notices.filter((notice) => notice.userId !== "ops").length, 0);
+  const alerts = world.notices.filter((notice) => notice.userId === "ops");
+  assert.equal(alerts.length, 1, "one operator alert, not one a tick");
+  await measured(round);
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  assert.equal(world.dispatched[0].capabilityId, "geo-strategy");
+});
+
+test("a diagnosis marked done on a round with no answer (before this rule) is measured again on request", options, async () => {
+  const { world, project, user } = await lockedProgram();
+  const round = world.enqueued[0].id;
+  await finishRound(round, { answers: 0 });
+  await store.setStep(project.id, "diagnosis", { status: "done", roundId: round });
+  await world.orchestrator.runStep(user, project, "diagnosis");
+  assert.deepEqual(world.enqueued.map((entry) => entry.kind), ["baseline", "baseline"]);
+  assert.equal((await statuses(project.id)).diagnosis, "running");
 });
 
 test("a paused project runs nothing new; 「让 AI 做」 says so", options, async () => {
