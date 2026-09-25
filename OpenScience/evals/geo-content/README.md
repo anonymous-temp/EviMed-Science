@@ -1,8 +1,16 @@
 # geo-content evals
 
-Four briefs for the `geo-content` capability. They are not smoke tests — each is
-a task somebody would actually bring, picked because it has a specific way of
-going wrong that a plausible-looking deliverable would hide.
+Since 2026-09-25 (`geo-content` 2.0.0, the 「循证 GEO」 module) the capability
+writes layered articles and correction materials, and the platform measures.
+`geo-005`…`007` grade that: a first batch for a prescription medicine, a
+correction for a measured 讲错我方, and existing drafts that carry unsafe advice.
+The four below are kept as the measurement corpus — the platform's probe queue
+is held to the same failure modes, and `measure.mjs` still reads their
+question sets.
+
+Four briefs for the measurement half of `geo-content` 1.x. They are not smoke
+tests — each is a task somebody would actually bring, picked because it has a
+specific way of going wrong that a plausible-looking deliverable would hide.
 
 | Brief | The failure it is looking for |
 |---|---|

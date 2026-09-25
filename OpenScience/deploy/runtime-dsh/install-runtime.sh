@@ -307,6 +307,7 @@ preset_skills() {
   cp -a /usr/local/share/evimed/skills/curated-scientific /opt/evimed/socket/presets/evimed-universal/skills/curated-scientific
   cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office
   cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community
+  cp -a /opt/evimed/skills/geo-private /opt/evimed/socket/presets/evimed-universal/skills/geo-private
   chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/mcp
 }
 

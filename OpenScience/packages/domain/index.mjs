@@ -190,33 +190,37 @@ export {
   validateDeliveryReceipt,
 } from './src/receipt.mjs'
 
-// capabilityManifest — 10 exports
+// capabilityManifest — 12 exports
 export {
+  AUTOPILOT_EPISODE_CAPABILITIES,
   AUTOPILOT_TASK_TYPES,
   CLAIM_TOOLS,
   COST_CLASSES,
   DELEGATION_BASE_TOOLS,
   EVIDENCE_MATRIX_OUTPUT,
   KERNEL_GLOBAL_TOOL_NAMES,
+  autopilotEpisodeCapability,
   capabilityCatalogueLine,
   delegationToolFilter,
   resolveContractKind,
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// capabilityDisplay — 4 exports
+// capabilityDisplay — 5 exports
 export {
   CAPABILITY_DISPLAY,
   capabilityBrief,
   capabilityBriefTask,
+  capabilityListed,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
-// contractRegistry — 6 exports
+// contractRegistry — 7 exports
 export {
   CONTRACT_VALIDATOR_KINDS,
   GATE_CHECK_IDS,
   METHOD_RELATIONS_ACTIONS,
+  contractCompanionPaths,
   layeredIssues,
   unreadableSubmission,
   runGate,

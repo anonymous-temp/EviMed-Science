@@ -91,6 +91,46 @@ export const AUTOPILOT_TASK_TYPES = Object.freeze([
   'signal-monitoring',
 ])
 
+/**
+ * Which capability an autopilot episode of each task type runs.
+ *
+ * An agenda names task types, never a capability, so this table is the whole
+ * of the choice — and a capability that declares a task type the table sends
+ * elsewhere has declared something that never happens. `geo-content` declared
+ * `signal-monitoring` for GEO citation monitoring while the table sent that
+ * type to adverse-event analysis, so a GEO agenda item ran `adr-analysis` and
+ * GEO monitoring never ran at all (build spec 2026-09-25 §1). GEO monitoring
+ * is now the 「循证 GEO」 module's own scheduler, `geo-content` declares no
+ * task type, and `apps/server/test/autopilotEpisodeCapabilities.test.mjs`
+ * holds every declaration against this table.
+ *
+ * Kept as a table rather than derived from the declarations because several
+ * capabilities declare the same type (`evidence-update`: evidence synthesis and
+ * meta-analysis) and which one an unattended episode runs is a product
+ * decision, not a tie to break by sort order.
+ * @type {Readonly<Record<typeof AUTOPILOT_TASK_TYPES[number], string>>}
+ */
+export const AUTOPILOT_EPISODE_CAPABILITIES = Object.freeze({
+  'literature-sentinel': 'clinical-evidence-synthesis',
+  'evidence-update': 'clinical-evidence-synthesis',
+  'data-prospecting': 'dataset-research-scoping',
+  'hypothesis-suggestion': 'research-topic-selection',
+  'writing-pipeline': 'manuscript-support',
+  'signal-monitoring': 'adr-analysis',
+})
+
+/**
+ * The capability an episode of this task type runs, or null for a type the
+ * allocator does not know.
+ * @param {string} taskType @returns {string | null}
+ */
+export function autopilotEpisodeCapability(taskType) {
+  const key = String(taskType ?? '')
+  return Object.hasOwn(AUTOPILOT_EPISODE_CAPABILITIES, key)
+    ? AUTOPILOT_EPISODE_CAPABILITIES[/** @type {keyof typeof AUTOPILOT_EPISODE_CAPABILITIES} */ (key)]
+    : null
+}
+
 /** Cost classes used by the daily allocator. */
 export const COST_CLASSES = Object.freeze(['low', 'medium', 'high'])
 
@@ -231,7 +271,7 @@ export function validateCapabilityManifest(value) {
  * The fields a `display:` block may carry, and nothing else: a key this list
  * does not name is a typo that would otherwise render as nothing.
  */
-const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'starterPrompts', 'materials', 'estimatedMinutes', 'outputs', 'knownLimits'])
+const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'listed', 'starterPrompts', 'materials', 'estimatedMinutes', 'outputs', 'knownLimits'])
 
 /**
  * `display:` — what a researcher is shown about the capability: its name,
@@ -249,6 +289,14 @@ const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'start
  * generator refuses a public capability in the tree that has none.
  * `estimatedMinutes` is `{ min, max }` — the reader's "usually" — and not the
  * `[min, max]` budget estimate above, which the orchestrator plans with.
+ *
+ * `listed: false` keeps a public capability out of the lists a researcher picks
+ * from — 科研工具 and the kernel frame's tool list — while it stays public, so
+ * a session can still be bound to it by id and its chip still has a name. The
+ * four 「循证 GEO」 capabilities are opened by their own module (build spec
+ * 2026-09-25 §6); `visibility: internal` would make that binding answer 403.
+ * Absent means listed, and only `false` is written back, so a manifest that
+ * says nothing about it generates exactly what it did before.
  *
  * @param {unknown} value
  * @param {ManifestIssue[]} issues
@@ -294,10 +342,14 @@ function normalizeDisplay(value, issues) {
   if (!minutesValid) issues.push({ code: 'capability_invalid', message: 'display.estimatedMinutes must be { min, max }: whole minutes, 1 ≤ min ≤ max ≤ 480.', field: 'display' })
 
   const materials = text('materials', 80, false)
+  if (raw.listed != null && typeof raw.listed !== 'boolean') {
+    issues.push({ code: 'capability_invalid', message: 'display.listed must be true or false.', field: 'display' })
+  }
   return {
     title: text('title', 40, true),
     category: text('category', 16, true),
     description: text('description', 200, true),
+    ...(raw.listed === false ? { listed: false } : {}),
     starterPrompts: list('starterPrompts', 1, 4, 160),
     ...(materials ? { materials } : {}),
     estimatedMinutes: minutesValid ? { min, max } : null,

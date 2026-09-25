@@ -39,6 +39,12 @@ echo "=== seed from the live release ==="
 # and compose then creates a directory where the file should be.
 cp -a "${ROOT}/releases/${OLD}" "$DST"
 mkdir -p "$BUILD" && tar -xzf "$DELTA" -C "$BUILD"
+# The private GEO method pack is not in git, so no DELETED line can remove a
+# file a newer pack dropped: when the archive carries the pack, it replaces the
+# seeded copy whole rather than overlaying it.
+if [ -d "$BUILD/src/OpenScience/runtime/skills/geo-private/skills" ]; then
+  rm -rf "$DST/OpenScience/runtime/skills/geo-private"
+fi
 cp -a "$BUILD/src/OpenScience/." "$DST/OpenScience/"
 # The specialist engines' sources live beside OpenScience (项目代码/), in the
 # same build context their images are built from; a release that changed one

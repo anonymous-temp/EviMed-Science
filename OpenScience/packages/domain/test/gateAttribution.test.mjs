@@ -65,20 +65,20 @@ test("naming the rule did not change which rules fire or what they say", () => {
 });
 
 test("the rule and line reach the gate issue a caller records", () => {
-  // End of the path: the GEO pack runs the same four rules over its own prose,
+  // End of the path: the GEO pack runs the same four rules over its articles,
   // and what the ledger stores is the issue this produces. Asserting the hits
-  // function alone would leave the forwarding — collector, registry, `issue()` —
-  // free to drop both fields with every unit test still green.
-  const pack = {
-    blocks: [{
-      conclusion: "速效救心丸可用于缓解症状。",
-      basis: "参见文献。",
-      conditions: "适用于既往确诊人群。",
-    }],
+  // function alone would leave the forwarding — collector, registry, the
+  // finding constructor — free to drop both fields with every unit test still
+  // green.
+  const index = {
+    articles: [{ id: "a1", layer: "popular", title: "速效救心丸", question: "速效救心丸怎么用", claimKeys: ["C1"], path: "articles/a1.md", recordPath: "records/a1.md", safety: { status: "clear" } }],
   };
   const verdict = runGate({
     contractKind: "geo-content-pack",
-    files: new Map([["geo-content-pack.json", JSON.stringify(pack)]]),
+    files: new Map([
+      ["articles.json", JSON.stringify(index)],
+      ["articles/a1.md", "速效救心丸可用于缓解症状。\n参见文献。\n适用于既往确诊人群。\n"],
+    ]),
     expectedOutputs: [],
   });
   const raised = (verdict.issues ?? []).find((entry) => entry.code === "clinical_safety_rule");

@@ -1,75 +1,62 @@
 # Capability manifest — the only definition of this capability.
 #
-# GEO is not a mode and not a router entry (spec D5): a request that starts as
-# "what is the evidence on X" can end as "now turn that into content the
-# assistants will cite", in the same session, with nothing switched. The
-# orchestrator composes this capability when the deliverable is content meant to
-# be read by an answering engine, and the contract — not the question — decides
-# how it is graded.
+# Step 6 of a 「循证 GEO」 project (build spec 2026-09-25 §8.1). Version 2.0.0:
+# the capability no longer measures. 1.x opened every run with a probe batch and
+# delivered a probe ledger, a monitor table and content blocks; measurement is
+# now the platform's (a server-side queue, one question per engine per fresh
+# chat, metrics computed by code), so this run writes the layered articles and
+# correction materials the claim library supports, and the contract reads the
+# articles themselves. Hidden from 科研工具 by `display.listed: false`: the GEO
+# module's orchestrator dispatches it in batches.
 id: geo-content
-version: 1.0.0
+version: 2.0.0
 title: GEO Content
 category: Content Production
-description: Measure how the consumer answering engines currently answer a set of real questions, then
-  produce evidence-bound content blocks — conclusion, basis, conditions, resolvable citations, author
-  credential, JSON-LD — that a later measurement can be compared against.
-whenToUse: 需要知道「用户去问 AI 时，我们出不出现、出现得对不对」，或要产出给答案引擎读的内容块时，委派给我——它以一次真实测量开场，不是以文案开场。
+description: Step 6 of an evidence-based GEO project — layered articles (deep analysis, evidence card, popular
+  article, Q&A) and correction materials written from the project's claim library, one work record per article,
+  medically reviewed, humanized with every number, quotation and drug name byte-identical, registered in the project.
+whenToUse: 「循证 GEO」项目的写稿交给我：按主战场和讲错我方，从主张库写深度分析、证据卡片、科普稿件、问答与纠错材料，每篇一份工作记录，医学审核后去 AI 味。
 persona: |
-  你是循证内容分析师。你先测量，后写作，两件事之间隔着一份可复算的明细。
-  你写下的每个数字都能指回某一次具体的提问——哪个平台、哪种模式、哪个会话、哪一刻。
-  你从不把"没测到"写成"没提到"：探测失败、未登录、服务繁忙都是测量失败，它们不进分母，
-  也不会被当成竞品缺席的证据。你写的内容块是给人看的，同时也要经得起药师逐条核对。
+  你是循证 GEO 的内容作者，也是自己的第一个药师读者。每篇稿子只回答一个典型问句，结论放在最前面，
+  每句关键话都落在主张库的一条主张上，措辞不比证据更强；先说边界，再说证据支持的价值。
+  改语言时，数字、引文、出处、药名、剂量和限定词一个字不动。出现处理不了的安全问题，你照实标出来，
+  不把它写含糊——那是整个项目里少数需要人看一眼的地方。
 safetyClass: clinical
 skills:
 - geo-content
-- autopilot-episode
-- citation-integrity
 - manuscript-humanize
-- deep-research
-- biomedical-database-search
+- citation-integrity
 tools:
-- mcp__evimed__geo_visibility_probe
-- mcp__evimed__literature_search
-- mcp__evimed__kb_search
-- mcp__evimed__biomedical_source_search
-- mcp__evimed__open_access_full_text
-- mcp__evimed__web_read
+- mcp__evimed__geo_read
+- mcp__evimed__geo_write
 - mcp__evimed__drug_label_search
-- mcp__evimed__guideline_search
-- mcp__evimed__clinical_trial_search
-- mcp__evimed__web_search
-- mcp__evimed__term_normalize
 - mcp__evimed__drug_term_normalize
-- mcp__evimed__evidence_deduplicate
 - mcp__evimed__pharmacy_reference_search
+- mcp__evimed__guideline_search
+- mcp__evimed__literature_search
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__locate_quote
+- mcp__evimed__web_read
+- mcp__evimed__web_search
+- mcp__evimed__kb_search
+- mcp__evimed__geo_visibility_probe
 produces:
 - contractKind: geo-content-pack
   outputs:
-  # The measurement, before any content exists. Written first on purpose: a pack
-  # assembled before anyone looked is a brochure with citations.
-  - path: geo-measurement.md
+  # The index a reader opens and the index the gate reads the articles through:
+  # each article is articles/<id>.md with an id the run chooses, which a
+  # manifest cannot declare, so articles.json names them and the gate brings
+  # them in (contractCompanionPaths in @evimed/domain).
+  - path: geo-content.md
     required: true
-  - path: geo-monitor.csv
+  - path: articles.json
     required: true
+  # A probe ledger exists only when the run asked an engine one question the
+  # user raised; measurement proper is the platform's.
   - path: geo-probe-log.jsonl
-    required: true
-  # The content itself.
-  - path: geo-content-pack.json
-    required: true
-  - path: geo-content-pack.md
-    required: true
-  - path: llms.txt
-    required: true
-  # The reachback.
-  - path: citation-ledger.csv
-    required: true
-  - path: brand-entity.json
-    required: true
-  - path: delivery-summary.md
-    required: true
-  - path: revision-notes.md
     required: false
-  - path: agenda-delta.json
+  - path: revision-notes.md
     required: false
   checks:
   - requiredOutputsExist
@@ -78,52 +65,57 @@ produces:
 inputs:
   required:
   - brandEntity
-  - questionSet
   optional:
+  - groups
+  - layers
+  - drafts
+  - corrections
+  - minimal
+  - questionSet
   - competitors
   - platforms
   - deepMode
   - outputLanguage
 autopilot:
-  # signal-monitoring, not a new task type: the spec's own framing is "citation
-  # rate per engine x query set x week", tracked over 60-90 days. That is the
-  # same shape the allocator already schedules, and widening a closed vocabulary
-  # to say "GEO" instead of what it does would buy nothing.
-  taskTypes:
-  - signal-monitoring
+  # Monitoring moved to the GEO module's own scheduler (weekly re-measurement,
+  # post-publication checks, the next batch), so this capability declares no
+  # autopilot task type. It used to declare signal-monitoring, which the
+  # allocator dispatches to adverse-event analysis — GEO monitoring never ran.
+  taskTypes: []
   costClass: high
   unattendedInputs:
   - brandEntity
-  - questionSet
 estimatedMinutes:
-- 40
-- 180
+- 30
+- 150
 dataSources:
-- answering-engines
 - drug-labels
 - literature
 - guidelines
+- clinical-trials
+- answering-engines
 starterPrompts:
-- 用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。
+- 按主战场给信尔美写第一批稿件：一篇证据卡片、两篇科普、两篇问答。
 
-# What a researcher is shown, in Chinese: read by people, not by the
-# orchestrator (the fields above). The generator derives the shell's and the
-# frame's capability table from this block, and adds what evals/ measured.
+# What a researcher is shown, in Chinese. `listed: false` keeps it off 科研工具
+# and the kernel's tool list; the 「循证 GEO」 module dispatches it.
 display:
-  # "GEO" in the title (2026-09-22): researchers know this work by that name,
-  # and a title without it read as the tool having disappeared.
-  title: "GEO 答案引擎优化"
+  # "GEO" in the title (2026-09-22): researchers know this work by that name.
+  title: "循证 GEO · 分层稿件"
   category: "写作与传播"
-  description: "先测各大 AI 答案引擎怎样回答你的问题，再写出可被引用的内容。"
+  description: "从主张库写出四层稿件和纠错材料，逐篇审核后去 AI 味。"
+  listed: false
   starterPrompts:
-  - "测一测「速效救心丸开封后多久失效」在各平台的回答，并写出可被引用的内容块。"
-  - "用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"
-  materials: "需要一组真实问法：写在问题里，或上传到知识库"
+  - "按主战场给信尔美写第一批稿件：一篇证据卡片、两篇科普、两篇问答。"
+  - "优化这几篇已有稿件：先医学审核，再去 AI 味，数字和引文一个字不动。"
+  - "针对 DeepSeek 把玛仕度肽说成每天注射一次，写一份纠错材料。"
+  materials: "需要项目的主张库；已有稿件可上传到知识库"
   estimatedMinutes:
-    min: 60
-    max: 180
+    min: 30
+    max: 150
   outputs:
-  - "测量报告与监测表"
-  - "证据绑定的内容块（含 JSON-LD 与 llms.txt）"
+  - "深度分析、证据卡片、科普稿件、问答"
+  - "针对讲错我方的纠错材料"
+  - "每篇一份工作记录"
   knownLimits:
-  - "测量依赖部署配置的答案引擎探测通道；通道不可用时内容块没有测量基础。"
+  - "有未处理安全问题的稿件会标出来，不自动投放，需要人看一眼。"

@@ -174,11 +174,14 @@ test("the GEO pack and the clinical package keep the verdicts they had", () => {
   // The two kinds whose validators already ran these rules are untouched by
   // the shared branch, and they still block. A change that quietly relaxed
   // them would look exactly like this change succeeding.
+  // The pack's content is its articles (geo-content 2.0.0): an index and one
+  // Markdown file per article, read through the index.
   const pack = runGate({
     contractKind: "geo-content-pack",
-    files: new Map([["geo-content-pack.json", JSON.stringify({
-      blocks: [{ conclusion: "速效救心丸可用于缓解症状。", basis: "参见文献。", conditions: "适用于既往确诊人群。" }],
-    })]]),
+    files: new Map([
+      ["articles.json", JSON.stringify({ articles: [{ id: "a1", layer: "popular", question: "速效救心丸怎么用", claimKeys: ["C1"], path: "articles/a1.md", recordPath: "records/a1.md", safety: { status: "clear" } }] })],
+      ["articles/a1.md", "速效救心丸可用于缓解症状。参见文献。适用于既往确诊人群。\n"],
+    ]),
     expectedOutputs: [],
   });
   const raised = pack.issues.filter((entry) => entry.code === "clinical_safety_rule");

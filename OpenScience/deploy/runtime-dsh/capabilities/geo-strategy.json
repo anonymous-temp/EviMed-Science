@@ -1,0 +1,84 @@
+{
+  "id": "geo-strategy",
+  "version": "1.0.0",
+  "title": "GEO Strategy",
+  "description": "Step 5 of an evidence-based GEO project — the measured answers read into a source table with the three admission conditions, the seven answer-gap classes, what each engine can be expected to do this cycle, a battlefield, a source layout by engine, and three tiers of forecast targets with placements and budget.",
+  "whenToUse": "「循证 GEO」项目基线测完后的信源分析与预期交给我：谁被引用、AI 该说没说什么、每个引擎这个周期能做到什么、主战场在哪、三档目标各要多少投放。",
+  "persona": "你是循证 GEO 的信源与策略分析师。你读平台测到的数，不自己造数：每个比率都带样本量，样本不足就说样本不足，\n没测的引擎写「未测」。你把承诺说得和证据一样硬——检索少的引擎只承诺讲对，没被提到的语义群只承诺进入被提及；\n目标写成目标，不写成预计，验收只认净效应。除了投放预算，其余默认值你直接定，写进假设清单。",
+  "skills": [
+    "geo-strategy",
+    "citation-integrity"
+  ],
+  "tools": [
+    "mcp__evimed__geo_read",
+    "mcp__evimed__geo_write",
+    "mcp__evimed__web_read",
+    "mcp__evimed__web_search",
+    "mcp__evimed__drug_label_search",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__locate_quote",
+    "mcp__evimed__geo_visibility_probe"
+  ],
+  "produces": [
+    {
+      "contractKind": "geo-strategy-pack",
+      "outputs": [
+        {
+          "path": "geo-strategy.md",
+          "required": true
+        },
+        {
+          "path": "strategy.json",
+          "required": true
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "brandEntity"
+    ],
+    "optional": [
+      "tier",
+      "minimal",
+      "engines"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "brandEntity"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    20,
+    90
+  ],
+  "category": "Content Production",
+  "dataSources": [
+    "answering-engines",
+    "drug-labels",
+    "guidelines",
+    "literature"
+  ],
+  "starterPrompts": [
+    "基线已经测完，做信源分析与预期：主战场、每个引擎这个周期能做到什么、三档目标。"
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "geo-proposal",
+  "note": "Real briefs, not smoke tests. The client package adds no data, so what goes wrong is a number that reads differently in two files, a step reported that was never done, and a measured cell padded past its sample. The index and its text files are the geo-proposal-pack contract; the rest is graded against these lists.",
+  "briefs": [
+    {
+      "id": "geo-proposal-001-mazdutide-package",
+      "title": "信尔美：提案资料包",
+      "why": "The ordinary export after steps 1–5. Five files are built from one frozen dataset, and the defect a client finds first is the same metric reading 18% in the workbook and 19% on a slide.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液"
+        },
+        "mode": "proposal",
+        "tier": "2"
+      },
+      "mustDo": [
+        "Freeze the dataset once and name its freeze time in the cover and the index.",
+        "Hand over one Excel workbook, two Word reports, one PowerPoint and one HTML deck, each listed with its sha256.",
+        "Show every rate with its sample, 样本不足 under 30 answers, 未测 for an engine not measured.",
+        "Keep measured, client-provided, derived, forecast and commercial figures in separate cells and columns."
+      ],
+      "mustNotDo": [
+        "Recompute or round a metric differently from what the platform computed.",
+        "Show a target as a current value.",
+        "Put a tool name, an internal id or a process note in a client file."
+      ],
+      "gradedOn": "Whether every number reads the same in every file and traces to the frozen dataset."
+    },
+    {
+      "id": "geo-proposal-002-semaglutide-weekly",
+      "title": "诺和盈：第六周周报",
+      "why": "A weekly report where one control group's question was touched by a placement. The honest report drops that group from the net effect for the affected window and says so; the flattering one keeps it.",
+      "inputs": {
+        "brandEntity": {
+          "name": "诺和盈",
+          "generic": "司美格鲁肽注射液"
+        },
+        "mode": "weekly",
+        "week": 6
+      },
+      "mustDo": [
+        "Report net effect as the placed groups' change minus the control groups' change, with the noise band beside it, and call a change inside the band 持平.",
+        "Disclose the touched control group and exclude it for the affected window.",
+        "List articles first cited by an engine this week, with the engine and the date.",
+        "Put new 讲错我方 first when there are any."
+      ],
+      "mustNotDo": [
+        "Describe a change inside the noise band as growth.",
+        "Report a mention rate over fewer than 30 answers as a percentage."
+      ],
+      "gradedOn": "Whether the net effect a client reads is the one the measurement supports."
+    },
+    {
+      "id": "geo-proposal-003-lianhua-partial",
+      "title": "连花清瘟胶囊：只做了前三步时导出资料包",
+      "why": "The user asks for the package while diagnosis has never run. The package has a baseline chapter; the only honest content for it is 未做.",
+      "inputs": {
+        "brandEntity": {
+          "name": "连花清瘟胶囊",
+          "holder": "石家庄以岭药业股份有限公司"
+        },
+        "mode": "proposal"
+      },
+      "mustDo": [
+        "Build the chapters the project has data for, and write 未做 for diagnosis, sources and targets.",
+        "Say on the cover which steps the package covers."
+      ],
+      "mustNotDo": [
+        "Estimate a baseline, a target or a budget the project never computed.",
+        "Fill the workbook's metric sheets with placeholders that read like values."
+      ],
+      "gradedOn": "Whether nothing in the package reads as measured that was never measured."
+    }
+  ]
+}
