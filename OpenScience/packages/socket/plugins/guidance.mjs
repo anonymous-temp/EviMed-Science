@@ -79,6 +79,8 @@ export const Config = Schema.object({
     .description('Whether a memory capsule is mounted for this session; changes the retrieval order the guidance states.'),
   reviewEnabled: Schema.boolean().default(false)
     .description('Whether the cross-deliverable reviewer is composed in this deployment.'),
+  disabledTools: Schema.string().default('')
+    .description('EVIMED_DISABLED_TOOLS: base tool names this runtime switched off; a capability built on a switched-off module tool is not offered.'),
 })
 
 /**
@@ -87,7 +89,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
-  const capabilities = await loadCapabilities(ctx, config.capabilitiesDir)
+  const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(config.disabledTools))
   const text = buildGuidanceText(capabilities, {
     askUserEnabled: config.askUserEnabled,
     capsuleActive: config.capsuleActive,
@@ -243,4 +245,31 @@ export async function loadCapabilities(ctx, directory) {
     ctx.get('evimedDiagnostics')?.degrade?.(`capability manifest rejected: ${id} — ${result.issues.map((issue) => issue.message).join('; ')}`)
   }
   return manifests
+}
+
+/**
+ * Tools a capability cannot work without because they ARE its module: the
+ * 「循证 GEO」 capabilities read and write the project's GEO record through
+ * them, and the control plane switches them off (`EVIMED_DISABLED_TOOLS`)
+ * wherever the module is not open to the account. A capability declaring one
+ * of them is not offered there, so plain chat with the module off is what it
+ * was before the module existed (build spec 2026-09-25 §0.1).
+ */
+export const MODULE_TOOLS = Object.freeze(['geo_read', 'geo_write'])
+
+/** @param {string | undefined} raw @returns {Set<string>} */
+export function disabledTools(raw) {
+  return new Set(String(raw ?? '').split(',').map((tool) => tool.trim()).filter(Boolean))
+}
+
+/**
+ * @param {Record<string, any>[]} manifests
+ * @param {Set<string>} disabled base tool names switched off in this runtime
+ * @returns {Record<string, any>[]}
+ */
+export function offeredCapabilities(manifests, disabled) {
+  const off = MODULE_TOOLS.filter((tool) => disabled.has(tool))
+  if (!off.length) return manifests
+  return manifests.filter((manifest) => !(manifest.tools ?? []).some((/** @type {unknown} */ tool) =>
+    off.includes(String(tool).replace(/^mcp__evimed__/, ''))))
 }

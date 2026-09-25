@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
-  "capability": "geo-content",
-  "version": "sha256:82ad9b430302fe3788e2d403e11de22cf88765c144955d48f2f686cae77845fc",
+  "capability": "geo-strategy",
+  "version": "sha256:e119f87b4dccb48fbd7790a159e587bfc4b859509954f64e97994fbca3aa0a7b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 30,
-    "edges": 9,
+    "nodes": 25,
+    "edges": 3,
     "byVia": {
-      "schema": 9,
+      "schema": 3,
       "model": 0,
       "executed": 0
     },
@@ -420,130 +420,6 @@
       "stateEffect": "none"
     },
     {
-      "name": "mcp__evimed__clinical_trial_search",
-      "source": "mcp",
-      "description": "Search configured clinical-trial registries.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
-          },
-          "recruitmentStatus": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
-          "registry": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2
-          },
-          "startYear": {
-            "type": "integer",
-            "minimum": 1900,
-            "maximum": 2100
-          },
-          "endYear": {
-            "type": "integer",
-            "minimum": 1900,
-            "maximum": 2100
-          },
-          "status": {
-            "type": "array",
-            "maxItems": 20,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          "phase": {
-            "type": "array",
-            "maxItems": 20,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          "studyType": {
-            "type": "array",
-            "maxItems": 20,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          "hasArticles": {
-            "type": "array",
-            "maxItems": 1,
-            "items": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 1
-            }
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "PubMed",
-              "Embase",
-              "ICTRP",
-              "CT.gov",
-              "CINAHL"
-            ]
-          },
-          "minSampleSize": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 10000000
-          },
-          "maxSampleSize": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 10000000
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": [
-          {
-            "path": "items[].nctId",
-            "type": "nct_id"
-          },
-          {
-            "path": "items[].pmid",
-            "type": "pmid"
-          }
-        ]
-      },
-      "typeTags": [
-        "source_id"
-      ],
-      "requiredTypeTags": [],
-      "outputTypeTags": [
-        "nct_id",
-        "pmid"
-      ],
-      "stateEffect": "none"
-    },
-    {
       "name": "mcp__evimed__drug_label_search",
       "source": "mcp",
       "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
@@ -607,46 +483,6 @@
         "drug_name"
       ],
       "requiredTypeTags": [],
-      "outputTypeTags": [
-        "drug_name"
-      ],
-      "stateEffect": "none"
-    },
-    {
-      "name": "mcp__evimed__drug_term_normalize",
-      "source": "mcp",
-      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms and the drug's WHO ATC codes as RxNorm carries them.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "term": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "term"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": [
-          {
-            "path": "normalized.term",
-            "type": "drug_name"
-          }
-        ]
-      },
-      "typeTags": [
-        "mesh_term"
-      ],
-      "requiredTypeTags": [
-        "mesh_term"
-      ],
       "outputTypeTags": [
         "drug_name"
       ],
@@ -948,48 +784,6 @@
       "stateEffect": "none"
     },
     {
-      "name": "mcp__evimed__kb_search",
-      "source": "mcp",
-      "description": "Search the researcher's own knowledge base (this project's uploaded documents and their personal library) for passages. Answers with quotable snippets, the document, page and character offsets; a small library is answered with the files to read instead.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20
-          },
-          "sourceIds": {
-            "type": "array",
-            "maxItems": 50,
-            "items": {
-              "type": "string",
-              "pattern": "^src_[a-f0-9]{32}$"
-            }
-          }
-        },
-        "required": [
-          "query"
-        ],
-        "additionalProperties": false
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": []
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [],
-      "stateEffect": "none"
-    },
-    {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
       "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
@@ -1183,99 +977,6 @@
         "source_id"
       ],
       "outputTypeTags": [],
-      "stateEffect": "none"
-    },
-    {
-      "name": "mcp__evimed__open_access_full_text",
-      "source": "mcp",
-      "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "identifier": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "identifier"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": [
-          {
-            "path": "artifacts[].path",
-            "type": "file_path"
-          },
-          {
-            "path": "metadata.doi",
-            "type": "doi"
-          },
-          {
-            "path": "metadata.pmcid",
-            "type": "pmid"
-          }
-        ]
-      },
-      "typeTags": [
-        "doi",
-        "pmid"
-      ],
-      "requiredTypeTags": [
-        "doi",
-        "pmid"
-      ],
-      "outputTypeTags": [
-        "doi",
-        "file_path",
-        "pmid"
-      ],
-      "stateEffect": "writes_workspace"
-    },
-    {
-      "name": "mcp__evimed__pharmacy_reference_search",
-      "source": "mcp",
-      "description": "Search the optional private curated pharmacy reference index. Results are decision-support context, not current clinical authority, and require verification against current official sources.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 50
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": [
-          {
-            "path": "items[].drug",
-            "type": "drug_name"
-          }
-        ]
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [
-        "drug_name"
-      ],
       "stateEffect": "none"
     },
     {
@@ -1520,79 +1221,6 @@
     }
   ],
   "edges": [
-    {
-      "from": "mcp__evimed__clinical_trial_search",
-      "to": "mcp__evimed__open_access_full_text",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "pmid"
-      ]
-    },
-    {
-      "from": "mcp__evimed__guideline_search",
-      "to": "mcp__evimed__open_access_full_text",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "doi"
-      ]
-    },
-    {
-      "from": "mcp__evimed__literature_search",
-      "to": "mcp__evimed__open_access_full_text",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "doi",
-        "pmid"
-      ]
-    },
-    {
-      "from": "mcp__evimed__open_access_full_text",
-      "to": "edit",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__open_access_full_text",
-      "to": "read",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__open_access_full_text",
-      "to": "write",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
     {
       "from": "mcp__evimed__web_read",
       "to": "edit",

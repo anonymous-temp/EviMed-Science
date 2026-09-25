@@ -1278,3 +1278,15 @@ test("the root is shown every research tool its own instructions name, and the s
   assert.ok(!hidden.includes("mcp__tooluniverse__execute_tool"), "another server's tools are not this list's business");
   assert.ok(hidden.includes("mcp__evimed__a_tool_added_later"), "a research tool this build does not know is delegated work by default");
 });
+
+test("a capability built on a module's tools is not offered where the module is switched off", async () => {
+  const { offeredCapabilities, disabledTools } = await import("../plugins/guidance.mjs");
+  const manifests = [
+    { id: "clinical-evidence-synthesis", tools: ["mcp__evimed__literature_search", "mcp__evimed__frontier_search"] },
+    { id: "geo-insight", tools: ["mcp__evimed__geo_read", "mcp__evimed__geo_write", "mcp__evimed__drug_label_search"] },
+  ];
+  assert.deepEqual(offeredCapabilities(manifests, disabledTools("")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight"]);
+  // An optional tool switched off keeps its capability; the module's own tools do not.
+  assert.deepEqual(offeredCapabilities(manifests, disabledTools("frontier_search")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight"]);
+  assert.deepEqual(offeredCapabilities(manifests, disabledTools("web_read, geo_read,geo_write,social_posts_search")).map((item) => item.id), ["clinical-evidence-synthesis"]);
+});
