@@ -402,6 +402,26 @@ services:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT:
+      # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
+      # through. Value-less: unset keeps config.mjs's defaults — the module off,
+      # open to operators once on, no social channel, no marketplace. The
+      # marketplace key is a file path; mount the file read-only at that path.
+      OPEN_SCIENCE_GEO_ENABLED:
+      OPEN_SCIENCE_GEO_AUDIENCE:
+      OPEN_SCIENCE_GEO_PREVIEW_USERS:
+      OPEN_SCIENCE_GEO_POLL_MS:
+      OPEN_SCIENCE_GEO_LEASE_MS:
+      OPEN_SCIENCE_GEO_DAILY_BUDGET_CNY:
+      OPEN_SCIENCE_GEO_ENGINES:
+      OPEN_SCIENCE_GEO_NIGHT_WINDOW:
+      OPEN_SCIENCE_GEO_TIMEZONE:
+      OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP:
+      OPEN_SCIENCE_GEO_SOCIAL_URL:
+      OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
+      OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
+      OPEN_SCIENCE_MEDIA_MARKET_URL:
+      OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE:
+      OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY:
       OPEN_SCIENCE_REVIEW_ENABLED:
       OPEN_SCIENCE_REVIEW_MODEL:
       OPEN_SCIENCE_REVIEW_API_BASE:

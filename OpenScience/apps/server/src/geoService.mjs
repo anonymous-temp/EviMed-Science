@@ -1,0 +1,1149 @@
+/**
+ * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
+ * module's switch, readiness and metrics.
+ *
+ * Hidden knowledge:
+ *
+ * - **Numbers are read, never computed here.** Every rate, index and interval
+ *   on a page is a row of `evimed_geo.metrics` the measurement package wrote,
+ *   with its numerator, denominator, interval, status and data type. A cell
+ *   no row speaks for is `absent` (「未测」), never zero; the counts shown
+ *   beside a table (failure modes, the most-mentioned competitor) are tallies
+ *   of fact rows, not metrics. So the pages and the weekly report can never
+ *   disagree about a number: they read the same row.
+ * - **Which row is which** is `GEO_METRIC_IDS` in the domain: the overview's
+ *   four blocks read `GVI`, `M-01S` (mention over P2 and P3 only), `M-06` and
+ *   `M-08`; 诊断 reads the engine- and pool-scoped `M-01`/`M-06`/`M-08`/`M-10`;
+ *   监测 draws the arms with `M-01` and reads the net effect from `NET` and
+ *   the noise band from `NOISE`. A row's date is its round's sample date.
+ * - **Ownership is the project lookup.** Every method resolves the GEO project
+ *   for the account first and answers 404 `geo_project_not_found` for anything
+ *   else — another account's project reads exactly like one that never
+ *   existed. The measurement and market tables are read here by project id
+ *   after that lookup.
+ * - **Money is shown from orders, decided elsewhere.** The distribution view
+ *   sums the order rows' reserved and settled amounts; placing, cancelling and
+ *   the budget itself are the market's (`geoMarket.mjs`), handed in as hooks
+ *   by the routes.
+ * - **Off is invisible** (`geoAudienceAllows`): the module off, or on for
+ *   operators and the preview list only while this account is neither, reads
+ *   as a module that does not exist — the routes answer 404 `geo_not_enabled`
+ *   and the runtime is given no tools.
+ *
+ * @module geoService
+ */
+
+import path from "node:path";
+import {
+  GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
+  GEO_ORDER_OPEN_STATES, GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES,
+} from "@evimed/domain";
+import { HttpError } from "./security.mjs";
+
+/** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
+ *   status: string, dataType: string }} GeoCell */
+
+/** The cell no row speaks for: 「未测」, never zero. */
+export const GEO_ABSENT_CELL = Object.freeze({ value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent", dataType: "measured" });
+
+/** Snapshot text handed to a run, per item (spec §4). */
+export const GEO_ANSWER_TEXT_LIMIT = 4_000;
+/** Items one runtime read returns at most (spec §4). */
+export const GEO_READ_MAX_ITEMS = 50;
+
+/** The name a new GEO project's control-plane project gets when no brand is given yet. */
+export const GEO_DEFAULT_PROJECT_NAME = "新 GEO 项目";
+
+const DIAGNOSIS_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
+const TREND_POINTS = 26;
+const WEEK_ITEMS = 5;
+const WEEK_MS = 7 * 86_400_000;
+const SHA256 = /^[a-f0-9]{64}$/;
+
+/** @param {number} status @param {string} code @param {string} message */
+const failure = (status, code, message) => new HttpError(status, code, message);
+/** @param {unknown} value */
+const iso = (value) => (value == null ? null : new Date(/** @type {any} */ (value)).toISOString());
+/** @param {unknown} value */
+const num = (value) => (value == null ? null : Number(value));
+/** @param {unknown} value */
+const text = (value) => (typeof value === "string" ? value : null);
+
+/**
+ * Whether this account sees the module at all: on, and either open to every
+ * account or this one an operator or on the preview list (ids, as the
+ * operator list is). The default audience is `operators`.
+ * @param {Record<string, any>} config @param {{ id?: string } | null | undefined} user
+ */
+export function geoAudienceAllows(config, user) {
+  if (!config?.geoEnabled) return false;
+  if (config.geoAudience === "all") return true;
+  const id = String(user?.id ?? "");
+  return Boolean(id) && ((config.operatorUsers ?? []).includes(id) || (config.geoPreviewUsers ?? []).includes(id));
+}
+
+/** Whether the media marketplace is wired: its base URL and its key file are both configured. @param {Record<string, any>} config */
+export function geoMarketConfigured(config) {
+  return Boolean(String(config?.mediaMarketUrl ?? "").trim() && String(config?.mediaMarketApiKeyFile ?? "").trim());
+}
+
+/**
+ * Where a snapshot's screenshot lives: content-addressed under the server's
+ * data directory (spec §2). The measurement package writes there, and the
+ * screenshot route reads there; this is the one spelling of the path.
+ * @param {string} dataDir @param {string} sha256
+ */
+export function geoScreenshotPath(dataDir, sha256) {
+  if (!SHA256.test(String(sha256))) throw new TypeError("A screenshot is addressed by its lowercase sha256.");
+  return path.join(dataDir, "geo", "snapshots", sha256.slice(0, 2), `${sha256}.png`);
+}
+
+/** @param {any} row @returns {GeoCell} */
+export function geoCellFromRow(row) {
+  if (!row) return { ...GEO_ABSENT_CELL };
+  return {
+    value: num(row.value), numerator: num(row.numerator), denominator: num(row.denominator), ciLow: num(row.ci_low), ciHigh: num(row.ci_high),
+    status: String(row.status), dataType: String(row.data_type ?? "measured"),
+  };
+}
+
+/** A calendar day in a time zone, `YYYY-MM-DD`. @param {Date} date @param {string} timeZone */
+function dayIn(date, timeZone) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+/** A metric row's day: its round's sample date, else the day it was computed in the module's zone. @param {any} row @param {string} timeZone */
+function rowDay(row, timeZone) {
+  if (row.sample_date) return typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : dayIn(new Date(row.sample_date), timeZone);
+  return dayIn(new Date(row.computed_at), timeZone);
+}
+
+/** The next Monday on or after tomorrow, in the zone. @param {Date} now @param {string} timeZone */
+function nextMonday(now, timeZone) {
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const candidate = new Date(now.getTime() + offset * 86_400_000);
+    const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(candidate);
+    if (weekday === "Mon") return dayIn(candidate, timeZone);
+  }
+  return dayIn(now, timeZone);
+}
+
+/** @param {unknown} value @param {number} max */
+const clip = (value, max) => {
+  const string = String(value ?? "").replace(/\s+/g, " ").trim();
+  return string.length > max ? `${string.slice(0, max - 1)}…` : string;
+};
+
+/** @param {string} engine */
+const engineLabel = (engine) => /** @type {Record<string, string>} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine;
+
+/** @param {any} row */
+function errorView(row) {
+  return {
+    id: String(row.id),
+    engine: String(row.engine),
+    statement: text(row.statement),
+    severity: text(row.severity),
+    errorType: text(row.error_type),
+    stability: row.confirm && typeof row.confirm === "object" ? text(row.confirm.stability) : null,
+    citedSource: row.cited_source && typeof row.cited_source === "object" ? row.cited_source : null,
+    action: text(row.action),
+    status: String(row.status),
+    snapshotId: text(row.last_snapshot_id) ?? text(row.first_snapshot_id),
+    questionId: text(row.question_id),
+    createdAt: iso(row.created_at),
+  };
+}
+
+/** A metric row as a runtime read lists it. @param {any} row @param {(metricId: string) => string | null} name */
+function metricView(row, name) {
+  return {
+    metricId: String(row.metric_id), name: name(String(row.metric_id)), scope: String(row.scope), pool: text(row.pool), engine: text(row.engine),
+    groupId: text(row.group_id), arm: text(row.arm), roundId: text(row.round_id), computedAt: iso(row.computed_at), cell: geoCellFromRow(row),
+  };
+}
+
+export class GeoService {
+  /**
+   * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
+   *   metricName?: ((metricId: string) => string | null) | null }} options
+   *   `metricName` names a metric id for 「更多指标」; the metrics package can
+   *   hand in its catalogue's names, and without it the domain's labels answer
+   *   for the ids the platform reads and every other id is its own name.
+   */
+  constructor({ store, config, social = null, now = () => new Date(), metricName = null }) {
+    if (!store || !config) throw new TypeError("The GEO service needs its store and the config.");
+    this.store = store;
+    this.config = config;
+    this.social = social;
+    this.now = now;
+    this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
+    /** @param {string} metricId */
+    this.metricName = (metricId) => metricName?.(metricId) ?? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[metricId] ?? null;
+    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0 };
+  }
+
+  ready() { return this.store.ready(); }
+
+  /** @param {{ id?: string }} user */
+  allows(user) { return geoAudienceAllows(this.config, user); }
+
+  /** @param {{ id?: string }} user */
+  isOperator(user) { return (this.config.operatorUsers ?? []).includes(String(user?.id ?? "")); }
+
+  /** The account's GEO project, or 404. @param {{ id: string }} user @param {string} id */
+  async requireProject(user, id) {
+    const project = typeof id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(id) ? await this.store.getProject(String(user.id), id) : null;
+    if (!project) {
+      this.counters.notFound += 1;
+      throw failure(404, "geo_project_not_found", "GEO project not found.");
+    }
+    return project;
+  }
+
+  // --- rows the views share -------------------------------------------------------
+
+  /**
+   * The latest project-scope row of each metric id, for many projects at once.
+   * @param {string[]} geoIds @param {readonly string[]} metricIds
+   * @returns {Promise<Map<string, Map<string, any>>>} project → metric → row
+   */
+  async #latestProjectMetrics(geoIds, metricIds) {
+    /** @type {Map<string, Map<string, any>>} */
+    const byProject = new Map();
+    if (!geoIds.length) return byProject;
+    const result = await this.store.query(`SELECT DISTINCT ON (m.geo_project_id, m.metric_id) m.*, r.sample_date
+      FROM evimed_geo.metrics m LEFT JOIN evimed_geo.rounds r ON r.id = m.round_id
+      WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = 'project' AND m.metric_id = ANY($2::text[])
+      ORDER BY m.geo_project_id, m.metric_id, m.computed_at DESC`, [geoIds, [...metricIds]]);
+    for (const row of result.rows) {
+      const map = byProject.get(row.geo_project_id) ?? new Map();
+      map.set(String(row.metric_id), row);
+      byProject.set(row.geo_project_id, map);
+    }
+    return byProject;
+  }
+
+  /**
+   * A metric's project-scope series: one point per round (its latest row),
+   * oldest first, the last 26.
+   * @param {string[]} geoIds @param {readonly string[]} metricIds
+   * @returns {Promise<Map<string, Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null }>>>>}
+   */
+  async #series(geoIds, metricIds, scope = "project", extra = "") {
+    // `extra` names a column spliced into the query: only these two ever are.
+    if (extra && !["arm", "engine"].includes(extra)) throw new TypeError("A series splits by arm or engine only.");
+    /** @type {Map<string, Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null }>>>} */
+    const byProject = new Map();
+    if (!geoIds.length) return byProject;
+    const result = await this.store.query(`SELECT * FROM (
+        SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""})
+          m.*, r.sample_date
+        FROM evimed_geo.metrics m LEFT JOIN evimed_geo.rounds r ON r.id = m.round_id
+        WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[])
+        ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.computed_at DESC
+      ) latest ORDER BY computed_at`, [geoIds, [...metricIds], scope]);
+    for (const row of result.rows) {
+      const key = extra ? `${row.metric_id}\u0000${row[extra] ?? ""}` : String(row.metric_id);
+      const map = byProject.get(row.geo_project_id) ?? new Map();
+      const points = map.get(key) ?? [];
+      points.push({ date: rowDay(row, this.timeZone), value: num(row.value), n: num(row.denominator), k: num(row.numerator) });
+      map.set(key, points);
+      byProject.set(row.geo_project_id, map);
+    }
+    for (const map of byProject.values()) for (const [key, points] of map) map.set(key, points.slice(-TREND_POINTS));
+    return byProject;
+  }
+
+  /** The chosen tier's target for a metric, project-wide first. @param {Awaited<ReturnType<import("./geoStore.mjs").GeoStore["latestTargets"]>>} targets @param {string} tier @param {string} metricId */
+  #target(targets, tier, metricId) {
+    if (!targets) return null;
+    const rows = targets.rows.filter((row) => row.tier === tier && row.metricId === metricId);
+    const row = rows.find((candidate) => candidate.pool === "all") ?? rows[0];
+    return row?.target ?? null;
+  }
+
+  // --- the home list ------------------------------------------------------------------
+
+  /** `GET /api/geo/projects`. @param {{ id: string }} user */
+  async listProjects(user) {
+    const projects = await this.store.listProjects(String(user.id));
+    const ids = projects.map((project) => project.id);
+    const headline = [GEO_METRIC_IDS.gvi, GEO_METRIC_IDS.mentionHeadline];
+    const [latest, series, names, alerts, targets] = await Promise.all([
+      this.#latestProjectMetrics(ids, headline),
+      this.#series(ids, [GEO_METRIC_IDS.gvi]),
+      this.#controlProjectNames(String(user.id), projects.map((project) => project.projectId)),
+      this.#alerts(ids),
+      Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
+    ]);
+    return {
+      projects: projects.map((project, index) => {
+        const metrics = latest.get(project.id) ?? new Map();
+        const trend = (series.get(project.id)?.get(GEO_METRIC_IDS.gvi) ?? []).map((point) => point.value).filter((value) => value != null);
+        const alert = alerts.get(project.id) ?? { wrongOurs: 0, safety: 0, text: null };
+        return {
+          id: project.id,
+          projectId: project.projectId,
+          name: text(project.product?.brandName) || names.get(project.projectId) || GEO_DEFAULT_PROJECT_NAME,
+          product: { brandName: text(project.product?.brandName), genericName: text(project.product?.genericName) },
+          coverageDays: project.coverageDays,
+          engines: project.engines,
+          status: project.status,
+          steps: project.steps,
+          headline: {
+            gvi: { ...geoCellFromRow(metrics.get(GEO_METRIC_IDS.gvi)), target: this.#target(targets[index], project.tier, GEO_METRIC_IDS.gvi), trend },
+            mention: geoCellFromRow(metrics.get(GEO_METRIC_IDS.mentionHeadline)),
+          },
+          alert,
+          updatedAt: project.updatedAt,
+        };
+      }),
+    };
+  }
+
+  /** @param {string} userId @param {string[]} projectIds */
+  async #controlProjectNames(userId, projectIds) {
+    /** @type {Map<string, string>} */
+    const names = new Map();
+    if (!projectIds.length) return names;
+    try {
+      const result = await this.store.query(`SELECT id, name FROM evimed_control.projects WHERE user_id = $1 AND id = ANY($2::text[])`, [userId, projectIds]);
+      for (const row of result.rows) names.set(String(row.id), String(row.name));
+    } catch {
+      // A store without the control-plane schema (a unit test's double) names nothing.
+    }
+    return names;
+  }
+
+  /**
+   * 讲错我方 still open and safety stops, per project, with the one sentence
+   * the home row shows in red: the most severe open error, in the engine's name.
+   * @param {string[]} geoIds @returns {Promise<Map<string, { wrongOurs: number, safety: number, text: string | null }>>}
+   */
+  async #alerts(geoIds) {
+    /** @type {Map<string, { wrongOurs: number, safety: number, text: string | null }>} */
+    const alerts = new Map();
+    if (!geoIds.length) return alerts;
+    const [errors, worst, safety] = await Promise.all([
+      this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.errors
+        WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed' GROUP BY geo_project_id`, [geoIds]),
+      this.store.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, engine, statement FROM evimed_geo.errors
+        WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed'
+        ORDER BY geo_project_id, severity DESC NULLS LAST, updated_at DESC`, [geoIds]),
+      this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.articles
+        WHERE geo_project_id = ANY($1::text[]) AND safety = 'open' AND status <> 'withdrawn' GROUP BY geo_project_id`, [geoIds]),
+    ]);
+    const count = (/** @type {any} */ result) => new Map(result.rows.map((/** @type {any} */ row) => [row.geo_project_id, Number(row.n)]));
+    const wrong = count(errors);
+    const stops = count(safety);
+    const sentences = new Map(worst.rows.map((/** @type {any} */ row) => [row.geo_project_id,
+      row.statement ? `${engineLabel(String(row.engine))}：${clip(row.statement, 60)}` : null]));
+    for (const id of geoIds) {
+      alerts.set(id, { wrongOurs: wrong.get(id) ?? 0, safety: stops.get(id) ?? 0, text: sentences.get(id) ?? (stops.get(id) ? "有稿件的安全问题待确认" : null) });
+    }
+    return alerts;
+  }
+
+  // --- creation, settings, deletion ------------------------------------------------------
+
+  /**
+   * `POST /api/geo/projects`: the control-plane project, its GEO row, and a
+   * conversation bound to `geo-insight`.
+   * @param {{ id: string }} user
+   * @param {{ brandName?: string, coverageDays?: number, engines?: string[] }} input already validated by the route
+   * @param {{ createControlProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
+   *   bindSession: (user: any, projectId: string) => Promise<{ sessionId: string, bound: boolean }> }} hooks
+   */
+  async createProject(user, input, hooks) {
+    const name = input.brandName || GEO_DEFAULT_PROJECT_NAME;
+    const control = await hooks.createControlProject(user, name);
+    const engines = input.engines?.length ? input.engines : (this.config.geoEngines?.length ? this.config.geoEngines : GEO_DEFAULT_ENGINES);
+    const project = await this.store.createProject({
+      userId: String(user.id), projectId: control.id, engines, coverageDays: input.coverageDays ?? 90,
+      product: input.brandName ? { brandName: input.brandName } : {},
+    });
+    const session = await hooks.bindSession(user, control.id);
+    this.counters.projectsCreated += 1;
+    return { id: project.id, projectId: control.id, sessionId: session.sessionId, bound: session.bound };
+  }
+
+  /**
+   * `PATCH /api/geo/projects/:id`.
+   * @param {{ id: string }} user @param {string} id @param {{ coverageDays?: number, engines?: string[], tier?: string, status?: string }} patch
+   */
+  async updateProject(user, id, patch) {
+    await this.requireProject(user, id);
+    const updated = await this.store.updateProject(String(user.id), id, patch);
+    if (!updated) throw failure(404, "geo_project_not_found", "GEO project not found.");
+    return updated;
+  }
+
+  /** `DELETE /api/geo/projects/:id`: hidden from 循证 GEO; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
+  async deleteProject(user, id) {
+    const project = await this.requireProject(user, id);
+    await this.store.softDeleteProject(String(user.id), id);
+    return { id, projectId: project.projectId, deleted: true };
+  }
+
+  // --- the project page -------------------------------------------------------------------
+
+  /**
+   * `GET /api/geo/projects/:id` without the session id (the route adds it).
+   * @param {{ id: string }} user @param {string} id
+   */
+  async projectView(user, id) {
+    return this.projectViewOf(await this.requireProject(user, id));
+  }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async projectViewOf(project) {
+    const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
+    const [latest, series, targets, week, names] = await Promise.all([
+      this.#latestProjectMetrics([project.id], metricIds),
+      this.#series([project.id], metricIds),
+      this.store.latestTargets(project.id),
+      this.#week(project),
+      this.#controlProjectNames(project.userId, [project.projectId]),
+    ]);
+    const rows = latest.get(project.id) ?? new Map();
+    const points = series.get(project.id) ?? new Map();
+    return {
+      ...project,
+      name: text(project.product?.brandName) || names.get(project.projectId) || GEO_DEFAULT_PROJECT_NAME,
+      overview: {
+        metrics: GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({
+          key,
+          cell: geoCellFromRow(rows.get(metricId)),
+          target: this.#target(targets, project.tier, metricId),
+          trend: (points.get(metricId) ?? []).map(({ date, value }) => ({ date, value })),
+        })),
+        week,
+        steps: project.steps,
+      },
+    };
+  }
+
+  /**
+   * 「本周」: the week's few events, most urgent first, each with where it
+   * leads. Facts only — every sentence restates a row.
+   * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project
+   */
+  async #week(project) {
+    const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
+    const [errors, stops, rounds, publishable, published] = await Promise.all([
+      this.store.query(`SELECT id, engine, statement, severity, last_snapshot_id FROM evimed_geo.errors
+        WHERE geo_project_id = $1 AND status <> 'closed' AND created_at >= $2 ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 3`, [project.id, since]),
+      this.store.query(`SELECT id, title FROM evimed_geo.articles WHERE geo_project_id = $1 AND safety = 'open' AND status <> 'withdrawn'
+        ORDER BY updated_at DESC LIMIT 2`, [project.id]),
+      this.store.query(`SELECT id, kind, done FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status IN ('done', 'partial')
+        AND finished_at >= $2 AND kind IN ('baseline', 'weekly', 'single_step', 'noise') ORDER BY finished_at DESC LIMIT 2`, [project.id, since]),
+      this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.articles WHERE geo_project_id = $1 AND status = 'publishable'
+        AND updated_at >= $2`, [project.id, since]),
+      this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.orders WHERE geo_project_id = $1
+        AND state IN ('published', 'verified', 'settled') AND updated_at >= $2`, [project.id, since]),
+    ]);
+    /** @type {Array<{ kind: string, text: string, tab: string, ref: Record<string, string> | null }>} */
+    const items = [];
+    for (const row of errors.rows) {
+      items.push({ kind: "wrong_ours", text: `${engineLabel(String(row.engine))}讲错：${clip(row.statement, 60)}`, tab: "diagnosis",
+        ref: { errorId: String(row.id), ...(row.last_snapshot_id ? { snapshotId: String(row.last_snapshot_id) } : {}) } });
+    }
+    for (const row of stops.rows) {
+      items.push({ kind: "safety", text: `「${clip(row.title ?? "稿件", 30)}」有安全问题待确认`, tab: "content", ref: { articleId: String(row.id) } });
+    }
+    for (const row of rounds.rows) {
+      const label = /** @type {Record<string, string>} */ (GEO_ROUND_KIND_LABELS_ZH)[String(row.kind)] ?? "测量";
+      items.push({ kind: "round", text: `${label}完成，${Number(row.done)} 次提问`, tab: row.kind === "noise" ? "monitoring" : "diagnosis",
+        ref: { roundId: String(row.id) } });
+    }
+    const readyCount = Number(publishable.rows[0]?.n ?? 0);
+    if (readyCount) items.push({ kind: "articles", text: `${readyCount} 篇稿件可发布`, tab: "content", ref: null });
+    const publishedCount = Number(published.rows[0]?.n ?? 0);
+    if (publishedCount) items.push({ kind: "orders", text: `${publishedCount} 篇稿件已发布`, tab: "distribution", ref: null });
+    return items.slice(0, WEEK_ITEMS);
+  }
+
+  /** `GET …/:id/evidence`. @param {{ id: string }} user @param {string} id */
+  async evidence(user, id) { return this.evidenceOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async evidenceOf(project) {
+    const claims = await this.store.listClaims(project.id);
+    return {
+      product: project.product,
+      competitors: project.competitors,
+      claims: claims.map((claim) => ({
+        id: claim.id, statement: claim.statement, quote: claim.quote, sourceRef: claim.sourceRef, sourceKind: claim.sourceKind,
+        evidenceLevel: claim.evidenceLevel, population: claim.population, inLabel: claim.inLabel, verifiedAt: claim.verifiedAt,
+        validUntil: claim.validUntil, status: claim.status,
+      })),
+    };
+  }
+
+  /** `GET …/:id/journey`. @param {{ id: string }} user @param {string} id */
+  async journey(user, id) { return this.journeyOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async journeyOf(project) {
+    const latest = await this.store.latestJourney(project.id);
+    const data = latest?.data ?? {};
+    const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value : []);
+    return {
+      version: latest?.version ?? null,
+      subtypes: list(data.subtypes), personas: list(data.personas), stages: list(data.stages), careNodes: list(data.careNodes), files: list(data.files),
+    };
+  }
+
+  /**
+   * `GET …/:id/questions?version=`: the named set version, the latest by default.
+   * @param {{ id: string }} user @param {string} id @param {number | null} version
+   */
+  async questions(user, id, version = null) { return this.questionsOf(await this.requireProject(user, id), version); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {number | null} version */
+  async questionsOf(project, version = null) {
+    const sets = await this.store.questionSets(project.id);
+    const chosen = version ?? sets[0]?.version ?? null;
+    if (version != null && !sets.some((set) => set.version === version)) throw failure(404, "geo_version_invalid", "No such question set version.");
+    const groups = chosen == null ? [] : await this.store.questionMap(project.id, chosen);
+    return {
+      sets: sets.map(({ version: setVersion, lockedAt, measuredCount }) => ({ version: setVersion, lockedAt, measuredCount })),
+      version: chosen,
+      groups: groups.map((group) => ({
+        id: group.id, pool: group.pool, name: group.name, typicalQuestion: group.typicalQuestion, journeyStage: group.journeyStage,
+        audience: group.audience, weight: group.weight, isControl: group.isControl, signal: group.signal,
+        questions: group.questions.map((question) => ({
+          id: question.id, text: question.text, kind: question.kind, platform: question.platform, sourceUrl: question.sourceUrl,
+          isMeasured: question.isMeasured,
+        })),
+      })),
+    };
+  }
+
+  /** `POST …/:id/questions/:qid/unmeasure`. @param {{ id: string }} user @param {string} id @param {string} questionId */
+  async unmeasureQuestion(user, id, questionId) {
+    const project = await this.requireProject(user, id);
+    const written = await this.store.unmeasureQuestion(String(user.id), project.id, questionId);
+    if (!written) throw failure(404, "geo_question_not_found", "Question not found.");
+    return written;
+  }
+
+  /** @param {string} geoId @param {string | null} roundId */
+  async #round(geoId, roundId) {
+    if (roundId) {
+      const row = (await this.store.query(`SELECT * FROM evimed_geo.rounds WHERE geo_project_id = $1 AND id = $2`, [geoId, roundId])).rows[0];
+      if (!row) throw failure(404, "geo_round_not_found", "Round not found.");
+      return row;
+    }
+    return (await this.store.query(`SELECT * FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
+      ORDER BY (status IN ('done', 'partial')) DESC, created_at DESC LIMIT 1`, [geoId, [...DIAGNOSIS_ROUND_KINDS]])).rows[0] ?? null;
+  }
+
+  /**
+   * `GET …/:id/diagnosis?round=`.
+   * @param {{ id: string }} user @param {string} id @param {string | null} roundId
+   */
+  async diagnosis(user, id, roundId = null) { return this.diagnosisOf(await this.requireProject(user, id), roundId); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string | null} roundId */
+  async diagnosisOf(project, roundId = null) {
+    const round = await this.#round(project.id, roundId);
+    const rounds = (await this.store.query(`SELECT id, kind, sample_date, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1
+      AND kind = ANY($2::text[]) ORDER BY created_at DESC LIMIT 20`, [project.id, [...DIAGNOSIS_ROUND_KINDS]])).rows;
+    const errors = (await this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1
+      ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT 100`, [project.id])).rows.map(errorView);
+    const noiseRow = (await this.store.query(`SELECT value, computed_at FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project'
+      AND metric_id = $2 ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_METRIC_IDS.noiseBand])).rows[0];
+    const engines = round && Array.isArray(round.engines) && round.engines.length ? round.engines.map(String) : project.engines;
+    /** @type {Map<string, any>} */
+    const cells = new Map();
+    let failureModes = { omitted: 0, correct: 0, wrongOurs: 0, wrongCompetitor: 0 };
+    /** @type {Map<string, { competitor: string | null, issue: string | null }>} */
+    const pools = new Map();
+    /** @type {any[]} */
+    let more = [];
+    if (round) {
+      const rows = (await this.store.query(`SELECT DISTINCT ON (scope, coalesce(pool, ''), coalesce(engine, ''), metric_id) *
+        FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id = $2 AND scope IN ('project', 'engine', 'pool')
+        ORDER BY scope, coalesce(pool, ''), coalesce(engine, ''), metric_id, computed_at DESC`, [project.id, round.id])).rows;
+      for (const row of rows) cells.set(`${row.scope}\u0000${row.pool ?? ""}\u0000${row.engine ?? ""}\u0000${row.metric_id}`, row);
+      /** @type {Set<string>} */
+      const hidden = new Set([...GEO_OVERVIEW_METRICS.map((entry) => entry.metricId), GEO_METRIC_IDS.netEffect, GEO_METRIC_IDS.noiseBand]);
+      more = rows.filter((row) => row.scope === "project" && !hidden.has(String(row.metric_id)))
+        .map((row) => ({ metricId: String(row.metric_id), name: this.metricName(String(row.metric_id)), cell: geoCellFromRow(row) }));
+      const modes = (await this.store.query(`SELECT f.failure_mode, count(*)::integer AS n FROM evimed_geo.facts f
+        JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+        WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal') GROUP BY f.failure_mode`, [round.id, project.id])).rows;
+      const tally = new Map(modes.map((/** @type {any} */ row) => [row.failure_mode, Number(row.n)]));
+      failureModes = { omitted: tally.get("omitted") ?? 0, correct: tally.get("correct") ?? 0, wrongOurs: tally.get("wrong_ours") ?? 0,
+        wrongCompetitor: tally.get("wrong_competitor") ?? 0 };
+      const competitors = (await this.store.query(`SELECT DISTINCT ON (q.pool) q.pool, brand.value ->> 'name' AS name,
+          sum(coalesce((brand.value ->> 'count')::integer, 1)) AS n
+        FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id
+          CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.brands) = 'array' THEN f.brands ELSE '[]'::jsonb END) AS brand(value)
+        WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal') AND (brand.value ->> 'competitor') = 'true'
+        GROUP BY q.pool, brand.value ->> 'name' ORDER BY q.pool, n DESC, name`, [round.id, project.id])).rows;
+      const issues = (await this.store.query(`SELECT DISTINCT ON (q.pool) q.pool, f.failure_mode, count(*)::integer AS n
+        FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id
+        WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal')
+          AND f.failure_mode IN ('omitted', 'wrong_ours', 'wrong_competitor')
+        GROUP BY q.pool, f.failure_mode ORDER BY q.pool, n DESC, f.failure_mode`, [round.id, project.id])).rows;
+      for (const pool of GEO_POOLS) {
+        pools.set(pool, {
+          competitor: text(competitors.find((/** @type {any} */ row) => row.pool === pool)?.name),
+          issue: text(issues.find((/** @type {any} */ row) => row.pool === pool)?.failure_mode),
+        });
+      }
+    }
+    const cell = (/** @type {string} */ scope, /** @type {string} */ pool, /** @type {string} */ engine, /** @type {string} */ metricId) =>
+      geoCellFromRow(cells.get(`${scope}\u0000${pool}\u0000${engine}\u0000${metricId}`));
+    return {
+      round: round ? {
+        id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null,
+        surface: round.surface ?? null, planned: Number(round.planned), done: Number(round.done), engines,
+      } : null,
+      rounds: rounds.map((/** @type {any} */ row) => ({ id: String(row.id), kind: String(row.kind), sampleDate: row.sample_date ? rowDay(row, this.timeZone) : null })),
+      byEngine: engines.map((engine) => ({
+        engine,
+        mention: cell("engine", "", engine, GEO_METRIC_IDS.mention),
+        accuracy: cell("engine", "", engine, GEO_METRIC_IDS.accuracy),
+        citation: cell("engine", "", engine, GEO_METRIC_IDS.citation),
+        retrieval: cell("engine", "", engine, GEO_METRIC_IDS.retrieval),
+      })),
+      byPool: GEO_POOLS.map((pool) => ({
+        pool, mention: cell("pool", pool, "", GEO_METRIC_IDS.mention),
+        topCompetitor: pools.get(pool)?.competitor ?? null, mainIssue: pools.get(pool)?.issue ?? null,
+      })),
+      failureModes,
+      errors,
+      noise: noiseRow ? { band: num(noiseRow.value), measuredAt: iso(noiseRow.computed_at) } : null,
+      more,
+    };
+  }
+
+  /**
+   * `GET …/:id/answers/:snapshotId`: one answer with its question, the other
+   * engines' answers to the same question in the same round, what was
+   * extracted from it, its errors and its earlier dates.
+   * @param {{ id: string }} user @param {string} id @param {string} snapshotId
+   */
+  async answer(user, id, snapshotId) {
+    const project = await this.requireProject(user, id);
+    const snapshot = (await this.store.query(`SELECT * FROM evimed_geo.snapshots WHERE geo_project_id = $1 AND id = $2`, [project.id, snapshotId])).rows[0];
+    if (!snapshot) throw failure(404, "geo_snapshot_not_found", "Snapshot not found.");
+    const [question, facts, siblings, errors, history] = await Promise.all([
+      snapshot.question_id ? this.store.question(project.id, String(snapshot.question_id)) : null,
+      this.store.query(`SELECT brands, statements FROM evimed_geo.facts WHERE snapshot_id = $1`, [snapshot.id]),
+      snapshot.round_id && snapshot.question_id
+        ? this.store.query(`SELECT id, engine, status FROM evimed_geo.snapshots WHERE geo_project_id = $1 AND round_id = $2 AND question_id = $3
+            ORDER BY engine, asked_at DESC`, [project.id, snapshot.round_id, snapshot.question_id])
+        : { rows: [] },
+      this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1 AND (first_snapshot_id = $2 OR last_snapshot_id = $2
+          OR (question_id = $3 AND engine = $4)) ORDER BY severity DESC NULLS LAST, updated_at DESC LIMIT 20`,
+      [project.id, snapshot.id, snapshot.question_id, snapshot.engine]),
+      snapshot.question_id
+        ? this.store.query(`SELECT s.id, s.asked_at, r.sample_date FROM evimed_geo.snapshots s LEFT JOIN evimed_geo.rounds r ON r.id = s.round_id
+            WHERE s.geo_project_id = $1 AND s.question_id = $2 AND s.engine = $3 ORDER BY s.asked_at DESC NULLS LAST LIMIT 30`,
+          [project.id, snapshot.question_id, snapshot.engine])
+        : { rows: [] },
+    ]);
+    const factRow = facts.rows[0];
+    return {
+      question: question ? { id: question.id, text: question.text, pool: question.pool } : null,
+      snapshot: {
+        id: String(snapshot.id), engine: text(snapshot.engine), askedAt: iso(snapshot.asked_at), status: text(snapshot.status),
+        answerText: text(snapshot.answer_text), citations: Array.isArray(snapshot.citations) ? snapshot.citations : [],
+        surface: snapshot.surface ?? null, screenshot: Boolean(snapshot.screenshot_sha256),
+        ...(snapshot.screenshot_sha256 ? { screenshotSha256: String(snapshot.screenshot_sha256) } : {}),
+      },
+      siblings: /** @type {any[]} */ (siblings.rows).filter((row, index, all) => all.findIndex((other) => other.engine === row.engine) === index)
+        .map((row) => ({ engine: text(row.engine), snapshotId: String(row.id), status: text(row.status) })),
+      facts: { brands: Array.isArray(factRow?.brands) ? factRow.brands : [], statements: Array.isArray(factRow?.statements) ? factRow.statements : [] },
+      errors: errors.rows.map(errorView),
+      history: /** @type {any[]} */ (history.rows).map((row) => ({
+        sampleDate: row.sample_date ? rowDay(row, this.timeZone) : (row.asked_at ? dayIn(new Date(row.asked_at), this.timeZone) : null),
+        snapshotId: String(row.id),
+      })),
+    };
+  }
+
+  /**
+   * The file a screenshot route serves, once the snapshot proves it is this
+   * project's.
+   * @param {{ id: string }} user @param {string} id @param {string} sha256
+   */
+  async screenshotPath(user, id, sha256) {
+    const project = await this.requireProject(user, id);
+    if (!SHA256.test(String(sha256))) throw failure(404, "geo_screenshot_not_found", "Screenshot not found.");
+    const owned = (await this.store.query(`SELECT 1 FROM evimed_geo.snapshots WHERE geo_project_id = $1 AND screenshot_sha256 = $2 LIMIT 1`,
+      [project.id, sha256])).rows.length > 0;
+    if (!owned) throw failure(404, "geo_screenshot_not_found", "Screenshot not found.");
+    return geoScreenshotPath(String(this.config.dataDir ?? ""), sha256);
+  }
+
+  /** `GET …/:id/sources`. @param {{ id: string }} user @param {string} id */
+  async sources(user, id) { return this.sourcesOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async sourcesOf(project) {
+    const [sources, strategy, targets, retrieval] = await Promise.all([
+      this.store.listSources(project.id),
+      this.store.latestStrategy(project.id),
+      this.store.latestTargets(project.id),
+      this.store.query(`SELECT DISTINCT ON (engine) * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'engine' AND metric_id = $2
+        ORDER BY engine, computed_at DESC`, [project.id, GEO_METRIC_IDS.retrieval]),
+    ]);
+    const retrievalByEngine = new Map(retrieval.rows.map((/** @type {any} */ row) => [String(row.engine), row]));
+    const stated = Array.isArray(strategy?.expectations) ? strategy.expectations.filter((/** @type {any} */ entry) => entry && typeof entry === "object") : [];
+    const engines = [...new Set([...project.engines, ...stated.map((/** @type {any} */ entry) => String(entry.engine ?? "")).filter(Boolean)])];
+    const battlefield = strategy?.battlefield && typeof strategy.battlefield === "object" ? strategy.battlefield : {};
+    /** @type {Map<string, { tier: string, targets: any[], placements: number | null, budgetCny: number | null }>} */
+    const tiers = new Map();
+    for (const row of targets?.rows ?? []) {
+      const tier = tiers.get(row.tier) ?? { tier: row.tier, targets: [], placements: null, budgetCny: null };
+      tier.targets.push({ metricId: row.metricId, pool: row.pool, baseline: row.baseline, target: row.target });
+      if (row.placements != null) tier.placements = Math.max(tier.placements ?? 0, row.placements);
+      if (row.budgetCny != null) tier.budgetCny = Math.max(tier.budgetCny ?? 0, row.budgetCny);
+      tiers.set(row.tier, tier);
+    }
+    return {
+      sources: sources.map((source) => ({
+        id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
+        conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical },
+        impostor: source.impostor,
+        cited: Object.fromEntries(Object.entries(source.cited).map(([engine, pools]) => [engine,
+          pools && typeof pools === "object" ? Object.values(pools).reduce((/** @type {number} */ sum, value) => sum + (Number(value) || 0), 0) : Number(pools) || 0])),
+        mentionsOurs: source.mentionsOurs, wrongOurs: source.wrongOurs,
+        market: source.market ? { price: num(source.market.price ?? source.market.priceCny), resourceId: text(source.market.resourceId) } : null,
+      })),
+      expectations: engines.map((engine) => {
+        const entry = stated.find((/** @type {any} */ candidate) => candidate.engine === engine) ?? {};
+        return {
+          engine, retrieval: geoCellFromRow(retrievalByEngine.get(engine)), promise: text(entry.promise),
+          layers: Array.isArray(entry.layers) ? entry.layers.filter((/** @type {unknown} */ layer) => typeof layer === "string") : [],
+        };
+      }),
+      battlefield: { groups: Array.isArray(battlefield.groups) ? battlefield.groups : [], reason: text(battlefield.reason) },
+      tiers: [...tiers.values()].sort((left, right) => left.tier.localeCompare(right.tier)),
+      chosenTier: project.tier,
+    };
+  }
+
+  /** `POST …/:id/tier`. @param {{ id: string }} user @param {string} id @param {string} tier */
+  async setTier(user, id, tier) {
+    await this.requireProject(user, id);
+    const updated = await this.store.updateProject(String(user.id), id, { tier });
+    return { id, tier: updated?.tier ?? tier };
+  }
+
+  /** `GET …/:id/articles`. @param {{ id: string }} user @param {string} id */
+  async articles(user, id) { return this.articlesOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async articlesOf(project) {
+    const articles = await this.store.listArticles(project.id);
+    const [groups, placements, cited] = await Promise.all([
+      this.store.query(`SELECT id, typical_question FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
+      this.store.query(`SELECT article_id, count(*)::integer AS n FROM evimed_geo.orders WHERE geo_project_id = $1
+        AND state NOT IN ('planned', 'cancelled', 'rejected', 'refunded', 'lost') GROUP BY article_id`, [project.id]),
+      this.store.query(`SELECT DISTINCT o.article_id FROM evimed_geo.orders o JOIN evimed_geo.snapshots s ON s.geo_project_id = o.geo_project_id
+        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL
+          AND s.citations @> jsonb_build_array(jsonb_build_object('url', o.published_url))`, [project.id]),
+    ]);
+    const questions = new Map(groups.rows.map((/** @type {any} */ row) => [String(row.id), text(row.typical_question)]));
+    const counts = new Map(placements.rows.map((/** @type {any} */ row) => [String(row.article_id), Number(row.n)]));
+    const citedIds = new Set(cited.rows.map((/** @type {any} */ row) => String(row.article_id)));
+    return {
+      articles: articles.map((article) => ({
+        id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
+        question: article.groupId ? questions.get(article.groupId) ?? null : null, status: article.status, gate: article.gate,
+        safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
+        placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
+      })),
+    };
+  }
+
+  /** `POST …/:id/articles/:aid/withdraw`: only before anything was placed. @param {{ id: string }} user @param {string} id @param {string} articleId */
+  async withdrawArticle(user, id, articleId) {
+    const project = await this.requireProject(user, id);
+    if (!(await this.store.getArticle(project.id, articleId))) throw failure(404, "geo_article_not_found", "Article not found.");
+    const changed = await this.store.changeArticle(project.id, articleId, { status: "withdrawn", fromStatuses: ["draft", "publishable"] });
+    if (!changed) throw failure(409, "geo_article_state_invalid", "Only an article that has not been placed can be withdrawn.");
+    return { id: changed.id, status: changed.status };
+  }
+
+  /** `POST …/:id/articles/:aid/release`: 「放行」 an open safety finding after a person looked. @param {{ id: string }} user @param {string} id @param {string} articleId */
+  async releaseArticle(user, id, articleId) {
+    const project = await this.requireProject(user, id);
+    if (!(await this.store.getArticle(project.id, articleId))) throw failure(404, "geo_article_not_found", "Article not found.");
+    const changed = await this.store.changeArticle(project.id, articleId, { safety: "released", fromSafety: ["open"] });
+    if (!changed) throw failure(409, "geo_article_state_invalid", "Only an article with an open safety finding can be released.");
+    return { id: changed.id, safety: changed.safety, status: changed.status };
+  }
+
+  /** `GET …/:id/distribution`. @param {{ id: string }} user @param {string} id @param {{ marketConfigured?: boolean }} [options] */
+  async distribution(user, id, options = {}) { return this.distributionOf(await this.requireProject(user, id), options); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {{ marketConfigured?: boolean }} [options] */
+  async distributionOf(project, { marketConfigured = geoMarketConfigured(this.config) } = {}) {
+    const [orders, money, targets] = await Promise.all([
+      this.store.query(`SELECT o.*, a.title AS article_title, a.layer AS article_layer, m.name AS media_name, m.domain AS media_domain
+        FROM evimed_geo.orders o LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+          LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id
+        WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500`, [project.id]),
+      this.store.query(`SELECT coalesce(sum(settled_cny) FILTER (WHERE state IN ('settled')), 0) AS spent,
+          coalesce(sum(reserve_cny) FILTER (WHERE state = ANY($2::text[])), 0) AS reserved
+        FROM evimed_geo.orders WHERE geo_project_id = $1`, [project.id, [...GEO_ORDER_OPEN_STATES]]),
+      this.store.latestTargets(project.id),
+    ]);
+    const suggested = (targets?.rows ?? []).filter((row) => row.tier === project.tier && row.budgetCny != null)
+      .reduce((/** @type {number | null} */ max, row) => Math.max(max ?? 0, Number(row.budgetCny)), null);
+    const budget = project.budget && typeof project.budget === "object"
+      ? { totalCny: num(project.budget.totalCny), dailyCny: num(project.budget.dailyCny) } : null;
+    return {
+      budget,
+      spentCny: Number(money.rows[0]?.spent ?? 0),
+      reservedCny: Number(money.rows[0]?.reserved ?? 0),
+      suggestedBudgetCny: suggested,
+      market: { configured: Boolean(marketConfigured) },
+      orders: orders.rows.map((/** @type {any} */ row) => ({
+        id: String(row.id), articleId: text(row.article_id), articleTitle: text(row.article_title), media: text(row.media_name),
+        domain: text(row.media_domain), layer: text(row.article_layer), state: String(row.state), priceCny: num(row.price_cny ?? row.reserve_cny),
+        publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
+        cancellable: GEO_ORDER_CANCELLABLE_STATES.includes(String(row.state)),
+      })),
+    };
+  }
+
+  /** One order of the project, for the cancel route's ownership and state check. @param {{ id: string }} user @param {string} id @param {string} orderId */
+  async order(user, id, orderId) {
+    const project = await this.requireProject(user, id);
+    const row = (await this.store.query(`SELECT id, state FROM evimed_geo.orders WHERE geo_project_id = $1 AND id = $2`, [project.id, orderId])).rows[0];
+    if (!row) throw failure(404, "geo_order_not_found", "Order not found.");
+    return { project, order: { id: String(row.id), state: String(row.state) } };
+  }
+
+  /** `GET …/:id/monitoring`. @param {{ id: string }} user @param {string} id */
+  async monitoring(user, id) { return this.monitoringOf(await this.requireProject(user, id)); }
+
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
+  async monitoringOf(project) {
+    const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
+    const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
+    const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline] = await Promise.all([
+      this.#series([project.id], metricIds),
+      this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm"),
+      this.#series([project.id], [GEO_METRIC_IDS.mention], "engine", "engine"),
+      this.store.query(`SELECT * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2
+        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_METRIC_IDS.netEffect]),
+      this.store.query(`SELECT value FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2
+        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_METRIC_IDS.noiseBand]),
+      this.store.query(`SELECT o.article_id, a.title, s.engine, min(s.asked_at) AS first_seen
+        FROM evimed_geo.orders o JOIN evimed_geo.snapshots s ON s.geo_project_id = o.geo_project_id
+          LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL
+          AND s.citations @> jsonb_build_array(jsonb_build_object('url', o.published_url))
+        GROUP BY o.article_id, a.title, s.engine ORDER BY first_seen`, [project.id]),
+      this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1 AND created_at >= $2
+        ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 50`, [project.id, since]),
+      this.store.query(`SELECT kind, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status = 'queued'
+        ORDER BY created_at LIMIT 1`, [project.id]),
+      this.store.query(`SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'baseline' AND status IN ('done', 'partial') LIMIT 1`, [project.id]),
+    ]);
+    const projectSeries = series.get(project.id) ?? new Map();
+    const armSeries = arms.get(project.id) ?? new Map();
+    const engineSeries = byEngine.get(project.id) ?? new Map();
+    const points = (/** @type {string} */ key) => (armSeries.get(`${GEO_ARM_METRIC_ID}\u0000${key}`) ?? []).map(({ date, value }) => ({ date, value }));
+    const netRow = net.rows[0];
+    const next = queued.rows[0]
+      ? { date: dayIn(new Date(queued.rows[0].created_at), this.timeZone), kind: String(queued.rows[0].kind) }
+      : baseline.rows.length ? { date: nextMonday(this.now(), this.timeZone), kind: "weekly" } : null;
+    return {
+      series: GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({ key, points: projectSeries.get(metricId) ?? [] })),
+      arms: {
+        pilot: points("pilot"),
+        control: points("control"),
+        netEffect: { ...geoCellFromRow(netRow), noiseBand: noise.rows[0] ? num(noise.rows[0].value) : null },
+      },
+      byEngine: project.engines.map((engine) => ({
+        engine, points: (engineSeries.get(`${GEO_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value }) => ({ date, value })),
+      })),
+      cited: cited.rows.map((/** @type {any} */ row) => ({ articleId: text(row.article_id), title: text(row.title), engine: text(row.engine), firstSeen: iso(row.first_seen) })),
+      newErrors: newErrors.rows.map(errorView),
+      next,
+    };
+  }
+
+  /**
+   * `GET /api/geo/market` (operators): the platform's balance as the market
+   * last read it, open top-up requests and the last reconciliation.
+   * @param {{ balance?: () => Promise<any> } | null} market
+   */
+  async market(market) {
+    await this.ready();
+    const [topups, reconciliation] = await Promise.all([
+      this.store.query(`SELECT * FROM evimed_geo.topups ORDER BY requested_at DESC LIMIT 20`),
+      this.store.query(`SELECT * FROM evimed_geo.reconciliations ORDER BY day DESC LIMIT 1`),
+    ]);
+    let balance = null;
+    try { balance = market?.balance ? await market.balance() : null; } catch { balance = null; }
+    const last = reconciliation.rows[0];
+    return {
+      configured: geoMarketConfigured(this.config),
+      balance,
+      balanceCapCny: this.config.mediaMarketBalanceCapCny ?? null,
+      topups: topups.rows.map((/** @type {any} */ row) => ({
+        id: String(row.id), amountCny: num(row.amount_cny), status: String(row.status), balanceBefore: num(row.balance_before),
+        balanceAfter: num(row.balance_after), requestedAt: iso(row.requested_at), confirmedAt: iso(row.confirmed_at), note: text(row.note),
+      })),
+      reconciliation: last ? {
+        day: typeof last.day === "string" ? last.day : dayIn(new Date(last.day), this.timeZone), ours: num(last.ours), vendor: num(last.vendor),
+        balance: num(last.balance), diff: num(last.diff), status: text(last.status),
+      } : null,
+    };
+  }
+
+  /** A top-up request exists (before the market confirms it). @param {string} topupId */
+  async topupExists(topupId) {
+    await this.ready();
+    return (await this.store.query(`SELECT 1 FROM evimed_geo.topups WHERE id = $1`, [topupId])).rows.length > 0;
+  }
+
+  // --- the runtime's reads (geo_read) -----------------------------------------------------
+
+  /**
+   * What `geo_read` answers for one `what`, in the page's shapes, cut to the
+   * tool's bounds: at most 50 items, answer text at most 4,000 characters.
+   * The filter is validated by the gateway.
+   * @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {string} what
+   * @param {{ round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, limit?: number, offset?: number }} filter
+   */
+  async runtimeRead(project, what, filter = {}) {
+    this.counters.reads += 1;
+    const limit = Math.min(filter.limit ?? 20, GEO_READ_MAX_ITEMS);
+    const offset = filter.offset ?? 0;
+    /** @template T @param {T[]} list */
+    const page = (list) => ({ items: list.slice(offset, offset + limit), total: list.length, more: list.length > offset + limit });
+    switch (what) {
+      case "project": {
+        const view = await this.projectViewOf(project);
+        return { project: { id: view.id, name: view.name, product: view.product, competitors: view.competitors, coverageDays: view.coverageDays,
+          engines: view.engines, tier: view.tier, status: view.status, steps: view.steps }, overview: view.overview };
+      }
+      case "claims": {
+        const evidence = await this.evidenceOf(project);
+        const claims = page(evidence.claims);
+        return { product: evidence.product, competitors: evidence.competitors, claims: claims.items, total: claims.total, more: claims.more };
+      }
+      case "questions": {
+        const view = await this.questionsOf(project, null);
+        const groups = page(view.groups.filter((group) => (!filter.pool || group.pool === filter.pool) && (!filter.groupId || group.id === filter.groupId)));
+        return { sets: view.sets, version: view.version, groups: groups.items, total: groups.total, more: groups.more };
+      }
+      case "journey": return this.journeyOf(project);
+      case "diagnosis": {
+        const view = await this.diagnosisOf(project, filter.round ?? null);
+        return { ...view, errors: view.errors.slice(0, limit), more: view.more.slice(0, limit) };
+      }
+      case "metrics": {
+        const values = [project.id];
+        const where = ["geo_project_id = $1"];
+        const add = (/** @type {string} */ column, /** @type {string | undefined} */ value) => {
+          if (value == null) return;
+          values.push(value);
+          where.push(`${column} = $${values.length}`);
+        };
+        add("round_id", filter.round);
+        add("engine", filter.engine);
+        add("pool", filter.pool);
+        add("group_id", filter.groupId);
+        values.push(String(limit + 1), String(offset));
+        const rows = (await this.store.query(`SELECT * FROM evimed_geo.metrics WHERE ${where.join(" AND ")}
+          ORDER BY computed_at DESC, metric_id, id LIMIT $${values.length - 1}::integer OFFSET $${values.length}::integer`, values)).rows;
+        return { items: rows.slice(0, limit).map((row) => metricView(row, this.metricName)), more: rows.length > limit };
+      }
+      case "snapshots": {
+        const values = [project.id];
+        const where = ["s.geo_project_id = $1"];
+        const add = (/** @type {string} */ column, /** @type {string | undefined} */ value) => {
+          if (value == null) return;
+          values.push(value);
+          where.push(`${column} = $${values.length}`);
+        };
+        add("s.round_id", filter.round);
+        add("s.engine", filter.engine);
+        add("s.question_id", filter.questionId);
+        add("q.pool", filter.pool);
+        add("q.group_id", filter.groupId);
+        values.push(String(limit + 1), String(offset));
+        const rows = (await this.store.query(`SELECT s.*, q.text AS question_text, q.pool AS question_pool, f.brands, f.statements, f.failure_mode,
+            f.mentions_ours, f.retrieval_triggered, f.cites_ours
+          FROM evimed_geo.snapshots s LEFT JOIN evimed_geo.questions q ON q.id = s.question_id LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id
+          WHERE ${where.join(" AND ")} ORDER BY s.asked_at DESC NULLS LAST, s.id
+          LIMIT $${values.length - 1}::integer OFFSET $${values.length}::integer`, values)).rows;
+        return {
+          items: rows.slice(0, limit).map((/** @type {any} */ row) => {
+            const answer = text(row.answer_text) ?? "";
+            return {
+              id: String(row.id), roundId: text(row.round_id), questionId: text(row.question_id), question: text(row.question_text),
+              pool: text(row.question_pool), engine: text(row.engine), askedAt: iso(row.asked_at), status: text(row.status),
+              answerText: answer.slice(0, GEO_ANSWER_TEXT_LIMIT), answerTruncated: answer.length > GEO_ANSWER_TEXT_LIMIT,
+              citations: Array.isArray(row.citations) ? row.citations.slice(0, 30) : [],
+              facts: row.failure_mode == null && row.brands == null ? null : {
+                failureMode: text(row.failure_mode), mentionsOurs: row.mentions_ours ?? null, retrievalTriggered: row.retrieval_triggered ?? null,
+                citesOurs: row.cites_ours ?? null, brands: Array.isArray(row.brands) ? row.brands : [], statements: Array.isArray(row.statements) ? row.statements : [],
+              },
+            };
+          }),
+          more: rows.length > limit,
+        };
+      }
+      case "errors": {
+        const values = [project.id];
+        const where = ["geo_project_id = $1"];
+        if (filter.engine) { values.push(filter.engine); where.push(`engine = $${values.length}`); }
+        if (filter.questionId) { values.push(filter.questionId); where.push(`question_id = $${values.length}`); }
+        values.push(String(limit + 1), String(offset));
+        const rows = (await this.store.query(`SELECT * FROM evimed_geo.errors WHERE ${where.join(" AND ")}
+          ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC
+          LIMIT $${values.length - 1}::integer OFFSET $${values.length}::integer`, values)).rows;
+        return {
+          items: rows.slice(0, limit).map((/** @type {any} */ row) => ({ ...errorView(row), evidenceQuote: text(row.evidence_quote), claimId: text(row.claim_id),
+            responsible: text(row.responsible), materials: Array.isArray(row.materials) ? row.materials : [] })),
+          more: rows.length > limit,
+        };
+      }
+      case "sources": {
+        const view = await this.sourcesOf(project);
+        const sources = page(view.sources);
+        return { ...view, sources: sources.items, total: sources.total, more: sources.more };
+      }
+      case "strategy": {
+        const [strategy, plan] = await Promise.all([this.store.latestStrategy(project.id), this.store.latestPlacementPlan(project.id)]);
+        return { strategy, placementPlan: plan };
+      }
+      case "targets": {
+        const view = await this.sourcesOf(project);
+        return { tiers: view.tiers, chosenTier: view.chosenTier };
+      }
+      case "articles": {
+        const view = await this.articlesOf(project);
+        const articles = page(view.articles);
+        return { articles: articles.items, total: articles.total, more: articles.more };
+      }
+      case "orders": {
+        const view = await this.distributionOf(project);
+        const orders = page(view.orders);
+        return { budget: view.budget, spentCny: view.spentCny, reservedCny: view.reservedCny, orders: orders.items, total: orders.total, more: orders.more };
+      }
+      case "monitoring": return this.monitoringOf(project);
+      default:
+        throw failure(400, "geo_read_what_invalid", "Unknown read.");
+    }
+  }
+
+  // --- metrics for the operator endpoint ----------------------------------------------------
+
+  /** Counts for `/api/ops/metrics`, one query. */
+  async metricsSnapshot() {
+    await this.ready();
+    const row = (await this.store.query(`SELECT
+        (SELECT count(*) FROM evimed_geo.projects WHERE deleted_at IS NULL)::integer AS projects,
+        (SELECT count(*) FROM evimed_geo.projects WHERE deleted_at IS NULL AND status = 'active')::integer AS active,
+        (SELECT count(*) FROM evimed_geo.errors WHERE status <> 'closed')::integer AS open_errors,
+        (SELECT count(*) FROM evimed_geo.errors WHERE status <> 'closed' AND severity = ANY($1::text[]))::integer AS urgent_errors,
+        (SELECT count(*) FROM evimed_geo.articles WHERE safety = 'open' AND status <> 'withdrawn')::integer AS safety_stops,
+        (SELECT count(*) FROM evimed_geo.rounds WHERE status IN ('queued', 'running'))::integer AS open_rounds`, [[...GEO_URGENT_SEVERITIES]])).rows[0] ?? {};
+    return {
+      projects: Number(row.projects ?? 0), active: Number(row.active ?? 0), openErrors: Number(row.open_errors ?? 0),
+      urgentErrors: Number(row.urgent_errors ?? 0), safetyStops: Number(row.safety_stops ?? 0), openRounds: Number(row.open_rounds ?? 0),
+    };
+  }
+}
+
+/** A readiness failure as `readinessCheck` in `server.mjs` reads one. @param {string} code @param {Record<string, any> | null} [details] */
+function readinessFailure(code, details = null) {
+  /** @type {Error & Record<string, any>} */
+  const error = new Error(code);
+  error.code = code;
+  if (details) error.details = details;
+  return error;
+}
+
+/**
+ * The `geo` readiness check. Red only for the module's own invariants: the
+ * schema migrated and the service composed. The social channel and the
+ * marketplace are outside the platform and read as warnings on a green check;
+ * the worker slot is filled by the orchestration package, and until it is,
+ * the check says so without going red. Off, the check is green and says so.
+ * @param {{ config: Record<string, any>, geo: any, database: any }} input
+ */
+export async function geoReadiness({ config, geo, database }) {
+  if (!config.geoEnabled) return { required: false, enabled: false };
+  if (!geo || !database) throw readinessFailure("geo_unavailable", { reason: database ? "not_composed" : "no_product_database" });
+  try {
+    await geo.service.ready();
+  } catch (error) {
+    throw readinessFailure("geo_migration_failed", { reason: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "migration_error" });
+  }
+  const warnings = [];
+  if (!geo.worker) warnings.push("geo_worker_missing");
+  if (!String(config.geoSocialUrl ?? "").trim()) warnings.push("geo_social_unconfigured");
+  if (!geoMarketConfigured(config)) warnings.push("geo_market_unconfigured");
+  return {
+    required: true, enabled: true, audience: config.geoAudience, engines: config.geoEngines,
+    social: geo.social?.status?.() ?? null,
+    market: { configured: geoMarketConfigured(config) },
+    worker: geo.worker?.status?.() ?? null,
+    ...(warnings.length ? { warning: warnings[0], warnings } : {}),
+  };
+}
+
+/**
+ * Everything the metrics endpoint shows about the module, read once per scrape.
+ * @param {{ service: GeoService, social?: any, worker?: any }} geo
+ */
+export async function geoMetricsSnapshot(geo) {
+  let tables = null;
+  try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
+  return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null };
+}
+
+/**
+ * The `open_science_geo_*` families, in the shape `addMetric` in `server.mjs`
+ * takes. With the module off there is one line: `open_science_geo_enabled 0`.
+ * @param {boolean} enabled @param {Awaited<ReturnType<typeof geoMetricsSnapshot>> | null} snapshot
+ * @returns {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]}
+ */
+export function geoMetricFamilies(enabled, snapshot) {
+  /** @type {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]} */
+  const families = [{ name: "open_science_geo_enabled", help: "Whether the 循证 GEO module is composed in this process.", type: "gauge",
+    series: [{ value: enabled && snapshot ? 1 : 0 }] }];
+  if (!enabled || !snapshot) return families;
+  /** @param {string} name @param {string} help @param {"gauge" | "counter"} type @param {{ value: number, labels?: Record<string, string> }[]} series */
+  const add = (name, help, type, series) => families.push({ name: `open_science_geo_${name}`, help, type, series });
+  add("tables_readable", "Whether the module's tables answered the metrics read.", "gauge", [{ value: snapshot.tables ? 1 : 0 }]);
+  if (snapshot.tables) {
+    const tables = snapshot.tables;
+    add("projects", "GEO projects by state (not deleted).", "gauge", [
+      { labels: { state: "all" }, value: tables.projects },
+      { labels: { state: "active" }, value: tables.active },
+    ]);
+    add("open_errors", "讲错我方 findings not yet closed, and those of severity S3 or S4.", "gauge", [
+      { labels: { severity: "any" }, value: tables.openErrors },
+      { labels: { severity: "urgent" }, value: tables.urgentErrors },
+    ]);
+    add("safety_stops", "Articles held by an open clinical-safety finding.", "gauge", [{ value: tables.safetyStops }]);
+    add("open_rounds", "Measurement rounds queued or running.", "gauge", [{ value: tables.openRounds }]);
+  }
+  const service = snapshot.service ?? {};
+  add("service_total", "What the service did since this process started.", "counter",
+    ["projectsCreated", "reads", "writes", "writeIssues", "notFound"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
+  const social = snapshot.social;
+  if (social?.counters) {
+    add("social_requests_total", "Social-channel requests by outcome.", "counter",
+      Object.entries(social.counters).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+  }
+  return families;
+}

@@ -96,6 +96,12 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // the feed of recent medical developments, 「前沿动态」, through the server's
   // gateway (frontier_search.py, 2026-09-22): leads, never evidence
   'frontier_search',
+  // 「循证 GEO」's platform data and its social channel, through the server's
+  // gateway (geo_platform.py, 2026-09-25): offered only where the module is on
+  // and open to the account, and used by the GEO capabilities' runs
+  'geo_read',
+  'geo_write',
+  'social_posts_search',
 ])
 
 /** Model-visible MCP tool names. */
