@@ -2108,13 +2108,17 @@ const NATIVE_ANSWER_WHEN_NOTHING_STARTED = new Set([
 ]);
 
 /**
- * Whether a native turn began delivering: it wrote or read a plan, delegated a
- * deliverable, or submitted one (the parent's own tool calls, `nativeWorkflow`).
+ * Whether a native turn began delivering: it wrote or read a plan that names a
+ * deliverable, delegated one, or submitted one (the parent's own tool calls,
+ * `nativeWorkflow`). A plan with no deliverable is not a delivery: on
+ * 2026-09-25 a follow-up in a GEO content conversation asked to re-register
+ * the targets and the rivals, did both, wrote an empty plan on the way, and
+ * was recorded as a failed geo-content delivery.
  * @param {Record<string, any>} run
  */
-function nativeTurnStartedDelivery(run) {
+export function nativeTurnStartedDelivery(run) {
   const proof = run.nativeWorkflow;
-  return Boolean(proof && (proof.plan || (proof.delegates ?? []).length > 0 || (proof.submissions ?? []).length > 0));
+  return Boolean(proof && ((proof.plan?.items ?? []).length > 0 || (proof.delegates ?? []).length > 0 || (proof.submissions ?? []).length > 0));
 }
 
 /** TypeScript infers a destructured parameter as exactly the shape its
