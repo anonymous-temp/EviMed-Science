@@ -43,18 +43,20 @@ export function GeoOverview({ geoId, project }: { geoId: string; project: GeoPro
 
 type Mark = "done" | "current" | "none";
 
-/** Which mark each step carries: done, the one being worked on, or not yet. */
+/**
+ * Which mark each step carries: done; under way (every step being worked on —
+ * content, distribution and monitoring run side by side — or, with none
+ * running, the first one asked for and not yet done); or not yet.
+ */
 export function stepMarks(steps: GeoProject["steps"]): Record<GeoStepKey, Mark> {
+  const status = (key: GeoStepKey) => steps[key]?.status ?? "none";
+  const working = (key: GeoStepKey) => ["running", "queued", "failed"].includes(status(key));
+  const anyWorking = GEO_STEP_KEYS.some(working);
+  const next = anyWorking ? null : GEO_STEP_KEYS.find((key) => steps[key]?.requested && !["done", "minimal"].includes(status(key))) ?? null;
   const marks = {} as Record<GeoStepKey, Mark>;
-  let current = false;
   for (const key of GEO_STEP_KEYS) {
     const step: GeoStep | undefined = steps[key];
-    const status = step?.status ?? "none";
-    if (status === "done" || status === "minimal") marks[key] = "done";
-    else if (!current && (status === "running" || status === "queued" || status === "failed" || step?.requested)) {
-      marks[key] = "current";
-      current = true;
-    } else marks[key] = "none";
+    marks[key] = step?.status === "done" || step?.status === "minimal" ? "done" : working(key) || key === next ? "current" : "none";
   }
   return marks;
 }
@@ -67,42 +69,51 @@ function progressNote(step: GeoStep | undefined): string | null {
   return note && note.length <= 10 && /^(\d+\s*\/\s*\d+|第\s*\d+\s*周)$/.test(note) ? note : null;
 }
 
+/**
+ * A step's mark, drawn rather than bordered: a filled dot with a tick (done),
+ * an accent ring (under way), a quiet ring (not yet). Drawn, because a page
+ * spends at most three kinds of border and the tabs and lists already have
+ * them; and not an icon, because no icon size fits inside a 16 px dot.
+ */
+function StepDot({ mark }: { mark: Mark }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" width={16} height={16} className={cn("shrink-0", mark === "none" ? "text-strong" : "text-accent")}>
+      {mark === "done" ? (
+        <>
+          <circle cx={8} cy={8} r={8} fill="currentColor" />
+          <path d="M4.8 8.3l2.2 2.2 4.2-4.6" fill="none" className="text-accent-fg" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <circle cx={8} cy={8} r={mark === "current" ? 7 : 7.5} fill="none" stroke="currentColor" strokeWidth={mark === "current" ? 2 : 1} />
+      )}
+    </svg>
+  );
+}
+
 function StepMarks({ geoId, steps }: { geoId: string; steps: GeoProject["steps"] }) {
   const marks = stepMarks(steps);
   return (
-    <ol aria-label="进度" className="flex flex-wrap items-center gap-y-2">
+    <ol aria-label="进度" className="flex flex-wrap items-center gap-x-3 gap-y-2 lg:gap-x-0">
       {GEO_STEP_KEYS.map((key, index) => {
         const mark = marks[key];
         const note = progressNote(steps[key]);
         return (
-          <li key={key} className="flex min-w-0 flex-1 items-center" data-geo-step={key} data-mark={mark}>
+          <li key={key} className="flex items-center lg:min-w-0 lg:flex-1" data-geo-step={key} data-mark={mark}>
             <Link
               to={`/app/geo/${encodeURIComponent(geoId)}/${key}`}
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-1 text-ui hover:bg-surface-2",
-                mark === "none" ? "text-text-3" : mark === "current" ? "font-medium text-text" : "text-text-2",
+                // One weight for every step, as for tabs: the one under way is
+                // told by its colour and its ring.
+                mark === "none" ? "text-text-3" : mark === "current" ? "text-text" : "text-text-2",
               )}
             >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "grid h-4 w-4 shrink-0 place-items-center rounded-full",
-                  mark === "done" ? "bg-accent text-accent-fg" : mark === "current" ? "border-2 border-accent" : "border border-strong",
-                )}
-              >
-                {mark === "done" && (
-                  // A drawn tick rather than an icon: it sits inside a 16 px
-                  // dot, where no icon size fits.
-                  <svg viewBox="0 0 16 16" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4.8 8.3l2.2 2.2 4.2-4.6" />
-                  </svg>
-                )}
-              </span>
+              <StepDot mark={mark} />
               {GEO_STEP_NAMES[key]}
               <span className="sr-only">，{MARK_WORDS[mark]}</span>
               {note && <span className="text-caption tabular-nums text-text-3">{note}</span>}
             </Link>
-            {index < GEO_STEP_KEYS.length - 1 && <span aria-hidden="true" className="mx-2 h-px min-w-3 flex-1 bg-border" />}
+            {index < GEO_STEP_KEYS.length - 1 && <span aria-hidden="true" className="mx-2 hidden h-px min-w-3 flex-1 bg-border lg:block" />}
           </li>
         );
       })}
@@ -143,7 +154,7 @@ function MetricBlock({ metricKey, metric, project }: { metricKey: GeoOverviewMet
         {metric?.target != null && <span className="text-ui tabular-nums text-text-3">目标 {formatGeoValue(metric.target, unit)}</span>}
       </div>
       <SampleLine metric={metric} unit={unit} />
-      <GeoSparkline values={metric?.trend.map((point) => point.value) ?? []} target={metric?.target ?? null} width={200} height={36} className="my-1 w-full" />
+      <GeoSparkline values={metric?.trend.map((point) => point.value) ?? []} target={metric?.target ?? null} width={180} height={36} className="my-1" />
       {delta !== null && delta !== 0 && (
         <p className={cn("text-caption tabular-nums", delta > 0 ? "text-accent" : "text-text-2")}>
           比上周 {delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`}
