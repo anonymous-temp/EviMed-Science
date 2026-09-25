@@ -5,12 +5,14 @@
 // the control-plane project or the account takes the GEO rows with it.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { geoScreenshotFile } from "../src/geoScreenshots.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { createWebApiApp } from "../src/server.mjs";
+import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -21,17 +23,21 @@ if (databaseUrl) {
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
 const suffix = randomUUID().slice(0, 8);
-const accounts = { operator: `ops${suffix}`, preview: `preview${suffix}`, reader: `reader${suffix}`, leaver: `leaver${suffix}` };
+const accounts = { operator: `ops${suffix}`, preview: `preview${suffix}`, reader: `reader${suffix}`, leaver: `leaver${suffix}`,
+  lastLeaver: `lastleaver${suffix}` };
 const PASSWORD = "test-only-geo-password";
 /** @type {any} */
 let context = null;
+/** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
+let isolated = null;
 
 before(async () => {
   if (!databaseUrl) return;
+  isolated = await createGeoTestDatabase(databaseUrl, "geoapp");
   const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-geo-app-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl, operatorMetricsToken: "test-only-metrics-token",
-    operatorUsers: [accounts.operator], geoEnabled: true, geoAudience: "operators", geoPreviewUsers: [accounts.preview, accounts.leaver] });
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
+    operatorUsers: [accounts.operator], geoEnabled: true, geoAudience: "operators", geoPreviewUsers: [accounts.preview, accounts.leaver, accounts.lastLeaver] });
   for (const id of Object.values(accounts)) await app.store.createUser(id, PASSWORD, id);
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
@@ -48,10 +54,11 @@ before(async () => {
 });
 
 after(async () => {
-  if (!context) return;
-  await context.app.store.database.query("DELETE FROM evimed_control.users WHERE id = ANY($1::text[])", [Object.values(accounts)]);
-  await context.app.close();
-  await rm(context.dataDir, { recursive: true, force: true });
+  if (context) {
+    await context.app.close();
+    await rm(context.dataDir, { recursive: true, force: true });
+  }
+  await isolated?.drop();
 });
 
 /** @param {string} role @param {string} method @param {string} route @param {unknown} [body] */
@@ -148,4 +155,66 @@ test("deleting the control-plane project takes its GEO rows; deleting the accoun
   const gone = await call("leaver", "DELETE", "/api/account", { confirm: accounts.leaver, password: PASSWORD });
   assert.equal(gone.status, 200, JSON.stringify(gone.body));
   assert.deepEqual(await rows("SELECT id FROM evimed_geo.projects WHERE user_id = $1", [accounts.leaver]), []);
+});
+
+test("an article's gate is read from the project's run ledger: the newest run holding its deliverable", options, async () => {
+  const created = await call("preview", "POST", "/api/geo/projects", { brandName: "Ledger Brand" });
+  const geo = context.app.geo;
+  const project = await geo.store.getProject(accounts.preview, created.body.data.id);
+  const map = await geoRuntimeWrite({ store: geo.store, project, what: "questions",
+    body: { data: { groups: [{ pool: "P1", name: "g", questions: [{ text: "q", isMeasured: true }] }] } } });
+  const item = (/** @type {string} */ deliverable) => ({ path: `deliverables/${deliverable}/card.md`, layer: "card", groupId: map.ids[0], claimIds: [],
+    safety: "clear", contentSha256: "d".repeat(64), gate: "passed" });
+  const listed = /** @type {any[]} */ ([]);
+  const original = context.app.agentRuns.list;
+  context.app.agentRuns.list = async (/** @type {any} */ controlProject) => {
+    listed.push(controlProject.id);
+    return [
+      { id: "run_old", status: "succeeded", startedAt: "2026-09-24T01:00:00.000Z", deliverables: [{ id: "geo-content", status: "delivered", lastVerdict: "pass" }] },
+      { id: "run_new", status: "succeeded", startedAt: "2026-09-25T01:00:00.000Z", deliverables: [{ id: "geo-content", status: "delivered", lastVerdict: "unverified" }] },
+      { id: "run_other", status: "failed", startedAt: "2026-09-25T02:00:00.000Z", deliverables: [{ id: "geo-other", status: "failed" }] },
+    ];
+  };
+  try {
+    const written = await geoRuntimeWrite({ store: geo.store, project, what: "articles", body: { items: [item("geo-content"), item("geo-other"), item("geo-missing")] },
+      articleGate: geo.articleGate });
+    assert.deepEqual(written.articles.map((/** @type {any} */ entry) => entry.gate), ["unverified", "failed", "unverified"],
+      "the newest run's verdict, a failed run's, and a deliverable no run holds — never the run's own 'passed'");
+    const named = await geoRuntimeWrite({ store: geo.store, project, what: "articles",
+      body: { items: [{ ...item("geo-content"), path: "deliverables/geo-content/card-2.md", runId: "run_old" }] }, articleGate: geo.articleGate });
+    assert.deepEqual(named.articles.map((/** @type {any} */ entry) => entry.gate), ["passed"], "a named run is the one asked");
+    assert.ok(listed.every((id) => id === created.body.data.projectId), "the ledger read is the GEO project's own");
+  } finally {
+    context.app.agentRuns.list = original;
+  }
+});
+
+test("deleting a project or an account removes the screenshots only its answers showed", options, async () => {
+  const { dataDir } = context;
+  const own = "1".repeat(56) + suffix;
+  const shared = "2".repeat(56) + suffix;
+  const leaverOwn = "3".repeat(56) + suffix;
+  for (const sha of [own, shared, leaverOwn]) {
+    await mkdir(path.dirname(geoScreenshotFile(dataDir, sha)), { recursive: true });
+    await writeFile(geoScreenshotFile(dataDir, sha), "png");
+  }
+  const snapshot = async (/** @type {string} */ user, /** @type {string} */ geoId, /** @type {string} */ sha) => context.app.store.database.query(
+    `INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, status, screenshot_sha256) VALUES ($1, $2, $3, 'valid', $4)`,
+    [`s-${randomUUID()}`, user, geoId, sha]);
+  const first = (await call("preview", "POST", "/api/geo/projects", { brandName: "Shots One" })).body.data;
+  const second = (await call("preview", "POST", "/api/geo/projects", { brandName: "Shots Two" })).body.data;
+  await snapshot(accounts.preview, first.id, own);
+  await snapshot(accounts.preview, first.id, shared);
+  await snapshot(accounts.preview, second.id, shared);
+  const deleted = await call("preview", "DELETE", `/api/projects/${first.projectId}`, { confirm: first.projectId });
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  await assert.rejects(stat(geoScreenshotFile(dataDir, own)), { code: "ENOENT" }, "a screenshot only the deleted project showed is gone");
+  assert.ok(await stat(geoScreenshotFile(dataDir, shared)), "one another project still shows is kept");
+
+  const leaving = await call("lastLeaver", "POST", "/api/geo/projects", { brandName: "Leaving Shots" });
+  assert.equal(leaving.status, 201, JSON.stringify(leaving.body));
+  await snapshot(accounts.lastLeaver, leaving.body.data.id, leaverOwn);
+  const gone = await call("lastLeaver", "DELETE", "/api/account", { confirm: accounts.lastLeaver, password: PASSWORD });
+  assert.equal(gone.status, 200, JSON.stringify(gone.body));
+  await assert.rejects(stat(geoScreenshotFile(dataDir, leaverOwn)), { code: "ENOENT" });
 });

@@ -43,6 +43,7 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
   GEO_ORDER_OPEN_STATES, GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES,
 } from "@evimed/domain";
+import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
 import { HttpError } from "./security.mjs";
 
 /** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
@@ -61,6 +62,10 @@ export const GEO_READ_MAX_ITEMS = 50;
 export const GEO_DEFAULT_PROJECT_NAME = "新 GEO 项目";
 
 const DIAGNOSIS_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
+/** The measurement package writes one `NOISE` row per metric (its `variant`); the band shown is mention's. */
+const NOISE_BAND_OF = GEO_VIEW_METRIC_IDS.mention;
+/** …and the project-scope `NET` row of the index (pool-scope rows carry each pool's metric). */
+const NET_EFFECT_OF = GEO_VIEW_METRIC_IDS.gvi;
 const TREND_POINTS = 26;
 const WEEK_ITEMS = 5;
 const WEEK_MS = 7 * 86_400_000;
@@ -546,8 +551,13 @@ export class GeoService {
   /** `POST …/:id/questions/:qid/unmeasure`. @param {{ id: string }} user @param {string} id @param {string} questionId */
   async unmeasureQuestion(user, id, questionId) {
     const project = await this.requireProject(user, id);
-    const written = await this.store.unmeasureQuestion(String(user.id), project.id, questionId);
+    const minimal = geoProgramMinimal(project.steps);
+    const written = await this.store.unmeasureQuestion(String(user.id), project.id, questionId, {
+      check: (groups) => geoLockCheck(groups, minimal).refusals.map((issue) => issue.message),
+    });
     if (!written) throw failure(404, "geo_question_not_found", "Question not found.");
+    if ("stale" in written) throw failure(409, "geo_question_not_current", "Only a question of the latest question set can be taken out of measurement.");
+    if ("refused" in written) throw failure(409, "geo_question_set_invalid", `Without this question the set could not be measured: ${written.refused.join(" ")}`);
     return written;
   }
 
@@ -576,7 +586,7 @@ export class GeoService {
     const errors = (await this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1
       ORDER BY (status = 'closed'), severity DESC NULLS LAST, updated_at DESC LIMIT 100`, [project.id])).rows.map(errorView);
     const noiseRow = (await this.store.query(`SELECT value, computed_at FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project'
-      AND metric_id = $2 ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand])).rows[0];
+      AND metric_id = $2 AND variant = $3 ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand, NOISE_BAND_OF])).rows[0];
     const engines = round && Array.isArray(round.engines) && round.engines.length ? round.engines.map(String) : project.engines;
     /** @type {Map<string, any>} */
     const cells = new Map();
@@ -597,7 +607,10 @@ export class GeoService {
       }
       /** @type {Set<string>} */
       const hidden = new Set([...GEO_OVERVIEW_METRICS.map((entry) => entry.metricId), GEO_VIEW_METRIC_IDS.netEffect, GEO_VIEW_METRIC_IDS.noiseBand]);
-      more = rows.filter((row) => row.scope === "project" && !(hidden.has(String(row.metric_id)) && row.variant == null && row.rival == null))
+      /** @type {Set<string>} */
+      const bookkeeping = new Set([GEO_VIEW_METRIC_IDS.netEffect, GEO_VIEW_METRIC_IDS.noiseBand]);
+      more = rows.filter((row) => row.scope === "project" && !bookkeeping.has(String(row.metric_id))
+        && !(hidden.has(String(row.metric_id)) && row.variant == null && row.rival == null))
         .map((row) => ({ metricId: String(row.metric_id), name: this.metricName(String(row.metric_id)), variant: text(row.variant), rival: text(row.rival),
           cell: geoCellFromRow(row) }));
       const modes = (await this.store.query(`SELECT f.failure_mode, count(*)::integer AS n FROM evimed_geo.facts f
@@ -775,13 +788,11 @@ export class GeoService {
       this.store.query(`SELECT id, typical_question FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
       this.store.query(`SELECT article_id, count(*)::integer AS n FROM evimed_geo.orders WHERE geo_project_id = $1
         AND state NOT IN ('planned', 'cancelled', 'rejected', 'refunded', 'lost') GROUP BY article_id`, [project.id]),
-      this.store.query(`SELECT DISTINCT o.article_id FROM evimed_geo.orders o JOIN evimed_geo.snapshots s ON s.geo_project_id = o.geo_project_id
-        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL
-          AND s.citations @> jsonb_build_array(jsonb_build_object('url', o.published_url))`, [project.id]),
+      this.store.citedArticles(project.id),
     ]);
     const questions = new Map(groups.rows.map((/** @type {any} */ row) => [String(row.id), text(row.typical_question)]));
     const counts = new Map(placements.rows.map((/** @type {any} */ row) => [String(row.article_id), Number(row.n)]));
-    const citedIds = new Set(cited.rows.map((/** @type {any} */ row) => String(row.article_id)));
+    const citedIds = new Set(cited.map((row) => row.articleId));
     return {
       articles: articles.map((article) => ({
         id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
@@ -863,16 +874,11 @@ export class GeoService {
       this.#series([project.id], metricIds),
       this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm"),
       this.#series([project.id], [GEO_VIEW_METRIC_IDS.mention], "engine", "engine"),
-      this.store.query(`SELECT * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2
-        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.netEffect]),
-      this.store.query(`SELECT value FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2
-        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand]),
-      this.store.query(`SELECT o.article_id, a.title, s.engine, min(s.asked_at) AS first_seen
-        FROM evimed_geo.orders o JOIN evimed_geo.snapshots s ON s.geo_project_id = o.geo_project_id
-          LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
-        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL
-          AND s.citations @> jsonb_build_array(jsonb_build_object('url', o.published_url))
-        GROUP BY o.article_id, a.title, s.engine ORDER BY first_seen`, [project.id]),
+      this.store.query(`SELECT * FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2 AND variant = $3
+        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.netEffect, NET_EFFECT_OF]),
+      this.store.query(`SELECT value FROM evimed_geo.metrics WHERE geo_project_id = $1 AND scope = 'project' AND metric_id = $2 AND variant = $3
+        ORDER BY computed_at DESC LIMIT 1`, [project.id, GEO_VIEW_METRIC_IDS.noiseBand, NOISE_BAND_OF]),
+      this.store.citedArticles(project.id),
       this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1 AND created_at >= $2
         ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 50`, [project.id, since]),
       this.store.query(`SELECT kind, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status = 'queued'
@@ -897,7 +903,7 @@ export class GeoService {
       byEngine: project.engines.map((engine) => ({
         engine, points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value }) => ({ date, value })),
       })),
-      cited: cited.rows.map((/** @type {any} */ row) => ({ articleId: text(row.article_id), title: text(row.title), engine: text(row.engine), firstSeen: iso(row.first_seen) })),
+      cited,
       newErrors: newErrors.rows.map(errorView),
       next,
     };
