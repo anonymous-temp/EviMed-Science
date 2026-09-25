@@ -307,6 +307,32 @@ test("an unbounded runtime cannot use an old signed marker to grant itself episo
   assert.equal(events.length, 0);
 });
 
+test("a user continuing in the chat a conversation a bounded run started is served under the user's own caps", async (t) => {
+  // Production, 2026-09-25: a follow-up typed into a GEO step's conversation
+  // failed every model call with budget_scope_invalid — the step's marker was
+  // still in the history the kernel sends.
+  const events = [];
+  let upstreamBody;
+  const marker = issueModelGatewayBudgetMarker({ secret: signingSecret, userId: "usage-owner", projectId: "default",
+    runId: "geo-step", dailyLimit: 1000, weeklyLimit: 1000, runLimit: 1000 });
+  const response = await call(t, async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    upstreamBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"id":"provider-follow-up","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1}}');
+  }, ledger(events), { messages: [
+    { role: "user", content: `Write this week's batch.\n\n<evimed-autopilot-episode>episode-one</evimed-autopilot-episode>\n${marker}` },
+    { role: "assistant", content: "Done: five articles." },
+    { role: "user", content: "Now raise the accuracy targets." }] });
+  assert.equal(response.status, 200);
+  await response.text();
+  const reservation = events.find((event) => event.type === "reserve").input;
+  assert.equal(reservation.runId, null, "the old run is not charged");
+  assert.notEqual(reservation.runLimit, 1000, "and its limits are not taken");
+  assert.doesNotMatch(JSON.stringify(upstreamBody), /evimed-budget-scope|evimed-autopilot-episode/);
+});
+
 test("a bounded runtime token retains episode attribution after markers compact out of history", async (t) => {
   const events = [];
   const scopedManager = { assertActiveModelGatewayToken: () => ({ userId: "usage-owner", projectId: "default",

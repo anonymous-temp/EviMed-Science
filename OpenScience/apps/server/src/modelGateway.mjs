@@ -99,8 +99,17 @@ function verifiedBudgetScope(encoded, signature, caller, config) {
 function consumeBudgetScope(request, caller, config) {
   const scopes = [];
   let requiresScope = false;
-  const scrub = (value) => {
+  // An interactive runtime's token names no run. A marker or an autopilot
+  // intent in an earlier message is history: the user continuing, in the
+  // chat, a conversation a bounded run started (a GEO step, an autopilot
+  // episode, a verification). On 2026-09-25 every such follow-up failed with
+  // budget_scope_invalid. History is stripped and neither honoured nor
+  // refused: the turn is the user's, under the user's own caps. In the newest
+  // user message they belong to this turn and are held to the rules below.
+  const current = caller.runId == null ? request.messages.map((message) => message.role).lastIndexOf("user") : -1;
+  const scrub = (value, index) => {
     if (typeof value !== "string") return value;
+    if (caller.runId == null && index !== current) return value.replace(autopilotIntentPattern, "").replace(budgetMarkerPattern, "");
     if (autopilotIntentPattern.test(value)) requiresScope = true;
     autopilotIntentPattern.lastIndex = 0;
     return value.replace(autopilotIntentPattern, "").replace(budgetMarkerPattern, (_match, encoded, signature) => {
@@ -108,9 +117,11 @@ function consumeBudgetScope(request, caller, config) {
       return "";
     });
   };
-  const messages = request.messages.map((message) => ({ ...message, content: typeof message.content === "string"
-    ? scrub(message.content)
-    : Array.isArray(message.content) ? message.content.map((part) => ({ ...part, ...(typeof part.text === "string" ? { text: scrub(part.text) } : {}) })) : message.content }));
+  const messages = request.messages.map((message, index) => ({ ...message, content: typeof message.content === "string"
+    ? scrub(message.content, index)
+    : Array.isArray(message.content)
+      ? message.content.map((part) => ({ ...part, ...(typeof part.text === "string" ? { text: scrub(part.text, index) } : {}) }))
+      : message.content }));
   if (scopes.length > 1 && scopes.some((scope) => JSON.stringify(scope) !== JSON.stringify(scopes[0]))) {
     throw gatewayError(400, "model_gateway_budget_scope_conflict", "Model request contains conflicting budget scopes.");
   }
