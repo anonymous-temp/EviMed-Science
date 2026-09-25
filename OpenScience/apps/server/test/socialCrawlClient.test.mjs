@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GEO_SOCIAL_PLATFORMS } from "@evimed/domain";
-import { createSocialCrawlClient, minimizedSocialPost, socialCollectionStatus } from "../src/socialCrawlClient.mjs";
+import { createSocialCrawlClient, minimizedSocialPost, readBoundedText, socialCollectionStatus } from "../src/socialCrawlClient.mjs";
 
 /** One post as the live host answers it: detailed, with comments that name their authors. */
 function livePost(id, overrides = {}) {
@@ -56,7 +56,10 @@ test("a post keeps its address, id, one excerpt, engagement, collection time and
   assert.equal(post.postId, "p1");
   assert.equal(post.excerpt.length, 200, "at most 200 characters of title and body together");
   assert.ok(post.excerpt.startsWith("二甲双胍 饭前还是饭后吃？ 我妈"), "whitespace folded, title first");
-  assert.deepEqual(post.engagement, { likes: 2930, favs: 2807, shares: 447, comments: 12 });
+  assert.deepEqual(post.engagement, { likes: 2930, favs: 2807, shares: 447 },
+    "the comments a detail crawl returns are a sample, not the post's comment count");
+  assert.equal(/** @type {any} */ (minimizedSocialPost(livePost("p4", { comment_count: 318 }), "xhs", "t")).engagement.comments, 318,
+    "a count the upstream states is kept");
   assert.equal(post.comments.length, 10, "at most ten comment excerpts");
   assert.equal(post.comments[0], "评论 0：医生说饭中吃");
   const serialized = JSON.stringify(post);
@@ -127,4 +130,26 @@ test("an unconfigured channel refuses by name and is never asked", async () => {
   assert.equal(client.configured, false);
   await assert.rejects(client.search({ query: "q" }), { code: "social_posts_unconfigured" });
   assert.equal(asked, 0);
+});
+
+test("an answer is bounded while it streams in, not buffered whole and then refused", async () => {
+  let pulled = 0;
+  const chunk = new Uint8Array(1024 * 1024).fill(0x20);
+  // An upstream that never stops sending (stopped by the test at 64 MB if the client does not).
+  const endless = () => new Response(new ReadableStream({
+    pull(controller) {
+      if (pulled >= 64 * 1024 * 1024) { controller.close(); return; }
+      pulled += chunk.byteLength;
+      controller.enqueue(chunk);
+    },
+  }), { status: 200, headers: { "content-type": "application/json" } });
+  await assert.rejects(readBoundedText(endless(), 8 * 1024 * 1024), { code: "response_too_large" });
+  assert.ok(pulled <= 10 * 1024 * 1024, `read ${pulled} bytes past an 8 MB bound`);
+  pulled = 0;
+  const client = createSocialCrawlClient({ baseUrl: "http://social.internal:9966", fetchImpl: async () => endless() });
+  const result = await client.search({ query: "q", platforms: ["xhs"] });
+  assert.equal(result.status, "request_failed");
+  assert.ok(pulled <= 10 * 1024 * 1024, `the client read ${pulled} bytes`);
+  assert.equal(client.status().lastError, "response_too_large");
+  assert.equal(await readBoundedText(new Response('{"ok":true}'), 1024), '{"ok":true}');
 });
