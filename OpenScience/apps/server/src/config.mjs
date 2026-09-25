@@ -341,7 +341,7 @@ function geoSettings(overrides) {
   if (!engines.length || engines.some((engine) => !GEO_ENGINES.includes(engine)) || new Set(engines).size !== engines.length) {
     throw new Error(`OPEN_SCIENCE_GEO_ENGINES must be distinct values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(engines.join(","))}.`);
   }
-  const inclusionEngines = list("geoInclusionEngines", "OPEN_SCIENCE_GEO_INCLUSION_ENGINES", "");
+  const inclusionEngines = [...new Set(list("geoInclusionEngines", "OPEN_SCIENCE_GEO_INCLUSION_ENGINES", "").map((engine) => engine.toLowerCase()))];
   if (inclusionEngines.some((engine) => !GEO_ENGINES.includes(engine))) {
     throw new Error(`OPEN_SCIENCE_GEO_INCLUSION_ENGINES must be values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(inclusionEngines.join(","))}.`);
   }
@@ -360,13 +360,6 @@ function geoSettings(overrides) {
   const budget = Number(budgetValue);
   if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
     throw new Error(`OPEN_SCIENCE_GEO_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
-  }
-  const keyFile = String(read("mediaMarketApiKeyFile", "OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE", "")).trim();
-  if (keyFile && !path.isAbsolute(keyFile)) throw new Error("OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE must be an absolute path.");
-  const capValue = read("mediaMarketBalanceCapCny", "OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY", null);
-  const cap = capValue == null ? null : Number(capValue);
-  if (cap != null && (!Number.isFinite(cap) || cap <= 0 || cap > 10_000_000)) {
-    throw new Error(`OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY must be a positive number up to 10000000, got ${JSON.stringify(capValue)}.`);
   }
   return {
     geoEnabled: overrides.geoEnabled ?? boolEnv("OPEN_SCIENCE_GEO_ENABLED", false),
@@ -388,9 +381,7 @@ function geoSettings(overrides) {
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
-    mediaMarketUrl: origin("mediaMarketUrl", "OPEN_SCIENCE_MEDIA_MARKET_URL"),
-    mediaMarketApiKeyFile: keyFile,
-    mediaMarketBalanceCapCny: cap,
+    // The media marketplace's settings are `mediaMarketSettings` below.
   };
 }
 
@@ -455,6 +446,63 @@ function reviewSettings(overrides) {
     reviewReplyConcurrency: integer("reviewReplyConcurrency", "OPEN_SCIENCE_REVIEW_REPLY_CONCURRENCY", 2, 1, 8),
     reviewPollMs: integer("reviewPollMs", "OPEN_SCIENCE_REVIEW_POLL_MS", 3_000, 500, 60_000),
     reviewReferenceTimeoutMs: integer("reviewReferenceTimeoutMs", "OPEN_SCIENCE_REVIEW_REFERENCE_TIMEOUT_MS", 8_000, 1_000, 60_000),
+  };
+}
+
+/**
+ * The media marketplace (「循证 GEO」 distribution, build spec §7) and the
+ * vendor's 「GEO 查收录」 channel. Neither the base URL nor the key file has a
+ * default a deployment could reach: the vendor's documentation names only a
+ * placeholder host, and the key is the operator's. Either missing reads as
+ * "not configured" (`mediaMarketClient.mjs`), and the market plans without
+ * placing an order.
+ *
+ * The key file is a path, read on every call (a rotation is a file write), and
+ * never loaded into this object: the runtime receives no part of it.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function mediaMarketSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  const url = String(read("mediaMarketUrl", "OPEN_SCIENCE_MEDIA_MARKET_URL", "")).trim().replace(/\/+$/, "");
+  if (url) {
+    let parsed = null;
+    try { parsed = new URL(url); } catch { parsed = null; }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error("OPEN_SCIENCE_MEDIA_MARKET_URL must be an http(s) origin with an optional path and no credentials.");
+    }
+  }
+  const keyFile = String(read("mediaMarketApiKeyFile", "OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE", "")).trim();
+  if (keyFile && !path.isAbsolute(keyFile)) {
+    throw new Error("OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE must be an absolute path.");
+  }
+  const timeoutValue = read("mediaMarketTimeoutMs", "OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS", 15_000);
+  const timeout = Number(timeoutValue);
+  if (!Number.isSafeInteger(timeout) || timeout < 1_000 || timeout > 120_000) {
+    throw new Error(`OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS must be a whole number from 1000 to 120000, got ${JSON.stringify(timeoutValue)}.`);
+  }
+  // The most the platform's prepaid balance at the vendor may hold. Unset means
+  // no top-up is ever requested: how much of the operator's money may sit with
+  // a counterparty is the operator's decision, and the code does not guess it.
+  const capValue = read("mediaMarketBalanceCapCny", "OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY", null);
+  const cap = capValue == null ? null : Number(capValue);
+  if (cap != null && (!Number.isFinite(cap) || cap <= 0 || cap > 10_000_000)) {
+    throw new Error(`OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY must be a number above 0 and at most 10000000, got ${JSON.stringify(capValue)}.`);
+  }
+  return {
+    mediaMarketUrl: url,
+    mediaMarketApiKeyFile: keyFile,
+    mediaMarketTimeoutMs: timeout,
+    // Plaintext would carry the key in every form; refused unless the vendor
+    // offers nothing else and the operator says so.
+    mediaMarketAllowPlaintext: overrides.mediaMarketAllowPlaintext ?? boolEnv("OPEN_SCIENCE_MEDIA_MARKET_ALLOW_PLAINTEXT", false),
+    mediaMarketBalanceCapCny: cap,
+    // `geoInclusionEngines` (which engines the vendor's 查收录 measures) is `geoSettings`'.
   };
 }
 
@@ -1708,6 +1756,7 @@ export function loadConfig(overrides = {}) {
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     ...reviewSettings(overrides),
+    ...mediaMarketSettings(overrides),
     ...reviewJevSettings(overrides, Boolean(typesafeSecret.value)),
     // The learning loop's own knobs.
     //
