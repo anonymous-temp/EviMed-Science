@@ -405,7 +405,7 @@ services:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The
-      # marketplace key is a file path; mount the file read-only at that path.
+      # marketplace key is the host file bound below.
       OPEN_SCIENCE_GEO_ENABLED:
       OPEN_SCIENCE_GEO_AUDIENCE:
       OPEN_SCIENCE_GEO_PREVIEW_USERS:
@@ -420,7 +420,9 @@ services:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
       OPEN_SCIENCE_MEDIA_MARKET_URL:
-      OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE:
+      OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: /run/secrets/media-market-api-key
+      OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS:
+      OPEN_SCIENCE_MEDIA_MARKET_ALLOW_PLAINTEXT:
       OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY:
       OPEN_SCIENCE_REVIEW_ENABLED:
       OPEN_SCIENCE_REVIEW_MODEL:
@@ -806,6 +808,12 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_TYPESAFE_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/typesafe-api-key
+        read_only: true
+      # The media marketplace's key (owner-only, like the others). Optional: a
+      # deployment without one binds /dev/null and no order leaves the host.
+      - type: bind
+        source: ${OPEN_SCIENCE_MEDIA_MARKET_API_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/media-market-api-key
         read_only: true
     depends_on:
       evimed-postgres:
