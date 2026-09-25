@@ -1442,6 +1442,7 @@ export function createWebApiApp(overrides = {}) {
   /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
+   *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
@@ -1457,7 +1458,8 @@ export function createWebApiApp(overrides = {}) {
       market: null,
       exporter: null,
       importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`),
-        articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified") }),
+        articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified"),
+        articleRunId: (project, deliverableId) => geo?.articleRunId(project, deliverableId) ?? Promise.resolve(null) }),
       // A project made before its brand was known is named by the brand once
       // the run writes it; a name the researcher chose is left alone.
       renameProject: async (userId, projectId, name) => {
@@ -1471,14 +1473,24 @@ export function createWebApiApp(overrides = {}) {
       // deliverable (or the run named) — never the run's own claim.
       articleGate: async (project, { runId, deliverableId, path: articlePath }) => {
         const id = deliverableId ?? deliverableIdOfPath(articlePath);
-        const owner = id && agentRuns ? await store.userById(project.userId) : null;
-        if (!owner) return "unverified";
-        const runs = (await agentRuns.list(await store.requireProject(owner, project.projectId)))
-          .filter((run) => (!runId || run.id === runId) && (run.deliverables ?? []).some((/** @type {any} */ item) => item?.id === id))
-          .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
-        return geoArticleGateOf(runs[0], id);
+        const run = id ? await geoDeliverableRun(project, id, runId) : null;
+        return run ? geoArticleGateOf(run, id) : "unverified";
       },
+      articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
     };
+  }
+  /**
+   * The newest run of a GEO project's control-plane project that holds the
+   * deliverable (or the run named, when it does).
+   * @param {any} project @param {string} deliverableId @param {string | null} runId
+   */
+  async function geoDeliverableRun(project, deliverableId, runId) {
+    const owner = agentRuns ? await store.userById(project.userId) : null;
+    if (!owner) return null;
+    const runs = (await agentRuns.list(await store.requireProject(owner, project.projectId)))
+      .filter((run) => (!runId || run.id === runId) && (run.deliverables ?? []).some((/** @type {any} */ item) => item?.id === deliverableId))
+      .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
+    return runs[0] ?? null;
   }
   const geoRoutes = createGeoRoutes({
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,

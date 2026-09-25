@@ -37,10 +37,14 @@
 import {
   GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_ENGINES, GEO_GAP_CLASSES,
   GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS, GEO_RX_CLASSES, GEO_SOURCE_KINDS,
-  GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS, geoConstant } from "@evimed/domain";
+  GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath,
+  geoConstant } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** @typedef {{ index?: number, group?: number, field?: string, code: string, message: string }} GeoIssue */
+
+/** A deliverable id: one path segment. */
+const DELIVERABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
 
 export const GEO_WRITE_LIMITS = Object.freeze({
   claims: 200, sources: 200, articles: 50, targets: 60, groups: 80, questionsPerGroup: 60, questions: 400, competitors: 20,
@@ -648,10 +652,18 @@ function validatedArticles(items, issues, known) {
     const item = /** @type {Record<string, any>} */ (entry);
     const read = fields(item, issues, { index });
     read.unknown(ARTICLE_FIELDS);
-    const pathValue = read.text("path", 512, { required: true });
-    if (pathValue && (pathValue.startsWith("/") || pathValue.includes("\\") || pathValue.split("/").some((part) => part === ".." || part === "."))) {
-      read.refuse("path", "invalid", "path is the deliverable's path relative to the workspace.");
+    const given = read.text("path", 512, { required: true });
+    if (given && (given.startsWith("/") || given.includes("\\") || given.split("/").some((part) => part === ".." || part === "."))) {
+      read.refuse("path", "invalid", "path is the article's path relative to the workspace, or to its deliverable folder.");
     }
+    const namedDeliverable = read.text("deliverableId", 120);
+    if (namedDeliverable && !DELIVERABLE_ID.test(namedDeliverable)) read.refuse("deliverableId", "invalid", "deliverableId is this deliverable's id.");
+    // The run writes inside its deliverable folder and may name the file
+    // relative to it (`articles/<id>.md`); the platform keeps the workspace
+    // path — the unique key, and what the page and the market open. Two
+    // batches' `articles/card.md` were one row before (production, 2026-09-25).
+    const pathValue = given && namedDeliverable && !given.startsWith("deliverables/") ? `${deliverableDir(namedDeliverable)}/${given}` : given;
+    const deliverableId = namedDeliverable ?? (pathValue ? deliverableIdOfPath(pathValue) : null);
     if (pathValue && seen.has(pathValue)) read.refuse("path", "duplicate", "The same path appears twice in this write.");
     const claimIds = read.texts("claimIds", 200, 80) ?? [];
     const unknownClaims = claimIds.filter((id) => !known.claimIds.has(id));
@@ -673,7 +685,7 @@ function validatedArticles(items, issues, known) {
     const article = {
       path: pathValue, layer, title: read.text("title", 200), groupId, claimIds,
       safety: read.word("safety", RUN_ARTICLE_SAFETY, { required: true }),
-      contentSha256, protectedSha256, deliverableId: read.text("deliverableId", 120), runId: read.text("runId", 120),
+      contentSha256, protectedSha256, deliverableId, runId: read.text("runId", 120),
     };
     if (read.refused) return;
     seen.add(pathValue);

@@ -1621,7 +1621,7 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "exporter", "importDelivery", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "exporter", "importDelivery", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
   // Every slot is filled: the worker with all twelve loops wired (measurement,
   // orchestration, market), the orchestrator, the exporter and the market's
   // user and operator hooks.
