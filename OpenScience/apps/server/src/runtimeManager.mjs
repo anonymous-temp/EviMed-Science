@@ -2077,6 +2077,11 @@ export async function syncRuntimeDshProfile(
   const profileInput = dshProfileInput(config, project, plan, model, workloadTokenRuntimePathForDsh);
   const patch = renderProfilePatch(profileInput);
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, "control-plane-patch.yml"), patch, { encoding: "utf8", mode: 0o600 });
+  // The tools the MCP server will not offer, for the kernel's guidance row
+  // (`EVIMED_DISABLED_TOOLS_FILE`): the same value, so the capability
+  // catalogue and the tool list cannot disagree.
+  await writeFile(project.rootDir, path.join(plan.dshHomeDir, disabledToolsFileName),
+    `${String(profileInput.mcpEnvironment?.EVIMED_DISABLED_TOOLS ?? "")}\n`, { encoding: "utf8", mode: 0o600 });
 
   // The kernel's browser-session signing secret, chosen here rather than by the
   // kernel. 0.1.2 authenticates every `/api` request, including on loopback,
@@ -2148,6 +2153,10 @@ export async function syncRuntimeDshProfile(
 /** The file `EVIMED_MODEL_GATEWAY_TOKEN_FILE` names inside a DSH runtime: the
  *  model-gateway token on its own, one line, mode 0600. */
 export const modelGatewayTokenFileName = "model-gateway.token";
+
+/** The file `EVIMED_DISABLED_TOOLS_FILE` names inside a DSH runtime: one line,
+ *  the comma-separated base names of the tools this runtime does not offer. */
+export const disabledToolsFileName = "disabled-tools";
 
 /** Host path for the MCP workload token file DSH's `EVIMED_WORKLOAD_TOKEN_FILE` names — the `dsh-home` analogue of `workloadTokenHostPath`. */
 function dshWorkloadTokenHostPath(plan) {
@@ -2461,6 +2470,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           publicSourceGatewayUrl,
           webSearchGatewayUrl,
           pluginConfig,
+          disabledToolsFile: `${runtimeDshHome}/${disabledToolsFileName}`,
           // The API owns issuance; the isolated controller owns this argv and
           // deliberately has no signing keys. Both processes name the same
           // fixed files. Bootstrap writes them empty when signing is absent.

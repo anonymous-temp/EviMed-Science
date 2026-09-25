@@ -3645,3 +3645,34 @@ test("only a file whose URL names its content counts as immutable", async () => 
     assert.equal(isImmutableRuntimeUiAsset(suffix), false, suffix);
   }
 });
+
+test("the runtime bootstrap writes the tools this runtime does not offer, for the kernel's capability catalogue", async () => {
+  // The guidance row reads this file (EVIMED_DISABLED_TOOLS_FILE) to leave out a
+  // capability whose module tools are off; the launch argv cannot carry the list
+  // itself because the controller that builds it lacks the settings behind it.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "os-dsh-disabled-tools-"));
+  try {
+    const projectRoot = path.join(tmp, "project");
+    await mkdir(path.join(projectRoot, "workspace"), { recursive: true });
+    const dshHomeDir = path.join(projectRoot, "runtime", "dsh-home");
+    await syncRuntimeDshProfile(
+      {
+        deepseekProviderEnabled: true,
+        deepseekModel: "deepseek-v4-pro",
+        modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+        modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes",
+        evimedWorkloadSigningSecret: "evimed-workload-signing-secret-with-32-bytes",
+        evimedWorkloadTokenTtlSeconds: 300,
+        runtimeSandboxEnforcement: "full",
+        production: false,
+        geoEnabled: false,
+      },
+      { id: "paper1", userId: "alice", rootDir: projectRoot, workspaceDir: path.join(projectRoot, "workspace") },
+      { sandboxMode: "docker", dshHomeDir, proxyWorkspaceDir: "/workspace" },
+    );
+    const written = (await readFile(path.join(dshHomeDir, "disabled-tools"), "utf8")).trim().split(",");
+    for (const tool of ["geo_read", "geo_write", "social_posts_search"]) assert.ok(written.includes(tool), `${tool} is off without the module: ${written}`);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
