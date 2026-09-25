@@ -79,7 +79,8 @@ describe("a GEO project's page", () => {
     const marks = [...steps.querySelectorAll("[data-geo-step]")].map((step) => [step.getAttribute("data-geo-step"), step.getAttribute("data-mark")]);
     expect(marks).toEqual([
       ["evidence", "done"], ["journey", "done"], ["questions", "done"], ["diagnosis", "done"], ["sources", "done"],
-      ["content", "current"], ["distribution", "none"], ["monitoring", "none"],
+      // Content, distribution and monitoring run side by side.
+      ["content", "current"], ["distribution", "current"], ["monitoring", "current"],
     ]);
     expect(within(steps).getByRole("link", { name: /内容\s*，进行中/ })).toHaveAttribute("href", "/app/geo/geo_masi/content");
     expect(steps).toHaveTextContent("14/20");

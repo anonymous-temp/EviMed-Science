@@ -168,7 +168,7 @@ export function GeoProjectPage() {
         </>
       )}
     >
-      <Tabs label="项目视图" items={GEO_TABS.map((item) => ({ value: item.key, label: item.label }))} value={tab} onChange={changeTab} panelId="geo-tab-panel" />
+      <Tabs label="项目视图" items={GEO_TABS.map((item) => ({ value: item.key, label: item.label }))} value={tab} onChange={changeTab} panelId="geo-tab-panel" className="gap-4 overflow-x-auto sm:gap-6 [&>button]:shrink-0" />
       <div id="geo-tab-panel" role="tabpanel" aria-labelledby={`geo-tab-panel-tab-${tab}`} className="pt-6">
         {tab === "overview" ? <GeoOverview geoId={geoId} project={project} />
           : untouched(project, tab) ? (

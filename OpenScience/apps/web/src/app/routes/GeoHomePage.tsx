@@ -91,9 +91,15 @@ function ProjectList({ projects }: { projects: GeoProjectSummary[] }) {
     <div>
       <div aria-hidden="true" className="flex items-center gap-3 border-b border-border px-2 pb-2 text-caption text-text-3">
         <span className="min-w-0 flex-1">项目</span>
-        <span className="w-56 shrink-0">综合可见度指数</span>
-        <span className="w-28 shrink-0">品牌提及率</span>
-        <span className="w-4 shrink-0" />
+        {/* The same columns as a row's trailing group (`ListRow`: gap 8). */}
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="w-16 sm:w-56">
+            <span className="sm:hidden">可见度</span>
+            <span className="hidden sm:inline">综合可见度指数</span>
+          </span>
+          <span className="w-20 sm:w-28">品牌提及率</span>
+          <span className="w-4" />
+        </span>
       </div>
       <List divided label="GEO 项目">
         {projects.map((project) => <ProjectRow key={project.id} project={project} />)}
@@ -123,13 +129,15 @@ function ProjectRow({ project }: { project: GeoProjectSummary }) {
       )}
       trailing={(
         <>
-          <span className="flex w-56 shrink-0 items-center gap-3 text-ui">
+          {/* Below 640 px the trend gives way to the number: no row may push
+              the page sideways at 390 px. */}
+          <span className="flex w-16 shrink-0 items-center gap-3 text-ui sm:w-56">
             <span className="w-8 shrink-0">
               <GeoCellText cell={gvi} unit="index" hideSample />
             </span>
-            <GeoSparkline values={gvi.trend} target={gvi.target} width={132} height={28} />
+            <GeoSparkline values={gvi.trend} target={gvi.target} width={132} height={28} className="hidden sm:block" />
           </span>
-          <span className="w-28 shrink-0 text-ui">
+          <span className="w-20 shrink-0 text-ui sm:w-28">
             <GeoCellText cell={mention} unit="percent" layout="stack" />
           </span>
           <ChevronRight size={16} aria-hidden="true" className="w-4 shrink-0 text-text-3" />
