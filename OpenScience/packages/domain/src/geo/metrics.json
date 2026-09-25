@@ -41,7 +41,8 @@
       "EC_NOTIFY_MIN_SEVERITY": "SPEC §5 / decisions.md #5: severity that notifies at detection",
       "RECHECK_WEEKS": "monitor.py post_pub_due: post-publication re-measure weeks",
       "MI_SENTINEL_QUESTION_COUNT": "monitor.py sentinel rounds: questions",
-      "MI_SENTINEL_ENGINE_COUNT": "monitor.py sentinel rounds: engines"
+      "MI_SENTINEL_ENGINE_COUNT": "monitor.py sentinel rounds: engines",
+      "PROBE_CIRCUIT_BREAK_CONSECUTIVE": "catalogue.yaml PROBE_CIRCUIT_BREAK_CONSECUTIVE: suspect or failed answers in a row that pause an engine (probe_client.py ask_batch)"
     },
     "computation": {
       "value_decimals": "compute_metrics.py _metric_value / _wilson / gvi_for_pool: round(x, 2)",
@@ -733,7 +734,8 @@
       12
     ],
     "MI_SENTINEL_QUESTION_COUNT": 10,
-    "MI_SENTINEL_ENGINE_COUNT": 2
+    "MI_SENTINEL_ENGINE_COUNT": 2,
+    "PROBE_CIRCUIT_BREAK_CONSECUTIVE": 5
   },
   "computation": {
     "value_decimals": 2,
