@@ -87,6 +87,25 @@ test("each capability card carries its summary and typical duration for the /能
   }
 });
 
+test("the GEO capabilities reach the frame for their chip, and are marked out of its tool list", async (t) => {
+  // Build spec 2026-09-25 §6: hidden from the kernel's own tool list by
+  // `display.listed: false`, never by `visibility: internal` — a session the
+  // 「循证 GEO」 module binds to one must still name its tool.
+  const f = await bootstrapFor(t);
+  const frame = await frameObject(f);
+  const byId = new Map(frame.capabilities.map((card) => [card.id, card]));
+  for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
+    assert.ok(byId.has(id), `${id} did not reach the frame, so a conversation bound to it would have no chip`);
+    assert.equal(byId.get(id).listed, false, `${id} would be offered in the frame's tool list`);
+  }
+  assert.equal(byId.get("geo-insight").title, "循证 GEO");
+  const listed = frame.capabilities.filter((card) => card.listed !== false);
+  // Fourteen: the fifteen public capabilities of 2026-09-24 less geo-content,
+  // which moved into the GEO module.
+  assert.ok(listed.length >= 14, `only ${listed.length} listed tools reached the frame`);
+  assert.ok(listed.every((card) => !card.id.startsWith("geo-")));
+});
+
 test("every body an operator can switch off is named where the switch is documented", async () => {
   const example = await readFile(new URL("../../../deploy/web/.env.example", import.meta.url), "utf8");
   const block = example.slice(example.indexOf("The EviMed layer inside that page"), example.indexOf("# OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF="));

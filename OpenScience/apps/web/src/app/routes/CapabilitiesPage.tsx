@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
+import { capabilityListed } from "@evimed/domain";
 import { webErrorMessage, listWebResearchAgents, type WebResearchAgent } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
@@ -70,7 +71,10 @@ export function CapabilitiesPage() {
     return () => { active = false; };
   }, [reloads]);
 
-  const catalogue = useMemo(() => agents.map(researchAgentUi), [agents]);
+  // A capability its own module opens (the 「循证 GEO」 ones, `display.listed:
+  // false`) is not a tool to pick here; it stays public so that module can
+  // bind a conversation to it.
+  const catalogue = useMemo(() => agents.filter((agent) => capabilityListed(agent.id)).map(researchAgentUi), [agents]);
   const categories = useMemo(
     () => [...new Set(catalogue.map((ui) => ui.category))]
       .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),

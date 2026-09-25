@@ -98,7 +98,7 @@ test('the bootstrap object is validated field by field', () => {
       { id: 'meta-analysis', title: '自动化 Meta 分析', category: '证据综合', brief: 'b', summary: '一句话', minutes: [30, 120] },
       { id: 'source-understanding', title: '资料理解', category: '内部', brief: 'b', visibility: 'internal' },
       { id: 'broken', title: '', category: '', brief: '' },
-      { id: 'minutes-wrong', title: 'x', category: 'y', brief: 'b', minutes: [0, 'a'] },
+      { id: 'minutes-wrong', title: 'x', category: 'y', brief: 'b', minutes: [0, 'a'], listed: false },
     ],
   });
   assert.equal(frame.operator, false, 'only a literal true is the operator flag');
@@ -107,6 +107,8 @@ test('the bootstrap object is validated field by field', () => {
   assert.deepEqual(frame.capabilities[0].minutes, [30, 120]);
   assert.equal(frame.capabilities[1].internal, true);
   assert.equal(frame.capabilities[2].minutes, null);
+  // Only a literal false keeps a tool out of the lists; absent is listed.
+  assert.deepEqual(frame.capabilities.map((/** @type {any} */ entry) => entry.listed), [true, true, false]);
 });
 
 test('the hub carries state to subscribers and settles one request by its id', async () => {

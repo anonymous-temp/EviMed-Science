@@ -58,14 +58,16 @@ import { frameStyles } from './runtimeUiStyles.mjs';
 export const inject = ['slots', 'sessions', 'conversation'];
 
 /**
- * The slash popup's rows: every public tool, in catalogue order (which is by
- * category), the category first in the detail line.
+ * The slash popup's rows: every public tool a researcher picks from, in
+ * catalogue order (which is by category), the category first in the detail
+ * line. A tool its own module opens (`listed: false`, the 「循证 GEO」
+ * capabilities) stays in the catalogue for its chip and is not a row here.
  * @param {any[]} capabilities the frame's validated catalogue
  * @returns {{ id: string, label: string, detail: string }[]}
  */
 export function capabilityOptions(capabilities) {
   return (Array.isArray(capabilities) ? capabilities : [])
-    .filter((entry) => entry && !entry.internal && entry.id && entry.title)
+    .filter((entry) => entry && !entry.internal && entry.listed !== false && entry.id && entry.title)
     .map((entry) => ({
       id: String(entry.id),
       label: String(entry.title),
