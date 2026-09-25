@@ -1,0 +1,881 @@
+{
+  "_provenance": {
+    "source": "geo-skills 3.0.0 (owner's proprietary method package, not vendored): shared/rules/metrics.yaml converted to JSON key for key; constants from shared/rules/catalogue.yaml; engines from shared/rules/interfaces.yaml",
+    "version": "3.0.0",
+    "sha256": {
+      "shared/rules/metrics.yaml": "a4ac003a9b9f4e0d383af15cfe9b301beff6387933a64ac5772b73e2b727579f",
+      "shared/rules/catalogue.yaml": "9b2ada5bb900aa92d1ff6457ca6fed6e0c7b6beb77a78fefa656e5585ee68e79",
+      "shared/rules/interfaces.yaml": "a389a7904a26e275c5c48b1a283ac1acbd5ba8c2a4dc56728984ba625bc5992a",
+      "shared/scripts/compute_metrics.py": "0e60db559122861a5c6bc83e703133c77d68fd8ba5f8867a6c1069a321bba150",
+      "shared/scripts/monitor.py": "9f2d9f47601be65960b21d64e20f4bbfc29f0fbfa354f896e1046d7bdcfc897e"
+    },
+    "converted": "2026-09-25",
+    "rule": "The one place formulas' constants live. Code reads them from here and never restates them (plan §4.1).",
+    "constants": {
+      "SOV_COVERAGE_MIN": "compute_metrics.py pool_metrics: M-04 is not measurable below this brand-registration coverage (M-04C); metrics.yaml M-04C note",
+      "STD_CELL_MIN_SAMPLES": "compute_metrics.py _annotate_samples + monitor.py report_data: a percent cell with fewer answers is insufficient (T/CAACCHINA 003, 30 per cell)",
+      "IRON_04_GROUP_REFERENCE_CAP": "compute_metrics.py gvi_for_pool + _overall_gvi: the GVI cap; metrics.yaml gvi.cap and M-19 formula",
+      "ACCURACY_HARD_LINE": "monitor.py _hard_lines: M-06 share must be >= this; decisions.md #1",
+      "RANKING_NOISE_DEFAULT_THRESHOLD": "monitor.py net_effect: the threshold when noise was not measured (then noise_measured=false); metrics.yaml net_effect.verdict",
+      "ROLLING_WINDOW_WEEKS": "metrics.yaml net_effect.window_weeks: trend and net-effect rolling window",
+      "CONTROL_CLUSTER_SHARE_MIN": "metrics.yaml net_effect.control_share: control groups' share of groups, lower bound",
+      "CONTROL_CLUSTER_SHARE_MAX": "metrics.yaml net_effect.control_share: control groups' share of groups, upper bound",
+      "PROBE_NOISE_QUESTION_COUNT": "metric-contract.md 噪声先测: questions in the one-off noise round",
+      "PROBE_NOISE_SAMPLE_N": "metric-contract.md 噪声先测: repeats per question x engine in the noise round",
+      "PROBE_SANITY_MIN_ANSWER_CHARS": "probe_client.py classify_answer: shorter answers are suspect (empty shell) unless a refusal marker hit",
+      "PROBE_BASELINE_QUESTION_TARGET": "baseline probe plan: target measured questions per baseline",
+      "PROBE_PROVIDER_COUNT": "baseline probe plan: engines per round",
+      "STD_MIN_ENGINES": "T/CAACCHINA sampling disclosure: engines per round",
+      "STD_ENGINE_SHARE_MAX": "T/CAACCHINA sampling disclosure: max share of one engine in the sample",
+      "STD_MIN_CITIES": "T/CAACCHINA sampling disclosure: collection cities",
+      "SINGLE_STEP_MIN_QUESTIONS": "decisions.md #3: single-step minimal question set",
+      "SINGLE_STEP_MIN_PER_POOL": "single-step minimal set: questions per pool",
+      "VF_PROVIDER_VALID_SHARE_MIN": "VF-G10: an engine whose valid share falls below this is flagged",
+      "IRON_02_SOV_RATIO_MIN": "IRON-02: SOV / mention-rate ratio lower bound (sov_pairs from compute_metrics.py _iron_inputs)",
+      "IRON_02_SOV_RATIO_MAX": "IRON-02: SOV / mention-rate ratio upper bound",
+      "IRON_02_SOV_RATIO_BLOCK_ABOVE": "IRON-02: ratio above this blocks",
+      "EC_CONFIRM_REPEATS": "DX-EC-01 / SPEC §5 errors: re-asks of a 讲错我方 question on that engine",
+      "EC_STABLE_MIN_SHARE": "DX-EC-01: hits / valid repeats at or above this share = stable, else sporadic",
+      "EC_CLOSE_REPEATS": "error close re-measure size",
+      "EC_NOTIFY_MIN_SEVERITY": "SPEC §5 / decisions.md #5: severity that notifies at detection",
+      "RECHECK_WEEKS": "monitor.py post_pub_due: post-publication re-measure weeks",
+      "MI_SENTINEL_QUESTION_COUNT": "monitor.py sentinel rounds: questions",
+      "MI_SENTINEL_ENGINE_COUNT": "monitor.py sentinel rounds: engines"
+    },
+    "computation": {
+      "value_decimals": "compute_metrics.py _metric_value / _wilson / gvi_for_pool: round(x, 2)",
+      "wilson_z": "compute_metrics.py _wilson default z",
+      "pool_metric_ids": "compute_metrics.py pool_metrics: the per-scope metric cells it emits",
+      "gvi_normalizable_metric_ids": "compute_metrics.py _dimension_scores `normalizable` (counts M-07, M-09 stay out of the index)",
+      "gvi_inverse_rank_metric_ids": "metrics.yaml gvi.normalization + compute_metrics.py _dimension_scores: min(100, 100 / position)",
+      "uneven_denominator_metric_ids": "compute_metrics.py pool_metrics: pool rates set not measurable when per-question valid counts differ (_denominator_evenness)",
+      "top_n_variant_max_position": "extract_facts.py self_top3 (M-01S top3 variant)",
+      "percent_scale": "compute_metrics.py _rate: 100.0 * numerator / denominator; metrics.yaml gvi.normalization 0-100",
+      "derived_metrics": "compute_metrics.py _derived and compute(): M-13 = P1 M-01 / P2 M-01; M-14 = P3's M-01 cell; M-15 = P4's M-03 cell taken AFTER _mask_out_of_pool (M-03 is not defined for P4, so M-15 is never measurable — see the package M report); pool_cell: compute() also stores M-15 inside pools.P4"
+    },
+    "engines": "interfaces.yaml probe.engines + probe.planned_providers; citation_display decides M-08B (VF-G12)",
+    "platform": {
+      "snapshot_statuses": "snapshots.status (SPEC §2); compute_metrics.py's ok/refusal/suspect/error",
+      "in_denominator_statuses": "metrics.yaml denominator: valid and refusal count, suspect does not (snapshots.status, SPEC §2)",
+      "excluded_round_kinds": "compute_metrics.py _exclude_noise: noise and error-confirmation repeats never enter a round's denominators (rounds.kind, SPEC §2)",
+      "noise_round_kind": "rounds.kind of the one-off noise round (SPEC §2, §5)",
+      "inclusion_surface_mode": "SPEC §7.4: snapshots from the vendor's inclusion check carry surface.mode='inclusion'",
+      "inclusion_metric_ids": "SPEC §7.4: only mention cells are computed for an inclusion-channel engine",
+      "error_closed_statuses": "metrics.yaml DX-EC-02 mapped onto errors.status (SPEC §2)",
+      "noise_band_sd_multiplier": "EviMed definition: geo-skills leaves the noise threshold to the skill (metrics.json#noise.threshold); net-effect-and-trends.md names 2 x the A/A noise standard deviation",
+      "noise_band_metric_ids": "EviMed definition: the answer-denominator rates a noise round can replicate",
+      "insufficient_gvi_below_answers": "EviMed: SPEC §0 ruling 8 applied to the index — an index built on fewer answers is shown as 样本不足"
+    }
+  },
+  "version": "3.0.0",
+  "pools": {
+    "P1": {
+      "name": "品牌明确类",
+      "rule": "问句含本品品牌名",
+      "client_term": "存量",
+      "target_direction": "打准确度",
+      "gvi_weight": 0.4
+    },
+    "P2": {
+      "name": "通用名与品类类",
+      "rule": "问句含通用名或剂型，且不含任何品牌名",
+      "client_term": "增量",
+      "target_direction": "打转化",
+      "gvi_weight": 0.4
+    },
+    "P3": {
+      "name": "泛症状场景类",
+      "rule": "问句只含症状或场景，不含任何药名",
+      "client_term": "泛增量",
+      "target_direction": "诚实追赶，不承诺反超（IRON-01）",
+      "gvi_weight": 0.2
+    },
+    "P4": {
+      "name": "风险监测类",
+      "rule": "问句命中超适应症、特殊人群或禁忌词表",
+      "client_term": "风险监测",
+      "target_direction": "降低——在此类问句里被推荐是负资产",
+      "gvi_weight": 0.0
+    }
+  },
+  "metrics": [
+    {
+      "id": "M-01",
+      "name": "品牌提及率",
+      "formula": "含本品品牌名的有效回答数 / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "有效回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "mention"
+    },
+    {
+      "id": "M-02",
+      "name": "首位提及率",
+      "formula": "本品是答案中第一个出现的品牌的回答数 / 至少提及一个品牌的回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "至少提及一个品牌的回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "mention"
+    },
+    {
+      "id": "M-03",
+      "name": "推荐位提及率",
+      "formula": "本品出现在明确推荐句或推荐列表项中的回答数 / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "有效回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "mention"
+    },
+    {
+      "id": "M-04",
+      "name": "品牌声量份额",
+      "formula": "本品被提及总次数 / 全部品牌被提及总次数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "全部品牌被提及总次数 >= 1；且与 M-01 来自同一批快照（IRON-02）",
+      "direction": "up",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "share"
+    },
+    {
+      "id": "M-04C",
+      "name": "品牌登记覆盖率",
+      "formula": "已登记品牌被提及总次数 / 答案中可识别药品实体被提及总次数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "可识别药品实体提及总次数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": false,
+      "gvi_group": "diagnostic",
+      "note": "M-04 的前置条件，不是它的补充。声量份额的分母只数已登记品牌——未登记品牌被提到多少次都不进分母，已登记品牌的份额必然虚高。覆盖率低于 SOV_COVERAGE_MIN 时 M-04 一律标不可测：补零或照报都是假数。补几个竞品能提高覆盖率，但赛道是开放词表的，补不完。"
+    },
+    {
+      "id": "M-05",
+      "name": "平均出现位序",
+      "formula": "本品在品牌序列中位次之和 / 提及本品的回答数",
+      "unit": "ratio",
+      "channel": "measured",
+      "measurable_when": "提及本品的回答数 >= 1",
+      "direction": "down",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "mention"
+    },
+    {
+      "id": "M-06",
+      "name": "事实准确率",
+      "formula": "讲对我方的回答数 / (讲对我方 + 讲错我方)",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "(讲对我方 + 讲错我方) >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2"
+      ],
+      "client_facing": true,
+      "gvi_group": "accuracy"
+    },
+    {
+      "id": "M-07",
+      "name": "错误陈述条数",
+      "formula": "去重后的「讲错我方」事实错误条数",
+      "unit": "count",
+      "channel": "measured",
+      "measurable_when": "always",
+      "direction": "down",
+      "pools": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "client_facing": true,
+      "gvi_group": "accuracy"
+    },
+    {
+      "id": "M-08",
+      "name": "引用命中率",
+      "formula": "search_results 中含本品可信信源域名的回答数 / 触发检索的回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "触发检索的回答数 >= 1；未触发检索的模型标 not_measurable，不得补零",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "citation"
+    },
+    {
+      "id": "M-09",
+      "name": "自有内容被引条数",
+      "formula": "search_results 中归属本品方自有或合作域名的去重条数",
+      "unit": "count",
+      "channel": "measured",
+      "measurable_when": "触发检索的回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "citation"
+    },
+    {
+      "id": "M-10",
+      "name": "检索触发率",
+      "formula": "search_results 非空的回答数 / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "有效回答数 >= 1",
+      "direction": "neutral",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "citation"
+    },
+    {
+      "id": "M-11",
+      "name": "就医红旗覆盖率",
+      "formula": "实测回答中出现应有就医提示的条目数 / 该问句按红旗期望表应出现的条目数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "红旗期望表条目数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "client_facing": true,
+      "gvi_group": "safety"
+    },
+    {
+      "id": "M-12",
+      "name": "禁忌与特殊人群提示率",
+      "formula": "实测回答含本品法定禁忌或相关特殊人群提示的回答数 / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "有效回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "client_facing": true,
+      "gvi_group": "safety"
+    },
+    {
+      "id": "M-13",
+      "name": "通用名到厂牌转化率",
+      "formula": "P1 池 M-01 / P2 池 M-01",
+      "unit": "ratio",
+      "channel": "derived",
+      "measurable_when": "P2 池 M-01 > 0",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2"
+      ],
+      "client_facing": true,
+      "gvi_group": "derived"
+    },
+    {
+      "id": "M-14",
+      "name": "泛症状可见度",
+      "formula": "P3 池的 M-01",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "P3 池有效回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "derived"
+    },
+    {
+      "id": "M-15",
+      "name": "风险问句被推荐率",
+      "formula": "P4 池中本品被推荐的回答数 / P4 池有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "P4 池有效回答数 >= 1",
+      "direction": "down",
+      "pools": [
+        "P4"
+      ],
+      "client_facing": true,
+      "gvi_group": "risk"
+    },
+    {
+      "id": "M-16",
+      "name": "竞品提及率",
+      "formula": "含该竞品名的有效回答数 / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "该竞品已登记四轴关系且已实测（VF-G09）",
+      "direction": "neutral",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "rival"
+    },
+    {
+      "id": "M-17",
+      "name": "竞品声量份额",
+      "formula": "该竞品被提及总次数 / 全部品牌被提及总次数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "与 M-16 同源（IRON-02）",
+      "direction": "neutral",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "rival"
+    },
+    {
+      "id": "M-18",
+      "name": "与头部竞品的差距档位",
+      "formula": "本品 GVI 与 TOP 竞品 GVI 之差，按噪声阈值折算为 领先/持平/落后 三档",
+      "unit": "rank_tier",
+      "channel": "derived",
+      "measurable_when": "TOP 竞品已实测；差值绝对值小于噪声阈值时一律判持平（VF-G04）",
+      "direction": "up",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "derived"
+    },
+    {
+      "id": "M-19",
+      "name": "综合可见度指数",
+      "formula": "见本文件 gvi 段：各维度归一后加权，再按池权重加权求和，封顶 IRON_04_GROUP_REFERENCE_CAP",
+      "unit": "index",
+      "channel": "derived",
+      "measurable_when": "mention 与 safety 两维均可测",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "index"
+    },
+    {
+      "id": "M-20",
+      "name": "回答有效率与拒答率",
+      "formula": "有效回答数 / (有效 + suspect)；拒答率 = refusal / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "always",
+      "direction": "neutral",
+      "pools": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "client_facing": true,
+      "gvi_group": "denominator"
+    },
+    {
+      "id": "M-01S",
+      "name": "品类问题可见率（团体标准口径）",
+      "formula": "P2、P3 两池合并后：含本品品牌名的有效回答数 / 有效回答数；变体 top1 = 本品为答案中第一个出现的品牌的回答数 / 有效回答数；top3 = 本品位于答案品牌序列前三的回答数 / 有效回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "P2 ∪ P3 有效回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "standard_view",
+      "standard_alias": "可见率",
+      "variants": {
+        "top1": "首推率",
+        "top3": "前三推荐率"
+      }
+    },
+    {
+      "id": "M-08S",
+      "name": "信源问题引用率（团体标准口径）",
+      "formula": "search_results 含本品可信信源域名的回答数 / 有效回答数（分母含未触发检索的回答）",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "brief 已登记自有域名且有效回答数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": false,
+      "gvi_group": "standard_view",
+      "standard_alias": "信源问题引用率"
+    },
+    {
+      "id": "M-09S",
+      "name": "信源数量引用率（团体标准口径）",
+      "formula": "指向本品可信信源域名的引用条数 / 全部引用条数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "brief 已登记自有域名且全部引用条数 >= 1",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": false,
+      "gvi_group": "standard_view",
+      "standard_alias": "信源数量引用率"
+    },
+    {
+      "id": "M-08B",
+      "name": "正文引用命中率",
+      "formula": "正文以行内角标引用本品可信信源域名的回答数 / 触发检索且引擎在正文给出角标的回答数",
+      "unit": "percent",
+      "channel": "measured",
+      "measurable_when": "引擎在正文给出行内角标（interfaces.yaml engines.<p>.citation_display=inline_marker）；只给来源列表的引擎不可测，不补零",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "diagnostic"
+    },
+    {
+      "id": "M-21",
+      "name": "发布稿件被引篇数",
+      "formula": "已核验的发布稿件中，在任一引擎引用列表出现过其 URL 的篇数（附分母：经过至少一次投后加测的已核验稿件数）",
+      "unit": "count",
+      "channel": "measured",
+      "measurable_when": "至少一篇已核验稿件经过一次投后加测",
+      "direction": "up",
+      "pools": [
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "client_facing": true,
+      "gvi_group": "diagnostic"
+    }
+  ],
+  "gvi": {
+    "dimension_weights": {
+      "mention": 0.3,
+      "share": 0.15,
+      "accuracy": 0.2,
+      "citation": 0.15,
+      "safety": 0.2
+    },
+    "normalization": "各维度取组内指标的等权平均，percent 型直接用 0-100，ratio 型 M-05 用 (1/位序)*100 截断到 100",
+    "pool_weighting": "按 pools 段的 gvi_weight 加权；P4 不进指数，单列",
+    "cap": "IRON_04_GROUP_REFERENCE_CAP",
+    "not_measurable_policy": "任一维度 not_measurable 时，该维度权重按比例重分配给可测维度，并在产物中显式声明重分配"
+  },
+  "denominator": {
+    "valid": "status=ok 且通过合理性校验的回答",
+    "suspect": "疑似会话失效或返回登录页；不进分母，单独告警",
+    "refusal": "模型合规拒答；进分母，单列 refusal 桶。把拒答踢出分母会系统性抬高提及率",
+    "absent_platform": "该平台本次未覆盖；分母冻结时显式声明，按可测子集重算"
+  },
+  "tiers": [
+    {
+      "id": "current",
+      "name": "现状",
+      "source": "measured",
+      "note": "全部来自快照"
+    },
+    {
+      "id": "tier_1",
+      "name": "档一",
+      "source": "forecast"
+    },
+    {
+      "id": "tier_2",
+      "name": "档二",
+      "source": "forecast"
+    },
+    {
+      "id": "tier_3",
+      "name": "档三",
+      "source": "forecast"
+    },
+    {
+      "id": "t_plus_n",
+      "name": "T+N 复测",
+      "source": "measured",
+      "note": "GEO-06 试点后由 GEO-04 复测，验收用净效应"
+    }
+  ],
+  "tier_variants": [
+    "基础",
+    "满配"
+  ],
+  "net_effect": {
+    "formula": "试点组变化 - 对照组变化",
+    "control_group_count_min": 3,
+    "control_group_count_max": 5,
+    "rule": "对照语义群不投放、只监测，与试点群同池同难度；验收口径与合同一律用净效应，不用单臂 before/after",
+    "window_weeks": "ROLLING_WINDOW_WEEKS",
+    "control_share": [
+      "CONTROL_CLUSTER_SHARE_MIN",
+      "CONTROL_CLUSTER_SHARE_MAX"
+    ],
+    "change": "当前滚动窗口值 − 基线窗口值（同池、同指标）",
+    "verdict": "|净效应| 不超过噪声阈值（实测；未实测用 RANKING_NOISE_DEFAULT_THRESHOLD 并标未实测）→ 持平；否则按方向判上升或下降",
+    "comparability_keys": [
+      "question_set_version",
+      "surface",
+      "engines"
+    ],
+    "control_exclusion": "被投放计划、稿件或订单碰过的对照组自首次污染日起退出；剩余不足 control_group_count_min → 不可算（MI-G02）",
+    "metrics_by_pool": {
+      "P1": [
+        "M-06",
+        "M-03"
+      ],
+      "P2": [
+        "M-01",
+        "M-02",
+        "M-06",
+        "M-08"
+      ],
+      "P3": [
+        "M-01",
+        "M-08"
+      ],
+      "P4": [
+        "M-15"
+      ],
+      "index": [
+        "M-19"
+      ]
+    }
+  },
+  "standard_aliases": {
+    "可见率": {
+      "metric": "M-01S",
+      "pools": [
+        "P2",
+        "P3"
+      ]
+    },
+    "提及率": {
+      "metric": "M-01S",
+      "pools": [
+        "P2",
+        "P3"
+      ]
+    },
+    "首推率": {
+      "metric": "M-01S",
+      "variant": "top1",
+      "pools": [
+        "P2",
+        "P3"
+      ]
+    },
+    "前三推荐率": {
+      "metric": "M-01S",
+      "variant": "top3",
+      "pools": [
+        "P2",
+        "P3"
+      ]
+    },
+    "可见份额": {
+      "metric": "M-04",
+      "note": "标准写明不宜直接作为项目考核 KPI——只作参考行，不进首屏与验收"
+    },
+    "平均位序": {
+      "metric": "M-05"
+    },
+    "指定信息正确率": {
+      "metric": "M-06",
+      "note": "真相源是说明书、指南与临床研究，不是品牌自报信息"
+    },
+    "信源问题引用率": {
+      "metric": "M-08S"
+    },
+    "信源数量引用率": {
+      "metric": "M-09S"
+    }
+  },
+  "diagnostics": [
+    {
+      "id": "DX-SE-01",
+      "name": "引用类型构成（逐引擎）",
+      "formula": "该引擎被引条数中 source_type = t 的条数 / 该引擎被引总条数；只计问题池问句，排除噪声、复问与复测轮次"
+    },
+    {
+      "id": "DX-SE-02",
+      "name": "正文引用占比（逐引擎）",
+      "formula": "in_body=true 的被引条数 / (in_body=true + in_body=false)；null 不进分母、单列"
+    },
+    {
+      "id": "DX-SE-03",
+      "name": "自家生态份额（逐引擎）",
+      "formula": "来自该引擎自家生态（豆包：抖音、今日头条；元宝：公众号、视频号；百度：百家号；千问：夸克）的被引条数 / 该引擎被引总条数"
+    },
+    {
+      "id": "DX-EC-01",
+      "name": "复问出现率（逐错误）",
+      "formula": "hits / repeats_valid；只用于稳定 / 偶发分类"
+    },
+    {
+      "id": "DX-EC-02",
+      "name": "未关闭讲错我方（检索层 / 参数化，分 S0–S4）",
+      "formula": "errors.json 中 status ∉ {closed, dropped, reference_conflict} 的条数，按是否无引用源分两栏；硬线只读检索层一栏（decisions 第 2 条）"
+    }
+  ],
+  "url_observation": {
+    "definition": "每条复测回答的引用列表里是否出现某条投放 URL（规范化后比对），并记录是否进了正文（带角标）",
+    "output": "citations.json#url_observations[]：{round_id, url, url_normalized, domain, order_id, question, provider, snapshot_key, listed, in_body, week}"
+  },
+  "anchor_schema": {
+    "fields": [
+      "dimension",
+      "band",
+      "lower",
+      "upper",
+      "criterion_text"
+    ],
+    "freeze_rule": "采样前写入 metrics.json 的 anchors 段并计入 anchor_hash；变更必须留 diff 与理由"
+  },
+  "constants": {
+    "SOV_COVERAGE_MIN": 0.6,
+    "STD_CELL_MIN_SAMPLES": 30,
+    "IRON_04_GROUP_REFERENCE_CAP": 96.0,
+    "ACCURACY_HARD_LINE": 0.98,
+    "RANKING_NOISE_DEFAULT_THRESHOLD": 5.0,
+    "ROLLING_WINDOW_WEEKS": 4,
+    "CONTROL_CLUSTER_SHARE_MIN": 0.2,
+    "CONTROL_CLUSTER_SHARE_MAX": 0.3,
+    "PROBE_NOISE_QUESTION_COUNT": 10,
+    "PROBE_NOISE_SAMPLE_N": 5,
+    "PROBE_SANITY_MIN_ANSWER_CHARS": 40,
+    "PROBE_BASELINE_QUESTION_TARGET": 60,
+    "PROBE_PROVIDER_COUNT": 5,
+    "STD_MIN_ENGINES": 5,
+    "STD_ENGINE_SHARE_MAX": 0.8,
+    "STD_MIN_CITIES": 3,
+    "SINGLE_STEP_MIN_QUESTIONS": 30,
+    "SINGLE_STEP_MIN_PER_POOL": 7,
+    "VF_PROVIDER_VALID_SHARE_MIN": 0.85,
+    "IRON_02_SOV_RATIO_MIN": 0.2,
+    "IRON_02_SOV_RATIO_MAX": 0.45,
+    "IRON_02_SOV_RATIO_BLOCK_ABOVE": 0.5,
+    "EC_CONFIRM_REPEATS": 10,
+    "EC_STABLE_MIN_SHARE": 0.5,
+    "EC_CLOSE_REPEATS": 10,
+    "EC_NOTIFY_MIN_SEVERITY": "S3",
+    "RECHECK_WEEKS": [
+      1,
+      2,
+      4,
+      8,
+      12
+    ],
+    "MI_SENTINEL_QUESTION_COUNT": 10,
+    "MI_SENTINEL_ENGINE_COUNT": 2
+  },
+  "computation": {
+    "value_decimals": 2,
+    "wilson_z": 1.96,
+    "pool_metric_ids": [
+      "M-01",
+      "M-02",
+      "M-03",
+      "M-04",
+      "M-04C",
+      "M-05",
+      "M-06",
+      "M-07",
+      "M-08",
+      "M-09",
+      "M-10",
+      "M-08B",
+      "M-11",
+      "M-12",
+      "M-20"
+    ],
+    "gvi_normalizable_metric_ids": [
+      "M-01",
+      "M-02",
+      "M-03",
+      "M-04",
+      "M-05",
+      "M-06",
+      "M-08",
+      "M-10",
+      "M-11",
+      "M-12"
+    ],
+    "gvi_inverse_rank_metric_ids": [
+      "M-05"
+    ],
+    "uneven_denominator_metric_ids": [
+      "M-01",
+      "M-02",
+      "M-03",
+      "M-04",
+      "M-05",
+      "M-10",
+      "M-12"
+    ],
+    "top_n_variant_max_position": 3,
+    "percent_scale": 100.0,
+    "derived_metrics": {
+      "M-13": {
+        "kind": "ratio",
+        "numerator": {
+          "pool": "P1",
+          "metric": "M-01"
+        },
+        "denominator": {
+          "pool": "P2",
+          "metric": "M-01"
+        }
+      },
+      "M-14": {
+        "kind": "copy",
+        "source": {
+          "pool": "P3",
+          "metric": "M-01"
+        }
+      },
+      "M-15": {
+        "kind": "copy",
+        "source": {
+          "pool": "P4",
+          "metric": "M-03"
+        },
+        "pool_cell": true
+      }
+    }
+  },
+  "engines": {
+    "deepseek": {
+      "display_name": "DeepSeek",
+      "citation_display": "inline_marker",
+      "optional": false,
+      "planned": false
+    },
+    "doubao": {
+      "display_name": "豆包",
+      "citation_display": "outside_list",
+      "optional": false,
+      "planned": false
+    },
+    "yuanbao": {
+      "display_name": "元宝",
+      "citation_display": "inline_marker",
+      "optional": false,
+      "planned": false
+    },
+    "qianwen": {
+      "display_name": "千问",
+      "citation_display": "outside_list",
+      "optional": false,
+      "planned": false
+    },
+    "kimi": {
+      "display_name": "Kimi",
+      "citation_display": "unknown",
+      "optional": true,
+      "planned": false
+    },
+    "baidu": {
+      "display_name": "百度文心助手",
+      "citation_display": "unknown",
+      "optional": true,
+      "planned": true
+    }
+  },
+  "platform": {
+    "snapshot_statuses": [
+      "valid",
+      "suspect",
+      "refusal",
+      "failed"
+    ],
+    "in_denominator_statuses": [
+      "valid",
+      "refusal"
+    ],
+    "excluded_round_kinds": [
+      "noise",
+      "confirm"
+    ],
+    "noise_round_kind": "noise",
+    "inclusion_surface_mode": "inclusion",
+    "inclusion_metric_ids": [
+      "M-01"
+    ],
+    "error_closed_statuses": [
+      "closed"
+    ],
+    "noise_band_sd_multiplier": 2,
+    "noise_band_metric_ids": [
+      "M-01",
+      "M-03",
+      "M-10"
+    ],
+    "insufficient_gvi_below_answers": "STD_CELL_MIN_SAMPLES"
+  }
+}

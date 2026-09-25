@@ -1,0 +1,83 @@
+{
+  "_provenance": {
+    "source": "geo-skills 3.0.0: shared/rules/interfaces.yaml probe.sanity, probe.page_chrome_markers, probe.page_chrome_tail_ratio, probe.retriable_raw_statuses; PROBE_SANITY_MIN_ANSWER_CHARS from shared/rules/catalogue.yaml",
+    "version": "3.0.0",
+    "sha256": {
+      "shared/rules/catalogue.yaml": "9b2ada5bb900aa92d1ff6457ca6fed6e0c7b6beb77a78fefa656e5585ee68e79",
+      "shared/rules/interfaces.yaml": "a389a7904a26e275c5c48b1a283ac1acbd5ba8c2a4dc56728984ba625bc5992a"
+    },
+    "converted": "2026-09-25",
+    "classification_order": [
+      "raw status not ok -> failed",
+      "empty text -> suspect (empty shell)",
+      "any session_invalid marker -> suspect (login page / captcha)",
+      "any service_unavailable marker and length <= service_unavailable_max_chars -> suspect (capacity, not the model)",
+      "any refusal marker and length <= refusal_max_chars -> refusal (stays in the denominator)",
+      "length < min_answer_chars -> refusal if a refusal marker hit, else suspect (empty shell)",
+      "otherwise valid"
+    ],
+    "classification_source": "probe_client.py classify_answer (precedence as written there); SPEC §5 adds the model judge for refusals",
+    "page_chrome": "extract_facts.py strip_page_chrome: a marker only cuts when it falls inside the last page_chrome_tail_ratio of the answer; the raw snapshot is never edited"
+  },
+  "session_invalid_markers": [
+    "请先登录",
+    "登录后查看",
+    "扫码登录",
+    "您的账号已在其他设备登录",
+    "会话已过期",
+    "验证码",
+    "人机验证",
+    "Just a moment",
+    "Enable JavaScript"
+  ],
+  "service_unavailable_markers": [
+    "算力不足",
+    "服务繁忙",
+    "系统繁忙",
+    "服务器繁忙",
+    "请稍后再试",
+    "请求过于频繁",
+    "当前访问人数较多",
+    "聊的人太多",
+    "提问太快",
+    "排队中",
+    "Too Many Requests",
+    "rate limit"
+  ],
+  "service_unavailable_max_chars": 100,
+  "refusal_markers": [
+    "无法提供医疗建议",
+    "不能为您提供用药建议",
+    "我无法回答",
+    "抱歉，我不能",
+    "抱歉，我无法",
+    "建议您咨询专业医师后再做决定",
+    "作为一个人工智能",
+    "我不能提供诊断"
+  ],
+  "refusal_max_chars": 400,
+  "min_answer_chars": 40,
+  "page_chrome_markers": [
+    "相关视频",
+    "推荐追问",
+    "你可能还想问",
+    "猜你想问",
+    "继续追问",
+    "相关搜索",
+    "相关推荐",
+    "参考资料",
+    "参考文献",
+    "以上内容由AI生成",
+    "内容由 AI 生成"
+  ],
+  "page_chrome_tail_ratio": 0.3,
+  "retriable_raw_statuses": [
+    "model_failed",
+    "server_busy",
+    "busy",
+    "rate_limited",
+    "too_many_requests",
+    "timeout",
+    "upstream_timeout"
+  ]
+}
