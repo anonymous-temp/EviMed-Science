@@ -21,7 +21,15 @@
  *   three to five control groups making up about a fifth to a third of the
  *   groups. A set that misses one of these is not locked, and the issues say
  *   which; a minimal set without control groups is locked with a notice,
- *   because a single step does not compute a net effect.
+ *   because a single step does not compute a net effect. Whether a set is
+ *   minimal is the program's to say (`geoProgramMinimal`: some step was asked
+ *   for, and the questions step was not), never the run's.
+ * - **What decides an article's placement is the platform's, not the run's.**
+ *   Its gate is the run ledger's verdict on the deliverable it was written in
+ *   (`articleGate`, handed in by the composition); a run's own `gate` field is
+ *   ignored. Every article but a correction names its question group, because
+ *   the control-group exclusion and the post-publication checks are keyed on
+ *   it — an article without one could be placed into a control group unseen.
  *
  * @module geoWrites
  */
@@ -43,6 +51,38 @@ export const GEO_WRITE_LIMITS = Object.freeze({
 export const GEO_MEASURED_RANGE = Object.freeze({ full: Object.freeze([40, 120]), minimal: Object.freeze([30, 120]) });
 /** Control groups in the full program, and the share of groups they make up (≈ 20–30 %, with a tolerance of five points). */
 export const GEO_CONTROL_RANGE = Object.freeze({ groups: Object.freeze([3, 5]), share: Object.freeze([0.15, 0.35]) });
+
+/**
+ * Whether the program asked for this project's question map only as an
+ * upstream of another step (a single step's minimal version, spec §2.2):
+ * some step was requested, and the questions step itself was not. A project
+ * nothing was requested for yet — a map written in plain conversation — is
+ * held to the full program's rules.
+ * @param {Record<string, { requested?: boolean }> | null | undefined} steps
+ */
+export function geoProgramMinimal(steps) {
+  const requested = GEO_STEPS.filter((step) => steps?.[step]?.requested === true);
+  return requested.length > 0 && !requested.includes("questions");
+}
+
+/**
+ * An article's gate as the run ledger records it: the deliverable it was
+ * written in, on the run that wrote it (`agentRuns.mjs` folds each
+ * deliverable's `status` and `lastVerdict`). `passed` only for a deliverable
+ * the gate accepted with a clean verdict; `failed` for one that failed or a
+ * run that failed or was cancelled; `unverified` for everything else,
+ * including a deliverable the ledger does not know.
+ * @param {{ status?: string, deliverables?: Array<{ id: string, status?: string, lastVerdict?: string }> } | null | undefined} run
+ * @param {string | null | undefined} deliverableId
+ * @returns {"passed" | "unverified" | "failed"}
+ */
+export function geoArticleGateOf(run, deliverableId) {
+  const deliverable = run && deliverableId ? (run.deliverables ?? []).find((item) => item?.id === deliverableId) : null;
+  if (!run || !deliverable) return "unverified";
+  if (deliverable.status === "failed" || run.status === "failed" || run.status === "canceled") return "failed";
+  if (deliverable.lastVerdict === "pass" && (deliverable.status === "accepted" || deliverable.status === "delivered")) return "passed";
+  return "unverified";
+}
 
 /** The steps a run reports on: the thinking steps. Diagnosis, distribution and
  *  monitoring are the platform's to mark, and `questions` is done by locking
@@ -596,15 +636,23 @@ function validatedArticles(items, issues, known) {
     const claimIds = read.texts("claimIds", 200, 80) ?? [];
     const unknownClaims = claimIds.filter((id) => !known.claimIds.has(id));
     if (unknownClaims.length) read.refuse("claimIds", "not_found", `Claims not in this project: ${unknownClaims.slice(0, 5).join(", ")}.`);
+    const layer = read.word("layer", GEO_ARTICLE_LAYERS, { required: true });
     const groupId = read.text("groupId", 80);
     if (groupId && !known.groupIds.has(groupId)) read.refuse("groupId", "not_found", "groupId is not a question group of this project.");
+    if (!groupId && layer && layer !== "correction") {
+      read.refuse("groupId", "missing", "Every article but a correction names the question group it answers.");
+    }
+    // The platform reads the gate from its own record; the run's word is not asked for.
+    if (item.gate != null && (typeof item.gate !== "string" || !GEO_ARTICLE_GATES.includes(item.gate))) {
+      read.refuse("gate", "unknown_value", `gate must be one of: ${GEO_ARTICLE_GATES.join(", ")}.`);
+    }
     const contentSha256 = read.text("contentSha256", 64, { required: true });
     if (contentSha256 && !SHA256.test(contentSha256)) read.refuse("contentSha256", "invalid", "contentSha256 is a lowercase sha256.");
     const protectedSha256 = read.text("protectedSha256", 64);
     if (protectedSha256 && !SHA256.test(protectedSha256)) read.refuse("protectedSha256", "invalid", "protectedSha256 is a lowercase sha256.");
     const article = {
-      path: pathValue, layer: read.word("layer", GEO_ARTICLE_LAYERS, { required: true }), title: read.text("title", 200), groupId, claimIds,
-      gate: read.word("gate", GEO_ARTICLE_GATES, { required: true }), safety: read.word("safety", RUN_ARTICLE_SAFETY, { required: true }),
+      path: pathValue, layer, title: read.text("title", 200), groupId, claimIds,
+      safety: read.word("safety", RUN_ARTICLE_SAFETY, { required: true }),
       contentSha256, protectedSha256, deliverableId: read.text("deliverableId", 120), runId: read.text("runId", 120),
     };
     if (read.refused) return;
@@ -642,10 +690,12 @@ function validatedPlacementPlan(data, issues) {
 /**
  * One `geo_write` call against a resolved GEO project.
  * @param {{ store: import("./geoStore.mjs").GeoStore, project: any, what: string, body: Record<string, any>,
- *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null }} input
+ *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
+ *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>) | null }} input
+ *   `articleGate` reads an article's gate from the run ledger; without it every article is `unverified`
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
  */
-export async function geoRuntimeWrite({ store, project, what, body, renameProject = null }) {
+export async function geoRuntimeWrite({ store, project, what, body, renameProject = null, articleGate = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */
@@ -679,8 +729,12 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
       const read = fields(data, issues, {});
       read.unknown(["version", "minimal"]);
       const requested = read.number("version", 1, 1_000_000, { integer: true });
-      const minimal = read.flag("minimal") === true;
+      const declared = read.flag("minimal");
       if (read.refused) return done([]);
+      const minimal = geoProgramMinimal(project.steps);
+      if (declared != null && declared !== minimal) {
+        issues.push({ field: "minimal", code: "notice", message: `The program decides this; the set is locked as a ${minimal ? "minimal" : "full"} set.` });
+      }
       const sets = await store.questionSets(project.id);
       const version = requested ?? sets[0]?.version ?? null;
       const set = sets.find((entry) => entry.version === version);
@@ -743,7 +797,12 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
         store.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
       ]);
       const articles = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))) });
-      return done(articles.length ? await store.registerArticles(userId, project.id, articles) : []);
+      for (const article of articles) {
+        const gate = articleGate ? await articleGate(project, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path }) : null;
+        article.gate = GEO_ARTICLE_GATES.includes(String(gate)) ? gate : "unverified";
+      }
+      const ids = articles.length ? await store.registerArticles(userId, project.id, articles) : [];
+      return done(ids, { articles: articles.map((article, index) => ({ id: ids[index], path: article.path, gate: article.gate })) });
     }
     case "placement_plan": {
       const plan = validatedPlacementPlan(dataOf(body), issues);

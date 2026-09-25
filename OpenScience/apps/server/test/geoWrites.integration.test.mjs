@@ -2,13 +2,15 @@
 // item checked against the closed vocabularies and refused one by one (the
 // rest written), claims versioned by what they say, the lock's whole-set rules,
 // and the words a run may never write (a person's 「放行」, a measured target,
-// a platform step).
+// a platform step), and what decides an article's placement being the
+// platform's record rather than the run's word.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
-import { GEO_MEASURED_RANGE, geoLockCheck, geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { GEO_MEASURED_RANGE, geoArticleGateOf, geoLockCheck, geoProgramMinimal, geoRuntimeWrite } from "../src/geoWrites.mjs";
+import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -25,16 +27,20 @@ let database = null;
 /** @type {GeoStore} */
 let store;
 let projectCounter = 0;
+/** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
+let isolated = null;
 
 before(async () => {
   if (!databaseUrl) return;
-  database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
+  isolated = await createGeoTestDatabase(databaseUrl, "geowrites");
+  database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   store = new GeoStore({ database });
   await store.ready();
 });
 
 after(async () => {
   if (database) await database.close();
+  await isolated?.drop();
 });
 
 async function freshProject() {
@@ -43,8 +49,10 @@ async function freshProject() {
   return /** @type {any} */ (project);
 }
 
-/** @param {any} project @param {string} what @param {Record<string, any>} body @param {any} [renameProject] */
-const write = (project, what, body, renameProject = null) => geoRuntimeWrite({ store, project, what, body, renameProject });
+/** @param {any} project @param {string} what @param {Record<string, any>} body @param {any} [renameProject] @param {any} [articleGate] */
+const write = (project, what, body, renameProject = null, articleGate = null) => geoRuntimeWrite({ store, project, what, body, renameProject, articleGate });
+/** The run ledger's verdict, as a composition hands it in: every deliverable passed. */
+const ledgerPassed = async () => "passed";
 
 /** A full-program set: 12 groups over the four pools, 3 control, 4 measured questions each (48). */
 function fullSet({ control = 3, pools = ["P1", "P2", "P3", "P4"], perGroup = 4 } = {}) {
@@ -153,21 +161,39 @@ test("locking checks the whole set: all four pools, the measured count, and in t
   refused = await lock();
   assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code), ["measured_count"], "24 measured is short of 40");
 
-  // A single step's minimal set: 30 or more measured, four pools, control groups only a notice.
+  // A set of 36 with no control groups: the run saying "minimal" does not make it one.
   await write(project, "questions", { data: { groups: fullSet({ control: 0, perGroup: 3 }) } });
-  const minimal = await lock({ minimal: true });
-  assert.equal(minimal.ok, true);
+  refused = await lock({ minimal: true });
+  assert.equal(refused.ok, false, "a caller's `minimal` is not the program's");
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => issue.code).sort(), ["control_groups", "measured_count", "notice"]);
+  // A single step asked for downstream (信源), the questions only its upstream: a minimal set —
+  // 30 or more measured, four pools, control groups only a notice.
+  await store.setStep(project.id, "sources", { status: "queued", requested: true });
+  const minimal = await write(/** @type {any} */ (await store.getProject(USER, project.id)), "lock_questions", { data: {} });
+  assert.equal(minimal.ok, true, JSON.stringify(minimal.issues));
   assert.equal(minimal.measuredCount, 36);
   assert.deepEqual(minimal.issues.map((/** @type {any} */ issue) => issue.code), ["notice"]);
   assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "minimal");
 
-  await write(project, "questions", { data: { groups: fullSet() } });
-  const full = await lock();
+  // The full program asked for: the questions step itself is requested.
+  await store.setStep(project.id, "questions", { requested: true });
+  const program = /** @type {any} */ (await store.getProject(USER, project.id));
+  await write(program, "questions", { data: { groups: fullSet() } });
+  const full = await write(program, "lock_questions", { data: {} });
   assert.equal(full.ok, true, JSON.stringify(full.issues));
   assert.deepEqual([full.version, full.measuredCount], [5, 48]);
   assert.equal((await store.getProject(USER, project.id))?.steps.questions.status, "done");
-  const again = await lock({ version: 5 });
+  const again = await write(program, "lock_questions", { data: { version: 5 } });
   assert.equal(again.alreadyLocked, true, "locking twice is a no-op");
+});
+
+test("a set is minimal only when the program asked for a later step and not for the questions", () => {
+  const steps = (/** @type {string[]} */ requested) => Object.fromEntries(requested.map((step) => [step, { requested: true }]));
+  assert.equal(geoProgramMinimal({}), false, "nothing asked for: the full rules");
+  assert.equal(geoProgramMinimal(null), false);
+  assert.equal(geoProgramMinimal(steps(["sources"])), true, "只做信源: its questions are an upstream");
+  assert.equal(geoProgramMinimal(steps(["questions"])), false, "只列问题: the questions are the product");
+  assert.equal(geoProgramMinimal(steps(["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"])), false);
 });
 
 test("the lock rule is a pure function of the set", () => {
@@ -212,13 +238,13 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
   const [group] = await store.questionMap(project.id, 1);
   const sha = "e".repeat(64);
   const articles = await write(project, "articles", { items: [
-    { path: "deliverables/a.md", layer: "card", claimIds: claims.ids, groupId: group.id, gate: "passed", safety: "clear", contentSha256: sha },
-    { path: "deliverables/b.md", layer: "card", claimIds: ["gcl_nope"], gate: "passed", safety: "clear", contentSha256: sha },
-    { path: "../etc/passwd", layer: "card", claimIds: [], gate: "passed", safety: "clear", contentSha256: sha },
-    { path: "deliverables/c.md", layer: "card", claimIds: [], gate: "passed", safety: "released", contentSha256: sha },
-    { path: "deliverables/d.md", layer: "essay", claimIds: [], gate: "passed", safety: "clear", contentSha256: sha },
-    { path: "deliverables/e.md", layer: "qa", claimIds: [], groupId: "ggr_nope", gate: "passed", safety: "clear", contentSha256: "short" },
-  ] });
+    { path: "deliverables/a.md", layer: "card", claimIds: claims.ids, groupId: group.id, safety: "clear", contentSha256: sha },
+    { path: "deliverables/b.md", layer: "card", claimIds: ["gcl_nope"], groupId: group.id, safety: "clear", contentSha256: sha },
+    { path: "../etc/passwd", layer: "card", claimIds: [], groupId: group.id, safety: "clear", contentSha256: sha },
+    { path: "deliverables/c.md", layer: "card", claimIds: [], groupId: group.id, safety: "released", contentSha256: sha },
+    { path: "deliverables/d.md", layer: "essay", claimIds: [], groupId: group.id, safety: "clear", contentSha256: sha },
+    { path: "deliverables/e.md", layer: "qa", claimIds: [], groupId: "ggr_nope", safety: "clear", contentSha256: "short" },
+  ] }, null, ledgerPassed);
   assert.deepEqual(articles.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [
     [1, "claimIds", "not_found"], [2, "path", "invalid"], [3, "safety", "unknown_value"], [4, "layer", "unknown_value"],
     [5, "groupId", "not_found"], [5, "contentSha256", "invalid"],
@@ -226,9 +252,81 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
   const registered = await store.listArticles(project.id);
   assert.deepEqual(registered.map((article) => [article.path, article.status]), [["deliverables/a.md", "publishable"]]);
   // Re-registering the same path updates it: an open safety finding pulls it back to draft.
-  await write(project, "articles", { items: [{ path: "deliverables/a.md", layer: "card", claimIds: claims.ids, gate: "passed", safety: "open", contentSha256: sha }] });
+  await write(project, "articles", { items: [{ path: "deliverables/a.md", layer: "card", claimIds: claims.ids, groupId: group.id, safety: "open",
+    contentSha256: sha }] }, null, ledgerPassed);
   const [again] = await store.listArticles(project.id);
   assert.deepEqual([again.id, again.status, again.safety], [registered[0].id, "draft", "open"]);
+});
+
+test("an open safety finding stays open whatever the run registers next; only the release route clears it", options, async () => {
+  const project = await freshProject();
+  await write(project, "questions", { data: { groups: [{ pool: "P1", name: "g", questions: [{ text: "q", isMeasured: true }] }] } });
+  const [group] = await store.questionMap(project.id, 1);
+  const article = (/** @type {string} */ safety) => ({ path: "deliverables/geo-content/card-1.md", layer: "card", claimIds: [], groupId: group.id,
+    safety, contentSha256: "f".repeat(64) });
+  await write(project, "articles", { items: [article("open")] }, null, ledgerPassed);
+  const cleared = await write(project, "articles", { items: [article("clear")] }, null, ledgerPassed);
+  assert.equal(cleared.ok, true);
+  const [held] = await store.listArticles(project.id);
+  assert.deepEqual([held.safety, held.status], ["open", "draft"], "the run's own 'clear' cannot lift a safety stop");
+  // A person looks and releases it (the route's compare-and-set); from then on the run's word counts again.
+  const released = await store.changeArticle(project.id, held.id, { safety: "released", fromSafety: ["open"] });
+  assert.deepEqual([released?.safety, released?.status], ["released", "publishable"]);
+  await write(project, "articles", { items: [article("clear")] }, null, ledgerPassed);
+  const [after] = await store.listArticles(project.id);
+  assert.deepEqual([after.safety, after.status], ["clear", "publishable"]);
+  await write(project, "articles", { items: [article("open")] }, null, ledgerPassed);
+  assert.deepEqual((await store.listArticles(project.id)).map((row) => [row.safety, row.status]), [["open", "draft"]], "a new finding holds it again");
+});
+
+test("every article but a correction names its question group", options, async () => {
+  const project = await freshProject();
+  const sha = "a".repeat(64);
+  const result = await write(project, "articles", { items: [
+    { path: "deliverables/geo-content/card.md", layer: "card", claimIds: [], safety: "clear", contentSha256: sha },
+    { path: "deliverables/geo-content/qa.md", layer: "qa", claimIds: [], safety: "clear", contentSha256: sha },
+    { path: "deliverables/geo-content/fix.md", layer: "correction", claimIds: [], safety: "clear", contentSha256: sha },
+  ] }, null, ledgerPassed);
+  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[0, "groupId", "missing"], [1, "groupId", "missing"]],
+    "a group-less article could be placed into a control group unseen");
+  assert.deepEqual((await store.listArticles(project.id)).map((row) => row.layer), ["correction"]);
+});
+
+test("an article's gate is the run ledger's verdict, never the run's own claim", options, async () => {
+  const project = await freshProject();
+  await write(project, "questions", { data: { groups: [{ pool: "P2", name: "g", questions: [{ text: "q", isMeasured: true }] }] } });
+  const [group] = await store.questionMap(project.id, 1);
+  const item = (/** @type {string} */ name, extra = {}) => ({ path: `deliverables/geo-content/${name}.md`, layer: "popular", claimIds: [], groupId: group.id,
+    safety: "clear", contentSha256: "b".repeat(64), gate: "passed", ...extra });
+  // No ledger to ask: the run's "passed" is not taken — the article is unverified and not publishable.
+  const unasked = await write(project, "articles", { items: [item("one")] });
+  assert.deepEqual(unasked.articles.map((/** @type {any} */ entry) => entry.gate), ["unverified"]);
+  assert.deepEqual((await store.listArticles(project.id)).map((row) => [row.gate, row.status]), [["unverified", "draft"]]);
+  // The ledger is asked with the deliverable the article was written in.
+  const asked = /** @type {any[]} */ ([]);
+  const ledger = async (/** @type {any} */ _project, /** @type {any} */ ref) => { asked.push(ref); return ref.path.endsWith("two.md") ? "passed" : "failed"; };
+  const answered = await write(project, "articles", { items: [item("two", { runId: "run_1" }), item("three", { deliverableId: "geo-content" })] }, null, ledger);
+  assert.deepEqual(answered.articles.map((/** @type {any} */ entry) => entry.gate), ["passed", "failed"]);
+  assert.deepEqual(asked, [
+    { runId: "run_1", deliverableId: null, path: "deliverables/geo-content/two.md" },
+    { runId: null, deliverableId: "geo-content", path: "deliverables/geo-content/three.md" },
+  ]);
+  assert.deepEqual((await store.listArticles(project.id)).map((row) => [row.path.split("/").pop(), row.gate, row.status]),
+    [["one.md", "unverified", "draft"], ["two.md", "passed", "publishable"], ["three.md", "failed", "draft"]]);
+  const wrong = await write(project, "articles", { items: [item("four", { gate: "certainly" })] }, null, ledger);
+  assert.deepEqual(wrong.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["gate", "unknown_value"]]);
+});
+
+test("the ledger's verdict: passed only for a deliverable accepted clean", () => {
+  const run = (/** @type {Record<string, any>} */ deliverable, status = "succeeded") => ({ status, deliverables: [{ id: "geo-content", ...deliverable }] });
+  assert.equal(geoArticleGateOf(run({ status: "delivered", lastVerdict: "pass" }), "geo-content"), "passed");
+  assert.equal(geoArticleGateOf(run({ status: "accepted", lastVerdict: "pass" }, "running"), "geo-content"), "passed");
+  assert.equal(geoArticleGateOf(run({ status: "delivered", lastVerdict: "unverified" }), "geo-content"), "unverified");
+  assert.equal(geoArticleGateOf(run({ status: "submitted", lastVerdict: "issues" }), "geo-content"), "unverified");
+  assert.equal(geoArticleGateOf(run({ status: "failed" }), "geo-content"), "failed");
+  assert.equal(geoArticleGateOf(run({ status: "delivered", lastVerdict: "pass" }, "canceled"), "geo-content"), "failed");
+  assert.equal(geoArticleGateOf(run({ status: "delivered", lastVerdict: "pass" }), "other"), "unverified", "a deliverable the run does not hold");
+  assert.equal(geoArticleGateOf(null, "geo-content"), "unverified");
 });
 
 test("a run reports its thinking steps; the platform's steps and the questions' done are not its to write", options, async () => {

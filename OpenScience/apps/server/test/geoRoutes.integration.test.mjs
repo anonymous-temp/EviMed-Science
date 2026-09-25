@@ -3,9 +3,8 @@
 // as one that never existed, the write-side hooks delegated or 503, and the
 // runtime's writes (geo_write) landing where the pages read them.
 //
-// Shared-database safe: test files run concurrently against one database, so
-// nothing here drops the schema, and every account and platform row id carries
-// this run's suffix.
+// Its own database (test/helpers/geoTestDatabase.mjs), and every account and
+// platform row id carries this run's suffix besides.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -19,6 +18,7 @@ import { GeoStore } from "../src/geoStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { sendError } from "../src/security.mjs";
+import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -43,6 +43,8 @@ let base = "";
 const hooks = { orchestrator: /** @type {any} */ (null), market: /** @type {any} */ (null), exporter: /** @type {any} */ (null) };
 const audits = /** @type {any[]} */ ([]);
 let projectCounter = 0;
+/** @type {Awaited<ReturnType<typeof createGeoTestDatabase>> | null} */
+let isolated = null;
 
 const run = randomBytes(4).toString("hex");
 /** Accounts unique to this run. */
@@ -56,7 +58,8 @@ const config = {
 
 before(async () => {
   if (!databaseUrl) return;
-  database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
+  isolated = await createGeoTestDatabase(databaseUrl, "georoutes");
+  database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   dataDir = await mkdtemp(path.join(tmpdir(), "evimed-geo-routes-"));
   store = new GeoStore({ database });
   service = new GeoService({ store, config: { ...config, dataDir }, now: () => new Date() });
@@ -98,6 +101,7 @@ before(async () => {
 after(async () => {
   if (server) await new Promise((resolve) => server?.close(() => resolve(undefined)));
   if (database) await database.close();
+  await isolated?.drop();
   if (dataDir) await rm(dataDir, { recursive: true, force: true });
 });
 
@@ -124,7 +128,9 @@ async function seededProject() {
   assert.equal(created.status, 201, JSON.stringify(created.payload));
   const project = await store.getProject(ALICE, created.payload.data.id);
   assert.ok(project);
-  const write = (/** @type {string} */ what, /** @type {Record<string, any>} */ body) => geoRuntimeWrite({ store, project, what, body });
+  // The run ledger's verdict on the deliverable, as the composition hands it in: passed.
+  const write = (/** @type {string} */ what, /** @type {Record<string, any>} */ body) =>
+    geoRuntimeWrite({ store, project, what, body, articleGate: async () => "passed" });
   await write("product", { data: { genericName: "玛仕度肽注射液", rx: "rx", competitors: [{ brandName: "替尔泊肽", reason: "同适应证" }] } });
   const claims = await write("claims", { items: [
     { claimKey: "dose", statement: "每周皮下注射一次", quote: "本品每周一次皮下注射。", sourceRef: "说明书 2024 版", sourceKind: "label", inLabel: true },
@@ -151,9 +157,9 @@ async function seededProject() {
   ]) });
   const articles = await write("articles", { items: [
     { path: "deliverables/geo-content/articles/card-1.md", layer: "card", title: "玛仕度肽怎么用", groupId: questions.ids[0], claimIds: [claims.ids[0]],
-      gate: "passed", safety: "clear", contentSha256: "a".repeat(64) },
-    { path: "deliverables/geo-content/articles/popular-1.md", layer: "popular", title: "减重针能停吗", claimIds: [claims.ids[1]],
-      gate: "passed", safety: "open", contentSha256: "b".repeat(64) },
+      safety: "clear", contentSha256: "a".repeat(64) },
+    { path: "deliverables/geo-content/articles/popular-1.md", layer: "popular", title: "减重针能停吗", groupId: questions.ids[1], claimIds: [claims.ids[1]],
+      safety: "open", contentSha256: "b".repeat(64) },
   ] });
   return { project, claims, questions, articles };
 }
@@ -235,6 +241,23 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   refused(await call("GET", `/api/geo/projects/${id}/questions?version=0`), 400, "geo_version_invalid");
   refused(await call("GET", `/api/geo/projects/${id}/questions?version=9`), 404, "geo_version_invalid");
   refused(await call("POST", `/api/geo/projects/${id}/questions/gq_missing/unmeasure`, { body: {} }), 404, "geo_question_not_found");
+  // Only the latest set's questions: taking a question out of version 1 now would fork an old set.
+  const stale = map.groups[1].questions[0].id;
+  refused(await call("POST", `/api/geo/projects/${id}/questions/${stale}/unmeasure`, { body: {} }), 409, "geo_question_not_current");
+  assert.equal((await call("GET", `/api/geo/projects/${id}/questions`)).payload.data.version, 2, "nothing was written");
+  // A locked set that would fall below the lock rule is not written: 47 → 40 is fine, 39 is not.
+  for (let remaining = 47; remaining > 40; remaining -= 1) {
+    const latest = (await call("GET", `/api/geo/projects/${id}/questions`)).payload.data;
+    const next = latest.groups.flatMap((/** @type {any} */ group) => group.questions).find((/** @type {any} */ question) => question.isMeasured);
+    assert.equal((await call("POST", `/api/geo/projects/${id}/questions/${next.id}/unmeasure`, { body: {} })).status, 200);
+  }
+  const forty = (await call("GET", `/api/geo/projects/${id}/questions`)).payload.data;
+  assert.equal(forty.sets[0].measuredCount, 40);
+  const last = forty.groups.flatMap((/** @type {any} */ group) => group.questions).find((/** @type {any} */ question) => question.isMeasured);
+  const below = await call("POST", `/api/geo/projects/${id}/questions/${last.id}/unmeasure`, { body: {} });
+  refused(below, 409, "geo_question_set_invalid");
+  assert.match(String(below.payload.error), /40 to 120/);
+  assert.equal((await call("GET", `/api/geo/projects/${id}/questions`)).payload.data.version, forty.version, "the refused copy was not written");
 
   const journey = (await call("GET", `/api/geo/projects/${id}/journey`)).payload.data;
   assert.deepEqual(journey, { version: null, subtypes: [], personas: [], stages: [], careNodes: [], files: [] }, "nothing written yet reads as empty");
@@ -311,8 +334,13 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   await metric("eng", { scope: "engine", engine: "deepseek", metricId: "M-01", k: 20, n: 48, value: 0.42 });
   await metric("eng-m10", { scope: "engine", engine: "doubao", metricId: "M-10", value: null, status: "not_measurable", reason: "no_retrieval" });
   await metric("pool", { scope: "pool", pool: "P2", metricId: "M-01", k: 3, n: 24, value: 0.125, status: "insufficient" });
-  await metric("noise", { metricId: "NOISE", value: 0.04 });
-  await metric("net", { metricId: "NET", value: 0.06, low: -0.01, high: 0.12 });
+  // The measurement package writes one NOISE row per metric (variant) and the index's NET row (variant M-19);
+  // the page shows mention's band and the index's net effect, whatever was written after them.
+  await metric("noise", { metricId: "NOISE", variant: "M-01", value: 0.04 });
+  await metric("net", { metricId: "NET", variant: "M-19", value: 0.06, low: -0.01, high: 0.12 });
+  const later = new Date(Date.now() + 60_000).toISOString();
+  await metric("noise-m10", { metricId: "NOISE", variant: "M-10", value: 0.2, at: later });
+  await metric("net-other", { metricId: "NET", variant: "M-06", value: 0.9, at: later });
   await metric("pilot", { scope: "arm", arm: "pilot", metricId: "M-19", value: 33.2 });
   await metric("control", { scope: "arm", arm: "control", metricId: "M-19", value: 30.1 });
   // An arm's per-pool row is a net-effect input, not the arm's line.
@@ -406,6 +434,15 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
     VALUES ($1, $6, $2, $3, 'website', $7, 'submitted', 1040.6, 946), ($4, $6, $2, $3, 'website', $7, 'accepted', 1040.6, 946),
       ($5, $6, $2, $3, 'website', $7, 'settled', 1040.6, 946)`, [`o1-${id}`, id, articles.ids[0], `o2-${id}`, `o3-${id}`, ALICE, media]);
   await database.query(`UPDATE evimed_geo.orders SET settled_cny = 946, published_url = 'https://lifetimes.cn/a' WHERE id = $1`, [`o3-${id}`]);
+  // An engine cites the published page by another spelling of the same address; a longer path is another page.
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, citations)
+    VALUES ($1, $3, $4, 'deepseek', now(), 'valid', $5::jsonb), ($2, $3, $4, 'doubao', now(), 'valid', $6::jsonb)`,
+  [`sc1-${id}`, `sc2-${id}`, ALICE, id, JSON.stringify([{ url: "http://www.LifeTimes.cn/a/?utm_source=ai#top", domain: "lifetimes.cn" }]),
+    JSON.stringify([{ url: "https://lifetimes.cn/ab", domain: "lifetimes.cn" }])]);
+  const content = (await call("GET", `/api/geo/projects/${id}/articles`)).payload.data.articles;
+  assert.equal(content.find((/** @type {any} */ article) => article.id === articles.ids[0]).cited, true, "matched by the owner's URL key");
+  const cited = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data.cited;
+  assert.deepEqual(cited.map((/** @type {any} */ row) => [row.articleId, row.engine]), [[articles.ids[0], "deepseek"]], "the longer path is another page");
   const view = (await call("GET", `/api/geo/projects/${id}/distribution`)).payload.data;
   assert.equal(view.budget, null);
   assert.equal(view.spentCny, 946);

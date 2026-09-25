@@ -29,13 +29,25 @@
  *   the caller's transaction; orders, their events and the ledger stay — they
  *   are money, and the platform's reconciliation reads them after the project
  *   is gone. Both check the schema exists first, so a deployment that never
- *   switched the module on deletes projects exactly as before.
+ *   switched the module on deletes projects exactly as before. They return
+ *   the screenshots no remaining snapshot references, which the caller
+ *   removes from disk once its transaction has committed
+ *   (`removeGeoScreenshotFiles`).
+ * - **Every query runs under a five-second statement timeout**, reads
+ *   included: a read is one statement inside its own short transaction, so a
+ *   page that cannot answer is refused rather than held (the frontier's rule).
+ * - **An article's clinical-safety stop is sticky.** Once an article is stored
+ *   with safety `open`, re-registering it cannot clear that — only a person's
+ *   「放行」 (`changeArticle` from the release route) moves it, and the status
+ *   is recomputed from the stored safety, never from the run's word.
  *
  * @module geoStore
  */
 
-import { geoArticlePublishable, GEO_STEPS } from "@evimed/domain";
+import { rm } from "node:fs/promises";
+import { canonicalGeoUrl, geoArticlePublishable, GEO_STEPS } from "@evimed/domain";
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
+import { geoScreenshotFile } from "./geoScreenshots.mjs";
 import { randomId } from "./security.mjs";
 
 /** The statement timeout every GEO transaction sets for itself. */
@@ -208,44 +220,90 @@ async function geoSchemaExists(client) {
 }
 
 /**
+ * The screenshots of the snapshots about to be deleted, and — once they are —
+ * which of those no other snapshot references any more (screenshots are
+ * content-addressed, so one file can serve two snapshots).
+ * @param {any} client @param {string} where @param {unknown[]} values
+ */
+async function screenshotsOf(client, where, values) {
+  const result = await client.query(`SELECT DISTINCT screenshot_sha256 FROM evimed_geo.snapshots
+    WHERE ${where} AND screenshot_sha256 IS NOT NULL`, values);
+  return result.rows.map((/** @type {any} */ row) => String(row.screenshot_sha256));
+}
+
+/** @param {any} client @param {string[]} candidates */
+async function orphanedScreenshots(client, candidates) {
+  if (!candidates.length) return [];
+  const still = await client.query(`SELECT DISTINCT screenshot_sha256 FROM evimed_geo.snapshots WHERE screenshot_sha256 = ANY($1::text[])`, [candidates]);
+  const referenced = new Set(still.rows.map((/** @type {any} */ row) => String(row.screenshot_sha256)));
+  return candidates.filter((sha) => !referenced.has(sha));
+}
+
+/**
  * Remove every GEO row of one control-plane project, inside the caller's
  * transaction (the project deletion's `beforeDelete`). Money rows stay.
- * @param {any} client @param {string} userId @param {string} projectId @returns {Promise<number>} GEO projects removed
+ * @param {any} client @param {string} userId @param {string} projectId
+ * @returns {Promise<{ projects: number, screenshots: string[] }>} GEO projects removed, and the screenshots nothing references now
  */
 export async function deleteGeoProjectRows(client, userId, projectId) {
-  if (!client || !(await geoSchemaExists(client))) return 0;
+  if (!client || !(await geoSchemaExists(client))) return { projects: 0, screenshots: [] };
   const found = await client.query(`SELECT id FROM evimed_geo.projects WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
   const ids = found.rows.map((/** @type {any} */ row) => String(row.id));
-  if (!ids.length) return 0;
+  if (!ids.length) return { projects: 0, screenshots: [] };
+  const candidates = await screenshotsOf(client, "geo_project_id = ANY($1::text[])", [ids]);
   for (const table of OWNED_TABLES) {
     await client.query(`DELETE FROM evimed_geo.${table} WHERE geo_project_id = ANY($1::text[])`, [ids]);
   }
   await client.query(`DELETE FROM evimed_geo.projects WHERE id = ANY($1::text[])`, [ids]);
-  return ids.length;
+  return { projects: ids.length, screenshots: await orphanedScreenshots(client, candidates) };
 }
 
 /**
  * Remove every GEO row of one account, inside the account deletion's
  * transaction. Money rows stay.
- * @param {any} client @param {string} userId @returns {Promise<number>} GEO projects removed
+ * @param {any} client @param {string} userId
+ * @returns {Promise<{ projects: number, screenshots: string[] }>} GEO projects removed, and the screenshots nothing references now
  */
 export async function deleteGeoUserRows(client, userId) {
-  if (!client || !(await geoSchemaExists(client))) return 0;
+  if (!client || !(await geoSchemaExists(client))) return { projects: 0, screenshots: [] };
+  const candidates = await screenshotsOf(client, "user_id = $1", [userId]);
   for (const table of OWNED_TABLES) {
     await client.query(`DELETE FROM evimed_geo.${table} WHERE user_id = $1`, [userId]);
   }
   const removed = await client.query(`DELETE FROM evimed_geo.projects WHERE user_id = $1`, [userId]);
-  return removed.rowCount ?? 0;
+  return { projects: removed.rowCount ?? 0, screenshots: await orphanedScreenshots(client, candidates) };
+}
+
+/**
+ * Remove screenshot files from disk, after the deletion that orphaned them
+ * has committed. A file that is already gone is fine; one that cannot be
+ * removed is reported by its code and left (the rows are gone either way).
+ * @param {string} dataDir @param {readonly string[]} shas @param {(code: string) => void} [report]
+ * @returns {Promise<number>} files removed or already absent
+ */
+export async function removeGeoScreenshotFiles(dataDir, shas, report = () => {}) {
+  let removed = 0;
+  for (const sha of shas) {
+    try {
+      await rm(geoScreenshotFile(dataDir, sha), { force: true });
+      removed += 1;
+    } catch (error) {
+      report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "screenshot_remove_failed");
+    }
+  }
+  return removed;
 }
 
 /** Whitespace-folded text, for deciding whether a claim changed. @param {unknown} value */
 const folded = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
 export class GeoStore {
-  /** @param {{ database: any }} options */
-  constructor({ database }) {
+  /** @param {{ database: any, statementTimeoutMs?: number }} options */
+  constructor({ database, statementTimeoutMs = STATEMENT_TIMEOUT_MS }) {
     if (!database) throw new TypeError("The GEO store needs the product database.");
+    if (!Number.isSafeInteger(statementTimeoutMs) || statementTimeoutMs < 1) throw new TypeError("The statement timeout is a positive whole number of ms.");
     this.database = database;
+    this.statementTimeoutMs = statementTimeoutMs;
   }
 
   ready() { return migrateGeo(this.database); }
@@ -257,15 +315,18 @@ export class GeoStore {
   async transaction(operation) {
     await this.ready();
     return this.database.transaction(async (/** @type {any} */ client) => {
-      await client.query(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+      await client.query(`SET LOCAL statement_timeout = ${this.statementTimeoutMs}`);
       return operation(client);
     });
   }
 
-  /** A read outside a transaction. @param {string} sql @param {unknown[]} [values] */
+  /**
+   * One statement under the module's statement timeout (in a transaction of
+   * its own, since `SET LOCAL` needs one).
+   * @param {string} sql @param {unknown[]} [values]
+   */
   async query(sql, values = []) {
-    await this.ready();
-    return this.database.query(sql, values);
+    return this.transaction((client) => client.query(sql, values));
   }
 
   // --- projects ---------------------------------------------------------------
@@ -508,21 +569,31 @@ export class GeoStore {
   }
 
   /**
-   * 「移出测量问句」: the question's set written again as the next version,
-   * that question no longer measured, locked when its source was.
+   * 「移出测量问句」: the latest set written again as the next version, that
+   * question no longer measured, locked when its source was — and then only
+   * if the copy still passes the lock rule `check` names (a set that loses its
+   * only P4 question, say, is not a set measurement may run on).
    * @param {string} userId @param {string} geoId @param {string} questionId
-   * @returns {Promise<{ version: number } | null>} null when the question is not this project's
+   * @param {{ check?: ((groups: any[]) => string[]) | null }} [options] refusals of a locked copy, empty when it may be locked
+   * @returns {Promise<{ version: number } | { stale: true } | { refused: string[] } | null>}
+   *   null when the question is not this project's; `stale` when it is not in the latest version
    */
-  async unmeasureQuestion(userId, geoId, questionId) {
+  async unmeasureQuestion(userId, geoId, questionId, { check = null } = {}) {
     const question = await this.question(geoId, questionId);
     if (!question) return null;
-    const source = (await this.questionSets(geoId)).find((set) => set.version === question.setVersion) ?? null;
+    const sets = await this.questionSets(geoId);
+    if (sets[0]?.version !== question.setVersion) return { stale: true };
+    const source = sets[0];
     const groups = await this.questionMap(geoId, question.setVersion);
     const copied = groups.map((group) => ({
       ...group,
       questions: group.questions.map((item) => ({ ...item, isMeasured: item.id === questionId ? false : item.isMeasured })),
     }));
     const measured = copied.reduce((sum, group) => sum + group.questions.filter((item) => item.isMeasured).length, 0);
+    if (source.lockedAt && check) {
+      const refusals = check(copied);
+      if (refusals.length) return { refused: refusals };
+    }
     return this.transaction(async (client) => {
       const written = await this.#insertSet(client, userId, geoId, {
         groups: copied, note: `unmeasure:${questionId}`, runId: null,
@@ -686,8 +757,11 @@ export class GeoStore {
   /**
    * Register validated articles by their path. A draft or publishable article
    * is publishable exactly when its gate passed and no safety finding is open
-   * (`geoArticlePublishable`); a placed, published or withdrawn one keeps its
-   * status — its lifecycle belongs to the market from there.
+   * (`geoArticlePublishable`, the same rule in SQL below); a placed, published
+   * or withdrawn one keeps its status — its lifecycle belongs to the market
+   * from there. A stored `open` safety stays open whatever the run says now:
+   * only the release route clears it. `gate` is the platform's (the run
+   * ledger's verdict on the deliverable), never the run's own claim.
    * @param {string} userId @param {string} geoId
    * @param {Array<{ path: string, layer: string, title?: string | null, groupId?: string | null, claimIds: string[], gate: string, safety: string,
    *   contentSha256?: string | null, protectedSha256?: string | null, deliverableId?: string | null, runId?: string | null }>} items
@@ -703,9 +777,13 @@ export class GeoStore {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp())
           ON CONFLICT (geo_project_id, path) WHERE path IS NOT NULL DO UPDATE SET run_id = coalesce(EXCLUDED.run_id, articles.run_id),
             deliverable_id = coalesce(EXCLUDED.deliverable_id, articles.deliverable_id), layer = EXCLUDED.layer, title = EXCLUDED.title,
-            group_id = EXCLUDED.group_id, claim_ids = EXCLUDED.claim_ids, gate = EXCLUDED.gate, safety = EXCLUDED.safety,
+            group_id = EXCLUDED.group_id, claim_ids = EXCLUDED.claim_ids, gate = EXCLUDED.gate,
+            safety = CASE WHEN articles.safety = 'open' THEN 'open' ELSE EXCLUDED.safety END,
             content_sha256 = EXCLUDED.content_sha256, protected_sha256 = EXCLUDED.protected_sha256,
-            status = CASE WHEN articles.status IN ('draft', 'publishable') THEN EXCLUDED.status ELSE articles.status END, updated_at = now()
+            status = CASE WHEN articles.status NOT IN ('draft', 'publishable') THEN articles.status
+              WHEN EXCLUDED.gate = 'passed' AND (CASE WHEN articles.safety = 'open' THEN 'open' ELSE EXCLUDED.safety END) IN ('clear', 'released')
+                THEN 'publishable' ELSE 'draft' END,
+            updated_at = now()
           RETURNING id`,
         [randomId("gart_"), userId, geoId, item.runId ?? null, item.deliverableId ?? null, item.path, item.layer, item.title ?? null,
           item.groupId ?? null, item.claimIds, item.gate, item.safety, item.contentSha256 ?? null, item.protectedSha256 ?? null, status]);
@@ -713,6 +791,47 @@ export class GeoStore {
       }
       return ids;
     });
+  }
+
+  /**
+   * The articles whose published address an engine has cited, first seen per
+   * engine — matched by the owner's URL key (`canonicalGeoUrl`: no scheme, no
+   * `www.`, no query, no trailing slash), because an engine cites
+   * `http://www.x.com/a/` for the `https://x.com/a` the outlet returned.
+   * Citations are prefiltered by host in SQL and compared exactly here.
+   * @param {string} geoId
+   * @returns {Promise<Array<{ articleId: string, title: string | null, engine: string | null, firstSeen: string | null }>>}
+   */
+  async citedArticles(geoId) {
+    const published = (await this.query(`SELECT DISTINCT o.article_id, o.published_url, a.title FROM evimed_geo.orders o
+      LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+      WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL AND o.article_id IS NOT NULL`, [geoId])).rows;
+    /** @type {Map<string, { articleId: string, title: string | null }[]>} */
+    const byKey = new Map();
+    for (const row of published) {
+      const key = canonicalGeoUrl(row.published_url);
+      if (!key) continue;
+      byKey.set(key, [...(byKey.get(key) ?? []), { articleId: String(row.article_id), title: text(row.title) }]);
+    }
+    if (!byKey.size) return [];
+    const hosts = [...new Set([...byKey.keys()].map((key) => key.split("/")[0]).filter(Boolean))];
+    const citations = (await this.query(`SELECT s.engine, s.asked_at, c.value ->> 'url' AS url
+      FROM evimed_geo.snapshots s
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END) AS c(value)
+      WHERE s.geo_project_id = $1 AND lower(c.value ->> 'url') LIKE ANY($2::text[])`,
+    [geoId, hosts.map((host) => `%${host.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)])).rows;
+    /** @type {Map<string, { articleId: string, title: string | null, engine: string | null, firstSeen: string | null }>} */
+    const first = new Map();
+    for (const citation of citations) {
+      for (const article of byKey.get(canonicalGeoUrl(citation.url)) ?? []) {
+        const engine = text(citation.engine);
+        const at = iso(citation.asked_at);
+        const id = `${article.articleId}\u0000${engine ?? ""}`;
+        const seen = first.get(id);
+        if (!seen || (at && (!seen.firstSeen || at < seen.firstSeen))) first.set(id, { ...article, engine, firstSeen: at });
+      }
+    }
+    return [...first.values()].sort((left, right) => String(left.firstSeen).localeCompare(String(right.firstSeen)));
   }
 
   /**
