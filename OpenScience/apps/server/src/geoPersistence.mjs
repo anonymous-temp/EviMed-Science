@@ -531,6 +531,15 @@ ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
 -- rows of one statement share their created_at.
 ALTER TABLE evimed_geo.question_groups ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
 ALTER TABLE evimed_geo.questions ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+-- The measurement package's bookkeeping (geoMeasureStore.mjs): which probe job
+-- an answer came from, the inclusion channel's own task id, and when an error
+-- was first notified (so an S3+ error notifies once).
+ALTER TABLE evimed_geo.snapshots ADD COLUMN IF NOT EXISTS probe_job_id text;
+ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS external_ref text;
+ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS notified_at timestamptz;
+CREATE INDEX IF NOT EXISTS geo_snapshots_parse_idx ON evimed_geo.snapshots (asked_at) WHERE status IN ('valid', 'refusal');
+CREATE INDEX IF NOT EXISTS geo_snapshots_job_idx ON evimed_geo.snapshots (probe_job_id);
+CREATE INDEX IF NOT EXISTS geo_probe_jobs_round_idx ON evimed_geo.probe_jobs (round_id, status);
 `;
 }
 
