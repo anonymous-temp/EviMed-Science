@@ -3,7 +3,7 @@
 // socket's build serializes into the kernel's page; here they run against a
 // recording slot registry.
 import * as React from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
@@ -234,5 +234,80 @@ describe("the tools on a blank conversation", () => {
     expect(leave).toHaveAttribute("title", "移除");
     fireEvent.click(leave);
     expect(sent.at(-1)).toEqual(["bind-capability", { capabilityId: null, sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]);
+  });
+});
+
+describe("the 循证 GEO chip", () => {
+  afterEach(() => { cleanup(); });
+
+  function geoFrame() {
+    const components = new Map<string, (props: Record<string, unknown>) => unknown>();
+    const drafts: string[] = [];
+    const ctx: Record<string, unknown> = {
+      slots: { inject: (_name: string, setup: () => unknown) => setup(),
+        register: (options: { name: string; id?: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.id ?? options.name, component); return () => {}; } },
+      sessions: { list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
+      conversation: { input: { for: () => ({ setDraft: (text: string) => { drafts.push(text); }, state: { getSnapshot: () => ({ draft: "" }) } }) } },
+      effect: (setup: () => unknown) => setup(),
+      on: () => () => {},
+    };
+    // The GEO capabilities are hidden from the tool list: the catalogue has none.
+    const target = {
+      __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [] },
+      parent: { postMessage() {} }, addEventListener() {}, removeEventListener() {}, console,
+    };
+    const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
+    const sent: Array<[string, Record<string, unknown>]> = [];
+    kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
+    applyCommands(ctx, {}, target, undefined, kit);
+    const options = {
+      sessionId: "session-a", controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
+      engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"],
+      offered: [{ id: "doubao", name: "豆包" }, { id: "qianwen", name: "千问" }, { id: "deepseek", name: "DeepSeek" }, { id: "yuanbao", name: "元宝" }, { id: "kimi", name: "Kimi" }, { id: "baidu", name: "百度" }],
+      starters: [{ label: "完整方案", draft: "做一套完整的 GEO 方案，从证据、问题、诊断到内容、投放和监测，产品是：" }, { label: "去 AI 味", draft: "给这批稿件去 AI 味：" }],
+    };
+    return { components, drafts, kit, sent, options };
+  }
+
+  it("says 「循证 GEO」 and changes the coverage window and the engines through the shell, never sending the composer", () => {
+    const f = geoFrame();
+    const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<Hero />);
+    act(() => f.kit.hub.deliver("capability", { capabilityId: "geo-insight", sessionId: "session-a" }));
+    expect(view.getByText("循证 GEO")).toBeInTheDocument();
+    expect(view.queryByRole("combobox", { name: "覆盖周期" })).toBeNull();
+    act(() => f.kit.hub.deliver("geo", f.options));
+
+    const coverage = view.getByRole("combobox", { name: "覆盖周期" });
+    expect(coverage).toHaveValue("90");
+    fireEvent.change(coverage, { target: { value: "180" } });
+    expect(f.sent.at(-1)).toEqual(["geo-options", { sessionId: "session-a", coverageDays: 180 }]);
+    expect(coverage).toHaveValue("180");
+
+    expect(view.getByText("5 个 AI 引擎")).toBeInTheDocument();
+    const engines = view.getByRole("group", { name: "AI 引擎" });
+    fireEvent.click(within(engines).getByRole("checkbox", { name: "百度" }));
+    expect(f.sent.at(-1)).toEqual(["geo-options", { sessionId: "session-a", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu"] }]);
+    expect(view.getByText("6 个 AI 引擎")).toBeInTheDocument();
+    fireEvent.click(within(engines).getByRole("checkbox", { name: "Kimi" }));
+    expect(f.sent.at(-1)).toEqual(["geo-options", { sessionId: "session-a", engines: ["doubao", "qianwen", "deepseek", "yuanbao", "baidu"] }]);
+
+    // A starter fills the composer; nothing is sent.
+    fireEvent.click(view.getByRole("button", { name: "完整方案" }));
+    expect(f.drafts).toEqual(["做一套完整的 GEO 方案，从证据、问题、诊断到内容、投放和监测，产品是："]);
+    expect(f.sent.filter(([type]) => type !== "geo-options")).toEqual([]);
+  });
+
+  it("keeps one engine chosen", () => {
+    const f = geoFrame();
+    const Chip = f.components.get("evimed-tool") as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<Chip />);
+    act(() => f.kit.hub.deliver("capability", { capabilityId: "geo-content", sessionId: "session-a" }));
+    act(() => f.kit.hub.deliver("geo", { ...f.options, engines: ["doubao"] }));
+    const only = within(view.getByRole("group", { name: "AI 引擎" })).getByRole("checkbox", { name: "豆包" });
+    expect(only).toBeChecked();
+    expect(only).toBeDisabled();
+    // The starters are the blank conversation's: not under the composer.
+    expect(view.queryByRole("button", { name: "完整方案" })).toBeNull();
   });
 });

@@ -42,6 +42,18 @@
  *    (`kb-query` → `kb-result`), which answers from the sources this project
  *    already parsed.
  *
+ * A 循证 GEO conversation (bound to any of the module's capabilities) reads
+ * 「循证 GEO」 on its chip whether or not the catalogue lists the capability —
+ * the module hides them from 科研工具 — and, once the shell has found the
+ * GEO project this conversation belongs to (`geo`), carries two optional
+ * controls beside the chip, 覆盖周期 and AI 引擎, which report a change back
+ * (`geo-options`) for the shell to write to the project; its starters are the
+ * module's single steps, a short name on each pill and a whole sentence into
+ * the composer, never sent. The composer bar itself has no seat on the blank
+ * conversation (`conversation.input.left/right` render only with a session),
+ * so the controls sit where the chip does: in the hero seat, and under the
+ * composer once the conversation has started.
+ *
  * Picking a tool binds this conversation to it through the shell
  * (`bind-capability`), which is the control plane's own deterministic route —
  * the same one the capabilities page has always used. It no longer writes
@@ -59,13 +71,16 @@ export const inject = ['slots', 'sessions', 'conversation'];
 
 /**
  * The slash popup's rows: every public tool, in catalogue order (which is by
- * category), the category first in the detail line.
+ * category), the category first in the detail line. `hidden` names tools
+ * entered elsewhere — 循证 GEO's capabilities are reached through its own
+ * sidebar row, never picked from the tool list.
  * @param {any[]} capabilities the frame's validated catalogue
+ * @param {readonly string[]} [hidden]
  * @returns {{ id: string, label: string, detail: string }[]}
  */
-export function capabilityOptions(capabilities) {
+export function capabilityOptions(capabilities, hidden = []) {
   return (Array.isArray(capabilities) ? capabilities : [])
-    .filter((entry) => entry && !entry.internal && entry.id && entry.title)
+    .filter((entry) => entry && !entry.internal && entry.id && entry.title && !hidden.includes(entry.id))
     .map((entry) => ({
       id: String(entry.id),
       label: String(entry.title),
@@ -78,10 +93,19 @@ export function capabilityOptions(capabilities) {
  * name and three questions to start from. What it does, how long it takes,
  * what it hands back, needs and cannot do stays on 科研工具, where the tool
  * was chosen.
+ *
+ * A conversation bound to one of 循证 GEO's capabilities reads 「循证 GEO」
+ * whichever of them it is, and whether or not the catalogue lists it: the
+ * module hides its capabilities from 科研工具 with a display flag, and the
+ * chip must still say what the conversation runs.
  * @param {any[]} capabilities @param {unknown} id
+ * @param {{ title?: string, capabilities?: readonly string[] } | null} [geo] the vocabulary's GEO entry
  */
-export function toolPageModel(capabilities, id) {
+export function toolPageModel(capabilities, id, geo = null) {
   const key = String(id ?? '');
+  if (geo && typeof geo.title === 'string' && Array.isArray(geo.capabilities) && geo.capabilities.includes(key)) {
+    return { id: key, title: geo.title, category: '', summary: '', outputs: [], limits: [], materials: '', starters: [], geo: true };
+  }
   const entry = (Array.isArray(capabilities) ? capabilities : []).find((candidate) => candidate && candidate.id === key && !candidate.internal);
   if (!entry) return null;
   return {
@@ -162,6 +186,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const { text: textStyle, textButton } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
+  /** @type {{ title: string, capabilities: readonly string[] } | null} */
+  const geo = kit.vocabulary?.geo && Array.isArray(kit.vocabulary.geo.capabilities) ? kit.vocabulary.geo : null;
+  const geoIds = geo ? geo.capabilities : [];
+  /** @param {string | null} id */
+  const modelOf = (id) => (id ? toolPageModel(catalogue, id, geo) : null);
 
   // Which tool this conversation runs. The control plane owns the answer — it
   // binds the session and tells the frame — and this holds the optimistic one
@@ -213,7 +242,39 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   ctx.effect(() => kit.hub.on('capability', (/** @type {any} */ data) => {
     setTool(data && typeof data.capabilityId === 'string' ? data.capabilityId : null);
   }), 'evimed-commands: bound capability');
-  ctx.effect(() => kit.hub.on('session', () => { setTool(null); }), 'evimed-commands: capability follows the conversation');
+  ctx.effect(() => kit.hub.on('session', () => { setTool(null); setGeoOptions(null); }), 'evimed-commands: capability follows the conversation');
+
+  // 循证 GEO's two options for the project this conversation belongs to —
+  // 覆盖周期 and AI 引擎 — and its single-step starters, as the shell reads them
+  // from the control plane (`geo`). The frame shows them and reports a change
+  // (`geo-options`); the shell writes it to the project. Nothing here decides.
+  /** @type {{ value: any }} */
+  const geoOptions = { value: null };
+  /** @type {Set<() => void>} */
+  const geoListeners = new Set();
+  /** @param {any} value */
+  function setGeoOptions(value) {
+    if (geoOptions.value === value) return;
+    geoOptions.value = value;
+    for (const listener of [...geoListeners]) { try { listener(); } catch { /* a listener must not stop the others */ } }
+  }
+  const useGeoOptions = () => React.useSyncExternalStore(
+    (/** @type {() => void} */ listener) => { geoListeners.add(listener); return () => { geoListeners.delete(listener); }; },
+    () => geoOptions.value, () => geoOptions.value,
+  );
+  ctx.effect(() => kit.hub.on('geo', (/** @type {any} */ data) => {
+    setGeoOptions(data && typeof data === 'object' && Array.isArray(data.starters) ? data : null);
+  }), 'evimed-commands: GEO options');
+  /**
+   * A changed option, shown at once and sent to the shell, which writes it to
+   * the project and answers with what the project now holds.
+   * @param {{ coverageDays?: number, engines?: string[] }} patch
+   */
+  const changeGeo = (patch) => {
+    if (!geoOptions.value) return;
+    setGeoOptions({ ...geoOptions.value, ...patch });
+    kit.hub.send('geo-options', { sessionId: currentSession(), ...patch });
+  };
 
   /**
    * Put a question in the composer of the session on screen; with none open,
@@ -232,7 +293,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 
   // `/工具`: the whole catalogue, searchable, in the kernel's own popup.
   kit.withServices(['commandUi'], (/** @type {any} */ scope) => {
-    const options = capabilityOptions(catalogue);
+    const options = capabilityOptions(catalogue, geoIds);
     if (!options.length) return;
     scope.effect(() => scope.commandUi.register({
       name: '工具',
@@ -247,7 +308,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     }), 'evimed-commands: /工具');
   });
 
-  if (React && catalogue.length) {
+  if (React && (catalogue.length || geoIds.length)) {
     const starterText = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
     // The chip: a 24 px capsule in the accent's soft fill — the page's one
     // accent (整改方案 §4) — with no outline.
@@ -273,7 +334,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      */
     const ToolChip = ({ docked = false }) => {
       const id = useTool();
-      const model = id ? toolPageModel(catalogue, id) : null;
+      const model = modelOf(id);
       if (!model) return null;
       return h('span', { 'data-evimed-tool-chip': model.id, style: docked ? { ...chipStyle, marginTop: '8px' } : chipStyle },
         h('span', { style: { ...starterText, fontWeight: 500 } }, model.title),
@@ -283,7 +344,62 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           onClick: () => bind(null),
         }, '×'));
     };
-    const DockedChip = () => h(ToolChip, { docked: true });
+
+    // 循证 GEO's two options beside its chip: quiet 24 px text controls in the
+    // secondary ink, as the kernel's own composer controls are.
+    const optionStyle = {
+      ...textButton, display: 'inline-flex', alignItems: 'center', gap: '2px', height: '24px', lineHeight: '24px',
+      padding: '0 8px', borderRadius: '999px', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)',
+    };
+    const popoverStyle = {
+      position: 'absolute', top: '28px', left: 0, zIndex: 20, minWidth: '144px', boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', gap: '2px', padding: '6px', borderRadius: '12px',
+      border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-specific-menu, var(--dsw-alias-bg-layer-3))',
+      color: 'var(--dsw-alias-label-primary)', fontSize: '12px', lineHeight: '24px', textAlign: 'left',
+    };
+
+    /**
+     * 覆盖周期 and AI 引擎, for a 循证 GEO conversation whose project the shell
+     * has found. Both optional: a project that is never touched here measures
+     * 90 days on the default five engines. The engine list is a native
+     * disclosure — a keyboard opens it like any other — and one engine always
+     * stays chosen.
+     */
+    const GeoControls = () => {
+      const id = useTool();
+      const options = useGeoOptions();
+      const model = modelOf(id);
+      if (!model || !model.geo || !options || !options.controls) return null;
+      const engines = Array.isArray(options.engines) ? options.engines : [];
+      /** @param {string} engine */
+      const toggle = (engine) => {
+        const next = engines.includes(engine) ? engines.filter((/** @type {string} */ item) => item !== engine) : [...engines, engine];
+        const order = options.offered.map((/** @type {any} */ item) => item.id);
+        if (next.length) changeGeo({ engines: order.filter((/** @type {string} */ item) => next.includes(item)) });
+      };
+      return h('span', { 'data-evimed-geo-options': '', style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 } },
+        h('select', {
+          'aria-label': '覆盖周期', value: String(options.coverageDays ?? ''), style: { ...optionStyle, appearance: 'auto' },
+          onChange: (/** @type {any} */ event) => changeGeo({ coverageDays: Number(event.target.value) }),
+        }, options.coverageOptions.map((/** @type {number} */ days) => h('option', { key: days, value: String(days) }, `覆盖 ${days} 天`))),
+        h('details', { 'data-evimed-geo-engines': '', style: { position: 'relative' } },
+          h('summary', { style: { ...optionStyle, listStyle: 'none' } }, `${engines.length} 个 AI 引擎`, h('span', { 'aria-hidden': 'true' }, ' ▾')),
+          h('div', { role: 'group', 'aria-label': 'AI 引擎', style: popoverStyle },
+            options.offered.map((/** @type {{ id: string, name: string }} */ engine) => {
+              const checked = engines.includes(engine.id);
+              return h('label', { key: engine.id, style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 6px', borderRadius: '8px', cursor: 'pointer' } },
+                h('input', { type: 'checkbox', checked, disabled: checked && engines.length === 1, onChange: () => toggle(engine.id) }),
+                engine.name);
+            }))));
+    };
+
+    /** The chip, and beside it a GEO conversation's two options. */
+    const DockedChip = () => {
+      const model = modelOf(useTool());
+      if (!model || !model.geo) return h(ToolChip, { docked: true });
+      return h('span', { style: { display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', minWidth: 0, maxWidth: '100%', marginTop: '8px' } },
+        h(ToolChip), h(GeoControls));
+    };
     kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, DockedChip));
 
     /**
@@ -296,8 +412,22 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      */
     const Starters = () => {
       const id = useTool();
-      const model = id ? toolPageModel(catalogue, id) : null;
-      if (!model || !model.starters.length) return null;
+      const options = useGeoOptions();
+      const model = modelOf(id);
+      if (!model) return null;
+      // 循证 GEO's single steps: a short name on the pill, a whole sentence
+      // into the composer — never sent.
+      if (model.geo) {
+        const starters = options && Array.isArray(options.starters) ? options.starters : [];
+        if (!starters.length) return null;
+        return h('div', {
+          'data-evimed-tool-starters': model.id,
+          style: { flexBasis: '100%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', minWidth: 0 },
+        }, starters.map((/** @type {{ label: string, draft: string }} */ starter) => h('button', {
+          key: starter.label, type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft),
+        }, h('span', { style: starterText }, starter.label))));
+      }
+      if (!model.starters.length) return null;
       return h('span', { 'data-evimed-tool-starters': model.id, style: { display: 'contents' } },
         model.starters.slice(0, 3).map((/** @type {string} */ starter) => h('button', {
           key: starter, type: 'button', title: starter, style: starterStyle, onClick: () => fill(starter),
@@ -315,12 +445,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      */
     const HeroTools = () => {
       const id = useTool();
-      const model = id ? toolPageModel(catalogue, id) : null;
+      const model = modelOf(id);
       if (!model) return null;
       return h('div', {
         'data-evimed-hero-tools': model.id,
         style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '8px auto 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
-      }, h(ToolChip), h(Starters));
+      }, h(ToolChip), h(GeoControls), h(Starters));
     };
     kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
   }

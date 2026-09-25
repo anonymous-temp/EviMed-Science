@@ -10,6 +10,8 @@ import { conversationTitle } from "@/lib/conversationTitles";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
+import { isGeoTab } from "@/components/geo/geoText";
+import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
 
 /** Why this surface is showing an alert instead of the conversation. */
 interface FrameFailure {
@@ -225,6 +227,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // binding needs. Read once per surface; a tool the deployment does not offer
   // is a choice this shell refuses rather than binds.
   const capabilityAgents = useRef(new Map<string, { agentId: string; agentVersion: string }>());
+  // The capability the task on screen is bound to, as the control plane said
+  // it: what decides whether the 「循证 GEO」 chip carries its options.
+  const [frameCapability, setFrameCapability] = useState<string | null>(null);
+  // The latest `geo-options` handler, read by the message listener.
+  const geoOptionsHandler = useRef<((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => void) | null>(null);
   const theme = useUiStore((state) => state.theme);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
@@ -516,9 +523,19 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const routes: Record<string, string> = {
           "new-task": "/app/chat", knowledge: "/app/files",
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
+          geo: "/app/geo",
         };
         const to = routes[String(message.destination)];
         if (!to) return;
+        if (message.destination === "geo") {
+          // 「循证 GEO」, at one of this project's tabs when the frame names
+          // one (a run's report linking to 诊断): the tab is a closed
+          // vocabulary, and the project is the tab's own, never the frame's word.
+          incoming.current = message.seq;
+          const tab = isGeoTab(typeof message.tab === "string" ? message.tab : null) ? message.tab as string : null;
+          void geoProjectPath(projectId, tab).then((path) => navigate(path));
+          return;
+        }
         // A brief from a capability card in the kernel's hero. Bounded here as
         // well as in the frame: this is a message from another origin, and
         // `newRuntimeUiIntent` hands whatever it is to the composer.
@@ -593,6 +610,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
             navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(draft || undefined, bound.sessionId), capabilityId } });
           })
           .catch(() => { postToFrame("capability", { capabilityId: null, sessionId: from }); });
+      } else if (message.type === "evimed.runtime-ui.geo-options") {
+        // 覆盖周期 or AI 引擎 changed beside the 「循证 GEO」 chip; the handler
+        // validates it again and writes it to this project's GEO row.
+        incoming.current = message.seq;
+        geoOptionsHandler.current?.({ sessionId: message.sessionId, coverageDays: message.coverageDays, engines: message.engines });
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -718,12 +740,23 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   useEffect(() => {
     if (!booted || error || !frameId) return undefined;
     let active = true;
-    if (!frameTask) { postToFrame("capability", { capabilityId: null, sessionId: null }); return undefined; }
+    if (!frameTask) { postToFrame("capability", { capabilityId: null, sessionId: null }); setFrameCapability(null); return undefined; }
     void conversationCapability(frameTask)
-      .then((capabilityId) => { if (active) postToFrame("capability", { capabilityId, sessionId: frameTask }); })
+      .then((capabilityId) => {
+        if (!active) return;
+        postToFrame("capability", { capabilityId, sessionId: frameTask });
+        setFrameCapability(capabilityId);
+      })
       .catch(() => { /* the chip stays absent rather than wrong */ });
     return () => { active = false; };
   }, [booted, error, frameId, frameTask, postToFrame]);
+
+  // 循证 GEO's options beside its chip, for a conversation bound to one of the
+  // module's capabilities (`useFrameGeoOptions`).
+  const postGeo = useCallback((payload: object) => postToFrame("geo", payload), [postToFrame]);
+  geoOptionsHandler.current = useFrameGeoOptions({
+    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postGeo,
+  });
 
   const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);
   const postEvidence = useCallback((evidence: object | null) => postToFrame("evidence", evidence ?? { runId: null }), [postToFrame]);

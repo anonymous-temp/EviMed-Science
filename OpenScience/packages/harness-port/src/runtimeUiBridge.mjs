@@ -319,6 +319,34 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         }));
       return { sessionId: data.sessionId, checks };
     },
+    /**
+     * 循证 GEO's options for the conversation on screen: the project's
+     * coverage window and engines (with `controls` when there is a GEO project
+     * to write them to), the engines on offer with their names, and the
+     * single-step starters. Rebuilt from a closed shape; `clear` drops them.
+     * @param {any} data
+     */
+    geo(data) {
+      if (data.clear === true) return { sessionId: validId(data.sessionId) ? data.sessionId : null, starters: null };
+      const engineId = (/** @type {unknown} */ value) => typeof value === 'string' && /^[a-z0-9-]{1,32}$/.test(value);
+      const text = (/** @type {unknown} */ value, /** @type {number} */ max) => String(value ?? '').slice(0, max);
+      const days = (/** @type {unknown} */ value) => Number.isInteger(value) && Number(value) > 0 && Number(value) <= 730;
+      const offered = (Array.isArray(data.offered) ? data.offered : []).slice(0, 12)
+        .filter((/** @type {any} */ engine) => engine && engineId(engine.id) && typeof engine.name === 'string' && engine.name)
+        .map((/** @type {any} */ engine) => ({ id: engine.id, name: text(engine.name, 24) }));
+      const offeredIds = offered.map((/** @type {{ id: string }} */ engine) => engine.id);
+      return {
+        sessionId: validId(data.sessionId) ? data.sessionId : null,
+        controls: data.controls === true,
+        coverageDays: days(data.coverageDays) ? data.coverageDays : null,
+        coverageOptions: (Array.isArray(data.coverageOptions) ? data.coverageOptions : []).filter(days).slice(0, 8),
+        engines: (Array.isArray(data.engines) ? data.engines : []).filter((/** @type {unknown} */ id) => engineId(id) && offeredIds.includes(id)).slice(0, 12),
+        offered,
+        starters: (Array.isArray(data.starters) ? data.starters : []).slice(0, 8)
+          .filter((/** @type {any} */ starter) => starter && typeof starter.label === 'string' && starter.label && typeof starter.draft === 'string' && starter.draft)
+          .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400) })),
+      };
+    },
     /** @param {any} data */
     'kb-result'(data) {
       if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
@@ -390,7 +418,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * redirect it could choose. The shell maps each name to a route and ignores
    * anything else.
    */
-  const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account'];
+  const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account', 'geo'];
+  /** The tabs of a 循证 GEO project a `geo` destination may name; the project is the shell's to know. */
+  const GEO_TABS = ['overview', 'evidence', 'journey', 'questions', 'diagnosis', 'sources', 'content', 'distribution', 'monitoring'];
 
   /**
    * The channel the frame bodies leave through.
@@ -407,11 +437,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      *   meaningful for `new-task`; the shell sends it back in as the
      *   navigation intent's draft. Bounded here as well as there, because this
      *   side runs third-party-composed code.
+     * @param {{ tab?: string }} [options] for `geo`: which tab of the
+     *   project to open (a report linking to 诊断); one of `GEO_TABS`.
      */
-    navigate(destination, draft = undefined) {
+    navigate(destination, draft = undefined, options = {}) {
       if (typeof destination !== 'string' || !SHELL_DESTINATIONS.includes(destination)) return;
       if (draft !== undefined && (typeof draft !== 'string' || !draft || draft.length > 100_000)) return;
-      post('shell-navigate', draft === undefined ? { destination } : { destination, draft });
+      const tab = destination === 'geo' && typeof options?.tab === 'string' && GEO_TABS.includes(options.tab) ? options.tab : undefined;
+      post('shell-navigate', { destination, ...(draft === undefined ? {} : { draft }), ...(tab ? { tab } : {}) });
     },
   };
 
@@ -434,10 +467,38 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (typeof fields.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(fields.requestId)) return null;
       return { requestId: fields.requestId, query: String(fields.query ?? '').slice(0, 200) };
     },
+    /**
+     * The tool chip's × and `/工具`: which research tool this conversation
+     * should run (or none), with the draft that travels with a rebinding. Was
+     * missing from this list until 2026-09-25, so both were dropped here and
+     * never reached the shell.
+     * @param {any} fields
+     */
+    'bind-capability'(fields) {
+      const capabilityId = fields.capabilityId === null ? null
+        : typeof fields.capabilityId === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(fields.capabilityId) ? fields.capabilityId : undefined;
+      if (capabilityId === undefined) return null;
+      const draft = typeof fields.draft === 'string' && fields.draft.length <= 100_000 ? fields.draft : '';
+      return { capabilityId, sessionId: validId(fields.sessionId) ? fields.sessionId : null, draft };
+    },
+    /**
+     * A 循证 GEO option the reader changed beside the chip: the coverage
+     * window in days, or the engines. The shell writes it to the project.
+     * @param {any} fields
+     */
+    'geo-options'(fields) {
+      const payload = /** @type {{ sessionId: string | null, coverageDays?: number, engines?: string[] }} */ ({ sessionId: validId(fields.sessionId) ? fields.sessionId : null });
+      if (Number.isInteger(fields.coverageDays) && fields.coverageDays > 0 && fields.coverageDays <= 730) payload.coverageDays = fields.coverageDays;
+      if (Array.isArray(fields.engines)) {
+        const engines = fields.engines.filter((/** @type {unknown} */ id) => typeof id === 'string' && /^[a-z0-9-]{1,32}$/.test(id)).slice(0, 12);
+        if (engines.length) payload.engines = engines;
+      }
+      return payload.coverageDays === undefined && payload.engines === undefined ? null : payload;
+    },
   };
   const detachHub = hub?.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
     if (!Object.hasOwn(OUTBOUND, type)) return;
-    const payload = OUTBOUND[/** @type {'open-artifact' | 'kb-query'} */ (type)](fields ?? {});
+    const payload = OUTBOUND[/** @type {'open-artifact' | 'kb-query' | 'bind-capability' | 'geo-options'} */ (type)](fields ?? {});
     if (payload) post(type, payload);
   });
 
