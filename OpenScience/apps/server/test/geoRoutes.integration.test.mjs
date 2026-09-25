@@ -391,10 +391,18 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   const media = `m1-${run}`;
   await database.query(`INSERT INTO evimed_geo.media (resource_id, media_type, name, domain, price_cny) VALUES ($1, 'website', '生命时报', 'lifetimes.cn', 946)
     ON CONFLICT DO NOTHING`, [media]);
+  // One live order per article (geo_orders_live_article_key), and the money in
+  // the ledger the market would have written: three reserves, one settlement.
+  const third = `art3-${id}`;
+  await database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, layer, title, gate, safety, status)
+    VALUES ($1, $2, $3, 'popular', '第三篇', 'passed', 'clear', 'published')`, [third, ALICE, id]);
   await database.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id, state, reserve_cny, price_cny)
-    VALUES ($1, $6, $2, $3, 'website', $7, 'submitted', 1040.6, 946), ($4, $6, $2, $3, 'website', $7, 'accepted', 1040.6, 946),
-      ($5, $6, $2, $3, 'website', $7, 'settled', 1040.6, 946)`, [`o1-${id}`, id, articles.ids[0], `o2-${id}`, `o3-${id}`, ALICE, media]);
+    VALUES ($1, $6, $2, $3, 'website', $7, 'submitted', 1040.6, 946), ($4, $6, $2, $8, 'website', $7, 'accepted', 1040.6, 946),
+      ($5, $6, $2, $9, 'website', $7, 'settled', 1040.6, 946)`, [`o1-${id}`, id, articles.ids[0], `o2-${id}`, `o3-${id}`, ALICE, media, articles.ids[1], third]);
   await database.query(`UPDATE evimed_geo.orders SET settled_cny = 946, published_url = 'https://lifetimes.cn/a' WHERE id = $1`, [`o3-${id}`]);
+  await database.query(`INSERT INTO evimed_geo.ledger (id, user_id, geo_project_id, order_id, kind, amount_cny) VALUES
+    ($1 || '-r1', $2, $3, $4, 'reserve', 1040.6), ($1 || '-r2', $2, $3, $5, 'reserve', 1040.6), ($1 || '-r3', $2, $3, $6, 'reserve', 1040.6),
+    ($1 || '-s3', $2, $3, $6, 'settle', 946), ($1 || '-l3', $2, $3, $6, 'release', 94.6)`, [`gl-${id}`, ALICE, id, `o1-${id}`, `o2-${id}`, `o3-${id}`]);
   const view = (await call("GET", `/api/geo/projects/${id}/distribution`)).payload.data;
   assert.equal(view.budget, null);
   assert.equal(view.spentCny, 946);

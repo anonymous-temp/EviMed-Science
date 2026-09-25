@@ -26,10 +26,10 @@
  *   else — another account's project reads exactly like one that never
  *   existed. The measurement and market tables are read here by project id
  *   after that lookup.
- * - **Money is shown from orders, decided elsewhere.** The distribution view
- *   sums the order rows' reserved and settled amounts; placing, cancelling and
- *   the budget itself are the market's (`geoMarket.mjs`), handed in as hooks
- *   by the routes.
+ * - **Money is shown from the ledger, decided elsewhere.** The distribution
+ *   view reads the market's ledger through its own `projectMoney`; placing,
+ *   cancelling and the budget itself are the market's (`geoMarket.mjs`),
+ *   handed in as hooks by the routes.
  * - **Off is invisible** (`geoAudienceAllows`): the module off, or on for
  *   operators and the preview list only while this account is neither, reads
  *   as a module that does not exist — the routes answer 404 `geo_not_enabled`
@@ -41,9 +41,11 @@
 import path from "node:path";
 import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
-  GEO_ORDER_OPEN_STATES, GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES,
+  GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { GEO_ORDER_ARTICLE_LIVE_STATES, projectMoney } from "./geoMarketStore.mjs";
+import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 
 /** @typedef {{ value: number | null, numerator: number | null, denominator: number | null, ciLow: number | null, ciHigh: number | null,
  *   status: string, dataType: string, reason: string | null }} GeoCell */
@@ -88,9 +90,13 @@ export function geoAudienceAllows(config, user) {
   return Boolean(id) && ((config.operatorUsers ?? []).includes(id) || (config.geoPreviewUsers ?? []).includes(id));
 }
 
-/** Whether the media marketplace is wired: its base URL and its key file are both configured. @param {Record<string, any>} config */
+/**
+ * Whether the media marketplace is wired: a base URL and a usable key file
+ * (compose binds /dev/null where there is none). The market's one definition.
+ * @param {Record<string, any>} config
+ */
 export function geoMarketConfigured(config) {
-  return Boolean(String(config?.mediaMarketUrl ?? "").trim() && String(config?.mediaMarketApiKeyFile ?? "").trim());
+  return mediaMarketConfigured(config);
 }
 
 /**
@@ -792,11 +798,18 @@ export class GeoService {
     };
   }
 
-  /** `POST …/:id/articles/:aid/withdraw`: only before anything was placed. @param {{ id: string }} user @param {string} id @param {string} articleId */
+  /**
+   * `POST …/:id/articles/:aid/withdraw`: before anything was placed, or once
+   * no order for it is live any more (the user cancelled it — 撤单 then 撤回).
+   * @param {{ id: string }} user @param {string} id @param {string} articleId
+   */
   async withdrawArticle(user, id, articleId) {
     const project = await this.requireProject(user, id);
     if (!(await this.store.getArticle(project.id, articleId))) throw failure(404, "geo_article_not_found", "Article not found.");
-    const changed = await this.store.changeArticle(project.id, articleId, { status: "withdrawn", fromStatuses: ["draft", "publishable"] });
+    const live = await this.store.query(`SELECT 1 FROM evimed_geo.orders WHERE geo_project_id = $1 AND article_id = $2
+      AND state = ANY($3::text[]) LIMIT 1`, [project.id, articleId, [...GEO_ORDER_ARTICLE_LIVE_STATES, "problem"]]);
+    const fromStatuses = live.rows.length ? ["draft", "publishable"] : ["draft", "publishable", "placed"];
+    const changed = await this.store.changeArticle(project.id, articleId, { status: "withdrawn", fromStatuses });
     if (!changed) throw failure(409, "geo_article_state_invalid", "Only an article that has not been placed can be withdrawn.");
     return { id: changed.id, status: changed.status };
   }
@@ -820,19 +833,23 @@ export class GeoService {
         FROM evimed_geo.orders o LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
           LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id
         WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500`, [project.id]),
-      this.store.query(`SELECT coalesce(sum(settled_cny) FILTER (WHERE state IN ('settled')), 0) AS spent,
-          coalesce(sum(reserve_cny) FILTER (WHERE state = ANY($2::text[])), 0) AS reserved
-        FROM evimed_geo.orders WHERE geo_project_id = $1`, [project.id, [...GEO_ORDER_OPEN_STATES]]),
+      // The money is the ledger's (projectMoney, the market's own view): a
+      // rejected order still holds its reserve until the refund is in the
+      // balance, and a refund after settlement is money back.
+      this.store.query(`SELECT order_id, kind, sum(amount_cny) AS amount FROM evimed_geo.ledger WHERE geo_project_id = $1 GROUP BY order_id, kind`,
+        [project.id]),
       this.store.latestTargets(project.id),
     ]);
     const suggested = (targets?.rows ?? []).filter((row) => row.tier === project.tier && row.budgetCny != null)
       .reduce((/** @type {number | null} */ max, row) => Math.max(max ?? 0, Number(row.budgetCny)), null);
     const budget = project.budget && typeof project.budget === "object"
       ? { totalCny: num(project.budget.totalCny), dailyCny: num(project.budget.dailyCny) } : null;
+    const ledger = projectMoney(project, money.rows.map((/** @type {any} */ row) => ({ orderId: row.order_id ?? null, kind: String(row.kind),
+      amountCny: Number(row.amount) })));
     return {
       budget,
-      spentCny: Number(money.rows[0]?.spent ?? 0),
-      reservedCny: Number(money.rows[0]?.reserved ?? 0),
+      spentCny: ledger.spentCny,
+      reservedCny: ledger.reservedCny,
       suggestedBudgetCny: suggested,
       market: { configured: Boolean(marketConfigured) },
       orders: orders.rows.map((/** @type {any} */ row) => ({
