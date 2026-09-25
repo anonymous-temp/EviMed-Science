@@ -112,10 +112,12 @@ const OPERATOR_TITLES = Object.freeze({
   order_unpublished: "投放：订单超时未发布",
   published_off_domain: "投放：发布链接不在媒体自己的域名上",
   market_unauthorized: "投放：媒介平台拒绝了接口密钥",
-  engine_paused: "测量：一家 AI 引擎暂停探测",
-  probe_unavailable: "测量：探测通道不可用",
-  suspect_answers: "测量：出现可疑回答（登录页或空白页）",
-  budget_exhausted: "测量：今日解析预算已用完",
+  geo_probe_suspect: "测量：出现可疑回答（登录页或空白页）",
+  geo_probe_engine_paused: "测量：一家 AI 引擎暂停探测",
+  geo_probe_host_down: "测量：探测机连不上",
+  geo_probe_busy: "测量：探测机持续繁忙，开始消耗重试次数",
+  geo_probe_misconfigured: "测量：探测通道配置有误",
+  geo_probe_unconfigured: "测量：探测通道没有配置，测量在排队",
 });
 
 /**
@@ -199,14 +201,17 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
      * 5a. 讲错我方, from the error row. S3/S4 alone; lower severities of one
      * project and day fold into one item led by the most severe.
      * @param {any} project @param {any} error a row of `evimed_geo.errors` (snake or camel case)
+     * @param {{ key?: string | null }} [options] the event's own key (the measurement's
+     *   `geo:wrong_ours:<id>:first`, or `…:seen:<snapshot>` for an error back after it closed)
      */
-    async wrongOurs(project, error) {
+    async wrongOurs(project, error, { key = null } = {}) {
       const row = normalizedError(error);
+      const idempotencyKey = key || `geo:wrong_ours:${row.id}:first`;
       const target = row.snapshotId ? source(project.id, "answers", row.snapshotId) : source(project.id, "diagnosis");
       const body = row.evidenceQuote ? `依据：「${clip(row.evidenceQuote, 200)}」` : "点开看这条回答和依据。";
       if (GEO_URGENT_SEVERITIES.includes(String(row.severity))) {
         return send(project, "wrong_or_safety", {
-          title: wrongOursTitle(project, row), body, severity: "safety", source: target, idempotencyKey: `geo:error:${row.id}`,
+          title: wrongOursTitle(project, row), body, severity: "safety", source: target, idempotencyKey,
         });
       }
       const day = dayIn(row.createdAt ? new Date(row.createdAt) : now(), timeZone);
@@ -220,7 +225,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       return send(project, "wrong_or_safety", {
         title: `${wrongOursTitle(project, normalizedError(lead))}${others ? `（另有 ${others} 处）` : ""}`,
         body, severity: "safety", source: others ? source(project.id, "diagnosis") : target,
-        groupKey: `geo-wrong:${project.id}:${day}`, idempotencyKey: `geo:error:${row.id}`,
+        groupKey: `geo-wrong:${project.id}:${day}`, idempotencyKey,
       });
     },
 
@@ -266,7 +271,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         const row = (await store.query(`SELECT * FROM evimed_geo.errors WHERE id = $1`, [errorId])).rows[0];
         if (!row) return null;
         const project = await projectRow(store, row.geo_project_id, row.user_id);
-        return project ? notifier.wrongOurs(project, row) : null;
+        return project ? notifier.wrongOurs(project, row, { key: typeof event.idempotencyKey === "string" ? event.idempotencyKey : null }) : null;
       }
       return notifier.alertOperator(event ?? {});
     },
@@ -277,7 +282,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
      * @param {Record<string, any>} event
      */
     async alertOperator(event) {
-      const type = String(event?.type ?? "");
+      const type = String(event?.type ?? event?.kind ?? "");
       const title = /** @type {Record<string, string>} */ (OPERATOR_TITLES)[type] ?? "循证 GEO 后台需要人工处理";
       const key = String(event?.idempotencyKey || `geo-op:${type}:${dayIn(now(), timeZone)}`);
       const operators = (config.operatorUsers ?? []).map(String).filter(Boolean);

@@ -19,8 +19,9 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  *   the caller first.
  * - Reads come from the module's tables; the write-side actions that belong
  *   to other workers are hooks: `orchestrator.runStep` (「让 AI 做」),
- *   `exporter.export` (导出), `market.setBudget`, `market.cancelOrder` and
- *   `market.confirmTopup`. A hook that is not composed answers 503
+ *   `exporter.export` (导出), `market.setBudget`, `market.cancelOrder`,
+ *   `market.confirmTopup`, and the operators' `market.resolveUnknownOrder`,
+ *   `market.markOrderLost` and `market.clearStop`. A hook that is not composed answers 503
  *   `geo_unavailable` — the route exists, the worker does not yet. The hooks
  *   are read at request time, so a package composed after the routes attaches
  *   to the same `geo` object and is found.
@@ -50,6 +51,8 @@ export function geoRoutePattern(pathname) {
   if (!parts.length) return "/api/geo";
   if (parts[0] === "market") {
     if (parts.length === 1) return "/api/geo/market";
+    if (parts[1] === "clear-stop") return "/api/geo/market/clear-stop";
+    if (parts[1] === "orders") return `/api/geo/market/orders/:id/${["resolve", "lost"].includes(parts[3]) ? parts[3] : ":action"}`;
     return "/api/geo/market/topups/:id/confirm";
   }
   if (parts[0] !== "projects") return "/api/geo/:route";
@@ -124,6 +127,8 @@ function money(value, field) {
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ sessionId: string, runId: string | null }> } | null,
  *   market?: { setBudget?: (user: any, project: any, budget: { totalCny: number, dailyCny: number }) => Promise<any>,
  *     cancelOrder?: (user: any, project: any, orderId: string) => Promise<any>, confirmTopup?: (user: any, topupId: string) => Promise<any>,
+ *     resolveUnknownOrder?: (user: any, orderId: string, input: { created: boolean, vendorOrderNid?: string }) => Promise<any>,
+ *     markOrderLost?: (user: any, orderId: string, reason: string) => Promise<any>, clearStop?: (user: any, note?: string) => Promise<any>,
  *     balance?: () => Promise<any>, configured?: () => boolean } | null }} dependencies
  */
 export function createGeoRoutes(dependencies) {
@@ -160,6 +165,43 @@ export function createGeoRoutes(dependencies) {
         if (!hooks.market?.confirmTopup) throw UNAVAILABLE();
         const result = await hooks.market.confirmTopup(user, parts[2]);
         await audit("geo.topup.confirm", "completed", { userId: user.id, code: parts[2] });
+        return reply(result);
+      }
+      // An order the vendor may or may not have (a send that timed out): the
+      // operator checked and says which, with the vendor's order number when
+      // it exists; the market verifies that number with the vendor.
+      if (parts.length === 4 && parts[1] === "orders" && parts[3] === "resolve" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["created", "vendorOrderNid"]);
+        if (typeof body.created !== "boolean"
+          || (body.created && (typeof body.vendorOrderNid !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(body.vendorOrderNid)))) {
+          throw new HttpError(400, "geo_payload_invalid", "created is true or false; a created order names the vendor's order number.");
+        }
+        if (!hooks.market?.resolveUnknownOrder) throw UNAVAILABLE();
+        const result = await hooks.market.resolveUnknownOrder(user, parts[2],
+          { created: body.created, ...(body.created ? { vendorOrderNid: body.vendorOrderNid } : {}) });
+        await audit("geo.order.resolve", "completed", { userId: user.id, code: parts[2], detail: body.created ? "created" : "not_created" });
+        return reply(result);
+      }
+      // An after-sale the platform will not recover: written off at what the vendor kept.
+      if (parts.length === 4 && parts[1] === "orders" && parts[3] === "lost" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["reason"]);
+        if (typeof body.reason !== "string" || !body.reason.trim() || body.reason.length > 300) {
+          throw new HttpError(400, "geo_payload_invalid", "reason is one line of at most 300 characters.");
+        }
+        if (!hooks.market?.markOrderLost) throw UNAVAILABLE();
+        const result = await hooks.market.markOrderLost(user, parts[2], body.reason.trim());
+        await audit("geo.order.lost", "completed", { userId: user.id, code: parts[2] });
+        return reply(result);
+      }
+      // A reconciliation stop an operator looked at: new orders may go out again.
+      if (parts.length === 2 && parts[1] === "clear-stop" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["note"]);
+        if (body.note != null && (typeof body.note !== "string" || body.note.length > 500)) {
+          throw new HttpError(400, "geo_payload_invalid", "note is at most 500 characters.");
+        }
+        if (!hooks.market?.clearStop) throw UNAVAILABLE();
+        const result = await hooks.market.clearStop(user, body.note ?? undefined);
+        await audit("geo.market.clear_stop", "completed", { userId: user.id, code: result?.day ? String(result.day) : "none" });
         return reply(result);
       }
       throw new HttpError(404, "not_found", "GEO route not found.");

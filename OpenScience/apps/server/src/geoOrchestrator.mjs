@@ -1,6 +1,6 @@
 import { GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, canonicalGeoUrl } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
-import { HttpError } from "./security.mjs";
+import { HttpError, randomId } from "./security.mjs";
 
 /**
  * 「循证 GEO」's program state machine (build spec 2026-09-25 §5; plan §6):
@@ -53,6 +53,11 @@ import { HttpError } from "./security.mjs";
  *   answer (IRON-06).
  * - **Paused is paused**: nothing new is dispatched or enqueued for a paused
  *   project; a run already out is still folded when it ends.
+ * - The worker's cross-process leases and daily claims are marks too, under
+ *   the platform's own key space (`geo_project_id = '_platform'`, which no
+ *   project or account deletion touches): `lease:<loop>` held by an owner
+ *   until released or until the lease runs out, `daily:<loop>:<day>` claimed
+ *   once. A lease holds no database connection while its work runs.
  *
  * @module geoOrchestrator
  */
@@ -370,6 +375,8 @@ export class GeoOrchestrator {
     this.now = now;
     this.report = report;
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
+    this.leaseSeconds = Math.max(60, Math.round(Number(config.geoLeaseMs ?? 600_000) / 1000));
+    this.owner = `geo-${process.pid}-${randomId().slice(0, 12)}`;
     /** @type {Map<string, Promise<unknown>>} one advance per project at a time, in this process */
     this.locks = new Map();
     this.counters = { ticks: 0, scheduleTicks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, roundsEnqueued: 0,
@@ -389,6 +396,38 @@ export class GeoOrchestrator {
       lastTickAt: this.lastTickAt, lastDeferral: this.lastDeferral, lastError: this.lastError,
       counters: { ...this.counters },
     };
+  }
+
+  // --- the worker's leases -----------------------------------------------------------------
+
+  /**
+   * Run `work` holding the cross-process lease of one worker loop; another
+   * holder (or a lease younger than `OPEN_SCIENCE_GEO_LEASE_MS`) answers
+   * `{ acquired: false }` and nothing runs.
+   * @param {string} loop @param {() => Promise<unknown>} work
+   */
+  async leaseLoop(loop, work) {
+    const key = `lease:${loop}`;
+    const got = await this.store.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, detail)
+      VALUES ('_platform', $1, '_platform', 'request', 'running', jsonb_build_object('owner', $2::text))
+      ON CONFLICT (geo_project_id, key) DO UPDATE SET state = 'running', detail = jsonb_build_object('owner', $2::text), done_at = NULL, updated_at = now()
+        WHERE schedule_marks.state <> 'running' OR schedule_marks.updated_at < now() - make_interval(secs => $3)
+          OR schedule_marks.detail ->> 'owner' = $2
+      RETURNING key`, [key, this.owner, this.leaseSeconds]);
+    if (!got.rows.length) return { acquired: false };
+    try {
+      return { acquired: true, value: await work() };
+    } finally {
+      await this.store.query(`UPDATE evimed_geo.schedule_marks SET state = 'done', done_at = now(), updated_at = now()
+        WHERE geo_project_id = '_platform' AND key = $1 AND detail ->> 'owner' = $2`, [key, this.owner]).catch(() => {});
+    }
+  }
+
+  /** Claim a daily loop's day once, across processes and restarts. @param {string} loop @param {string} day */
+  async claimDay(loop, day) {
+    const got = await this.store.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, done_at)
+      VALUES ('_platform', $1, '_platform', 'request', 'done', now()) ON CONFLICT (geo_project_id, key) DO NOTHING RETURNING key`, [`daily:${loop}:${day}`]);
+    return got.rows.length > 0;
   }
 
   // --- marks ----------------------------------------------------------------------------
@@ -698,9 +737,18 @@ export class GeoOrchestrator {
       this.counters.roundsEnqueued += 1;
       return roundId;
     } catch (error) {
-      await this.store.query(`DELETE FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = $2 AND state = 'claimed'`, [project.id, key]);
       this.lastError = codeOf(error);
       this.report(`enqueue:${this.lastError}`);
+      // A round the measurement refuses on its merits (nothing to ask, an
+      // unknown question or engine) will not be different in a minute: it is
+      // recorded as skipped with the reason. Anything else is tried again.
+      const status = Number(/** @type {any} */ (error)?.status);
+      if ([400, 404, 409].includes(status)) {
+        await this.#update(project.id, key, { state: "skipped", detail: { reason: this.lastError } }, ["claimed"]);
+        this.counters.roundsSkipped += 1;
+      } else {
+        await this.store.query(`DELETE FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = $2 AND state = 'claimed'`, [project.id, key]);
+      }
       return null;
     }
   }
@@ -750,7 +798,10 @@ export class GeoOrchestrator {
     if (!this.enqueueRound) return this.#step(project, "diagnosis", { status: "queued" });
     const roundId = await this.#enqueueOnce(project, key, { kind: questions === "minimal" ? "single_step" : "baseline", engines: project.engines,
       ref: { step: "diagnosis", setVersion: set.version } });
-    if (!roundId) return this.#step(project, "diagnosis", { status: "queued" });
+    if (!roundId) {
+      const refused = (await this.#mark(project.id, key))?.state === "skipped";
+      return this.#step(project, "diagnosis", { status: refused ? "failed" : "queued" });
+    }
     result.enqueued.push(key);
     return this.#step(project, "diagnosis", { status: "running", roundId });
   }
@@ -759,12 +810,9 @@ export class GeoOrchestrator {
   async #noise(project, plan, result) {
     if (!plan.full || project.steps.questions.status !== "done" || project.steps.diagnosis.status !== "done" || !this.enqueueRound) return;
     if (await this.#mark(project.id, "round:noise")) return;
-    const set = await this.#lockedSet(project.id);
-    if (!set) return;
-    const questionIds = topQuestions(set.groups, GEO_SCHEDULE.noiseQuestions);
-    if (!questionIds.length) return;
-    const roundId = await this.#enqueueOnce(project, "round:noise", { kind: "noise", questionIds, engines: project.engines,
-      repeat: GEO_SCHEDULE.noiseRepeat, ref: { reason: "noise" } });
+    // The questions and the repeats are the measurement's own (the owner's
+    // PROBE_NOISE_* constants): the highest-weight measured questions, five times each.
+    const roundId = await this.#enqueueOnce(project, "round:noise", { kind: "noise", engines: project.engines, ref: { reason: "noise" } });
     if (roundId) result.enqueued.push("round:noise");
   }
 
@@ -1143,8 +1191,9 @@ export class GeoOrchestrator {
   /** 讲错我方, articles held for safety, the first publishable article, the first citation. @param {any} project */
   async #notices(project) {
     if (!this.notifier) return;
+    // An error the measurement already told (`notified_at`, its S3+ notice) is not told twice.
     const errors = (await this.store.query(`SELECT e.* FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.status <> 'closed'
-        AND e.created_at >= now() - make_interval(days => $2)
+        AND e.notified_at IS NULL AND e.created_at >= now() - make_interval(days => $2)
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = e.geo_project_id AND m.key = 'notice:error:' || e.id)
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT $3`, [project.id, GEO_RUN_RULES.noticeScanDays, GEO_RUN_RULES.noticesPerTick])).rows;
     for (const error of errors) await this.#notice(project, `notice:error:${error.id}`, () => this.notifier?.wrongOurs(project, error));
@@ -1277,18 +1326,18 @@ export class GeoOrchestrator {
       const sentinel = sentinelSlot(now, this.timeZone);
       const sentinelKey = `sentinel:${sentinel.day}`;
       if (sentinel.due && !(await this.#mark(project.id, sentinelKey))) {
-        const set = await this.#lockedSet(project.id);
-        const questionIds = topQuestions(set?.groups ?? [], GEO_SCHEDULE.sentinelQuestions);
+        // The questions are the measurement's (the ten highest-weight measured
+        // ones); the two engines are chosen here, by retrieval rate.
         const retrieval = (await this.store.query(`SELECT DISTINCT ON (engine) engine, value, denominator, status FROM evimed_geo.metrics
           WHERE geo_project_id = $1 AND scope = 'engine' AND metric_id = 'M-10' AND pool IS NULL AND variant IS NULL AND rival IS NULL
             AND group_id IS NULL AND arm IS NULL ORDER BY engine, computed_at DESC`, [project.id])).rows
           .map((/** @type {any} */ row) => ({ engine: String(row.engine), value: row.value == null ? null : Number(row.value),
             denominator: row.denominator == null ? null : Number(row.denominator), status: String(row.status) }));
         const engines = sentinelEngines(retrieval, project.engines.filter((/** @type {string} */ engine) => !(this.config.geoInclusionEngines ?? []).includes(engine)));
-        if (!questionIds.length || !engines.length) {
-          await this.#skip(project, sentinelKey, "no_questions");
+        if (!engines.length) {
+          await this.#skip(project, sentinelKey, "no_engines");
           counts.skipped += 1;
-        } else if (await this.#enqueueOnce(project, sentinelKey, { kind: "sentinel", questionIds, engines, ref: { day: sentinel.day } })) {
+        } else if (await this.#enqueueOnce(project, sentinelKey, { kind: "sentinel", engines, ref: { day: sentinel.day } })) {
           counts.sentinel += 1;
         }
       }
