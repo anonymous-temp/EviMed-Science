@@ -83,8 +83,12 @@ default with its reason in `assumptions[]`.
 
 ## Tools
 
-- `mcp__evimed__geo_read`, `geo_write articles` (register each article: layer, title, group,
-  claim keys, content hash, safety) and `geo_write step`.
+- `mcp__evimed__geo_read`, `geo_write articles` and `geo_write step`. Register each article
+  with `path` (`articles/<id>.md`), `layer`, `title`, `groupId` (the id of the question group it
+  answers, from `geo_read questions` — required for every layer but `correction`), `claimIds`
+  (ids from `geo_read claims`), `contentSha256` (of the file as written) and `safety`
+  (`clear` or `open`). Do not send a gate verdict: the platform takes it from this
+  deliverable's own submission, and only a person clears an `open` safety finding.
 - `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search`,
   `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`, `mcp__evimed__locate_quote` for a claim
   an article needs and the library lacks — add it through `geo_write claims`
