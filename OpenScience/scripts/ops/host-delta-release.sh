@@ -23,6 +23,9 @@
 # This lived in /tmp on the host until 2026-09-17, which is how three releases
 # were cut from a script nobody could read, diff or review.
 set -euo pipefail
+# A failed step says so in this script's own log (a docker build writes to its
+# own file), which is what the operator's wait loop reads.
+trap 'echo "ERROR: host-delta-release failed at line $LINENO"' ERR
 OLD="$1"; NEW="$2"; REV="$3"; CREATED="$4"; DELTA="$5"
 ROOT="${EVIMED_ROOT:-/srv/evimed-science}"
 BUILD="${ROOT}/build/${NEW}"
