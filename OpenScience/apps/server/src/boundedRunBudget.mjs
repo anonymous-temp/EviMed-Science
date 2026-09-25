@@ -43,7 +43,7 @@ function cap(value, code) {
 
 /**
  * @param {{ runLimitCny?: number, dailyLimitCny?: number, weeklyLimitCny?: number,
- *   purpose: "learning" | "source-understanding", invalidCode: string }} own
+ *   purpose: "learning" | "source-understanding" | "geo", invalidCode: string }} own
  * @param {Record<string, any>} config the account caps: `userDailySpendLimit`, `userWeeklySpendLimit`
  */
 export function boundedRunBudget(own, config) {

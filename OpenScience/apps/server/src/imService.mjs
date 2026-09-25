@@ -27,6 +27,7 @@ import { RUN_ACTIVITY_PHASE_LABELS_ZH, capabilityTitle, errorCodeMessage } from 
 import { HttpError, openScopedFileNoFollow, resolveScopedPath } from "./security.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
 import { runFinishedNotice } from "./notificationService.mjs";
+import { geoNoticeHref } from "./geoNotify.mjs";
 import { IN_APP_CHANNEL, channelMessage, deliveryOutcome } from "./channels/port.mjs";
 import { ChannelRegistry, channelSwitches } from "./channels/registry.mjs";
 import { ChannelStore } from "./channels/store.mjs";
@@ -123,6 +124,8 @@ export function noticeLink(config, item) {
   if (frontierDay) return appLink(config, `/app/frontier?view=daily&day=${frontierDay}`);
   if (source?.type === "digest") return appLink(config, `/app/autopilot?digest=${encodeURIComponent(source.id)}`);
   if (source?.type === "memory") return appLink(config, `/app/memory?record=${encodeURIComponent(source.id)}`);
+  const geoPath = source?.type === "geo" ? geoNoticeHref(source.id) : null;
+  if (geoPath) return appLink(config, geoPath);
   return appLink(config, "/app/inbox");
 }
 

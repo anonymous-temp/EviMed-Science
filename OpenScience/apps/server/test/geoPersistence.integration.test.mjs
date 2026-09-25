@@ -67,7 +67,7 @@ test("the migration creates every table of the build spec and a second run chang
   const result = await migrateGeo(first);
   assert.deepEqual(result.tables, GEO_TABLES);
   const created = await inventory(first);
-  assert.equal(created.tables.length, 24, created.tables.join());
+  assert.equal(created.tables.length, 25, created.tables.join());
   assert.deepEqual([...created.tables].sort(), [...GEO_TABLES].sort());
   // The columns other packages code against, spot-checked per side.
   const has = (/** @type {string} */ table, /** @type {string} */ column) => created.columns.some((row) => row.table_name === table && row.column_name === column);

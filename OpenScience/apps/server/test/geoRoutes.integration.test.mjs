@@ -352,7 +352,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(diagnosis.round.engines, ["doubao", "deepseek"]);
   const deepseek = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "deepseek");
   assert.deepEqual(deepseek.mention, { value: 0.42, numerator: 20, denominator: 48, ciLow: null, ciHigh: null, status: "ok", dataType: "measured",
-    reason: null });
+    reason: null, snapshotIds: [`s1-${id}`] }, "a cell names the answers it rests on (the suspect one is out)");
   assert.equal(deepseek.retrieval.status, "absent", "an unmeasured cell is absent, never zero");
   const doubao = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "doubao");
   assert.deepEqual([doubao.retrieval.status, doubao.retrieval.reason, doubao.retrieval.value], ["not_measurable", "no_retrieval", null]);
@@ -361,7 +361,10 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   const p1 = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P1");
   assert.equal(p1.topCompetitor, "替尔泊肽");
   assert.equal(p1.mainIssue, "wrong_ours");
-  assert.deepEqual(diagnosis.failureModes, { omitted: 0, correct: 0, wrongOurs: 1, wrongCompetitor: 0 }, "a suspect answer is out of the tally");
+  assert.deepEqual(Object.fromEntries(Object.entries(diagnosis.failureModes).map(([mode, cell]) => [mode, [/** @type {any} */ (cell).numerator,
+    /** @type {any} */ (cell).denominator]])), { omitted: [0, 1], correct: [0, 1], wrongOurs: [1, 1], wrongCompetitor: [0, 1] },
+  "a suspect answer is out of the tally");
+  assert.deepEqual(diagnosis.failureModes.wrongOurs.snapshotIds, [`s1-${id}`], "a failure mode opens on its answers");
   assert.equal(diagnosis.errors[0].stability, "stable");
   assert.equal(diagnosis.errors[0].snapshotId, `s1-${id}`);
   assert.deepEqual(diagnosis.noise, { band: 0.04, measuredAt: diagnosis.noise.measuredAt });
@@ -375,6 +378,10 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(answer.snapshot.screenshot, true);
   assert.equal(answer.snapshot.citations[0].domain, "39.net");
   assert.deepEqual(answer.siblings.map((/** @type {any} */ row) => row.engine).sort(), ["deepseek", "doubao"]);
+  const own = answer.siblings.find((/** @type {any} */ row) => row.engine === "deepseek");
+  assert.deepEqual([own.mentionsOurs, own.wrongOurs, own.citesOurs], [true, 1, null], "what the answer did for us, from its facts");
+  assert.equal(answer.snapshot.screenshotSha256, sha);
+  assert.deepEqual([answer.errors[0].claimId, answer.errors[0].evidenceQuote], [null, null], "an error row carries its claim and quote fields");
   assert.equal(answer.facts.statements[0].severity, "S3");
   assert.equal(answer.errors[0].id, `e-${id}`);
   assert.equal(answer.history[0].snapshotId, `s1-${id}`);
@@ -397,6 +404,10 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(accuracy.cell.status, "insufficient");
   assert.equal(citation.cell.status, "absent");
   assert.ok(page.overview.week.some((/** @type {any} */ item) => item.kind === "wrong_ours" && item.ref.snapshotId === `s1-${id}`));
+  assert.ok(page.overview.week.every((/** @type {any} */ item) => typeof item.at === "string" && !Number.isNaN(Date.parse(item.at))), "every 本周 line says when");
+  assert.deepEqual(mention.cell.snapshotIds, [], "the overview's mention (P2+P3) cell names its answers; this round had none in those pools");
+  assert.deepEqual(page.availableEngines, ["doubao", "deepseek", "kimi"]);
+  assert.ok(page.startedAt && Date.parse(page.startedAt) <= Date.now(), "the coverage window's start");
   const row = (await call("GET", "/api/geo/projects")).payload.data.projects.find((/** @type {any} */ entry) => entry.id === id);
   assert.deepEqual(row.alert, { wrongOurs: 1, safety: 1, text: "DeepSeek：把玛仕度肽说成每天注射一次" });
   assert.equal(row.headline.gvi.value, 31.5);

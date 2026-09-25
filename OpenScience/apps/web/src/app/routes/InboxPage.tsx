@@ -241,6 +241,8 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   if (item.source.type === "run") return `/app/runs?run=${encodeURIComponent(item.source.id)}`;
   // A memory's confirm, correct and delete controls are on its own page.
   if (item.source.type === "memory") return `/app/memory?record=${encodeURIComponent(item.source.id)}`;
+  // A 循证 GEO notice names the page it is about: `<geoId>/<tab>[/<item>]`.
+  if (item.source.type === "geo" && /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/.test(item.source.id)) return `/app/geo/${item.source.id}`;
   return null;
 }
 
