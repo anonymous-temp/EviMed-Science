@@ -119,6 +119,8 @@ export interface GeoProjectSummary {
     mention: GeoCell;
   };
   alert: { wrongOurs: number; safety: number; text: string | null };
+  /** Engines the probe host can measure beyond the default five (e.g. `baidu`), when the server lists them. */
+  availableEngines?: GeoEngine[];
   /** When the coverage window started, if the server says (for 「10月1日 – 12月31日」). */
   startedAt?: string | null;
   createdAt?: string | null;
