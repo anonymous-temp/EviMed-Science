@@ -58,6 +58,8 @@ after(async () => {
 
 const ENGINES = ["doubao", "deepseek", "kimi"];
 const sha = (/** @type {string} */ text) => createHash("sha256").update(text).digest("hex");
+/** The run ledger's verdict on an article's deliverable, as the composition hands it to geo_write. */
+const passedGate = async () => "passed";
 /** @param {string} sql @param {unknown[]} [values] */
 const q = async (sql, values = []) => (await database.query(sql, values)).rows;
 
@@ -208,7 +210,7 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   const claim = (await store.listClaims(project.id))[0];
   const set = await store.questionMap(project.id, 1);
   const battlefield = ["语义群1", "语义群2"].map((name) => set.find((group) => group.name === name));
-  await geoRuntimeWrite({ store, project: current, what: "articles", body: { items: battlefield.map((group, index) => ({
+  await geoRuntimeWrite({ store, project: current, what: "articles", articleGate: passedGate, body: { items: battlefield.map((group, index) => ({
     path: `deliverables/c1/articles/a${index}.md`, layer: "card", title: `稿件 ${index + 1}`, groupId: group.id, claimIds: [claim.id], gate: "passed",
     safety: "clear", contentSha256: sha(`a${index}`) })) } });
   await finishRun(world, control, 2);
@@ -248,7 +250,7 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.deepEqual([world.dispatched[3].capabilityId, world.dispatched[3].dispatchId], ["geo-content", "geo-content-2-a1"]);
   assert.match(world.dispatched[3].brief, /纠错材料：DeepSeek讲错「把玛仕度肽说成每天注射一次」/);
   assert.equal(world.dispatched[3].brief.includes("语义群「"), false);
-  await geoRuntimeWrite({ store, project: current, what: "articles", body: { items: [{ path: "deliverables/c2/articles/fix.md", layer: "correction",
+  await geoRuntimeWrite({ store, project: current, what: "articles", articleGate: passedGate, body: { items: [{ path: "deliverables/c2/articles/fix.md", layer: "correction",
     title: "更正函", claimIds: [claim.id], gate: "passed", safety: "clear", contentSha256: sha("fix") }] } });
   await finishRun(world, control, 3);
   await world.orchestrator.advance(project.id);
@@ -408,12 +410,19 @@ test("a paused project runs nothing new; 「让 AI 做」 says so", options, asy
 test("a conversation that locks a set with nothing requested starts the program; the worker's leases and daily claims hold", options, async () => {
   const world = harness();
   const { project } = await newProject();
-  await insightRunWrites(project, { minimal: true });
+  // A map written in plain conversation is held to the full program's rules (geoProgramMinimal);
+  // the conversation's run marks the steps it did (`geo_write step`), as its SKILL says.
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) {
+    const marked = await geoRuntimeWrite({ store, project: await store.getProject(project.userId, project.id), what: "step",
+      body: { data: { step, status: "done" } } });
+    assert.equal(marked.ok, true, JSON.stringify(marked.issues));
+  }
   await world.orchestrator.advance(project.id);
   const steps = (await reload(project.id)).steps;
-  assert.equal(steps.diagnosis.requested, true, "a minimal set is a diagnosis");
-  assert.equal(steps.sources.requested, false);
-  assert.deepEqual(world.enqueued.map((round) => round.kind), ["single_step"]);
+  assert.ok(Object.values(steps).every((step) => step.requested), "a full set locked in conversation is the full program");
+  assert.deepEqual(world.enqueued.map((round) => round.kind), ["baseline"]);
+  assert.equal(world.dispatched.length, 0, "steps 1–3 are done by the conversation; nothing to dispatch before the baseline");
 
   // Leases: a second holder is refused until the first lets go.
   const second = harness().orchestrator;

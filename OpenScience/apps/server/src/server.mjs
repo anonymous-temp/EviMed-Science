@@ -28,7 +28,7 @@ import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, autopilotEpisodeCapability, geoMetricDefinition, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -142,7 +142,8 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // service and routes, the runtime tools' gateway and the social channel. The
 // measurement, market and orchestration packages attach to the composed
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
-import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows } from "./geoStore.mjs";
+import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
+import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
@@ -1438,7 +1439,8 @@ export function createWebApiApp(overrides = {}) {
   // and `geo.exporter` (导出). Each is null until its package composes it, and
   // each route or loop that needs one reads it at the moment it is needed.
   /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
-   *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown> } | null} */
+   *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
+   *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase });
@@ -1459,6 +1461,18 @@ export function createWebApiApp(overrides = {}) {
         if (!owner) return;
         const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
         if (current?.name === GEO_DEFAULT_PROJECT_NAME) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
+      },
+      // An article's gate is the run ledger's verdict on the deliverable it
+      // was written in — the newest run of the project holding that
+      // deliverable (or the run named) — never the run's own claim.
+      articleGate: async (project, { runId, deliverableId, path: articlePath }) => {
+        const id = deliverableId ?? deliverableIdOfPath(articlePath);
+        const owner = id && agentRuns ? await store.userById(project.userId) : null;
+        if (!owner) return "unverified";
+        const runs = (await agentRuns.list(await store.requireProject(owner, project.projectId)))
+          .filter((run) => (!runId || run.id === runId) && (run.deliverables ?? []).some((/** @type {any} */ item) => item?.id === id))
+          .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
+        return geoArticleGateOf(runs[0], id);
       },
     };
   }
@@ -4292,6 +4306,8 @@ export function createWebApiApp(overrides = {}) {
           ? await researchMemory.countUserMemory(user.id)
           : { structured: 0, manual: 0 };
         let memoryIndexPurge = null;
+        /** @type {string[]} */
+        let geoScreenshots = [];
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
@@ -4300,9 +4316,11 @@ export function createWebApiApp(overrides = {}) {
             }
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
             // The account's GEO rows, whether or not the module is on today.
-            if (client) await deleteGeoUserRows(client, id);
+            if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
           },
         });
+        // The screenshots only those rows referenced, now that they are gone.
+        await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
@@ -4418,14 +4436,18 @@ export function createWebApiApp(overrides = {}) {
           // the deletion's own transaction, so the two commit together; the
           // update is also what tells the recall index (`derivedMemory.mjs`).
           if (productDatabase) await migrateProductStore(productDatabase);
+          /** @type {string[]} */
+          let geoScreenshots = [];
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
-              if (client) await deleteGeoProjectRows(client, user.id, project.id);
+              if (client) geoScreenshots = (await deleteGeoProjectRows(client, user.id, project.id)).screenshots;
             },
           });
+          // The screenshots only those rows referenced, once the deletion has committed.
+          await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
           return;

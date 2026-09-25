@@ -797,6 +797,8 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_version_invalid',
   'geo_round_not_found',
   'geo_question_not_found',
+  'geo_question_not_current',
+  'geo_question_set_invalid',
   'geo_snapshot_not_found',
   'geo_screenshot_not_found',
   'geo_article_not_found',
