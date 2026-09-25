@@ -1611,9 +1611,9 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
 
 // 「循证 GEO」 (build spec 2026-09-25): composed only when switched on with a
 // product database, visible to its audience in `/api/me`, its routes and its
-// runtime gateway dispatched, and — since its worker is another package's —
-// a `geo.worker` slot that the recurring work starts, pauses and closes with
-// the rest the moment something fills it.
+// runtime gateway dispatched, every slot filled (worker, orchestrator,
+// exporter, market), and a `geo.worker` that the recurring work starts,
+// pauses and closes with the rest whatever fills the slot.
 test("循证 GEO is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID] });
@@ -1622,7 +1622,20 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
   assert.deepEqual(Object.keys(app.geo).sort(), ["exporter", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
-  assert.equal(app.geo.worker, null, "the worker slot waits for the orchestration package");
+  // Every slot is filled: the worker with all twelve loops wired (measurement,
+  // orchestration, market), the orchestrator, the exporter and the market's
+  // user and operator hooks.
+  const status = app.geo.worker.status();
+  assert.deepEqual(status.missing, [], "every loop has its function");
+  assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
+    "verify", "reconcile", "topups"]);
+  assert.equal(typeof app.geo.orchestrator.runStep, "function");
+  assert.equal(typeof app.geo.exporter.export, "function");
+  for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
+    assert.equal(typeof app.geo.market[hook], "function", hook);
+  }
+  assert.equal(app.geo.market.configured(), false, "no marketplace URL or key: unconfigured");
+  await app.geo.worker.close();
   const me = await (await fetch(`${base}/api/me`, { headers })).json();
   assert.equal(me.data.features.geo, true);
 

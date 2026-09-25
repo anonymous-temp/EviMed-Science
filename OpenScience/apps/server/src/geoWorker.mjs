@@ -26,6 +26,13 @@
  *   day is claimed through `claimDay(loop, day)` when given (the
  *   orchestrator's marks — so a restart or a second process does not run a
  *   daily loop twice), else remembered in memory.
+ * - **Leased across processes.** A loop marked `leased` (the orchestrator's
+ *   two and every market tick) runs inside `lease(loop, work)` — a session
+ *   advisory lock per loop on a dedicated connection — so two control planes,
+ *   or a tick that outlived its interval in one of them, never run the same
+ *   tick at once: the market's money path assumes it is alone. A loop whose
+ *   lease another process holds is skipped this time (`last.held`), not
+ *   failed. The measurement ticks take their own locks (the probe's).
  * - Every loop checks `canRun` (the maintenance lease's `claimingAllowed`)
  *   before it starts, like every other worker of this control plane.
  *
@@ -45,14 +52,14 @@ export const GEO_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "parse", package: "measurement", every: 0 }),
   Object.freeze({ name: "metrics", package: "measurement", every: 0 }),
   Object.freeze({ name: "errors", package: "measurement", every: 0 }),
-  Object.freeze({ name: "orchestrator", package: "orchestrator", every: MINUTE }),
-  Object.freeze({ name: "schedules", package: "orchestrator", every: MINUTE }),
-  Object.freeze({ name: "catalogue", package: "market", daily: 5 }),
-  Object.freeze({ name: "orders", package: "market", every: 10 * MINUTE }),
-  Object.freeze({ name: "poll", package: "market", every: 10 * MINUTE }),
-  Object.freeze({ name: "verify", package: "market", every: 10 * MINUTE }),
-  Object.freeze({ name: "reconcile", package: "market", daily: 4 }),
-  Object.freeze({ name: "topups", package: "market", every: HOUR }),
+  Object.freeze({ name: "orchestrator", package: "orchestrator", every: MINUTE, leased: true }),
+  Object.freeze({ name: "schedules", package: "orchestrator", every: MINUTE, leased: true }),
+  Object.freeze({ name: "catalogue", package: "market", daily: 5, leased: true }),
+  Object.freeze({ name: "orders", package: "market", every: 10 * MINUTE, leased: true }),
+  Object.freeze({ name: "poll", package: "market", every: 10 * MINUTE, leased: true }),
+  Object.freeze({ name: "verify", package: "market", every: 10 * MINUTE, leased: true }),
+  Object.freeze({ name: "reconcile", package: "market", daily: 4, leased: true }),
+  Object.freeze({ name: "topups", package: "market", every: HOUR, leased: true }),
 ]);
 
 /** @param {unknown} error */
@@ -63,6 +70,27 @@ export function zonedDayHour(date, timeZone) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", hourCycle: "h23" }).formatToParts(date).map((part) => [part.type, part.value]));
   return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+
+/**
+ * The `geo` readiness check with what the worker says added as warnings on
+ * a green check: a loop not wired (`geo_worker_loop_missing`), one whose last
+ * run failed (`geo_worker_loop_failing`), one past its lease
+ * (`geo_worker_loop_stalled`). Loops are background work — none of them makes
+ * the module red, and the page keeps answering from what is stored.
+ * @template {Record<string, any>} T @param {T} readiness @param {{ status?: () => any } | null} worker @returns {T}
+ */
+export function withGeoWorkerWarnings(readiness, worker) {
+  if (!readiness || readiness.enabled === false || !worker?.status) return readiness;
+  const status = worker.status();
+  const added = [
+    ...(status?.missing?.length ? ["geo_worker_loop_missing"] : []),
+    ...(status?.failing?.length ? ["geo_worker_loop_failing"] : []),
+    ...(status?.stalled?.length ? ["geo_worker_loop_stalled"] : []),
+  ];
+  if (!added.length) return readiness;
+  const warnings = [...(Array.isArray(readiness.warnings) ? readiness.warnings : []), ...added];
+  return { ...readiness, warning: readiness.warning ?? warnings[0], warnings };
 }
 
 /** A small summary of what a tick returned, for the status (counts only, never rows). @param {unknown} value */
@@ -84,11 +112,12 @@ export class GeoWorker {
    * @param {{ loops: Record<string, (() => Promise<unknown>) | null | undefined>, pollMs?: number, leaseMs?: number,
    *   timeZone?: string, canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void,
    *   claimDay?: ((loop: string, day: string) => Promise<boolean>) | null,
+   *   lease?: ((loop: string, work: () => Promise<unknown>) => Promise<{ acquired: boolean, value?: unknown }>) | null,
    *   cadence?: Record<string, { every?: number, daily?: number }> }} dependencies
    *   `loops` maps a loop name of {@link GEO_WORKER_LOOPS} to the function it runs; `cadence` overrides a loop's cadence (tests).
    */
   constructor({ loops, pollMs = 5_000, leaseMs = 600_000, timeZone = "Asia/Shanghai", canRun = () => true, now = () => new Date(),
-    report = () => {}, claimDay = null, cadence = {} }) {
+    report = () => {}, claimDay = null, lease = null, cadence = {} }) {
     if (!loops || typeof loops !== "object") throw new TypeError("The GEO worker needs its loops.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 3_600_000) throw new TypeError("Invalid GEO worker poll interval.");
     if (!Number.isSafeInteger(leaseMs) || leaseMs < 1_000 || leaseMs > 86_400_000) throw new TypeError("Invalid GEO worker lease.");
@@ -103,7 +132,8 @@ export class GeoWorker {
     this.now = now;
     this.report = report;
     this.claimDay = claimDay;
-    /** @type {Array<{ name: string, package: string, every?: number, daily?: number, run: (() => Promise<unknown>) | null }>} */
+    this.lease = lease;
+    /** @type {Array<{ name: string, package: string, every?: number, daily?: number, leased?: boolean, run: (() => Promise<unknown>) | null }>} */
     this.table = GEO_WORKER_LOOPS.map((loop) => ({ ...loop, ...(cadence[loop.name] ?? {}), run: loops[loop.name] ?? null }));
     /** @type {ReturnType<typeof setInterval> | null} cleared by the maintenance pause */
     this.timer = null;
@@ -203,8 +233,7 @@ export class GeoWorker {
       }
       if (!this.canRun() || this.closed) break;
       this.lastStarted[loop.name] = at;
-      const run = loop.run;
-      started.push(this.#run(loop.name, () => run()));
+      started.push(this.#run(loop.name, this.#work(loop)));
     }
     return Promise.all(started);
   }
@@ -213,8 +242,18 @@ export class GeoWorker {
   async runNow(name) {
     const loop = this.table.find((entry) => entry.name === name);
     if (!loop?.run) return null;
-    const run = loop.run;
-    return this.#run(name, () => run());
+    return this.#run(name, this.#work(loop));
+  }
+
+  /** A loop's work, inside its lease when it is leased. @param {{ name: string, leased?: boolean, run: (() => Promise<unknown>) | null }} loop */
+  #work(loop) {
+    const run = /** @type {() => Promise<unknown>} */ (loop.run);
+    const lease = this.lease;
+    if (!loop.leased || !lease) return () => run();
+    return async () => {
+      const held = await lease(loop.name, run);
+      return held.acquired ? held.value : { held: "elsewhere" };
+    };
   }
 
   status() {
