@@ -53,7 +53,9 @@ probe host, a social crawler or a marketplace.
   `mcp__evimed__literature_search`, `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`,
   `mcp__evimed__web_search`, `mcp__evimed__web_read` (regulator pages render in the cloud browser),
   `mcp__evimed__locate_quote` to find the exact passage in a preserved source.
-- Real phrasings: `mcp__evimed__social_posts_search`. A platform with no posts is 「无信号」,
+- Real phrasings: `mcp__evimed__social_posts_search`, one platform per call (a crawl takes
+  30–120 s): ask the platforms that carry the product's patients — usually 知乎、抖音、
+  小红书 — one after another. A platform with no posts is 「无信号」,
   never zero; when the channel fails, questions are written as kind `typical`
   and the report says the phrasings were not collected.
 - Project data: `mcp__evimed__geo_read` for what the project already holds (never redo a

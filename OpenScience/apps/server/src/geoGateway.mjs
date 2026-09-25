@@ -162,14 +162,13 @@ function socialRequest(body) {
   if (!query || [...query].length > SOCIAL_MAX_QUERY_LENGTH || [...query].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
     throw gatewayError(400, "social_posts_query_invalid", `query must be text of 1 to ${SOCIAL_MAX_QUERY_LENGTH} characters.`);
   }
-  let platforms = [...GEO_SOCIAL_PLATFORMS];
-  if (body.platforms != null) {
-    if (!Array.isArray(body.platforms) || body.platforms.length === 0 || body.platforms.some((platform) => !GEO_SOCIAL_PLATFORMS.includes(platform))
-      || new Set(body.platforms).size !== body.platforms.length) {
-      throw gatewayError(400, "social_posts_platform_invalid", `platforms must be distinct values of: ${GEO_SOCIAL_PLATFORMS.join(", ")}.`);
-    }
-    platforms = body.platforms;
+  // One platform per call: the crawler serves one request at a time and one
+  // crawl takes 30–120 s (production, 2026-09-25), so more than one does not
+  // fit under the kernel's 180 s tool-call ceiling.
+  if (!Array.isArray(body.platforms) || body.platforms.length !== 1 || !GEO_SOCIAL_PLATFORMS.includes(body.platforms[0])) {
+    throw gatewayError(400, "social_posts_platform_invalid", `Name one platform per call, one of: ${GEO_SOCIAL_PLATFORMS.join(", ")}.`);
   }
+  const platforms = body.platforms;
   if (body.sort != null && !GEO_SOCIAL_SORTS.includes(body.sort)) {
     throw gatewayError(400, "social_posts_sort_invalid", `sort must be one of: ${GEO_SOCIAL_SORTS.join(", ")}.`);
   }

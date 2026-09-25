@@ -168,7 +168,7 @@ test("each project has a per-minute ceiling per operation", async (t) => {
 test("the social search needs a channel, validates its words, and answers within the channel's own time", async (t) => {
   const { geo: withoutChannel } = geoDouble(on);
   const { post: unconfigured } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo: withoutChannel }));
-  const refused = await unconfigured("social", { query: "降糖药" });
+  const refused = await unconfigured("social", { query: "降糖药", platforms: ["xhs"] });
   assert.deepEqual([refused.status, refused.body.code], [503, "social_posts_unconfigured"]);
 
   const searched = /** @type {any[]} */ ([]);
@@ -186,11 +186,12 @@ test("the social search needs a channel, validates its words, and answers within
   assert.deepEqual(searched, [{ query: "二甲双胍 饭前", platforms: ["xhs"], sort: "latest", limit: 5 }]);
   assert.equal(answer.body.data.status, "collected");
   // It reads no project data, so any conversation of an account the module is open to may ask.
-  assert.equal((await post("social", { query: "降糖药" }, "token-plain")).status, 200);
+  assert.equal((await post("social", { query: "降糖药", platforms: ["zhihu"] }, "token-plain")).status, 200);
   for (const [body, code] of [
     [{ query: "" }, "social_posts_query_invalid"], [{ query: "x".repeat(101) }, "social_posts_query_invalid"],
-    [{ query: "q", platforms: ["tiktok"] }, "social_posts_platform_invalid"], [{ query: "q", platforms: ["xhs", "xhs"] }, "social_posts_platform_invalid"],
-    [{ query: "q", sort: "random" }, "social_posts_sort_invalid"], [{ query: "q", limit: 51 }, "social_posts_limit_invalid"],
+    [{ query: "q", platforms: ["tiktok"] }, "social_posts_platform_invalid"], [{ query: "q", platforms: ["xhs", "zhihu"] }, "social_posts_platform_invalid"],
+    [{ query: "q" }, "social_posts_platform_invalid"],
+    [{ query: "q", platforms: ["xhs"], sort: "random" }, "social_posts_sort_invalid"], [{ query: "q", platforms: ["xhs"], limit: 51 }, "social_posts_limit_invalid"],
   ]) {
     const bad = await post("social", body);
     assert.deepEqual([bad.status, bad.body.code], [400, code], JSON.stringify(body));
@@ -198,6 +199,6 @@ test("the social search needs a channel, validates its words, and answers within
   // A channel that hangs is cut at its own timeout plus the gateway's margin.
   const hanging = geoDouble(on, { social: { configured: true, search: () => new Promise(() => {}) } });
   const { post: slow } = await serve(t, createGeoGatewayHandler({ ...on, geoSocialTimeoutMs: 100 }, runtimeManager, { geo: hanging.geo, budgetMs: 200 }));
-  const timedOut = await slow("social", { query: "q" });
+  const timedOut = await slow("social", { query: "q", platforms: ["xhs"] });
   assert.deepEqual([timedOut.status, timedOut.body.code], [504, "geo_gateway_timeout"]);
 });

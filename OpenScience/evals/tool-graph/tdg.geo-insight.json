@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:05d1fc03862bbc3636d206273ffb85e7cc9982e9f21a990d4f74cf85d5bfc9ad",
+  "version": "sha256:cfe469d3ce05451476267eaad3d7e5787f56c8812b394ad062609320e791b169",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -1281,7 +1281,7 @@
     {
       "name": "mcp__evimed__social_posts_search",
       "source": "mcp",
-      "description": "Collect how real people phrase a health question on six Chinese social platforms (小红书, 抖音, 知乎, 微博, B站, 视频号): excerpts with the post's link, engagement and collection time. A status other than collected means no signal (无信号), never zero.",
+      "description": "Collect how real people phrase a health question on one Chinese social platform (xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with the post's link, engagement and collection time. One platform per call — a crawl takes 30–120 s; call again for each platform you need. A status other than collected means no signal (无信号), never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1290,21 +1290,16 @@
             "minLength": 1,
             "maxLength": 100
           },
-          "platforms": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 6,
-            "items": {
-              "type": "string",
-              "enum": [
-                "xhs",
-                "douyin",
-                "zhihu",
-                "weibo",
-                "bilibili",
-                "wechat_channels"
-              ]
-            }
+          "platform": {
+            "type": "string",
+            "enum": [
+              "xhs",
+              "douyin",
+              "zhihu",
+              "weibo",
+              "bilibili",
+              "wechat_channels"
+            ]
           },
           "sort": {
             "type": "string",
@@ -1322,7 +1317,8 @@
           }
         },
         "required": [
-          "query"
+          "query",
+          "platform"
         ],
         "additionalProperties": false
       },

@@ -1057,7 +1057,7 @@ test("the GEO tools offer exactly the domain's vocabularies and the gateway's ow
   assert.equal(read.properties.filter.properties.limit.maximum, GEO_READ_MAX_ITEMS);
   assert.deepEqual(tools.geo_write.inputSchema.properties.what.enum, [...GEO_WRITE_WHATS]);
   const social = tools.social_posts_search.inputSchema;
-  assert.deepEqual(social.properties.platforms.items.enum, [...GEO_SOCIAL_PLATFORMS]);
+  assert.deepEqual(social.properties.platform.enum, [...GEO_SOCIAL_PLATFORMS]);
   assert.deepEqual(social.properties.sort.enum, [...GEO_SOCIAL_SORTS]);
   assert.equal(social.properties.limit.maximum, SOCIAL_MAX_LIMIT);
   assert.equal(social.properties.limit.default, SOCIAL_DEFAULT_LIMIT);
