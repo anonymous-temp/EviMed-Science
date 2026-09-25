@@ -79,11 +79,20 @@ async function insightFolders(workspaceDir) {
 }
 
 /**
+ * The workspace file at a path relative to the workspace, never following a
+ * link. `readFileNoFollow` takes an absolute target (a relative one resolves
+ * against the process's own directory and is refused as escaping) — which the
+ * first cut of this module passed, so production read nothing.
+ * @param {string} workspaceDir @param {string} relative
+ */
+export const readWorkspaceFile = async (workspaceDir, relative) => readFileNoFollow(workspaceDir, resolveScopedPath(workspaceDir, relative));
+
+/**
  * @param {{ store: import("./geoStore.mjs").GeoStore, report?: (code: string) => void,
  *   readFile?: (rootDir: string, file: string) => Promise<Buffer | string>,
  *   listInsightFolders?: (workspaceDir: string) => Promise<string[]> }} deps
  */
-export function createGeoDeliveryImport({ store, report = () => {}, readFile = readFileNoFollow, listInsightFolders = insightFolders }) {
+export function createGeoDeliveryImport({ store, report = () => {}, readFile = readWorkspaceFile, listInsightFolders = insightFolders }) {
   /** Runs already imported by this process; the writes are idempotent either way. */
   const seen = new Set();
   /**

@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { claimChunks, createGeoDeliveryImport } from "../src/geoDeliveryImport.mjs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { claimChunks, createGeoDeliveryImport, readWorkspaceFile } from "../src/geoDeliveryImport.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -88,5 +91,18 @@ test("claims are sent in chunks the write accepts", () => {
   for (const chunk of chunks) {
     assert.ok(chunk.length <= 200);
     assert.ok(Buffer.byteLength(JSON.stringify({ items: chunk })) < 256 * 1024);
+  }
+});
+
+test("the default reader finds a deliverable by its path in the workspace, from any working directory", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "geo-import-ws-"));
+  try {
+    await mkdir(path.join(workspace, "deliverables", "geo-insight"), { recursive: true });
+    await writeFile(path.join(workspace, "deliverables", "geo-insight", "claims.json"), JSON.stringify({ claims: [claim(1)] }));
+    const text = String(await readWorkspaceFile(workspace, "deliverables/geo-insight/claims.json"));
+    assert.equal(JSON.parse(text).claims.length, 1);
+    await assert.rejects(readWorkspaceFile(workspace, "../outside.json"), { code: "path_forbidden" });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
   }
 });
