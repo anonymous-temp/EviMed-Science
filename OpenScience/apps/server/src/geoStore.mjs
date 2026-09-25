@@ -198,7 +198,7 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
   created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
-const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups",
+const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
   "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
