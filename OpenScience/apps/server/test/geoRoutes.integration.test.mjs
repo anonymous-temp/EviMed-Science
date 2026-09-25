@@ -220,7 +220,7 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   assert.equal(evidence.product.brandName, "玛仕度肽", "the brand given at creation stays");
   assert.equal(evidence.competitors[0].brandName, "替尔泊肽");
   assert.deepEqual(evidence.claims.map((/** @type {any} */ claim) => claim.id), claims.ids);
-  assert.deepEqual(Object.keys(evidence.claims[0]).sort(), ["evidenceLevel", "id", "inLabel", "population", "quote", "sourceKind", "sourceRef",
+  assert.deepEqual(Object.keys(evidence.claims[0]).sort(), ["evidenceLevel", "id", "inLabel", "population", "quote", "sourceKind", "sourceLabel", "sourceRef",
     "statement", "status", "validUntil", "verifiedAt"]);
 
   const map = (await call("GET", `/api/geo/projects/${id}/questions`)).payload.data;

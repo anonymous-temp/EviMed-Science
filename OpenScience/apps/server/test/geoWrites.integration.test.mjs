@@ -380,3 +380,12 @@ test("journey, strategy and placement preferences are versions, and each refused
   assert.deepEqual(plan.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[1, "unknown_value"]]);
   assert.deepEqual((await store.latestPlacementPlan(project.id))?.data.avoid, ["fake-times.cn"]);
 });
+
+test("a claim keeps the reader's name for its source, from the method's sourceRefLabel", options, async () => {
+  const project = await freshProject();
+  await write(project, "claims", { items: [{ claimKey: "id", statement: "s", quote: "q", sourceRef: "web-page:e1edc04a1ac28750",
+    sourceRefLabel: "玛仕度肽注射液说明书（国家药监局 2025）", sourceKind: "label" }] });
+  const [claim] = await store.listClaims(project.id);
+  assert.equal(claim.sourceRef, "web-page:e1edc04a1ac28750");
+  assert.equal(claim.sourceLabel, "玛仕度肽注射液说明书（国家药监局 2025）");
+});
