@@ -115,6 +115,11 @@ class ToolContractTests(unittest.TestCase):
             # A paper's reference list or its citing papers, from Europe PMC's
             # citation network (2026-09-23): landmark-trial tracing.
             "reference_list",
+            # 「循证 GEO」's platform data and its social channel, through the
+            # server's gateway (`geo_platform.py`, 2026-09-25).
+            "geo_read",
+            "geo_write",
+            "social_posts_search",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

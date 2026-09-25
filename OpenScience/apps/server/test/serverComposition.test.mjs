@@ -1570,7 +1570,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   };
 
   const off = await composedApp(t);
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, geo: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);

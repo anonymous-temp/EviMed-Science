@@ -138,6 +138,15 @@ import { FrontierDaily } from "./frontierDaily.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
+// 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
+// service and routes, the runtime tools' gateway and the social channel. The
+// measurement, market and orchestration packages attach to the composed
+// `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
+import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows } from "./geoStore.mjs";
+import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
+import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
+import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
+import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
@@ -492,6 +501,7 @@ function routePattern(pathname) {
   if (pathname === "/api/files/upload") return pathname;
   if (pathname === "/api/frontier" || pathname.startsWith("/api/frontier/")) return frontierRoutePattern(pathname);
   if (pathname === "/api/review" || pathname.startsWith("/api/review/")) return reviewRoutePattern(pathname);
+  if (pathname === "/api/geo" || pathname.startsWith("/api/geo/")) return geoRoutePattern(pathname);
   if (pathname.startsWith("/api/")) return "/api/:route";
   // The internal gateways carry the runtime's entire outbound traffic —
   // every model call, every source fetch, every search, every probe. They used
@@ -511,6 +521,7 @@ function routePattern(pathname) {
     pathname === FRONTIER_GATEWAY_PATH
   ) return pathname;
   if (pathname.startsWith(REVIEW_GATEWAY_PREFIX)) return pathname.startsWith(`${REVIEW_GATEWAY_PREFIX}deliverables/`) ? `${REVIEW_GATEWAY_PREFIX}deliverables/:id` : pathname;
+  if (pathname.startsWith(`${GEO_GATEWAY_PATH}/`)) return geoGatewayRoutePattern(pathname);
   return pathname === "/" ? "/" : "/static";
 }
 
@@ -1358,6 +1369,106 @@ export function createWebApiApp(overrides = {}) {
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  /**
+   * A researcher's new project, as `POST /api/projects` makes it and as a new
+   * GEO project makes its own: a name in any language and an id the
+   * researcher never has to see (C4) — the id is a path segment under
+   * projects/, so it stays ASCII and is derived; a caller that still sends one
+   * keeps it. Counted against the account's project limit before the create.
+   * @param {any} user @param {{ id?: unknown, name?: unknown }} body
+   */
+  async function createResearcherProject(user, body) {
+    const existing = (await store.listProjects(user)).filter((project) => !isInternalProject(project.id));
+    if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
+    const id = body.id == null
+      ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
+      : safeId(assertString(body.id, "id", { max: 64 }), "project id");
+    // The learning loop's project is made by the loop; the paired
+    // evaluation still makes its own through this route.
+    // Not `isInternalProject`: the paired evaluation makes its `eval-method-*`
+    // projects through this very route.
+    if (id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID) {
+      throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
+    }
+    const name = projectDisplayName(body.name ?? id);
+    // Counted before the create, and only for a project that is new: a
+    // per-project storage quota and a per-user runtime limit bound nothing
+    // on their own, because an account at the limit can make another
+    // project and have another of each. Archived projects count: they
+    // still hold their storage.
+    if (
+      config.maxProjectsPerUser > 0 &&
+      existing.length >= config.maxProjectsPerUser &&
+      !existing.some((project) => project.id === id)
+    ) {
+      throw new HttpError(
+        409,
+        "project_limit_reached",
+        `This account already holds ${existing.length} projects, which is its limit: each has its own storage and research runtime. Export and delete one to make another.`,
+      );
+    }
+    const data = await store.createProject(user, id, name);
+    const project = await store.requireProject(user, id);
+    await audit({ config, user, project }, "project.create", "completed", { target: id });
+    return data;
+  }
+  // 「循证 GEO」 (geoService.mjs): composed only when switched on and a
+  // product database exists; otherwise its routes answer 404 `geo_not_enabled`,
+  // its tools are not offered and nothing of it runs. The other packages attach
+  // here: `geo.worker` (the leased loops, started and stopped with the rest),
+  // `geo.orchestrator` (「让 AI 做」), `geo.market` (budget, orders, top-ups)
+  // and `geo.exporter` (导出). Each is null until its package composes it, and
+  // each route or loop that needs one reads it at the moment it is needed.
+  /** @type {{ store: GeoStore, service: GeoService, social: ReturnType<typeof createSocialCrawlClient>, worker: any, orchestrator: any,
+   *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown> } | null} */
+  let geo = null;
+  if (config.geoEnabled && productDatabase) {
+    const geoStore = new GeoStore({ database: productDatabase });
+    const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
+      fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
+    geo = {
+      store: geoStore,
+      service: new GeoService({ store: geoStore, config, social }),
+      social,
+      worker: null,
+      orchestrator: null,
+      market: null,
+      exporter: null,
+      // A project made before its brand was known is named by the brand once
+      // the run writes it; a name the researcher chose is left alone.
+      renameProject: async (userId, projectId, name) => {
+        const owner = { id: userId };
+        const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
+        if (current?.name === GEO_DEFAULT_PROJECT_NAME) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
+      },
+    };
+  }
+  const geoRoutes = createGeoRoutes({
+    store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
+    audit: (event, status, details) => securityAudit(config, event, status, details),
+    projects: {
+      create: (user, name) => createResearcherProject(user, { name }),
+      // The new project's first conversation, bound to `geo-insight` before it
+      // exists: the binding is what makes the router honour the choice. A
+      // registry without the capability (a build before it shipped) leaves the
+      // conversation unbound and says so (`bound: false`).
+      bindSession: async (user, projectId) => {
+        const sessionId = randomId("geo-");
+        const agent = (await agentRegistry)?.get?.("geo-insight") ?? null;
+        if (!agent) return { sessionId, bound: false };
+        const project = await store.requireProject(user, projectId);
+        await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
+        return { sessionId, bound: true };
+      },
+      latestSessionId: async (user, projectId) => {
+        const project = await store.requireProject(user, projectId);
+        return (await researchSessions.list(project))[0]?.sessionId ?? null;
+      },
+    },
+    get orchestrator() { return geo?.orchestrator ?? null; },
+    get market() { return geo?.market ?? null; },
+    get exporter() { return geo?.exporter ?? null; },
+  });
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
   let autopilotScheduleRun = null;
@@ -2649,6 +2760,11 @@ export function createWebApiApp(overrides = {}) {
     service: frontier?.service ?? null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
+  // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
+  // runtime's own project is; off, they answer `geo_disabled` (geoGateway.mjs).
+  const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
+    geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
+  });
   // A submission's independent review: started, asked after, answered
   // (reviewGateway.mjs); off, it answers `review_disabled`.
   const reviewGatewayHandler = createReviewGatewayHandler({
@@ -2704,6 +2820,7 @@ export function createWebApiApp(overrides = {}) {
           learningWorker?.status?.().running,
           frontier?.worker.status().running,
           review?.worker.status().running,
+          geo?.worker?.status?.().running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -2954,7 +3071,9 @@ export function createWebApiApp(overrides = {}) {
                 ? frontierGatewayHandler
                 : pathname.startsWith(REVIEW_GATEWAY_PREFIX)
                   ? reviewGatewayHandler
-                  : null;
+                  : pathname.startsWith(`${GEO_GATEWAY_PATH}/`)
+                    ? geoGatewayHandler
+                    : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -3026,6 +3145,7 @@ export function createWebApiApp(overrides = {}) {
       if (await autopilotRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
+      if (await geoRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
 
       if (pathname === "/api/health") {
@@ -3044,7 +3164,7 @@ export function createWebApiApp(overrides = {}) {
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -3072,6 +3192,7 @@ export function createWebApiApp(overrides = {}) {
           edgeProxy,
           frontier,
           review,
+          geo,
         });
         return;
       }
@@ -3271,7 +3392,8 @@ export function createWebApiApp(overrides = {}) {
             operator: config.operatorUsers.includes(user.id),
             // Which optional modules this account sees. Presentation too: the
             // module's own routes answer 404 to anyone it does not.
-            features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review) },
+            features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
+              geo: Boolean(geo) && geoAudienceAllows(config, user) },
             runtime: {
               kernel: RUNTIME_KERNEL_NAME,
               // Where the kernel's own browser application is served. Empty
@@ -3986,13 +4108,14 @@ export function createWebApiApp(overrides = {}) {
         let memoryIndexPurge = null;
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
-          beforeDelete: capsuleTransferService || memoryIndexing ? async (id, client) => {
-              if (memoryIndexing) {
-                memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
-              }
-              if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
+          beforeDelete: async (id, client) => {
+            if (memoryIndexing) {
+              memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
-            : null,
+            if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
+            // The account's GEO rows, whether or not the module is on today.
+            if (client) await deleteGeoUserRows(client, id);
+          },
         });
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
@@ -4026,41 +4149,7 @@ export function createWebApiApp(overrides = {}) {
         const body = assertObject(await readJson(req, config.maxJsonBytes), "project");
         const unknown = Object.keys(body).filter((field) => field !== "id" && field !== "name");
         if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
-        // A name in any language, and an id the researcher never has to see
-        // (C4): the id is a path segment under projects/, so it stays ASCII
-        // and is derived; a caller that still sends one keeps it.
-        const existing = (await store.listProjects(user)).filter((project) => !isInternalProject(project.id));
-        if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
-        const id = body.id == null
-          ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
-          : safeId(assertString(body.id, "id", { max: 64 }), "project id");
-        // The learning loop's project is made by the loop; the paired
-        // evaluation still makes its own through this route.
-        // Not `isInternalProject`: the paired evaluation makes its `eval-method-*`
-        // projects through this very route.
-        if (id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID) {
-          throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
-        }
-        const name = projectDisplayName(body.name ?? id);
-        // Counted before the create, and only for a project that is new: a
-        // per-project storage quota and a per-user runtime limit bound nothing
-        // on their own, because an account at the limit can make another
-        // project and have another of each. Archived projects count: they
-        // still hold their storage.
-        if (
-          config.maxProjectsPerUser > 0 &&
-          existing.length >= config.maxProjectsPerUser &&
-          !existing.some((project) => project.id === id)
-        ) {
-          throw new HttpError(
-            409,
-            "project_limit_reached",
-            `This account already holds ${existing.length} projects, which is its limit: each has its own storage and research runtime. Export and delete one to make another.`,
-          );
-        }
-        const data = await store.createProject(user, id, name);
-        const project = await store.requireProject(user, id);
-        await audit({ config, user, project }, "project.create", "completed", { target: id });
+        const data = await createResearcherProject(user, body);
         sendJson(res, 200, { data: { ...data, runCount: 0, lastActivityAt: null } });
         return;
       }
@@ -4146,6 +4235,9 @@ export function createWebApiApp(overrides = {}) {
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
+              // A GEO project's rows go with it, whether or not the module is
+              // on today (its money rows stay; geoStore.mjs).
+              if (client) await deleteGeoProjectRows(client, user.id, project.id);
             },
           });
           taskManager.purgeProject(project);
@@ -4693,7 +4785,8 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+      geo?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -4728,6 +4821,7 @@ export function createWebApiApp(overrides = {}) {
       im.worker?.start();
       frontier?.worker.start();
       review?.worker.start();
+      geo?.worker?.start?.();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -4816,6 +4910,9 @@ export function createWebApiApp(overrides = {}) {
     review,
     reviewService: review?.service ?? null,
     reviewWorker: review?.worker ?? null,
+    // 「循证 GEO」: null when the module is off or there is no product database.
+    geo,
+    geoService: geo?.service ?? null,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -4837,6 +4934,12 @@ export function createWebApiApp(overrides = {}) {
       if (frontier) {
         await frontier.service.ready().catch((error) => {
           process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
+        });
+      }
+      // The same for 循证 GEO: a failed migration turns `geo` red.
+      if (geo) {
+        await geo.service.ready().catch((error) => {
+          process.stderr.write(`geo migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "geo_migration_failed"}\n`);
         });
       }
       // The same for the reviewer: a failed migration turns `review` red.
@@ -4877,6 +4980,7 @@ export function createWebApiApp(overrides = {}) {
       await im.worker?.close();
       await frontier?.worker.close();
       await review?.worker.close();
+      await geo?.worker?.close?.();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
@@ -5669,8 +5773,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -5896,6 +6000,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // contract (frontierService.mjs `frontierMetricFamilies`).
   const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
   for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
+  const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
+  for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
@@ -6009,7 +6116,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -6046,6 +6153,8 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),
+    // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
+    geo: await readinessCheck(async () => geoReadiness({ config, geo, database: productDatabase })),
   };
   checks.saasProfile = await readinessCheck(() => readinessSaasProfile(config, checks));
   return {

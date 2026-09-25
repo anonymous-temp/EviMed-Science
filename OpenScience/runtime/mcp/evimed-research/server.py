@@ -37,6 +37,7 @@ import geo_probe
 import web_search
 import kb_search
 import frontier_search
+import geo_platform
 
 
 SERVER_NAME = "evimed-research"
@@ -857,6 +858,10 @@ TOOL_DEFINITIONS.extend(kb_search.tool_definitions())
 # The feed of recent medical developments (「前沿动态」, 2026-09-22): leads a
 # model may look up when a question is about what is new, never evidence.
 TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
+# 「循证 GEO」's platform data and social channel (2026-09-25): offered only where
+# the module is on and open to the account (EVIMED_GEO_GATEWAY_URL), and used by
+# the GEO capabilities' runs.
+TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -932,7 +937,11 @@ def disabled_tools():
 # frontier_search: 「前沿动态」 is a module a deployment may not run at all
 # (`OPEN_SCIENCE_FRONTIER_ENABLED`, off by default), and its results were only
 # ever leads; without it every question is still answered (2026-09-22).
-OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search"})
+# geo_read, geo_write, social_posts_search: 「循证 GEO」 is a module a deployment
+# may not run at all (`OPEN_SCIENCE_GEO_ENABLED`, off by default), and the
+# social channel is a separate host a deployment may not have; every research
+# question is answered without them (2026-09-25).
+OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search"})
 
 
 def list_tools():
@@ -1911,6 +1920,29 @@ def _dispatch(name, arguments):
             else:
                 stop_reason, next_action = "unsupported", (
                     "Answer without the feed: use the literature, guideline and regulatory tools, or settled knowledge."
+                )
+            return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name in ("geo_read", "geo_write", "social_posts_search"):
+        try:
+            if name == "geo_read":
+                result = geo_platform.read(arguments)
+            elif name == "geo_write":
+                result = geo_platform.write(arguments)
+            else:
+                result = geo_platform.social_search(arguments)
+        except geo_platform.GeoPlatformError as error:
+            # Three different next steps: a malformed call is the run's to fix,
+            # an outage may pass, and a module this conversation does not have
+            # is simply not there -- the work goes on without it.
+            if error.code.endswith("_invalid"):
+                stop_reason, next_action = "invalid_input", "Correct the named field and call again."
+            elif error.retryable:
+                stop_reason, next_action = "retry", "Retry once, then go on and say what could not be read or written."
+            else:
+                stop_reason, next_action = "unsupported", (
+                    "Go on without the platform's GEO data and say so; never invent a measured number or a real phrasing."
                 )
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())

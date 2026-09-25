@@ -15,6 +15,7 @@
 import { MCP_TOOL_PREFIX, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
 import { contractKindLabel } from './contractKinds.mjs'
 import { frontierLabel } from './frontierVocabulary.mjs'
+import { GEO_READ_WHAT_LABELS_ZH, GEO_WRITE_WHAT_LABELS_ZH } from './geoVocabulary.mjs'
 
 /** @param {unknown} value @param {number} [max] @returns {string} */
 function excerpt(value, max = 40) {
@@ -70,7 +71,17 @@ const MCP_NARRATION = Object.freeze({
   peer_review: (args) => jobPhrase('论文审稿', args),
   drug_safety_analysis: (args) => jobPhrase('药物安全分析', args),
   frontier_search: (args, result) => withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result),
+  // 「循证 GEO」's platform tools: what was read or written, in the page's words.
+  geo_read: (args) => `读取 GEO 项目：${geoWhat(GEO_READ_WHAT_LABELS_ZH, args?.what)}`,
+  geo_write: (args) => `写入 GEO 项目：${geoWhat(GEO_WRITE_WHAT_LABELS_ZH, args?.what)}`,
+  social_posts_search: (args, result) => withCount(`采集社媒真实问法：「${excerpt(args?.query)}」`, result?.data?.posts ?? null),
 })
+
+/** A GEO read or write's subject, or 「数据」 for a word this build does not know.
+ *  @param {Readonly<Record<string, string>>} labels @param {unknown} what @returns {string} */
+function geoWhat(labels, what) {
+  return typeof what === 'string' && Object.hasOwn(labels, what) ? labels[what] : '数据'
+}
 
 /** How a feed lookup's window reads. */
 const FRONTIER_WINDOW_WORDS = Object.freeze({ '24h': '近 24 小时', '3d': '近 3 天', '7d': '近 7 天', '30d': '近 30 天' })

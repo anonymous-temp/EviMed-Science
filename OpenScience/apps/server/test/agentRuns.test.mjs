@@ -4676,9 +4676,12 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     "../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs",
     "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/webReadExtract.mjs", "../src/agentbay/browser.mjs",
     "../src/kbSearchGateway.mjs", "../src/frontierGateway.mjs",
+    // 循证 GEO's gateway, the write module it hands writes to, and the social
+    // channel behind `social_posts_search` (2026-09-25).
+    "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
   ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search|frontier)_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search|frontier|geo|social_posts)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 
