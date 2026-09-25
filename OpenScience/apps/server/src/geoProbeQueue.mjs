@@ -809,7 +809,7 @@ async function inclusionPass(deps, state, engines, counts) {
         brands: result.hit ? [{ name, ours: true, competitor: false, position: null, inRecommendation: false, count: 1 }] : [],
         mentionsOurs: result.hit, brandsMentioned: result.hit ? 1 : 0, parserVersion: "inclusion-1", judgedAt: null,
         failureMode: result.hit ? null : "omitted",
-      });
+      }, { at });
       await store.finishJob(job.id, { now: at, status: "done", snapshotId });
       counts.inclusion.done += 1;
       continue;
