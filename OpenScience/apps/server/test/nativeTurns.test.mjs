@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { AgentRunStore } from "../src/agentRuns.mjs";
+import { AgentRunStore, nativeTurnStartedDelivery } from "../src/agentRuns.mjs";
 import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
@@ -226,6 +226,18 @@ test("a conversation-window follow-up the classifier routed to a capability, ans
   assert.equal(run.status, "succeeded");
   assert.equal(run.errorCode ?? null, null);
   assert.deepEqual(run.artifacts, []);
+});
+
+test("a plan that names no deliverable has not started a delivery", () => {
+  // 2026-09-25: a follow-up in a GEO content conversation re-registered the
+  // targets and the rivals, wrote an empty plan on the way, and was recorded as
+  // a failed geo-content delivery (specialist_required_output_stale).
+  const plan = (/** @type {any[]} */ items) => ({ revision: 1, written: true, items, start: 1, end: 2, callId: "c", messageId: "seq_1" });
+  assert.equal(nativeTurnStartedDelivery({ nativeWorkflow: { plan: plan([]), delegates: [], submissions: [] } }), false);
+  assert.equal(nativeTurnStartedDelivery({ nativeWorkflow: { plan: plan([{ id: "geo-content-b6", contractKind: "geo-content", capability: "geo-content" }]),
+    delegates: [], submissions: [] } }), true);
+  assert.equal(nativeTurnStartedDelivery({ nativeWorkflow: { plan: null, delegates: ["d"], submissions: [] } }), true);
+  assert.equal(nativeTurnStartedDelivery({ nativeWorkflow: null }), false);
 });
 
 test("an unknown ordinary dispatch cannot consume an unrelated native answer", async (t) => {
