@@ -9,8 +9,10 @@ import {
   clearStop,
   confirmTopup,
   getDistribution,
+  markOrderLost,
   marketStatus,
   noteCitation,
+  projectIdentityBreaks,
   projectMoney,
   resolveUnknownOrder,
   setBudget,
@@ -119,7 +121,7 @@ export function standardCatalogue() {
  * @param {() => Promise<MarketFixture>} makeFixture
  * @param {{ catalogue?: any, balance?: number, sendTimeoutMs?: number, configured?: boolean, config?: Record<string, any> }} [options]
  */
-async function world(makeFixture, { catalogue = standardCatalogue(), balance = 1_000, sendTimeoutMs = 2_000, configured = true, config = {} } = {}) {
+export async function world(makeFixture, { catalogue = standardCatalogue(), balance = 1_000, sendTimeoutMs = 2_000, configured = true, config = {} } = {}) {
   const fixture = await makeFixture();
   const fake = await startFakeMediaMarket({ catalogue, balance });
   const clock = testClock();
@@ -143,7 +145,8 @@ async function world(makeFixture, { catalogue = standardCatalogue(), balance = 1
     market,
     webReader: reader,
     now: clock.now,
-    config,
+    // The module on for everyone: the audience rule is its own scenario.
+    config: { geoEnabled: true, geoAudience: "all", ...config },
     articleBody: async (/** @type {any} */ article) => ({ markdown: bodies.get(article.id) }),
     notify: async (/** @type {any} */ event) => { notices.push(event); },
     alertOperator: async (/** @type {any} */ event) => { alerts.push(event); },
@@ -182,12 +185,12 @@ async function world(makeFixture, { catalogue = standardCatalogue(), balance = 1
 }
 
 /** @param {any} store @param {string} geoProjectId */
-async function orders(store, geoProjectId) {
+export async function orders(store, geoProjectId) {
   return store.listOrders({ geoProjectId, limit: 500 });
 }
 
 /** @param {any} store @param {string} geoProjectId */
-async function moneyOf(store, geoProjectId) {
+export async function moneyOf(store, geoProjectId) {
   const project = await store.getProject({ geoProjectId });
   return projectMoney(project, await store.ledgerSums({ geoProjectId }));
 }
@@ -615,7 +618,7 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal(uncapped.note, "balance_cap_unset");
       assert.equal((await store.listTopups({ limit: 10 })).length, 0);
 
-      const capped = { ...w.deps, config: { mediaMarketBalanceCapCny: 5_000 } };
+      const capped = { ...w.deps, config: { ...w.deps.config, mediaMarketBalanceCapCny: 5_000 } };
       const requested = await tickTopups(capped);
       assert.equal(requested.requested, 1);
       const [topup] = await store.listTopups({ limit: 10 });
@@ -633,6 +636,345 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       w.clock.advance(DAY);
       assert.equal((await tickReconcile(capped)).status, "ok", "a confirmed top-up is part of the expected balance");
       assert.equal((await tickOrders(capped)).submitted, 1, "the waiting order goes once the money is there");
+    } finally { await w.close(); }
+  });
+}
+
+/**
+ * A store that lets a test run something right after one of its writes, as
+ * a second writer would. `after(method, args, result)` runs once per call.
+ * @param {any} store @param {(method: string, args: any[], result: any) => Promise<void>} after
+ */
+export function interceptingStore(store, after) {
+  return new Proxy(store, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target);
+      if (typeof value !== "function") return value;
+      return async (/** @type {any[]} */ ...args) => {
+        const result = await value.apply(target, args);
+        await after(String(key), args, result);
+        return result;
+      };
+    },
+  });
+}
+
+/** Whether a store write moved an order into `reserved` (either write the market may use). @param {string} method @param {any[]} args */
+const reservedBy = (method, args) => method === "reserveForSend" || (method === "transitionOrder" && args[1]?.to === "reserved");
+
+/** A planned order built with the store's own writes. @param {any} store @param {{ userId: string, geoProjectId: string, articleId: string }} key @param {string} at */
+async function plannedOrder(store, { userId, geoProjectId, articleId }, at) {
+  const [order] = await store.insertOrders([{ userId, geoProjectId, articleId, mediaType: "website", resourceId: "101", priceCny: 100, reserveCny: 110 }], at);
+  return order;
+}
+
+/**
+ * The money path under concurrency and failure (the review of 2026-09-25):
+ * each scenario failed before its fix.
+ * @param {(name: string, options: any, fn: () => Promise<void>) => any} test
+ * @param {() => Promise<MarketFixture>} makeFixture
+ * @param {any} [options]
+ */
+export function defineGeoMarketMoneyPathScenarios(test, makeFixture, options = {}) {
+  test("race: a cancel landing right after the reserve never leaves a sent order cancelled", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      /** @type {any} */
+      let raced = null;
+      const racing = interceptingStore(store, async (method, args, result) => {
+        if (!raced && result && reservedBy(method, args)) {
+          raced = await cancelOrder({ ...w.deps, store }, { userId: p.userId, geoProjectId: p.id, orderId: args[0] }).catch((error) => error);
+        }
+      });
+      await tickOrders({ ...w.deps, store: racing });
+      assert.ok(raced, "the cancel raced the send");
+      const [order] = await orders(store, p.id);
+      const sends = w.fake.requestsTo("/api/media/send").length;
+      if (order.state === "cancelled") assert.equal(sends, 0, "a cancelled order was sent to the vendor");
+      else {
+        assert.equal(raced.code, "geo_order_in_flight");
+        assert.equal(order.state, "submitted");
+      }
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+    } finally { await w.close(); }
+  });
+
+  test("race: a send in flight is not declared unknown before its timeout and margin have passed", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: null });
+      const at = w.clock.now().toISOString();
+      const order = await plannedOrder(store, { userId: p.userId, geoProjectId: p.id, articleId: p.articleIds[0] }, at);
+      await store.transitionOrder(order.id, { from: ["planned"], to: "reserved", at,
+        ledger: [{ kind: "reserve", amountCny: 110, userId: p.userId, geoProjectId: p.id }] });
+      await store.annotateOrder(order.id, { at, detail: { phase: "send_started" } });
+      w.clock.advance(1_000);
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "reserved", "another process may still be waiting for the vendor");
+      w.clock.advance(10 * 60_000);
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "unknown");
+    } finally { await w.close(); }
+  });
+
+  test("race: the vendor's order number is kept when the order moved while it was being sent", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const market = w.market;
+      const racingMarket = new Proxy(market, {
+        get(target, key) {
+          if (key === "send") {
+            return async (/** @type {any[]} */ ...args) => {
+              const answer = await target.send(...args);
+              const [order] = await orders(store, p.id);
+              await store.transitionOrder(order.id, { from: ["reserved"], to: "unknown", at: w.clock.now().toISOString(), detail: { reason: "send_interrupted" } });
+              return answer;
+            };
+          }
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await tickOrders({ ...w.deps, market: racingMarket });
+      const nid = [...w.fake.state.orders.values()][0].order_nid;
+      const [order] = await orders(store, p.id);
+      const events = await store.listOrderEvents(order.id, 500);
+      assert.ok(events.some((event) => event.detail?.vendorOrderNid === nid), "the order number is in the order's history");
+      assert.equal(order.vendorOrderNid, nid);
+      assert.equal(order.state, "submitted", "a late answer settles the unknown");
+      assert.ok(w.alerts.some((alert) => alert.type === "order_late_send_result" && alert.orderId === order.id));
+    } finally { await w.close(); }
+  });
+
+  test("撤单: a plan the user cancelled is not placed again on the same outlet", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      await tickOrders(w.deps);
+      const [first] = await orders(store, p.id);
+      assert.equal(first.state, "planned");
+      assert.equal((await cancelOrder(w.deps, { userId: p.userId, geoProjectId: p.id, orderId: first.id })).state, "cancelled");
+      await tickOrders(w.deps);
+      const again = (await orders(store, p.id)).filter((order) => order.id !== first.id);
+      assert.equal(again.length, 1);
+      assert.notEqual(again[0].resourceId, first.resourceId, "the outlet the user cancelled is not chosen again");
+    } finally { await w.close(); }
+  });
+
+  test("failure: one order's reserve failing neither aborts the tick nor strands money", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ articles: [{}, {}] });
+      let failed = false;
+      const flaky = new Proxy(store, {
+        get(target, key) {
+          const value = Reflect.get(target, key, target);
+          if (typeof value !== "function") return value;
+          return async (/** @type {any[]} */ ...args) => {
+            if (!failed && reservedBy(String(key), args)) { failed = true; throw new Error("connection terminated unexpectedly"); }
+            return value.apply(target, args);
+          };
+        },
+      });
+      const tick = await tickOrders({ ...w.deps, store: flaky });
+      assert.ok(failed);
+      assert.equal(tick.submitted, 1, "the other order went");
+      const states = (await orders(store, p.id)).map((order) => order.state).sort();
+      assert.deepEqual(states, ["planned", "submitted"]);
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
+    } finally { await w.close(); }
+  });
+
+  test("failure: a reserve that never reached a send is released after ten minutes", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const at = w.clock.now().toISOString();
+      const order = await plannedOrder(store, { userId: p.userId, geoProjectId: p.id, articleId: p.articleIds[0] }, at);
+      await store.transitionOrder(order.id, { from: ["planned"], to: "reserved", at,
+        ledger: [{ kind: "reserve", amountCny: 110, userId: p.userId, geoProjectId: p.id }] });
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "reserved");
+      w.clock.advance(11 * 60_000);
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "planned");
+      assert.equal((await moneyOf(store, p.id)).reservedCny, 0);
+    } finally { await w.close(); }
+  });
+
+  test("refunds and top-ups: a paid top-up is not taken for a refund", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      await tickOrders(w.deps);
+      const [order] = await orders(store, p.id);
+      w.fake.setOrder(order.vendorOrderNid, { status: 4 });
+      w.fake.refund(order.vendorOrderNid, { moveMoney: false });
+      const topup = await store.insertTopup({ amountCny: 150, balanceBefore: w.fake.state.balance.money, at: w.clock.now().toISOString() });
+      w.fake.adjustBalance(150);
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "rejected", "the balance moved by the top-up, not by the refund");
+      assert.equal((await store.getTopup(topup.id)).status, "confirmed", "top-ups are settled before refunds");
+      w.fake.adjustBalance(100);
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "refunded");
+      assert.equal((await tickReconcile(w.deps)).status, "ok");
+    } finally { await w.close(); }
+  });
+
+  test("refunds and top-ups: a refund is not taken for a paid top-up", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      await tickOrders(w.deps);
+      const [order] = await orders(store, p.id);
+      w.fake.setOrder(order.vendorOrderNid, { status: 4 });
+      await tickPoll(w.deps);
+      const topup = await store.insertTopup({ amountCny: 80, balanceBefore: w.fake.state.balance.money, at: w.clock.now().toISOString() });
+      w.fake.refund(order.vendorOrderNid);
+      w.clock.advance(60_000);
+      await tickTopups({ ...w.deps, config: { ...w.deps.config, mediaMarketBalanceCapCny: 5_000 } });
+      assert.equal((await store.getTopup(topup.id)).status, "requested", "the money is the refund's");
+      await tickPoll(w.deps);
+      assert.equal((await store.getOrder(order.id)).state, "refunded");
+      assert.equal((await store.getTopup(topup.id)).status, "requested");
+    } finally { await w.close(); }
+  });
+
+  test("send: a failure after the vendor answered is unknown and never resent", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      w.fake.state.sendQueue = ["http429"];
+      await tickOrders(w.deps);
+      await tickOrders(w.deps);
+      const [order] = await orders(store, p.id);
+      assert.equal(order.state, "unknown");
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 1);
+      assert.equal(w.fake.state.orders.size, 1, "no second order at the vendor");
+    } finally { await w.close(); }
+  });
+
+  test("send: a request the client refuses to send cancels the plan instead of looping", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const big = `# 太大的稿件\n\n${"司美格鲁肽每周注射一次。".repeat(60_000)}`;
+      const p = await w.project({ articles: [{ markdown: big }] });
+      await tickOrders(w.deps);
+      await tickOrders(w.deps);
+      const mine = await orders(store, p.id);
+      assert.ok(mine.every((order) => order.state === "cancelled"), mine.map((order) => order.state).join());
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0);
+      assert.equal((await moneyOf(store, p.id)).reservedCny, 0);
+    } finally { await w.close(); }
+  });
+
+  test("audience: no order is placed for an account the module is no longer open to", options, async () => {
+    const w = await world(makeFixture, { config: { geoAudience: "operators", operatorUsers: ["someone-else"], geoPreviewUsers: [] } });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.planned, 0);
+      assert.equal(tick.skipped.audience_not_allowed, 1);
+      assert.equal((await orders(store, p.id)).length, 0);
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0);
+    } finally { await w.close(); }
+  });
+
+  test("concurrency: two ticks at once plan an article once", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      await Promise.all([tickOrders(w.deps), tickOrders(w.deps)]);
+      assert.equal((await orders(store, p.id)).length, 1);
+    } finally { await w.close(); }
+  });
+
+  test("concurrency: an article holds one live order at most (the store refuses a second)", options, async () => {
+    const w = await world(makeFixture, { configured: false });
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: null });
+      const at = w.clock.now().toISOString();
+      await plannedOrder(store, { userId: p.userId, geoProjectId: p.id, articleId: p.articleIds[0] }, at);
+      await assert.rejects(plannedOrder(store, { userId: p.userId, geoProjectId: p.id, articleId: p.articleIds[0] }, at), { code: "geo_order_article_live" });
+    } finally { await w.close(); }
+  });
+
+  test("budget: a budget lowered while an order is being placed is honoured at the reserve", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      const body = w.deps.articleBody;
+      let lowered = false;
+      const deps = {
+        ...w.deps,
+        articleBody: async (/** @type {any} */ article, /** @type {any} */ project) => {
+          if (!lowered) { lowered = true; await setBudget(w.deps, { userId: p.userId, geoProjectId: p.id, totalCny: 50, dailyCny: 50 }); }
+          return body(article, project);
+        },
+      };
+      await tickOrders(deps);
+      assert.ok(lowered);
+      const [order] = await orders(store, p.id);
+      assert.notEqual(order.state, "submitted");
+      assert.equal(w.fake.requestsTo("/api/media/send").length, 0);
+      assert.equal((await moneyOf(store, p.id)).reservedCny, 0);
+    } finally { await w.close(); }
+  });
+
+  test("budget: the daily cap nets out a reserve released the same day", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project({ totalCny: 1_000, dailyCny: 150, articles: [{}, {}] });
+      w.fake.state.sendQueue = ["refuse"];
+      const tick = await tickOrders(w.deps);
+      assert.equal(tick.refused, 1);
+      assert.equal(tick.submitted, 1, "the refused order's reserve came back the same day");
+      const states = (await orders(store, p.id)).map((order) => order.state).sort();
+      assert.deepEqual(states, ["cancelled", "submitted"]);
+    } finally { await w.close(); }
+  });
+
+  test("write-off: an order priced above its reserve is written off at its price", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const p = await w.project();
+      await tickOrders(w.deps);
+      let [order] = await orders(store, p.id);
+      const url = "https://www.jksb.com.cn/p/over.html";
+      w.fake.setOrder(order.vendorOrderNid, { status: 2, order_url: url, price: "150.00" });
+      w.reader.pages.set(url, { html: publishedHtml(ARTICLE_MARKDOWN) });
+      await tickPoll(w.deps);
+      w.clock.advance(HOUR + 1);
+      await tickVerify(w.deps);
+      order = await store.getOrder(order.id);
+      assert.equal(order.state, "problem", "never paid above the reserve automatically");
+      const lost = await markOrderLost(w.deps, { orderId: order.id, operatorId: "op", reason: "vendor charged 150" });
+      assert.equal(lost.state, "lost");
+      assert.equal((await store.getOrder(order.id)).settledCny, 150);
+      const money = await moneyOf(store, p.id);
+      assert.equal(money.spentCny, 150);
+      assert.equal(money.reservedCny, 0);
+      assert.equal(money.availableCny, 850);
+      assert.deepEqual(projectIdentityBreaks(await orders(store, p.id), await store.ledgerSums({ geoProjectId: p.id })), []);
     } finally { await w.close(); }
   });
 }

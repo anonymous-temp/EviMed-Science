@@ -65,6 +65,16 @@ export const GEO_TABLES = Object.freeze([
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations",
 ]);
 
+/**
+ * The order states in which an article is placed or being placed: at most one
+ * order per article may be in one of them (`geo_orders_live_article_key`), so
+ * two planners racing cannot both place it. `problem` is not among them — an
+ * order reaches it from a rejection or a cancel too, after the article may
+ * already have been placed elsewhere — and the market's own rule (no new
+ * placement while an order is in `problem`) covers it.
+ */
+export const GEO_ORDER_ARTICLE_LIVE_STATES = Object.freeze(["planned", "reserved", "submitted", "accepted", "published", "verified", "settled", "unknown"]);
+
 const migrations = new WeakMap();
 
 /** `IN (...)` over a closed vocabulary, refusing any member that is not a plain word. @param {readonly string[]} words */
@@ -469,6 +479,8 @@ CREATE TABLE IF NOT EXISTS evimed_geo.orders (
 CREATE INDEX IF NOT EXISTS geo_orders_project_idx ON evimed_geo.orders (geo_project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS geo_orders_state_idx ON evimed_geo.orders (state);
 CREATE INDEX IF NOT EXISTS geo_orders_outlet_idx ON evimed_geo.orders (media_type, resource_id);
+CREATE UNIQUE INDEX IF NOT EXISTS geo_orders_live_article_key ON evimed_geo.orders (article_id)
+  WHERE article_id IS NOT NULL AND state IN ${inList(GEO_ORDER_ARTICLE_LIVE_STATES)};
 
 CREATE TABLE IF NOT EXISTS evimed_geo.order_events (
   id         text PRIMARY KEY,

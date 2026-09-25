@@ -1,6 +1,10 @@
 import { HttpError } from "./security.mjs";
-import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES } from "./mediaMarketClient.mjs";
+import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
+import { dailyReserved, projectMoney } from "./geoMarketStore.mjs";
+import { geoAudienceAllows } from "./geoService.mjs";
+
+export { projectMoney };
 
 /**
  * 「循证 GEO」 distribution: the media marketplace loop (build spec §5, §7).
@@ -47,6 +51,23 @@ import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtm
  * - No idempotency key and no order listing: a send whose outcome is unknown
  *   leaves the order `unknown` for an operator, and blocks that outlet (for
  *   every project — it is one account) until resolved. It is never resent.
+ *   Any failure once an answer exists is unknown; only the vendor's own
+ *   refusal, a connection that never opened, or a request this client would
+ *   not build is "not created".
+ * - The reserve and the send's start are one write (`reserveForSend`),
+ *   checked against the budget and the day's cap inside it: a cancel or a
+ *   second placer meets a planned order or one in flight, never a reserve it
+ *   could still move, and nothing can fail between holding money and marking
+ *   the send. An in-flight send is declared unknown only after the client's
+ *   send deadline plus a margin; if the vendor's answer comes back to an order
+ *   that moved meanwhile, its order number is written into the history first.
+ * - Placing runs under the project's lock (a second tick skips the project),
+ *   only for owners the module is still open to, and an article holds one
+ *   live order at most — the database refuses a second.
+ * - Money that may have arrived (requested top-ups, refunds) is taken as
+ *   arrived only when the balance cannot be explained without it
+ *   (`certainArrivals`): a paid top-up is never mistaken for a refund, nor a
+ *   refund for a top-up. Top-ups are confirmed first.
  * - An outlet admitted once is re-checked at send time: articles get withdrawn
  *   or a safety finding opens, outlets change price or get blacklisted.
  * - The blacklist rules and remark flags below are closed patterns over the
@@ -84,6 +105,18 @@ export const MARKET_RULES = Object.freeze({
   epsilonCny: 0.01,
   pageReadTimeoutMs: 60_000,
   categoryCacheMs: 24 * 3_600_000,
+  // A send marked started is only declared `unknown` once the client's own
+  // send deadline has passed by this much: another process may still be
+  // waiting for the vendor's answer.
+  sendRecoveryMarginMs: 120_000,
+  // A reserve that never reached a send (the process died between them in an
+  // older build) is released after this long.
+  stalledReserveMs: 10 * 60_000,
+  // Pending arrivals (requested top-ups, refunds) explained exactly by
+  // enumeration up to this many; beyond it only "everything arrived" counts.
+  arrivalsExactMax: 16,
+  // The largest body the client will send (mediaMarketClient MAX_CONTENT_BYTES).
+  contentMaxBytes: 512 * 1024,
 });
 
 /** The vendor's order status → our state. A status not here is never guessed. */
@@ -112,13 +145,15 @@ export const ORDER_TRANSITIONS = Object.freeze({
 });
 
 /**
- * A plan withdrawn before anything was reserved for it (its outlet or its
- * article stopped qualifying, or the user dropped it): no attempt was made,
- * so it neither counts against the article nor excludes its outlet.
+ * A plan the platform withdrew before anything was reserved for it (its
+ * outlet or its article stopped qualifying): no attempt was made, so it
+ * neither counts against the article nor excludes its outlet. A plan the user
+ * cancelled (撤单) is an attempt: that outlet is not chosen for the article
+ * again — to stop the article, the user withdraws it (撤回).
  * @param {any} order
  */
 function neverAttempted(order) {
-  return order.state === "cancelled" && !order.vendorOrderNid && !order.bodySha256;
+  return order.state === "cancelled" && !order.vendorOrderNid && !order.bodySha256 && String(order.stateReason ?? "").startsWith("plan_withdrawn:");
 }
 
 /** Orders that still stand for their article (a new placement waits for them). */
@@ -238,7 +273,10 @@ const DAY = 24 * HOUR;
  *   the article's reviewed body (the file behind `articles.path`)
  * @property {(event: Record<string, any>) => Promise<unknown> | unknown} [notify] a user-facing notice (the safety kind)
  * @property {(event: Record<string, any>) => Promise<unknown> | unknown} [alertOperator] an operator alert (money, balance, unknown orders)
- * @property {Record<string, any>} [config] `mediaMarketBalanceCapCny`
+ * @property {Record<string, any>} [config] the server's config: `geoEnabled`, `geoAudience`, `operatorUsers`,
+ *   `geoPreviewUsers` (who may still be placed for) and `mediaMarketBalanceCapCny`
+ * @property {(userId: string) => Promise<{ id: string } | null> | { id: string } | null} [userById] the account record;
+ *   null = the owner is gone and nothing more is placed for the project
  * @property {() => Date} [now]
  * @property {string} [timeZone] default Asia/Shanghai
  */
@@ -253,6 +291,7 @@ function context(deps) {
     configured: deps.market?.configured === true,
     webReader: deps.webReader ?? null,
     articleBody: deps.articleBody ?? null,
+    userById: deps.userById ?? null,
     notify: deps.notify ?? null,
     alertOperator: deps.alertOperator ?? null,
     config: deps.config ?? {},
@@ -486,34 +525,8 @@ export function drugTerms(project) {
 }
 
 // ------------------------------------------------------------ money view
-
-/**
- * A project's money from its ledger sums.
- * @param {any} project @param {Array<{ orderId: string | null, kind: string, amountCny: number }>} sums
- */
-export function projectMoney(project, sums) {
-  let reserve = 0;
-  let release = 0;
-  let settle = 0;
-  let refund = 0;
-  for (const row of sums) {
-    if (row.kind === "reserve") reserve += row.amountCny;
-    else if (row.kind === "release") release += row.amountCny;
-    else if (row.kind === "settle") settle += row.amountCny;
-    else if (row.kind === "refund") refund += row.amountCny;
-  }
-  const budget = project?.budget?.totalCny == null ? null : Number(project.budget.totalCny);
-  const reserved = round2(reserve - release - settle);
-  return {
-    budgetCny: budget,
-    dailyCny: project?.budget?.dailyCny == null ? null : Number(project.budget.dailyCny),
-    reservedCny: reserved,
-    settledCny: round2(settle),
-    refundedCny: round2(refund),
-    spentCny: round2(settle - refund),
-    availableCny: budget == null ? null : round2(budget - reserved - settle + refund),
-  };
-}
+// `projectMoney` (the ledger → money view) lives in geoMarketStore.mjs, where
+// the reserve's in-transaction budget check and the GEO service read it too.
 
 /**
  * Where a project's ledger and its orders disagree: every order's outstanding
@@ -536,7 +549,8 @@ export function projectIdentityBreaks(orders, sums) {
   for (const order of orders) {
     known.add(order.id);
     const money = byOrder.get(order.id) ?? { reserve: 0, release: 0, settle: 0, refund: 0 };
-    const outstanding = round2(money.reserve - money.release - money.settle);
+    // Settled only up to the reserve: a write-off above it holds nothing (projectMoney).
+    const outstanding = round2(money.reserve - money.release - Math.min(money.settle, money.reserve));
     const expected = round2(heldReserve(order));
     if (Math.abs(outstanding - expected) > eps) breaks.push({ orderId: order.id, problem: "reserve_mismatch", ledger: outstanding, expected });
     const settled = order.settledCny ?? 0;
@@ -750,11 +764,10 @@ async function domainUsage(ctx, geoProjectId, mediaByKey) {
   return { usage, orders };
 }
 
-/** What today's reserves already hold for a project. @param {ReturnType<typeof context>} ctx @param {string} geoProjectId */
+/** What today's reserves still commit for a project, net of same-day releases (dailyReserved). @param {ReturnType<typeof context>} ctx @param {string} geoProjectId */
 async function reservedToday(ctx, geoProjectId) {
   const since = zonedDayStart(ctx.now(), ctx.timeZone).toISOString();
-  const sums = await ctx.store.ledgerSums({ geoProjectId, since });
-  return round2(sums.filter((row) => row.kind === "reserve").reduce((total, row) => total + row.amountCny, 0));
+  return dailyReserved(await ctx.store.ledgerSums({ geoProjectId, since }));
 }
 
 /**
@@ -818,8 +831,15 @@ async function planProject(ctx, project, candidates, blocked, counts) {
       detail: { score: pick.score, domain: pick.media.domain, layer: article.layer, recentOrders: recent.length },
     });
   }
-  for (let index = 0; index < plans.length; index += 100) {
-    counts.planned += (await ctx.store.insertOrders(plans.slice(index, index + 100), ctx.now().toISOString())).length;
+  // One at a time: the store holds an article to one live order, and a plan a
+  // concurrent writer beat to its article is skipped without losing the rest.
+  for (const plan of plans) {
+    try {
+      counts.planned += (await ctx.store.insertOrders([plan], ctx.now().toISOString())).length;
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code !== "geo_order_article_live") throw error;
+      counts.skipped.article_already_live = (counts.skipped.article_already_live ?? 0) + 1;
+    }
   }
 }
 
@@ -842,17 +862,34 @@ async function withdrawStalePlans(ctx, project, candidatesByKey, counts) {
 }
 
 /**
- * A send that started and never recorded its outcome (the process died in
- * between) is `unknown`: it may have reached the vendor.
+ * Reserved orders nobody is looking after any more:
+ * - a send that started and never recorded its outcome is `unknown` — it may
+ *   have reached the vendor — but only once the client's own send deadline
+ *   has passed by a margin: until then another process may still be waiting
+ *   for the vendor's answer, and declaring it unknown under that process
+ *   would cost the order number it is about to receive;
+ * - a reserve that never reached a send (reserve and send start are one write
+ *   now; an older build could die between them) is released after
+ *   `stalledReserveMs` and the plan goes back to `planned`.
  * @param {ReturnType<typeof context>} ctx
  */
 async function recoverInterruptedSends(ctx) {
   const reserved = await ctx.store.listOrders({ states: ["reserved"], limit: 500 });
+  const now = ctx.now().getTime();
+  const sendDeadline = Number(ctx.market?.sendTimeoutMs ?? 30_000) + MARKET_RULES.sendRecoveryMarginMs;
   let recovered = 0;
-  for (const order of reserved.filter(sendInFlight)) {
-    if (await transition(ctx, order, "unknown", { detail: { reason: "send_interrupted" } })) {
-      recovered += 1;
-      await fire(ctx.alertOperator, { type: "order_unknown", orderId: order.id, reason: "send_interrupted", idempotencyKey: `geo:order:${order.id}:unknown` });
+  for (const order of reserved) {
+    if (sendInFlight(order)) {
+      if (now - Date.parse(order.sentAt) <= sendDeadline) continue;
+      if (await transition(ctx, order, "unknown", { detail: { reason: "send_interrupted" } })) {
+        recovered += 1;
+        await fire(ctx.alertOperator, { type: "order_unknown", orderId: order.id, reason: "send_interrupted", idempotencyKey: `geo:order:${order.id}:unknown` });
+      }
+    } else if (order.stateAt && now - Date.parse(order.stateAt) > MARKET_RULES.stalledReserveMs) {
+      if (await transition(ctx, order, "planned", { detail: { reason: "reserve_stalled" },
+        ledger: heldReserve(order) > 0 ? [{ kind: "release", amountCny: heldReserve(order), note: "reserve never reached a send" }] : [] })) {
+        recovered += 1;
+      }
     }
   }
   return recovered;
@@ -895,55 +932,89 @@ async function placeOrder(ctx, project, order, state) {
   const contentHtml = split ? markdownToHtml(split.body) : String(body.html);
   const title = String(body.title || split?.title || article.title || "").trim().slice(0, 200);
   if (!title) return "article_untitled";
+  // A body the client would refuse to send is refused here, before any money
+  // is held for it — and the plan is cancelled, not retried every tick.
+  if (Buffer.byteLength(contentHtml) > MARKET_RULES.contentMaxBytes) {
+    await transition(ctx, order, "cancelled", { detail: { reason: "request_invalid", bytes: Buffer.byteLength(contentHtml) } });
+    return "request_invalid";
+  }
   const spans = extractProtectedSpans(htmlToText(contentHtml), { terms: drugTerms(project) });
   const bodySha256 = sha256Hex(contentHtml);
-  const reserved = await transition(ctx, order, "reserved", {
-    detail: { reserveCny: order.reserveCny, priceCny: order.priceCny, chargeAt: "submit" },
-    patch: { bodySha256 },
-    ledger: [{ kind: "reserve", amountCny: order.reserveCny }],
-  });
-  if (!reserved) return "conflict";
-  // Written (and committed) before the network call: a crash after this line
-  // leaves an order that recovery turns `unknown`, never one that is sent twice.
-  await ctx.store.annotateOrder(order.id, {
+  // The reserve and the send's start are one write, checked against the
+  // budget inside it: a cancel or a second placer finds either a planned order
+  // or one already in flight, never a reserved one it may still move.
+  const reservation = await ctx.store.reserveForSend(order.id, {
     at: ctx.now().toISOString(),
-    detail: { phase: "send_started", title, bodySha256, spans, spanCount: spans.length, terms: drugTerms(project).slice(0, 50) },
+    dayStart: zonedDayStart(ctx.now(), ctx.timeZone).toISOString(),
+    reserveDetail: { reserveCny: order.reserveCny, priceCny: order.priceCny, chargeAt: "submit" },
+    sendDetail: { title, bodySha256, spans, spanCount: spans.length, terms: drugTerms(project).slice(0, 50) },
+    patch: { bodySha256 },
   });
-  const current = await ctx.store.getOrder(order.id);
+  if (!reservation) return "conflict";
+  if ("refused" in reservation) return reservation.refused;
+  const current = reservation.order;
+  /** @type {{ orderNid: string } | null} */
+  let answer = null;
   try {
-    const { orderNid } = await ctx.market.send(order.mediaType, {
+    answer = await ctx.market.send(order.mediaType, {
       resourceId: order.resourceId, title, contentHtml, thirdId: order.id,
       remark: "医学稿件：请勿改动数字、药名、剂量、引用与链接。",
     });
-    await transition(ctx, current, "submitted", { patch: { vendorOrderNid: orderNid }, detail: { vendorOrderNid: orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
-    await ctx.store.advanceArticleStatus(article.id, ["publishable"], "placed", ctx.now().toISOString());
-    state.balance = round2(state.balance - order.priceCny);
-    return "submitted";
   } catch (error) {
     const code = /** @type {any} */ (error)?.code;
     if (code === "media_market_refused") {
+      // The vendor's own envelope said no: nothing was created.
       await transition(ctx, current, "cancelled", {
         detail: { reason: "send_refused", vendorMessage: /** @type {any} */ (error).vendorMessage ?? "" },
         ledger: [{ kind: "release", amountCny: order.reserveCny, note: "send refused" }],
       });
       return "refused";
     }
-    if (["media_market_unreachable", "media_market_rate_limited", "media_market_unauthorized", "media_market_http_error",
-      "media_market_unconfigured", "media_market_request_invalid"].includes(code)) {
-      // Provably not created: the reserve goes back and the plan waits for the next tick.
+    if (code === "media_market_request_invalid") {
+      // This client refused to build the request: nothing left the host, and trying again changes nothing.
+      await transition(ctx, current, "cancelled", { detail: { reason: "request_invalid" },
+        ledger: [{ kind: "release", amountCny: order.reserveCny, note: "request refused by the client" }] });
+      return "request_invalid";
+    }
+    if (code === "media_market_unreachable" || code === "media_market_unconfigured") {
+      // No connection was ever opened (or no key to open one with): provably not sent.
       await transition(ctx, current, "planned", {
         detail: { reason: "send_not_delivered", code },
         ledger: [{ kind: "release", amountCny: order.reserveCny, note: "send not delivered" }],
       });
-      if (code === "media_market_unauthorized") await fire(ctx.alertOperator, { type: "market_unauthorized", idempotencyKey: `geo:market:unauthorized:${zonedDay(ctx.now(), ctx.timeZone)}` });
       return "not_delivered";
     }
-    // Anything else may have reached the vendor: never resend.
+    // Anything after an answer existed may have created the order: never resend.
     await transition(ctx, current, "unknown", { detail: { reason: code ?? "send_outcome_unknown" } });
     state.blocked.add(mediaKey(order.mediaType, order.resourceId));
     await fire(ctx.alertOperator, { type: "order_unknown", orderId: order.id, reason: code ?? "send_outcome_unknown", idempotencyKey: `geo:order:${order.id}:unknown` });
     return "unknown";
   }
+  state.balance = round2(state.balance - order.priceCny);
+  const submitted = await transition(ctx, current, "submitted", { patch: { vendorOrderNid: answer.orderNid },
+    detail: { vendorOrderNid: answer.orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
+  if (!submitted) await keepLateOrderNumber(ctx, order, answer.orderNid);
+  await ctx.store.advanceArticleStatus(article.id, ["publishable"], "placed", ctx.now().toISOString());
+  return "submitted";
+}
+
+/**
+ * The vendor created an order but ours moved while the send was out (another
+ * process declared it unknown). The order number is never lost: it goes into
+ * the order's history first; an `unknown` order is settled by it; anything
+ * else is an operator's to look at.
+ * @param {ReturnType<typeof context>} ctx @param {any} order @param {string} orderNid
+ */
+async function keepLateOrderNumber(ctx, order, orderNid) {
+  await ctx.store.annotateOrder(order.id, { at: ctx.now().toISOString(), detail: { phase: "late_send_result", vendorOrderNid: orderNid } });
+  const now = await ctx.store.getOrder(order.id);
+  let resolved = false;
+  if (now?.state === "unknown") {
+    resolved = Boolean(await transition(ctx, now, "submitted", { patch: { vendorOrderNid: orderNid },
+      detail: { vendorOrderNid: orderNid, reason: "late_send_result", mappingVersion: VENDOR_STATUS_MAP.version } }));
+  }
+  await fire(ctx.alertOperator, { type: "order_late_send_result", orderId: order.id, vendorOrderNid: orderNid, state: resolved ? "submitted" : now?.state ?? null,
+    idempotencyKey: `geo:order:${order.id}:late_send_result` });
 }
 
 /**
@@ -968,12 +1039,12 @@ export async function tickOrders(deps) {
   /** @type {number | null} */
   let balance = null;
   let sends = 0;
-  for (const project of projects) {
-    counts.projects += 1;
+  /** Plan, then send, for one project — under its lock. @param {any} project */
+  const work = async (project) => {
     await withdrawStalePlans(ctx, project, candidatesByKey, counts);
     await planProject(ctx, project, candidates, blocked, counts);
-    if (!ctx.configured) { skip("market_unconfigured"); continue; }
-    if (stop.stopped) { skip("orders_stopped"); continue; }
+    if (!ctx.configured) { skip("market_unconfigured"); return; }
+    if (stop.stopped) { skip("orders_stopped"); return; }
     const planned = await ctx.store.listOrders({ geoProjectId: project.id, states: ["planned"], limit: MARKET_RULES.sendsPerTick });
     for (const order of planned) {
       if (sends >= MARKET_RULES.sendsPerTick) break;
@@ -984,7 +1055,15 @@ export async function tickOrders(deps) {
         } catch { skip("balance_unavailable"); break; }
       }
       const state = { balance: /** @type {number} */ (balance), blocked, candidatesByKey };
-      const outcome = await placeOrder(ctx, project, order, state);
+      let outcome;
+      try {
+        outcome = await placeOrder(ctx, project, order, state);
+      } catch {
+        // One order's failure (a lost connection, a store refusal) is that
+        // order's: the reserve and the send are one write, so nothing is held
+        // for it, and the next order goes on.
+        outcome = "error";
+      }
       balance = state.balance;
       if (["submitted", "unknown", "refused", "not_delivered"].includes(outcome)) sends += 1;
       if (outcome === "submitted") counts.submitted += 1;
@@ -992,6 +1071,19 @@ export async function tickOrders(deps) {
       else if (outcome === "refused") counts.refused += 1;
       else if (outcome === "not_delivered") counts.notDelivered += 1;
       else skip(outcome);
+    }
+  };
+  for (const project of projects) {
+    counts.projects += 1;
+    // Placing spends the owner's budget: only while the module is still open to them.
+    const owner = ctx.userById ? await ctx.userById(project.userId) : { id: project.userId };
+    if (!owner) { skip("owner_missing"); continue; }
+    if (!geoAudienceAllows(ctx.config, owner)) { skip("audience_not_allowed"); continue; }
+    try {
+      const run = await ctx.store.withProjectLock(project.id, () => work(project));
+      if (!run.locked) skip("project_busy");
+    } catch {
+      skip("error");
     }
   }
   return counts;
@@ -1048,38 +1140,98 @@ async function applyVendorStatus(ctx, order, info, counts) {
 }
 
 /**
- * Release refunds the vendor flagged, as far as the balance shows the money.
- * @param {ReturnType<typeof context>} ctx @param {Array<{ order: any, amountCny: number }>} queue @param {Record<string, number>} counts
+ * Which pending arrivals the balance certainly holds. `surplus` is what the
+ * balance holds beyond every counted flow; `items` are the credits that may
+ * account for it (requested top-ups, refunds expected or flagged). An item is
+ * certain when every combination of items that adds up to the surplus
+ * contains it — a paid top-up is never mistaken for a refund of a different
+ * amount, nor a refund for a top-up. When no combination adds up and the
+ * surplus covers all of them, all arrived (and the rest is the
+ * reconciliation's to explain); otherwise nothing is certain yet.
+ * @template {{ amountCny: number }} T @param {T[]} items @param {number} surplus @returns {T[]}
  */
-async function confirmRefunds(ctx, queue, counts) {
-  if (!queue.length) return;
+export function certainArrivals(items, surplus) {
+  const eps = MARKET_RULES.epsilonCny;
+  const candidates = items.filter((item) => item.amountCny > eps);
+  if (surplus <= eps || !candidates.length) return [];
+  const total = candidates.reduce((sum, item) => sum + item.amountCny, 0);
+  if (candidates.length <= MARKET_RULES.arrivalsExactMax) {
+    /** @type {Set<number> | null} */
+    let common = null;
+    for (let mask = 1; mask < 1 << candidates.length; mask += 1) {
+      let sum = 0;
+      for (let index = 0; index < candidates.length; index += 1) if (mask & (1 << index)) sum += candidates[index].amountCny;
+      if (Math.abs(sum - surplus) > eps) continue;
+      const members = new Set(candidates.map((_, index) => index).filter((index) => mask & (1 << index)));
+      common = common == null ? members : new Set([...common].filter((index) => members.has(index)));
+    }
+    if (common) return [...common].map((index) => candidates[index]);
+  }
+  return surplus + eps >= total ? candidates : [];
+}
+
+/**
+ * Settle what the balance shows arrived: requested top-ups first, then
+ * refunds — a refund only when the vendor also flagged it (`is_refund=1`).
+ * @param {ReturnType<typeof context>} ctx
+ * @param {{ flagged?: Map<string, { order: any, amountCny: number }>, confirmRefunds?: boolean, amounts?: Map<string, number> }} [options]
+ *   `flagged`: orders the vendor flagged this tick; `amounts`: an operator's paid amount for a top-up
+ */
+async function resolveArrivals(ctx, { flagged = new Map(), confirmRefunds = true, amounts = new Map() } = {}) {
   const anchor = await ensureAnchor(ctx);
   const { money } = await ctx.market.balance();
   const { expected } = await expectedBalance(ctx, anchor);
-  let surplus = round2(money - expected);
-  const now = ctx.now();
-  for (const { order, amountCny } of queue) {
-    if (surplus + MARKET_RULES.epsilonCny >= amountCny) {
-      const ledger = order.settledCny != null
-        ? [{ kind: "refund", amountCny: round2(Math.min(amountCny, order.settledCny)) }]
-        : heldReserve(order) > 0 ? [{ kind: "release", amountCny: heldReserve(order), note: "refund confirmed" }] : [];
-      const moved = await transition(ctx, order, "refunded", { detail: { amountCny, evidence: "is_refund_and_balance", surplusBefore: surplus }, ledger });
-      if (moved) {
-        surplus = round2(surplus - amountCny);
-        counts.refunds += 1;
-      }
-      continue;
+  const surplus = round2(money - expected);
+  const topups = await ctx.store.listTopups({ status: "requested", limit: 50 });
+  const refundable = (await listAllOrders(ctx.store, { states: [...POLL_STATES], hasVendorNid: true }))
+    .filter((order) => ["rejected", "cancelled"].includes(order.state) || order.refundSeenAt || flagged.has(order.id));
+  const items = [
+    ...topups.map((topup) => ({ kind: "topup", id: topup.id, amountCny: amounts.get(topup.id) ?? topup.amountCny ?? 0, row: topup })),
+    ...refundable.map((order) => ({ kind: "refund", id: order.id, amountCny: flagged.get(order.id)?.amountCny ?? order.priceCny ?? 0, row: order })),
+  ];
+  const certain = certainArrivals(items, surplus);
+  const at = ctx.now().toISOString();
+  /** @type {{ topupsConfirmed: string[], refunded: string[], pending: typeof items, balance: number, surplus: number }} */
+  const result = { topupsConfirmed: [], refunded: [], pending: items.filter((item) => !certain.includes(item)), balance: money, surplus };
+  for (const item of certain.filter((entry) => entry.kind === "topup")) {
+    if (await ctx.store.updateTopup(item.id, { from: "requested", to: "confirmed", at, amountCny: item.amountCny, balanceAfter: money })) {
+      result.topupsConfirmed.push(item.id);
     }
-    counts.pendingRefunds += 1;
+  }
+  if (!confirmRefunds) return result;
+  for (const item of certain.filter((entry) => entry.kind === "refund")) {
+    const order = item.row;
+    if (!flagged.has(order.id) && !order.refundSeenAt) { result.pending.push(item); continue; }
+    const ledger = order.settledCny != null
+      ? [{ kind: "refund", amountCny: round2(Math.min(item.amountCny, order.settledCny)) }]
+      : heldReserve(order) > 0 ? [{ kind: "release", amountCny: heldReserve(order), note: "refund confirmed" }] : [];
+    const moved = await transition(ctx, order, "refunded", { detail: { amountCny: item.amountCny, evidence: "is_refund_and_balance", surplus }, ledger });
+    if (moved) result.refunded.push(order.id);
+  }
+  return result;
+}
+
+/**
+ * Refunds the vendor flagged but the balance does not show yet: noted once,
+ * and an operator told after the escalation window.
+ * @param {ReturnType<typeof context>} ctx @param {Map<string, { order: any, amountCny: number }>} flagged @param {Set<string>} refunded
+ */
+async function notePendingRefunds(ctx, flagged, refunded) {
+  const now = ctx.now();
+  let pending = 0;
+  for (const { order, amountCny } of flagged.values()) {
+    if (refunded.has(order.id)) continue;
+    pending += 1;
     const events = await ctx.store.listOrderEvents(order.id, 500);
     const seen = events.find((event) => event.detail?.phase === "refund_seen");
     if (!seen) {
-      await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "refund_seen", amountCny, surplus } });
+      await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "refund_seen", amountCny } });
     } else if (now.getTime() - Date.parse(seen.at) > MARKET_RULES.refundEscalationDays * DAY && !events.some((event) => event.detail?.phase === "refund_escalated")) {
-      await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "refund_escalated", amountCny, surplus } });
+      await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "refund_escalated", amountCny } });
       await fire(ctx.alertOperator, { type: "refund_not_in_balance", orderId: order.id, amountCny, idempotencyKey: `geo:order:${order.id}:refund_escalated` });
     }
   }
+  return pending;
 }
 
 /**
@@ -1091,14 +1243,15 @@ async function confirmRefunds(ctx, queue, counts) {
 export async function tickPoll(deps) {
   const ctx = context(deps);
   if (!ctx.configured) return { skipped: "market_unconfigured" };
-  const counts = { polled: 0, transitions: 0, missing: 0, unmapped: 0, refunds: 0, pendingRefunds: 0, withdrawn: 0, windowProblems: 0, recovered: 0, errors: 0 };
+  const counts = { polled: 0, transitions: 0, missing: 0, unmapped: 0, refunds: 0, pendingRefunds: 0, topupsConfirmed: 0, withdrawn: 0, windowProblems: 0,
+    recovered: 0, errors: 0 };
   counts.recovered = await recoverInterruptedSends(ctx);
   const now = ctx.now();
   const afterSale = now.getTime() - MARKET_RULES.afterSaleDays * DAY;
   const orders = (await listAllOrders(ctx.store, { states: [...POLL_STATES], hasVendorNid: true }))
     .filter((order) => order.state !== "settled" || Date.parse(order.stateAt ?? order.updatedAt) >= afterSale);
-  /** @type {Array<{ order: any, amountCny: number }>} */
-  const refundQueue = [];
+  /** @type {Map<string, { order: any, amountCny: number }>} */
+  const flagged = new Map();
   for (const mediaType of MEDIA_TYPES) {
     const mine = orders.filter((order) => order.mediaType === mediaType);
     for (let index = 0; index < mine.length; index += 50) {
@@ -1110,14 +1263,21 @@ export async function tickPoll(deps) {
         counts.polled += 1;
         const info = byNid.get(order.vendorOrderNid);
         if (!info) { counts.missing += 1; continue; }
-        const current = await applyVendorStatus(ctx, order, info, counts);
-        if (info.isRefund && !["refunded", "lost"].includes(current.state)) {
-          refundQueue.push({ order: current, amountCny: info.priceCny ?? current.priceCny ?? 0 });
-        }
+        try {
+          const current = await applyVendorStatus(ctx, order, info, counts);
+          if (info.isRefund && !["refunded", "lost"].includes(current.state)) {
+            flagged.set(current.id, { order: current, amountCny: info.priceCny ?? current.priceCny ?? 0 });
+          }
+        } catch { counts.errors += 1; }
       }
     }
   }
-  try { await confirmRefunds(ctx, refundQueue, counts); } catch { counts.errors += 1; }
+  try {
+    const arrivals = await resolveArrivals(ctx, { flagged });
+    counts.refunds += arrivals.refunded.length;
+    counts.topupsConfirmed = arrivals.topupsConfirmed.length;
+    counts.pendingRefunds += await notePendingRefunds(ctx, flagged, new Set(arrivals.refunded));
+  } catch { counts.errors += 1; }
   // Windows.
   const events = async (/** @type {any} */ order) => ctx.store.listOrderEvents(order.id, 500);
   // Withdrawn or rejected, and no refund in sight after the escalation window:
@@ -1301,7 +1461,7 @@ async function verifyOrder(ctx, order, checkpoint, counts) {
  */
 export async function tickVerify(deps) {
   const ctx = context(deps);
-  const counts = { due: 0, checked: 0, passed: 0, failed: 0, appeals: 0, settled: 0 };
+  const counts = { due: 0, checked: 0, passed: 0, failed: 0, appeals: 0, settled: 0, errors: 0 };
   if (!ctx.webReader) return { ...counts, skipped: "web_reader_unavailable" };
   const now = ctx.now();
   // Checkpoints end at +48 h; a week of slack covers a verifier that was down.
@@ -1310,7 +1470,8 @@ export async function tickVerify(deps) {
   const due = orders.map((order) => ({ order, checkpoint: dueCheckpoint(order, now) })).filter((item) => item.checkpoint);
   counts.due = due.length;
   for (const { order, checkpoint } of due.slice(0, MARKET_RULES.verifyPerTick)) {
-    await verifyOrder(ctx, order, /** @type {string} */ (checkpoint), counts);
+    // One order's check failing (a store hiccup, a page that breaks the reader) is that order's alone.
+    try { await verifyOrder(ctx, order, /** @type {string} */ (checkpoint), counts); } catch { counts.errors += 1; }
   }
   return counts;
 }
@@ -1320,7 +1481,7 @@ export async function tickVerify(deps) {
 /**
  * The subset of `items` whose amounts sum to `target` (within a cent), or
  * null. Exhaustive up to twelve items, greedy beyond.
- * @param {Array<{ orderId: string, amountCny: number }>} items @param {number} target
+ * @template {{ amountCny: number }} T @param {T[]} items @param {number} target @returns {T[] | null}
  */
 function subsetSum(items, target) {
   const eps = MARKET_RULES.epsilonCny;
@@ -1365,8 +1526,8 @@ export async function tickReconcile(deps) {
     .filter((order) => POLL_STATES.includes(order.state) || Date.parse(order.updatedAt) >= recent);
   const missing = [];
   const priceMismatch = [];
-  /** @type {Array<{ order: any, amountCny: number }>} */
-  const refundQueue = [];
+  /** @type {Map<string, { order: any, amountCny: number }>} */
+  const flagged = new Map();
   for (const mediaType of MEDIA_TYPES) {
     const mine = orders.filter((order) => order.mediaType === mediaType);
     for (let index = 0; index < mine.length; index += 50) {
@@ -1381,23 +1542,30 @@ export async function tickReconcile(deps) {
         if (info.priceCny != null && order.priceCny != null && Math.abs(info.priceCny - order.priceCny) > MARKET_RULES.epsilonCny) {
           priceMismatch.push({ orderId: order.id, ours: order.priceCny, vendor: info.priceCny });
         }
-        const current = POLL_STATES.includes(order.state) ? await applyVendorStatus(ctx, order, info, counts) : order;
-        if (info.isRefund && !["refunded", "lost"].includes(current.state)) refundQueue.push({ order: current, amountCny: info.priceCny ?? current.priceCny ?? 0 });
+        try {
+          const current = POLL_STATES.includes(order.state) ? await applyVendorStatus(ctx, order, info, counts) : order;
+          if (info.isRefund && !["refunded", "lost"].includes(current.state)) flagged.set(current.id, { order: current, amountCny: info.priceCny ?? current.priceCny ?? 0 });
+        } catch { counts.errors += 1; }
       }
     }
   }
-  await confirmRefunds(ctx, refundQueue, counts);
+  // Top-ups and refunds the balance already shows are counted before the balance is judged.
+  const arrivals = await resolveArrivals(ctx, { flagged });
+  counts.refunds += arrivals.refunded.length;
+  counts.pendingRefunds += await notePendingRefunds(ctx, flagged, new Set(arrivals.refunded));
   // The balance against what the flows since the anchor say it should be.
   const { money, powerCount } = await ctx.market.balance();
   const { expected, flows } = await expectedBalance(ctx, anchor);
   const diff = round2(money - expected);
+  /** @type {Array<{ orderId?: string, topupId?: string, amountCny: number }>} */
   let explainedDebits = [];
+  /** @type {Array<{ orderId?: string, topupId?: string, amountCny: number }>} */
   let explainedCredits = [];
   if (Math.abs(diff) > MARKET_RULES.epsilonCny) {
-    const open = await listAllOrders(ctx.store, { states: ["unknown", "reserved", "rejected", "cancelled"] });
+    const open = await listAllOrders(ctx.store, { states: ["unknown", "reserved"] });
     const debits = open.filter((order) => order.state === "unknown" || sendInFlight(order)).map((order) => ({ orderId: order.id, amountCny: order.priceCny ?? 0 }));
-    const credits = open.filter((order) => ["rejected", "cancelled"].includes(order.state) && order.vendorOrderNid)
-      .map((order) => ({ orderId: order.id, amountCny: order.priceCny ?? 0 }));
+    // Money that may have arrived and is not counted yet: refunds not flagged, top-ups not certain.
+    const credits = arrivals.pending.map((item) => (item.kind === "topup" ? { topupId: item.id, amountCny: item.amountCny } : { orderId: item.id, amountCny: item.amountCny }));
     if (diff < 0) explainedDebits = subsetSum(debits, -diff) ?? [];
     else explainedCredits = subsetSum(credits, diff) ?? [];
   }
@@ -1445,17 +1613,6 @@ export async function tickReconcile(deps) {
 
 // ------------------------------------------------------------------ top-ups
 
-/**
- * Whether a top-up's money is in the balance: the balance holds at least its
- * amount more than it would have without it, counting every flow since it was
- * requested.
- * @param {ReturnType<typeof context>} ctx @param {any} topup @param {number} balance @param {number} amountCny
- */
-async function topupArrived(ctx, topup, balance, amountCny) {
-  const { expected } = await expectedBalance(ctx, { balance: topup.balanceBefore ?? 0, at: topup.requestedAt });
-  return round2(balance - expected) + MARKET_RULES.epsilonCny >= amountCny;
-}
-
 /** Spend the next days are expected to need: the last week's average plus the queue. @param {ReturnType<typeof context>} ctx */
 async function projectedDailySpend(ctx) {
   const now = ctx.now();
@@ -1475,17 +1632,13 @@ export async function tickTopups(deps) {
   const ctx = context(deps);
   if (!ctx.configured) return { skipped: "market_unconfigured" };
   const counts = { confirmed: 0, requested: 0, open: 0, balance: /** @type {number | null} */ (null), projectedDailyCny: 0, note: /** @type {string | null} */ (null) };
-  await ensureAnchor(ctx);
-  const { money } = await ctx.market.balance();
+  // A top-up is confirmed only when the balance cannot be explained without
+  // it — a refund that landed meanwhile is not taken for the operator's money.
+  const arrivals = await resolveArrivals(ctx, { confirmRefunds: false });
+  const money = arrivals.balance;
   counts.balance = money;
-  const open = await ctx.store.listTopups({ status: "requested", limit: 50 });
-  for (const topup of open) {
-    if (await topupArrived(ctx, topup, money, topup.amountCny ?? 0)) {
-      if (await ctx.store.updateTopup(topup.id, { from: "requested", to: "confirmed", at: ctx.now().toISOString(), balanceAfter: money })) counts.confirmed += 1;
-    } else {
-      counts.open += 1;
-    }
-  }
+  counts.confirmed = arrivals.topupsConfirmed.length;
+  counts.open = arrivals.pending.filter((item) => item.kind === "topup").length;
   const cap = ctx.config.mediaMarketBalanceCapCny == null ? null : Number(ctx.config.mediaMarketBalanceCapCny);
   if (cap == null || !Number.isFinite(cap)) { counts.note = "balance_cap_unset"; return counts; }
   if (counts.open) return counts;
@@ -1557,6 +1710,7 @@ export async function getDistribution(deps, { userId, geoProjectId }) {
       const article = articles.get(order.articleId);
       return {
         id: order.id,
+        articleId: order.articleId,
         articleTitle: article?.title ?? "",
         media: outlet?.name ?? "",
         domain: outlet?.domain ?? null,
@@ -1567,6 +1721,8 @@ export async function getDistribution(deps, { userId, geoProjectId }) {
         checks: (order.checks ?? []).map((check) => ({ checkpoint: check.checkpoint, at: check.at, reachable: check.reachable ?? null,
           domainMatch: check.domainMatch ?? null, protectedTotal: check.protectedTotal ?? null, protectedMatched: check.protectedMatched ?? null })),
         updatedAt: order.updatedAt,
+        // 撤单 is offered only where it can work: a plan, a reserve not yet sent, a sent order the outlet has not taken.
+        cancellable: order.state === "planned" || order.state === "submitted" || (order.state === "reserved" && !sendInFlight(order)),
       };
     }),
   };
@@ -1607,8 +1763,10 @@ export async function cancelOrder(deps, { userId, geoProjectId, orderId }) {
 
 /**
  * Operator: an after-sale that will not be recovered (appeal refused, window
- * missed). Money the vendor kept is spent: settled at its price, the rest of
- * the reserve released, in the same write.
+ * missed, a price above the reserve accepted). Money the vendor kept is spent
+ * at its full price — above the reserve too, which is exactly the case that
+ * stopped at `problem` — and what is left of the reserve released, in the
+ * same write.
  * @param {MarketDeps} deps @param {{ orderId: string, operatorId: string, reason: string }} input
  */
 export async function markOrderLost(deps, { orderId, operatorId, reason }) {
@@ -1623,7 +1781,7 @@ export async function markOrderLost(deps, { orderId, operatorId, reason }) {
     return { id: order.id, state: moved?.state ?? order.state };
   }
   const reserve = order.reserveCny ?? 0;
-  const spent = round2(Math.min(order.priceCny ?? reserve, reserve));
+  const spent = round2(order.priceCny ?? reserve);
   const moved = await transition(ctx, order, "lost", {
     detail, patch: { settledCny: spent },
     ledger: [{ kind: "settle", amountCny: spent, note: "written off" }, ...(reserve - spent > 0 ? [{ kind: "release", amountCny: round2(reserve - spent) }] : [])],
@@ -1669,15 +1827,17 @@ export async function confirmTopup(deps, { topupId, operatorId, amountCny }) {
   if (!ctx.configured) throw marketFailure("503", "media_market_unconfigured", "The media marketplace is not configured.");
   const amount = amountCny == null ? topup.amountCny ?? 0 : parseMoney(amountCny);
   if (!(amount > 0)) throw marketFailure("400", "geo_topup_invalid", "The paid amount must be above zero.");
-  const { money: balance } = await ctx.market.balance();
   const at = ctx.now().toISOString();
-  if (await topupArrived(ctx, topup, balance, amount)) {
-    const confirmed = await ctx.store.updateTopup(topup.id, { from: "requested", to: "confirmed", at, amountCny: amount, balanceAfter: balance,
-      note: `${topup.note ?? ""} · confirmed by ${operatorId}`.trim() });
-    return { id: topup.id, status: confirmed?.status ?? "confirmed", balance };
+  // The operator's paid amount is what the balance is checked for — and kept,
+  // so the hourly tick checks the same amount if it has not landed yet.
+  const arrivals = await resolveArrivals(ctx, { confirmRefunds: false, amounts: new Map([[topup.id, amount]]) });
+  const note = `${topup.note ?? ""} · ${operatorId} marked paid ${amount} at ${at}`.trim();
+  if (arrivals.topupsConfirmed.includes(topup.id)) {
+    await ctx.store.noteTopup(topup.id, note);
+    return { id: topup.id, status: "confirmed", balance: arrivals.balance };
   }
-  await ctx.store.noteTopup(topup.id, `${topup.note ?? ""} · ${operatorId} marked paid ${amount} at ${at}`.trim());
-  return { id: topup.id, status: "awaiting_balance", balance };
+  await ctx.store.updateTopup(topup.id, { from: "requested", to: "requested", at, amountCny: amount, note });
+  return { id: topup.id, status: "awaiting_balance", balance: arrivals.balance };
 }
 
 /**
@@ -1734,10 +1894,12 @@ export async function marketStatus(deps) {
  * @param {Record<string, any>} config @param {{ configured?: boolean } | null} market
  */
 export function geoMarketReadiness(config, market) {
+  // One definition of "configured" (mediaMarketConfigured): a URL and a usable key file.
+  const configured = market ? market.configured === true : mediaMarketConfigured(config);
   const notes = [];
-  if (!market?.configured) notes.push("media_market_unconfigured");
+  if (!configured) notes.push("media_market_unconfigured");
   if (config?.mediaMarketBalanceCapCny == null) notes.push("balance_cap_unset_no_topup_requests");
-  return { configured: market?.configured === true, notes };
+  return { configured, notes };
 }
 
 /**

@@ -2,6 +2,8 @@
 // every lever read from the environment, and every value outside its range
 // refused at start by the variable's name.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -49,7 +51,16 @@ test("every lever is read from the environment, and an empty value reads as unse
     geoSocialTimeoutMs: 90_000, geoInclusionEngines: ["baidu"], mediaMarketUrl: "https://market.example", mediaMarketApiKeyFile: "/run/secrets/media",
     mediaMarketBalanceCapCny: 20_000,
   });
-  assert.equal(geoMarketConfigured(config), true);
+  // Wired means a usable key file (mediaMarketConfigured): a path alone is not
+  // a key, and the /dev/null compose binds where there is none is not either.
+  const keyDir = mkdtempSync(path.join(os.tmpdir(), "geo-config-key-"));
+  try {
+    const keyFile = path.join(keyDir, "media-market-api-key");
+    writeFileSync(keyFile, "k-123456\n", { mode: 0o600 });
+    assert.equal(geoMarketConfigured({ ...config, mediaMarketApiKeyFile: keyFile }), true);
+  } finally { rmSync(keyDir, { recursive: true, force: true }); }
+  assert.equal(geoMarketConfigured(config), false, "a key file that is not there is not a key");
+  assert.equal(geoMarketConfigured({ ...config, mediaMarketApiKeyFile: "/dev/null" }), false, "the empty bind is not a key");
   assert.equal(geoMarketConfigured({ ...config, mediaMarketApiKeyFile: "" }), false, "an address without a key is not wired");
 });
 

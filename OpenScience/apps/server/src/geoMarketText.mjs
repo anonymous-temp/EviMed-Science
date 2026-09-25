@@ -189,9 +189,13 @@ export function extractProtectedSpans(text, { terms = [] } = {}) {
   const source = String(text ?? "");
   /** @type {Map<string, ProtectedSpan>} */
   const spans = new Map();
-  /** @type {Array<[number, number]>} character ranges already inside a span */
-  const taken = [];
-  const overlaps = (/** @type {number} */ start, /** @type {number} */ end) => taken.some(([a, b]) => start < b && end > a);
+  // One flag per UTF-16 unit already inside a span. A list of ranges checked
+  // against every new span was quadratic: a 700 KB body took a minute.
+  const taken = new Uint8Array(source.length);
+  const overlaps = (/** @type {number} */ start, /** @type {number} */ end) => {
+    for (let index = start; index < end; index += 1) if (taken[index]) return true;
+    return false;
+  };
   /** @param {ProtectedSpan["kind"]} kind @param {RegExp} pattern @param {(match: string) => boolean} [accept] */
   const collect = (kind, pattern, accept = () => true) => {
     for (const match of source.matchAll(pattern)) {
@@ -199,7 +203,7 @@ export function extractProtectedSpans(text, { terms = [] } = {}) {
       const start = match.index ?? 0;
       const end = start + raw.length;
       if (!raw || raw.length > MAX_SPAN_CHARS || overlaps(start, end) || !accept(raw)) continue;
-      taken.push([start, end]);
+      taken.fill(1, start, end);
       const key = `${kind}\u0000${comparisonForm(raw)}`;
       const existing = spans.get(key);
       if (existing) existing.count += 1;

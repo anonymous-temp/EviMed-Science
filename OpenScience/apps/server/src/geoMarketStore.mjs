@@ -1,6 +1,85 @@
 import { randomBytes } from "node:crypto";
-import { migrateGeo } from "./geoPersistence.mjs";
+import { GEO_ORDER_ARTICLE_LIVE_STATES, migrateGeo } from "./geoPersistence.mjs";
 import { HttpError } from "./security.mjs";
+
+export { GEO_ORDER_ARTICLE_LIVE_STATES };
+
+/** The partial unique index that holds an article to one live order (geoPersistence.mjs). */
+export const ARTICLE_LIVE_INDEX = "geo_orders_live_article_key";
+
+/** Amounts closer than a cent are equal. */
+export const EPSILON_CNY = 0.01;
+
+const round2 = (/** @type {number} */ value) => Math.round(value * 100) / 100;
+
+/** The refusal a second live order for one article gets, from this store and its double alike. */
+export function articleLiveError() {
+  return new HttpError(409, "geo_order_article_live", "The article already has a live order.");
+}
+
+/**
+ * A project's money from its ledger sums (per order and kind). Per order, the
+ * reserve still held is what was reserved less what was released and settled
+ * — settled only up to the reserve: an order written off above its reserve
+ * (the vendor charged more) counts in full as spent and holds nothing, never
+ * a negative reserve that would hide the excess. So
+ * `available = budget − reserved − settled + refunded`.
+ * @param {{ budget?: { totalCny?: unknown, dailyCny?: unknown } | null } | null | undefined} project
+ * @param {Array<{ orderId: string | null, kind: string, amountCny: number }>} sums
+ */
+export function projectMoney(project, sums) {
+  /** @type {Map<string, { reserve: number, release: number, settle: number }>} */
+  const byOrder = new Map();
+  let settled = 0;
+  let refunded = 0;
+  for (const row of sums) {
+    if (row.kind === "settle") settled += row.amountCny;
+    if (row.kind === "refund") refunded += row.amountCny;
+    if (row.kind !== "reserve" && row.kind !== "release" && row.kind !== "settle") continue;
+    const key = row.orderId ?? "";
+    const entry = byOrder.get(key) ?? { reserve: 0, release: 0, settle: 0 };
+    entry[/** @type {"reserve" | "release" | "settle"} */ (row.kind)] += row.amountCny;
+    byOrder.set(key, entry);
+  }
+  let reserved = 0;
+  for (const entry of byOrder.values()) reserved += entry.reserve - entry.release - Math.min(entry.settle, entry.reserve);
+  const budget = project?.budget?.totalCny == null ? null : Number(project.budget.totalCny);
+  return {
+    budgetCny: budget,
+    dailyCny: project?.budget?.dailyCny == null ? null : Number(project.budget.dailyCny),
+    reservedCny: round2(reserved),
+    settledCny: round2(settled),
+    refundedCny: round2(refunded),
+    spentCny: round2(settled - refunded),
+    availableCny: budget == null ? null : round2(budget - reserved - settled + refunded),
+  };
+}
+
+/**
+ * The day's new commitments from ledger sums since the day began: per order,
+ * what was reserved today less what came back today — a reserve released the
+ * same day (a refused send, a settlement's remainder) is not the day's spend,
+ * and a release of an older reserve does not make room for new ones.
+ * @param {Array<{ orderId: string | null, kind: string, amountCny: number }>} sumsSinceDayStart
+ */
+export function dailyReserved(sumsSinceDayStart) {
+  /** @type {Map<string, number>} */
+  const net = new Map();
+  for (const row of sumsSinceDayStart) {
+    if (!row.orderId || (row.kind !== "reserve" && row.kind !== "release")) continue;
+    net.set(row.orderId, (net.get(row.orderId) ?? 0) + (row.kind === "reserve" ? row.amountCny : -row.amountCny));
+  }
+  let total = 0;
+  for (const value of net.values()) total += Math.max(0, value);
+  return round2(total);
+}
+
+/** @param {any} client @param {string} geoProjectId @param {string | null} since */
+async function ledgerSumsWith(client, geoProjectId, since) {
+  const result = await client.query(`SELECT order_id, kind, sum(amount_cny) AS amount, count(*)::int AS n FROM evimed_geo.ledger
+    WHERE geo_project_id = $1 AND ($2::timestamptz IS NULL OR created_at >= $2) GROUP BY order_id, kind`, [String(geoProjectId), since]);
+  return result.rows.map((/** @type {any} */ row) => ({ orderId: row.order_id ?? null, kind: String(row.kind), amountCny: round2(Number(row.amount)), count: row.n }));
+}
 
 /**
  * SQL for the market side of 「循证 GEO」 (build spec §2): the media catalogue,
@@ -225,6 +304,8 @@ export function mapOrder(row) {
     acceptedAt: iso(row.accepted_at),
     publishedAt: iso(row.published_at),
     stateAt: iso(row.state_at),
+    stateReason: row.state_reason ?? null,
+    refundSeenAt: iso(row.refund_seen_at),
   };
 }
 
@@ -291,7 +372,10 @@ const ORDER_SELECT = `SELECT o.*,
   (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = 'submitted' AND e.from_state IS DISTINCT FROM 'submitted') AS submitted_at,
   (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = 'accepted' AND e.from_state IS DISTINCT FROM 'accepted') AS accepted_at,
   (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = 'published' AND e.from_state IS DISTINCT FROM 'published') AS published_at,
-  (SELECT max(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = o.state AND e.from_state IS DISTINCT FROM e.to_state) AS state_at
+  (SELECT max(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = o.state AND e.from_state IS DISTINCT FROM e.to_state) AS state_at,
+  (SELECT e.detail->>'reason' FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.to_state = o.state AND e.from_state IS DISTINCT FROM e.to_state
+    ORDER BY e.at DESC, e.id DESC LIMIT 1) AS state_reason,
+  (SELECT min(e.at) FROM evimed_geo.order_events e WHERE e.order_id = o.id AND e.detail->>'phase' = 'refund_seen') AS refund_seen_at
   FROM evimed_geo.orders o`;
 
 const ARTICLE_SELECT = `SELECT a.*, coalesce(g.is_control, false) AS is_control
@@ -545,17 +629,91 @@ export class GeoMarketStore {
       detail: assertDetail(order.detail ?? {}),
     }));
     if (!rows.length) return [];
+    try {
+      return await this.#transaction(async (client) => {
+        const created = [];
+        for (const row of rows) {
+          const inserted = await client.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id,
+              state, reserve_cny, price_cny, checks, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, 'planned', $7, $8, '[]'::jsonb, $9, $9) RETURNING *`,
+          [row.id, row.userId, row.geoProjectId, row.articleId, row.mediaType, row.resourceId, row.reserveCny, row.priceCny, when]);
+          await insertEvent(client, { orderId: row.id, at: when, fromState: null, toState: "planned", detail: row.detail });
+          created.push(mapOrder(inserted.rows[0]));
+        }
+        return created;
+      });
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === "23505" && /** @type {any} */ (error)?.constraint === ARTICLE_LIVE_INDEX) throw articleLiveError();
+      throw error;
+    }
+  }
+
+  /**
+   * planned → reserved and the send's start, in one transaction: nothing can
+   * fail between holding the money and marking the order in flight, and a
+   * second writer (a cancel, another placer) finds either a planned order or
+   * one already being sent. The budget and the day's cap are checked here,
+   * against the ledger as it stands inside the transaction, under the
+   * project's row lock — a budget lowered a moment ago is the one that holds.
+   * @param {string} orderId
+   * @param {{ at: string, dayStart: string, reserveDetail?: Record<string, any>, sendDetail: Record<string, any>, patch?: Record<string, any> }} move
+   * @returns {Promise<{ order: ReturnType<typeof mapOrder> } | { refused: "budget_exhausted" | "daily_cap_reached" | "project_missing" } | null>}
+   *   null when the order was not planned any more
+   */
+  async reserveForSend(orderId, { at, dayStart, reserveDetail = {}, sendDetail, patch = {} }) {
+    const when = assertAt(at);
+    const since = assertAt(dayStart);
+    assertDetail(reserveDetail);
+    assertDetail(sendDetail);
+    assertOrderPatch(patch);
     return this.#transaction(async (client) => {
-      const created = [];
-      for (const row of rows) {
-        const inserted = await client.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id,
-            state, reserve_cny, price_cny, checks, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, 'planned', $7, $8, '[]'::jsonb, $9, $9) RETURNING *`,
-        [row.id, row.userId, row.geoProjectId, row.articleId, row.mediaType, row.resourceId, row.reserveCny, row.priceCny, when]);
-        await insertEvent(client, { orderId: row.id, at: when, fromState: null, toState: "planned", detail: row.detail });
-        created.push(mapOrder(inserted.rows[0]));
+      const current = await client.query(`SELECT * FROM evimed_geo.orders WHERE id = $1 FOR UPDATE`, [String(orderId)]);
+      const row = current.rows[0];
+      if (!row || row.state !== "planned") return null;
+      const project = await client.query(`SELECT budget FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [row.geo_project_id]);
+      if (!project.rows[0]) return { refused: "project_missing" };
+      const reserve = Number(row.reserve_cny);
+      const money = projectMoney({ budget: project.rows[0].budget }, await ledgerSumsWith(client, row.geo_project_id, null));
+      if (money.availableCny == null || money.availableCny + EPSILON_CNY < reserve) return { refused: "budget_exhausted" };
+      if (money.dailyCny != null && dailyReserved(await ledgerSumsWith(client, row.geo_project_id, since)) + reserve > money.dailyCny + EPSILON_CNY) {
+        return { refused: "daily_cap_reached" };
       }
-      return created;
+      const sets = ["state = 'reserved'", "updated_at = $2"];
+      const values = [String(orderId), when];
+      for (const [key, value] of Object.entries(patch)) {
+        const column = ORDER_PATCH_COLUMNS[/** @type {keyof typeof ORDER_PATCH_COLUMNS} */ (key)];
+        values.push(JSON_ORDER_COLUMNS.has(column) ? JSON.stringify(value) : value);
+        sets.push(`${column} = $${values.length}${JSON_ORDER_COLUMNS.has(column) ? "::jsonb" : ""}`);
+      }
+      await client.query(`UPDATE evimed_geo.orders SET ${sets.join(", ")} WHERE id = $1`, values);
+      await insertEvent(client, { orderId: String(orderId), at: when, fromState: "planned", toState: "reserved", detail: reserveDetail });
+      await insertEvent(client, { orderId: String(orderId), at: when, fromState: "reserved", toState: "reserved", detail: { ...sendDetail, phase: "send_started" } });
+      await insertLedger(client, [assertLedgerRow({ kind: "reserve", amountCny: reserve, userId: row.user_id, geoProjectId: row.geo_project_id,
+        orderId: String(orderId) }, when)]);
+      const updated = await client.query(`${ORDER_SELECT} WHERE o.id = $1`, [String(orderId)]);
+      return { order: mapOrder(updated.rows[0]) };
+    });
+  }
+
+  /**
+   * Run `operation` holding the project's market lock, or not at all: a second
+   * process (or a second tick) finds the project busy and leaves it for the
+   * next tick. A session advisory lock on its own connection, released when
+   * the operation ends or the connection dies.
+   * @template T @param {string} geoProjectId @param {() => Promise<T>} operation
+   * @returns {Promise<{ locked: true, value: T } | { locked: false }>}
+   */
+  async withProjectLock(geoProjectId, operation) {
+    await this.ready();
+    const key = `evimed_geo_market:${geoProjectId}`;
+    return /** @type {any} */ (this.database).withClient(async (/** @type {any} */ client) => {
+      const got = await client.query(`SELECT pg_try_advisory_lock(hashtext($1)) AS locked`, [key]);
+      if (!got.rows[0]?.locked) return { locked: false };
+      try {
+        return { locked: true, value: await operation() };
+      } finally {
+        await client.query(`SELECT pg_advisory_unlock(hashtext($1))`, [key]).catch(() => {});
+      }
     });
   }
 
@@ -574,41 +732,56 @@ export class GeoMarketStore {
     assertDetail(detail);
     if (ledger.length > GEO_MARKET_STORE_LIMITS.ledgerRowsMax) throw storeError("Too many ledger rows for one transition.");
     const rows = ledger.map((row) => assertLedgerRow({ ...row, orderId }, when));
-    return this.#transaction(async (client) => {
-      const sets = ["state = $3", "updated_at = $4"];
-      const values = [String(orderId), from, to, when];
-      for (const [key, value] of Object.entries(patch)) {
-        const column = ORDER_PATCH_COLUMNS[/** @type {keyof typeof ORDER_PATCH_COLUMNS} */ (key)];
-        values.push(JSON_ORDER_COLUMNS.has(column) ? JSON.stringify(value) : value);
-        sets.push(`${column} = $${values.length}${JSON_ORDER_COLUMNS.has(column) ? "::jsonb" : ""}`);
-      }
-      const current = await client.query(`SELECT state FROM evimed_geo.orders WHERE id = $1 FOR UPDATE`, [String(orderId)]);
-      const fromState = current.rows[0]?.state;
-      if (!fromState || !from.includes(fromState)) return null;
-      await client.query(`UPDATE evimed_geo.orders SET ${sets.join(", ")} WHERE id = $1 AND state = ANY($2::text[])`, values);
-      await insertEvent(client, { orderId: String(orderId), at: when, fromState, toState: to, detail });
-      await insertLedger(client, rows.map((row) => ({ ...row, userId: row.userId ?? null })));
-      const updated = await client.query(`${ORDER_SELECT} WHERE o.id = $1`, [String(orderId)]);
-      return mapOrder(updated.rows[0]);
-    });
+    try {
+      return await this.#transaction((client) => this.#move(client, { orderId, from, to, when, patch, detail, rows }));
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === "23505" && /** @type {any} */ (error)?.constraint === ARTICLE_LIVE_INDEX) throw articleLiveError();
+      throw error;
+    }
+  }
+
+  /**
+   * The body of `transitionOrder`, inside its transaction.
+   * @param {any} client
+   * @param {{ orderId: string, from: string[], to: string, when: string, patch: Record<string, any>, detail: Record<string, any>, rows: any[] }} move
+   */
+  async #move(client, { orderId, from, to, when, patch, detail, rows }) {
+    const sets = ["state = $3", "updated_at = $4"];
+    const values = [String(orderId), from, to, when];
+    for (const [key, value] of Object.entries(patch)) {
+      const column = ORDER_PATCH_COLUMNS[/** @type {keyof typeof ORDER_PATCH_COLUMNS} */ (key)];
+      values.push(JSON_ORDER_COLUMNS.has(column) ? JSON.stringify(value) : value);
+      sets.push(`${column} = $${values.length}${JSON_ORDER_COLUMNS.has(column) ? "::jsonb" : ""}`);
+    }
+    const current = await client.query(`SELECT state FROM evimed_geo.orders WHERE id = $1 FOR UPDATE`, [String(orderId)]);
+    const fromState = current.rows[0]?.state;
+    if (!fromState || !from.includes(fromState)) return null;
+    await client.query(`UPDATE evimed_geo.orders SET ${sets.join(", ")} WHERE id = $1 AND state = ANY($2::text[])`, values);
+    await insertEvent(client, { orderId: String(orderId), at: when, fromState, toState: to, detail });
+    await insertLedger(client, rows.map((row) => ({ ...row, userId: row.userId ?? null })));
+    const updated = await client.query(`${ORDER_SELECT} WHERE o.id = $1`, [String(orderId)]);
+    return mapOrder(updated.rows[0]);
   }
 
   /**
    * An event that does not move the order (a send started, a check, an
    * appeal, a citation), optionally with an order patch (checks, appeal).
-   * @param {string} orderId @param {{ at: string, detail: Record<string, any>, patch?: Record<string, any> }} note
+   * `expectState` makes it a compare-and-set: null when the order is not in
+   * that state.
+   * @param {string} orderId @param {{ at: string, detail: Record<string, any>, patch?: Record<string, any>, expectState?: string }} note
    */
-  async annotateOrder(orderId, { at, detail, patch = {} }) {
+  async annotateOrder(orderId, { at, detail, patch = {}, expectState }) {
     const when = assertAt(at);
     assertDetail(detail);
     assertOrderPatch(patch);
+    if (expectState != null) assertOneOf(expectState, ORDER_STATES, "order state");
     for (const key of ["vendorOrderNid", "reserveCny", "settledCny"]) {
       if (Object.hasOwn(patch, key)) throw storeError(`An annotation cannot set ${key}.`);
     }
     return this.#transaction(async (client) => {
       const current = await client.query(`SELECT state FROM evimed_geo.orders WHERE id = $1 FOR UPDATE`, [String(orderId)]);
       const state = current.rows[0]?.state;
-      if (!state) return null;
+      if (!state || (expectState != null && state !== expectState)) return null;
       const sets = ["updated_at = $2"];
       const values = [String(orderId), when];
       for (const [key, value] of Object.entries(patch)) {
@@ -674,10 +847,8 @@ export class GeoMarketStore {
    * @returns {Promise<Array<{ orderId: string | null, kind: string, amountCny: number, count: number }>>}
    */
   async ledgerSums({ geoProjectId, since }) {
-    const result = await this.#query(`SELECT order_id, kind, sum(amount_cny) AS amount, count(*)::int AS n FROM evimed_geo.ledger
-      WHERE geo_project_id = $1 AND ($2::timestamptz IS NULL OR created_at >= $2) GROUP BY order_id, kind`,
-    [String(geoProjectId), since == null ? null : assertAt(since)]);
-    return result.rows.map((row) => ({ orderId: row.order_id ?? null, kind: row.kind, amountCny: Math.round(Number(row.amount) * 100) / 100, count: row.n }));
+    await this.ready();
+    return ledgerSumsWith(this.database, geoProjectId, since == null ? null : assertAt(since));
   }
 
   /** Platform rows (no project): top-up requests and confirmations, adjustments. @param {Array<Record<string, any>>} rows @param {string} at */
