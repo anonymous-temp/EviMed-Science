@@ -112,13 +112,16 @@ test("没采到 is not 没人这么问: a failed platform is request_failed, and
 });
 
 test("every platform of a search shares one deadline; what it did not reach is request_failed", async () => {
+  // One platform at a time (the crawler is single-concurrency): the slow third
+  // one spends the rest of the deadline, and the fourth is never asked.
   const { fetchImpl, seen } = upstream((platform) => (platform === "xhs" ? { ...liveAnswer("xhs", [livePost("a")]), delayMs: 5_000 } : liveAnswer(platform, [livePost("b")])));
   const client = createSocialCrawlClient({ baseUrl: "http://social.internal:9966", timeoutMs: 1_200, fetchImpl });
   const started = Date.now();
-  const result = await client.search({ query: "q", platforms: ["xhs", "zhihu", "douyin", "weibo"] });
+  const result = await client.search({ query: "q", platforms: ["zhihu", "douyin", "xhs", "weibo"] });
   assert.ok(Date.now() - started < 2_500, "the search ends near its deadline, not after every platform's own");
+  assert.equal(result.platforms.find((/** @type {any} */ entry) => entry.platform === "zhihu").status, "collected");
   assert.equal(result.platforms.find((/** @type {any} */ entry) => entry.platform === "xhs").status, "request_failed");
-  assert.equal(result.platforms.find((/** @type {any} */ entry) => entry.platform === "weibo").status, "request_failed", "the second batch had no time left");
+  assert.equal(result.platforms.find((/** @type {any} */ entry) => entry.platform === "weibo").status, "request_failed", "no time was left for it");
   assert.equal(seen.some((call) => call.body.platform === "weibo"), false, "a platform past the deadline is not asked at all");
   assert.equal(result.status, "partial_collected");
   assert.equal(client.status().lastError, "timeout");
@@ -152,4 +155,29 @@ test("an answer is bounded while it streams in, not buffered whole and then refu
   assert.ok(pulled <= 10 * 1024 * 1024, `the client read ${pulled} bytes`);
   assert.equal(client.status().lastError, "response_too_large");
   assert.equal(await readBoundedText(new Response('{"ok":true}'), 1024), '{"ok":true}');
+});
+
+test("platforms are asked one at a time, and a busy answer is asked again after a wait", async () => {
+  let inFlight = 0;
+  let peak = 0;
+  let zhihuCalls = 0;
+  const waits = /** @type {number[]} */ ([]);
+  /** @type {typeof fetch} */
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    inFlight -= 1;
+    if (body.platform === "zhihu" && ++zhihuCalls === 1) return new Response("{}", { status: 429 });
+    return new Response(JSON.stringify(liveAnswer(body.platform, [livePost(body.platform)]).body), { status: 200 });
+  };
+  const client = createSocialCrawlClient({ baseUrl: "http://social.internal:9966", timeoutMs: 60_000, fetchImpl,
+    sleep: async (ms) => { waits.push(ms); } });
+  const result = await client.search({ query: "q", platforms: ["xhs", "zhihu", "douyin"] });
+  assert.equal(peak, 1, "never two requests at once");
+  assert.equal(zhihuCalls, 2);
+  assert.deepEqual(waits, [2_000]);
+  assert.equal(result.status, "collected");
+  assert.equal(client.status().counters.retried, 1);
 });

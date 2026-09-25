@@ -53,7 +53,14 @@ export const SOCIAL_MAX_QUERY_LENGTH = 100;
 const MAX_DETAIL_POSTS = 10;
 const COMMENTS_PER_POST = 5;
 const MAX_COMMENTS_KEPT = 10;
-const CONCURRENCY = 3;
+/**
+ * One platform at a time: the crawler serves one request at a time and answers
+ * 429 to the rest. Measured on production 2026-09-25 with three at once: 14 of
+ * 16 platform requests came back 429 and a question map was built from two.
+ */
+const CONCURRENCY = 1;
+/** Waits before asking again after a busy answer (429/503), inside the search's one deadline. */
+const BUSY_BACKOFF_MS = Object.freeze([2_000, 5_000, 10_000]);
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const UPSTREAM_STATUSES = new Set(["collected", "partial_collected", "no_results", "request_failed"]);
 
@@ -146,11 +153,12 @@ export function socialCollectionStatus(platforms) {
 }
 
 /**
- * @param {{ baseUrl?: string, timeoutMs?: number, fetchImpl?: typeof fetch, now?: () => Date }} options
+ * @param {{ baseUrl?: string, timeoutMs?: number, fetchImpl?: typeof fetch, now?: () => Date, sleep?: (ms: number) => Promise<unknown> }} options
  */
-export function createSocialCrawlClient({ baseUrl = "", timeoutMs = 120_000, fetchImpl = globalThis.fetch, now = () => new Date() } = {}) {
+export function createSocialCrawlClient({ baseUrl = "", timeoutMs = 120_000, fetchImpl = globalThis.fetch, now = () => new Date(),
+  sleep = (/** @type {number} */ ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); }) } = {}) {
   const origin = String(baseUrl ?? "").trim().replace(/\/+$/, "");
-  const counters = { searches: 0, requests: 0, collected: 0, noResults: 0, failed: 0 };
+  const counters = { searches: 0, requests: 0, collected: 0, noResults: 0, failed: 0, retried: 0 };
   let lastError = /** @type {string | null} */ (null);
 
   /**
@@ -160,6 +168,17 @@ export function createSocialCrawlClient({ baseUrl = "", timeoutMs = 120_000, fet
    * @param {string} query @param {string} platform @param {string} sort @param {number} detailPosts @param {number} deadline epoch ms
    */
   async function crawl(query, platform, sort, detailPosts, deadline) {
+    for (let attempt = 0; ; attempt += 1) {
+      const result = await crawlOnce(query, platform, sort, detailPosts, deadline);
+      const wait = BUSY_BACKOFF_MS[attempt];
+      if (!result.busy || wait == null || deadline - Date.now() < wait + 5_000) return { platform: result.platform, status: result.status, posts: result.posts };
+      counters.retried += 1;
+      await sleep(wait);
+    }
+  }
+
+  /** @param {string} query @param {string} platform @param {string} sort @param {number} detailPosts @param {number} deadline */
+  async function crawlOnce(query, platform, sort, detailPosts, deadline) {
     const remaining = deadline - Date.now();
     if (remaining < 1_000) {
       lastError = "timeout";
@@ -181,7 +200,7 @@ export function createSocialCrawlClient({ baseUrl = "", timeoutMs = 120_000, fet
       if (!response.ok) {
         lastError = `http_${response.status}`;
         counters.failed += 1;
-        return { platform, status: "request_failed", posts: [] };
+        return { platform, status: "request_failed", posts: [], busy: response.status === 429 || response.status === 503 };
       }
       const body = JSON.parse(await readBoundedText(response, MAX_RESPONSE_BYTES));
       const collectedAt = now().toISOString();
