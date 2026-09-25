@@ -449,11 +449,12 @@ function ownedSources(owned) {
 }
 
 /**
- * Whether a citation points at our source: its host ends with an owned domain
- * (the scripts' suffix rule, kept as written — `notexample.com` ends with
- * `example.com`), or it is one of our published article URLs. The parser uses
- * this same function for `facts.cites_ours`, so a page and a metric never
- * disagree about what is ours.
+ * Whether a citation points at our source: its host is an owned domain or a
+ * subdomain of one, label-aligned (`www.example.com` is `example.com`'s,
+ * `notexample.com` is not — the scripts' rule since geo-skills 3.0.1), or it
+ * is one of our published article URLs. The parser uses this same function
+ * for `facts.cites_ours`, so a page and a metric never disagree about what is
+ * ours.
  * @param {GeoCitation} citation @param {{ domains?: string[], urls?: string[] }} owned
  * @returns {boolean}
  */
@@ -464,7 +465,7 @@ export function isOurCitation(citation, owned) {
 /** @param {GeoCitation} citation @param {OwnedSources} owned */
 function citationIsOurs(citation, owned) {
   const domain = String(citation?.domain || hostOf(citation?.url)).toLowerCase()
-  if (domain && owned.domains.some((suffix) => domain.endsWith(suffix))) return true
+  if (domain && owned.domains.some((owner) => domain === owner || domain.endsWith(`.${owner}`))) return true
   const key = canonicalGeoUrl(citation?.url)
   return Boolean(key) && owned.urls.has(key)
 }
@@ -634,8 +635,8 @@ const applies = (metricId, pool) => (METRIC_INDEX.get(metricId)?.pools ?? []).in
 
 /**
  * The metrics a pool-bound scope reports: those defined for the pool, the
- * risk metric where it is defined (taken from its source metric AFTER the
- * pool mask, as the script does), and the refusal share.
+ * risk metric where it is defined (M-15, from its source metric before the
+ * pool mask), and the refusal share.
  * @param {string} pool @returns {string[]}
  */
 function poolMetricIds(pool) {
@@ -647,13 +648,16 @@ function poolMetricIds(pool) {
 }
 
 /**
+ * A pool-bound cell's core. A copy metric (M-15 = the risk pool's M-03) reads
+ * its source as this scope computed it, BEFORE the pool mask: M-03 is not
+ * defined for P4, so the masked cell would never be measurable — the defect
+ * geo-skills 3.0.1 fixed in the script.
  * @param {string} metricId @param {Record<string, CoreCell>} core @param {string} pool @returns {CoreCell}
  */
 function poolCore(metricId, core, pool) {
   if (core[metricId]) return applies(metricId, pool) ? core[metricId] : unmeasurable('not_applicable')
   const rule = COMPUTATION.derived_metrics[metricId]
-  const source = /** @type {{ pool: string, metric: string }} */ (rule.source)
-  return applies(source.metric, pool) ? core[source.metric] : unmeasurable('not_applicable')
+  return core[/** @type {{ pool: string, metric: string }} */ (rule.source).metric]
 }
 
 /**

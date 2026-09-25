@@ -1,13 +1,14 @@
 {
   "_provenance": {
-    "source": "geo-skills 3.0.0 (owner's proprietary method package, not vendored): shared/rules/metrics.yaml converted to JSON key for key; constants from shared/rules/catalogue.yaml; engines from shared/rules/interfaces.yaml",
-    "version": "3.0.0",
+    "source": "geo-skills 3.0.1 (owner's proprietary method package, not vendored): shared/rules/metrics.yaml converted to JSON key for key; constants from shared/rules/catalogue.yaml; engines from shared/rules/interfaces.yaml",
+    "version": "3.0.1",
     "sha256": {
       "shared/rules/metrics.yaml": "a4ac003a9b9f4e0d383af15cfe9b301beff6387933a64ac5772b73e2b727579f",
       "shared/rules/catalogue.yaml": "9b2ada5bb900aa92d1ff6457ca6fed6e0c7b6beb77a78fefa656e5585ee68e79",
       "shared/rules/interfaces.yaml": "a389a7904a26e275c5c48b1a283ac1acbd5ba8c2a4dc56728984ba625bc5992a",
-      "shared/scripts/compute_metrics.py": "0e60db559122861a5c6bc83e703133c77d68fd8ba5f8867a6c1069a321bba150",
-      "shared/scripts/monitor.py": "9f2d9f47601be65960b21d64e20f4bbfc29f0fbfa354f896e1046d7bdcfc897e"
+      "shared/scripts/compute_metrics.py": "bbdc035c6cbfff5b811d22097614bd1c51f13ffb15abd82dd9f75affda95ef28",
+      "shared/scripts/monitor.py": "9f2d9f47601be65960b21d64e20f4bbfc29f0fbfa354f896e1046d7bdcfc897e",
+      "shared/scripts/extract_facts.py": "523e83186e3e62af8454453b5e89ac5970f5b90b03272697b08ad1a93a59f49c"
     },
     "converted": "2026-09-25",
     "rule": "The one place formulas' constants live. Code reads them from here and never restates them (plan §4.1).",
@@ -51,7 +52,7 @@
       "uneven_denominator_metric_ids": "compute_metrics.py pool_metrics: pool rates set not measurable when per-question valid counts differ (_denominator_evenness)",
       "top_n_variant_max_position": "extract_facts.py self_top3 (M-01S top3 variant)",
       "percent_scale": "compute_metrics.py _rate: 100.0 * numerator / denominator; metrics.yaml gvi.normalization 0-100",
-      "derived_metrics": "compute_metrics.py _derived and compute(): M-13 = P1 M-01 / P2 M-01; M-14 = P3's M-01 cell; M-15 = P4's M-03 cell taken AFTER _mask_out_of_pool (M-03 is not defined for P4, so M-15 is never measurable — see the package M report); pool_cell: compute() also stores M-15 inside pools.P4"
+      "derived_metrics": "compute_metrics.py _derived and compute(): M-13 = P1 M-01 / P2 M-01; M-14 = P3's M-01 cell; M-15 = P4's own M-03 read BEFORE _mask_out_of_pool and annotated on its own (3.0.1; M-03 is not defined for P4, so the masked cell was never measurable); pool_cell: compute() stores M-15 inside pools.P4"
     },
     "engines": "interfaces.yaml probe.engines + probe.planned_providers; citation_display decides M-08B (VF-G12)",
     "platform": {
