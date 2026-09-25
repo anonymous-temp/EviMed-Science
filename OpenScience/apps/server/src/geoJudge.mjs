@@ -66,6 +66,8 @@ const JUDGE_MAX_TOKENS = 3_000;
 const JUDGE_TIMEOUT_MS = 90_000;
 /** Judge failures on one answer before it is written unjudged. */
 export const GEO_JUDGE_MAX_ATTEMPTS = 3;
+/** The failures that are the answer's own; every other one stops the tick. */
+const ANSWER_FAILURES = new Set(["geo_judge_invalid", "geo_judge_timeout"]);
 const LIMITS = Object.freeze({ statements: 30, entities: 30, recommendations: 20, safetyTerms: 20 });
 /** The shortest evidence quote that says anything. */
 const EVIDENCE_MIN_CHARS = 4;
@@ -491,8 +493,11 @@ export async function tickParse(deps) {
     } catch (error) {
       const code = String(/** @type {any} */ (error)?.code ?? "geo_judge_failed");
       counts.failures += 1;
-      // A spent budget or no model will not be different on the next answer.
-      if (code === "usage_budget_exceeded" || code === "geo_judge_unavailable" || code === "model_gateway_payment_required") {
+      // Only a failure of this answer (no usable JSON, or a call that ran out
+      // of time on it) counts against the answer. A provider that is down, out
+      // of balance or refusing is not the answer's fault and will not be
+      // different on the next one: stop, and try again next tick.
+      if (!ANSWER_FAILURES.has(code)) {
         counts.skipped = code;
         break;
       }

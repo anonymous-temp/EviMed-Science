@@ -602,6 +602,48 @@ test("an unconfigured probe is a wait, not an absence; an unreachable one fails 
   }
 });
 
+// ---------------------------------------------------------------- a judge that fails
+
+test("a provider outage stops the judge without spending attempts; an answer the judge keeps failing on is written unjudged and counted as unparsed", options, async () => {
+  await reset();
+  await seed("geo_j");
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }) });
+  let mode = "outage";
+  const judge = new GeoJudge(h.config, {
+    callModel: /** @type {any} */ (async () => {
+      if (mode === "outage") throw Object.assign(new Error("upstream"), { code: "model_gateway_upstream_error" });
+      return { choices: [{ message: { content: "I cannot produce JSON today." } }] };
+    }),
+  });
+  const deps = { ...h.deps, judge };
+  try {
+    const round = await enqueueRound(deps, { geoProjectId: "geo_j", kind: "baseline" });
+    await tickProbe({ ...deps, maxAsks: 10 });
+    const outage = await tickParse({ ...deps, maxParse: 20 });
+    assert.equal(outage.skipped, "model_gateway_upstream_error");
+    assert.equal(outage.parsed, 0);
+    assert.equal(h.state.judgeAttempts.size, 0, "an outage is not the answers' fault");
+
+    mode = "garbage";
+    assert.equal((await tickParse({ ...deps, maxParse: 20 })).parsed, 0);
+    assert.equal((await tickParse({ ...deps, maxParse: 20 })).parsed, 0);
+    const third = await tickParse({ ...deps, maxParse: 20 });
+    assert.equal(third.parsed, 6);
+    assert.equal(third.unjudged, 6);
+    const facts = await rows(`SELECT judged_at, parser_version, brands FROM evimed_geo.facts`);
+    assert.ok(facts.every((row) => row.judged_at === null && row.parser_version.endsWith("+unjudged") && row.brands.length === 1),
+      "what code can count is kept for the page");
+    await tickMetrics(deps);
+    const cells = await rows(`SELECT metric_id, scope, engine, status, reason FROM evimed_geo.metrics WHERE round_id = $1 AND scope = 'engine'`, [round.roundId]);
+    const mention = cells.find((row) => row.metric_id === "M-01" && row.engine === "deepseek");
+    // Every answer unparsed leaves the domain's metrics nothing to count: 未测, never 0 %.
+    assert.deepEqual({ status: mention.status, reason: mention.reason }, { status: "absent", reason: "engine_absent" },
+      "unjudged answers are left out, never read as mentioning nothing");
+  } finally {
+    await h.probe.close();
+  }
+});
+
 // ---------------------------------------------------------------- money
 
 test("the judge stops when the module's daily budget is spent: answers wait unparsed, nothing is counted as zero", options, async () => {
