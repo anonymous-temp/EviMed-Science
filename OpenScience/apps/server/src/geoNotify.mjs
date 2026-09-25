@@ -118,6 +118,8 @@ const OPERATOR_TITLES = Object.freeze({
   order_unpublished: "投放：订单超时未发布",
   published_off_domain: "投放：发布链接不在媒体自己的域名上",
   market_unauthorized: "投放：媒介平台拒绝了接口密钥",
+  diagnosis_empty: "测量：一轮诊断没有测到任何有效回答",
+  metrics_missing: "测量：一轮测量结束已过半小时，指标还没有算出来",
   geo_probe_suspect: "测量：出现可疑回答（登录页或空白页）",
   geo_probe_engine_paused: "测量：一家 AI 引擎暂停探测",
   geo_probe_host_down: "测量：探测机连不上",
@@ -172,6 +174,19 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         title: `${geoProductName(project)}：诊断完成`,
         body: `${engines} 家 AI 引擎、${answers} 次回答已经测完${wrong}。`,
         severity: "info", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis:${roundId}`,
+      });
+    },
+
+    /**
+     * 1'. The diagnosis measured nothing — said plainly instead of 「诊断完成」,
+     * with what the user can do once operators have looked.
+     * @param {any} project @param {{ roundId: string }} facts
+     */
+    diagnosisEmpty(project, { roundId }) {
+      return send(project, "diagnosis_done", {
+        title: `${geoProductName(project)}：诊断没有测到回答`,
+        body: "这一轮没有从任何 AI 引擎拿到有效回答，已通知管理员检查探测通道。处理好后，在诊断页点「让 AI 做」重新测。",
+        severity: "attention", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
       });
     },
 
