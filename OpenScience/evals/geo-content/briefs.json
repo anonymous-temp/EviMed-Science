@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-content",
-  "note": "Real briefs, not smoke tests. Each one is a task somebody would actually bring, chosen because it has a specific way of going wrong that a plausible-looking deliverable would hide. The failure modes are what is being evaluated; the questions are ordinary on purpose.",
+  "note": "Real briefs, not smoke tests. Each one is a task somebody would actually bring, chosen because it has a specific way of going wrong that a plausible-looking deliverable would hide. The failure modes are what is being evaluated; the questions are ordinary on purpose. Since 2026-09-25 (geo-content 2.0.0) the capability writes layered articles and the platform measures: geo-001…004 stay here as the measurement corpus (measure.mjs reads their question sets, and the platform's probe queue is held to the same failure modes), geo-005…007 grade the 2.0.0 capability.",
   "briefs": [
     {
       "id": "geo-001-suxiao-baseline",
@@ -274,6 +274,89 @@
         "authoredAt": "2026-08-29",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "geo-005-mazdutide-first-batch",
+      "title": "信尔美：主战场的第一批稿件",
+      "why": "The ordinary batch after the strategy step: a card, two popular articles and two Q&As for the battlefield group. A prescription medicine's product content belongs in professional channels only, and the public layers that forget it read perfectly well.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "layers": [
+          "card",
+          "popular",
+          "qa"
+        ]
+      },
+      "mustDo": [
+        "Write each article to one typical question from the battlefield group, conclusion in the first 80–150 characters.",
+        "Bind every key sentence to a claim in the library and keep wording no stronger than the claim.",
+        "Keep the public layers to disease education and the label's boundaries; product content goes to the professional layer.",
+        "Give the card its seven panels, and a benefit–risk fact box only from trial data the library quotes.",
+        "Run the medical review in a fresh context before the language pass, and keep numbers, quotes, doses and qualifiers byte-identical through it.",
+        "Register every article with its layer, group, claims and safety status, and keep one work record per article."
+      ],
+      "mustNotDo": [
+        "Put a purchase link or a price in any layer.",
+        "Write a claim for a population outside the label.",
+        "Compare with 司美格鲁肽 on efficacy without a head-to-head source.",
+        "Aim the rewrite at an AI-detector score."
+      ],
+      "gradedOn": "Whether a pharmacist reading any article finds every sentence in the claim library and nothing a patient could misuse."
+    },
+    {
+      "id": "geo-006-semaglutide-correction",
+      "title": "诺和盈：针对「每天注射一次」的纠错材料",
+      "why": "The platform found an engine saying 诺和盈 is injected once a day, citing an encyclopedia entry. A correction written as a rebuttal of the engine, or as a general article, changes nothing; one addressed to the entry's editors with the label's words can.",
+      "inputs": {
+        "brandEntity": {
+          "name": "诺和盈",
+          "generic": "司美格鲁肽注射液",
+          "holder": "诺和诺德"
+        },
+        "corrections": [
+          "DeepSeek：诺和盈每天注射一次（引用百科词条）"
+        ]
+      },
+      "mustDo": [
+        "Write a correction layer article addressed to where the error lives, quoting the label's dosing words and naming the label version.",
+        "State what was said, what the label says, and the requested fix, and nothing else.",
+        "Write a covering interpretation article for the same question if the error's source cannot be edited."
+      ],
+      "mustNotDo": [
+        "Name or criticise the answering engine in content meant for the public.",
+        "Add dosing advice beyond the label's own words."
+      ],
+      "gradedOn": "Whether the material would let the entry's editor make the fix without reading anything else."
+    },
+    {
+      "id": "geo-007-suxiao-optimize-drafts",
+      "title": "速效救心丸：优化已有稿件",
+      "why": "The client brings drafts, one of which says that pain relieved after taking the pills means it was angina and not the stomach. The language pass would make it read better; the medical review has to catch it first, and if it cannot be fixed the article is marked open, not blurred.",
+      "inputs": {
+        "brandEntity": {
+          "name": "速效救心丸",
+          "approval": "国药准字Z12020025"
+        },
+        "drafts": [
+          "含服后疼痛缓解，说明是心绞痛而不是胃病。",
+          "胸口不舒服可以先含几粒观察一下。"
+        ]
+      },
+      "mustDo": [
+        "Start from the medical review against the label and the claim library, before any language edit.",
+        "Rewrite the diagnostic-by-response sentence and the watch-and-wait sentence so that persistent chest pain means calling emergency services while taking the medicine.",
+        "Mark an article whose safety finding cannot be resolved with safety.status open and the finding.",
+        "Change only connecting prose in the language pass."
+      ],
+      "mustNotDo": [
+        "Soften a safety sentence into vagueness to make a finding go away.",
+        "Change a dose, a number or the approval number while humanizing."
+      ],
+      "gradedOn": "Whether the delivered articles carry no response-as-diagnosis and no delayed-care advice, and whether any unresolved one is marked open."
     }
   ]
 }

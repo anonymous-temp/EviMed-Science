@@ -172,6 +172,11 @@
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/evimed'
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/curated-scientific'
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/office'
+      # The owner's GEO method pack (a private root: gitignored, vendored on the
+      # build machine). Its skills sit under `skills/`, beside the `shared/`
+      # layer they call $GEO_LIB. A build without the pack has the root and no
+      # `skills/` in it, which the loader reads as no skills, not as an error.
+      - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills'
       # Community skills, vendored at pinned commits and last in the order: the
       # first root wins a name collision, so nothing taken from the ecosystem
       # can displace a skill we wrote. What is in here is recorded in

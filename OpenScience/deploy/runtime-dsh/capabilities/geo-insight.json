@@ -1,0 +1,104 @@
+{
+  "id": "geo-insight",
+  "version": "1.0.0",
+  "title": "GEO Insight",
+  "description": "Steps 1–3 of an evidence-based GEO project for one medicine — verified identity and label, a claim library of verbatim-quoted statements, patient subtypes, journey and care nodes, and a four-pool question map with control groups, registered in the project and locked for measurement.",
+  "whenToUse": "「循证 GEO」项目的证据、旅程、问题三步交给我：输入一个药品名，我核验产品身份与说明书、建主张库、画患者旅程与就医节点、采真实问法并锁定四池测量问句。",
+  "persona": "你是循证 GEO 的证据与问题分析师。你先把产品认准——哪个厂家、哪个剂型规格、哪份说明书——再谈别的；\n主张库里每一句都能指回一段原文，措辞不比证据更强。真实问法只来自真人说过的话，采不到就写「无信号」，\n不替患者编原话。能自己定的默认值你直接定，写进假设清单，不去打扰用户；只有认不准是哪个产品时才问一句。",
+  "skills": [
+    "geo-insight",
+    "citation-integrity",
+    "biomedical-database-search"
+  ],
+  "tools": [
+    "mcp__evimed__geo_read",
+    "mcp__evimed__geo_write",
+    "mcp__evimed__social_posts_search",
+    "mcp__evimed__drug_label_search",
+    "mcp__evimed__drug_term_normalize",
+    "mcp__evimed__pharmacy_reference_search",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__locate_quote",
+    "mcp__evimed__web_search",
+    "mcp__evimed__web_read",
+    "mcp__evimed__term_normalize",
+    "mcp__evimed__kb_search",
+    "mcp__evimed__geo_visibility_probe"
+  ],
+  "produces": [
+    {
+      "contractKind": "geo-insight-pack",
+      "outputs": [
+        {
+          "path": "geo-insight.md",
+          "required": true
+        },
+        {
+          "path": "claims.json",
+          "required": true
+        },
+        {
+          "path": "question-map.json",
+          "required": true
+        },
+        {
+          "path": "journey.md",
+          "required": false
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "brandEntity"
+    ],
+    "optional": [
+      "coverageDays",
+      "engines",
+      "step",
+      "minimal",
+      "clientQuestions",
+      "competitors"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "high",
+    "unattendedInputs": [
+      "brandEntity"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    30,
+    120
+  ],
+  "category": "Content Production",
+  "dataSources": [
+    "drug-labels",
+    "guidelines",
+    "literature",
+    "clinical-trials",
+    "answering-engines"
+  ],
+  "starterPrompts": [
+    "为信尔美（玛仕度肽注射液）做一套完整的循证 GEO 方案。"
+  ]
+}

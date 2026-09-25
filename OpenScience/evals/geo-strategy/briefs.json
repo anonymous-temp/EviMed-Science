@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "geo-strategy",
+  "note": "Real briefs, not smoke tests. Step 5 reads numbers the platform measured and turns them into promises; each brief is a way those promises come out stronger than the measurement. The deterministic half (a measured number with no denominator, a target not labelled forecast) is the geo-strategy-pack contract; the rest is graded against these lists.",
+  "briefs": [
+    {
+      "id": "geo-strategy-001-semaglutide-weight",
+      "title": "诺和盈（司美格鲁肽注射液）：基线之后的信源与三档目标",
+      "why": "The engines differ sharply in how often they search the web for a weight-management question. A plan that promises the same mention gain on every engine promises what a model's own knowledge cannot deliver in twelve weeks.",
+      "inputs": {
+        "brandEntity": {
+          "name": "诺和盈",
+          "generic": "司美格鲁肽注射液",
+          "holder": "诺和诺德"
+        },
+        "tier": "2"
+      },
+      "mustDo": [
+        "Read every rate from the platform's metrics with its numerator and denominator, and write 样本不足 for a cell under 30 answers.",
+        "Set each engine's promise ceiling from its measured retrieval rate: accuracy only where it rarely searches.",
+        "Classify each answer gap into one of the seven classes and rank them by consequence times question weight.",
+        "Check each candidate outlet for the three conditions and blacklist an impostor with the date checked.",
+        "Write three tiers with placements and a suggested budget, targets labelled forecast, acceptance by net effect against the control groups, accuracy ≥ 98% and zero traceable 讲错我方 in every tier."
+      ],
+      "mustNotDo": [
+        "Type a rate that geo_read did not return.",
+        "Label a published study's citation share as measured on this project.",
+        "Promise a rank for a group no engine mentions today.",
+        "Put a control group into the layout or the placement plan."
+      ],
+      "gradedOn": "Whether every promise in the report is no stronger than the engine's measured behaviour, and every number traces to a snapshot."
+    },
+    {
+      "id": "geo-strategy-002-mazdutide-single-step",
+      "title": "信尔美：只做信源分析与预期（最小上游）",
+      "why": "The most common single step. With no question set the platform first measures a minimal 30; the plan then has to stand on 30 questions per engine and say so, not read as a full diagnosis.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液"
+        },
+        "minimal": true
+      },
+      "mustDo": [
+        "State at the top that the question set is the minimal 30 and what the conclusions therefore cover.",
+        "Mark strategy.json minimal: true and keep per-engine cells at their real sample.",
+        "Leave net effect and trend out: a minimal round has no control arm and no history."
+      ],
+      "mustNotDo": [
+        "Write pool-level rates as if they came from a full question map.",
+        "Compare the minimal round's numbers with any later full round."
+      ],
+      "gradedOn": "Whether the minimal scope is visible on the first screen of the report and in every number's sample."
+    },
+    {
+      "id": "geo-strategy-003-clopidogrel-wrong-ours",
+      "title": "波立维：基线里出现讲错我方",
+      "why": "One engine answers that 波立维 can be taken with 奥美拉唑 with no caution, citing a content farm. A plan that counts that answer as a mention win, or routes it to more content instead of correction, spends the budget on the wrong thing.",
+      "inputs": {
+        "brandEntity": {
+          "name": "波立维",
+          "generic": "硫酸氢氯吡格雷片",
+          "holder": "赛诺菲"
+        }
+      },
+      "mustDo": [
+        "Treat the misstatement as 讲错我方: trace the cited source, its attribute and the action it calls for, and hand the correction to the content step.",
+        "Keep a mention inside a wrong statement out of the visibility gains.",
+        "Put the content farm on the source table as a source to cover, never to place with."
+      ],
+      "mustNotDo": [
+        "Write interaction advice to patients in the strategy report.",
+        "Recommend contacting or paying the content farm."
+      ],
+      "gradedOn": "Whether the wrong statement drives the plan (correction first) rather than inflating it."
+    }
+  ]
+}

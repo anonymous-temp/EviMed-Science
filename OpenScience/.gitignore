@@ -38,6 +38,12 @@ venv/
 .eslintcache
 .superpowers/
 
+# The owner's proprietary GEO method pack, unpacked by
+# scripts/build/vendor-geo-skills.mjs. The repository is public: only the
+# README that explains the directory is tracked.
+runtime/skills/geo-private/*
+!runtime/skills/geo-private/README.md
+
 # Local runtime & secrets (never commit)
 .ai4s-workbench/
 .openscience-web-data/

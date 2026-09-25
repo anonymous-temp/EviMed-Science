@@ -137,6 +137,11 @@ export function documentNameOf(path) {
     'appraisal-table.md': '证据评价表',
     'geo-content-pack.md': '内容包',
     'geo-measurement.md': '答案引擎测量',
+    'geo-insight.md': '证据与问题地图',
+    'journey.md': '患者旅程矩阵',
+    'geo-strategy.md': '信源与目标',
+    'geo-content.md': '稿件清单',
+    'geo-proposal.md': '提案资料包说明',
   };
   const name = String(path ?? '').split('/').pop() ?? '';
   return Object.hasOwn(names, name) ? names[name] : null;

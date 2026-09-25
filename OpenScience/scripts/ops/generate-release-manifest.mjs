@@ -179,6 +179,9 @@ async function currentSkills() {
     "runtime/skills/curated-scientific",
     "runtime/skills/office",
     "runtime/skills/community",
+    // The private GEO method pack: not in git, so this digest is the only
+    // record of which pack a release carried (a clone binds its README alone).
+    "runtime/skills/geo-private",
     "capability-skills",
   ];
   const sources = [...(configured == null ? defaults : configured.split(","))]

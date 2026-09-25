@@ -45,7 +45,14 @@ const JSON_SHAPED = new Set([
 /** Kinds that measure something else entirely, and say so in their own metrics. */
 const OWN_METRICS = new Map([
   ["grant-proposal-package", ["grantRequirements", "grantMilestones"]],
-  ["geo-content-pack", ["geoProbeRounds", "geoMeasuredRounds", "geoFailedRounds"]],
+  // The four GEO contracts count what each of them is made of. A claim library
+  // and a question map have no citation matrix; their own counts are what the
+  // tiering decision needs. The content pack keeps its probe-ledger counts for
+  // the ad-hoc probe a run may still record (zero when it recorded none).
+  ["geo-insight-pack", ["geoClaims", "geoClaimsVerified", "geoMeasuredQuestions", "geoControlGroups"]],
+  ["geo-strategy-pack", ["geoSources", "geoGaps", "geoEnginesExpected", "geoTiers"]],
+  ["geo-content-pack", ["geoArticles", "geoArticlesSafetyOpen", "geoProbeRounds", "geoMeasuredRounds", "geoFailedRounds"]],
+  ["geo-proposal-pack", ["geoProposalFiles", "geoProposalMode"]],
 ]);
 
 test("every contract kind has a decided position on the verification metrics", () => {

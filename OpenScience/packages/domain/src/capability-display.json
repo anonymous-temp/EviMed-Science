@@ -188,24 +188,27 @@
       }
     },
     "geo-content": {
-      "title": "GEO 答案引擎优化",
+      "title": "循证 GEO · 分层稿件",
       "category": "写作与传播",
-      "description": "先测各大 AI 答案引擎怎样回答你的问题，再写出可被引用的内容。",
+      "description": "从主张库写出四层稿件和纠错材料，逐篇审核后去 AI 味。",
+      "listed": false,
       "starterPrompts": [
-        "测一测「速效救心丸开封后多久失效」在各平台的回答，并写出可被引用的内容块。",
-        "用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"
+        "按主战场给信尔美写第一批稿件：一篇证据卡片、两篇科普、两篇问答。",
+        "优化这几篇已有稿件：先医学审核，再去 AI 味，数字和引文一个字不动。",
+        "针对 DeepSeek 把玛仕度肽说成每天注射一次，写一份纠错材料。"
       ],
-      "materials": "需要一组真实问法：写在问题里，或上传到知识库",
+      "materials": "需要项目的主张库；已有稿件可上传到知识库",
       "estimatedMinutes": {
-        "min": 60,
-        "max": 180
+        "min": 30,
+        "max": 150
       },
       "outputs": [
-        "测量报告与监测表",
-        "证据绑定的内容块（含 JSON-LD 与 llms.txt）"
+        "深度分析、证据卡片、科普稿件、问答",
+        "针对讲错我方的纠错材料",
+        "每篇一份工作记录"
       ],
       "knownLimits": [
-        "测量依赖部署配置的答案引擎探测通道；通道不可用时内容块没有测量基础。"
+        "有未处理安全问题的稿件会标出来，不自动投放，需要人看一眼。"
       ],
       "evaluation": {
         "lastStatus": "failed",
@@ -213,6 +216,85 @@
         "runs": 3,
         "delivered": 0,
         "typicalMinutes": null
+      }
+    },
+    "geo-insight": {
+      "title": "循证 GEO",
+      "category": "写作与传播",
+      "description": "核验产品与说明书，建主张库，画患者旅程并锁定测量问句。",
+      "listed": false,
+      "starterPrompts": [
+        "为信尔美（玛仕度肽注射液）做一套完整的循证 GEO 方案。",
+        "AI 现在怎么说诺和盈（司美格鲁肽注射液）？先把证据和问题做出来。",
+        "只列问题：给连花清瘟胶囊出一版 30 个问句的最小测量集。"
+      ],
+      "materials": "需要一个药品名：商品名、通用名或批准文号都可以",
+      "estimatedMinutes": {
+        "min": 30,
+        "max": 120
+      },
+      "outputs": [
+        "产品身份与主张库",
+        "患者旅程与就医节点",
+        "四池问题地图与测量问句"
+      ],
+      "knownLimits": [
+        "真实问法依赖社媒采集通道；采不到时只用典型问句，并如实标注。"
+      ],
+      "evaluation": {
+        "lastStatus": "not-run",
+        "lastRunAt": null
+      }
+    },
+    "geo-proposal": {
+      "title": "循证 GEO · 提案资料包",
+      "category": "写作与传播",
+      "description": "用项目冻结的数据导出提案资料包或每周周报。",
+      "listed": false,
+      "starterPrompts": [
+        "把信尔美项目导出成提案资料包：Excel、两份 Word、PPT 和 HTML。",
+        "出本周的周报：净效应、被引用的稿件、新出现的讲错我方。"
+      ],
+      "estimatedMinutes": {
+        "min": 20,
+        "max": 90
+      },
+      "outputs": [
+        "提案资料包：Excel、两份 Word、PPT、HTML",
+        "每周周报：PDF 与 Word"
+      ],
+      "knownLimits": [
+        "只呈现项目里已有的数据；没做过的步骤写「未做」。"
+      ],
+      "evaluation": {
+        "lastStatus": "not-run",
+        "lastRunAt": null
+      }
+    },
+    "geo-strategy": {
+      "title": "循证 GEO · 信源与目标",
+      "category": "写作与传播",
+      "description": "读懂各引擎引用谁、缺什么，定主战场和三档目标。",
+      "listed": false,
+      "starterPrompts": [
+        "基线已经测完，做信源分析与预期：主战场、每个引擎这个周期能做到什么、三档目标。",
+        "只做信源分析与预期：波立维（硫酸氢氯吡格雷片）。"
+      ],
+      "estimatedMinutes": {
+        "min": 20,
+        "max": 90
+      },
+      "outputs": [
+        "信源表与答案缺口",
+        "逐引擎预期与主战场",
+        "三档目标与建议预算"
+      ],
+      "knownLimits": [
+        "只解读平台实测的数；样本不足的格子不出百分数。"
+      ],
+      "evaluation": {
+        "lastStatus": "not-run",
+        "lastRunAt": null
       }
     },
     "manuscript-support": {

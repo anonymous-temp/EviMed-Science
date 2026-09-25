@@ -47,6 +47,7 @@ import displayTable from './capability-display.json' with { type: 'json' }
  * @property {string} title
  * @property {string} category
  * @property {string} description
+ * @property {false} [listed] Present, and false, when the capability is kept out of the lists a researcher picks from.
  * @property {string[]} starterPrompts
  * @property {string} [materials] What the researcher has to provide first, when the capability works on their material.
  * @property {{ min: number, max: number }} estimatedMinutes How long it usually takes.
@@ -68,6 +69,23 @@ export const CAPABILITY_DISPLAY = Object.freeze(
 export function capabilityTitle(id) {
   const key = String(id ?? '').trim()
   return key && CAPABILITY_DISPLAY[key] ? CAPABILITY_DISPLAY[key].title : null
+}
+
+/**
+ * Whether a capability belongs in the lists a researcher picks a tool from —
+ * 科研工具 and the kernel frame's tool list.
+ *
+ * Everything is, except a capability whose display block says `listed: false`:
+ * the 「循证 GEO」 capabilities are opened by their own module and bound to a
+ * session by id, which is why they stay public (a bound internal capability
+ * answers 403) and are hidden here instead. What a list does with an id this
+ * build has no display entry for stays that list's decision.
+ * @param {string | null | undefined} id
+ * @returns {boolean}
+ */
+export function capabilityListed(id) {
+  const key = String(id ?? '').trim()
+  return !key || CAPABILITY_DISPLAY[key]?.listed !== false
 }
 
 /**

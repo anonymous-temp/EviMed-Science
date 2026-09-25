@@ -15,7 +15,10 @@
     "manuscript-section": ["sampl"],
     "research-topic-report": [],
     "grant-proposal-package": [],
+    "geo-insight-pack": [],
+    "geo-strategy-pack": [],
     "geo-content-pack": [],
+    "geo-proposal-pack": [],
     "peer-review-report": [],
     "research-brief": ["evidence-report"],
     "clinical-decision-brief": ["evidence-report"]

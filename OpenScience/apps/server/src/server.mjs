@@ -28,7 +28,7 @@ import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, autopilotEpisodeCapability, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -2396,14 +2396,6 @@ export function createWebApiApp(overrides = {}) {
     });
   }
   if (autopilotService && config.autopilotEnabled) {
-    const episodeAgents = {
-      "literature-sentinel": "clinical-evidence-synthesis",
-      "evidence-update": "clinical-evidence-synthesis",
-      "data-prospecting": "dataset-research-scoping",
-      "hypothesis-suggestion": "research-topic-selection",
-      "writing-pipeline": "manuscript-support",
-      "signal-monitoring": "adr-analysis",
-    };
     autopilotWorker = new AutopilotWorker({
       jobs: productJobs,
     service: autopilotService,
@@ -2563,7 +2555,10 @@ export function createWebApiApp(overrides = {}) {
           weeklyLimit: Number(agenda.payload.weeklyBudgetCny) || 0,
         });
         const registry = await agentRegistry;
-        const selected = registry.get(episodeAgents[episode.taskType]);
+        // One table in the domain, held against every capability's declared
+        // task types by a test: GEO monitoring used to ride `signal-monitoring`
+        // here and ran adverse-event analysis instead.
+        const selected = registry.get(autopilotEpisodeCapability(episode.taskType) ?? "");
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
         const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
         const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);

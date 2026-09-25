@@ -1107,6 +1107,52 @@ test("a package check answers with the submission's own verdict and spends nothi
   );
 });
 
+test("a GEO content pack is judged on the articles its index names, which the gate reads in", async () => {
+  // A manifest declares fixed paths and an article is `articles/<id>.md` with
+  // an id the run chooses, so `articles.json` names them and the domain says
+  // which to read (`contractCompanionPaths`). Without that read, the gate would
+  // judge an index pointing at files it never opened.
+  const GEO_CONTENT = Object.freeze({
+    id: "geo-content",
+    persona: "你是循证 GEO 的内容作者。",
+    skills: ["geo-content"],
+    tools: ["mcp__evimed__drug_label_search"],
+    produces: [{
+      contractKind: "geo-content-pack",
+      outputs: [{ path: "geo-content.md", required: true }, { path: "articles.json", required: true }],
+    }],
+  });
+  const f = await combinedFixture({ capabilities: [GEO_CONTENT], skillBodies: { "geo-content": "## 写稿\n" } });
+  await f.step(1);
+  const written = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["一件交付物，按主战场写第一批稿件。"],
+    deliverables: [{ id: "d-geo", contractKind: "geo-content-pack", capability: "geo-content", title: "GEO 稿件", dependsOn: [] }],
+  });
+  assert.equal(written.value.ok, true, JSON.stringify(written.value));
+  const prefix = "/workspace/deliverables/d-geo";
+  f.writeFiles(new Map([
+    [`${prefix}/geo-content.md`, "# 第一批稿件\n\n一篇证据卡片。\n"],
+    [`${prefix}/articles.json`, JSON.stringify({ articles: [{ id: "a1", layer: "card", question: "速效救心丸可以长期服用吗？", claimKeys: ["C1"], path: "articles/a1.md", recordPath: "records/a1.md", safety: { status: "clear" } }] })],
+    [`${prefix}/records/a1.md`, "# 工作记录\n"],
+  ]));
+
+  const absent = await f.execute("evimed_package_check", { deliverableId: "d-geo" });
+  assert.equal(absent.value.ok, false);
+  assert.ok(absent.value.issues.some((/** @type {any} */ issue) => issue.code === "required_output_missing" && issue.path === "articles/a1.md"),
+    `the article the index names must be required: ${JSON.stringify(absent.value.issues)}`);
+
+  f.writeFiles(new Map([[`${prefix}/articles/a1.md`, "# 速效救心丸可以长期服用吗？\n\n含服后疼痛缓解，说明是心绞痛而不是胃病。\n"]]));
+  const unsafe = await f.execute("evimed_package_check", { deliverableId: "d-geo" });
+  assert.equal(unsafe.value.ok, false);
+  assert.ok(unsafe.value.issues.some((/** @type {any} */ issue) => issue.code === "clinical_safety_rule" && issue.path === "articles/a1.md"),
+    `the article itself must be read and graded: ${JSON.stringify(unsafe.value.issues)}`);
+
+  f.writeFiles(new Map([[`${prefix}/articles/a1.md`, "# 速效救心丸可以长期服用吗？\n\n速效救心丸不作为日常保健长期服用。速效救心丸不能代替急救：胸痛持续时，服药的同时呼叫急救，服药不得延误就医。\n"]]));
+  const fixed = await f.execute("evimed_package_check", { deliverableId: "d-geo" });
+  assert.equal(fixed.value.ok, true, JSON.stringify(fixed.value));
+});
+
 test("a package check still answers once the submissions are spent, and says there are none left", async () => {
   // The guard refuses the fourth submission, and that is right; it is also the
   // moment a run most needs to know what is still wrong, because what it wrote

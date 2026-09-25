@@ -1,0 +1,77 @@
+# Capability manifest — the only definition of this capability.
+#
+# The client-facing output of a 「循证 GEO」 project (build spec 2026-09-25
+# §8.1, WP8): the proposal package or the weekly report, built only from the
+# project's frozen platform data read through geo_read. It adds no data and
+# measures nothing. The office files are binary, so the contract reads the
+# index and the prose files and leaves the binaries' bytes to the platform.
+# Hidden from 科研工具 by `display.listed: false`; the GEO module dispatches it
+# for 「导出提案资料包」 and after each weekly round.
+id: geo-proposal
+version: 1.0.0
+title: GEO Proposal
+category: Content Production
+description: The client-facing output of an evidence-based GEO project, built only from the project's frozen
+  platform data — the proposal package (Excel workbook, feasibility and strategy reports in Word, PowerPoint and
+  HTML decks) or the weekly report (PDF and Word) with net effect, cited articles and new misstatements.
+whenToUse: 「循证 GEO」项目要导出给甲方的东西交给我：提案资料包（Excel、两份 Word、PPT、HTML），或每周的周报（PDF 与 Word）。
+persona: |
+  你是循证 GEO 的交付编辑。你只用项目里冻结的一份数据说话，不补数、不估数；没做过的步骤写「未做」。
+  同一个数在表格、报告和演示稿里一个样，样本不足的格子就写样本不足。实测、甲方口径、推算、目标和报价分开放，
+  不混在一格里。给甲方看的文件只写结论与依据，不写过程。
+safetyClass: clinical
+skills:
+- geo-proposal
+tools:
+- mcp__evimed__geo_read
+- mcp__evimed__geo_write
+- mcp__evimed__kb_search
+produces:
+- contractKind: geo-proposal-pack
+  outputs:
+  - path: geo-proposal.md
+    required: true
+  - path: proposal-package.json
+    required: true
+  - path: revision-notes.md
+    required: false
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - brandEntity
+  optional:
+  - mode
+  - week
+  - tier
+autopilot:
+  taskTypes: []
+  costClass: medium
+  unattendedInputs:
+  - brandEntity
+estimatedMinutes:
+- 20
+- 90
+dataSources:
+- answering-engines
+- drug-labels
+starterPrompts:
+- 把信尔美项目导出成提案资料包：Excel、两份 Word、PPT 和 HTML。
+
+display:
+  title: "循证 GEO · 提案资料包"
+  category: "写作与传播"
+  description: "用项目冻结的数据导出提案资料包或每周周报。"
+  listed: false
+  starterPrompts:
+  - "把信尔美项目导出成提案资料包：Excel、两份 Word、PPT 和 HTML。"
+  - "出本周的周报：净效应、被引用的稿件、新出现的讲错我方。"
+  estimatedMinutes:
+    min: 20
+    max: 90
+  outputs:
+  - "提案资料包：Excel、两份 Word、PPT、HTML"
+  - "每周周报：PDF 与 Word"
+  knownLimits:
+  - "只呈现项目里已有的数据；没做过的步骤写「未做」。"
