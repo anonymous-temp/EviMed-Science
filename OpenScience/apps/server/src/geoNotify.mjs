@@ -1,4 +1,5 @@
 import { GEO_ENGINE_LABELS_ZH, GEO_URGENT_SEVERITIES } from "@evimed/domain";
+import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 
 /**
  * 「循证 GEO」's notices (build spec 2026-09-25 §5; plan §5.7): exactly five
@@ -202,10 +203,14 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
 
     /** 3. 首批稿件可发布. @param {any} project @param {{ count: number, budgetSet: boolean }} facts */
     firstPublishable(project, { count, budgetSet }) {
+      // What the reader can do next. Without a media market on this
+      // deployment no budget places anything, so none is asked for.
+      const market = mediaMarketConfigured(config);
+      const next = !market ? "可以在「内容」里查看。" : budgetSet ? "会在预算内自动投放。" : "设置投放预算后会自动投放。";
       return send(project, "first_publishable", {
         title: `${geoProductName(project)}：首批稿件可发布`,
-        body: `${count} 篇稿件过了交付闸门，${budgetSet ? "会在预算内自动投放。" : "设置投放预算后自动投放。"}`,
-        severity: "info", source: source(project.id, budgetSet ? "content" : "distribution"), idempotencyKey: `geo:${project.id}:first-publishable`,
+        body: `${count} 篇稿件可以发布了，${next}`,
+        severity: "info", source: source(project.id, market && !budgetSet ? "distribution" : "content"), idempotencyKey: `geo:${project.id}:first-publishable`,
       });
     },
 

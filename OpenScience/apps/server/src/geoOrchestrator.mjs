@@ -318,7 +318,7 @@ export function contentBrief(project, { number, groups, errors, reason, size }) 
   }
   for (const error of errors) lines.push(`· 纠错材料：${engineLabel(error.engine)}讲错「${error.statement ?? ""}」`);
   if (!groups.length && !errors.length) lines.push("· 由你按主张库和问题地图挑最需要的主题。");
-  lines.push("语义群的 groupId 用 geo_read questions 查，讲错我方的依据用 geo_read errors 查。每篇过交付闸门后用 geo_write articles 登记（path、layer、groupId、claimIds、gate、safety、contentSha256）。有临床安全问题就如实标 safety: open，不要自己放行。");
+  lines.push("语义群的 groupId 用 geo_read questions 查，讲错我方的依据用 geo_read errors 查。每篇写好后用 geo_write articles 登记（deliverableId 即本交付物的 id、path、layer、groupId、claimIds、safety、contentSha256）；闸门结论由平台从交付记录读取，不必填 gate。有临床安全问题就如实标 safety: open，不要自己放行。");
   lines.push(DATA_LINE);
   return lines.join("\n");
 }
