@@ -214,6 +214,14 @@ function answerSiblings(rows) {
   return siblings;
 }
 
+/**
+ * The rounds whose project-scope rows are the headline, the overview's blocks
+ * and every trend line: full measurements of the question set. A sentinel
+ * (ten questions on two engines), a post-publication check, a confirmation or
+ * a noise round measures a sliver and never stands in for them.
+ */
+export const GEO_HEADLINE_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
+
 /** How many snapshot ids a cell carries at most (the first is where a click lands). */
 export const GEO_CELL_SNAPSHOT_LIMIT = 200;
 
@@ -303,9 +311,9 @@ export class GeoService {
     const byProject = new Map();
     if (!geoIds.length) return byProject;
     const result = await this.store.query(`SELECT DISTINCT ON (m.geo_project_id, m.metric_id) m.*, r.sample_date
-      FROM evimed_geo.metrics m LEFT JOIN evimed_geo.rounds r ON r.id = m.round_id
+      FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = 'project' AND m.metric_id = ANY($2::text[]) AND m.arm IS NULL AND ${PLAIN_ROW}
-      ORDER BY m.geo_project_id, m.metric_id, m.computed_at DESC`, [geoIds, [...metricIds]]);
+      ORDER BY m.geo_project_id, m.metric_id, m.computed_at DESC`, [geoIds, [...metricIds], [...GEO_HEADLINE_ROUND_KINDS]]);
     for (const row of result.rows) {
       const map = byProject.get(row.geo_project_id) ?? new Map();
       map.set(String(row.metric_id), row);
@@ -329,10 +337,10 @@ export class GeoService {
     const result = await this.store.query(`SELECT * FROM (
         SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""})
           m.*, r.sample_date
-        FROM evimed_geo.metrics m LEFT JOIN evimed_geo.rounds r ON r.id = m.round_id
+        FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($4::text[])
         WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${PLAIN_ROW}
         ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.computed_at DESC
-      ) latest ORDER BY computed_at`, [geoIds, [...metricIds], scope]);
+      ) latest ORDER BY computed_at`, [geoIds, [...metricIds], scope, [...GEO_HEADLINE_ROUND_KINDS]]);
     for (const row of result.rows) {
       const key = extra ? `${row.metric_id}\u0000${row[extra] ?? ""}` : String(row.metric_id);
       const map = byProject.get(row.geo_project_id) ?? new Map();

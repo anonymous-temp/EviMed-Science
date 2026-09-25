@@ -95,6 +95,8 @@ export const GEO_SCHEDULE = Object.freeze({
   noiseQuestions: 10,
   noiseRepeat: 5,
   metricsGraceMinutes: 30,
+  /** The rounds that measure the whole question set; only their rows choose sentinel engines. */
+  fullRoundKinds: Object.freeze(["baseline", "weekly", "single_step"]),
   stalePlacementWeeks: 8,
 });
 /** Runs: at most five articles a batch, two tries a run, a claim that stalls for ten minutes is retried. */
@@ -526,7 +528,14 @@ export class GeoOrchestrator {
     if (!project || project.userId !== String(user.id)) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
     if (project.status !== "active") throw new HttpError(409, "geo_project_paused", "This GEO project is paused.");
     const status = project.steps[step]?.status ?? "none";
-    await this.store.setStep(project.id, step, { requested: true, ...(["none", "failed"].includes(status) ? { status: "queued" } : {}) });
+    let again = ["none", "failed"].includes(status);
+    // A diagnosis recorded as done on a round that measured no answer is measured again.
+    if (!again && step === "diagnosis" && FINISHED.has(status) && project.steps.diagnosis.roundId) {
+      const answers = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.snapshots
+        WHERE round_id = $1 AND status IN ('valid', 'refusal')`, [project.steps.diagnosis.roundId])).rows[0]?.n ?? 0);
+      again = answers === 0;
+    }
+    await this.store.setStep(project.id, step, { requested: true, ...(again ? { status: "queued" } : {}) });
     await this.#allowRetries(project, step);
     const result = await this.advance(project.id);
     return this.#answer(project, result);
@@ -770,12 +779,30 @@ export class GeoOrchestrator {
     if (!FINISHED.has(questions)) return project;
     const step = project.steps.diagnosis;
     if (step.status === "running" && step.roundId) {
-      const round = (await this.store.query(`SELECT r.*, (r.finished_at < now() - make_interval(mins => $2)) AS settled,
-          EXISTS (SELECT 1 FROM evimed_geo.metrics m WHERE m.round_id = r.id) AS measured
+      const round = (await this.store.query(`SELECT r.*, (r.finished_at < now() - make_interval(mins => $2)) AS overdue,
+          EXISTS (SELECT 1 FROM evimed_geo.metrics m WHERE m.round_id = r.id) AS measured,
+          (SELECT count(*)::integer FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal')) AS answers
         FROM evimed_geo.rounds r WHERE r.id = $1`, [step.roundId, GEO_SCHEDULE.metricsGraceMinutes])).rows[0];
       if (!round) return this.#step(project, "diagnosis", { status: "queued", roundId: null });
       if (round.status === "cancelled") return this.#step(project, "diagnosis", { status: "failed" });
-      if (!["done", "partial"].includes(round.status) || !(round.measured || round.settled)) return project;
+      if (!["done", "partial"].includes(round.status)) return project;
+      // A round that measured nothing (every engine skipped or absent, every
+      // answer suspect) is not a diagnosis: the step fails, operators are
+      // told, the user is told plainly, and nothing downstream moves.
+      if (Number(round.done ?? 0) === 0 || Number(round.answers ?? 0) === 0) {
+        const failed = await this.#step(project, "diagnosis", { status: "failed", roundId: String(round.id) });
+        await this.#alertOnce(failed, `alert:diagnosis-empty:${round.id}`, { type: "diagnosis_empty", geoProjectId: project.id, roundId: String(round.id) });
+        await this.#notice(failed, `notice:diagnosis-empty:${round.id}`, () => this.notifier?.diagnosisEmpty(failed, { roundId: String(round.id) }));
+        return failed;
+      }
+      // Numbers first: without the round's metrics nothing advances, however
+      // long it has been; past the grace operators hear about it once.
+      if (!round.measured) {
+        if (round.overdue) {
+          await this.#alertOnce(project, `alert:metrics-missing:${round.id}`, { type: "metrics_missing", geoProjectId: project.id, roundId: String(round.id) });
+        }
+        return project;
+      }
       const current = await this.#step(project, "diagnosis", { status: questions === "minimal" ? "minimal" : "done", roundId: String(round.id) });
       const wrong = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed'`,
         [project.id])).rows[0]?.n ?? 0);
@@ -788,12 +815,15 @@ export class GeoOrchestrator {
     if ((FINISHED.has(step.status) && !upgrade) || step.status === "failed") return project;
     const set = await this.#lockedSet(project.id);
     if (!set) return project;
-    // A round that was cancelled does not answer a new request: the next key.
-    const prior = await this.#marksWith(project.id, `round:diagnosis:v${set.version}`);
+    // A round still being measured answers the request (idempotent); one that
+    // ended — cancelled, refused, or finished without a diagnosis (the step
+    // was asked again) — does not: the next key, a new round.
+    const base = `round:diagnosis:v${set.version}`;
+    const prior = (await this.#marksWith(project.id, base)).filter((mark) => mark.key === base || String(mark.key).startsWith(`${base}:`));
     const last = prior.at(-1) ?? null;
     const lastRound = last?.round_id ? (await this.store.query(`SELECT status FROM evimed_geo.rounds WHERE id = $1`, [last.round_id])).rows[0] : null;
-    const key = !last || (lastRound?.status !== "cancelled" && last.state !== "skipped") ? (last?.key ?? `round:diagnosis:v${set.version}`)
-      : `round:diagnosis:v${set.version}:r${prior.length + 1}`;
+    const ended = last && (last.state === "skipped" || ["cancelled", "done", "partial"].includes(String(lastRound?.status ?? "")));
+    const key = !last ? base : ended ? `${base}:r${prior.length + 1}` : last.key;
     if (!this.enqueueRound) return this.#step(project, "diagnosis", { status: "queued" });
     const roundId = await this.#enqueueOnce(project, key, { kind: questions === "minimal" ? "single_step" : "baseline", engines: project.engines,
       ref: { step: "diagnosis", setVersion: set.version } });
@@ -932,8 +962,8 @@ export class GeoOrchestrator {
     if (!plan.want.has("monitoring")) return null;
     const row = (await this.store.query(`SELECT m.key, m.round_id FROM evimed_geo.schedule_marks m JOIN evimed_geo.rounds r ON r.id = m.round_id
       WHERE m.geo_project_id = $1 AND starts_with(m.key, 'weekly:') AND m.state = 'done' AND r.status IN ('done', 'partial')
-        AND (EXISTS (SELECT 1 FROM evimed_geo.metrics x WHERE x.round_id = r.id) OR r.finished_at < now() - make_interval(mins => $2))
-      ORDER BY m.key DESC LIMIT 1`, [project.id, GEO_SCHEDULE.metricsGraceMinutes])).rows[0];
+        AND EXISTS (SELECT 1 FROM evimed_geo.metrics x WHERE x.round_id = r.id)
+      ORDER BY m.key DESC LIMIT 1`, [project.id])).rows[0];
     return row ? { monday: String(row.key).slice("weekly:".length), roundId: String(row.round_id) } : null;
   }
 
@@ -1188,6 +1218,13 @@ export class GeoOrchestrator {
     return true;
   }
 
+  /** An operator alert once per key (the mark is written whether or not an inbox took it). @param {any} project @param {string} key @param {Record<string, any>} event */
+  async #alertOnce(project, key, event) {
+    if (await this.#mark(project.id, key)) return;
+    await this.notifier?.alertOperator({ ...event, idempotencyKey: `geo:${key}` });
+    await this.#claim(project, key, "notice", "done");
+  }
+
   /** 讲错我方, articles held for safety, the first publishable article, the first citation. @param {any} project */
   async #notices(project) {
     if (!this.notifier) return;
@@ -1327,10 +1364,15 @@ export class GeoOrchestrator {
       const sentinelKey = `sentinel:${sentinel.day}`;
       if (sentinel.due && !(await this.#mark(project.id, sentinelKey))) {
         // The questions are the measurement's (the ten highest-weight measured
-        // ones); the two engines are chosen here, by retrieval rate.
-        const retrieval = (await this.store.query(`SELECT DISTINCT ON (engine) engine, value, denominator, status FROM evimed_geo.metrics
-          WHERE geo_project_id = $1 AND scope = 'engine' AND metric_id = 'M-10' AND pool IS NULL AND variant IS NULL AND rival IS NULL
-            AND group_id IS NULL AND arm IS NULL ORDER BY engine, computed_at DESC`, [project.id])).rows
+        // ones); the two engines are chosen here, by retrieval rate — from the
+        // latest full measurement (baseline, weekly, single step), never from a
+        // sentinel's or a post-publication check's own sliver.
+        const plain = "m.scope = 'engine' AND m.metric_id = 'M-10' AND m.pool IS NULL AND m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL AND m.arm IS NULL";
+        const retrieval = (await this.store.query(`SELECT DISTINCT ON (m.engine) m.engine, m.value, m.denominator, m.status FROM evimed_geo.metrics m
+          WHERE m.geo_project_id = $1 AND ${plain} AND m.round_id = (SELECT m.round_id FROM evimed_geo.metrics m
+            JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($2::text[])
+            WHERE m.geo_project_id = $1 AND ${plain} ORDER BY m.computed_at DESC LIMIT 1)
+          ORDER BY m.engine, m.computed_at DESC`, [project.id, [...GEO_SCHEDULE.fullRoundKinds]])).rows
           .map((/** @type {any} */ row) => ({ engine: String(row.engine), value: row.value == null ? null : Number(row.value),
             denominator: row.denominator == null ? null : Number(row.denominator), status: String(row.status) }));
         const engines = sentinelEngines(retrieval, project.engines.filter((/** @type {string} */ engine) => !(this.config.geoInclusionEngines ?? []).includes(engine)));
