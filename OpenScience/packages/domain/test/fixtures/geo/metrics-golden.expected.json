@@ -1,0 +1,1052 @@
+{
+ "source": {
+  "package": "geo-skills",
+  "version": "3.0.1",
+  "script": "shared/scripts/compute_metrics.py",
+  "sha256": "bbdc035c6cbfff5b811d22097614bd1c51f13ffb15abd82dd9f75affda95ef28",
+  "metricsYamlSha256": "a4ac003a9b9f4e0d383af15cfe9b301beff6387933a64ac5772b73e2b727579f",
+  "catalogueSha256": "9b2ada5bb900aa92d1ff6457ca6fed6e0c7b6beb77a78fefa656e5585ee68e79",
+  "python": "3.12.3",
+  "generated": "2026-09-25"
+ },
+ "cells": [
+  {"metricId":"M-19","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":50.28,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"derived","snapshotCount":84},
+  {"metricId":"M-01S","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":29,"denominator":64,"value":45.31,"ciLow":33.73,"ciHigh":57.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":66},
+  {"metricId":"M-01S","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":"top1","numerator":14,"denominator":64,"value":21.88,"ciLow":13.5,"ciHigh":33.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":66},
+  {"metricId":"M-01S","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":"top3","numerator":29,"denominator":64,"value":45.31,"ciLow":33.73,"ciHigh":57.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":66},
+  {"metricId":"M-08S","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":26,"denominator":82,"value":31.71,"ciLow":22.65,"ciHigh":42.4,"status":"ok","reason":null,"dataType":"measured","snapshotCount":84},
+  {"metricId":"M-09S","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":35,"denominator":88,"value":39.77,"ciLow":30.18,"ciHigh":50.22,"status":"ok","reason":null,"dataType":"measured","snapshotCount":84},
+  {"metricId":"M-13","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":94.44,"denominator":53.85,"value":1.75,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"derived","snapshotCount":57},
+  {"metricId":"M-14","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-15","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-01","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":84},
+  {"metricId":"M-02","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":66},
+  {"metricId":"M-03","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":84},
+  {"metricId":"M-04","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":66},
+  {"metricId":"M-04C","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":169,"denominator":338,"value":50.0,"ciLow":44.7,"ciHigh":55.3,"status":"ok","reason":null,"dataType":"measured","snapshotCount":66},
+  {"metricId":"M-05","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":66},
+  {"metricId":"M-06","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":28,"value":39.29,"ciLow":23.57,"ciHigh":57.59,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":57},
+  {"metricId":"M-07","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":96},
+  {"metricId":"M-08","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":26,"denominator":32,"value":81.25,"ciLow":64.69,"ciHigh":91.11,"status":"ok","reason":null,"dataType":"measured","snapshotCount":84},
+  {"metricId":"M-09","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":84},
+  {"metricId":"M-10","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":84},
+  {"metricId":"M-08B","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":10,"denominator":22,"value":45.45,"ciLow":26.92,"ciHigh":65.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":84},
+  {"metricId":"M-11","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":23,"denominator":55,"value":41.82,"ciLow":29.74,"ciHigh":54.97,"status":"ok","reason":null,"dataType":"measured","snapshotCount":96},
+  {"metricId":"M-12","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":96},
+  {"metricId":"M-20","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":94,"denominator":97,"value":96.91,"ciLow":91.3,"ciHigh":98.94,"status":"ok","reason":null,"dataType":"measured","snapshotCount":96},
+  {"metricId":"M-20","scope":"project","pool":null,"engine":null,"groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":2,"denominator":94,"value":2.13,"ciLow":0.59,"ciHigh":7.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":96},
+  {"metricId":"M-01","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":17,"denominator":18,"value":94.44,"ciLow":74.24,"ciHigh":99.01,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-03","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":18,"value":61.11,"ciLow":38.62,"ciHigh":79.7,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-06","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":14,"value":35.71,"ciLow":16.34,"ciHigh":61.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-07","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-08","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":6,"value":50.0,"ciLow":18.76,"ciHigh":81.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-09","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-10","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":18,"value":33.33,"ciLow":16.28,"ciHigh":56.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-08B","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":4,"value":0.0,"ciLow":0.0,"ciHigh":48.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-11","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":18},
+  {"metricId":"M-12","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":18,"value":44.44,"ciLow":24.56,"ciHigh":66.28,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-20","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":18,"denominator":18,"value":100.0,"ciLow":82.41,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-20","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":18,"value":0.0,"ciLow":0.0,"ciHigh":17.59,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-19","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":53.66,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":18},
+  {"metricId":"M-16","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":10,"denominator":18,"value":55.56,"ciLow":33.72,"ciHigh":75.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-17","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":16,"denominator":60,"value":26.67,"ciLow":17.13,"ciHigh":39.01,"status":"ok","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-16","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":9,"denominator":18,"value":50.0,"ciLow":29.03,"ciHigh":70.97,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-17","scope":"pool","pool":"P1","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":13,"denominator":60,"value":21.67,"ciLow":13.12,"ciHigh":33.62,"status":"ok","reason":null,"dataType":"measured","snapshotCount":18},
+  {"metricId":"M-01","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":21,"denominator":39,"value":53.85,"ciLow":38.57,"ciHigh":68.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-02","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":36,"value":30.56,"ciLow":18.0,"ciHigh":46.86,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-03","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":13,"denominator":39,"value":33.33,"ciLow":20.63,"ciHigh":49.02,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-04","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":42,"denominator":110,"value":38.18,"ciLow":29.65,"ciHigh":47.51,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-04C","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":110,"denominator":178,"value":61.8,"ciLow":54.48,"ciHigh":68.62,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-05","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":33,"denominator":21,"value":1.57,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-06","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":14,"value":42.86,"ciLow":21.38,"ciHigh":67.41,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-07","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-08","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":14,"denominator":15,"value":93.33,"ciLow":70.18,"ciHigh":98.81,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-09","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-10","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":15,"denominator":39,"value":38.46,"ciLow":24.89,"ciHigh":54.1,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-08B","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":11,"value":54.55,"ciLow":28.01,"ciHigh":78.73,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-11","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":39},
+  {"metricId":"M-12","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":10,"denominator":39,"value":25.64,"ciLow":14.57,"ciHigh":41.08,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-20","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":39,"denominator":40,"value":97.5,"ciLow":87.12,"ciHigh":99.56,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-20","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":1,"denominator":39,"value":2.56,"ciLow":0.45,"ciHigh":13.18,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-19","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":42.92,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"derived","snapshotCount":39},
+  {"metricId":"M-16","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":19,"denominator":39,"value":48.72,"ciLow":33.86,"ciHigh":63.8,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-17","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":28,"denominator":110,"value":25.45,"ciLow":18.24,"ciHigh":34.33,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-16","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":24,"denominator":39,"value":61.54,"ciLow":45.9,"ciHigh":75.11,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-17","scope":"pool","pool":"P2","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":40,"denominator":110,"value":36.36,"ciLow":27.98,"ciHigh":45.67,"status":"ok","reason":null,"dataType":"measured","snapshotCount":39},
+  {"metricId":"M-01","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-02","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-03","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-04","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-04C","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":59,"denominator":160,"value":36.88,"ciLow":29.79,"ciHigh":44.58,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-05","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-07","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-08","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":11,"value":81.82,"ciLow":52.3,"ciHigh":94.86,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-09","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-10","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-08B","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":7,"value":57.14,"ciLow":25.05,"ciHigh":84.18,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-11","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":15,"denominator":37,"value":40.54,"ciLow":26.35,"ciHigh":56.51,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-12","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-20","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":25,"denominator":27,"value":92.59,"ciLow":76.63,"ciHigh":97.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-20","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":25,"value":0.0,"ciLow":0.0,"ciHigh":13.32,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-19","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":58.23,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":27},
+  {"metricId":"M-16","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":17,"denominator":25,"value":68.0,"ciLow":48.41,"ciHigh":82.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-17","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":23,"denominator":59,"value":38.98,"ciLow":27.58,"ciHigh":51.73,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-16","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":13,"denominator":25,"value":52.0,"ciLow":33.5,"ciHigh":69.97,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-17","scope":"pool","pool":"P3","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":20,"denominator":59,"value":33.9,"ciLow":23.14,"ciHigh":46.63,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-07","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-11","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":18,"value":44.44,"ciLow":24.56,"ciHigh":66.28,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-12","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":12,"denominator":12,"value":100.0,"ciLow":75.75,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-15","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":1,"denominator":12,"value":8.33,"ciLow":1.49,"ciHigh":35.39,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-16","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":2,"denominator":12,"value":16.67,"ciLow":4.7,"ciHigh":44.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-17","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":"对照牌A","variant":null,"numerator":4,"denominator":18,"value":22.22,"ciLow":9.0,"ciHigh":45.22,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-16","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":2,"denominator":12,"value":16.67,"ciLow":4.7,"ciHigh":44.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-17","scope":"pool","pool":"P4","engine":null,"groupId":null,"arm":null,"rival":"对照牌B","variant":null,"numerator":3,"denominator":18,"value":16.67,"ciLow":5.84,"ciHigh":39.22,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-01","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":16,"denominator":32,"value":50.0,"ciLow":33.63,"ciHigh":66.37,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-02","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":30,"value":26.67,"ciLow":14.18,"ciHigh":44.45,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-03","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":10,"denominator":32,"value":31.25,"ciLow":17.95,"ciHigh":48.57,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-04","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":37,"denominator":86,"value":43.02,"ciLow":33.08,"ciHigh":53.56,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-04C","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":86,"denominator":140,"value":61.43,"ciLow":53.16,"ciHigh":69.08,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-05","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":26,"denominator":16,"value":1.62,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-06","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":11,"value":36.36,"ciLow":15.17,"ciHigh":64.62,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-07","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-08","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":17,"denominator":26,"value":65.38,"ciLow":46.22,"ciHigh":80.59,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-09","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-10","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":26,"denominator":32,"value":81.25,"ciLow":64.69,"ciHigh":91.11,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-08B","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":26,"value":42.31,"ciLow":25.54,"ciHigh":61.05,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-11","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":19,"value":47.37,"ciLow":27.33,"ciHigh":68.29,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-12","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":32,"value":34.38,"ciLow":20.41,"ciHigh":51.69,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":32,"denominator":32,"value":100.0,"ciLow":89.28,"ciHigh":100.0,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":32,"value":0.0,"ciLow":0.0,"ciHigh":10.72,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-01","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":18,"denominator":31,"value":58.06,"ciLow":40.77,"ciHigh":73.58,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-02","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":13,"denominator":27,"value":48.15,"ciLow":30.74,"ciHigh":66.01,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-03","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":13,"denominator":31,"value":41.94,"ciLow":26.42,"ciHigh":59.23,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-04","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":34,"denominator":78,"value":43.59,"ciLow":33.14,"ciHigh":54.64,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-04C","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":78,"denominator":127,"value":61.42,"ciLow":52.73,"ciHigh":69.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-05","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":25,"denominator":18,"value":1.39,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-06","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":10,"value":40.0,"ciLow":16.82,"ciHigh":68.73,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-07","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-08","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":11,"value":100.0,"ciLow":74.12,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-09","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-10","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":31,"value":35.48,"ciLow":21.12,"ciHigh":53.05,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-08B","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":32},
+  {"metricId":"M-11","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":18,"value":44.44,"ciLow":24.56,"ciHigh":66.28,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-12","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":7,"denominator":31,"value":22.58,"ciLow":11.39,"ciHigh":39.81,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":31,"denominator":34,"value":91.18,"ciLow":77.04,"ciHigh":96.95,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":2,"denominator":31,"value":6.45,"ciLow":1.79,"ciHigh":20.72,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-01","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":17,"denominator":31,"value":54.84,"ciLow":37.77,"ciHigh":70.84,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-02","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":27,"value":33.33,"ciLow":18.64,"ciHigh":52.18,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-03","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":31,"value":29.03,"ciLow":16.1,"ciHigh":46.59,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-04","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":32},
+  {"metricId":"M-04C","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":83,"denominator":166,"value":50.0,"ciLow":42.48,"ciHigh":57.52,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-05","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":27,"denominator":17,"value":1.59,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-06","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":11,"value":27.27,"ciLow":9.75,"ciHigh":56.57,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-07","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-08","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":32},
+  {"metricId":"M-09","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":32},
+  {"metricId":"M-10","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":31,"value":0.0,"ciLow":-0.0,"ciHigh":11.03,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-08B","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":32},
+  {"metricId":"M-11","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":18,"value":33.33,"ciLow":16.28,"ciHigh":56.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-12","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":31,"value":29.03,"ciLow":16.1,"ciHigh":46.59,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":31,"denominator":31,"value":100.0,"ciLow":88.97,"ciHigh":100.0,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":31,"value":0.0,"ciLow":-0.0,"ciHigh":11.03,"status":"ok","reason":null,"dataType":"measured","snapshotCount":32},
+  {"metricId":"M-01","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-02","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-03","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-04","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-04C","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-05","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-06","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-07","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-09","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-10","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08B","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-11","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-12","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"engine","pool":null,"engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":6,"value":66.67,"ciLow":30.0,"ciHigh":90.32,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":5,"value":60.0,"ciLow":23.07,"ciHigh":88.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":4,"value":25.0,"ciLow":4.56,"ciHigh":69.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":6,"value":66.67,"ciLow":30.0,"ciHigh":90.32,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":4,"value":0.0,"ciLow":0.0,"ciHigh":48.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":6,"value":66.67,"ciLow":30.0,"ciHigh":90.32,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":6,"value":0.0,"ciLow":0.0,"ciHigh":39.03,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":6,"value":83.33,"ciLow":43.65,"ciHigh":96.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":2,"value":100.0,"ciLow":34.24,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":6,"value":0.0,"ciLow":0.0,"ciHigh":39.03,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":6,"value":83.33,"ciLow":43.65,"ciHigh":96.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":5,"value":0.0,"ciLow":-0.0,"ciHigh":43.45,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":6,"value":0.0,"ciLow":0.0,"ciHigh":39.03,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":6,"value":0.0,"ciLow":0.0,"ciHigh":39.03,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P1","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":13,"value":30.77,"ciLow":12.68,"ciHigh":57.63,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":12,"value":8.33,"ciLow":1.49,"ciHigh":35.39,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":13,"value":23.08,"ciLow":8.18,"ciHigh":50.26,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":32,"value":28.12,"ciLow":15.56,"ciHigh":45.37,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":32,"denominator":43,"value":74.42,"ciLow":59.76,"ciHigh":85.07,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":7,"denominator":4,"value":1.75,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":3,"value":33.33,"ciLow":6.15,"ciHigh":79.23,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":10,"denominator":11,"value":90.91,"ciLow":62.26,"ciHigh":98.38,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":11,"denominator":13,"value":84.62,"ciLow":57.76,"ciHigh":95.67,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":11,"value":54.55,"ciLow":28.01,"ciHigh":78.73,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":13,"value":46.15,"ciLow":23.21,"ciHigh":70.86,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":13,"denominator":13,"value":100.0,"ciLow":77.19,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":13,"value":0.0,"ciLow":0.0,"ciHigh":22.81,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":13,"value":69.23,"ciLow":42.37,"ciHigh":87.32,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":12,"value":41.67,"ciLow":19.33,"ciHigh":68.05,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":13,"value":61.54,"ciLow":35.52,"ciHigh":82.29,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":19,"denominator":37,"value":51.35,"ciLow":35.89,"ciHigh":66.55,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":37,"denominator":51,"value":72.55,"ciLow":59.05,"ciHigh":82.89,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":14,"denominator":9,"value":1.56,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":5,"value":40.0,"ciLow":11.76,"ciHigh":76.93,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":4,"value":100.0,"ciLow":51.01,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":13,"value":30.77,"ciLow":12.68,"ciHigh":57.63,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":13,"value":7.69,"ciLow":1.37,"ciHigh":33.31,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":13,"denominator":14,"value":92.86,"ciLow":68.53,"ciHigh":98.73,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":1,"denominator":13,"value":7.69,"ciLow":1.37,"ciHigh":33.31,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":13,"value":61.54,"ciLow":35.52,"ciHigh":82.29,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":12,"value":41.67,"ciLow":19.33,"ciHigh":68.05,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":13,"value":15.38,"ciLow":4.33,"ciHigh":42.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":41,"denominator":84,"value":48.81,"ciLow":38.41,"ciHigh":59.32,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":12,"denominator":8,"value":1.5,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":6,"value":50.0,"ciLow":18.76,"ciHigh":81.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":13,"value":0.0,"ciLow":0.0,"ciHigh":22.81,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":13},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":13,"value":23.08,"ciLow":8.18,"ciHigh":50.26,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":13,"denominator":13,"value":100.0,"ciLow":77.19,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":13,"value":0.0,"ciLow":0.0,"ciHigh":22.81,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":13},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-06","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P2","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":9,"value":33.33,"ciLow":12.06,"ciHigh":64.58,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":9,"value":11.11,"ciLow":1.99,"ciHigh":43.5,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":24,"denominator":64,"value":37.5,"ciLow":26.67,"ciHigh":49.75,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":7,"denominator":3,"value":2.33,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":7,"value":71.43,"ciLow":35.89,"ciHigh":91.78,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":7,"denominator":9,"value":77.78,"ciLow":45.26,"ciHigh":93.68,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":7,"value":57.14,"ciLow":25.05,"ciHigh":84.18,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":6,"denominator":13,"value":46.15,"ciLow":23.21,"ciHigh":70.86,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":8,"value":37.5,"ciLow":13.68,"ciHigh":69.43,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":6,"value":50.0,"ciLow":18.76,"ciHigh":81.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":8,"value":25.0,"ciLow":7.15,"ciHigh":59.07,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":16,"denominator":43,"value":37.21,"ciLow":24.38,"ciHigh":52.14,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":3,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":4,"value":100.0,"ciLow":51.01,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":8,"value":50.0,"ciLow":21.52,"ciHigh":78.48,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":7,"denominator":12,"value":58.33,"ciLow":31.95,"ciHigh":80.67,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":8,"value":37.5,"ciLow":13.68,"ciHigh":69.43,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":10,"value":80.0,"ciLow":49.02,"ciHigh":94.33,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":8,"value":0.0,"ciLow":0.0,"ciHigh":32.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":8,"value":25.0,"ciLow":7.15,"ciHigh":59.07,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":7,"value":0.0,"ciLow":0.0,"ciHigh":35.43,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":8,"value":12.5,"ciLow":2.24,"ciHigh":47.09,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":19,"denominator":53,"value":35.85,"ciLow":24.3,"ciHigh":49.31,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":5,"denominator":2,"value":2.5,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_retrieval","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":0,"denominator":8,"value":0.0,"ciLow":0.0,"ciHigh":32.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_inline_citation_engine","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":12,"value":16.67,"ciLow":4.7,"ciHigh":44.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":8,"value":25.0,"ciLow":7.15,"ciHigh":59.07,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":8,"denominator":8,"value":100.0,"ciLow":67.56,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":8,"value":0.0,"ciLow":0.0,"ciHigh":32.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-01","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-02","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-03","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-04","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-04C","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-05","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-09","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-10","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-08B","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P3","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P4","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P4","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":3,"denominator":6,"value":50.0,"ciLow":18.76,"ciHigh":81.24,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P4","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":4,"value":25.0,"ciLow":4.56,"ciHigh":69.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":4,"value":100.0,"ciLow":51.01,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-15","scope":"pool_engine","pool":"P4","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"deepseek","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":4,"value":0.0,"ciLow":0.0,"ciHigh":48.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P4","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P4","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":6,"value":16.67,"ciLow":3.01,"ciHigh":56.35,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P4","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":4,"value":25.0,"ciLow":4.56,"ciHigh":69.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":4,"value":100.0,"ciLow":51.01,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-15","scope":"pool_engine","pool":"P4","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":4,"value":25.0,"ciLow":4.56,"ciHigh":69.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"doubao","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":1,"denominator":4,"value":25.0,"ciLow":4.56,"ciHigh":69.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P4","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":4},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P4","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":6,"value":66.67,"ciLow":30.0,"ciHigh":90.32,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P4","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":4,"denominator":4,"value":100.0,"ciLow":51.01,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-15","scope":"pool_engine","pool":"P4","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":1,"denominator":4,"value":25.0,"ciLow":4.56,"ciHigh":69.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"qianwen","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":4,"value":0.0,"ciLow":0.0,"ciHigh":48.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":4},
+  {"metricId":"M-07","scope":"pool_engine","pool":"P4","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-11","scope":"pool_engine","pool":"P4","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-12","scope":"pool_engine","pool":"P4","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-15","scope":"pool_engine","pool":"P4","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-20","scope":"pool_engine","pool":"P4","engine":"kimi","groupId":null,"arm":null,"rival":null,"variant":"refusal","numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"absent","reason":"engine_absent","dataType":"measured","snapshotCount":0},
+  {"metricId":"M-01","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":8,"denominator":9,"value":88.89,"ciLow":56.5,"ciHigh":98.01,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":5,"denominator":9,"value":55.56,"ciLow":26.66,"ciHigh":81.12,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-06","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":5,"value":20.0,"ciLow":3.62,"ciHigh":62.45,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":2,"value":50.0,"ciLow":9.45,"ciHigh":90.55,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":9,"value":22.22,"ciLow":6.32,"ciHigh":54.74,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":1,"value":0.0,"ciLow":0.0,"ciHigh":79.35,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"group","pool":"P1","engine":null,"groupId":"g11","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-01","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":9,"value":66.67,"ciLow":35.42,"ciHigh":87.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-06","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":3,"value":0.0,"ciLow":0.0,"ciHigh":56.15,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"group","pool":"P1","engine":null,"groupId":"g12","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-01","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":9,"denominator":15,"value":60.0,"ciLow":35.75,"ciHigh":80.18,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-02","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":14,"value":42.86,"ciLow":21.38,"ciHigh":67.41,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-03","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":7,"denominator":15,"value":46.67,"ciLow":24.81,"ciHigh":69.88,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-04","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":18,"denominator":39,"value":46.15,"ciLow":31.57,"ciHigh":61.43,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-04C","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":39,"denominator":61,"value":63.93,"ciLow":51.39,"ciHigh":74.83,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-05","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":12,"denominator":9,"value":1.33,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-06","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":8,"value":37.5,"ciLow":13.68,"ciHigh":69.43,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-07","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-08","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":7,"denominator":7,"value":100.0,"ciLow":64.57,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-09","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-10","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":7,"denominator":15,"value":46.67,"ciLow":24.81,"ciHigh":69.88,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-08B","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":4,"value":75.0,"ciLow":30.06,"ciHigh":95.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-11","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-12","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":15,"value":20.0,"ciLow":7.05,"ciHigh":45.19,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-20","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":null,"numerator":15,"denominator":15,"value":100.0,"ciLow":79.61,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-20","scope":"group","pool":"P2","engine":null,"groupId":"g21","arm":null,"rival":null,"variant":"refusal","numerator":1,"denominator":15,"value":6.67,"ciLow":1.19,"ciHigh":29.82,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-01","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":12,"value":50.0,"ciLow":25.38,"ciHigh":74.62,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-02","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":11,"value":27.27,"ciLow":9.75,"ciHigh":56.57,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-03","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":12,"value":16.67,"ciLow":4.7,"ciHigh":44.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":12,"denominator":37,"value":32.43,"ciLow":19.63,"ciHigh":48.54,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04C","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":37,"denominator":59,"value":62.71,"ciLow":49.95,"ciHigh":73.92,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-05","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":10,"denominator":6,"value":1.67,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-06","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":2,"value":50.0,"ciLow":9.45,"ciHigh":90.55,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-07","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":4,"value":100.0,"ciLow":51.01,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-09","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-10","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08B","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":4,"value":75.0,"ciLow":30.06,"ciHigh":95.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-11","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-12","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":null,"numerator":12,"denominator":13,"value":92.31,"ciLow":66.69,"ciHigh":98.63,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"group","pool":"P2","engine":null,"groupId":"g22","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":12,"value":0.0,"ciLow":0.0,"ciHigh":24.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-01","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":12,"value":50.0,"ciLow":25.38,"ciHigh":74.62,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-02","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":11,"value":18.18,"ciLow":5.14,"ciHigh":47.7,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-03","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04C","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":34,"denominator":58,"value":58.62,"ciLow":45.8,"ciHigh":70.37,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-05","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":11,"denominator":6,"value":1.83,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-06","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-07","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":4,"value":75.0,"ciLow":30.06,"ciHigh":95.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-09","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-10","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08B","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":3,"value":0.0,"ciLow":0.0,"ciHigh":56.15,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-11","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-12","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":12,"value":25.0,"ciLow":8.89,"ciHigh":53.23,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":null,"numerator":12,"denominator":12,"value":100.0,"ciLow":75.75,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"group","pool":"P2","engine":null,"groupId":"g23","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":12,"value":0.0,"ciLow":0.0,"ciHigh":24.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-01","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-02","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-03","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-04","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-04C","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":37,"denominator":90,"value":41.11,"ciLow":31.51,"ciHigh":51.44,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-05","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-07","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-08","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":5,"value":80.0,"ciLow":37.55,"ciHigh":96.38,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-09","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-10","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-08B","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":3,"value":66.67,"ciLow":20.77,"ciHigh":93.85,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-11","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":5,"denominator":19,"value":26.32,"ciLow":11.81,"ciHigh":48.79,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-12","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-20","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":null,"numerator":13,"denominator":15,"value":86.67,"ciLow":62.12,"ciHigh":96.26,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-20","scope":"group","pool":"P3","engine":null,"groupId":"g31","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":13,"value":0.0,"ciLow":0.0,"ciHigh":22.81,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-01","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":12,"value":16.67,"ciLow":4.7,"ciHigh":44.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-02","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":10,"value":10.0,"ciLow":1.79,"ciHigh":40.42,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-03","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":12,"value":8.33,"ciLow":1.49,"ciHigh":35.39,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04C","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":22,"denominator":70,"value":31.43,"ciLow":21.76,"ciHigh":43.03,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-05","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":4,"denominator":2,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-07","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":5,"denominator":6,"value":83.33,"ciLow":43.65,"ciHigh":96.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-09","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-10","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":12,"value":50.0,"ciLow":25.38,"ciHigh":74.62,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08B","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-11","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":10,"denominator":18,"value":55.56,"ciLow":33.72,"ciHigh":75.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-12","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":12,"value":25.0,"ciLow":8.89,"ciHigh":53.23,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":null,"numerator":12,"denominator":12,"value":100.0,"ciLow":75.75,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"group","pool":"P3","engine":null,"groupId":"g32","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":12,"value":0.0,"ciLow":0.0,"ciHigh":24.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-07","scope":"group","pool":"P4","engine":null,"groupId":"g41","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"group","pool":"P4","engine":null,"groupId":"g41","arm":null,"rival":null,"variant":null,"numerator":3,"denominator":9,"value":33.33,"ciLow":12.06,"ciHigh":64.58,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"group","pool":"P4","engine":null,"groupId":"g41","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"group","pool":"P4","engine":null,"groupId":"g41","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-15","scope":"group","pool":"P4","engine":null,"groupId":"g41","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"group","pool":"P4","engine":null,"groupId":"g41","arm":null,"rival":null,"variant":"refusal","numerator":1,"denominator":6,"value":16.67,"ciLow":3.01,"ciHigh":56.35,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-07","scope":"group","pool":"P4","engine":null,"groupId":"g42","arm":null,"rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"group","pool":"P4","engine":null,"groupId":"g42","arm":null,"rival":null,"variant":null,"numerator":5,"denominator":9,"value":55.56,"ciLow":26.66,"ciHigh":81.12,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"group","pool":"P4","engine":null,"groupId":"g42","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"group","pool":"P4","engine":null,"groupId":"g42","arm":null,"rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-15","scope":"group","pool":"P4","engine":null,"groupId":"g42","arm":null,"rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"group","pool":"P4","engine":null,"groupId":"g42","arm":null,"rival":null,"variant":"refusal","numerator":0,"denominator":6,"value":0.0,"ciLow":0.0,"ciHigh":39.03,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-01","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":8,"denominator":9,"value":88.89,"ciLow":56.5,"ciHigh":98.01,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":5,"denominator":9,"value":55.56,"ciLow":26.66,"ciHigh":81.12,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-06","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":1,"denominator":5,"value":20.0,"ciLow":3.62,"ciHigh":62.45,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":1,"denominator":2,"value":50.0,"ciLow":9.45,"ciHigh":90.55,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":2,"denominator":9,"value":22.22,"ciLow":6.32,"ciHigh":54.74,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":0,"denominator":1,"value":0.0,"ciLow":0.0,"ciHigh":79.35,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":"refusal","numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-19","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":47.02,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":9},
+  {"metricId":"M-01","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":15,"denominator":27,"value":55.56,"ciLow":37.31,"ciHigh":72.41,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-02","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":9,"denominator":25,"value":36.0,"ciLow":20.25,"ciHigh":55.48,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-03","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":9,"denominator":27,"value":33.33,"ciLow":18.64,"ciHigh":52.18,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-04","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":30,"denominator":76,"value":39.47,"ciLow":29.25,"ciHigh":50.71,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-04C","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":76,"denominator":120,"value":63.33,"ciLow":54.42,"ciHigh":71.42,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-05","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":22,"denominator":15,"value":1.47,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-06","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":4,"denominator":10,"value":40.0,"ciLow":16.82,"ciHigh":68.73,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-07","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-08","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":11,"denominator":11,"value":100.0,"ciLow":74.12,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-09","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-10","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":11,"denominator":27,"value":40.74,"ciLow":24.51,"ciHigh":59.27,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-08B","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":6,"denominator":8,"value":75.0,"ciLow":40.93,"ciHigh":92.85,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-11","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":27},
+  {"metricId":"M-12","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":7,"denominator":27,"value":25.93,"ciLow":13.17,"ciHigh":44.68,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-20","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":27,"denominator":28,"value":96.43,"ciLow":82.29,"ciHigh":99.37,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-20","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":"refusal","numerator":1,"denominator":27,"value":3.7,"ciLow":0.66,"ciHigh":18.28,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":27},
+  {"metricId":"M-19","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":44.13,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":27},
+  {"metricId":"M-01","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-02","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-03","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-04","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-04C","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":37,"denominator":90,"value":41.11,"ciLow":31.51,"ciHigh":51.44,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-05","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-07","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-08","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":4,"denominator":5,"value":80.0,"ciLow":37.55,"ciHigh":96.38,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-09","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-10","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-08B","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":2,"denominator":3,"value":66.67,"ciLow":20.77,"ciHigh":93.85,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-11","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":5,"denominator":19,"value":26.32,"ciLow":11.81,"ciHigh":48.79,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-12","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"uneven_denominators","dataType":"measured","snapshotCount":15},
+  {"metricId":"M-20","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":13,"denominator":15,"value":86.67,"ciLow":62.12,"ciHigh":96.26,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-20","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":"refusal","numerator":0,"denominator":13,"value":0.0,"ciLow":0.0,"ciHigh":22.81,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":15},
+  {"metricId":"M-19","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":49.33,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":15},
+  {"metricId":"M-07","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":3,"denominator":9,"value":33.33,"ciLow":12.06,"ciHigh":64.58,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-15","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":"refusal","numerator":1,"denominator":6,"value":16.67,"ciLow":3.01,"ciHigh":56.35,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-19","scope":"arm","pool":null,"engine":null,"groupId":null,"arm":"pilot","rival":null,"variant":null,"numerator":null,"denominator":null,"value":46.33,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"derived","snapshotCount":51},
+  {"metricId":"M-01","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-03","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":6,"denominator":9,"value":66.67,"ciLow":35.42,"ciHigh":87.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-06","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-07","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-09","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-10","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-08B","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":0,"denominator":3,"value":0.0,"ciLow":0.0,"ciHigh":56.15,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-11","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":9},
+  {"metricId":"M-12","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":4,"denominator":9,"value":44.44,"ciLow":18.88,"ciHigh":73.34,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":9,"denominator":9,"value":100.0,"ciLow":70.08,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-20","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":"refusal","numerator":0,"denominator":9,"value":0.0,"ciLow":0.0,"ciHigh":29.92,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":9},
+  {"metricId":"M-19","scope":"arm","pool":"P1","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":58.66,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":9},
+  {"metricId":"M-01","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":6,"denominator":12,"value":50.0,"ciLow":25.38,"ciHigh":74.62,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-02","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":11,"value":18.18,"ciLow":5.14,"ciHigh":47.7,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-03","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04C","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":34,"denominator":58,"value":58.62,"ciLow":45.8,"ciHigh":70.37,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-05","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":11,"denominator":6,"value":1.83,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-06","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-07","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":3,"denominator":4,"value":75.0,"ciLow":30.06,"ciHigh":95.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-09","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-10","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":4,"denominator":12,"value":33.33,"ciLow":13.81,"ciHigh":60.94,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08B","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":0,"denominator":3,"value":0.0,"ciLow":0.0,"ciHigh":56.15,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-11","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":0,"denominator":0,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"no_red_flag_expectations","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-12","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":3,"denominator":12,"value":25.0,"ciLow":8.89,"ciHigh":53.23,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":12,"denominator":12,"value":100.0,"ciLow":75.75,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":"refusal","numerator":0,"denominator":12,"value":0.0,"ciLow":0.0,"ciHigh":24.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-19","scope":"arm","pool":"P2","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":40.98,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":12},
+  {"metricId":"M-01","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":12,"value":16.67,"ciLow":4.7,"ciHigh":44.8,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-02","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":1,"denominator":10,"value":10.0,"ciLow":1.79,"ciHigh":40.42,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-03","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":1,"denominator":12,"value":8.33,"ciLow":1.49,"ciHigh":35.39,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"coverage_below_min","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-04C","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":22,"denominator":70,"value":31.43,"ciLow":21.76,"ciHigh":43.03,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-05","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":4,"denominator":2,"value":2.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-07","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":null,"ciLow":null,"ciHigh":null,"status":"not_measurable","reason":"not_adjudicated","dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":5,"denominator":6,"value":83.33,"ciLow":43.65,"ciHigh":96.99,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-09","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":3.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-10","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":6,"denominator":12,"value":50.0,"ciLow":25.38,"ciHigh":74.62,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-08B","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":4,"value":50.0,"ciLow":15.0,"ciHigh":85.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-11","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":10,"denominator":18,"value":55.56,"ciLow":33.72,"ciHigh":75.44,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-12","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":3,"denominator":12,"value":25.0,"ciLow":8.89,"ciHigh":53.23,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":12,"denominator":12,"value":100.0,"ciLow":75.75,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-20","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":"refusal","numerator":0,"denominator":12,"value":0.0,"ciLow":0.0,"ciHigh":24.25,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":12},
+  {"metricId":"M-19","scope":"arm","pool":"P3","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":37.58,"ciLow":null,"ciHigh":null,"status":"insufficient","reason":null,"dataType":"derived","snapshotCount":12},
+  {"metricId":"M-07","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":1,"denominator":null,"value":1.0,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-11","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":5,"denominator":9,"value":55.56,"ciLow":26.66,"ciHigh":81.12,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-12","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":6,"denominator":6,"value":100.0,"ciLow":60.97,"ciHigh":100.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-15","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":2,"denominator":6,"value":33.33,"ciLow":9.68,"ciHigh":70.0,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-20","scope":"arm","pool":"P4","engine":null,"groupId":null,"arm":"control","rival":null,"variant":"refusal","numerator":0,"denominator":6,"value":0.0,"ciLow":0.0,"ciHigh":39.03,"status":"insufficient","reason":null,"dataType":"measured","snapshotCount":6},
+  {"metricId":"M-19","scope":"arm","pool":null,"engine":null,"groupId":null,"arm":"control","rival":null,"variant":null,"numerator":null,"denominator":null,"value":47.37,"ciLow":null,"ciHigh":null,"status":"ok","reason":null,"dataType":"derived","snapshotCount":33}
+ ],
+ "gvi": {
+  "project": {
+   "value": 50.28,
+   "status": "ok",
+   "poolsUsed": [
+    "P1",
+    "P2",
+    "P3"
+   ],
+   "poolsMissing": [],
+   "pools": {
+    "P1": {
+     "value": 53.66,
+     "rawValue": 53.66,
+     "status": "ok",
+     "cappedBy": null,
+     "redistributed": [
+      "share"
+     ],
+     "dimensions": {
+      "mention": {
+       "value": 77.78,
+       "measurable": true,
+       "used": [
+        "M-01",
+        "M-03"
+       ]
+      },
+      "share": {
+       "value": null,
+       "measurable": false,
+       "used": []
+      },
+      "accuracy": {
+       "value": 35.71,
+       "measurable": true,
+       "used": [
+        "M-06"
+       ]
+      },
+      "citation": {
+       "value": 41.66,
+       "measurable": true,
+       "used": [
+        "M-08",
+        "M-10"
+       ]
+      },
+      "safety": {
+       "value": 44.44,
+       "measurable": true,
+       "used": [
+        "M-12"
+       ]
+      }
+     }
+    },
+    "P2": {
+     "value": 42.92,
+     "rawValue": 42.92,
+     "status": "ok",
+     "cappedBy": null,
+     "redistributed": [],
+     "dimensions": {
+      "mention": {
+       "value": 45.36,
+       "measurable": true,
+       "used": [
+        "M-01",
+        "M-02",
+        "M-03",
+        "M-05"
+       ]
+      },
+      "share": {
+       "value": 38.18,
+       "measurable": true,
+       "used": [
+        "M-04"
+       ]
+      },
+      "accuracy": {
+       "value": 42.86,
+       "measurable": true,
+       "used": [
+        "M-06"
+       ]
+      },
+      "citation": {
+       "value": 65.89,
+       "measurable": true,
+       "used": [
+        "M-08",
+        "M-10"
+       ]
+      },
+      "safety": {
+       "value": 25.64,
+       "measurable": true,
+       "used": [
+        "M-12"
+       ]
+      }
+     }
+    },
+    "P3": {
+     "value": 58.23,
+     "rawValue": 58.23,
+     "status": "ok",
+     "cappedBy": null,
+     "redistributed": [
+      "accuracy",
+      "mention",
+      "share"
+     ],
+     "dimensions": {
+      "mention": {
+       "value": null,
+       "measurable": false,
+       "used": []
+      },
+      "share": {
+       "value": null,
+       "measurable": false,
+       "used": []
+      },
+      "accuracy": {
+       "value": null,
+       "measurable": false,
+       "used": []
+      },
+      "citation": {
+       "value": 81.82,
+       "measurable": true,
+       "used": [
+        "M-08"
+       ]
+      },
+      "safety": {
+       "value": 40.54,
+       "measurable": true,
+       "used": [
+        "M-11"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "arms": {
+   "pilot": {
+    "value": 46.33,
+    "status": "ok",
+    "poolsUsed": [
+     "P1",
+     "P2",
+     "P3"
+    ],
+    "poolsMissing": [],
+    "pools": {
+     "P1": {
+      "value": 47.02,
+      "rawValue": 47.02,
+      "status": "ok",
+      "cappedBy": null,
+      "redistributed": [
+       "share"
+      ],
+      "dimensions": {
+       "mention": {
+        "value": 72.22,
+        "measurable": true,
+        "used": [
+         "M-01",
+         "M-03"
+        ]
+       },
+       "share": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "accuracy": {
+        "value": 20.0,
+        "measurable": true,
+        "used": [
+         "M-06"
+        ]
+       },
+       "citation": {
+        "value": 36.11,
+        "measurable": true,
+        "used": [
+         "M-08",
+         "M-10"
+        ]
+       },
+       "safety": {
+        "value": 44.44,
+        "measurable": true,
+        "used": [
+         "M-12"
+        ]
+       }
+      }
+     },
+     "P2": {
+      "value": 44.13,
+      "rawValue": 44.13,
+      "status": "ok",
+      "cappedBy": null,
+      "redistributed": [],
+      "dimensions": {
+       "mention": {
+        "value": 48.23,
+        "measurable": true,
+        "used": [
+         "M-01",
+         "M-02",
+         "M-03",
+         "M-05"
+        ]
+       },
+       "share": {
+        "value": 39.47,
+        "measurable": true,
+        "used": [
+         "M-04"
+        ]
+       },
+       "accuracy": {
+        "value": 40.0,
+        "measurable": true,
+        "used": [
+         "M-06"
+        ]
+       },
+       "citation": {
+        "value": 70.37,
+        "measurable": true,
+        "used": [
+         "M-08",
+         "M-10"
+        ]
+       },
+       "safety": {
+        "value": 25.93,
+        "measurable": true,
+        "used": [
+         "M-12"
+        ]
+       }
+      }
+     },
+     "P3": {
+      "value": 49.33,
+      "rawValue": 49.33,
+      "status": "ok",
+      "cappedBy": null,
+      "redistributed": [
+       "accuracy",
+       "mention",
+       "share"
+      ],
+      "dimensions": {
+       "mention": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "share": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "accuracy": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "citation": {
+        "value": 80.0,
+        "measurable": true,
+        "used": [
+         "M-08"
+        ]
+       },
+       "safety": {
+        "value": 26.32,
+        "measurable": true,
+        "used": [
+         "M-11"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "control": {
+    "value": 47.37,
+    "status": "ok",
+    "poolsUsed": [
+     "P1",
+     "P2",
+     "P3"
+    ],
+    "poolsMissing": [],
+    "pools": {
+     "P1": {
+      "value": 58.66,
+      "rawValue": 58.66,
+      "status": "ok",
+      "cappedBy": null,
+      "redistributed": [
+       "share"
+      ],
+      "dimensions": {
+       "mention": {
+        "value": 83.34,
+        "measurable": true,
+        "used": [
+         "M-01",
+         "M-03"
+        ]
+       },
+       "share": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "accuracy": {
+        "value": 44.44,
+        "measurable": true,
+        "used": [
+         "M-06"
+        ]
+       },
+       "citation": {
+        "value": 47.22,
+        "measurable": true,
+        "used": [
+         "M-08",
+         "M-10"
+        ]
+       },
+       "safety": {
+        "value": 44.44,
+        "measurable": true,
+        "used": [
+         "M-12"
+        ]
+       }
+      }
+     },
+     "P2": {
+      "value": 40.98,
+      "rawValue": 40.98,
+      "status": "ok",
+      "cappedBy": null,
+      "redistributed": [
+       "share"
+      ],
+      "dimensions": {
+       "mention": {
+        "value": 39.04,
+        "measurable": true,
+        "used": [
+         "M-01",
+         "M-02",
+         "M-03",
+         "M-05"
+        ]
+       },
+       "share": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "accuracy": {
+        "value": 50.0,
+        "measurable": true,
+        "used": [
+         "M-06"
+        ]
+       },
+       "citation": {
+        "value": 54.16,
+        "measurable": true,
+        "used": [
+         "M-08",
+         "M-10"
+        ]
+       },
+       "safety": {
+        "value": 25.0,
+        "measurable": true,
+        "used": [
+         "M-12"
+        ]
+       }
+      }
+     },
+     "P3": {
+      "value": 37.58,
+      "rawValue": 37.58,
+      "status": "ok",
+      "cappedBy": null,
+      "redistributed": [
+       "accuracy",
+       "share"
+      ],
+      "dimensions": {
+       "mention": {
+        "value": 21.25,
+        "measurable": true,
+        "used": [
+         "M-01",
+         "M-02",
+         "M-03",
+         "M-05"
+        ]
+       },
+       "share": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "accuracy": {
+        "value": null,
+        "measurable": false,
+        "used": []
+       },
+       "citation": {
+        "value": 66.66,
+        "measurable": true,
+        "used": [
+         "M-08",
+         "M-10"
+        ]
+       },
+       "safety": {
+        "value": 40.28,
+        "measurable": true,
+        "used": [
+         "M-11",
+         "M-12"
+        ]
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "denominators": {
+  "snapshots": 97,
+  "inDenominator": 95,
+  "valid": 93,
+  "refusal": 2,
+  "suspect": 1,
+  "failed": 1,
+  "noiseExcluded": 18,
+  "repeatExcluded": 3,
+  "unparsed": 0
+ }
+}
