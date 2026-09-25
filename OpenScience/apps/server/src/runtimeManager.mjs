@@ -31,6 +31,8 @@ import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 // So does 「前沿动态」 search (2026-09-22), for an account the module is open to.
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
+import { geoGatewayProviderUrl } from "./geoGateway.mjs";
+import { geoAudienceAllows } from "./geoService.mjs";
 import { createAgentBayClient } from "./agentbay/client.mjs";
 // A cycle, on purpose and safe: the provider module reads this one's exports
 // only when a method runs, never while either module is being evaluated.
@@ -1560,6 +1562,14 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (frontierGatewayUrl && frontierAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_FRONTIER_GATEWAY_URL = frontierGatewayUrl;
     }
+    // 「循证 GEO」's three tools ride the same token, and are given an address
+    // on the same terms as the frontier's: the module on and open to this
+    // account. Whether the project is a GEO project is the gateway's answer
+    // (`geo_no_project`), not a reason to leave the address out.
+    const geoGatewayUrl = gateways ? String(gateways.geo ?? "") : geoGatewayProviderUrl(config);
+    if (geoGatewayUrl && geoAudienceAllows(config, { id: String(project.userId ?? "") })) {
+      environment.EVIMED_GEO_GATEWAY_URL = geoGatewayUrl;
+    }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a
@@ -1689,6 +1699,16 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // release audit count it as not offered.
   if (!environment.EVIMED_FRONTIER_GATEWAY_URL) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "frontier_search"])].join(",");
+  }
+  // 「循证 GEO」's tools likewise: offered only where their gateway address
+  // was given above, and the social search only where the deployment has a
+  // social channel — a tool that can only answer 「无信号」 is not offered.
+  // `OPTIONAL_TOOLS` in the MCP server lets the release audit count them.
+  const geoDisabled = !environment.EVIMED_GEO_GATEWAY_URL
+    ? ["geo_read", "geo_write", "social_posts_search"]
+    : String(config.geoSocialUrl ?? "").trim() ? [] : ["social_posts_search"];
+  if (geoDisabled.length) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...geoDisabled])].join(",");
   }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String((gateways ? gateways.adapters?.[key] : configured[key]) ?? "").trim();

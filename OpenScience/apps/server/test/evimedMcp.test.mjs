@@ -21,7 +21,10 @@ import {
   verifyEviMedWorkloadToken,
   verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
-import { FRONTIER_LANES, FRONTIER_SPECIALTIES, MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { FRONTIER_LANES, FRONTIER_SPECIALTIES, GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS,
+  MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { GEO_READ_MAX_ITEMS } from "../src/geoService.mjs";
+import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "../src/socialCrawlClient.mjs";
 import { FRONTIER_SEARCH_DEFAULT_LIMIT, FRONTIER_SEARCH_MAX_LIMIT, FRONTIER_SEARCH_MAX_QUERY_LENGTH, FRONTIER_SEARCH_MODES } from "../src/frontierGateway.mjs";
 import { FRONTIER_WINDOWS } from "../src/frontierService.mjs";
 import { dshProfileInput } from "../src/runtimeManager.mjs";
@@ -323,6 +326,45 @@ test("「前沿动态」 search reaches a runtime only where the module is on an
   }
 });
 
+// 「循证 GEO」 is a module a deployment may run for its operators only. A
+// runtime of an account it is not open to is given no route, so its three
+// tools answer `geo_disabled` without asking, and are not even listed; the
+// social search is offered only where the deployment has a social channel.
+test("循证 GEO's tools reach a runtime only where the module is on and open to its account", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-geo-mcp-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const environment = (overrides) => dshProfileInput(dshConfig({
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [], geoSocialUrl: "http://social.internal:9966", ...overrides,
+    }), project, plan, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    const url = "http://127.0.0.1:8787/internal/geo/v1";
+    const disabled = (/** @type {any} */ env) => String(env.EVIMED_DISABLED_TOOLS).split(",").filter((name) => /^(?:geo_|social_)/.test(name)).sort();
+    const on = environment({});
+    assert.equal(on.EVIMED_GEO_GATEWAY_URL, url);
+    assert.deepEqual(disabled(on), []);
+    for (const [overrides, reason] of [
+      [{ geoEnabled: false }, "off"],
+      [{ geoAudience: "operators" }, "operators only, and user-1 is none"],
+      [{ publicSourceGatewayInternalUrl: "" }, "the tools authenticate with the source gateway's token; without it they have none"],
+    ]) {
+      const env = environment(overrides);
+      assert.equal(env.EVIMED_GEO_GATEWAY_URL, undefined, reason);
+      assert.deepEqual(disabled(env), ["geo_read", "geo_write", "social_posts_search"], reason);
+    }
+    assert.equal(environment({ geoAudience: "operators", operatorUsers: ["user-1"] }).EVIMED_GEO_GATEWAY_URL, url);
+    assert.equal(environment({ geoAudience: "operators", geoPreviewUsers: ["user-1"] }).EVIMED_GEO_GATEWAY_URL, url);
+    assert.deepEqual(disabled(environment({ geoSocialUrl: "" })), ["social_posts_search"], "no channel, no social search");
+    const remote = { ...plan, gateways: { model: "https://evimed.example/runtime-gateway/model/v1", publicSource: "https://evimed.example/runtime-gateway/sources/v1/fetch",
+      geo: "https://evimed.example/runtime-gateway/geo/v1", adapters: {} } };
+    const remoteEnv = dshProfileInput(dshConfig({ geoEnabled: true, geoAudience: "all", geoSocialUrl: "http://social.internal:9966" }), project, remote,
+      "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment;
+    assert.equal(remoteEnv.EVIMED_GEO_GATEWAY_URL, "https://evimed.example/runtime-gateway/geo/v1", "a remote session is given the public prefix");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("the generated patch mounts the research MCP and hands it a token, never a key", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-"));
   try {
@@ -352,8 +394,8 @@ test("the generated patch mounts the research MCP and hands it a token, never a 
     assert.match(patch, /^ {8}failOnStartupError: true$/m);
 
     assert.deepEqual(mcpEnvironment(patch), {
-      // The frontier module is off here, so its search tool is not offered.
-      EVIMED_DISABLED_TOOLS: "frontier_search",
+      // The frontier and GEO modules are off here, so their tools are not offered.
+      EVIMED_DISABLED_TOOLS: "frontier_search,geo_read,geo_write,social_posts_search",
       EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
       EVIMED_MODEL_GATEWAY_TOKEN_FILE: `/runtime/dsh-home/${modelGatewayTokenFileName}`,
       EVIMED_MODEL_GATEWAY_URL: "http://127.0.0.1:8787/internal/model/v1",
@@ -999,6 +1041,27 @@ test("frontier_search offers exactly the domain's lanes and specialties, and the
   assert.equal(schema.properties.q.maxLength, FRONTIER_SEARCH_MAX_QUERY_LENGTH);
   assert.equal(schema.required, undefined, "no field is required: without q the tool lists the newest items");
   assert.match(description, /leads, not evidence/);
+});
+
+// The GEO tools' schemas are written in Python and their vocabularies are the
+// domain's; the gateway checks the same fields again. A word added to the
+// domain and not to a tool is a read the model is never offered.
+test("the GEO tools offer exactly the domain's vocabularies and the gateway's own bounds", async () => {
+  const script = "import json,sys; sys.path.insert(0, '.'); import server; print(json.dumps({n: server.TOOLS[n] for n in ('geo_read','geo_write','social_posts_search')}))";
+  const { stdout } = await execFile("python3", ["-c", script], { cwd: path.join(repoRoot, "runtime/mcp/evimed-research") });
+  const tools = JSON.parse(stdout);
+  const read = tools.geo_read.inputSchema;
+  assert.deepEqual(read.properties.what.enum, [...GEO_READ_WHATS]);
+  assert.deepEqual(read.properties.filter.properties.engine.enum, [...GEO_ENGINES]);
+  assert.deepEqual(read.properties.filter.properties.pool.enum, [...GEO_POOLS]);
+  assert.equal(read.properties.filter.properties.limit.maximum, GEO_READ_MAX_ITEMS);
+  assert.deepEqual(tools.geo_write.inputSchema.properties.what.enum, [...GEO_WRITE_WHATS]);
+  const social = tools.social_posts_search.inputSchema;
+  assert.deepEqual(social.properties.platforms.items.enum, [...GEO_SOCIAL_PLATFORMS]);
+  assert.deepEqual(social.properties.sort.enum, [...GEO_SOCIAL_SORTS]);
+  assert.equal(social.properties.limit.maximum, SOCIAL_MAX_LIMIT);
+  assert.equal(social.properties.limit.default, SOCIAL_DEFAULT_LIMIT);
+  assert.equal(social.properties.query.maxLength, SOCIAL_MAX_QUERY_LENGTH);
 });
 
 // The other half: what an agent package may ask for has to be something the

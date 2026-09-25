@@ -95,9 +95,11 @@ test("switching web reading off also stops offering the tool to the runtime", as
     };
     // The frontier module is off in this config, so its search tool is not
     // offered either (runtimeManager.mjs, next to the web_read switch).
-    assert.equal(disabledTools({ ...base, webReadEnabled: true }), "patent_search,frontier_search");
-    assert.equal(disabledTools({ ...base, webReadEnabled: false }), "patent_search,web_read,frontier_search");
-    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), "web_read,frontier_search");
+    // So are 循证 GEO's three tools: the module is off in this config too.
+    const geo = "geo_read,geo_write,social_posts_search";
+    assert.equal(disabledTools({ ...base, webReadEnabled: true }), `patent_search,frontier_search,${geo}`);
+    assert.equal(disabledTools({ ...base, webReadEnabled: false }), `patent_search,web_read,frontier_search,${geo}`);
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), `web_read,frontier_search,${geo}`);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

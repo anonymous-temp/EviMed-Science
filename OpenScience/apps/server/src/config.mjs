@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
+import { GEO_DEFAULT_ENGINES, GEO_ENGINES } from "@evimed/domain";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -270,6 +271,126 @@ function frontierSettings(overrides) {
     knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),
     knowledgePluginTimeoutMs: integer("knowledgePluginTimeoutMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS", 8_000, 1_000, 60_000),
     knowledgePluginMinContract: minContract,
+  };
+}
+
+/**
+ * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
+ * load, and the media marketplace it places orders through.
+ *
+ * Hidden knowledge — the same discipline as the frontier's: every one is a
+ * lever an operator sets in `.env`, compose passes it value-less (unset is
+ * absent, so the default here applies), and a value outside its range stops
+ * the process at start with the variable's name.
+ *
+ * - Off by default, and open to operators and the preview list only when on:
+ *   the module spends model money (parse and judge), probe time and, once the
+ *   marketplace is wired, real money.
+ * - The engines are closed words (`GEO_ENGINES`); an unknown one is a startup
+ *   error, not a silently unmeasured engine.
+ * - The night window is `HH-HH` in the module's time zone (`22-07` wraps
+ *   midnight); large rounds wait for it (spec §5).
+ * - The social channel is plain HTTP on its host and needs no key; its
+ *   timeout is held under the kernel's tool-call ceiling with room for the
+ *   gateway to answer, the same clamp the probe learned the hard way.
+ * - The marketplace's key is a file path, read by its client at call time;
+ *   either the address or the key file missing means `configured: false` —
+ *   plans and budgets work, no order leaves. The balance cap unset means no
+ *   top-up is ever requested.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function geoSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const value = read(key, name, fallback);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+    }
+    return number;
+  };
+  /** @param {string} key @param {string} name @param {string} fallback */
+  const list = (key, name, fallback) => {
+    const value = read(key, name, fallback);
+    const items = Array.isArray(value) ? value.map(String) : String(value).split(",");
+    return items.map((item) => item.trim()).filter(Boolean);
+  };
+  /** @param {string} key @param {string} name */
+  const origin = (key, name) => {
+    const value = String(read(key, name, "")).trim().replace(/\/+$/, "");
+    if (!value) return "";
+    let parsed = null;
+    try { parsed = new URL(value); } catch { parsed = null; }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error(`${name} must be an http(s) origin with an optional path and no credentials.`);
+    }
+    return value;
+  };
+  const audience = String(read("geoAudience", "OPEN_SCIENCE_GEO_AUDIENCE", "operators")).trim().toLowerCase();
+  if (!["all", "operators"].includes(audience)) {
+    throw new Error(`OPEN_SCIENCE_GEO_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
+  }
+  const engines = list("geoEngines", "OPEN_SCIENCE_GEO_ENGINES", GEO_DEFAULT_ENGINES.join(","));
+  if (!engines.length || engines.some((engine) => !GEO_ENGINES.includes(engine)) || new Set(engines).size !== engines.length) {
+    throw new Error(`OPEN_SCIENCE_GEO_ENGINES must be distinct values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(engines.join(","))}.`);
+  }
+  const inclusionEngines = list("geoInclusionEngines", "OPEN_SCIENCE_GEO_INCLUSION_ENGINES", "");
+  if (inclusionEngines.some((engine) => !GEO_ENGINES.includes(engine))) {
+    throw new Error(`OPEN_SCIENCE_GEO_INCLUSION_ENGINES must be values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(inclusionEngines.join(","))}.`);
+  }
+  const nightWindow = String(read("geoNightWindow", "OPEN_SCIENCE_GEO_NIGHT_WINDOW", "22-07")).trim();
+  const night = /^(\d{1,2})-(\d{1,2})$/.exec(nightWindow);
+  if (!night || Number(night[1]) > 23 || Number(night[2]) > 23 || night[1] === night[2]) {
+    throw new Error(`OPEN_SCIENCE_GEO_NIGHT_WINDOW must be HH-HH with two different hours from 0 to 23, got ${JSON.stringify(nightWindow)}.`);
+  }
+  const timeZone = String(read("geoTimeZone", "OPEN_SCIENCE_GEO_TIMEZONE", "Asia/Shanghai")).trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(0);
+  } catch {
+    throw new Error(`OPEN_SCIENCE_GEO_TIMEZONE must be an IANA time zone, got ${JSON.stringify(timeZone)}.`);
+  }
+  const budgetValue = read("geoDailyBudgetCny", "OPEN_SCIENCE_GEO_DAILY_BUDGET_CNY", 20);
+  const budget = Number(budgetValue);
+  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
+    throw new Error(`OPEN_SCIENCE_GEO_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
+  }
+  const keyFile = String(read("mediaMarketApiKeyFile", "OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE", "")).trim();
+  if (keyFile && !path.isAbsolute(keyFile)) throw new Error("OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE must be an absolute path.");
+  const capValue = read("mediaMarketBalanceCapCny", "OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY", null);
+  const cap = capValue == null ? null : Number(capValue);
+  if (cap != null && (!Number.isFinite(cap) || cap <= 0 || cap > 10_000_000)) {
+    throw new Error(`OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY must be a positive number up to 10000000, got ${JSON.stringify(capValue)}.`);
+  }
+  return {
+    geoEnabled: overrides.geoEnabled ?? boolEnv("OPEN_SCIENCE_GEO_ENABLED", false),
+    geoAudience: audience,
+    // Accounts that see the module under `operators` without being operators.
+    geoPreviewUsers: overrides.geoPreviewUsers ?? listEnv("OPEN_SCIENCE_GEO_PREVIEW_USERS"),
+    geoPollMs: integer("geoPollMs", "OPEN_SCIENCE_GEO_POLL_MS", 5_000, 1_000, 3_600_000),
+    geoLeaseMs: integer("geoLeaseMs", "OPEN_SCIENCE_GEO_LEASE_MS", 600_000, 60_000, 86_400_000),
+    // The module's own model money per day (parse and judge, purpose `geo`); 0 is no cap.
+    geoDailyBudgetCny: budget,
+    geoEngines: engines,
+    geoNightWindow: nightWindow,
+    geoTimeZone: timeZone,
+    // Asks one project may make in a week (spec §5): the probe host is shared.
+    geoWeeklyAskCap: integer("geoWeeklyAskCap", "OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP", 1_500, 0, 1_000_000),
+    geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
+    geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 120_000, 5_000,
+      MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
+    // Engines measured through the marketplace's inclusion check instead of the
+    // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
+    geoInclusionEngines: inclusionEngines,
+    mediaMarketUrl: origin("mediaMarketUrl", "OPEN_SCIENCE_MEDIA_MARKET_URL"),
+    mediaMarketApiKeyFile: keyFile,
+    mediaMarketBalanceCapCny: cap,
   };
 }
 
@@ -1584,6 +1705,8 @@ export function loadConfig(overrides = {}) {
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
+    // --- 循证 GEO and the media marketplace (2026-09-25) ---
+    ...geoSettings(overrides),
     ...reviewSettings(overrides),
     ...reviewJevSettings(overrides, Boolean(typesafeSecret.value)),
     // The learning loop's own knobs.

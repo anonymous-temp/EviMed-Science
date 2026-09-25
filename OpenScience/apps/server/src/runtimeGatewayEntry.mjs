@@ -3,8 +3,8 @@
  * (plan §3.1 #5).
  *
  * A Docker runtime reaches the model, public-source, search, capsule,
- * revision, connector-credential, GEO-probe, knowledge-base and frontier
- * gateways by the control plane's container name, and the specialist engines
+ * revision, connector-credential, GEO-probe, knowledge-base, frontier and
+ * GEO gateways by the control plane's container name, and the specialist engines
  * by theirs. A runtime in an AgentBay session is on the internet: it reaches
  * all of them through this one
  * prefix on port 443, which the host's nginx forwards here, and nothing about
@@ -13,7 +13,7 @@
  * adds is the mapping and a per-runtime rate limit, because an address on the
  * internet can be called by anything that learns it:
  *
- *   /runtime-gateway/<model|sources|search|capsules|revisions|geo-probe|kb|frontier|review>/…
+ *   /runtime-gateway/<model|sources|search|capsules|revisions|geo-probe|kb|frontier|review|geo>/…
  *       → the same request at /internal/<name>/…, handled by the same gateway
  *   /runtime-gateway/specialist/<adapter>[/…]
  *       → relayed to that specialist adapter's configured URL, token included
@@ -35,6 +35,7 @@ import {
 import { HttpError, sendError } from "./security.mjs";
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
+import { geoGatewayProviderUrl } from "./geoGateway.mjs";
 
 export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
 
@@ -46,7 +47,7 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
  * runtime, and a credential endpoint reachable from the internet with a token
  * the run can print is what the 2026-09-20 security review found here.
  */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review"]);
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 
@@ -77,6 +78,8 @@ export function publicRuntimeGatewayUrls(config) {
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
+    // 循证 GEO's three operations sit under one base (`geo_platform.py` appends them).
+    geo: geoGatewayProviderUrl(config) ? `${base}/geo/v1` : "",
     // The review gateway has no address of its own in a runtime's environment:
     // the socket derives it from the revision gateway's (`../socket/src/review.mjs`).
     review: config.reviewEnabled && revisionGatewayProviderUrl(config) ? `${base}/review/v1` : "",
