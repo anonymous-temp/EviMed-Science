@@ -62,12 +62,28 @@ export const GEO_SEVERITIES = Object.freeze(["S0", "S1", "S2", "S3", "S4"]);
 export const GEO_JUDGE_ANSWER_CHARS = 8_000;
 /** A claim's quote as shown to the judge at most. */
 const CLAIM_QUOTE_CHARS = 600;
-const JUDGE_MAX_TOKENS = 3_000;
-const JUDGE_TIMEOUT_MS = 90_000;
+/** Room for thirty statements with their quotes; a cut-off answer is the answer's own failure (`geo_judge_truncated`). */
+const JUDGE_MAX_TOKENS = 8_000;
+const JUDGE_TIMEOUT_MS = 180_000;
 /** Judge failures on one answer before it is written unjudged. */
 export const GEO_JUDGE_MAX_ATTEMPTS = 3;
 /** The failures that are the answer's own; every other one stops the tick. */
-const ANSWER_FAILURES = new Set(["geo_judge_invalid", "geo_judge_timeout"]);
+const ANSWER_FAILURES = new Set(["geo_judge_invalid", "geo_judge_timeout", "geo_judge_truncated"]);
+/** Provider statuses that refuse this request for what it is (too long, malformed), not the provider being unavailable. */
+const ANSWER_REFUSAL_STATUSES = new Set([400, 413, 422]);
+
+/**
+ * Whether a judge failure is the answer's own — counted against its attempts
+ * and, after the last, written unjudged — rather than the provider's (401,
+ * 402, 429, 5xx, a network failure), which stops the tick and is retried.
+ * @param {unknown} error
+ */
+export function judgeFailureIsTheAnswers(error) {
+  const value = /** @type {any} */ (error);
+  const code = String(value?.code ?? "");
+  if (ANSWER_FAILURES.has(code)) return true;
+  return code === "model_gateway_upstream_error" && ANSWER_REFUSAL_STATUSES.has(Number(value?.upstreamStatus));
+}
 const LIMITS = Object.freeze({ statements: 30, entities: 30, recommendations: 20, safetyTerms: 20 });
 /** The shortest evidence quote that says anything. */
 const EVIDENCE_MIN_CHARS = 4;
@@ -77,7 +93,7 @@ export const GEO_JUDGE_INSTRUCTIONS = [
   "",
   "请做以下几件事：",
   "1. refusal：回答是否在合规拒答（只说无法提供医疗建议、请咨询医生之类，而没有回答问题）。真正回答了问题的填 false。",
-  "2. statements：从回答中逐句摘出关于本品（品牌名、别名、通用名或明确指代本品的说法）的事实性陈述——适应症、用法用量、给药频次、剂型规格、禁忌、不良反应、特殊人群、批准信息、处方属性等。text 必须逐字照抄回答原句，不改一个字。每句对照主张库判定：",
+  "2. statements：最多 30 条，最重要的（讲错的、涉及用法用量与安全的）在前。从回答中逐句摘出关于本品（品牌名、别名、通用名或明确指代本品的说法）的事实性陈述——适应症、用法用量、给药频次、剂型规格、禁忌、不良反应、特殊人群、批准信息、处方属性等。text 必须逐字照抄回答原句，不改一个字。每句对照主张库判定：",
   "   - verdict：correct（与某条主张一致）/ wrong（与某条主张矛盾，或主张库明确不支持）/ unverifiable（主张库没有相关内容，无法判定）。",
   "   - claim：判定所依据的主张编号（如 C3）；unverifiable 可为 null。",
   "   - evidence：从该主张的原文中逐字摘出支持你判定的一段（至少 4 个字）；unverifiable 可为空字符串。",
@@ -397,7 +413,11 @@ export class GeoJudge {
           ],
         },
       });
-      const message = body?.choices?.[0]?.message;
+      const choice = body?.choices?.[0];
+      if (choice?.finish_reason === "length") {
+        throw Object.assign(new Error("The judge's answer was cut off at its token limit."), { code: "geo_judge_truncated" });
+      }
+      const message = choice?.message;
       const parsed = parseJson(message?.content) ?? parseJson(message?.reasoning_content);
       const verified = verifyJudgement(parsed, built, input);
       this.counters.dropped += verified.dropped.length;
@@ -458,7 +478,16 @@ export async function tickParse(deps) {
     counts.skipped = "judge_unavailable";
     return counts;
   }
-  const pending = await store.snapshotsToParse(Math.max(1, deps.maxParse ?? 10));
+  // A wider window than one tick handles, least-failed first: an answer that
+  // keeps failing goes behind the others instead of blocking every later one.
+  const limit = Math.max(1, deps.maxParse ?? 10);
+  state.parseTicks += 1;
+  const failuresOf = (/** @type {string} */ id) => (state.judgeAttempts.get(id) ?? 0) + (state.judgeStops.get(id)?.count ?? 0);
+  const pending = (await store.snapshotsToParse(Math.min(500, limit * 5)))
+    .map((snapshot, index) => ({ snapshot, index }))
+    .sort((left, right) => failuresOf(left.snapshot.id) - failuresOf(right.snapshot.id) || left.index - right.index)
+    .slice(0, limit)
+    .map((entry) => entry.snapshot);
   /** @type {Map<string, Awaited<ReturnType<typeof store.projectContext>>>} */
   const contexts = new Map();
   /** @type {Map<string, Map<string, any>>} */
@@ -480,7 +509,13 @@ export async function tickParse(deps) {
     const registry = brandRegistry(context.project.product, context.project.competitors);
     /** @type {(GeoJudgement & { truncated?: boolean }) | null} */
     let judged = null;
-    try {
+    const stops = state.judgeStops.get(snapshot.id);
+    // It stopped the judge again and again while another answer was judged in
+    // the tick it first failed or since: the provider works and this answer
+    // does not. Written unjudged. (In an outage only the one answer that
+    // stopped the tick right after the last success can be taken for stuck.)
+    const stuck = Boolean(stops && stops.count >= GEO_JUDGE_MAX_ATTEMPTS && state.lastJudgedTick >= stops.firstTick);
+    if (!stuck) try {
       judged = await judge.judge({
         owner: { userId: context.project.userId, projectId: context.project.projectId },
         product: context.project.product,
@@ -493,11 +528,14 @@ export async function tickParse(deps) {
     } catch (error) {
       const code = String(/** @type {any} */ (error)?.code ?? "geo_judge_failed");
       counts.failures += 1;
-      // Only a failure of this answer (no usable JSON, or a call that ran out
-      // of time on it) counts against the answer. A provider that is down, out
-      // of balance or refusing is not the answer's fault and will not be
-      // different on the next one: stop, and try again next tick.
-      if (!ANSWER_FAILURES.has(code)) {
+      // Only a failure of this answer (no usable JSON, cut off, out of time,
+      // or refused by the provider as too long or malformed) counts against
+      // the answer. A provider that is down, out of balance or rate-limiting
+      // is not the answer's fault and will not differ on the next one: stop,
+      // and try again next tick (this answer then goes behind the others).
+      if (!judgeFailureIsTheAnswers(error)) {
+        const previous = state.judgeStops.get(snapshot.id);
+        state.judgeStops.set(snapshot.id, { count: (previous?.count ?? 0) + 1, firstTick: previous?.firstTick ?? state.parseTicks });
         counts.skipped = code;
         break;
       }
@@ -507,6 +545,8 @@ export async function tickParse(deps) {
       state.judgeAttempts.delete(snapshot.id);
       judged = null;
     }
+    state.judgeStops.delete(snapshot.id);
+    if (judged) state.lastJudgedTick = state.parseTicks;
 
     const code = parseAnswer({
       answer: snapshot.answerText,
