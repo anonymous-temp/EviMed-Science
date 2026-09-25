@@ -28,6 +28,13 @@
  *   failed or said partial, `no_results` only when every platform answered
  *   and none had a post, and `request_failed` when nothing came back and a
  *   platform failed. A run reads the last as 「无信号」, never as zero.
+ * - **Engagement is what the platform counted, or nothing.** The comments a
+ *   detail crawl returns are at most `minimum_comments_per_post` of them, so
+ *   their number is not the post's comment count; `engagement.comments` is set
+ *   only from a count the upstream states (`comment_count`), and is absent
+ *   otherwise — never the length of a sample dressed as a total.
+ * - An answer is read at most 8 MB, counted while it streams in: an upstream
+ *   that sends more is cut off there, not buffered whole and then refused.
  * - Platforms are asked three at a time, all within one deadline — the
  *   configured timeout (a detail crawl took 14 s for one post on the live
  *   host; five posts with five comments each take longer). A platform the
@@ -57,6 +64,37 @@ const count = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? Math.floor(number) : 0;
 };
+
+/** A count the upstream states, or null when it states none. @param {unknown} value */
+function statedCount(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : null;
+}
+
+/**
+ * A response body as text, read chunk by chunk and abandoned the moment it
+ * passes `limit` bytes.
+ * @param {Response} response @param {number} limit
+ */
+export async function readBoundedText(response, limit) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  /** @type {Uint8Array[]} */
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      throw Object.assign(new Error("The social channel's answer is too large."), { code: "response_too_large" });
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))).toString("utf8");
+}
 
 /**
  * One upstream post, reduced to what may be kept.
@@ -88,7 +126,7 @@ export function minimizedSocialPost(post, platform, collectedAt) {
     excerpt: joined,
     engagement: {
       likes: count(post.likes), favs: count(post.favs), shares: count(post.shares),
-      comments: Array.isArray(post.comments) ? post.comments.length : count(post.comment_count),
+      ...(statedCount(post.comment_count ?? post.comments_count) != null ? { comments: statedCount(post.comment_count ?? post.comments_count) } : {}),
     },
     collectedAt,
     comments,
@@ -145,9 +183,7 @@ export function createSocialCrawlClient({ baseUrl = "", timeoutMs = 120_000, fet
         counters.failed += 1;
         return { platform, status: "request_failed", posts: [] };
       }
-      const raw = await response.text();
-      if (raw.length > MAX_RESPONSE_BYTES) throw Object.assign(new Error("too large"), { code: "response_too_large" });
-      const body = JSON.parse(raw);
+      const body = JSON.parse(await readBoundedText(response, MAX_RESPONSE_BYTES));
       const collectedAt = now().toISOString();
       const upstream = String(body?.meta?.collection_status ?? "");
       const posts = (Array.isArray(body?.posts) ? body.posts : [])
