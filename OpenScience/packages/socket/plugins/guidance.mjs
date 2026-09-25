@@ -79,8 +79,8 @@ export const Config = Schema.object({
     .description('Whether a memory capsule is mounted for this session; changes the retrieval order the guidance states.'),
   reviewEnabled: Schema.boolean().default(false)
     .description('Whether the cross-deliverable reviewer is composed in this deployment.'),
-  disabledTools: Schema.string().default('')
-    .description('EVIMED_DISABLED_TOOLS: base tool names this runtime switched off; a capability built on a switched-off module tool is not offered.'),
+  disabledToolsFile: Schema.string().default('')
+    .description('File holding the base tool names this runtime does not offer (the MCP server\'s EVIMED_DISABLED_TOOLS); a capability built on a switched-off module tool is not offered. Empty offers every capability.'),
 })
 
 /**
@@ -89,7 +89,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
-  const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(config.disabledTools))
+  const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(await readDisabledTools(ctx, config.disabledToolsFile)))
   const text = buildGuidanceText(capabilities, {
     askUserEnabled: config.askUserEnabled,
     capsuleActive: config.capsuleActive,
@@ -256,6 +256,24 @@ export async function loadCapabilities(ctx, directory) {
  * was before the module existed (build spec 2026-09-25 §0.1).
  */
 export const MODULE_TOOLS = Object.freeze(['geo_read', 'geo_write'])
+
+/**
+ * The file the control plane wrote before the kernel started. Absent or
+ * unreadable reads as nothing switched off: every capability stays offered,
+ * which is what a runtime without the module ever saw.
+ * @param {any} ctx @param {string} file
+ * @returns {Promise<string>}
+ */
+async function readDisabledTools(ctx, file) {
+  if (!file) return ''
+  const slash = file.lastIndexOf('/')
+  if (slash <= 0) return ''
+  try {
+    return String(await readFileAt(ctx, file.slice(0, slash), file.slice(slash + 1)) ?? '')
+  } catch {
+    return ''
+  }
+}
 
 /** @param {string | undefined} raw @returns {Set<string>} */
 export function disabledTools(raw) {

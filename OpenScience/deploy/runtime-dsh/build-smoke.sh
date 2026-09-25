@@ -124,7 +124,7 @@ export EVIMED_ANSWER_PERSONA_DIR=/opt/evimed/skills/evimed/open-domain-answer
   echo "  every open-domain answer would then be delivered unverified for a method the image was holding." >&2
   exit 1
 }
-export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL="" EVIMED_REVISION_AUTHORIZE_URL=""
+export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL="" EVIMED_REVISION_AUTHORIZE_URL="" EVIMED_DISABLED_TOOLS_FILE=""
 export EVIMED_PUBLIC_SOURCE_GATEWAY_URL="" EVIMED_WEB_SEARCH_GATEWAY_URL="" EVIMED_MODEL_GATEWAY_TOKEN_FILE=""
 export EVIMED_WORKLOAD_TOKEN_FILE="${home}/evimed-workload.token"
 export EVIMED_BUNDLE_VERSION="${SOCKET_VERSION:-0.1.0}"

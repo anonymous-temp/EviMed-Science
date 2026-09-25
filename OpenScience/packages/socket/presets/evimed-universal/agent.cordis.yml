@@ -61,7 +61,7 @@
         askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
         capsuleActive: !!js process.env.EVIMED_CAPSULE_ACTIVE === '1'
         reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
-        disabledTools: !!js process.env.EVIMED_DISABLED_TOOLS ?? ''
+        disabledToolsFile: !!js process.env.EVIMED_DISABLED_TOOLS_FILE ?? ''
       name: '@evimed/dsh-socket/plugins/guidance'
 
     # "When is a run finished, and when is it acceptable" — the plan, the
