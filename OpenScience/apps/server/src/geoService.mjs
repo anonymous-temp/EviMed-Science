@@ -39,6 +39,10 @@
  */
 
 import path from "node:path";
+import { GEO_FAILURE_MODE_LABELS_ZH } from "@evimed/domain";
+
+/** A failure mode as the page says it. @param {string | null} code */
+const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
 import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
@@ -815,7 +819,9 @@ export class GeoService {
     }));
     const byPool = GEO_POOLS.map((pool) => ({
       pool, mention: cell("pool", pool, "", GEO_VIEW_METRIC_IDS.mention),
-      topCompetitor: pools.get(pool)?.competitor ?? null, mainIssue: pools.get(pool)?.issue ?? null,
+      topCompetitor: pools.get(pool)?.competitor ?? null,
+      // The page's words, never the failure-mode code (「omitted」 reached the page on 2026-09-25).
+      mainIssue: failureModeWord(pools.get(pool)?.issue ?? null),
     }));
     await this.#attachSnapshotIds(project.id, traced);
     return {

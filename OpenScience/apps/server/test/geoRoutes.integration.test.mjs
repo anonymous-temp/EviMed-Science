@@ -365,7 +365,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(p2.mention.status, "insufficient");
   const p1 = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P1");
   assert.equal(p1.topCompetitor, "替尔泊肽");
-  assert.equal(p1.mainIssue, "wrong_ours");
+  assert.equal(p1.mainIssue, "讲错我方", "the page's words, never the code");
   assert.deepEqual(Object.fromEntries(Object.entries(diagnosis.failureModes).map(([mode, cell]) => [mode, [/** @type {any} */ (cell).numerator,
     /** @type {any} */ (cell).denominator]])), { omitted: [0, 1], correct: [0, 1], wrongOurs: [1, 1], wrongCompetitor: [0, 1] },
   "a suspect answer is out of the tally");

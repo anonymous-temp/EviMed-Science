@@ -201,15 +201,18 @@ function ByEngine({
                     </td>
                   ))}
                   <td className={`${TD} w-16 text-right`}>
-                    <AskAi
-                      project={target}
-                      draft={rowDraft({
-                        product,
-                        scope: engineName(row.engine),
-                        cells: cells.map((column) => ({ name: column.label, cell: column.cell, word: only && column.mentionOnly ? MENTION_ONLY_WORD : undefined })),
-                        date,
-                      })}
-                    />
+                    {/* An engine with no measured number has nothing to ask about. */}
+                    {cells.some((column) => column.cell?.value != null) && (
+                      <AskAi
+                        project={target}
+                        draft={rowDraft({
+                          product,
+                          scope: engineName(row.engine),
+                          cells: cells.map((column) => ({ name: column.label, cell: column.cell, word: only && column.mentionOnly ? MENTION_ONLY_WORD : undefined })),
+                          date,
+                        })}
+                      />
+                    )}
                   </td>
                 </tr>
               );

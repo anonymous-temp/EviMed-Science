@@ -106,3 +106,13 @@ test("the default reader finds a deliverable by its path in the workspace, from 
     await rm(workspace, { recursive: true, force: true });
   }
 });
+
+test("the run's competitors come with its claims when the project has none", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `r-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  const importDelivery = createGeoDeliveryImport({ store,
+    readFile: async () => JSON.stringify({ competitors: [{ brandName: "诺和盈", genericName: "司美格鲁肽注射液", reason: "同适应证", tier: "A" }], claims: [claim(1)] }),
+    listInsightFolders: async () => ["geo-insight"] });
+  await importDelivery({ id: `r-${run}`, userId: USER, workspaceDir: "/nowhere" }, { id: "with-rivals", status: "succeeded", deliverables: [] });
+  const saved = await store.getProject(USER, created.id);
+  assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["诺和盈"]);
+});
