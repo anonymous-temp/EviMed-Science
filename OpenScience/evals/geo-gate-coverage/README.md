@@ -2,13 +2,15 @@
 
 Measures how many of the geo-skills BLOCK rules are actually proved by a test.
 
-The package under measurement ships 88 rules, 78 of them BLOCK, and a suite of
-309 tests that all pass. That last number says nothing about the first two. The
+The package under measurement (geo-skills 3.0.1) ships 133 rules, 99 of them
+BLOCK (93 with a check this harness can locate and switch off), and a suite of
+781 tests that all pass. That last number says nothing about the first two. The
 question this harness answers is different and harder: **switch a rule off
 entirely — does anything go red?**
 
-Today the answer is **78 of 78 yes**. It was 59 of 78 when this harness was written;
-`tests/test_uncovered_gates.py` closed the other nineteen.
+Today the answer is **93 of 93 yes** (2026-09-25, 3.0.1). On 2.0.0 it was 59 of 78
+when this harness was written; `tests/test_uncovered_gates.py` closed the other
+nineteen, and 3.0.0 ships those tests inside the package.
 
 A surviving rule is not necessarily wrong. It is unproved: it can be deleted,
 inverted, or quietly broken by a refactor and every test still passes. For a
@@ -19,7 +21,7 @@ impression of a guard.
 ## Running it
 
 ```bash
-python3 evals/geo-gate-coverage/run_gate_coverage.py --package /path/to/geo-skills-2.0.0
+python3 evals/geo-gate-coverage/run_gate_coverage.py --package /path/to/geo-skills-3.0.1
 ```
 
 Needs `pytest` and `pyyaml`; about six minutes (one full suite run per rule).

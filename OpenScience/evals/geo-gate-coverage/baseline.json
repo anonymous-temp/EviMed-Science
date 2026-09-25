@@ -1,7 +1,7 @@
 {
   "note": "Rewritten by run_gate_coverage.py --record-baseline. `survivors` is the ratchet: it may shrink, never grow. It is empty — every BLOCK rule is now proved by a named test, so any regression fails the run.",
-  "recordedAt": "2026-08-29",
-  "version": "2.0.0",
-  "treeDigest": "e21925ab5b92e05bfabcc17496c6411e458355eaff96fdaa5a90069c51cbc660",
+  "recordedAt": "2026-09-25",
+  "version": "3.0.1",
+  "treeDigest": "a10d2d9001700f57a3cd7bf64dbb23f9c1d148ba6613e0ecf1a949d5ad2a963c",
   "survivors": []
 }

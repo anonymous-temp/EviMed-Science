@@ -1,8 +1,8 @@
 {
-  "package": "/tmp/geo-dl/geo-skills-2.0.0",
-  "version": "2.0.0",
-  "treeDigest": "e21925ab5b92e05bfabcc17496c6411e458355eaff96fdaa5a90069c51cbc660",
-  "blockRules": 78,
+  "package": "geo-skills-3.0.1 (unpacked from the archive in provenance.json)",
+  "version": "3.0.1",
+  "treeDigest": "a10d2d9001700f57a3cd7bf64dbb23f9c1d148ba6613e0ecf1a949d5ad2a963c",
+  "blockRules": 93,
   "caught": [
     "CN-G01",
     "CN-G02",
@@ -21,6 +21,9 @@
     "DM-G03",
     "DM-G04",
     "DM-G06",
+    "EC-G01",
+    "EC-G02",
+    "EC-G03",
     "EF-G01",
     "EF-G02",
     "EF-G03",
@@ -30,6 +33,7 @@
     "EF-G07",
     "EF-G08",
     "EF-G09",
+    "EF-G10",
     "GEO-M01",
     "GEO-M03",
     "GEO-M04",
@@ -47,6 +51,15 @@
     "IRON-06",
     "LABEL-02",
     "LABEL-05",
+    "LC-G02",
+    "LC-G07",
+    "MD-G01",
+    "MD-G02",
+    "MD-G03",
+    "MD-G04",
+    "MD-G05",
+    "MD-G06",
+    "MI-G02",
     "PB-G01",
     "PB-G02",
     "PB-G03",
@@ -57,6 +70,8 @@
     "PJ-G04",
     "PJ-G05",
     "PJ-G06",
+    "RW-G01",
+    "SE-G02",
     "ST-G01",
     "ST-G02",
     "ST-G03",
@@ -102,6 +117,7 @@
       "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
     ],
     "IRON-04": [
+      "tests/test_adversarial_gates.py::TestCapAndCoherenceGates::test_iron04_blocks_a_group_reference_above_the_cap",
       "tests/test_gates.py::TestMetricGates::test_demand_strength_is_checked_on_deliverables_not_a_phantom_field",
       "tests/test_gates.py::TestTierShapeAndCap::test_demand_strength_100_in_deliverable_blocks",
       "tests/test_gates.py::TestTierShapeAndCap::test_numeric_target_over_cap_still_blocks",
@@ -131,6 +147,8 @@
       "tests/test_gates.py::TestSafetyAndComplianceGates::test_rx_public_promotion_blocked"
     ],
     "X-WRITE": [
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_x_write_blocks_a_declaration_repeated_verbatim",
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_x_write_blocks_a_done_claim_with_nothing_to_open",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_x_write_blocks_a_declaration_repeated_verbatim",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_x_write_blocks_a_done_claim_with_nothing_to_open"
     ],
@@ -151,31 +169,41 @@
       "tests/test_gates.py::TestSkipIsNotPass::test_missing_data_is_skipped_not_passed"
     ],
     "CN-G04": [
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_cn_g04_blocks_a_node_phrase_absent_from_the_label",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_cn_g04_blocks_a_node_phrase_absent_from_the_label"
     ],
     "CN-G05": [
       "tests/test_gates.py::TestSafetyAndComplianceGates::test_rx_first_boundary_must_be_diagnosis"
     ],
     "CN-G06": [
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_cn_g06_blocks_corpus_refs_when_nothing_was_collected",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_cn_g06_blocks_corpus_refs_when_nothing_was_collected"
     ],
     "DM-G01": [
       "tests/test_gates.py::TestSkipIsNotPass::test_missing_data_is_skipped_not_passed"
     ],
     "DM-G02": [
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g02_blocks_a_known_content_farm_domain",
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g02_blocks_seo_farm_content_left_in_the_corpus",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g02_blocks_a_known_content_farm_domain",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g02_blocks_seo_farm_content_left_in_the_corpus"
     ],
     "DM-G03": [
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_a_group_in_an_illegal_pool",
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_a_primary_group_that_does_not_exist",
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_an_utterance_with_no_primary_group",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_a_group_in_an_illegal_pool",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_a_primary_group_that_does_not_exist",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_an_utterance_with_no_primary_group"
     ],
     "DM-G04": [
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g04_blocks_coverage_above_one_hundred_percent",
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g04_blocks_coverage_under_the_floor",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g04_blocks_coverage_above_one_hundred_percent",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g04_blocks_coverage_under_the_floor"
     ],
     "DM-G06": [
+      "tests/test_adversarial_gates.py::TestCorpusAndDemandGates::test_dm_g06_blocks_a_population_share_inferred_from_engagement",
       "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g06_blocks_a_population_share_inferred_from_engagement"
     ],
     "EF-G01": [
@@ -193,6 +221,8 @@
       "tests/test_wiring.py::TestShapeGate::test_checks_reading_broken_contract_are_not_counted_as_verified"
     ],
     "EF-G04": [
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_ef_g04_blocks_a_reprint_counted_as_independent",
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_ef_g04_blocks_reprints_with_no_independent_count_declared",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g04_blocks_a_reprint_counted_as_independent",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g04_blocks_reprints_with_no_independent_count_declared"
     ],
@@ -206,6 +236,8 @@
       "tests/test_gates.py::TestEvidenceGates::test_confirmed_absent_needs_non_ai_search_ref"
     ],
     "EF-G08": [
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_ef_g08_blocks_a_silent_absence_of_fact_differences",
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_ef_g08_blocks_a_verifiable_fact_marked_off_label",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g08_blocks_a_silent_absence_of_fact_differences",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g08_blocks_a_verifiable_fact_marked_off_label"
     ],
@@ -214,6 +246,7 @@
       "tests/test_gates.py::TestCounterEvidenceRegistry::test_missing_counter_evidence_field_blocks"
     ],
     "VF-G01": [
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_vf_g01_blocks_measured_and_estimated_in_one_cell",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g01_blocks_measured_and_estimated_in_one_cell"
     ],
     "VF-G02": [
@@ -228,6 +261,9 @@
       "tests/test_gates.py::TestSafetyAndComplianceGates::test_decimal_score_and_rank_blocked"
     ],
     "VF-G05": [
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_a_client_file_that_never_says_what_was_measured",
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_an_incomplete_surface_triple",
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_metrics_without_a_probe_surface",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_a_client_file_that_never_says_what_was_measured",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_an_incomplete_surface_triple",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_metrics_without_a_probe_surface"
@@ -249,25 +285,35 @@
       "tests/test_gates.py::TestMetricGates::test_provider_sample_loss_is_warned_before_assembly"
     ],
     "PJ-G01": [
+      "tests/test_adversarial_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_a_merged_skeleton",
+      "tests/test_adversarial_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_a_not_applicable_stage_with_no_reason",
+      "tests/test_adversarial_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_an_otc_product_on_the_rx_skeleton",
       "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_a_merged_skeleton",
       "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_a_not_applicable_stage_with_no_reason",
       "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_an_otc_product_on_the_rx_skeleton"
     ],
     "PJ-G02": [
+      "tests/test_adversarial_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_an_unlabelled_cell",
+      "tests/test_adversarial_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_measured_cells_in_a_pure_inference_run",
+      "tests/test_adversarial_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_measured_without_a_source",
       "tests/test_uncovered_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_an_unlabelled_cell",
       "tests/test_uncovered_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_measured_cells_in_a_pure_inference_run",
       "tests/test_uncovered_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_measured_without_a_source"
     ],
     "PJ-G03": [
+      "tests/test_adversarial_gates.py::TestJourneySkeletonGates::test_pj_g03_blocks_an_invented_patient_quote",
       "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g03_blocks_an_invented_patient_quote"
     ],
     "PJ-G04": [
+      "tests/test_adversarial_gates.py::TestJourneyStructureGates::test_pj_g04_blocks_a_score_without_a_driver",
       "tests/test_uncovered_gates.py::TestJourneyStructureGates::test_pj_g04_blocks_a_score_without_a_driver"
     ],
     "PJ-G05": [
+      "tests/test_adversarial_gates.py::TestJourneyStructureGates::test_pj_g05_blocks_an_opportunity_from_a_single_lane",
       "tests/test_uncovered_gates.py::TestJourneyStructureGates::test_pj_g05_blocks_an_opportunity_from_a_single_lane"
     ],
     "PJ-G06": [
+      "tests/test_adversarial_gates.py::TestJourneyStructureGates::test_pj_g06_blocks_a_window_missing_one_of_its_three_numbers",
       "tests/test_uncovered_gates.py::TestJourneyStructureGates::test_pj_g06_blocks_a_window_missing_one_of_its_three_numbers"
     ],
     "VF-G11": [
@@ -275,6 +321,7 @@
       "tests/test_gates.py::TestEvenDenominator::test_uneven_sample_sizes_are_blocked"
     ],
     "X-JARGON": [
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_x_jargon_blocks_an_internal_id_used_as_content",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_x_jargon_blocks_an_internal_id_used_as_content"
     ],
     "X-SEAL": [
@@ -309,6 +356,8 @@
       "tests/test_gates.py::TestProposalAndPilotGates::test_must_not_do_minimum"
     ],
     "PB-G03": [
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_pb_g03_blocks_a_concept_set_over_the_cap",
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_pb_g03_blocks_a_concept_with_no_definition",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_pb_g03_blocks_a_concept_set_over_the_cap",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_pb_g03_blocks_a_concept_with_no_definition"
     ],
@@ -316,6 +365,9 @@
       "tests/test_gates.py::TestProposalAndPilotGates::test_override_without_reason_blocked"
     ],
     "CP-G01": [
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_cp_g01_blocks_an_asset_bound_to_an_off_label_claim",
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_cp_g01_blocks_an_asset_bound_to_nothing",
+      "tests/test_gates_v3.py::TestContentBatchReusesPilotGates::test_cp_g01_blocks_batch_asset_bound_to_missing_claim",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g01_blocks_an_asset_bound_to_an_off_label_claim",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g01_blocks_an_asset_bound_to_nothing"
     ],
@@ -323,7 +375,9 @@
       "tests/test_gates.py::TestProposalAndPilotGates::test_correction_table_columns_required"
     ],
     "CP-G03": [
-      "tests/test_gates.py::TestProposalAndPilotGates::test_imposter_source_blocked"
+      "tests/test_gates.py::TestProposalAndPilotGates::test_imposter_source_blocked",
+      "tests/test_gates_v3.py::TestCpG03AnchorScope::test_cp_g03_blocks_impostor_even_in_anchor_layer",
+      "tests/test_gates_v3.py::TestCpG03AnchorScope::test_cp_g03_still_blocks_coverage_source_missing_news_index"
     ],
     "CP-G04": [
       "tests/test_gates.py::TestProposalAndPilotGates::test_brand_must_stay_in_fourth_cell"
@@ -332,6 +386,9 @@
       "tests/test_gates.py::TestSafetyAndComplianceGates::test_cognition_promise_blocked"
     ],
     "CP-G07": [
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_cp_g07_blocks_an_asset_with_no_qualification_note",
+      "tests/test_adversarial_gates.py::TestClientFacingGates::test_cp_g07_blocks_an_rx_asset_aimed_at_the_public",
+      "tests/test_gates_v3.py::TestContentBatchReusesPilotGates::test_cp_g07_blocks_public_rx_asset_in_content_batch",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g07_blocks_an_asset_with_no_qualification_note",
       "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g07_blocks_an_rx_asset_aimed_at_the_public"
     ],
@@ -382,13 +439,91 @@
       "tests/test_gates.py::TestEvidenceGates::test_manufacturer_claim_must_be_chased"
     ],
     "HR-E3": [
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_hr_e3_blocks_a_numeric_evidence_score_in_a_client_file",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_hr_e3_blocks_a_numeric_evidence_score_in_a_client_file"
     ],
     "HR-E4": [
+      "tests/test_adversarial_gates.py::TestEvidenceBoundaryGates::test_hr_e4_blocks_a_real_utterance_used_as_product_evidence",
       "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_hr_e4_blocks_a_real_utterance_used_as_product_evidence"
     ],
     "HR-E5": [
       "tests/test_gates.py::TestSafetyAndComplianceGates::test_icd_without_disclaimer_blocked"
+    ],
+    "EF-G10": [
+      "tests/test_gates_v3.py::TestEfG10::test_ef_g10_blocks_grade_from_a_source_that_was_never_grade_assessed",
+      "tests/test_gates_v3.py::TestEfG10::test_ef_g10_blocks_grade_without_quote",
+      "tests/test_gates_v3.py::TestEfG10::test_ef_g10_blocks_pyramid_tier_relabelled_as_grade"
+    ],
+    "SE-G02": [
+      "tests/test_gates_v3.py::TestSeG02::test_se_g02_blocks_a_prior_dressed_as_measured",
+      "tests/test_gates_v3.py::TestSeG02::test_se_g02_blocks_measured_rate_that_disagrees_with_metrics",
+      "tests/test_gates_v3.py::TestSeG02::test_se_g02_blocks_promise_on_small_sample"
+    ],
+    "EC-G01": [
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g01_blocks_numeric_verdict_that_code_could_not_confirm",
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g01_blocks_quote_absent_from_label_clause"
+    ],
+    "EC-G02": [
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g02_blocks_misstatement_missing_from_the_ledger",
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g02_blocks_s3_notified_after_confirmation_started"
+    ],
+    "EC-G03": [
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g03_blocks_closure_without_retest",
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g03_blocks_retest_taken_before_the_correction",
+      "tests/test_gates_v3.py::TestEcBlockingRules::test_ec_g03_blocks_sporadic_closed_on_one_clean_run"
+    ],
+    "LC-G02": [
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g02_blocks_binding_to_a_claim_that_does_not_exist",
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g02_blocks_derived_number_that_code_recomputes_differently",
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g02_blocks_number_not_byte_identical_to_the_claim",
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g02_blocks_unbound_key_sentence"
+    ],
+    "LC-G07": [
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g07_blocks_body_that_is_not_the_reviewed_version",
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g07_blocks_ready_status_for_a_control_group_topic",
+      "tests/test_gates_v3.py::TestLcBlockingRules::test_lc_g07_blocks_ready_status_with_open_safety_finding"
+    ],
+    "RW-G01": [
+      "tests/test_gates_v3.py::TestRwRules::test_rw_g01_blocks_a_dropped_ai_label",
+      "tests/test_gates_v3.py::TestRwRules::test_rw_g01_blocks_a_log_that_claims_pass_over_an_added_intensifier",
+      "tests/test_gates_v3.py::TestRwRules::test_rw_g01_blocks_mismatched_sequence_hashes"
+    ],
+    "MD-G01": [
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g01_blocks_order_for_asset_with_open_safety_finding",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g01_blocks_order_whose_body_is_not_the_reviewed_version"
+    ],
+    "MD-G02": [
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g02_blocks_reservation_beyond_the_budget",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g02_blocks_reserving_without_a_budget"
+    ],
+    "MD-G03": [
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g03_blocks_a_medical_ranking_slot",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g03_blocks_a_third_order_on_one_domain_within_30_days",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g03_blocks_placement_into_a_control_group",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g03_blocks_placement_on_an_impostor_domain"
+    ],
+    "MD-G04": [
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g04_blocks_a_state_that_moves_backwards",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g04_blocks_resubmitting_after_an_unknown_result",
+      "tests/test_gates_v3_execution.py::TestMdMoneyModel::test_md_g04_blocks_a_reservation_exit_without_a_reason",
+      "tests/test_gates_v3_execution.py::TestMdMoneyModel::test_md_g04_blocks_direct_release_after_the_platform_took_money"
+    ],
+    "MD-G05": [
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g05_blocks_a_charge_before_verification",
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g05_blocks_new_orders_while_the_books_do_not_balance",
+      "tests/test_gates_v3_execution.py::TestMdMoneyModel::test_md_g05_blocks_a_missing_hold_at_the_charge_point",
+      "tests/test_gates_v3_execution.py::TestMdMoneyModel::test_md_g05_blocks_an_adjustment_without_direction",
+      "tests/test_gates_v3_execution.py::TestMdMoneyModel::test_md_g05_blocks_closed_lost_without_a_loss_line",
+      "tests/test_gates_v3_execution.py::TestMdMoneyModel::test_md_g05_blocks_settlement_that_keeps_the_reserve_remainder"
+    ],
+    "MD-G06": [
+      "tests/test_gates_v3_execution.py::TestMdBlockingRules::test_md_g06_blocks_verified_with_an_edited_dose"
+    ],
+    "MI-G02": [
+      "tests/test_gates_v3_execution.py::TestMiRules::test_mi_g02_blocks_a_hand_written_metric_field",
+      "tests/test_gates_v3_execution.py::TestMiRules::test_mi_g02_blocks_a_number_the_references_do_not_contain",
+      "tests/test_gates_v3_execution.py::TestMiRules::test_mi_g02_blocks_comparison_across_question_set_versions",
+      "tests/test_gates_v3_execution.py::TestMiRules::test_mi_g02_blocks_net_effect_on_a_contaminated_control_group"
     ]
   },
   "promiscuousWitnesses": {}
