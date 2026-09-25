@@ -132,11 +132,42 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
+  // 「循证 GEO」 is a row directly below 「科研工具」, and only where `/api/me`
+  // offers the module to this account (`features.geo`).
+  it("has no 循证 GEO row unless the account is offered the module", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: false } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "前沿动态" });
+    expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
+  });
+
+  it("puts 循证 GEO directly below 科研工具 when the account is offered it", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: true } });
+    renderSidebar();
+    const row = await screen.findByRole("link", { name: "循证 GEO" });
+    expect(row).toHaveAttribute("href", "/app/geo");
+    await screen.findByRole("link", { name: "前沿动态" });
+    const rows = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "主动科研"]);
+    await userEvent.click(row);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
+    expect(row).toHaveAttribute("aria-current", "page");
+  });
+
+  it("puts 循证 GEO below 科研工具 without the frontier feed too", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "循证 GEO" });
+    const rows = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "主动科研"]);
+  });
+
   it("keeps the row out when /api/me cannot be read", async () => {
     mocks.fetchWebMe.mockRejectedValue(new Error("offline"));
     renderSidebar();
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
   // The footer is who is signed in and a gear (2026-09-23 plan §5.2). The

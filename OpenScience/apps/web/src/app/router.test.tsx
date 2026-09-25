@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Navigate, Outlet, useLocation, useRoutes, type RouteObject } from "react-router";
+import { matchRoutes, MemoryRouter, Navigate, Outlet, useLocation, useRoutes, type RouteObject } from "react-router";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -77,6 +77,11 @@ describe("every address people already have still arrives", () => {
     ["/app/frontier", "/app/frontier"],
     ["/app/frontier?view=daily&day=2026-09-21", "/app/frontier?view=daily&day=2026-09-21"],
     ["/app/frontier/events/ev1", "/app/frontier/events/ev1"],
+    // 循证 GEO: the projects, one project (概览 or a named tab), one answer.
+    ["/app/geo", "/app/geo"],
+    ["/app/geo/geo_1", "/app/geo/geo_1"],
+    ["/app/geo/geo_1/diagnosis", "/app/geo/geo_1/diagnosis"],
+    ["/app/geo/geo_1/answers/snap_1", "/app/geo/geo_1/answers/snap_1"],
   ])("%s lands on %s", async (from, to) => {
     landOn(from);
     expect(await screen.findByTestId("landed")).toHaveTextContent(new RegExp(`^${to.replace(/[?]/g, "\\?")}$`));
@@ -100,5 +105,36 @@ describe("every address people already have still arrives", () => {
     findRunSession.mockResolvedValue(null);
     landOn("/app/runs?run=run_gone");
     expect(await screen.findByTestId("landed")).toHaveTextContent(/^\/app\/chat$/);
+  });
+});
+
+describe("循证 GEO's addresses", () => {
+  /** The leaf route an address resolves to, and its parameters. */
+  function leaf(path: string) {
+    const matches = matchRoutes(routes, path) ?? [];
+    const last = matches.at(-1);
+    return { path: last?.route.path, params: last?.params ?? {} };
+  }
+
+  it("names a project's tab in the address, and 概览 when none is named", () => {
+    expect(leaf("/app/geo")).toMatchObject({ path: "geo" });
+    expect(leaf("/app/geo/geo_1")).toMatchObject({ path: "geo/:geoId/:tab?", params: { geoId: "geo_1" } });
+    expect(leaf("/app/geo/geo_1").params.tab).toBeUndefined();
+    expect(leaf("/app/geo/geo_1/sources")).toMatchObject({ path: "geo/:geoId/:tab?", params: { geoId: "geo_1", tab: "sources" } });
+  });
+
+  it("opens one answer on its own page, not as a tab called 「answers」", () => {
+    expect(leaf("/app/geo/geo_1/answers/snap_9")).toMatchObject({
+      path: "geo/:geoId/answers/:snapshotId",
+      params: { geoId: "geo_1", snapshotId: "snap_9" },
+    });
+  });
+
+  it("loads each GEO page as its own chunk", () => {
+    const pages = ["geo", "geo/:geoId/:tab?", "geo/:geoId/answers/:snapshotId"].map((path) => {
+      const found = (matchRoutes(routes, `/app/${path.replace(":geoId", "g").replace(":tab?", "overview").replace(":snapshotId", "s")}`) ?? []).at(-1);
+      return (found?.route.element as ReactElement | undefined)?.type as { $$typeof?: symbol } | undefined;
+    });
+    for (const type of pages) expect(String(type?.$$typeof)).toBe("Symbol(react.lazy)");
   });
 });

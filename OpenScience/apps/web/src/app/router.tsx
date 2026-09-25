@@ -29,6 +29,9 @@ const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ def
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
+const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
+const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
+const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -66,6 +69,12 @@ export const routes: RouteObject[] = [
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
+        // 「循证 GEO」: the projects, one project's tabs (概览 when none is
+        // named), and one AI answer. Like the frontier feed, each answers for
+        // itself when the module is off here.
+        { path: "geo", element: <GeoHomePage /> },
+        { path: "geo/:geoId/answers/:snapshotId", element: <GeoAnswerPage /> },
+        { path: "geo/:geoId/:tab?", element: <GeoProjectPage /> },
         // The run ledger page was deleted on 2026-09-20: a run is read in the
         // conversation it happened in. Its address survives because it is in
         // notification mail, in Feishu cards and in people's bookmarks.
