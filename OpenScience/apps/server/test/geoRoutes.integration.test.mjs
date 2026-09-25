@@ -448,9 +448,10 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   [`sc1-${id}`, `sc2-${id}`, ALICE, id, JSON.stringify([{ url: "http://www.LifeTimes.cn/a/?utm_source=ai#top", domain: "lifetimes.cn" }]),
     JSON.stringify([{ url: "https://lifetimes.cn/ab", domain: "lifetimes.cn" }])]);
   const content = (await call("GET", `/api/geo/projects/${id}/articles`)).payload.data.articles;
-  assert.equal(content.find((/** @type {any} */ article) => article.id === articles.ids[0]).cited, true, "matched by the owner's URL key");
+  // The published order (o3) is the third article's: one live order per article.
+  assert.equal(content.find((/** @type {any} */ article) => article.id === third).cited, true, "matched by the owner's URL key");
   const cited = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data.cited;
-  assert.deepEqual(cited.map((/** @type {any} */ row) => [row.articleId, row.engine]), [[articles.ids[0], "deepseek"]], "the longer path is another page");
+  assert.deepEqual(cited.map((/** @type {any} */ row) => [row.articleId, row.engine]), [[third, "deepseek"]], "the longer path is another page");
   const view = (await call("GET", `/api/geo/projects/${id}/distribution`)).payload.data;
   assert.equal(view.budget, null);
   assert.equal(view.spentCny, 946);
