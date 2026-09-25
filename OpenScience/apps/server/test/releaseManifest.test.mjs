@@ -112,6 +112,7 @@ test("release manifest generator records exact images, tools, skills, and source
         "runtime/skills/core",
         "runtime/skills/curated-scientific",
         "runtime/skills/external/ai4s-skills",
+        "runtime/skills/geo-private",
         "runtime/skills/office",
       ],
     );

@@ -115,6 +115,12 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh office-smoke
 # unable to tell the difference.
 COPY runtime/skills/core /opt/evimed/skills/core
 COPY runtime/skills/community /opt/evimed/skills/community
+# The owner's GEO method pack, a private skill root: gitignored except its
+# README, unpacked on the build machine by scripts/build/vendor-geo-skills.mjs
+# and carried to the release host in the delta archive. The directory always
+# exists (the README is tracked), so a clone without the pack builds an image
+# whose GEO capabilities say the pack is missing.
+COPY runtime/skills/geo-private /opt/evimed/skills/geo-private
 # The agent packages under `runtime/skills/evimed` that are NOT delegated
 # capabilities. The eleven specialists reach a run through
 # `capability-skills`, which delegation injects; `open-domain-answer` is

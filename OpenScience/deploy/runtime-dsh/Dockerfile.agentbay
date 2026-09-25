@@ -85,6 +85,7 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh office-smoke
 
 COPY runtime/skills/core /opt/evimed/skills/core
 COPY runtime/skills/community /opt/evimed/skills/community
+COPY runtime/skills/geo-private /opt/evimed/skills/geo-private
 COPY runtime/skills/evimed/open-domain-answer /opt/evimed/skills/evimed/open-domain-answer
 COPY runtime/mcp/evimed-research /opt/evimed/mcp/evimed-research
 RUN bash /usr/local/lib/evimed/install-runtime.sh sider-cache

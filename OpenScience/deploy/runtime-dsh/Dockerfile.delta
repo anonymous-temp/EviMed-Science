@@ -29,8 +29,9 @@
 #     passed once on an image whose bundle could not be imported at all.
 #
 # NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
-# pin move, or anything under `runtime/` other than the curated skills' prose
-# and the research MCP server's own Python sources (see those steps).
+# pin move, or anything under `runtime/` other than the curated skills' prose,
+# the research MCP server's own Python sources and the private GEO method pack
+# (see those steps).
 # Those change what the base installed, and the base is what this trusts.
 #
 # The lockfile rule is about what the base installed, not about the file: the
@@ -131,8 +132,18 @@ RUN set -eux; \
   diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}"; \
   rm -rf "${source}"
 
+# The private GEO method pack (runtime/skills/geo-private): instruction text and
+# standard-library Python the skills call, never installed by the base, so a
+# delta replaces the whole tree from the source it is built from. The tree is
+# not in git; the release script appends it to the delta archive. A base older
+# than the root has no directory to remove, which `rm -rf` does not mind.
+RUN set -eux; \
+  rm -rf /opt/evimed/skills/geo-private
+COPY runtime/skills/geo-private /opt/evimed/skills/geo-private
+
 # The preset's system-trusted skill roots, and the copy of the preset under the
-# kernel's own root. Both are rebuilt from the skill trees the base already has.
+# kernel's own root. Both are rebuilt from the skill trees the base already has,
+# and from the GEO method pack just copied.
 RUN set -eux; \
   install -d -m 0755 /opt/evimed/socket/presets/evimed-universal/skills; \
   cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core; \
@@ -140,6 +151,7 @@ RUN set -eux; \
   cp -a /usr/local/share/evimed/skills/curated-scientific /opt/evimed/socket/presets/evimed-universal/skills/curated-scientific; \
   cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office; \
   cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community; \
+  cp -a /opt/evimed/skills/geo-private /opt/evimed/socket/presets/evimed-universal/skills/geo-private; \
   chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
 
 RUN set -eux; \
