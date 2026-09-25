@@ -67,6 +67,15 @@ export const RUNTIME_SKILL_ROOTS = Object.freeze([
     holds: 'vendored community skills',
   }),
   Object.freeze({
+    family: 'geo-private',
+    source: 'runtime/skills/geo-private',
+    path: '/opt/evimed/skills/geo-private',
+    // The one family whose skills sit one level down, beside the shared layer
+    // they call $GEO_LIB — the method pack's own layout, kept so its skills
+    // resolve `refs/` and `scripts/` the way they do outside the platform.
+    holds: 'the GEO method pack: skills/<name>/ for each skill, and shared/ — what those skills call $GEO_LIB',
+  }),
+  Object.freeze({
     family: 'capability-skills',
     source: 'capability-skills',
     path: '/opt/evimed/capability-skills',
