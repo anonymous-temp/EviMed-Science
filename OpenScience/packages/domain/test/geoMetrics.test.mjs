@@ -11,6 +11,7 @@ import {
   computeGvi,
   geoCellRows,
   geoConstant,
+  geoMetricDefinition,
   hardLines,
   isOurCitation,
   netEffect,
@@ -79,7 +80,8 @@ const cellOf = (cells, where) => {
 // ------------------------------------------------------------------ the table
 
 test("metrics.json is the owner's metrics.yaml: every metric, pool, weight and constant, with provenance", () => {
-  assert.equal(GEO_METRICS.version, "3.0.0");
+  assert.equal(GEO_METRICS.version, "3.0.0", "metrics.yaml's own version: the yaml did not change in 3.0.1");
+  assert.equal(GEO_METRICS._provenance.version, "3.0.1", "converted from the 3.0.1 package");
   assert.equal(GEO_METRIC_IDS.length, 26, "20 metrics of 2.0 plus six added in 3.0.0");
   assert.equal(GEO_METRICS.diagnostics.length, 5);
   assert.deepEqual([...GEO_METRIC_POOL_IDS], ["P1", "P2", "P3", "P4"]);
@@ -311,9 +313,11 @@ test("an inclusion-channel engine reports mentions only", () => {
   assert.equal(cellOf(cells, { metricId: "M-01", scope: "pool", pool: "P2" }).denominator, 1);
 });
 
-test("isOurCitation follows the scripts' suffix rule and accepts our published article URLs", () => {
+test("isOurCitation matches an owned domain label by label and accepts our published article URLs", () => {
   assert.equal(isOurCitation({ domain: "www.example-pharma.com" }, OWNED), true);
+  assert.equal(isOurCitation({ domain: "example-pharma.com" }, OWNED), true);
   assert.equal(isOurCitation({ url: "https://EXAMPLE-pharma.com/x" }, OWNED), true);
+  assert.equal(isOurCitation({ domain: "notexample-pharma.com" }, OWNED), false, "a bare suffix is not our domain (geo-skills 3.0.1)");
   assert.equal(isOurCitation({ domain: "other.org" }, OWNED), false);
   const owned = { urls: ["https://news.example.org/a/123?utm_source=x"] };
   assert.equal(isOurCitation({ url: "http://www.news.example.org/a/123/", domain: "news.example.org" }, owned), true);
@@ -422,6 +426,32 @@ test("net effect is pilot change minus control change, flat inside the noise ban
   assert.equal(noControl.status, "not_computable");
 });
 
+test("M-15 is P4's own recommended rate, so P4's net effect computes", () => {
+  /** @param {string} date @param {number} pilotRecommended @param {number} controlRecommended */
+  const round = (date, pilotRecommended, controlRecommended) => [
+    ...many(10, (i) => row({ pool: "P4", groupId: "g41", isControl: false, askedAt: date }, { ...ours, recommendedOurs: i < pilotRecommended })),
+    ...many(10, (i) => row({ pool: "P4", groupId: "g42", isControl: true, askedAt: date }, { ...ours, recommendedOurs: i < controlRecommended })),
+  ];
+  const baseline = computeGeoMetrics(round("2026-08-03", 6, 6), { owned: OWNED });
+  const pool = cellOf(baseline.cells, { metricId: "M-15", scope: "pool", pool: "P4" });
+  assert.deepEqual([pool.numerator, pool.denominator, pool.value, pool.status], [12, 20, 60, "insufficient"]);
+  assert.deepEqual([pool.ciLow, pool.ciHigh], wilsonInterval(12, 20));
+  assert.equal(cellOf(baseline.cells, { metricId: "M-15", scope: "project" }).value, 60);
+  assert.equal(baseline.cells.some((cell) => cell.metricId === "M-03" && cell.pool === "P4"), false, "M-03 itself stays undefined for P4");
+
+  const later = computeGeoMetrics(round("2026-09-28", 2, 6), { owned: OWNED });
+  /** @param {"pilot"|"control"} arm */
+  const series = (arm) => [baseline, later].map((result, index) => {
+    const cell = cellOf(result.cells, { metricId: "M-15", scope: "arm", pool: "P4", arm });
+    return { date: index ? "2026-09-28" : "2026-08-03", numerator: cell.numerator, denominator: cell.denominator };
+  });
+  const effect = netEffect(series("pilot"), series("control"), { noise: { value: 5, measured: true }, controlGroupCount: 3 });
+  assert.equal(effect.status, "computed");
+  assert.deepEqual([effect.pilotChange, effect.controlChange, effect.value], [-40, 0, -40]);
+  assert.equal(effect.verdict, "down", "recommended less often on risk questions: the direction P4 wants");
+  assert.equal(geoMetricDefinition("M-15")?.direction, "down");
+});
+
 // ------------------------------------------------------------------ hard lines, names
 
 test("hard lines: accuracy at the line and no open retrieval-layer 讲错我方; parametric errors never block", () => {
@@ -466,7 +496,7 @@ test("standard names follow X-STDVIS: only metrics with the standard's formula c
 test("golden: every cell equals the owner's compute_metrics.py on the fixture batch", () => {
   assert.equal(fixture.source.sha256, expected.source.sha256, "fixture and expected come from one script");
   assert.match(expected.source.sha256, /^[0-9a-f]{64}$/);
-  assert.equal(expected.source.version, GEO_METRICS.version);
+  assert.equal(expected.source.version, GEO_METRICS._provenance.version);
   assert.equal(expected.source.metricsYamlSha256, GEO_METRICS._provenance.sha256["shared/rules/metrics.yaml"], "the table and the golden were made from the same yaml");
   assert.equal(expected.source.sha256, GEO_METRICS._provenance.sha256["shared/scripts/compute_metrics.py"]);
 
@@ -493,9 +523,11 @@ test("golden: every cell equals the owner's compute_metrics.py on the fixture ba
   const statuses = new Set(expected.cells.map((cell) => cell.status));
   for (const status of ["ok", "insufficient", "not_measurable", "absent"]) assert.ok(statuses.has(status), `golden covers ${status}`);
   const reasons = new Set(expected.cells.map((cell) => cell.reason));
-  for (const reason of ["uneven_denominators", "coverage_below_min", "no_retrieval", "not_applicable", "engine_absent"]) {
+  for (const reason of ["uneven_denominators", "coverage_below_min", "no_retrieval", "engine_absent"]) {
     assert.ok(reasons.has(reason), `golden covers ${reason}`);
   }
+  const risk = expected.cells.filter((cell) => cell.metricId === "M-15" && cell.status !== "absent");
+  assert.ok(risk.length > 0 && risk.every((cell) => cell.value !== null), "M-15 is measured in every P4 scope (geo-skills 3.0.1)");
 
   assert.deepEqual(result.denominators, expected.denominators);
   /** @param {GeoGviResult} gvi */

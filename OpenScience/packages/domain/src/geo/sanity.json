@@ -1,7 +1,7 @@
 {
   "_provenance": {
-    "source": "geo-skills 3.0.0: shared/rules/interfaces.yaml probe.sanity, probe.page_chrome_markers, probe.page_chrome_tail_ratio, probe.retriable_raw_statuses; PROBE_SANITY_MIN_ANSWER_CHARS from shared/rules/catalogue.yaml",
-    "version": "3.0.0",
+    "source": "geo-skills 3.0.1: shared/rules/interfaces.yaml probe.sanity, probe.page_chrome_markers, probe.page_chrome_tail_ratio, probe.retriable_raw_statuses; PROBE_SANITY_MIN_ANSWER_CHARS from shared/rules/catalogue.yaml",
+    "version": "3.0.1",
     "sha256": {
       "shared/rules/catalogue.yaml": "9b2ada5bb900aa92d1ff6457ca6fed6e0c7b6beb77a78fefa656e5585ee68e79",
       "shared/rules/interfaces.yaml": "a389a7904a26e275c5c48b1a283ac1acbd5ba8c2a4dc56728984ba625bc5992a"
