@@ -119,6 +119,22 @@ export function createGeoDeliveryImport({ store, report = () => {}, readFile = r
       } catch {
         continue;
       }
+      // The competitors the run named, when the project has none yet: the
+      // parser recognises a rival only by a registered name, so without them
+      // share of voice and the rival cells are never computed (production,
+      // 2026-09-25: a baseline measured with competitors []).
+      const rivals = Array.isArray(parsed?.competitors) ? parsed.competitors.filter((entry) => entry && typeof entry === "object") : [];
+      if (rivals.length && !(geoProject.competitors ?? []).length) {
+        try {
+          const result = await geoRuntimeWrite({ store, project: geoProject, what: "product", body: { data: { competitors: rivals.slice(0, GEO_WRITE_LIMITS.competitors) } } });
+          if (result.ok) {
+            geoProject.competitors = result.product ? (await store.projectByControlProject(project.userId, project.id))?.competitors ?? [] : geoProject.competitors;
+            report(`competitors imported ${rivals.length}`);
+          }
+        } catch (error) {
+          report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_competitors_import_failed");
+        }
+      }
       const claims = Array.isArray(parsed?.claims) ? parsed.claims : Array.isArray(parsed) ? parsed : [];
       for (const chunk of claimChunks(claims)) {
         try {

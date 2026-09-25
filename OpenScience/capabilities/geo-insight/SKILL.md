@@ -62,6 +62,9 @@ probe host, a social crawler or a marketplace.
   step that is done and not stale); `mcp__evimed__geo_write` to register what you produce —
   `product`, `claims`, `journey`, `questions`, then `lock_questions`, then
   `step`. A write answers item by item; fix the refused items and write again.
+  `product` carries `competitors` (`brandName`, `genericName`, `holder`,
+  `indication`, `reason`): the measurement recognises a rival only by a
+  registered name, so without them share of voice is never computed.
   The project page shows the journey as four columns, so every `journey` stage
   carries all four: `emotion`, `thinking`, `questions` (the questions a patient
   at that stage asks an AI — take them from the question map's typical
