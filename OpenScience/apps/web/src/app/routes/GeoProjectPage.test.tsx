@@ -171,6 +171,21 @@ describe("a GEO project's page", () => {
     await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo$/));
   });
 
+  it("reads as a new project before anything was measured: 「—」, no 问 AI, and 让 AI 做 on every step", async () => {
+    client.getGeoProject.mockResolvedValue({
+      ...GEO_PROJECT, name: "新 GEO 项目", steps: {}, sessionId: "ses_new",
+      overview: { metrics: [], week: [], steps: {} },
+    });
+    renderProject();
+    const steps = await screen.findByRole("list", { name: "进度" });
+    expect([...steps.querySelectorAll("[data-mark]")].map((step) => step.getAttribute("data-mark"))).toEqual(Array(8).fill("none"));
+    expect(screen.getByRole("region", { name: "品牌提及率" })).toHaveTextContent("—");
+    expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
+    expect(screen.getByText("这周还没有新的变化。")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "信源" }));
+    expect(await screen.findByRole("button", { name: "让 AI 做" })).toBeInTheDocument();
+  });
+
   it("says a project that is gone is gone", async () => {
     client.getGeoProject.mockRejectedValue(new WebApiError("missing", { status: 404, code: "not_found" }));
     renderProject("/app/geo/geo_gone");

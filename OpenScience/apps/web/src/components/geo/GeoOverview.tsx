@@ -140,14 +140,17 @@ function MetricBlock({ metricKey, metric, project }: { metricKey: GeoOverviewMet
     <section aria-label={name} data-geo-metric={metricKey} className="flex min-w-0 flex-col gap-1 rounded-card bg-surface-1 px-4 pb-3 pt-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="truncate text-ui text-text-2">{name}</h3>
-        <AskAi
-          project={project}
-          product={project.name}
-          name={name}
-          cell={metric?.cell ?? null}
-          unit={unit}
-          date={monthDay(lastDate)}
-        />
+        {/* Beside a number, or a 「样本不足」 worth asking about; not beside 「—」. */}
+        {metric && (metric.cell.status === "ok" || metric.cell.status === "insufficient") && (
+          <AskAi
+            project={project}
+            product={project.name}
+            name={name}
+            cell={metric.cell}
+            unit={unit}
+            date={monthDay(lastDate)}
+          />
+        )}
       </div>
       <div className="flex flex-wrap items-baseline gap-x-2">
         <GeoCellText cell={metric?.cell ?? null} unit={unit} size="display" hideSample />
