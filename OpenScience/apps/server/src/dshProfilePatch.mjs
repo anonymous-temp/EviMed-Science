@@ -594,7 +594,7 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledTools?: string }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string> }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -632,11 +632,6 @@ export function runtimeEnvironment(input) {
     EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",
     EVIMED_CAPSULE_ACTIVE: input.flags.capsule ? "1" : "0",
     EVIMED_REVIEW_ENABLED: input.flags.review ? "1" : "0",
-    // The tools this runtime does not offer, as the MCP server is told
-    // (`evimedMcpEnvironment`). The guidance row reads it to leave out a
-    // capability whose own module tools are off — 「循证 GEO」's for an account
-    // the module is not open to — so the catalogue matches the tool list.
-    EVIMED_DISABLED_TOOLS: String(input.disabledTools ?? ""),
     // A nonsense limit falls back to the schema's own default rather than being
     // written through: a plugin reading `maxParallelChildren: -1` would honour
     // it, and a misconfiguration should not be able to stop delegation.
