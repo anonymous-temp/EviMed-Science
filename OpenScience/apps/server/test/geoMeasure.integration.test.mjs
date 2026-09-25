@@ -364,7 +364,7 @@ test("an S3 error notifies once, is confirmed by ten fresh asks, closes only aft
 
 // ---------------------------------------------------------------- the breaker
 
-test("an engine that keeps returning a login page is paused, its round finishes without it, and it resumes when its tab is back", options, async () => {
+test("an engine that keeps returning a login page is paused, holds its round until a re-check fails, then the round finishes without it, and it resumes when its tab is back", options, async () => {
   await reset();
   await seed("geo_c");
   /** @type {Record<string, string>} */
@@ -376,12 +376,27 @@ test("an engine that keeps returning a login page is paused, its round finishes 
   try {
     const round = await enqueueRound(h.deps, { geoProjectId: "geo_c", kind: "sentinel" });
     assert.equal(round.planned, 6);
-    const counts = await tickProbe({ ...h.deps, maxAsks: 10 });
-    assert.equal(counts.asked, 6);
-    assert.deepEqual(counts.tripped, ["doubao"]);
-    assert.deepEqual(counts.paused, ["doubao"]);
-    assert.equal(counts.roundsFinished, 1, "the round finishes with the paused engine's jobs skipped");
+    const first = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(first.asked, 6);
+    assert.deepEqual(first.tripped, [], "three in a row is below the owner's five");
+    h.clock.advance(3 * 60_000);
+    const second = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(second.asked, 2, "the fifth login page in a row pauses doubao before its last retry");
+    assert.deepEqual(second.tripped, ["doubao"]);
+    assert.deepEqual(second.paused, ["doubao"]);
+    assert.equal(second.roundsFinished, 0, "a fresh pause is not proof the engine is down: the round waits");
     assert.ok(h.alerts.some((event) => event.kind === "geo_probe_engine_paused" && event.engine === "doubao"));
+    h.clock.advance(5 * 60_000);
+    assert.equal((await tickProbe({ ...h.deps, maxAsks: 10 })).roundsFinished, 0, "still not re-checked");
+    const [open] = await rows(`SELECT status FROM evimed_geo.rounds WHERE id = $1`, [round.roundId]);
+    assert.equal(open.status, "running");
+
+    // Ten minutes after the pause the tab is re-checked, still gone: now the round closes without it.
+    const providersBefore = h.probe.providerCalls.count;
+    h.clock.advance(6 * 60_000);
+    const checked = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(h.probe.providerCalls.count, providersBefore + 1);
+    assert.equal(checked.roundsFinished, 1, "the round finishes with the paused engine's jobs skipped");
     const [closed] = await rows(`SELECT status, done, failed FROM evimed_geo.rounds WHERE id = $1`, [round.roundId]);
     assert.deepEqual({ ...closed }, { status: "partial", done: 3, failed: 3 });
     const skipped = await rows(`SELECT engine, error_code FROM evimed_geo.probe_jobs WHERE round_id = $1 AND status = 'skipped'`, [round.roundId]);
@@ -397,12 +412,7 @@ test("an engine that keeps returning a login page is paused, its round finishes 
     assert.deepEqual(pick(cell(cells, { metric_id: "M-20", scope: "project", variant: null })), { numerator: 3, denominator: 3, status: "insufficient" },
       "the paused engine's answers are out of the round altogether");
 
-    // Still logged out ten minutes later; logged in ten minutes after that.
-    const providersBefore = h.probe.providerCalls.count;
-    await tickProbe({ ...h.deps, maxAsks: 1 });
-    assert.equal(h.probe.providerCalls.count, providersBefore, "not re-checked before ten minutes");
-    h.clock.advance(10 * 60_000);
-    assert.deepEqual((await tickProbe({ ...h.deps, maxAsks: 1 })).resumed, []);
+    // Logged in again: resumed at the next re-check.
     tabs = { deepseek: "tab_found", doubao: "tab_found" };
     h.clock.advance(10 * 60_000);
     const resumed = await tickProbe({ ...h.deps, maxAsks: 1 });
@@ -611,15 +621,15 @@ test("an unconfigured probe is a wait, not an absence; an unreachable one fails 
 
     await h.probe.close();
     const down = await tickProbe({ ...h.deps, maxAsks: 10 });
-    assert.equal(down.asked, 3);
-    assert.equal(down.failed, 3);
-    assert.equal(down.retried, 3);
+    assert.equal(down.asked, 5, "five unanswered asks in a row pause the host (the owner's threshold)");
+    assert.equal(down.failed, 5);
+    assert.equal(down.retried, 5);
     assert.ok(h.alerts.some((event) => event.kind === "geo_probe_host_down"));
     const failed = await rows(`SELECT status, warnings FROM evimed_geo.snapshots`);
     assert.ok(failed.every((row) => row.status === "failed" && row.warnings.includes("probe_error:geo_probe_unavailable")));
     assert.equal((await tickProbe({ ...h.deps, maxAsks: 10 })).probe, "host_paused");
     const jobs = await rows(`SELECT status, attempts FROM evimed_geo.probe_jobs WHERE round_id = $1 ORDER BY created_at`, [round.roundId]);
-    assert.deepEqual(jobs.map((row) => [row.status, row.attempts]), [["queued", 1], ["queued", 1], ["queued", 1], ["queued", 0], ["queued", 0], ["queued", 0]]);
+    assert.deepEqual(jobs.map((row) => [row.status, row.attempts]), [["queued", 1], ["queued", 1], ["queued", 1], ["queued", 1], ["queued", 1], ["queued", 0]]);
   } finally {
     await h.probe.close().catch(() => {});
   }
@@ -662,6 +672,140 @@ test("a provider outage stops the judge without spending attempts; an answer the
     // Every answer unparsed leaves the domain's metrics nothing to count: 未测, never 0 %.
     assert.deepEqual({ status: mention.status, reason: mention.reason }, { status: "absent", reason: "engine_absent" },
       "unjudged answers are left out, never read as mentioning nothing");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- review fixes (2026-09-25)
+
+test("an answer the provider refuses as malformed is its own failure; one that keeps stopping the judge goes behind the others and is written unjudged", options, async () => {
+  await reset();
+  await seed("geo_k", { engines: ["deepseek"] });
+  const A400 = "玛仕度肽的答案一，这一条请求会被模型服务商当作格式不对而拒绝，需要在三次之后写成未裁定，不能挡住后面的答案。";
+  const A500 = "玛仕度肽的答案二，这一条每次都会遇到模型服务商的服务器错误，但别的答案都能裁定，所以它最后也要写成未裁定。";
+  const h = await harness({ answers: ({ question }) => ({ answer: question === Q1 ? A400 : question === Q2 ? A500 : A_RIGHT }) });
+  const judge = new GeoJudge(h.config, {
+    callModel: /** @type {any} */ (async (/** @type {any} */ deps, /** @type {any} */ call) => {
+      const content = String(call.body.messages[1].content);
+      if (content.includes("答案一")) throw Object.assign(new Error("400"), { code: "model_gateway_upstream_error", upstreamStatus: 400 });
+      if (content.includes("答案二")) throw Object.assign(new Error("500"), { code: "model_gateway_upstream_error", upstreamStatus: 500 });
+      return h.model.callModel(deps, call);
+    }),
+  });
+  const deps = { ...h.deps, judge };
+  const parsed = async () => {
+    h.clock.advance(1_000);
+    return tickParse({ ...deps, maxParse: 10 });
+  };
+  const judged = async () => (await rows(`SELECT q.text, f.judged_at IS NOT NULL AS judged FROM evimed_geo.facts f
+    JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id ORDER BY q.text`))
+    .map((row) => `${row.text === Q1 ? "q1" : row.text === Q2 ? "q2" : "q3"}:${row.judged ? "judged" : "unjudged"}`).sort();
+  try {
+    await enqueueRound(deps, { geoProjectId: "geo_k", kind: "baseline" });
+    await tickProbe({ ...deps, maxAsks: 10 });
+    const first = await parsed();
+    assert.equal(first.skipped, "model_gateway_upstream_error", "the 500 stops the tick");
+    await parsed();
+    assert.ok((await judged()).includes("q3:judged"), "the answer behind the stuck ones is judged");
+    await parsed();
+    await parsed();
+    assert.deepEqual(await judged(), ["q1:unjudged", "q2:unjudged", "q3:judged"],
+      "the 400 counted against its own answer three times; the 500 stopped the judge three times while another answer was judged");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("one failed ask no longer withdraws the round's cross-engine rates: its question is left out of them and counted on the round", options, async () => {
+  await reset();
+  await seed("geo_l");
+  const h = await harness({ answers: ({ question, engine }) => (question === Q2 && engine === "doubao" ? { answer: LOGIN } : { answer: A_RIGHT }) });
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_l", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(5 * 60_000);
+    const last = await tickProbe({ ...h.deps, maxAsks: 10 });
+    assert.equal(last.roundsFinished, 1);
+    await tickParse({ ...h.deps, maxParse: 20 });
+    await tickMetrics(h.deps);
+    const cells = await rows(`SELECT metric_id, scope, pool, engine, variant, status, reason, numerator::float8 AS numerator, denominator::float8 AS denominator
+      FROM evimed_geo.metrics WHERE round_id = $1`, [round.roundId]);
+    const project = cell(cells, { metric_id: "M-01", scope: "project", variant: null });
+    assert.notEqual(project.reason, "uneven_denominators");
+    assert.deepEqual({ numerator: project.numerator, denominator: project.denominator }, { numerator: 4, denominator: 4 },
+      "q1 and q3 on both engines; q2 is left out of the cross-engine cells");
+    assert.deepEqual(pick(cell(cells, { metric_id: "M-01", scope: "engine", engine: "deepseek" })), { numerator: 3, denominator: 3, status: "insufficient" },
+      "per engine every answer still counts");
+    assert.deepEqual(pick(cell(cells, { metric_id: "M-01", scope: "engine", engine: "doubao" })), { numerator: 2, denominator: 2, status: "insufficient" });
+    const [balanced] = await rows(`SELECT ref FROM evimed_geo.rounds WHERE id = $1`, [round.roundId]);
+    assert.deepEqual({ questions: balanced.ref.balance.questions, kept: balanced.ref.balance.kept, dropped: balanced.ref.balance.dropped },
+      { questions: 3, kept: 2, dropped: 1 });
+    assert.deepEqual(balanced.ref.balance.droppedQuestionIds, ["geo_l_q2"]);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("the queue leases for its own 360 s probe timeout plus the screenshot and a margin, not the runtime tool's cap; latency is stored whole", options, async () => {
+  await reset();
+  await seed("geo_m", { engines: ["deepseek"] });
+  const h = await harness({ answers: () => ({ answer: A_RIGHT, latencyMs: 1234.6 }), config: { geoProbeTimeoutMs: 10_000 } });
+  /** @type {number[]} */
+  const leases = [];
+  const probe = await import("../src/geoProbeGateway.mjs");
+  const real = probe.probeUpstream(h.config);
+  const upstream = {
+    ...real,
+    ask: async (/** @type {any} */ request) => {
+      const [leased] = await rows(`SELECT lease_until FROM evimed_geo.probe_jobs WHERE status = 'leased'`);
+      leases.push(new Date(leased.lease_until).getTime() - h.clock.now().getTime());
+      return real.ask(request);
+    },
+  };
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_m", kind: "sentinel", questionIds: ["geo_m_q1"] });
+    const counts = await tickProbe({ ...h.deps, upstream, maxAsks: 1 });
+    assert.equal(counts.asked, 1);
+    assert.deepEqual(leases, [(360 + 60 + 60) * 1_000]);
+    const [snapshot] = await rows(`SELECT latency_ms FROM evimed_geo.snapshots`);
+    assert.equal(snapshot.latency_ms, 1235);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an error gets one confirmation round: the housekeeping leaves a new error to the parse tick that created it", options, async () => {
+  await reset();
+  await seed("geo_n", { engines: ["deepseek"] });
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }) });
+  try {
+    await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status,
+        created_at, updated_at) VALUES ('ge_n', 'user_geo_n', 'geo_n', 'fp', 'deepseek', 'geo_n_q1', $1, 'number', 'S2', 'open', $2, $2)`,
+    [WRONG, h.clock.now().toISOString()]);
+    assert.equal((await tickErrors(h.deps)).confirmsQueued, 0, "a second old: its creator is still queueing its round");
+    h.clock.advance(61_000);
+    assert.equal((await tickErrors(h.deps)).confirmsQueued, 1, "a minute on and still without one: queued here");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind = 'confirm'`))[0].n, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("a job still busy past the limit with its asks used up fails instead of bouncing forever", options, async () => {
+  await reset();
+  await seed("geo_o", { engines: ["deepseek"] });
+  const h = await harness({ answers: () => ({ status: 409 }) });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_o", kind: "sentinel", questionIds: ["geo_o_q1"] });
+    await database.query(`UPDATE evimed_geo.probe_jobs SET attempts = 2`);
+    h.state.busy.consecutive = 6; // PROBE_BACKOFF_MAX_RETRIES busy answers in a row already
+    const counts = await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.equal(counts.busy, 1);
+    const [job] = await rows(`SELECT status, attempts, error_code FROM evimed_geo.probe_jobs`);
+    assert.deepEqual({ ...job }, { status: "failed", attempts: 3, error_code: "probe_busy" });
   } finally {
     await h.probe.close();
   }
