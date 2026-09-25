@@ -148,6 +148,24 @@ import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamil
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
+// The moving parts (packages B, C and F): measurement ticks and rounds, the
+// marketplace's ticks and hooks, the orchestrator, the worker and the notices.
+import { GeoOrchestrator } from "./geoOrchestrator.mjs";
+import { GeoWorker, withGeoWorkerWarnings } from "./geoWorker.mjs";
+import { createGeoNotifier } from "./geoNotify.mjs";
+import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
+import { tickParse as tickGeoParse } from "./geoJudge.mjs";
+import { tickMetrics as tickGeoMetrics } from "./geoMetricsJob.mjs";
+import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
+import { GeoMarketStore } from "./geoMarketStore.mjs";
+import { cancelOrder as cancelGeoOrder, clearStop as clearGeoMarketStop, confirmTopup as confirmGeoTopup, markOrderLost as markGeoOrderLost,
+  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, resolveUnknownOrder as resolveGeoUnknownOrder, setBudget as setGeoBudget,
+  tickCatalogue as tickGeoCatalogue, tickOrders as tickGeoOrders, tickPoll as tickGeoPoll, tickReconcile as tickGeoReconcile,
+  tickTopups as tickGeoTopups, tickVerify as tickGeoVerify } from "./geoMarket.mjs";
+import { createMediaMarketClient } from "./mediaMarketClient.mjs";
+import { GeoInclusionClient, inclusionEnabled } from "./geoInclusionClient.mjs";
+import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
@@ -1988,6 +2006,20 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
+      // A GEO run (dispatch id `geo-…`): its bounded runtime is let go, then
+      // the orchestrator folds it into the program's steps.
+      if (geo?.orchestrator && String(run.dispatchId ?? "").startsWith("geo-")) {
+        if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
+          await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "geo.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+          }));
+        }
+        await geo.orchestrator.onRunFinished(project, run).catch((/** @type {any} */ error) => securityAudit(config, "geo.run.complete", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
+        }));
+      }
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
@@ -2775,6 +2807,164 @@ export function createWebApiApp(overrides = {}) {
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
   });
+  // 「循证 GEO」's moving parts, composed into the slots the routes read at
+  // request time: the market's hooks (C), the orchestrator (F) that dispatches
+  // runs inside the GEO project and enqueues the measurement's rounds (B), the
+  // exporter, and one worker whose loops are B's, C's and F's ticks. Off, none
+  // of it exists.
+  if (geo && productDatabase) {
+    const geoParts = geo;
+    const geoTimeZone = String(config.geoTimeZone || "Asia/Shanghai");
+    const geoAudit = (/** @type {string} */ event, /** @type {string} */ status, /** @type {Record<string, any>} */ details) => securityAudit(config, event, status, details);
+    const notifier = createGeoNotifier({ notifications: notificationService, store: geoParts.store, config, audit: geoAudit });
+    const marketClient = overrides.mediaMarketClient ?? createMediaMarketClient(config, overrides.mediaMarketFetch ? { fetchImpl: overrides.mediaMarketFetch } : {});
+    const inclusion = inclusionEnabled(config, marketClient) ? new GeoInclusionClient({ market: marketClient, config }) : null;
+    /** The reviewed file behind an article, read from its project's workspace (what the market sends). @param {any} article @param {any} geoProject */
+    const articleBody = async (article, geoProject) => {
+      const owner = await store.userById(geoProject.userId);
+      if (!owner || !article?.path) throw new HttpError(404, "geo_article_not_found", "The article's file is not available.");
+      const project = await store.requireProject(owner, geoProject.projectId);
+      const file = resolveScopedPath(project.workspaceDir, article.path);
+      return { markdown: String(await readFileNoFollow(project.workspaceDir, file, "utf8")) };
+    };
+    const marketDeps = {
+      store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
+      notify: (/** @type {any} */ event) => notifier.textChanged(event),
+      alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
+    };
+    /** @type {GeoOrchestrator | null} */
+    let orchestrator = null;
+    const measureDeps = {
+      store: new GeoMeasureStore(productDatabase), config, usageLedger, inclusion, state: geoMeasureState(),
+      notify: (/** @type {any} */ event) => notifier.measurement(event),
+      alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
+      // A measured round moves its project on now rather than at the next tick.
+      onRoundMeasured: (/** @type {{ geoProjectId: string }} */ round) => { void orchestrator?.advance(round.geoProjectId).catch(() => {}); },
+    };
+    orchestrator = new GeoOrchestrator({
+      store: geoParts.store, config, notifier,
+      dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
+      runStatus: async ({ userId, projectId, runId }) => {
+        const owner = await store.userById(userId);
+        if (!owner) return null;
+        const run = (await agentRuns.list(await store.requireProject(owner, projectId))).find((entry) => entry.id === runId);
+        return run ? { status: run.status } : null;
+      },
+      latestSessionId: async ({ userId, projectId }) => {
+        const owner = await store.userById(userId);
+        if (!owner) return null;
+        return (await researchSessions.list(await store.requireProject(owner, projectId)))[0]?.sessionId ?? null;
+      },
+      enqueueRound: (spec) => enqueueGeoRound(measureDeps, spec),
+      noteCitation: (input) => noteGeoCitation(marketDeps, input),
+      report: (code) => process.stderr.write(`geo orchestrator: ${code}\n`),
+    });
+    const running = /** @type {GeoOrchestrator} */ (orchestrator);
+    geoParts.orchestrator = running;
+    geoParts.exporter = { export: (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ kind) => running.requestExport(user, project, kind) };
+    geoParts.market = {
+      configured: () => marketClient.configured === true,
+      balance: () => marketClient.balance(),
+      status: () => geoMarketStatus(marketDeps),
+      setBudget: (/** @type {any} */ user, /** @type {any} */ project, /** @type {{ totalCny: number, dailyCny: number }} */ budget) =>
+        setGeoBudget(marketDeps, { userId: String(user.id), geoProjectId: project.id, ...budget }),
+      cancelOrder: (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ orderId) =>
+        cancelGeoOrder(marketDeps, { userId: String(user.id), geoProjectId: project.id, orderId }),
+      confirmTopup: (/** @type {any} */ user, /** @type {string} */ topupId, /** @type {number | undefined} */ amountCny) =>
+        confirmGeoTopup(marketDeps, { topupId, operatorId: String(user.id), ...(amountCny == null ? {} : { amountCny }) }),
+      resolveUnknownOrder: (/** @type {any} */ user, /** @type {string} */ orderId, /** @type {{ created: boolean, vendorOrderNid?: string }} */ input) =>
+        resolveGeoUnknownOrder(marketDeps, { orderId, operatorId: String(user.id), ...input }),
+      markOrderLost: (/** @type {any} */ user, /** @type {string} */ orderId, /** @type {string} */ reason) =>
+        markGeoOrderLost(marketDeps, { orderId, operatorId: String(user.id), reason }),
+      clearStop: (/** @type {any} */ user, /** @type {string | undefined} */ note) => clearGeoMarketStop(marketDeps, { operatorId: String(user.id), note }),
+    };
+    geoParts.worker = new GeoWorker({
+      pollMs: config.geoPollMs ?? 5_000, leaseMs: config.geoLeaseMs ?? 600_000, timeZone: geoTimeZone,
+      canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+      report: (loop, code) => process.stderr.write(`geo ${loop}: ${code}\n`),
+      lease: (loop, work) => running.leaseLoop(loop, work),
+      claimDay: (loop, day) => running.claimDay(loop, day),
+      loops: {
+        probe: () => tickGeoProbe(measureDeps),
+        parse: () => tickGeoParse(measureDeps),
+        metrics: () => tickGeoMetrics(measureDeps),
+        errors: () => tickGeoErrors(measureDeps),
+        orchestrator: () => running.tick(),
+        schedules: () => running.tickSchedules(),
+        catalogue: () => tickGeoCatalogue(marketDeps),
+        orders: () => tickGeoOrders(marketDeps),
+        poll: () => tickGeoPoll(marketDeps),
+        verify: () => tickGeoVerify(marketDeps),
+        reconcile: () => tickGeoReconcile(marketDeps),
+        topups: () => tickGeoTopups(marketDeps),
+      },
+    });
+  }
+
+  /**
+   * One GEO run, dispatched the way an autopilot episode is (bounded runtime,
+   * a session bound to the capability, `automated`) but in the GEO project
+   * itself, so it shows under that project. A project whose runtime is
+   * already open for the researcher takes the run in that runtime instead —
+   * the conversation they are looking at — rather than waiting for it to go
+   * idle. Any run already running in the project refuses with `runtime_busy`
+   * (one GEO run per project; the orchestrator retries next tick), as does a
+   * full runtime quota.
+   * @param {{ userId: string, projectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
+   */
+  async function dispatchGeoRun({ userId, projectId, capabilityId, dispatchId, reason, brief }) {
+    const user = await store.userById(userId);
+    if (!user) throw new HttpError(404, "geo_project_not_found", "The GEO project's account is unavailable.");
+    const project = await store.requireProject(user, projectId);
+    const ledger = await agentRuns.list(project);
+    const replay = ledger.find((run) => run.dispatchId === dispatchId);
+    if (replay) return { runId: replay.id, sessionId: replay.sessionId ?? null, status: replay.status };
+    if (ledger.some((run) => run.status === "running")) throw new HttpError(409, "runtime_busy", "The project has a run in progress; the GEO step waits.");
+    if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
+      throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
+    }
+    const selected = (await agentRegistry)?.get?.(capabilityId) ?? null;
+    if (!selected) throw new HttpError(503, "geo_unavailable", "This GEO capability is not installed on this deployment.");
+    const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "geo", invalidCode: "geo_unavailable" }, config);
+    if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
+    const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
+    const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
+    try {
+      await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
+      const run = await agentRuns.dispatch(project, {
+        sessionId: session.id, dispatchId, automated: true, question: brief,
+        effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent, effectiveRouteReason: reason,
+        ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
+      }, async (binding, dispatchedRun, repairText = null) => {
+        const promptText = typeof repairText === "string" && repairText.trim() ? repairText : brief;
+        let memories = [];
+        try { memories = await memorySubstrate.recall(user.id, brief, { projectId: project.id, sessionId: session.id }); }
+        catch (error) { throw memoryRecallRejection(error); }
+        const prepared = await prepareResearchContext(project, binding, config, {
+          query: brief, memories, specialists: [],
+          routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
+            skill: selected.skill, companionSkills: selected.companionSkills },
+        });
+        const marker = interactive ? null : issueModelGatewayBudgetMarker({
+          secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id, runId: dispatchId, ...budget.scope,
+        });
+        return runtimeManager.dispatchPrompt(project, session.id, {
+          // The brief first: the kernel names a session after its first message.
+          text: marker ? `${promptText}\n\n${marker}` : promptText,
+          system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+          model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+          requestId: dispatchedRun.kernelRequestIds?.at(-1),
+        });
+      });
+      return { runId: run.id, sessionId: session.id, status: run.status };
+    } catch (error) {
+      const recorded = (await agentRuns.list(project).catch(() => [])).find((run) => run.dispatchId === dispatchId);
+      if (recorded?.status === "running") return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status };
+      if (!interactive) await runtimeManager.endBoundedRuntime(project, dispatchId).catch(() => {});
+      if (recorded) return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status };
+      throw error;
+    }
+  }
   // A submission's independent review: started, asked after, answered
   // (reviewGateway.mjs); off, it answers `review_disabled`.
   const reviewGatewayHandler = createReviewGatewayHandler({
@@ -6172,7 +6362,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),
     // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
-    geo: await readinessCheck(async () => geoReadiness({ config, geo, database: productDatabase })),
+    geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
   };
   checks.saasProfile = await readinessCheck(() => readinessSaasProfile(config, checks));
   return {

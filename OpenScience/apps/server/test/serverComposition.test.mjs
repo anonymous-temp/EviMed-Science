@@ -1611,9 +1611,9 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
 
 // 「循证 GEO」 (build spec 2026-09-25): composed only when switched on with a
 // product database, visible to its audience in `/api/me`, its routes and its
-// runtime gateway dispatched, and — since its worker is another package's —
-// a `geo.worker` slot that the recurring work starts, pauses and closes with
-// the rest the moment something fills it.
+// runtime gateway dispatched, every slot filled (worker, orchestrator,
+// exporter, market), and a `geo.worker` that the recurring work starts,
+// pauses and closes with the rest whatever fills the slot.
 test("循证 GEO is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID] });
@@ -1622,7 +1622,20 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
   assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "exporter", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
-  assert.equal(app.geo.worker, null, "the worker slot waits for the orchestration package");
+  // Every slot is filled: the worker with all twelve loops wired (measurement,
+  // orchestration, market), the orchestrator, the exporter and the market's
+  // user and operator hooks.
+  const status = app.geo.worker.status();
+  assert.deepEqual(status.missing, [], "every loop has its function");
+  assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
+    "verify", "reconcile", "topups"]);
+  assert.equal(typeof app.geo.orchestrator.runStep, "function");
+  assert.equal(typeof app.geo.exporter.export, "function");
+  for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
+    assert.equal(typeof app.geo.market[hook], "function", hook);
+  }
+  assert.equal(app.geo.market.configured(), false, "no marketplace URL or key: unconfigured");
+  await app.geo.worker.close();
   const me = await (await fetch(`${base}/api/me`, { headers })).json();
   assert.equal(me.data.features.geo, true);
 
@@ -1655,6 +1668,83 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   assert.ok(await waitFor(() => worker.started > 0 && live(fixture.armed).length >= armedAtStartup, 10_000), "reopening never started the GEO worker");
   await fixture.close();
   assert.equal(worker.closed, 1, "close() closes the GEO worker");
+});
+
+// A GEO run is dispatched the way an autopilot episode is — a bounded runtime,
+// a session bound to the capability, `automated` so the inbox stays quiet —
+// but in the GEO project itself, so it shows under that project; a project
+// whose runtime the researcher has open takes it in that runtime instead; a
+// run already running refuses with `runtime_busy`, which the orchestrator
+// retries next tick.
+test("a GEO run is dispatched like an episode, inside the GEO project, bound to its capability and automated", async (t) => {
+  const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID],
+    modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  await app.geo.worker.close();
+  const user = await app.store.userById(USER_ID);
+  const project = await app.store.requireProject(user, PROJECT_ID);
+  /** @type {any[]} */ const reserved = [];
+  /** @type {any[]} */ const dispatched = [];
+  /** @type {any[]} */ const prompts = [];
+  /** @type {any[]} */ const bindings = [];
+  app.memorySubstrate.recall = async () => [];
+  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ sessionId, /** @type {any} */ binding) => {
+    bindings.push({ sessionId, mode: binding.mode, agentId: binding.agentId });
+    return binding;
+  };
+  app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ scoped, /** @type {any} */ scope) => {
+    reserved.push({ project: scoped, scope });
+    return { id: `session-geo-${reserved.length}`, kernel: "dsh" };
+  };
+  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ scoped, /** @type {string} */ sessionId, /** @type {any} */ request) => {
+    prompts.push({ project: scoped, sessionId, request });
+    return { accepted: true };
+  };
+  const list = app.agentRuns.list.bind(app.agentRuns);
+  app.agentRuns.dispatch = async (/** @type {any} */ scoped, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
+    dispatched.push({ project: scoped, input });
+    await sendPrompt({ sessionId: input.sessionId }, { id: `run-geo-${dispatched.length}`, kernelRequestIds: [] });
+    return { id: `run-geo-${dispatched.length}`, status: "running" };
+  };
+  const brief = "「循证 GEO」自动运行 · 第 1–3 步（证据、旅程、问题）";
+  const dispatchRun = app.geo.orchestrator.dispatchRun;
+  const out = await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
+    dispatchId: "geo-insight-a1", reason: "geo:evidence", brief });
+  assert.deepEqual(out, { runId: "run-geo-1", sessionId: "session-geo-1", status: "running" });
+  assert.equal(reserved[0].project.workspaceDir, project.workspaceDir, "the GEO project's own workspace, not an internal project's");
+  assert.equal(reserved[0].scope.runId, "geo-insight-a1");
+  assert.ok(reserved[0].scope.runLimit > 0 && reserved[0].scope.dailyLimit > 0, "a signed scope needs positive limits");
+  assert.deepEqual([dispatched[0].input.dispatchId, dispatched[0].input.automated, dispatched[0].input.effectiveAgentId,
+    dispatched[0].input.effectiveRouteReason, dispatched[0].input.question], ["geo-insight-a1", true, "geo-insight", "geo:evidence", brief]);
+  assert.deepEqual(bindings[0], { sessionId: "session-geo-1", mode: "specialist", agentId: "geo-insight" }, "the conversation is bound to the capability");
+  assert.ok(String(prompts[0].request.text).startsWith(brief), "the brief first: the kernel names the conversation after it");
+  assert.match(String(prompts[0].request.text), /<evimed-budget-scope>/);
+  assert.equal(prompts[0].request.allowBounded, true);
+
+  // A run already running in the project: the GEO step waits.
+  app.agentRuns.list = async () => [{ id: "busy", status: "running", dispatchId: "chat-1" }];
+  await assert.rejects(dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-strategy",
+    dispatchId: "geo-strategy-a1", reason: "geo:sources", brief }), { status: 409, code: "runtime_busy" });
+  // A dispatch id the ledger already has is that run, whatever state it is in.
+  app.agentRuns.list = async () => [{ id: "run-old", status: "failed", dispatchId: "geo-insight-a1", sessionId: "s-old" }];
+  assert.deepEqual(await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
+    dispatchId: "geo-insight-a1", reason: "geo:evidence", brief }), { runId: "run-old", sessionId: "s-old", status: "failed" });
+  app.agentRuns.list = list;
+  // The researcher has the project open: the run goes into that runtime, unbounded, no reservation.
+  const key = app.runtimeManager.key(project);
+  app.runtimeManager.runtimes.set(key, { kind: "mock", project, workspaceDir: project.workspaceDir });
+  try {
+    await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-content",
+      dispatchId: "geo-content-1-a1", reason: "geo:content", brief });
+  } finally {
+    app.runtimeManager.runtimes.delete(key);
+  }
+  assert.equal(reserved.length, 1, "no bounded runtime when the project's own is open");
+  assert.equal(prompts[1].request.allowBounded, false);
+  assert.equal(String(prompts[1].request.text), brief, "no budget scope on the researcher's own runtime");
+  // A capability this deployment does not have is refused by name.
+  await assert.rejects(dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-nonexistent",
+    dispatchId: "geo-x-a1", reason: "geo:x", brief }), { status: 503, code: "geo_unavailable" });
 });
 
 test("循证 GEO off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {

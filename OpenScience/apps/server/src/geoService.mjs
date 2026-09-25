@@ -41,7 +41,7 @@
 import path from "node:path";
 import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH, GEO_ORDER_CANCELLABLE_STATES,
-  GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES,
+  GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
 import { HttpError } from "./security.mjs";
@@ -180,7 +180,64 @@ function errorView(row) {
     status: String(row.status),
     snapshotId: text(row.last_snapshot_id) ?? text(row.first_snapshot_id),
     questionId: text(row.question_id),
+    // What the statement contradicts: the claim and its quote (对的是什么 / 依据哪份说明书).
+    claimId: text(row.claim_id),
+    evidenceQuote: text(row.evidence_quote),
     createdAt: iso(row.created_at),
+  };
+}
+
+/**
+ * The other engines' answers to the same question in the same round, one per
+ * engine, each with what it did for us from its facts (提及 / 讲错 N 处 / 引用你);
+ * an engine of the round with no answer reads `absent` (「未测」).
+ * @param {any[]} rows
+ */
+function answerSiblings(rows) {
+  const firsts = rows.filter((row, index, all) => all.findIndex((other) => other.engine === row.engine) === index);
+  const siblings = firsts.map((row) => {
+    const statements = Array.isArray(row.statements) ? row.statements : [];
+    const judged = row.judged != null;
+    return {
+      engine: text(row.engine), snapshotId: String(row.id), status: text(row.status),
+      mentionsOurs: judged && row.mentions_ours != null ? Boolean(row.mentions_ours) : null,
+      wrongOurs: judged ? statements.filter((/** @type {any} */ statement) => statement?.verdict === "wrong").length : null,
+      citesOurs: judged && row.cites_ours != null ? Boolean(row.cites_ours) : null,
+    };
+  });
+  const roundEngines = Array.isArray(rows[0]?.round_engines) ? rows[0].round_engines.map(String) : [];
+  for (const engine of roundEngines) {
+    if (!siblings.some((sibling) => sibling.engine === engine)) {
+      siblings.push({ engine, snapshotId: /** @type {any} */ (null), status: "absent", mentionsOurs: null, wrongOurs: null, citesOurs: null });
+    }
+  }
+  return siblings;
+}
+
+/** How many snapshot ids a cell carries at most (the first is where a click lands). */
+export const GEO_CELL_SNAPSHOT_LIMIT = 200;
+
+/**
+ * The engines this deployment can measure: the configured probe engines and
+ * the inclusion channel's (the new-project control offers them).
+ * @param {Record<string, any>} config
+ */
+export function geoAvailableEngines(config) {
+  const listed = [...(config?.geoEngines?.length ? config.geoEngines : GEO_DEFAULT_ENGINES), ...(config?.geoInclusionEngines ?? [])];
+  return [...new Set(listed.map(String))].filter((engine) => GEO_ENGINES.includes(engine));
+}
+
+/**
+ * A failure-mode tally as a cell: the count over the round's answers in the
+ * denominator (valid and refusal answers; suspect ones are out), with the
+ * answers that show it.
+ * @param {number} count @param {number} total @param {string[]} snapshotIds
+ */
+function tallyCell(count, total, snapshotIds) {
+  if (!total) return { ...GEO_ABSENT_CELL, snapshotIds: [] };
+  return {
+    value: Math.round((count / total) * 10_000) / 100, numerator: count, denominator: total, ciLow: null, ciHigh: null,
+    status: total < 30 ? "insufficient" : "ok", dataType: "measured", reason: null, snapshotIds: snapshotIds.slice(0, GEO_CELL_SNAPSHOT_LIMIT),
   };
 }
 
@@ -303,13 +360,15 @@ export class GeoService {
     const projects = await this.store.listProjects(String(user.id));
     const ids = projects.map((project) => project.id);
     const headline = [GEO_VIEW_METRIC_IDS.gvi, GEO_VIEW_METRIC_IDS.mentionHeadline];
-    const [latest, series, names, alerts, targets] = await Promise.all([
+    const [latest, series, names, alerts, targets, started] = await Promise.all([
       this.#latestProjectMetrics(ids, headline),
       this.#series(ids, [GEO_VIEW_METRIC_IDS.gvi]),
       this.#controlProjectNames(String(user.id), projects.map((project) => project.projectId)),
       this.#alerts(ids),
       Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
+      this.#startedAt(projects),
     ]);
+    const availableEngines = geoAvailableEngines(this.config);
     return {
       projects: projects.map((project, index) => {
         const metrics = latest.get(project.id) ?? new Map();
@@ -329,6 +388,9 @@ export class GeoService {
             mention: geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.mentionHeadline)),
           },
           alert,
+          startedAt: started.get(project.id) ?? project.createdAt,
+          createdAt: project.createdAt,
+          availableEngines,
           updatedAt: project.updatedAt,
         };
       }),
@@ -432,29 +494,90 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async projectViewOf(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
-    const [latest, series, targets, week, names] = await Promise.all([
+    const [latest, series, targets, week, names, started] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
       this.#series([project.id], metricIds),
       this.store.latestTargets(project.id),
       this.#week(project),
       this.#controlProjectNames(project.userId, [project.projectId]),
+      this.#startedAt([project]),
     ]);
     const rows = latest.get(project.id) ?? new Map();
     const points = series.get(project.id) ?? new Map();
+    const metrics = GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({
+      key,
+      cell: geoCellFromRow(rows.get(metricId)),
+      target: this.#target(targets, project.tier, metricId),
+      trend: (points.get(metricId) ?? []).map(({ date, value }) => ({ date, value })),
+    }));
+    await this.#attachSnapshotIds(project.id, GEO_OVERVIEW_METRICS.map(({ metricId }, index) => ({ cell: metrics[index].cell, row: rows.get(metricId) })));
     return {
       ...project,
       name: geoProjectName(project, names.get(project.projectId)),
+      startedAt: started.get(project.id) ?? project.createdAt,
+      availableEngines: geoAvailableEngines(this.config),
       overview: {
-        metrics: GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({
-          key,
-          cell: geoCellFromRow(rows.get(metricId)),
-          target: this.#target(targets, project.tier, metricId),
-          trend: (points.get(metricId) ?? []).map(({ date, value }) => ({ date, value })),
-        })),
+        metrics,
         week,
         steps: project.steps,
       },
     };
+  }
+
+  /**
+   * When each project's coverage window started: its first run's work (the
+   * first claim written, round enqueued or run dispatched), else its creation.
+   * @param {Array<{ id: string, createdAt: string | null }>} projects @returns {Promise<Map<string, string>>}
+   */
+  async #startedAt(projects) {
+    /** @type {Map<string, string>} */
+    const started = new Map();
+    if (!projects.length) return started;
+    const ids = projects.map((project) => project.id);
+    const result = await this.store.query(`SELECT geo_project_id, min(at) AS at FROM (
+        SELECT geo_project_id, min(created_at) AS at FROM evimed_geo.claims WHERE geo_project_id = ANY($1::text[]) GROUP BY geo_project_id
+        UNION ALL SELECT geo_project_id, min(created_at) FROM evimed_geo.rounds WHERE geo_project_id = ANY($1::text[]) GROUP BY geo_project_id
+        UNION ALL SELECT geo_project_id, min(created_at) FROM evimed_geo.schedule_marks WHERE geo_project_id = ANY($1::text[]) AND kind = 'run'
+          GROUP BY geo_project_id
+      ) firsts GROUP BY geo_project_id`, [ids]).catch(() => ({ rows: [] }));
+    for (const row of result.rows) if (row.at) started.set(String(row.geo_project_id), /** @type {string} */ (iso(row.at)));
+    for (const project of projects) if (!started.has(project.id) && project.createdAt) started.set(project.id, project.createdAt);
+    return started;
+  }
+
+  /**
+   * The answers behind each cell (ruling 8: every number traces to its
+   * answers): the snapshots of the cell's own round the metric counted — the
+   * metrics' own selection (`geoCellRows`), valid and refusal answers only —
+   * at most {@link GEO_CELL_SNAPSHOT_LIMIT}. A cell with no row gets none.
+   * @param {string} geoId @param {Array<{ cell: Record<string, any>, row: any }>} entries
+   */
+  async #attachSnapshotIds(geoId, entries) {
+    const rounds = [...new Set(entries.map((entry) => entry.row?.round_id).filter(Boolean).map(String))];
+    for (const entry of entries) if (entry.row) entry.cell.snapshotIds = [];
+    if (!rounds.length) return;
+    const rows = (await this.store.query(`SELECT s.id, s.round_id, s.engine, s.status, s.surface, q.pool, q.group_id,
+        coalesce(g.is_control, false) AS is_control, r.kind AS round_kind
+      FROM evimed_geo.snapshots s JOIN evimed_geo.rounds r ON r.id = s.round_id
+        LEFT JOIN evimed_geo.questions q ON q.id = s.question_id LEFT JOIN evimed_geo.question_groups g ON g.id = q.group_id
+      WHERE s.geo_project_id = $1 AND s.round_id = ANY($2::text[]) AND s.status IN ('valid', 'refusal')
+      ORDER BY s.asked_at NULLS LAST, s.id LIMIT 20000`, [geoId, rounds])).rows;
+    /** @type {Map<string, any[]>} */
+    const byRound = new Map();
+    for (const row of rows) {
+      const list = byRound.get(String(row.round_id)) ?? [];
+      list.push({ snapshotId: String(row.id), engine: String(row.engine ?? ""), roundId: String(row.round_id), roundKind: text(row.round_kind),
+        status: String(row.status), surface: row.surface ?? null, pool: text(row.pool), groupId: text(row.group_id), isControl: row.is_control === true });
+      byRound.set(String(row.round_id), list);
+    }
+    for (const { cell, row } of entries) {
+      if (!row?.round_id) continue;
+      const selected = geoCellRows(byRound.get(String(row.round_id)) ?? [], /** @type {any} */ ({
+        metricId: String(row.metric_id), scope: String(row.scope), pool: text(row.pool), engine: text(row.engine), groupId: text(row.group_id),
+        arm: text(row.arm), rival: text(row.rival), variant: text(row.variant),
+      }));
+      cell.snapshotIds = selected.slice(0, GEO_CELL_SNAPSHOT_LIMIT).map((entry) => entry.snapshotId);
+    }
   }
 
   /**
@@ -464,36 +587,46 @@ export class GeoService {
    */
   async #week(project) {
     const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
-    const [errors, stops, rounds, publishable, published] = await Promise.all([
-      this.store.query(`SELECT id, engine, statement, severity, last_snapshot_id FROM evimed_geo.errors
+    const [errors, stops, changed, rounds, publishable, published] = await Promise.all([
+      this.store.query(`SELECT id, engine, statement, severity, last_snapshot_id, created_at FROM evimed_geo.errors
         WHERE geo_project_id = $1 AND status <> 'closed' AND created_at >= $2 ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 3`, [project.id, since]),
-      this.store.query(`SELECT id, title FROM evimed_geo.articles WHERE geo_project_id = $1 AND safety = 'open' AND status <> 'withdrawn'
+      this.store.query(`SELECT id, title, updated_at FROM evimed_geo.articles WHERE geo_project_id = $1 AND safety = 'open' AND status <> 'withdrawn'
         ORDER BY updated_at DESC LIMIT 2`, [project.id]),
-      this.store.query(`SELECT id, kind, done FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status IN ('done', 'partial')
+      // An outlet that changed a published text this week (the market's post-publication check).
+      this.store.query(`SELECT o.id, a.title, min(e.at) AS at FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id = e.order_id
+          LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+        WHERE o.geo_project_id = $1 AND e.at >= $2 AND e.detail ->> 'reason' = 'text_changed'
+        GROUP BY o.id, a.title ORDER BY min(e.at) DESC LIMIT 2`, [project.id, since]),
+      this.store.query(`SELECT id, kind, done, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status IN ('done', 'partial')
         AND finished_at >= $2 AND kind IN ('baseline', 'weekly', 'single_step', 'noise') ORDER BY finished_at DESC LIMIT 2`, [project.id, since]),
-      this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.articles WHERE geo_project_id = $1 AND status = 'publishable'
+      this.store.query(`SELECT count(*)::integer AS n, max(updated_at) AS at FROM evimed_geo.articles WHERE geo_project_id = $1 AND status = 'publishable'
         AND updated_at >= $2`, [project.id, since]),
-      this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.orders WHERE geo_project_id = $1
+      this.store.query(`SELECT count(*)::integer AS n, max(updated_at) AS at FROM evimed_geo.orders WHERE geo_project_id = $1
         AND state IN ('published', 'verified', 'settled') AND updated_at >= $2`, [project.id, since]),
     ]);
-    /** @type {Array<{ kind: string, text: string, tab: string, ref: Record<string, string> | null }>} */
+    /** @type {Array<{ kind: string, text: string, tab: string, ref: Record<string, string> | null, at: string | null }>} */
     const items = [];
     for (const row of errors.rows) {
       items.push({ kind: "wrong_ours", text: `${engineLabel(String(row.engine))}讲错：${clip(row.statement, 60)}`, tab: "diagnosis",
-        ref: { errorId: String(row.id), ...(row.last_snapshot_id ? { snapshotId: String(row.last_snapshot_id) } : {}) } });
+        ref: { errorId: String(row.id), ...(row.last_snapshot_id ? { snapshotId: String(row.last_snapshot_id) } : {}) }, at: iso(row.created_at) });
     }
     for (const row of stops.rows) {
-      items.push({ kind: "safety", text: `「${clip(row.title ?? "稿件", 30)}」有安全问题待确认`, tab: "content", ref: { articleId: String(row.id) } });
+      items.push({ kind: "safety", text: `「${clip(row.title ?? "稿件", 30)}」有安全问题待确认`, tab: "content", ref: { articleId: String(row.id) },
+        at: iso(row.updated_at) });
+    }
+    for (const row of changed.rows) {
+      items.push({ kind: "safety", text: `「${clip(row.title ?? "稿件", 30)}」发布后被媒体改动`, tab: "distribution", ref: { orderId: String(row.id) },
+        at: iso(row.at) });
     }
     for (const row of rounds.rows) {
       const label = /** @type {Record<string, string>} */ (GEO_ROUND_KIND_LABELS_ZH)[String(row.kind)] ?? "测量";
       items.push({ kind: "round", text: `${label}完成，${Number(row.done)} 次提问`, tab: row.kind === "noise" ? "monitoring" : "diagnosis",
-        ref: { roundId: String(row.id) } });
+        ref: { roundId: String(row.id) }, at: iso(row.finished_at) });
     }
     const readyCount = Number(publishable.rows[0]?.n ?? 0);
-    if (readyCount) items.push({ kind: "articles", text: `${readyCount} 篇稿件可发布`, tab: "content", ref: null });
+    if (readyCount) items.push({ kind: "articles", text: `${readyCount} 篇稿件可发布`, tab: "content", ref: null, at: iso(publishable.rows[0]?.at) });
     const publishedCount = Number(published.rows[0]?.n ?? 0);
-    if (publishedCount) items.push({ kind: "orders", text: `${publishedCount} 篇稿件已发布`, tab: "distribution", ref: null });
+    if (publishedCount) items.push({ kind: "orders", text: `${publishedCount} 篇稿件已发布`, tab: "distribution", ref: null, at: iso(published.rows[0]?.at) });
     return items.slice(0, WEEK_ITEMS);
   }
 
@@ -596,7 +729,10 @@ export class GeoService {
     const engines = round && Array.isArray(round.engines) && round.engines.length ? round.engines.map(String) : project.engines;
     /** @type {Map<string, any>} */
     const cells = new Map();
-    let failureModes = { omitted: 0, correct: 0, wrongOurs: 0, wrongCompetitor: 0 };
+    /** @type {Record<string, any>} */
+    let failureModes = { omitted: tallyCell(0, 0, []), correct: tallyCell(0, 0, []), wrongOurs: tallyCell(0, 0, []), wrongCompetitor: tallyCell(0, 0, []) };
+    /** @type {Array<{ cell: Record<string, any>, row: any }>} */
+    const traced = [];
     /** @type {Map<string, { competitor: string | null, issue: string | null }>} */
     const pools = new Map();
     /** @type {any[]} */
@@ -617,14 +753,27 @@ export class GeoService {
       const bookkeeping = new Set([GEO_VIEW_METRIC_IDS.netEffect, GEO_VIEW_METRIC_IDS.noiseBand]);
       more = rows.filter((row) => row.scope === "project" && !bookkeeping.has(String(row.metric_id))
         && !(hidden.has(String(row.metric_id)) && row.variant == null && row.rival == null))
-        .map((row) => ({ metricId: String(row.metric_id), name: this.metricName(String(row.metric_id)), variant: text(row.variant), rival: text(row.rival),
-          cell: geoCellFromRow(row) }));
-      const modes = (await this.store.query(`SELECT f.failure_mode, count(*)::integer AS n FROM evimed_geo.facts f
+        .map((row) => {
+          const entry = { metricId: String(row.metric_id), name: this.metricName(String(row.metric_id)), variant: text(row.variant), rival: text(row.rival),
+            cell: geoCellFromRow(row) };
+          traced.push({ cell: entry.cell, row });
+          return entry;
+        });
+      // The four failure modes as cells: the count over the round's answers
+      // (valid and refusal; suspect ones are out), with the answers behind it.
+      const modes = (await this.store.query(`SELECT f.failure_mode, s.id FROM evimed_geo.facts f
         JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
-        WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal') GROUP BY f.failure_mode`, [round.id, project.id])).rows;
-      const tally = new Map(modes.map((/** @type {any} */ row) => [row.failure_mode, Number(row.n)]));
-      failureModes = { omitted: tally.get("omitted") ?? 0, correct: tally.get("correct") ?? 0, wrongOurs: tally.get("wrong_ours") ?? 0,
-        wrongCompetitor: tally.get("wrong_competitor") ?? 0 };
+        WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal') ORDER BY s.asked_at NULLS LAST, s.id LIMIT 20000`,
+      [round.id, project.id])).rows;
+      /** @type {Map<string, string[]>} */
+      const byMode = new Map();
+      for (const row of modes) {
+        const list = byMode.get(String(row.failure_mode)) ?? [];
+        list.push(String(row.id));
+        byMode.set(String(row.failure_mode), list);
+      }
+      const mode = (/** @type {string} */ key) => tallyCell(byMode.get(key)?.length ?? 0, modes.length, byMode.get(key) ?? []);
+      failureModes = { omitted: mode("omitted"), correct: mode("correct"), wrongOurs: mode("wrong_ours"), wrongCompetitor: mode("wrong_competitor") };
       const competitors = (await this.store.query(`SELECT DISTINCT ON (q.pool) q.pool, brand.value ->> 'name' AS name,
           sum(coalesce((brand.value ->> 'count')::integer, 1)) AS n
         FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id
@@ -643,25 +792,32 @@ export class GeoService {
         });
       }
     }
-    const cell = (/** @type {string} */ scope, /** @type {string} */ pool, /** @type {string} */ engine, /** @type {string} */ metricId) =>
-      geoCellFromRow(cells.get(`${scope}\u0000${pool}\u0000${engine}\u0000${metricId}`));
+    const cell = (/** @type {string} */ scope, /** @type {string} */ pool, /** @type {string} */ engine, /** @type {string} */ metricId) => {
+      const row = cells.get(`${scope}\u0000${pool}\u0000${engine}\u0000${metricId}`);
+      const value = geoCellFromRow(row);
+      traced.push({ cell: value, row });
+      return value;
+    };
+    const byEngine = engines.map((engine) => ({
+      engine,
+      mention: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.mention),
+      accuracy: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.accuracy),
+      citation: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.citation),
+      retrieval: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.retrieval),
+    }));
+    const byPool = GEO_POOLS.map((pool) => ({
+      pool, mention: cell("pool", pool, "", GEO_VIEW_METRIC_IDS.mention),
+      topCompetitor: pools.get(pool)?.competitor ?? null, mainIssue: pools.get(pool)?.issue ?? null,
+    }));
+    await this.#attachSnapshotIds(project.id, traced);
     return {
       round: round ? {
         id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null,
         surface: round.surface ?? null, planned: Number(round.planned), done: Number(round.done), engines,
       } : null,
       rounds: rounds.map((/** @type {any} */ row) => ({ id: String(row.id), kind: String(row.kind), sampleDate: row.sample_date ? rowDay(row, this.timeZone) : null })),
-      byEngine: engines.map((engine) => ({
-        engine,
-        mention: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.mention),
-        accuracy: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.accuracy),
-        citation: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.citation),
-        retrieval: cell("engine", "", engine, GEO_VIEW_METRIC_IDS.retrieval),
-      })),
-      byPool: GEO_POOLS.map((pool) => ({
-        pool, mention: cell("pool", pool, "", GEO_VIEW_METRIC_IDS.mention),
-        topCompetitor: pools.get(pool)?.competitor ?? null, mainIssue: pools.get(pool)?.issue ?? null,
-      })),
+      byEngine,
+      byPool,
       failureModes,
       errors,
       noise: noiseRow ? { band: num(noiseRow.value), measuredAt: iso(noiseRow.computed_at) } : null,
@@ -683,8 +839,11 @@ export class GeoService {
       snapshot.question_id ? this.store.question(project.id, String(snapshot.question_id)) : null,
       this.store.query(`SELECT brands, statements FROM evimed_geo.facts WHERE snapshot_id = $1`, [snapshot.id]),
       snapshot.round_id && snapshot.question_id
-        ? this.store.query(`SELECT id, engine, status FROM evimed_geo.snapshots WHERE geo_project_id = $1 AND round_id = $2 AND question_id = $3
-            ORDER BY engine, asked_at DESC`, [project.id, snapshot.round_id, snapshot.question_id])
+        ? this.store.query(`SELECT s.id, s.engine, s.status, f.snapshot_id AS judged, f.mentions_ours, f.cites_ours, f.statements,
+              (SELECT r.engines FROM evimed_geo.rounds r WHERE r.id = s.round_id) AS round_engines
+            FROM evimed_geo.snapshots s LEFT JOIN evimed_geo.facts f ON f.snapshot_id = s.id
+            WHERE s.geo_project_id = $1 AND s.round_id = $2 AND s.question_id = $3
+            ORDER BY s.engine, s.asked_at DESC`, [project.id, snapshot.round_id, snapshot.question_id])
         : { rows: [] },
       this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1 AND (first_snapshot_id = $2 OR last_snapshot_id = $2
           OR (question_id = $3 AND engine = $4)) ORDER BY severity DESC NULLS LAST, updated_at DESC LIMIT 20`,
@@ -704,8 +863,7 @@ export class GeoService {
         surface: snapshot.surface ?? null, screenshot: Boolean(snapshot.screenshot_sha256),
         ...(snapshot.screenshot_sha256 ? { screenshotSha256: String(snapshot.screenshot_sha256) } : {}),
       },
-      siblings: /** @type {any[]} */ (siblings.rows).filter((row, index, all) => all.findIndex((other) => other.engine === row.engine) === index)
-        .map((row) => ({ engine: text(row.engine), snapshotId: String(row.id), status: text(row.status) })),
+      siblings: answerSiblings(siblings.rows),
       facts: { brands: Array.isArray(factRow?.brands) ? factRow.brands : [], statements: Array.isArray(factRow?.statements) ? factRow.statements : [] },
       errors: errors.rows.map(errorView),
       history: /** @type {any[]} */ (history.rows).map((row) => ({
@@ -754,6 +912,14 @@ export class GeoService {
       if (row.budgetCny != null) tier.budgetCny = Math.max(tier.budgetCny ?? 0, row.budgetCny);
       tiers.set(row.tier, tier);
     }
+    const expectations = engines.map((engine) => {
+      const entry = stated.find((/** @type {any} */ candidate) => candidate.engine === engine) ?? {};
+      return {
+        engine, retrieval: geoCellFromRow(retrievalByEngine.get(engine)), promise: text(entry.promise),
+        layers: Array.isArray(entry.layers) ? entry.layers.filter((/** @type {unknown} */ layer) => typeof layer === "string") : [],
+      };
+    });
+    await this.#attachSnapshotIds(project.id, expectations.map((entry) => ({ cell: entry.retrieval, row: retrievalByEngine.get(entry.engine) })));
     return {
       sources: sources.map((source) => ({
         id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
@@ -764,13 +930,7 @@ export class GeoService {
         mentionsOurs: source.mentionsOurs, wrongOurs: source.wrongOurs,
         market: source.market ? { price: num(source.market.price ?? source.market.priceCny), resourceId: text(source.market.resourceId) } : null,
       })),
-      expectations: engines.map((engine) => {
-        const entry = stated.find((/** @type {any} */ candidate) => candidate.engine === engine) ?? {};
-        return {
-          engine, retrieval: geoCellFromRow(retrievalByEngine.get(engine)), promise: text(entry.promise),
-          layers: Array.isArray(entry.layers) ? entry.layers.filter((/** @type {unknown} */ layer) => typeof layer === "string") : [],
-        };
-      }),
+      expectations,
       battlefield: { groups: Array.isArray(battlefield.groups) ? battlefield.groups : [], reason: text(battlefield.reason) },
       tiers: [...tiers.values()].sort((left, right) => left.tier.localeCompare(right.tier)),
       chosenTier: project.tier,
