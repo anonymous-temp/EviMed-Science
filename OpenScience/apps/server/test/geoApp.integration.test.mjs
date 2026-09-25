@@ -101,6 +101,12 @@ test("a project made before its brand is known is named by the brand the run wri
   await geoRuntimeWrite({ store: geo.store, project: namedProject, what: "product", body: { data: { brandName: "诺和盈" } }, renameProject: geo.renameProject });
   assert.deepEqual((await rows("SELECT name FROM evimed_control.projects WHERE user_id = $1 AND id = $2", [accounts.preview, named.body.data.projectId]))[0],
     { name: "司美格鲁肽" });
+  const page = await call("preview", "GET", `/api/geo/projects/${named.body.data.id}`);
+  assert.equal(page.body.data.name, "司美格鲁肽", "the project's own name, not the brand written after it");
+  // A researcher's rename of the project is what 循证 GEO calls it from then on.
+  const renamed = await call("preview", "PATCH", `/api/projects/${named.body.data.projectId}`, { name: "司美格鲁肽 2026 H1" });
+  assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
+  assert.equal((await call("preview", "GET", `/api/geo/projects/${named.body.data.id}`)).body.data.name, "司美格鲁肽 2026 H1");
 });
 
 test("under the operators audience a reader sees nothing of it; operators and the preview list do", options, async () => {

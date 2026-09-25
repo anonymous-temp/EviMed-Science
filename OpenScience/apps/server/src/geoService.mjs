@@ -113,6 +113,18 @@ export function geoCellFromRow(row) {
   };
 }
 
+/**
+ * What a GEO project is called: its project's name — a researcher's rename
+ * wins — unless that is still the placeholder a brandless project was made
+ * with, in which case the brand the run wrote.
+ * @param {{ product?: Record<string, any> }} project @param {string | undefined} controlName
+ */
+export function geoProjectName(project, controlName) {
+  const brand = text(project.product?.brandName);
+  if (controlName && controlName !== GEO_DEFAULT_PROJECT_NAME) return controlName;
+  return brand || controlName || GEO_DEFAULT_PROJECT_NAME;
+}
+
 /** A calendar day in a time zone, `YYYY-MM-DD`. @param {Date} date @param {string} timeZone */
 function dayIn(date, timeZone) {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -295,7 +307,7 @@ export class GeoService {
         return {
           id: project.id,
           projectId: project.projectId,
-          name: text(project.product?.brandName) || names.get(project.projectId) || GEO_DEFAULT_PROJECT_NAME,
+          name: geoProjectName(project, names.get(project.projectId)),
           product: { brandName: text(project.product?.brandName), genericName: text(project.product?.genericName) },
           coverageDays: project.coverageDays,
           engines: project.engines,
@@ -420,7 +432,7 @@ export class GeoService {
     const points = series.get(project.id) ?? new Map();
     return {
       ...project,
-      name: text(project.product?.brandName) || names.get(project.projectId) || GEO_DEFAULT_PROJECT_NAME,
+      name: geoProjectName(project, names.get(project.projectId)),
       overview: {
         metrics: GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({
           key,
