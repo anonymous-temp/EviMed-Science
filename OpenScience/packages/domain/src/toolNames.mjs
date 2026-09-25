@@ -60,6 +60,12 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'locate_quote',
   // measured visibility (the consumer LLM front-ends, not the record)
   'geo_visibility_probe',
+  // 「循证 GEO」: the project's own data through the control plane's GEO
+  // gateway, and the social channel real phrasings are collected from
+  // (geo_platform.py; build spec 2026-09-25 §4)
+  'geo_read',
+  'geo_write',
+  'social_posts_search',
   // pharmacy data
   'drug_label_search',
   'pharmacy_reference_search',
