@@ -85,10 +85,26 @@ function catalogue(name, fallback) {
   }
 }
 
-/** Suspect or failed answers in a row that pause an engine. */
-export const GEO_PROBE_BREAK_AFTER = catalogue("PROBE_CIRCUIT_BREAK_CONSECUTIVE", 3);
+/** Suspect or failed answers in a row that pause an engine (the owner's catalogue constant, in the domain's table). */
+export const GEO_PROBE_BREAK_AFTER = Number(geoConstant("PROBE_CIRCUIT_BREAK_CONSECUTIVE"));
 /** How often a paused engine's tab is re-checked. */
 export const GEO_PROBE_RECHECK_MS = 10 * 60_000;
+/**
+ * The measurement queue's probe timeout: the probe host's own ceiling is about
+ * five minutes a question, and an overnight round has no user waiting, so it
+ * is not the runtime tool's 150 s cap (`geoProbeTimeoutMs`).
+ */
+export const GEO_QUEUE_PROBE_TIMEOUT_MS = 360_000;
+const SCREENSHOT_TIMEOUT_MS = 60_000;
+/** A job's lease: the ask, its screenshot, and a margin for the writes around them. */
+const LEASE_MARGIN_MS = 60_000;
+/**
+ * How long a paused engine may hold a round open without a failed re-check:
+ * a pause alone is not proof the engine is down (its tab may be back at the
+ * next check), so its jobs are skipped only once a re-check since the pause
+ * failed, or after this long.
+ */
+export const GEO_PROBE_SKIP_AFTER_MS = 30 * 60_000;
 /** Asks one job may use before it is failed (the first and two retries). */
 export const GEO_JOB_MAX_ATTEMPTS = 3;
 /** Rounds of these kinds with more asks than this wait for the night window. */
@@ -171,18 +187,19 @@ export function nightWindowOpen(at, config) {
 // ───────────────────────── the breaker and the worker's state ─────────────────────────
 
 export class GeoProbeBreaker {
-  /** @param {{ threshold?: number, recheckMs?: number }} [options] */
-  constructor({ threshold = GEO_PROBE_BREAK_AFTER, recheckMs = GEO_PROBE_RECHECK_MS } = {}) {
+  /** @param {{ threshold?: number, recheckMs?: number, skipAfterMs?: number }} [options] */
+  constructor({ threshold = GEO_PROBE_BREAK_AFTER, recheckMs = GEO_PROBE_RECHECK_MS, skipAfterMs = GEO_PROBE_SKIP_AFTER_MS } = {}) {
     this.threshold = threshold;
     this.recheckMs = recheckMs;
-    /** @type {Map<string, { consecutive: number, pausedAt: number | null, lastCheckAt: number | null }>} */
+    this.skipAfterMs = skipAfterMs;
+    /** @type {Map<string, { consecutive: number, pausedAt: number | null, lastCheckAt: number | null, failedCheckAt: number | null }>} */
     this.engines = new Map();
   }
 
   /** @param {string} engine */
   #entry(engine) {
     let entry = this.engines.get(engine);
-    if (!entry) this.engines.set(engine, entry = { consecutive: 0, pausedAt: null, lastCheckAt: null });
+    if (!entry) this.engines.set(engine, entry = { consecutive: 0, pausedAt: null, lastCheckAt: null, failedCheckAt: null });
     return entry;
   }
 
@@ -201,7 +218,10 @@ export class GeoProbeBreaker {
       }
       const entry = this.#entry(engine);
       entry.consecutive = consecutive;
-      if (consecutive >= this.threshold) entry.pausedAt = now;
+      if (consecutive >= this.threshold) {
+        entry.pausedAt = now;
+        entry.failedCheckAt = null;
+      }
     }
   }
 
@@ -219,6 +239,7 @@ export class GeoProbeBreaker {
     if (entry.pausedAt === null && entry.consecutive >= this.threshold) {
       entry.pausedAt = now;
       entry.lastCheckAt = now;
+      entry.failedCheckAt = null;
       return true;
     }
     return false;
@@ -237,13 +258,30 @@ export class GeoProbeBreaker {
     });
   }
 
+  /**
+   * Paused engines whose remaining jobs a round may skip: a re-check since
+   * the pause found the tab still gone, or the pause is older than
+   * `skipAfterMs`. A freshly paused engine holds its round open.
+   * @param {number} now
+   */
+  skippable(now) {
+    return this.paused().filter((engine) => {
+      const entry = /** @type {{ pausedAt: number, failedCheckAt: number | null }} */ (this.engines.get(engine));
+      return (entry.failedCheckAt !== null && entry.failedCheckAt >= entry.pausedAt) || now - entry.pausedAt >= this.skipAfterMs;
+    });
+  }
+
   /** A re-check's result; true when the engine resumed. @param {string} engine @param {number} now @param {boolean} ready */
   checked(engine, now, ready) {
     const entry = this.#entry(engine);
     entry.lastCheckAt = now;
-    if (!ready) return false;
+    if (!ready) {
+      entry.failedCheckAt = now;
+      return false;
+    }
     entry.consecutive = 0;
     entry.pausedAt = null;
+    entry.failedCheckAt = null;
     return true;
   }
 }
@@ -256,7 +294,10 @@ export class GeoProbeBreaker {
  * @property {number} hostFailures
  * @property {boolean} seeded
  * @property {Map<string, number>} retriable   job id → vendor-busy answers in a row
- * @property {Map<string, number>} judgeAttempts
+ * @property {Map<string, number>} judgeAttempts   snapshot id → the answer's own judge failures
+ * @property {Map<string, { count: number, firstTick: number }>} judgeStops   snapshot id → provider-side failures it met, and the parse tick of the first
+ * @property {number} parseTicks     parse ticks run by this worker
+ * @property {number} lastJudgedTick the parse tick of the latest successful judgement
  * @property {any} judge
  * @property {any} upstream
  * @property {Set<string>} alerted
@@ -283,6 +324,9 @@ export function geoMeasureState(key) {
     seeded: false,
     retriable: new Map(),
     judgeAttempts: new Map(),
+    judgeStops: new Map(),
+    parseTicks: 0,
+    lastJudgedTick: -1,
     judge: null,
     upstream: null,
     alerted: new Set(),
@@ -483,7 +527,8 @@ async function probePass(deps, state, upstream, counts) {
     counts.probe = "busy_backoff";
     return;
   }
-  const timeoutMs = Math.max(1_000, Number(config.geoProbeTimeoutMs) || 360_000);
+  // The queue's own ceiling, not the runtime tool's: an overnight ask may take the probe host's full five minutes.
+  const timeoutMs = Math.max(1_000, Number(config.geoQueueProbeTimeoutMs) || GEO_QUEUE_PROBE_TIMEOUT_MS);
 
   // Paused engines whose tab may be back.
   const due = state.breaker.due(start.getTime());
@@ -509,7 +554,7 @@ async function probePass(deps, state, upstream, counts) {
       weeklyCap: Math.max(0, Number(config.geoWeeklyAskCap ?? 1_500) || 0),
     };
     const job = await store.leaseNextJob({
-      ...window, owner: state.owner, leaseUntil: new Date(at.getTime() + timeoutMs + 60_000), paused: state.breaker.paused(),
+      ...window, owner: state.owner, leaseUntil: new Date(at.getTime() + timeoutMs + SCREENSHOT_TIMEOUT_MS + LEASE_MARGIN_MS), paused: state.breaker.paused(),
     });
     if (!job) {
       counts.held = await store.heldJobs(window);
@@ -603,7 +648,7 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
   let screenshotSha256 = null;
   if (row.screenshotName) {
     try {
-      const shot = await upstream.screenshot({ name: row.screenshotName, signal: AbortSignal.timeout(60_000) });
+      const shot = await upstream.screenshot({ name: row.screenshotName, signal: AbortSignal.timeout(SCREENSHOT_TIMEOUT_MS) });
       const stored = await storeGeoScreenshot(String(config.dataDir ?? ""), shot.bytes);
       screenshotSha256 = stored.sha256;
       if (stored.stored) counts.screenshotsStored += 1;
@@ -654,7 +699,7 @@ function backoffMs(attempt) {
 /**
  * The probe host is busy: the job goes back without using an attempt (until
  * the probe has been busy too long), and the queue backs off.
- * @param {GeoMeasureDeps} deps @param {GeoMeasureState} state @param {{ id: string }} job @param {GeoProbeCounts} counts
+ * @param {GeoMeasureDeps} deps @param {GeoMeasureState} state @param {{ id: string, attempts: number }} job @param {GeoProbeCounts} counts
  */
 async function busy(deps, state, job, counts) {
   const now = (deps.now ?? (() => new Date()))();
@@ -662,7 +707,12 @@ async function busy(deps, state, job, counts) {
   state.busy.backoffMs = backoffMs(state.busy.consecutive);
   state.busy.until = now.getTime() + state.busy.backoffMs;
   const refund = state.busy.consecutive <= BUSY_MAX;
-  await deps.store.requeueJob(job.id, { now, refundAttempt: refund, errorCode: refund ? null : "probe_busy" });
+  if (!refund && job.attempts >= GEO_JOB_MAX_ATTEMPTS) {
+    // Busy past the limit with its asks used up: failed, not bounced forever.
+    await deps.store.finishJob(job.id, { now, status: "failed", errorCode: "probe_busy" });
+  } else {
+    await deps.store.requeueJob(job.id, { now, refundAttempt: refund, errorCode: refund ? null : "probe_busy" });
+  }
   counts.busy += 1;
   counts.probe = "busy_backoff";
   if (!refund) {
@@ -793,7 +843,9 @@ async function closeRounds(deps, state, inclusionEngines, counts) {
   const now = (deps.now ?? (() => new Date()))();
   // An unconfigured probe is a wait, not an absence: its engines keep a channel.
   const channels = [...GEO_PROBE_ENGINES, ...inclusionEngines];
-  const paused = state.breaker.paused();
+  // Only an engine confirmed down (a failed re-check since its pause, or a
+  // long pause) lets a round close without it; a fresh pause holds the round.
+  const paused = state.breaker.skippable(now.getTime());
   const open = await store.openRoundProgress({ paused, channels });
   if (counts.probe === "unconfigured" && open.some((round) => round.open > round.unchanneled)) {
     await alert(deps, state, { kind: "geo_probe_unconfigured", message: "GEO rounds are waiting for the probe host, which this deployment has not configured.",
