@@ -299,8 +299,8 @@ function validatedProduct(data, issues) {
 
 // --- claims -------------------------------------------------------------------------------
 
-const CLAIM_FIELDS = Object.freeze(["claimKey", "statement", "quote", "sourceRef", "sourceKind", "evidenceLevel", "population", "inLabel", "elements",
-  "verifiedAt", "validUntil", "status"]);
+const CLAIM_FIELDS = Object.freeze(["claimKey", "statement", "quote", "sourceRef", "sourceLabel", "sourceRefLabel", "sourceKind", "evidenceLevel",
+  "population", "inLabel", "elements", "verifiedAt", "validUntil", "status"]);
 
 /** @param {unknown[]} items @param {GeoIssue[]} issues */
 function validatedClaims(items, issues) {
@@ -320,6 +320,8 @@ function validatedClaims(items, issues) {
       statement: read.text("statement", 1000, { required: true }),
       quote: read.text("quote", 4000, { required: true, multiline: true }),
       sourceRef: read.text("sourceRef", 500, { required: true }),
+      // The reader's name for the source; the method's records call it sourceRefLabel.
+      sourceLabel: read.text(item.sourceLabel != null ? "sourceLabel" : "sourceRefLabel", 300),
       sourceKind: read.word("sourceKind", GEO_CLAIM_SOURCE_KINDS),
       evidenceLevel: read.text("evidenceLevel", 60),
       population: read.text("population", 300),

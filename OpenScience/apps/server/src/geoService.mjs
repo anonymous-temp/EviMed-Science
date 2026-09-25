@@ -640,7 +640,7 @@ export class GeoService {
       product: project.product,
       competitors: project.competitors,
       claims: claims.map((claim) => ({
-        id: claim.id, statement: claim.statement, quote: claim.quote, sourceRef: claim.sourceRef, sourceKind: claim.sourceKind,
+        id: claim.id, statement: claim.statement, quote: claim.quote, sourceRef: claim.sourceRef, sourceLabel: claim.sourceLabel, sourceKind: claim.sourceKind,
         evidenceLevel: claim.evidenceLevel, population: claim.population, inLabel: claim.inLabel, verifiedAt: claim.verifiedAt,
         validUntil: claim.validUntil, status: claim.status,
       })),

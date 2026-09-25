@@ -131,12 +131,25 @@ function Claims({ claims }: { claims: GeoClaim[] }) {
   );
 }
 
+/**
+ * A source reference as a reader can use it: a PMID or DOI as written, a
+ * preserved page or file by no name at all (its hash means nothing to a
+ * reader; the kind before it already says what it is).
+ */
+export function readableSourceRef(ref: string | null | undefined): string | null {
+  const value = (ref ?? "").trim();
+  if (!value) return null;
+  if (/^(pmid|doi|pmcid)\s*:\s*/i.test(value)) return value.replace(/^(pmid|doi|pmcid)\s*:\s*/i, (_match, kind: string) => `${kind.toUpperCase()} `);
+  if (/^(web-page|file|source|label):/i.test(value) || /^(src_|\.evimed-sources)/i.test(value)) return null;
+  return value;
+}
+
 /** 「说明书 · 国家药监局 2025 · 证据等级 A · 成人 · 9月22日核验」 */
 function ClaimMeta({ claim }: { claim: GeoClaim }) {
   const verified = monthDay(claim.verifiedAt);
   const parts = [
     claimSourceKindWord(claim.sourceKind),
-    claim.sourceRef || null,
+    claim.sourceLabel || readableSourceRef(claim.sourceRef),
     claim.evidenceLevel ? `证据等级 ${claim.evidenceLevel}` : null,
     claim.population || null,
     verified ? `${verified}核验` : null,

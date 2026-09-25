@@ -582,6 +582,9 @@ CREATE TABLE IF NOT EXISTS evimed_geo.schedule_marks (
 );
 CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_marks (geo_project_id, kind, state)
   WHERE state IN ('pending', 'claimed', 'running');
+-- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
+-- source_ref stays the machine reference the quote is checked against.
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
 `;
 }
 

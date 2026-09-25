@@ -114,6 +114,7 @@ export function claimFromRow(row) {
     statement: String(row.statement),
     quote: String(row.quote),
     sourceRef: String(row.source_ref),
+    sourceLabel: text(row.source_label),
     sourceKind: text(row.source_kind),
     evidenceLevel: text(row.evidence_level),
     population: text(row.population),
@@ -432,7 +433,7 @@ export class GeoStore {
    * statement, quote or source is the next version; otherwise the claim's
    * bookkeeping is updated in place.
    * @param {string} userId @param {string} geoId
-   * @param {Array<{ claimKey: string, statement: string, quote: string, sourceRef: string, sourceKind?: string | null,
+   * @param {Array<{ claimKey: string, statement: string, quote: string, sourceRef: string, sourceLabel?: string | null, sourceKind?: string | null,
    *   evidenceLevel?: string | null, population?: string | null, inLabel?: boolean | null, elements?: Record<string, any>,
    *   verifiedAt?: string | null, validUntil?: string | null, status?: string, runId?: string | null }>} items
    * @returns {Promise<Array<{ id: string, claimKey: string, version: number, change: 'created' | 'versioned' | 'updated' }>>}
@@ -445,12 +446,14 @@ export class GeoStore {
         const latest = (await client.query(`SELECT * FROM evimed_geo.claims WHERE geo_project_id = $1 AND claim_key = $2
           ORDER BY version DESC LIMIT 1 FOR UPDATE`, [geoId, item.claimKey])).rows[0];
         const values = [item.sourceKind ?? null, item.evidenceLevel ?? null, item.population ?? null, item.inLabel ?? null,
-          JSON.stringify(item.elements ?? {}), item.verifiedAt ?? null, item.validUntil ?? null, item.status ?? "active", item.runId ?? null];
+          JSON.stringify(item.elements ?? {}), item.verifiedAt ?? null, item.validUntil ?? null, item.status ?? "active", item.runId ?? null,
+          item.sourceLabel ?? null];
         const same = latest && folded(latest.statement) === folded(item.statement) && folded(latest.quote) === folded(item.quote)
           && folded(latest.source_ref) === folded(item.sourceRef);
         if (same) {
           await client.query(`UPDATE evimed_geo.claims SET source_kind = $2, evidence_level = $3, population = $4, in_label = $5,
-            elements = $6::jsonb, verified_at = $7, valid_until = $8, status = $9, run_id = coalesce($10, run_id), updated_at = now()
+            elements = $6::jsonb, verified_at = $7, valid_until = $8, status = $9, run_id = coalesce($10, run_id),
+            source_label = coalesce($11, source_label), updated_at = now()
             WHERE id = $1`, [latest.id, ...values]);
           written.push({ id: String(latest.id), claimKey: item.claimKey, version: Number(latest.version), change: "updated" });
           continue;
@@ -460,8 +463,8 @@ export class GeoStore {
         // clock_timestamp, not the transaction's now(): a write of thirty
         // claims lists them in the order they were written.
         await client.query(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref,
-            source_kind, evidence_level, population, in_label, elements, verified_at, valid_until, status, run_id, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, clock_timestamp(), clock_timestamp())`,
+            source_kind, evidence_level, population, in_label, elements, verified_at, valid_until, status, run_id, source_label, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, clock_timestamp(), clock_timestamp())`,
         [id, userId, geoId, item.claimKey, version, item.statement, item.quote, item.sourceRef, ...values]);
         written.push({ id, claimKey: item.claimKey, version, change: latest ? "versioned" : "created" });
       }

@@ -181,6 +181,8 @@ export interface GeoClaim {
   statement: string;
   quote: string;
   sourceRef: string;
+  /** The reader's name for the source; absent on claims written before it existed. */
+  sourceLabel?: string | null;
   sourceKind: "label" | "guideline" | "trial" | "review" | "literature" | "regulator" | "other" | null;
   evidenceLevel: string | null;
   population: string | null;
