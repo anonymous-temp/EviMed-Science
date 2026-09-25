@@ -320,7 +320,9 @@ class RealLedgerTests(unittest.TestCase):
         # skill call as a load), eight still never run (three of them internal).
         # On 2026-09-10 evidence-appraisal was accepted again on the release
         # carrying the gate fix, read rather than trusted: seven accepted.
-        self.assertEqual(statuses.count("not-run"), 8)
+        # On 2026-09-25 the 「循证 GEO」 module added geo-insight, geo-strategy
+        # and geo-proposal, none of them run yet: eleven never run.
+        self.assertEqual(statuses.count("not-run"), 11)
         self.assertEqual(statuses.count("accepted"), 7)
         self.assertEqual(statuses.count("failed"), 3)
         self.assertIn("notice:", checker.coverage_notice())

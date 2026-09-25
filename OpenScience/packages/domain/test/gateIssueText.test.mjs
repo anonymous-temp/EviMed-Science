@@ -58,10 +58,10 @@ test("every code a contract module raises without a check, and every run-side re
   /** Codes read out of the raising calls, both call shapes the modules use. */
   const raised = new Set();
   let walked = 0;
-  for (const name of ["contractRegistry.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs"]) {
+  for (const name of ["contractRegistry.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs", "geoContracts.mjs"]) {
     const source = await readFile(new URL(`../src/${name}`, import.meta.url), "utf8");
     assert.ok(source.length > 0, `${name} is empty — the walk read nothing`);
-    for (const match of source.matchAll(/\b(?:issue|notice|advisory)\(\s*['"]([a-z][a-z0-9_]+)['"]/g)) {
+    for (const match of source.matchAll(/\b(?:issue|notice|advisory|finding)\(\s*['"]([a-z][a-z0-9_]+)['"]/g)) {
       walked += 1;
       raised.add(match[1]);
     }

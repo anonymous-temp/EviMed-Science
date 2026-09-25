@@ -146,7 +146,7 @@
       "id": "geo-content",
       "visibility": "public",
       "evalHarness": "evals/geo-content",
-      "briefCount": 4,
+      "briefCount": 7,
       "realDelivery": {
         "status": "failed",
         "evidence": "evals/geo-content/results/2026-09-10-geo-001-suxiao-baseline",
@@ -158,7 +158,49 @@
         "evals/geo-content/results/2026-08-30-geo-002",
         "evals/geo-content/results/2026-08-30-geo-003"
       ],
-      "note": "Third real run, 2026-09-10 against evimed-20260910-dae363e on a clean project: brief geo-001 (速效救心丸 baseline) ran 66 minutes and ended specialist_deliverable_not_accepted, with nine files kept. What changed since the second run: the root planned and delegated, the child was injected with all six manifest skills (the skillsLoaded gate is now satisfied by construction), and the deliverable reached the contract three times. What blocked it, all three times, were two required findings the child could not act on: runtime_leakage quoted a line of delivery-summary.md but not the two words that matched (访问层级, from the closed leakage vocabulary), so each rewrite changed everything else; and clinical_safety_rule (medication response presented as diagnosing chest pain) carried the rule's generic message with no file, a line number into a concatenation of six files and every block, and not the sentence. Fixed after this run: both findings now name the matched text, and the pack's safety rules run per file and per block so a hit says where it is; tested in geoContentPack.test.mjs. Still open and outside the code: every probe round in all three runs failed at the channel level (183-184 s, exactly the client ceiling) because no GEO probe host is configured on this deployment, so any pack this capability can produce here is built on zero measurements — the advisory it correctly raises. The second run (2026-09-09, evimed-20260909-7f88cf2) did an hour's work in the root session and failed for a method it could never load; the first (evimed-20260909-c7434fb) failed because the skill never named the required files. Both packages are kept as siblings. Earlier retained deliverables under relatedEvidence were assembled by the harness (measure.mjs + build_pack.py), not by the capability, which is why this row left the accepted list."
+      "note": "2.0.0 (2026-09-25): the capability no longer measures — the platform does — and writes layered articles instead of content blocks; briefs geo-005…007 grade that, geo-001…004 remain the measurement corpus the platform's queue is held to. Third real run, 2026-09-10 against evimed-20260910-dae363e on a clean project: brief geo-001 (速效救心丸 baseline) ran 66 minutes and ended specialist_deliverable_not_accepted, with nine files kept. What changed since the second run: the root planned and delegated, the child was injected with all six manifest skills (the skillsLoaded gate is now satisfied by construction), and the deliverable reached the contract three times. What blocked it, all three times, were two required findings the child could not act on: runtime_leakage quoted a line of delivery-summary.md but not the two words that matched (访问层级, from the closed leakage vocabulary), so each rewrite changed everything else; and clinical_safety_rule (medication response presented as diagnosing chest pain) carried the rule's generic message with no file, a line number into a concatenation of six files and every block, and not the sentence. Fixed after this run: both findings now name the matched text, and the pack's safety rules run per file and per block so a hit says where it is; tested in geoContentPack.test.mjs. Still open and outside the code: every probe round in all three runs failed at the channel level (183-184 s, exactly the client ceiling) because no GEO probe host is configured on this deployment, so any pack this capability can produce here is built on zero measurements — the advisory it correctly raises. The second run (2026-09-09, evimed-20260909-7f88cf2) did an hour's work in the root session and failed for a method it could never load; the first (evimed-20260909-c7434fb) failed because the skill never named the required files. Both packages are kept as siblings. Earlier retained deliverables under relatedEvidence were assembled by the harness (measure.mjs + build_pack.py), not by the capability, which is why this row left the accepted list."
+    },
+    {
+      "id": "geo-insight",
+      "visibility": "public",
+      "evalHarness": "evals/geo-insight",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. No delivery yet."
+    },
+    {
+      "id": "geo-proposal",
+      "visibility": "public",
+      "evalHarness": "evals/geo-proposal",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. No delivery yet."
+    },
+    {
+      "id": "geo-strategy",
+      "visibility": "public",
+      "evalHarness": "evals/geo-strategy",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. No delivery yet."
     },
     {
       "id": "manuscript-support",

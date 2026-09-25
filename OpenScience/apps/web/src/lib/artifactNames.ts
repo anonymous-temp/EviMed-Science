@@ -36,6 +36,12 @@ const DOCUMENT_NAMES: Readonly<Record<string, string>> = Object.freeze({
   "appraisal-table.md": "证据评价表",
   "geo-content-pack.md": "内容包",
   "geo-measurement.md": "答案引擎测量",
+  // 「循证 GEO」 (2026-09-25): the reader's document of each step.
+  "geo-insight.md": "证据与问题地图",
+  "journey.md": "患者旅程矩阵",
+  "geo-strategy.md": "信源与目标",
+  "geo-content.md": "稿件清单",
+  "geo-proposal.md": "提案资料包说明",
 });
 
 /** The document's name for a workspace path, or its file name when it has none. */

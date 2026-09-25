@@ -1,217 +1,138 @@
 ---
 name: geo-content
-description: Measure how the consumer answering engines answer a set of real questions, then write evidence-bound content blocks a later measurement can be compared against.
+description: Step 6 of a 「循证 GEO」 project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
 metadata:
   evimed-agent: geo-content
 ---
 
-# GEO content
+# 循证 GEO — layered content
 
-Use this skill when someone needs to know **whether their product shows up when a
-patient asks an AI, and whether what it says is right** — and then wants content
-that stands a chance of being cited correctly next time.
+You run step 6, **内容**: articles an answering engine can quote correctly, all
+written from the project's one claim library so the same fact reads the same in
+every layer, and correction materials for every 讲错我方 the platform found.
+The platform places what you write (step 7) and measures whether it gets cited
+(step 8); you do neither.
 
-Two halves, in this order, always: **measure, then write.** A pack assembled
-before anyone looked is a brochure with citations attached.
+Work and write in Simplified Chinese. Product names, approval numbers, doses,
+label wording and source titles stay exactly as their sources write them.
 
-Unless the user asks otherwise, work and write in Simplified Chinese. Keep
-official product names, approval numbers, label wording, statistical symbols and
-source titles in their original form — translating them destroys the reachback
-that makes the pack checkable.
+## The method pack
 
----
+Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
+the `geo-private` root.
 
-## Part one: the measurement
+| Part | Load |
+|---|---|
+| the four layers from the claim library | `geo-layered-content` |
+| one article at a time, with its work record | `pharma-geo-article-optimizer` |
+| the medical review before any language edit | `geo-create-medical-review` |
+| 去 AI 味, protected spans byte-identical | `geo-humanize-register` |
+| correction letters, encyclopedia fixes, covering interpretations | `geo-correct-misstatements` (materials only; the platform confirms, re-measures and closes) |
+| which claim may go to which channel and audience | `geo-gate-compliance-channels` |
+| one step on its own | `geo-run-single-step` |
 
-### It has a denominator, so it can be wrong
+If a `geo-*` skill cannot be found, the method pack is not installed here: say
+so once — 「本部署未安装 GEO 方法包，以下按平台内置的简要方法完成」 — and write
+with this page.
 
-Everything else in this platform retrieves; this measures. A retrieval that fails
-leaves a gap somebody notices. **A measurement that fails and gets recorded
-produces a number that is simply wrong and looks exactly like a correct one.**
+## What goes into a batch
 
-Three things are not the same, and collapsing any two of them is the single most
-expensive mistake available here:
+Read before writing: `geo_read strategy` (battlefield first), `targets`,
+`questions` (the group and its typical question), `claims`, `errors` (open
+讲错我方 with their trace), `articles` (what exists — never rewrite a published
+article, write the next one). A batch is at most five articles unless the brief
+says otherwise: battlefield groups first, then correction materials for open
+讲错我方. Existing drafts the user brings in ("优化这几篇") start at the medical
+review and go through the same steps.
 
-| What happened | What it means | What it must never become |
+The layers (the platform's ids in brackets):
+
+| Layer | For | Must carry |
 |---|---|---|
-| The vendor answered, and did not mention the brand | A finding. Counts. | — |
-| The vendor errored, timed out, or was busy | A **measurement failure**. Retry it. | "did not mention the brand" |
-| The vendor was not logged in | It was **never asked**. | "did not mention the brand" |
+| 深度分析 (`deep`) | physicians | a GRADE evidence profile of at most 7 outcomes — absolute effects, time frame, certainty — copied, never self-graded |
+| 证据卡片 (`card`) | everyone; engines extract it | the seven panels: one-line answer, what it is, what the label says, when it does not apply, go to a doctor now if…, misconceptions actually measured, sources with the date checked; a benefit–risk fact box when trial data exist |
+| 科普稿件 (`popular`) | patients, families | one typical question per article, conclusion first, readable at middle-school level, certainty words 会 / 很可能 / 可能 / 目前尚不清楚 |
+| 问答 (`qa`) | search and community users | the first sentence answers; 300–600 characters; a certainty qualifier, absolute numbers, source and date |
+| 纠错材料 (`correction`) | the outlet or editor that carries the error | what was said, what the label says, the source, the requested fix |
 
-`mcp__evimed__geo_visibility_probe` marks all three for you: `inDenominator` is true only for
-the first. Take it at its word. If it returns `measurement: "failed"`, you did not
-measure — say so, or retry, but do not compute a rate over it.
+A lower layer carries no claim the upper layer does not; public layers stay
+inside the label and carry no purchase link; a prescription medicine's product
+content goes to professional channels only.
 
-**Run `op: "providers"` before any batch.** A batch started against an unready
-vendor spends its whole run producing failures, and you find out at the end.
+GEO structure (the method pack's mechanics): the title is the question; the
+conclusion sits in the first 80–150 characters; paragraphs stand alone; every
+article carries statistics, a verbatim quotation and a clickable source; one
+spelling of the product everywhere; author and medical reviewer visible.
 
-### One question, one platform, one fresh session
+## Humanize last, and keep the evidence still
 
-`newChat` defaults to 1 and should stay there. A warm session measures the
-conversation, not the question. Ask each platform separately — a "multi-platform"
-round that shares context is one measurement wearing five labels.
+Medical review first, then the language pass, and the pass changes only
+connecting prose: numbers, quotations, sources, drug names, doses and qualifiers
+are replaced by placeholders before it and compared byte for byte after it. The
+reviewer is never the writer: run the review in a fresh context. Never aim at
+an AI-detector score. Keep any AI-generation label the rules require.
 
-Record the **surface** beside every number: `mode` (default or deep) and
-`session` (new_chat or continued). Without it, a client who reproduces your
-result on their phone in a different mode sees a contradiction rather than a
-different measurement, and the whole report goes with it.
+## The two stops
 
-### The probe is one caller at a time
+Only two things wait for a person in a GEO project, and one of them is yours to
+raise: **an article with a clinical-safety finding you cannot resolve** is
+written, marked `safety.status: "open"` with the finding, and not rewritten
+into vagueness — the platform holds it back from distribution until a person
+releases it. The other stop, the budget, is not yours. Everything else is a
+default with its reason in `assumptions[]`.
 
-HTTP 429 / `geo_probe_busy` means wait, not "no answer". Retry it. Never cache
-it — a cached failure makes a resumed batch replay the failure forever while the
-progress bar advances.
+## Tools
 
-### What lands on disk
+- `mcp__evimed__geo_read`, `geo_write articles` (register each article: layer, title, group,
+  claim keys, content hash, safety) and `geo_write step`.
+- `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search`,
+  `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`, `mcp__evimed__locate_quote` for a claim
+  an article needs and the library lacks — add it through `geo_write claims`
+  first, then write from it. `mcp__evimed__web_read` to read a published page a correction
+  answers.
+- Measurement is the platform's. Never batch-probe inside a run;
+  `mcp__evimed__geo_visibility_probe` is only for a single question the user asks about.
 
-- `geo-probe-log.jsonl` — one line per probe call: question, platform, surface,
-  timestamp, latency, `inDenominator`, `answerDigest`, `screenshotName`. This is
-  the raw ledger. Every number in the report must be recomputable from it alone.
-- `geo-monitor.csv` — one row per (platform × question × round), with the date.
-  This is what the *next* run compares against; industry experience is 60–90 days
-  before movement, so the file matters more than this run's number does.
-- `geo-measurement.md` — what you measured, what you did not, and what the
-  numbers are. **Open it by saying what this round did not cover** — which
-  platforms, which modes, which question types. A reader who learns the scope
-  after the number has already believed the number.
+## The files, at their names
 
-### Rates, honestly
+Inside this deliverable's `deliverables/<id>/` directory:
 
-- Denominator = rounds that actually measured. Not rounds attempted.
-- If failures shrank the denominator, **write both numbers**. 1/1 and 1/2 are not
-  a rounding difference; one of them is double the other.
-- Never write a rate to more precision than the denominator supports. Three
-  rounds do not produce 33.3%.
-- Measured and estimated never share a cell, a column, or a colour. If you
-  project anything, it goes in its own column with its own label, and no
-  projection may exceed what the measured evidence supports.
+- `geo-content.md` — the reader's index of the batch: each article's title,
+  layer, the question it answers, the claims it rests on, its safety status, and
+  the assumptions. It carries no article text.
+- `articles.json` — `{ minimal, articles: [...], assumptions }`. Each article:
+  `id`, `layer` (`deep|card|popular|qa|correction`), `title`, `question`,
+  `groupKey`, `claimKeys`, `path` (`articles/<id>.md`), `recordPath`
+  (`records/<id>.md`), `audience`, `channel`, `author`, `reviewer`,
+  `updatedAt`, `safety: { status: "clear"|"open", findings }`.
+- `articles/<id>.md` — the article, exactly as it would be published.
+- `records/<id>.md` — its work record: the clinical path, each key sentence's
+  claim, what the medical review changed, and the protected-span comparison.
 
----
+## Registers do not mix
 
-## Part two: the content
-
-### The three paragraphs are the unit
-
-Every content block is **conclusion → basis → conditions**. Not a heading and
-three bullets; three paragraphs, in that order, each doing its own job:
-
-- **Conclusion** — the answer, first sentence, plainly. An answering engine that
-  has to read four paragraphs to find the claim will quote the fourth paragraph.
-- **Basis** — what makes it true, with the citations. Two resolvable citations
-  minimum; a label clause counts and is often the strongest one.
-- **Conditions** — who it does *not* apply to, and when it stops being true.
-  This is the paragraph that keeps the block honest and, in practice, the one
-  that gets cited when a patient's question has a qualifier in it.
-
-A block missing any of the three is rejected by the contract. That is not style
-enforcement — a two-paragraph block is a claim with no stated limits, which in a
-medical context is the defect.
-
-### Bound to evidence, not to a marketing brief
-
-- Every claim in a block traces to a citation in `citation-ledger.csv`.
-- A claim that goes beyond the label is off-label. It does not go in the pack.
-  Not softened, not hedged — out. Check with `mcp__evimed__drug_label_search` when unsure.
-- Claims about a competitor need the same evidence as claims about the product.
-  "Not mentioned by the engines" is a measurement about the engines, not a fact
-  about the competitor.
-- Author credential and update date on every block. They are contract fields
-  because E-E-A-T is what the engines weigh, but they are also just true: a
-  medical claim with no responsible name is not finished.
-
-### The machine-readable side
-
-- `jsonLd` per block: schema.org `MedicalWebPage`, plus `MedicalCondition` or
-  `Drug` where the block is about one. This is the part the engines parse.
-- `llms.txt` — the site-level fragment pointing at the pack.
-- An `faq` block for the pack. Questions in the user's words, taken from the
-  question set you actually measured, not invented.
-
-### The files, at their names
-
-The pack is checked by file name before any of it is read. Inside this
-deliverable's `deliverables/<id>/` directory, all of these are required:
-
-- `geo-measurement.md`, `geo-monitor.csv`, `geo-probe-log.jsonl` — the
-  measurement half, as described in part one.
-- `geo-content-pack.json` — the machine-readable pack: `blocks[]`, each with
-  its `conclusion`, `basis` and `conditions` paragraphs, `citations[]` (two or
-  more, resolvable in the ledger), `jsonLd`, `author` and `updatedAt`; plus
-  `llmsTxt`, `faq[]`, and `measurement.measured` equal to the rounds the probe
-  log actually holds.
-- `geo-content-pack.md` — the same blocks as a reader sees them.
-- `llms.txt` — the site-level fragment, also carried as `llmsTxt` in the pack.
-- `brand-entity.json` — the entity the pack is about: at least `name` and
-  `approval` (the registration number), taken from the label record, never
-  typed from memory.
-- `citation-ledger.csv` — one row per cited source.
-- `delivery-summary.md` — one page: which questions were measured on which
-  engines, how many blocks were written, and every assumption made where the
-  brief was silent.
-
-### Registers do not mix
-
-`geo-content-pack.md` is what a reader sees. Anything about *how the work went* —
-what you revised, what failed, what you would do next round — goes in
-`revision-notes.md`. That file exists so the report can be held to a register the
-notes are not; it is an outlet, not a trap, and nothing in it is scanned for
-tone.
-
-Do not write tool names, gateway names, platform hostnames, internal ids, or
-first-person retrieval narration into pack prose. "查了知网发现…" is a diary
-entry; the reader needs the finding and the citation.
-
----
+An article is for its reader. How the work went — what you revised, what the
+review found, what you would write next — goes in the work record or in
+`revision-notes.md`, never in an article, and the reply in the conversation
+says what was written and what the user can do next, without process narration,
+tool names or ids.
 
 ## Before you submit
 
-### The two fixed steps
+1. **`traceability-review`** — every number and quotation in every article
+   traces to a claim, and every claim to its source.
+2. **`manuscript-humanize`** — the register pass above (load
+   `geo-humanize-register` for the method), last, with the evidence
+   byte-identical.
 
-Both run on the finished pack, in this order, every time. They are steps of this
-capability, not options the run weighs — a pass that happens only when the model
-remembers it is a pass that happens on the easy runs and not the hard ones.
-
-1. **`traceability-review`** — every citation resolves, every number in prose has
-   a source in the artifacts, and every rate can be recomputed from
-   `geo-probe-log.jsonl`. Repair findings before the next step: humanizing the
-   prose around a rate whose denominator is wrong only makes the defect read
-   better. This step matters more here than anywhere else in the platform,
-   because a GEO pack's numbers are the deliverable.
-2. **`manuscript-humanize`** — register cleanup over the pack prose, with every
-   quotation, number, citation index and claim marker byte-identical. Load the
-   language-matched upstream rules it names. It is the last thing that touches
-   the document.
-
-Write what changed and why to `revision-notes.md` in this deliverable's
-directory — revision notes, replies to a rejection, and process description all
-live there, and the pack itself carries none of them.
-
-### Then submit
-
-```
-evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
-```
-
-It answers with the verdict, in place. A first submission that comes back with
-issues is the normal case, not a failure: fix everything it lists as 必修, submit
-again, repeat until it answers `ok`. The rules it applies are the same ones the
-server applies afterwards — there is one implementation of them, so a package
-this accepts is a package the server accepts.
-
-The verdict also carries advisory issues. **For this capability they are the
-ones to read most carefully**, because every one of them is about a number:
-nothing measured, a failed round counted, a surface not recorded, a denominator
-larger than the ledger supports. They do not decide the outcome. A pack that
-ships with any of them still standing is a pack whose numbers you have chosen
-not to defend.
-
-Do not read the gate's source to work out what will pass. A pack written to
-satisfy a checker rather than a reader is the failure this whole arrangement
-exists to prevent, and it is visible in the output.
+Then `evimed_submit_deliverable{deliverableId}`. There is one implementation of
+the rules it applies, the same the server applies. A clinical-safety finding in
+an article, an article the index names that is not in the package, and an index
+that does not parse must be fixed or, for safety, marked open; everything else
+is advice.
 
 ## What this capability does not do
 
-- It does not decide whether content may be published, or who may publish it.
-- It does not rank you against competitors on anything but what was measured.
-- It does not promise movement. 60–90 days is the industry's own experience, and
-  this run produces a baseline plus a comparable file, not an outcome.
+It does not place, pay for or schedule anything, and it does not measure. It
+does not promise citation: 60–90 days is the industry's own experience, and the
+platform's post-publication checks are what will say.

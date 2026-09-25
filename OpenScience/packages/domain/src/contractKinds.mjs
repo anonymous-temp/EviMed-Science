@@ -33,8 +33,13 @@ export const CONTRACT_KINDS = Object.freeze([
   'appraisal-table',
   'manuscript-section',
   'grant-proposal-package',
-  // P3 — GEO
+  // P3 — 「循证 GEO」: insight (evidence, journey, questions), strategy
+  // (sources, expectations, targets), content (layered articles), proposal
+  // (the client package and the weekly report)
+  'geo-insight-pack',
+  'geo-strategy-pack',
   'geo-content-pack',
+  'geo-proposal-pack',
   // Reserved: regulated, ships only when product and compliance decide (§9.9)
   'clinical-decision-brief',
   // Autopilot contract kinds (§24.7)
@@ -136,7 +141,10 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'appraisal-table': '证据质量评价表',
   'manuscript-section': '稿件章节',
   'grant-proposal-package': '课题申报包',
-  'geo-content-pack': 'GEO 内容包',
+  'geo-insight-pack': 'GEO 证据与问题地图',
+  'geo-strategy-pack': 'GEO 信源与目标',
+  'geo-content-pack': 'GEO 分层稿件',
+  'geo-proposal-pack': 'GEO 提案资料包',
   'clinical-decision-brief': '临床决策辅助简报',
   'episode-plan': '回合计划',
   'agenda-delta': '议程增量',

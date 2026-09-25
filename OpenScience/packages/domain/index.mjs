@@ -211,11 +211,12 @@ export {
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
-// contractRegistry — 6 exports
+// contractRegistry — 7 exports
 export {
   CONTRACT_VALIDATOR_KINDS,
   GATE_CHECK_IDS,
   METHOD_RELATIONS_ACTIONS,
+  contractCompanionPaths,
   layeredIssues,
   unreadableSubmission,
   runGate,

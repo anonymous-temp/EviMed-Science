@@ -8,7 +8,11 @@
     "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution",
     "source-understanding": "2 required on 2026-09-07, the opening contract for approved ING04/06: typed understanding and its frozen input copy. Control-plane publication independently validates against the canonical capture.",
     "method-candidate": "2 required on 2026-09-07, the opening count for the distillation contract: the proposed method and the record of what it rests on. distillation-notes.md ships `required: false` deliberately — the backstage channel is where the reflection goes, and making it required would be a blocking point nobody has an observed distribution for.",
-    "method-relations": "1 required on 2026-09-07, the opening count for the consolidation contract. The screen, the analyser's assignments and the builder's revisions are three actions of one file, so there is one required output and revision-notes.md stays optional."
+    "method-relations": "1 required on 2026-09-07, the opening count for the consolidation contract. The screen, the analyser's assignments and the builder's revisions are three actions of one file, so there is one required output and revision-notes.md stays optional.",
+    "geo-content-pack": "9 required on 2026-08-30 (the measurement ledger, the monitor table, the content-block pack and its companions); 2 on 2026-09-25, when geo-content 2.0.0 stopped measuring — measurement moved to the platform's own queue (build spec 2026-09-25 §0.3) — and the pack became layered articles: geo-content.md (the reader's index) and articles.json (the index the gate reads the articles through). Every 1.x file is gone, geo-probe-log.jsonl stays optional for an ad-hoc probe.",
+    "geo-insight-pack": "3 required on 2026-09-25, the opening contract of the 「循证 GEO」 insight step: the reader's report, the claim library and the question map.",
+    "geo-strategy-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 strategy step: the reader's report and strategy.json.",
+    "geo-proposal-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 client package: the cover and the package index. The office files are binary and listed in the index, never declared as outputs: the gate reads text."
   },
   "contracts": {
     "adr-analysis-report": {
@@ -167,59 +171,102 @@
         }
       ]
     },
-    "geo-content-pack": {
-      "capability": "geo-content",
-      "requiredCount": 9,
+    "geo-insight-pack": {
+      "capability": "geo-insight",
+      "requiredCount": 3,
       "outputs": [
         {
-          "path": "geo-measurement.md",
+          "path": "geo-insight.md",
           "required": true,
-          "addedOn": "2026-08-30"
+          "addedOn": "2026-09-25"
         },
         {
-          "path": "geo-monitor.csv",
+          "path": "claims.json",
           "required": true,
-          "addedOn": "2026-08-30"
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "question-map.json",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "journey.md",
+          "required": false,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
+          "addedOn": "2026-09-25"
+        }
+      ]
+    },
+    "geo-strategy-pack": {
+      "capability": "geo-strategy",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "geo-strategy.md",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "strategy.json",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
+          "addedOn": "2026-09-25"
+        }
+      ]
+    },
+    "geo-content-pack": {
+      "capability": "geo-content",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "geo-content.md",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "articles.json",
+          "required": true,
+          "addedOn": "2026-09-25"
         },
         {
           "path": "geo-probe-log.jsonl",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "geo-content-pack.json",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "geo-content-pack.md",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "llms.txt",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "citation-ledger.csv",
-          "required": true,
-          "addedOn": "2026-07-23"
-        },
-        {
-          "path": "brand-entity.json",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "delivery-summary.md",
-          "required": true,
-          "addedOn": "2026-08-30"
+          "required": false,
+          "addedOn": "2026-09-25"
         },
         {
           "path": "revision-notes.md",
           "required": false,
           "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "geo-proposal-pack": {
+      "capability": "geo-proposal",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "geo-proposal.md",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "proposal-package.json",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
+          "addedOn": "2026-09-25"
         }
       ]
     },

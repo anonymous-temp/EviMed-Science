@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "geo-insight",
+  "note": "Real briefs, not smoke tests: each is a product somebody would actually bring to 「循证 GEO」, chosen for the specific way steps 1–3 go wrong while looking finished — the wrong holder's label, a claim stronger than its source, a composed question filed as a patient's words. mustDo / mustNotDo are the rubric; the deterministic half (quote in its preserved source, a real phrasing with its URL, the files at their names) is the geo-insight-pack contract in @evimed/domain.",
+  "briefs": [
+    {
+      "id": "geo-insight-001-mazdutide-full",
+      "title": "信尔美（玛仕度肽注射液）：完整的证据、旅程与问题",
+      "why": "A new first-in-class weight-management injection with a dense social conversation about 减肥针. The ordinary full case, and the one where every downstream number depends on the claim library: an indication written wider than the label here becomes an AI answer judged 'correct' later.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "coverageDays": 90,
+        "engines": ["deepseek", "doubao", "yuanbao", "qianwen", "kimi"]
+      },
+      "mustDo": [
+        "Lock identity from the current China label: holder, form, strengths, prescription status, the approved indication and its population thresholds word for word.",
+        "Quote every claim verbatim from a preserved source and cite the .evimed-sources path it is in; the label's contraindications, warnings and special populations are claims too.",
+        "Run a patient line and a physician line, because it is a prescription medicine.",
+        "Hang every red flag the label names on a care node, and say which node needs a 就医 prompt.",
+        "Collect real phrasings through the social channel; where a platform returns nothing, write 无信号 for it.",
+        "Measure 40–120 questions across all four pools with 3–5 control groups of the same pool and difficulty, and put off-label and special-population questions in P4.",
+        "Record every default taken (coverage, engines, focus SKU) in assumptions[] with its reason and how to change it."
+      ],
+      "mustNotDo": [
+        "Write a claim that the medicine suits people outside the label's population (for example cosmetic weight loss at a normal BMI).",
+        "Carry a comparative efficacy claim against 司美格鲁肽 or 替尔泊肽 that no head-to-head source states.",
+        "File a question the run wrote itself as kind real.",
+        "Ask the user anything other than which product, if identity cannot be fixed.",
+        "Probe the engines in batch inside the run."
+      ],
+      "gradedOn": "Whether the claim library and the locked question set would let a pharmacist judge an AI answer correct or wrong without going back to the label."
+    },
+    {
+      "id": "geo-insight-002-lianhua-minimal",
+      "title": "连花清瘟胶囊：只列问题（最小测量集）",
+      "why": "A single step with no upstream, for a traditional Chinese medicine whose label speaks in 功能主治 rather than indications. The minimal path has to say it is minimal, and a TCM label split into parallel 'indications' is the failure a reader cannot see.",
+      "inputs": {
+        "brandEntity": {
+          "name": "连花清瘟胶囊",
+          "holder": "石家庄以岭药业股份有限公司"
+        },
+        "step": "questions",
+        "minimal": true
+      },
+      "mustDo": [
+        "Build only the minimal upstream the step needs: identity and label claims, then a set of 30 measured questions across the four pools.",
+        "Keep the label's 功能, 主治 and symptom layers as the label writes them, not as parallel indications.",
+        "Check the prescription or OTC status from the label record, not from memory.",
+        "Mark every file minimal: true and say in the report which parts are minimal and what the full version would add.",
+        "Mark questions not collected from a real post as kind typical."
+      ],
+      "mustNotDo": [
+        "Write a claim about treating or preventing an infection the label does not name.",
+        "Present 30 minimal questions as the project's full question map.",
+        "Fill an empty social-channel result with invented phrasings."
+      ],
+      "gradedOn": "Whether the minimal set is honest about being minimal and faithful to the label's own TCM wording."
+    },
+    {
+      "id": "geo-insight-003-clopidogrel-identity",
+      "title": "波立维（硫酸氢氯吡格雷片）：原研与仿制药的身份",
+      "why": "Clopidogrel has many generic holders in China, and patients ask whether 波立维 and 国产氯吡格雷 are the same. A claim library assembled from whichever label came up first mixes holders, strengths and label versions, and nothing on the page shows it.",
+      "inputs": {
+        "brandEntity": {
+          "name": "波立维",
+          "generic": "硫酸氢氯吡格雷片",
+          "holder": "赛诺菲"
+        },
+        "competitors": ["替格瑞洛（倍林达）", "国产硫酸氢氯吡格雷片"]
+      },
+      "mustDo": [
+        "Map the product family (strengths, packs, approval records) and pick one focus SKU by rule, recording the choice as an assumption.",
+        "Take every claim from this holder's current label, and mark any generic's label as not the brand's.",
+        "Put bleeding, surgery or dental work while taking it, stopping without advice, and interacting medicines in P4 and on care nodes.",
+        "List competitors by the same indication with the reason each is one."
+      ],
+      "mustNotDo": [
+        "Quote a generic manufacturer's label as 波立维's.",
+        "Write that the brand and a generic are or are not equivalent beyond what a regulator's document says.",
+        "Tell a patient to stop or switch the medicine."
+      ],
+      "gradedOn": "Whether every claim names the right holder's label, and whether the interaction and bleeding questions are measured rather than answered."
+    }
+  ]
+}
