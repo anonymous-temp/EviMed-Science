@@ -80,6 +80,18 @@ export const GEO_STEP_NAMES: Readonly<Record<GeoStepKey, string>> = Object.freez
   monitoring: "监测",
 });
 
+/** A step as a piece of work, for 「只做了信源分析」. */
+export const GEO_STEP_WORK: Readonly<Record<GeoStepKey, string>> = Object.freeze({
+  evidence: "证据整理",
+  journey: "旅程分析",
+  questions: "问题清单",
+  diagnosis: "诊断",
+  sources: "信源分析",
+  content: "写稿",
+  distribution: "投放",
+  monitoring: "监测",
+});
+
 export type GeoTabKey = "overview" | GeoStepKey;
 
 /** The project page's tabs, in order: 概览 then the eight steps. */
@@ -243,12 +255,17 @@ export const GEO_STARTERS: readonly GeoStarter[] = Object.freeze([
 
 /* -------------------------------------------------------------------- dates */
 
+/** A date or an instant; a bare `YYYY-MM-DD` is that day in the reader's calendar, not UTC midnight. */
+export function parseGeoDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const date = typeof value === "string" ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value) : value;
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** 「10月1日」 for a date, in the reader's calendar. */
 export function monthDay(value: string | Date | null | undefined): string | null {
-  if (!value) return null;
-  const date = typeof value === "string" ? new Date(value.length === 10 ? `${value}T00:00:00` : value) : value;
-  if (Number.isNaN(date.getTime())) return null;
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+  const date = parseGeoDate(value);
+  return date ? `${date.getMonth() + 1}月${date.getDate()}日` : null;
 }
 
 /**
@@ -257,8 +274,8 @@ export function monthDay(value: string | Date | null | undefined): string | null
  */
 export function coverageText(coverageDays: number | null | undefined, startedAt?: string | null): string {
   const days = typeof coverageDays === "number" && coverageDays > 0 ? coverageDays : GEO_DEFAULT_COVERAGE_DAYS;
-  const start = startedAt ? new Date(startedAt) : null;
-  if (start && !Number.isNaN(start.getTime())) {
+  const start = parseGeoDate(startedAt);
+  if (start) {
     const end = new Date(start.getTime() + (days - 1) * 86_400_000);
     return `${monthDay(start)} – ${monthDay(end)}`;
   }
@@ -267,8 +284,7 @@ export function coverageText(coverageDays: number | null | undefined, startedAt?
 
 /** 「第 3 周」 since the window started, or null before it has. */
 export function weekOf(startedAt: string | null | undefined, now: Date = new Date()): number | null {
-  if (!startedAt) return null;
-  const start = new Date(startedAt);
-  if (Number.isNaN(start.getTime()) || now < start) return null;
+  const start = parseGeoDate(startedAt);
+  if (!start || now < start) return null;
   return Math.floor((now.getTime() - start.getTime()) / (7 * 86_400_000)) + 1;
 }

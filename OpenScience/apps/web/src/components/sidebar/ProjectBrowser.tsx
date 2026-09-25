@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Search, X } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Radar, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -16,6 +16,7 @@ import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
 import { inputClasses } from "@/components/ui/Input";
 import { IconButton } from "@/components/ui/IconButton";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
+import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
  *  workspace list folds at the same count (`COLLAPSED_SESSION_LIMIT`). */
@@ -106,8 +107,12 @@ type Destination = () => { to: string; state?: unknown };
  * Conversations are read per project and only once a group is open
  * (`useProjectRuns`); which groups are open survives a reload.
  */
-export function ProjectBrowser() {
+export function ProjectBrowser({ geo = false }: {
+  /** Whether 「循证 GEO」 is offered: its projects then carry the radar icon. */
+  geo?: boolean;
+} = {}) {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
+  const geoProjectIds = useGeoProjectIds(geo, projects.map((project) => project.id).join("\u0000"));
   const navigate = useNavigate();
   const location = useLocation();
   const headingId = useId();
@@ -481,6 +486,7 @@ export function ProjectBrowser() {
                   <ProjectGroup
                     key={project.id}
                     project={project}
+                    geo={geoProjectIds.has(project.id)}
                     current={project.id === currentId}
                     standIn={projects.length === 0}
                     expanded={isExpanded(project.id)}
@@ -519,6 +525,7 @@ export function ProjectBrowser() {
  */
 function ProjectGroup({
   project,
+  geo,
   current,
   standIn,
   expanded,
@@ -537,6 +544,8 @@ function ProjectGroup({
   onWarm,
 }: {
   project: WebProject;
+  /** A GEO project: the radar instead of the folder. */
+  geo: boolean;
   current: boolean;
   /** The group shown for the tab's project while the list cannot be read:
    *  named 「当前项目」, and not renamable, since its real name is unknown. */
@@ -566,7 +575,7 @@ function ProjectGroup({
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const running = runs?.status === "ready" && runs.runs.some(isRunning);
-  const Icon = expanded ? FolderOpen : Folder;
+  const Icon = geo ? Radar : expanded ? FolderOpen : Folder;
 
   useEffect(() => {
     if (!renaming) return;

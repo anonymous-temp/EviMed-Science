@@ -78,7 +78,7 @@ export function AskAi({
       aria-busy={busy || undefined}
       onClick={() => {
         setBusy(true);
-        void open(project, text).catch(() => undefined).finally(() => setBusy(false));
+        void open({ projectId: project.projectId, sessionId: project.sessionId ?? null }, text).catch(() => undefined).finally(() => setBusy(false));
       }}
       className={cn(
         "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-caption text-accent outline-none transition-colors duration-fast hover:bg-surface-2 disabled:opacity-40",
