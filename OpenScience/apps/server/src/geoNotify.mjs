@@ -57,6 +57,12 @@ export function geoNoticeHref(sourceId) {
 /** @param {string} engine */
 export const geoEngineLabel = (engine) => /** @type {Record<string, string>} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine;
 
+/** An engine's name followed by a space when it ends in a Latin letter (「DeepSeek 把…」, 「豆包把…」). @param {string} engine */
+const spacedEngine = (engine) => {
+  const label = geoEngineLabel(engine);
+  return /[A-Za-z0-9]$/.test(label) ? `${label} ` : label;
+};
+
 /** @param {unknown} value @param {number} max */
 function clip(value, max) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -90,7 +96,7 @@ export function wrongOursTitle(project, error) {
       if (rest) return `${engine}${gap}把${word}说成${rest}`;
     }
   }
-  return `${engine}讲错${geoProductName(project)}：${statement}`;
+  return `${engine}${gap}讲错${geoProductName(project)}：${statement}`;
 }
 
 /** The inbox refuses a replay whose content moved; that event was sent. @param {unknown} error */
@@ -145,7 +151,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       counts[kind] = (counts[kind] ?? 0) + 1;
       return item;
     } catch (error) {
-      if (alreadySent(error)) return null;
+      if (alreadySent(error)) return true;
       counts.failed += 1;
       await audit("geo.notice", "failed", { userId: project.userId, projectId: project.projectId,
         code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "notification_unavailable", detail: kind });
@@ -191,7 +197,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
     /** 4. 第一次被 AI 引用. @param {any} project @param {{ engine: string, title: string | null }} facts */
     firstCited(project, { engine, title }) {
       return send(project, "first_cited", {
-        title: `${geoEngineLabel(engine)}第一次引用了${title ? `《${clip(title, 40)}》` : "投放的稿件"}`,
+        title: `${spacedEngine(engine)}第一次引用了${title ? `《${clip(title, 40)}》` : "投放的稿件"}`,
         body: `${geoProductName(project)}：投放的稿件出现在 AI 回答的引用里。`,
         severity: "info", source: source(project.id, "monitoring"), idempotencyKey: `geo:${project.id}:first-cited`,
       });
