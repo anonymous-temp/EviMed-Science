@@ -104,7 +104,7 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 23 exports
+// errorCodes — 24 exports
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
@@ -113,6 +113,7 @@ export {
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  EVIMED_CREDITS_ROUTE_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   RUNTIME_ERROR_CODES,
   RUN_OUTCOME_KINDS,
@@ -232,6 +233,15 @@ export {
   narrateRunEvent,
   narrateToolCall,
 } from './src/narration.mjs'
+
+// toolViewPhrases — 4 exports: the Chinese verb phrase a tool call wears in
+// the conversation, as data (the kernel page's bodies may import nothing).
+export {
+  KERNEL_TOOL_VIEW_NAMES,
+  TOOL_VIEW_PHRASE_NAMES,
+  toolViewPhrase,
+  toolViewPhraseTable,
+} from './src/toolViewPhrases.mjs'
 
 // runTranscript — 9 exports
 export {
@@ -631,14 +641,16 @@ export {
   summarizeRunPhases,
 } from './src/runPhases.mjs'
 
-// sourceTypes — 6 exports
+// sourceTypes — 8 exports
 export {
   EVIDENCE_SOURCE_TYPES,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
+  STUDY_BADGE_KINDS,
   evidenceSourceTypeOf,
   isEvidenceSourceType,
   sourceTypeOfSidecar,
   sourceTypeSidecarPath,
+  studyBadgeKind,
 } from './src/sourceTypes.mjs'
 
 // appraisalStructure — 9 exports: a claim's PICO, GRADE certainty in parts and

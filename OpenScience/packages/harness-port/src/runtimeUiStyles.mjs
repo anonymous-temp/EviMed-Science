@@ -7,7 +7,7 @@
  * functions with no asset pipeline, and a style object dies with the element
  * that carries it.
  *
- * The geometry is the shell's (`@evimed/domain/design-tokens`, 整改方案 §4),
+ * The geometry is the shell's (`@evimed/design-tokens`, 整改方案 §4),
  * written here as numbers because a body may import nothing: a card is 12 px
  * round, a control 8 and 24 px high inline, a tag 4 and 20 px high, every edge
  * one 1 px hairline, and text 14 px with 12 px for metadata. Colour arrives

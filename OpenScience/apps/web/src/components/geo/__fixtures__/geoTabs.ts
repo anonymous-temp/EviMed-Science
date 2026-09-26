@@ -24,6 +24,7 @@ export function cell(value: number | null, numerator: number | null, denominator
 }
 
 export function geoProject(steps: Partial<Record<GeoStepKey, GeoStepStatus>> = {}, overrides: Partial<GeoProject> = {}): GeoProject {
+  const stepRows = Object.fromEntries(Object.entries(steps).map(([key, status]) => [key, { status, requested: true }]));
   return {
     id: "geo_1",
     projectId: "prj_geo_1",
@@ -35,15 +36,18 @@ export function geoProject(steps: Partial<Record<GeoStepKey, GeoStepStatus>> = {
     tier: "2",
     budget: null,
     status: "active",
-    steps: Object.fromEntries(Object.entries(steps).map(([key, status]) => [key, { status, requested: true }])),
+    steps: stepRows,
     sessionId: "ses_geo_1",
     overview: {
       metrics: [
         { key: "gvi", cell: cell(38, null, 310), target: 55, trend: [] },
         { key: "mention", cell: cell(21, 65, 310), target: 35, trend: [] },
+        { key: "accuracy", cell: cell(92, 285, 310), target: 98, trend: [{ date: "2026-10-06", value: 88 }, { date: "2026-10-13", value: 92 }] },
+        { key: "citation", cell: cell(6, 2, 24), target: 20, trend: [] },
       ],
       week: [],
-      steps: {},
+      // The server sends the same map in both places; so does this.
+      steps: stepRows,
     },
     ...overrides,
   };

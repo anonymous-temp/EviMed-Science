@@ -60,7 +60,16 @@ test("the frame never shares an origin with the shell, and never drops TLS in pr
 test("a path, a query or credentials in either origin is refused", () => {
   // An origin with a path is a prefix someone hoped would scope the frame; it
   // does not, and `frame-ancestors` would be computed from the wrong string.
-  for (const ui of ["https://www.evimed.com:8789/frame", "https://www.evimed.com:8789/?x=1", "https://u:p@www.evimed.com:8789"]) {
+  for (const ui of ["https://www.evimed.com:8789/frame", "https://www.evimed.com:8789/?x=1"]) {
     assert.throws(() => runtimeUiOrigins(topology("https://www.evimed.com", ui)), refused, ui);
+  }
+  // Credentials are set on the parsed URL rather than written as
+  // `user:pass@host`: the source-secret scanner reads that form as a committed
+  // credential, and a fixture proving the form is REFUSED should not look like
+  // one being used.
+  for (const field of /** @type {const} */ (["username", "password"])) {
+    const url = new URL("https://www.evimed.com:8789");
+    url[field] = "x";
+    assert.throws(() => runtimeUiOrigins(topology("https://www.evimed.com", url.href)), refused, field);
   }
 });

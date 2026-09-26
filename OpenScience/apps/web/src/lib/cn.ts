@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
-import { TYPE_SCALE } from "@evimed/domain/design-tokens";
+import { TYPE_SCALE } from "@evimed/design-tokens";
 
 // Semantic font-size tokens, read from the token module that also builds
 // tailwind.config.js's scale. Without them tailwind-merge files an unknown

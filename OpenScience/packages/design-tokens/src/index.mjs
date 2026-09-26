@@ -59,7 +59,7 @@ export const COLOR_RAMPS = Object.freeze({
     100: '#dde9f9',
     200: '#bcd3f3',
     300: '#8fb5ea',
-    400: '#5690dd',
+    400: '#5f97e0', // the dark scheme's accent: 4.63 on its inset track, 6.20 on the dark canvas
     500: '#2a72d0',
     600: '#0a5dc1',
     700: '#0a4da0',
@@ -86,7 +86,12 @@ export const COLOR_RAMPS = Object.freeze({
     200: '#d6dce2',
     300: '#bac2ca',
     400: '#939ca6',
-    500: '#646d77',
+    // 4.61 on `surface-3` (#e4e8ec), the darkest ground metadata is drawn on —
+    // in the shell's inset tracks and in the kernel's own `bg-layer-3`. The
+    // design language quotes 5.3:1, which was measured on white only; at
+    // #646d77 the same text was 4.27:1 two layers down, and the kernel's
+    // tertiary label is this step.
+    500: '#5f686f',
     600: '#535b64',
     700: '#3e454d',
     800: '#2a3037',
@@ -113,7 +118,11 @@ export const COLOR_RAMPS = Object.freeze({
     100: '#fbe2de',
     300: '#e0877f',
     400: '#d1594e',
-    600: '#c0362c',
+    // 4.66 on `surface-3` (#e4e8ec) and 5.73 on the page; white on it 5.73. The
+    // design language quotes #c0362c, measured on white; two layers down the
+    // same red was 4.48:1, and a safety notice is the last text that may fall
+    // below AA.
+    600: '#bc342a',
     700: '#a72d24',
     800: '#9a2a22',
     950: '#3d100c',
@@ -124,7 +133,7 @@ export const COLOR_RAMPS = Object.freeze({
     100: '#ffeacc',
     300: '#e0b169',
     400: '#c98a1f',
-    600: '#a15c00',
+    600: '#985600', // 4.64 on `surface-3`, 5.72 on the page; white on it 5.72
     700: '#8c5000',
     800: '#7f4800',
     950: '#331d00',
@@ -135,7 +144,7 @@ export const COLOR_RAMPS = Object.freeze({
     100: '#d5ebdf',
     300: '#7cc0a0',
     400: '#3f9c73',
-    600: '#1e7a4c',
+    600: '#1c7347', // 4.75 on `surface-3`, 5.85 on the page; white on it 5.85
     700: '#1a6a42',
     800: '#155636',
     950: '#082418',
@@ -148,7 +157,7 @@ export const COLOR_RAMPS = Object.freeze({
     50: '#eef4fc',
     100: '#dde9f9',
     300: '#8fb5ea',
-    400: '#5690dd',
+    400: '#5f97e0', // the dark scheme's accent: 4.63 on its inset track, 6.20 on the dark canvas
     600: '#2a72d0',
     700: '#0a5dc1',
     800: '#0c3e7f',
@@ -214,19 +223,19 @@ export const COLOR_ROLES = Object.freeze(
     // A pill or segment whose ground already separates it from the page.
     'border-light': { light: 'n-200', dark: 'dark-border' },
     // The visible boundary of a control (WCAG 1.4.11 wants 3:1).
-    'border-control': { light: 'n-control', dark: 'dark-border-strong', note: '3.33 on the page, 3.10 on the sidebar' },
+    'border-control': { light: 'n-control', dark: 'dark-border-strong', note: '3.21 on the page, 3.10 on the sidebar' },
 
     /* --- text ----------------------------------------------------------- */
-    text: { light: 'n-900', dark: '#eef1f4', note: '15.09 on the page' },
-    'text-2': { light: 'n-700', dark: '#c3cad2', note: '9.30 on the page' },
-    'text-3': { light: 'n-500', dark: '#8d96a0', note: '5.13 on the page, 4.76 on surface-1 — nothing lighter carries text' },
+    text: { light: 'n-900', dark: '#eef1f4', note: '16.00 on the page' },
+    'text-2': { light: 'n-700', dark: '#c3cad2', note: '9.37 on the page' },
+    'text-3': { light: 'n-500', dark: '#8d96a0', note: '5.48 on the page, 4.76 on surface-1 — nothing lighter carries text' },
     // Icons and rules only. Never a word: 2.90 on the page.
     'text-graphic': { light: 'n-400', dark: 'n-600', note: 'graphics only, 2.90 — never text' },
 
     /* --- accent --------------------------------------------------------- */
     // One accent: the primary action, the link, the focus ring, the selected
     // row, the ✓ verified mark, and "our" series in a chart.
-    accent: { light: 'brand-600', dark: 'brand-400', note: '6.24 on the page; white on it 6.24' },
+    accent: { light: 'brand-600', dark: 'brand-400', note: '6.05 on the page; white on it 6.24' },
     'accent-fg': { light: '#ffffff', dark: 'dark-bg' },
     // Selected rows, the current sidebar row, the verified chip. Never text.
     'accent-soft': { light: 'brand-50', dark: 'brand-950' },
@@ -243,7 +252,7 @@ export const COLOR_ROLES = Object.freeze(
     'warn-strong': { light: 'warn-800', dark: 'warn-300', note: 'on warn-soft: 7.92' },
     // Red is spent on clinical safety, deletion and a severe error, and on
     // nothing else. Low certainty is not red: it is a shorter blue bar.
-    error: { light: 'danger-600', dark: 'danger-300', note: '5.49 on the page' },
+    error: { light: 'danger-600', dark: 'danger-300', note: '5.53 on the page' },
     'error-fg': { light: '#ffffff', dark: 'dark-bg' },
     danger: { light: 'danger-600', dark: 'danger-300' },
     'danger-soft': { light: 'danger-50', dark: 'danger-950' },
@@ -251,7 +260,7 @@ export const COLOR_ROLES = Object.freeze(
     info: { light: 'info-700', dark: 'info-300' },
     'info-soft': { light: 'info-50', dark: 'info-950' },
     // Links wear the accent: one accent colour on the whole product.
-    link: { light: 'brand-600', dark: 'brand-400', note: '6.24 on the page' },
+    link: { light: 'brand-600', dark: 'brand-400', note: '6.05 on the page' },
 
     /* --- product marks -------------------------------------------------- */
     // A verified claim, in the brand colour on purpose: verification is the

@@ -424,6 +424,18 @@ services:
       OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS:
       OPEN_SCIENCE_MEDIA_MARKET_ALLOW_PLAINTEXT:
       OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY:
+      # 灵豆 settlement (evimedCreditsService.mjs, fusion plan §9.6): a finished
+      # run's already-recorded CNY, charged once to EviMed's credits service in
+      # its own currency. Value-less: unset keeps the module off, and off means
+      # no routes, no schema, no refused start and no charge. The key is the
+      # EviMed one bound above (OPEN_SCIENCE_EVIMED_API_KEY_FILE) — one secret,
+      # one rotation. The rate has no default: without it nothing settles.
+      OPEN_SCIENCE_EVIMED_CREDITS_ENABLED:
+      OPEN_SCIENCE_EVIMED_CREDITS_URL:
+      OPEN_SCIENCE_EVIMED_CREDITS_BALANCE_URL:
+      OPEN_SCIENCE_EVIMED_CREDITS_TIMEOUT_MS:
+      OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY:
+      OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS:
       OPEN_SCIENCE_REVIEW_ENABLED:
       OPEN_SCIENCE_REVIEW_MODEL:
       OPEN_SCIENCE_REVIEW_API_BASE:
@@ -476,6 +488,16 @@ services:
       OPEN_SCIENCE_OIDC_ALLOWED_EMAIL_DOMAINS: ${OPEN_SCIENCE_OIDC_ALLOWED_EMAIL_DOMAINS:-}
       OPEN_SCIENCE_OIDC_TIMEOUT_MS: ${OPEN_SCIENCE_OIDC_TIMEOUT_MS:-10000}
       OPEN_SCIENCE_OIDC_FLOW_TTL_MS: ${OPEN_SCIENCE_OIDC_FLOW_TTL_MS:-600000}
+      # The `evimed` login mode (fusion plan 2026-09-26 §9.2): the EviMed shell's
+      # signed-in user becomes a Science session. Value-less so unset stays
+      # absent from the container and the code's own defaults apply — the mode is
+      # off, and the introspection endpoint is the one thing it cannot default.
+      # The platform key it authenticates with is the evimed-api-key mount this
+      # service already carries.
+      OPEN_SCIENCE_EVIMED_AUTH_ENABLED:
+      OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL:
+      OPEN_SCIENCE_EVIMED_INTROSPECT_TIMEOUT_MS:
+      OPEN_SCIENCE_EVIMED_INTROSPECT_CACHE_TTL_MS:
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_ALLOW_MOCK_RUNTIME: ${OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:-false}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}

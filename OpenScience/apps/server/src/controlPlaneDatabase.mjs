@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS ${schema}.users (
   id text PRIMARY KEY,
   name text NOT NULL,
   password_hash text,
-  auth_type text NOT NULL CHECK (auth_type IN ('local', 'oidc', 'development')),
+  auth_type text NOT NULL CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((auth_type = 'local' AND password_hash IS NOT NULL) OR auth_type <> 'local')
@@ -88,6 +88,23 @@ BEGIN
     INSERT INTO ${schema}.schema_migrations(version) VALUES (2) ON CONFLICT (version) DO NOTHING;
   END IF;
 END $default_project_name$;
+
+-- 2026-09-26 (fusion plan section 9.2). A Science account provisioned from an
+-- EviMed shell session authenticates by neither a password of ours nor an OIDC
+-- provider, so it carries an auth_type of its own. The kind is recorded rather
+-- than folded into 'oidc' because step two of the same plan moves these
+-- accounts to real OIDC, and that migration has to be able to find them.
+--
+-- Written as a drop-and-add rather than under a version guard: the statement is
+-- the constraint this build requires, and a database whose constraint is wrong
+-- for any reason is repaired by starting. The table holds one row per account,
+-- so revalidating it costs nothing.
+ALTER TABLE ${schema}.users DROP CONSTRAINT IF EXISTS users_auth_type_check;
+ALTER TABLE ${schema}.users ADD CONSTRAINT users_auth_type_check
+  CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed'));
+
+INSERT INTO ${schema}.schema_migrations(version) VALUES (3)
+ON CONFLICT (version) DO NOTHING;
 `;
 
 /** @returns {Error & Record<string, any>} An Error carrying the extra fields its
@@ -234,6 +251,6 @@ export class ControlPlaneDatabase {
 
 export const CONTROL_PLANE_SCHEMA = schema;
 /** The migration version this build writes last, and the one readiness
- *  requires: 2 since the project archive column and the default-name
- *  migration (2026-09-18). */
-export const CONTROL_PLANE_SCHEMA_VERSION = 2;
+ *  requires: 3 since the `evimed` account kind (2026-09-26); 2 was the project
+ *  archive column and the default-name migration (2026-09-18). */
+export const CONTROL_PLANE_SCHEMA_VERSION = 3;

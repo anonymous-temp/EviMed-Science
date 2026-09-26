@@ -21,6 +21,7 @@ import { RouteError } from "./routes/RouteError";
  */
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
+const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
@@ -105,6 +106,12 @@ export const routes: RouteObject[] = [
       ],
     }],
   },
+  // The component gallery: every primitive in every state, outside the shell
+  // and outside a session. CI screenshots it and diffs the result, which is how
+  // changing a component's look becomes a review with a picture in it. Under
+  // `/app` it would have needed a login and drawn the sidebar around itself —
+  // neither of which is the thing being compared. Not in a production build.
+  ...(import.meta.env.PROD ? [] : [{ path: "/__gallery", element: <GalleryPage />, errorElement: <RouteError /> }]),
   { path: "/", element: <Navigate to="/app/chat" replace /> },
   // The paths this shell used before it had a prefix. They were linked to from
   // runs, from notification mail and from people's bookmarks, and a redirect

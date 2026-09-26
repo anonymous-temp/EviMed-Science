@@ -20,6 +20,42 @@ import {
 const stateWriteQueues = new Map();
 
 /**
+ * Account kinds whose credential lives outside this deployment, so the row
+ * carries no password hash: `oidc` is an identity provider's subject, `evimed`
+ * is a user of the EviMed shell whose session the control plane introspected
+ * (fusion plan §9.2). They are listed once because three places used to decide
+ * it separately — the reader, the writer and the upsert — and a value one of
+ * them did not know was silently rewritten to `local`, which is an account with
+ * no password and no way in.
+ */
+export const EXTERNAL_AUTH_TYPES = Object.freeze(["oidc", "evimed"]);
+
+/**
+ * The routes a caller reaches before it has a session, and so the routes the
+ * CSRF gate cannot apply to: a CSRF token is bound to a session, and requiring
+ * one here would make them unreachable.
+ *
+ * They share one rule rather than each getting a weaker one of its own. Every
+ * one of them lets a cross-site page make a visitor's browser end up signed in
+ * as an account the page chose; every one is bounded by the auth rate limiter;
+ * and none can reach data that was already there. The EviMed session exchange
+ * is the weakest case of the four — the only account it can produce is the
+ * visitor's own, because the identity comes from EviMed's answer about the
+ * credential the browser already had (fusion plan §9.2).
+ */
+const SESSIONLESS_AUTH_PATHS = Object.freeze([
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/dev-login",
+  "/api/auth/evimed/session",
+]);
+
+/** @param {unknown} value */
+function externalAuthType(value) {
+  return EXTERNAL_AUTH_TYPES.includes(/** @type {string} */ (value));
+}
+
+/**
  * What the seeded project is called (C4, 2026-09-18). It was 「Default
  * Project」 — English, the first thing under the wordmark, and unrenamable —
  * and it reads as a place the researcher owns rather than a system slot.
@@ -278,17 +314,7 @@ export class InMemoryStore {
     if (deviceSessionOf(req)) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-    // The three routes a caller reaches before it has a session. A CSRF token
-    // is bound to a session, so requiring one here would make them
-    // unreachable. Registration joins login rather than getting a weaker rule
-    // of its own: both let a cross-site page make a visitor's browser end up
-    // signed in as an account the page chose, both are bounded by the auth
-    // rate limiter, and neither can reach data that was already there.
-    if (
-      pathname === "/api/auth/login" ||
-      pathname === "/api/auth/register" ||
-      pathname === "/api/auth/dev-login"
-    ) return;
+    if (SESSIONLESS_AUTH_PATHS.includes(pathname)) return;
 
     await this.loadSessions();
     const cookies = parseCookies(req.headers.cookie ?? "");
@@ -396,7 +422,7 @@ export class InMemoryStore {
     }
     for (const record of records) {
       const id = safeId(record.id, "username");
-      const authType = record.authType === "oidc" ? "oidc" : "local";
+      const authType = externalAuthType(record.authType) ? String(record.authType) : "local";
       this.users.set(id, {
         id,
         tenantId: id,
@@ -425,11 +451,11 @@ export class InMemoryStore {
 
   async saveUsers() {
     const users = [...this.users.values()]
-      .filter((user) => user.passwordHash || user.authType === "oidc")
+      .filter((user) => user.passwordHash || externalAuthType(user.authType))
       .map((user) => ({
         id: user.id,
         name: user.name,
-        authType: user.authType === "oidc" ? "oidc" : "local",
+        authType: externalAuthType(user.authType) ? user.authType : "local",
         ...(user.passwordHash ? { passwordHash: user.passwordHash } : {}),
       }));
     await writeJsonState(this.config, this.config.usersFile, {
@@ -470,11 +496,24 @@ export class InMemoryStore {
     await this.saveUsers();
   }
 
-  async upsertOidcUser(userId, name) {
-    const id = safeId(userId, "OIDC user id");
+  /**
+   * The account behind an identity this deployment did not authenticate itself:
+   * created the first time it is seen, with a personal tenant of its own, and
+   * resolved to the same account every time after. The caller has already
+   * turned the provider's subject into an id of ours — nothing of the
+   * credential it came from is stored here.
+   *
+   * @param {string} userId @param {string} name
+   * @param {"oidc" | "evimed"} authType
+   */
+  async upsertExternalUser(userId, name, authType) {
+    const id = safeId(userId, `${authType} user id`);
     await this.loadUsers();
     const existing = this.users.get(id);
-    if (existing && existing.authType !== "oidc") {
+    // An id that already belongs to another kind of account is refused rather
+    // than converted: a password account and an external identity that collide
+    // are two people until someone says otherwise.
+    if (existing && existing.authType !== authType) {
       throw new HttpError(409, "identity_collision", "External identity conflicts with an existing account.");
     }
     const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 128) : "EviMed User";
@@ -485,7 +524,7 @@ export class InMemoryStore {
       tenantId: id,
       name: displayName,
       passwordHash: null,
-      authType: "oidc",
+      authType,
       rootDir: userRoot,
     };
     const changed = !existing || user.name !== displayName || this.deletedUsers.has(id);
@@ -494,6 +533,17 @@ export class InMemoryStore {
     this.users.set(id, user);
     if (changed) await this.saveUsers();
     return user;
+  }
+
+  /** @param {string} userId @param {string} name */
+  async upsertOidcUser(userId, name) {
+    return this.upsertExternalUser(userId, name, "oidc");
+  }
+
+  /** The account behind a user of the EviMed shell (fusion plan §9.2).
+   *  @param {string} userId @param {string} name */
+  async upsertEvimedUser(userId, name) {
+    return this.upsertExternalUser(userId, name, "evimed");
   }
 
   async userById(id) {
@@ -1013,17 +1063,7 @@ export class PostgresStore extends InMemoryStore {
     if (deviceSessionOf(req)) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-    // The three routes a caller reaches before it has a session. A CSRF token
-    // is bound to a session, so requiring one here would make them
-    // unreachable. Registration joins login rather than getting a weaker rule
-    // of its own: both let a cross-site page make a visitor's browser end up
-    // signed in as an account the page chose, both are bounded by the auth
-    // rate limiter, and neither can reach data that was already there.
-    if (
-      pathname === "/api/auth/login" ||
-      pathname === "/api/auth/register" ||
-      pathname === "/api/auth/dev-login"
-    ) return;
+    if (SESSIONLESS_AUTH_PATHS.includes(pathname)) return;
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
     const key = sessionId ? sessionKey(sessionId) : null;
@@ -1089,8 +1129,12 @@ export class PostgresStore extends InMemoryStore {
     );
   }
 
-  async upsertOidcUser(userId, name) {
-    const id = safeId(userId, "OIDC user id");
+  /** @param {string} userId @param {string} name @param {"oidc" | "evimed"} authType */
+  async upsertExternalUser(userId, name, authType) {
+    const id = safeId(userId, `${authType} user id`);
+    if (!EXTERNAL_AUTH_TYPES.includes(authType)) {
+      throw new HttpError(400, "invalid_id", "Unknown external identity kind.");
+    }
     const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 128) : "EviMed User";
     return this.database.transaction(async (client) => {
       await lockUserIdentity(client, id);
@@ -1098,16 +1142,16 @@ export class PostgresStore extends InMemoryStore {
         `SELECT id, name, password_hash, auth_type FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1 FOR UPDATE`,
         [id],
       );
-      if (existing.rowCount && existing.rows[0].auth_type !== "oidc") {
+      if (existing.rowCount && existing.rows[0].auth_type !== authType) {
         throw new HttpError(409, "identity_collision", "External identity conflicts with an existing account.");
       }
       await client.query(`DELETE FROM ${CONTROL_PLANE_SCHEMA}.deleted_users WHERE id = $1`, [id]);
       const result = await client.query(
         `INSERT INTO ${CONTROL_PLANE_SCHEMA}.users(id, name, password_hash, auth_type)
-         VALUES ($1, $2, NULL, 'oidc')
+         VALUES ($1, $2, NULL, $3)
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
          RETURNING id, name, password_hash, auth_type`,
-        [id, displayName],
+        [id, displayName, authType],
       );
       const user = databaseUser(this.config, result.rows[0]);
       await ensureUserRoot(this.config, user.rootDir);

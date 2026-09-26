@@ -10,7 +10,7 @@ import { conversationTitle } from "@/lib/conversationTitles";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
-import { isGeoTab } from "@/components/geo/geoText";
+import { isGeoTab } from "@/components/geo/geoTabs";
 import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
 
 /** Why this surface is showing an alert instead of the conversation. */

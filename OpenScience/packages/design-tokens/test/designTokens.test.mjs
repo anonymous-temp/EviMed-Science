@@ -22,7 +22,7 @@ import {
   colorRole,
   resolveColor,
 } from '../src/index.mjs'
-import { contrastFailures } from '../src/contrast.mjs'
+import { contrastFailures, quotedContrast } from '../src/contrast.mjs'
 import { designTokensCss } from '../src/css.mjs'
 import { kernelThemeTokens } from '../src/kernel.mjs'
 
@@ -120,4 +120,20 @@ test('the artifacts carry the values, not a copy of them', () => {
   assert.equal(JSON.parse(files['echarts-theme.json']).light.color[0], '#0a5dc1')
   assert.equal(JSON.parse(files['dsh-theme.json'])['--dsw-alias-link'].light, '#0a5dc1')
   assert.ok(JSON.parse(files['figma-tokens.json']).global.ramp.brand['600'])
+})
+
+test('every contrast figure the table quotes is the figure it measures', () => {
+  // The `note` fields were prose until 2026-09-26 and two of them were already
+  // fiction. A number a reader can quote has to be one the code can reproduce,
+  // or the table is documentation of itself.
+  const mismatched = []
+  for (const [role, entry] of Object.entries(COLOR_ROLES)) {
+    const quoted = /(\d+\.\d+) on the page/.exec(entry.note ?? '')
+    if (!quoted) continue
+    const measured = quotedContrast(resolveColor(colorRole(role, 'light')), resolveColor(colorRole('bg', 'light')))
+    if (Math.abs(measured - Number(quoted[1])) > 0.005) {
+      mismatched.push(`--${role}: note says ${quoted[1]}, measures ${measured.toFixed(2)}`)
+    }
+  }
+  assert.deepEqual(mismatched, [])
 })

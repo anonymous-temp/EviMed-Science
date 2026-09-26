@@ -110,9 +110,44 @@ describe("the evidence the frame is told", () => {
     expect(evidence.claims.map((claim) => [claim.claimId, claim.status, claim.sourceType ?? null])).toEqual([["CLM-001", "verified", "rct"], ["CLM-002", "unchecked", null]]);
     expect(evidence.claims[1].claim.length).toBe(300);
     expect(evidence.sources).toEqual([
-      { title: "ROCKET AF", identifier: "PMID:21830957", url: "https://pubmed.ncbi.nlm.nih.gov/21830957/", sourceType: "rct", claims: 2 },
-      { title: "ARISTOTLE", identifier: "PMID:21870978", claims: 1 },
+      { title: "ROCKET AF", identifier: "PMID:21830957", url: "https://pubmed.ncbi.nlm.nih.gov/21830957/", sourceType: "rct", quote: "q", claimId: "CLM-001", claims: 2 },
+      // `other` is the source-type table saying it cannot tell from this
+      // record; it wears no badge but it is still counted in the composition.
+      { title: "ARISTOTLE", identifier: "PMID:21870978", sourceType: "other", claimId: "CLM-002", claims: 1 },
     ]);
+  });
+
+  // What a source card draws (融合方案 §8.3): the quotation and the verdict
+  // `claim_verification` reached on it, the retraction notice Crossref
+  // returned, and the identifier a reader copies. Each rides with the source
+  // it belongs to, by the index the verification reports its verdicts in.
+  it("carries each source's quotation, its ✓/⚠ verdict and its retraction notice, and grades the body in code", () => {
+    const matrix = JSON.stringify({ claims: [
+      { claimId: "CLM-001", claim: "a", claimType: "direct", sourceTitle: "UKPDS 34", identifier: "PMID 9742977", supportQuote: "36% for all-cause mortality",
+        artifactPath: ".evimed-sources/a/page.txt", sourceType: "rct", journal: "The Lancet", year: "1998", funding: "industry" },
+      { claimId: "CLM-002", claim: "b", claimType: "direct", sourceTitle: "A meta-analysis", artifactPath: ".evimed-sources/b/page.txt", sourceType: "meta-analysis" },
+    ] });
+    const evidence = frameEvidenceFrom("run-1", "deliverables/e/clinical-evidence-report.md", "deliverables/e/clinical-evidence-matrix.json", matrix, {
+      claims: [
+        { claimId: "CLM-001", claimType: "direct", status: "quote_not_found", sources: [{ artifactPath: ".evimed-sources/a/page.txt", status: "quote_not_found", sourceType: "rct" }] },
+        { claimId: "CLM-002", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/b/page.txt", status: "verified", sourceType: "meta-analysis",
+          doi: "10.1000/meta", updates: [{ kind: "retraction", noticeDoi: "10.1000/notice", date: "2024-03-01", source: "retraction-watch" }] }] },
+      ],
+      counts: { verified: 1, quote_not_found: 1 },
+    });
+    expect(evidence.sources[0]).toMatchObject({
+      title: "UKPDS 34", identifier: "PMID 9742977", sourceType: "rct", journal: "The Lancet", year: "1998", funding: "industry",
+      quote: "36% for all-cause mortality", status: "quote_not_found", claimId: "CLM-001",
+    });
+    expect(evidence.sources[0].updates).toBeUndefined();
+    expect(evidence.sources[1]).toMatchObject({ title: "A meta-analysis", identifier: "DOI 10.1000/meta", status: "verified" });
+    expect(evidence.sources[1].updates).toEqual([{ kind: "retraction", noticeDoi: "10.1000/notice", date: "2024-03-01", source: "retraction-watch" }]);
+    // Two designs, no participant count and no interval: the grade is the one
+    // the decidable items give, and its reasons are the facts behind it.
+    expect(evidence.grade?.letter).toMatch(/^[ABCDU]$/);
+    expect(evidence.grade?.reasons.length).toBeGreaterThan(0);
+    // Nothing writes the applicability premises yet, and none are invented.
+    expect(evidence.premises).toBeUndefined();
   });
 });
 

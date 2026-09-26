@@ -38,6 +38,7 @@ import {
   routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
+import { ROUTING_DECISION_PATH, createRoutingDecisionRoutes } from "./routingDecision.mjs";
 import { RunTitleScheduler, RunTitler } from "./runTitles.mjs";
 import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
@@ -101,6 +102,10 @@ import { ReviewService, replyOfRun, reviewMetricFamilies } from "./reviewService
 import { providerRefusalMetricFamily } from "./providerRefusals.mjs";
 import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
+import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
+import { EvimedCreditsService } from "./evimedCreditsService.mjs";
+import { EvimedCreditsWorker } from "./evimedCreditsWorker.mjs";
+import { createEvimedCreditsRoutes, evimedCreditsRoutePattern } from "./evimedCreditsRoutes.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
@@ -172,6 +177,10 @@ import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGate
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
+// The `evimed` login mode (fusion plan 2026-09-26 §9.2): the EviMed shell's
+// signed-in user becomes a Science session without signing in twice.
+import { EvimedAuthService, evimedAuthReadiness } from "./evimedAuthService.mjs";
+import { createEvimedAuthRoutes, evimedAuthRoutePattern } from "./evimedAuthRoutes.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RUNTIME_CAPABILITY_SKILLS_DIR,
@@ -490,6 +499,7 @@ function routePattern(pathname) {
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
+  if (pathname.startsWith("/api/auth/evimed")) return evimedAuthRoutePattern(pathname);
   if (
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
@@ -505,6 +515,9 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/tasks/")) return "/api/tasks/:taskId";
   if (pathname.startsWith("/api/logs/")) return "/api/logs/:kind";
   if (pathname === "/api/feedback/events") return pathname;
+  // Its own label: the composer asks on every pause in typing, so it must be
+  // readable on the dashboard rather than folded into the `/api/:route` bucket.
+  if (pathname === ROUTING_DECISION_PATH) return pathname;
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
   if (pathname.startsWith("/api/agent-memory/v1")) return "/api/agent-memory/v1/:action";
   if (pathname.startsWith("/api/agent-keys/")) return "/api/agent-keys/:keyId";
@@ -522,6 +535,7 @@ function routePattern(pathname) {
   if (pathname === "/api/frontier" || pathname.startsWith("/api/frontier/")) return frontierRoutePattern(pathname);
   if (pathname === "/api/review" || pathname.startsWith("/api/review/")) return reviewRoutePattern(pathname);
   if (pathname === "/api/geo" || pathname.startsWith("/api/geo/")) return geoRoutePattern(pathname);
+  if (pathname === "/api/credits" || pathname.startsWith("/api/credits/")) return evimedCreditsRoutePattern(pathname);
   if (pathname.startsWith("/api/")) return "/api/:route";
   // The internal gateways carry the runtime's entire outbound traffic —
   // every model call, every source fetch, every search, every probe. They used
@@ -1538,6 +1552,14 @@ export function createWebApiApp(overrides = {}) {
   };
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
+  const evimedAuth = new EvimedAuthService(config, store, { fetchImpl: overrides.evimedIntrospectFetch });
+  const evimedAuthRoutes = createEvimedAuthRoutes({
+    store,
+    service: evimedAuth,
+    maxJsonBytes: config.maxJsonBytes,
+    audit: (event, status, details) => securityAudit(config, event, status, details),
+    onSignIn: (userId) => warmAfterSignIn(userId),
+  });
   const memoryIntelligence = new MemoryIntelligence(config, researchMemory, {
     // A conversation that changes a memory the researcher confirmed is worth
     // telling them about, and the inbox is where that is told. It never holds
@@ -1846,6 +1868,50 @@ export function createWebApiApp(overrides = {}) {
     review = { service, worker };
   }
   const reviewRoutes = createReviewRoutes({ store, service: review?.service ?? null, config });
+  // 灵豆 settlement (evimedCreditsService.mjs, fusion plan §9.6): composed when
+  // switched on and a product database exists. With it off the routes answer
+  // `evimed_credits_not_enabled`, no start is refused and no run is charged —
+  // the CNY usage ledger is unchanged either way, because this is an outbound
+  // bridge to EviMed's currency rather than a second ledger.
+  /** @type {{ service: EvimedCreditsService, worker: EvimedCreditsWorker } | null} */
+  let credits = null;
+  if (config.evimedCreditsEnabled && productDatabase) {
+    const service = new EvimedCreditsService({
+      config, database: productDatabase, usageLedger,
+      client: createEvimedCreditsClient({
+        deductUrl: config.evimedCreditsUrl,
+        balanceUrl: config.evimedCreditsBalanceUrl,
+        // The key EviMed already issued this deployment: the file is read per
+        // call so a rotation is a file write, and the value config resolved at
+        // start is the fallback for a deployment that sets the key directly.
+        apiKeyFile: config.evimedCreditsApiKeyFile,
+        apiKey: config.publicSourceCredentials?.evimedEvidence ?? "",
+        timeoutMs: config.evimedCreditsTimeoutMs,
+        fetchImpl: overrides.evimedCreditsFetch ?? globalThis.fetch,
+      }),
+      report: (code) => process.stderr.write(`evimed credits: ${code}\n`),
+    });
+    const worker = new EvimedCreditsWorker({
+      service, pollMs: config.evimedCreditsPollMs,
+      canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+      report: (code) => process.stderr.write(`evimed credits worker: ${code}\n`),
+    });
+    credits = { service, worker };
+  }
+  const creditsRoutes = createEvimedCreditsRoutes({ store, service: credits?.service ?? null, config });
+  // What one question would do, answered before it is sent (fusion plan §9.5).
+  // Advice, not a gate: it runs the same router the dispatch runs and decides
+  // nothing. Composed after the credits service because the price half of the
+  // composer's line is that service's estimate (§9.6); with credits off the
+  // answer carries the duration alone.
+  const routingDecisionRoutes = createRoutingDecisionRoutes({
+    config,
+    context,
+    agentRegistry,
+    classifier: specialistClassifier,
+    estimateCredits: overrides.estimateRunCredits
+      ?? (credits ? ({ capabilityId }) => credits.service.estimate(capabilityId) : null),
+  });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     maxClinicalRepairAttempts: config.gateRepairRounds,
@@ -2040,6 +2106,20 @@ export function createWebApiApp(overrides = {}) {
           userId: project.userId, projectId: project.id, runId: run.id,
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
+      }
+      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's
+      // currency, from the CNY this run already has recorded against it. It is
+      // idempotent on the run id, it never throws, and it is not a condition of
+      // anything below — the platform's own background work is left out for the
+      // same reason the usage caps leave it out: an evaluation cell and a lesson
+      // are not the researcher's spend.
+      if (credits && !evaluationRun && !isInternalProject(project.id)) {
+        await credits.service.settleRun({
+          userId: project.userId, projectId: project.id, runId: run.id,
+          dispatchId: run.dispatchId ?? null,
+          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
+          subject: run.title ?? run.question ?? null,
+        });
       }
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
@@ -3357,6 +3437,7 @@ export function createWebApiApp(overrides = {}) {
       if (maintenanceService && requestStartsMutation(req, pathname)) {
         releaseMutation = await maintenanceService.admitMutation();
       }
+      if (await evimedAuthRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
@@ -3366,8 +3447,10 @@ export function createWebApiApp(overrides = {}) {
       if (await autopilotRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
+      if (await creditsRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
+      if (await routingDecisionRoutes(req, res)) return;
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -3438,7 +3521,12 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname === "/api/auth/methods" && req.method === "GET") {
-        sendJson(res, 200, { data: oidcService.methods() });
+        // Two login paths can be offered at once: a deployment migrating to the
+        // EviMed shell keeps its own operator accounts signing in with a
+        // password while the shell's researchers arrive through EviMed. With the
+        // EviMed mode off this answers exactly what it answered before.
+        const mode = config.authMode === "evimed" ? { mode: "evimed" } : oidcService.methods();
+        sendJson(res, 200, { data: { ...mode, ...evimedAuth.loginMethod() } });
         return;
       }
 
@@ -4006,6 +4094,11 @@ export function createWebApiApp(overrides = {}) {
         const estimate = runEstimate(boundSession?.mode === "specialist"
           ? registry.get(boundSession.agentId)
           : (routedSpecialist ? registry.get(routedSpecialist.agentId) : answerAgent));
+        // 灵豆 (§9.6): a start this account cannot pay for is refused here —
+        // after routing, so the estimate is the capability's own; before a run
+        // exists, so nothing under way is ever interrupted; and never again. A
+        // credits service that cannot be reached admits the start.
+        if (credits) await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
@@ -4817,6 +4910,11 @@ export function createWebApiApp(overrides = {}) {
       // store, and the cheaper one to abuse: a login attempt costs a hash, a
       // registration costs a user directory.
       (pathname === "/api/auth/register" && req.method === "POST") ||
+      // The EviMed session exchange is the third way an anonymous caller
+      // reaches the account store: it introspects a credential upstream and
+      // can create a user, so it is bounded like the other two. Its sign-out
+      // is not here — that one already needs a session and its CSRF token.
+      (pathname === "/api/auth/evimed/session" && req.method === "POST") ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {
       authRateLimiter.check(`auth:${ip}`, {
@@ -5015,7 +5113,7 @@ export function createWebApiApp(overrides = {}) {
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
     for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker]) {
+      geo?.worker, credits?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -5051,6 +5149,7 @@ export function createWebApiApp(overrides = {}) {
       frontier?.worker.start();
       review?.worker.start();
       geo?.worker?.start?.();
+      credits?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -5210,6 +5309,7 @@ export function createWebApiApp(overrides = {}) {
       await frontier?.worker.close();
       await review?.worker.close();
       await geo?.worker?.close?.();
+      await credits?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
@@ -6639,10 +6739,28 @@ async function readinessAuth(config, store) {
   if (!Number.isFinite(sessionTtlMs) || sessionTtlMs <= 0) {
     throw readinessFailure("session_ttl_invalid");
   }
+  // The EviMed login path (§9.2) can be on under any mode, because a deployment
+  // migrating to the shell keeps its own operator accounts. So its settings are
+  // checked here and reported alongside whichever mode this deployment runs.
+  let evimed = null;
+  if (config.evimedAuthEnabled) {
+    try {
+      evimed = evimedAuthReadiness(config);
+    } catch (error) {
+      throw readinessFailure(error?.code ?? "evimed_auth_configuration_invalid");
+    }
+  } else if (config.authMode === "evimed") {
+    // Selecting the mode turns the switch on by itself, so reaching here means
+    // the deployment turned it off again and left the mode selected: there is
+    // no way in at all.
+    throw readinessFailure("evimed_auth_disabled");
+  }
+  const withEvimed = evimed ? { evimed } : {};
   if (config.authMode === "development") {
     if (config.production) throw readinessFailure("dev_auth_enabled");
-    return { mode: "development", sessionTtlMs };
+    return { mode: "development", sessionTtlMs, ...withEvimed };
   }
+  if (config.authMode === "evimed") return { mode: "evimed", sessionTtlMs, ...withEvimed };
   if (config.authMode === "oidc") {
     let settings;
     try {
@@ -6658,6 +6776,7 @@ async function readinessAuth(config, store) {
       allowedEmailDomains: settings.allowedEmailDomains.length,
       clientSecretSource: config.oidcClientSecretSource,
       flowSecretSource: config.oidcFlowSecretSource,
+      ...withEvimed,
     };
   }
   if (config.authMode !== "local") throw readinessFailure("auth_mode_invalid");
@@ -6694,7 +6813,7 @@ async function readinessAuth(config, store) {
   // visible, because either way the configured administrator does not exist.
   const bootstrapUser = await store.bootstrapUserState();
   if (bootstrapUser === "absent") throw readinessFailure("bootstrap_user_missing", { bootstrapUser });
-  return { mode: "local", sessionTtlMs, bootstrapPasswordSource: config.bootstrapPasswordSource, bootstrapUser };
+  return { mode: "local", sessionTtlMs, bootstrapPasswordSource: config.bootstrapPasswordSource, bootstrapUser, ...withEvimed };
 }
 
 function readinessSecurity(config) {

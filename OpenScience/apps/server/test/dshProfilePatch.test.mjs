@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import YAML from "yaml";
 
+import { RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
@@ -247,6 +248,30 @@ test("the trajectory panel is everyone's: a researcher's runtime mounts it, labe
     assert.doesNotMatch(rendered, /- id: ui-sidebar-documentpreview\n {2}disabled: true/);
   }
   assert.equal(researcher, operator, "with nothing operator-only, the two profiles are one patch");
+});
+
+test("a running turn's reasoning stays folded: the transcript mode is the kernel's collapsed default and nothing in a page can change it", () => {
+  // 融合方案 §8.2 asks for 「推理默认折叠并要求中文」. The folding is already the
+  // kernel's: `ui-chat` draws each reasoning block as a Think disclosure and,
+  // in its `transcriptView` Compact mode — the shipped default — folds a
+  // closed turn's reasoning, tool rows and earlier messages behind one
+  // control. What this deployment owes is that the mode cannot drift off that
+  // default, and it owes it twice, because a setting has two ways to change:
+  // the row that writes it and the method that writes it.
+  //
+  // So this is not a new gate; it is the assertion that the two existing ones
+  // cover the case. The remaining half of §8.2 — that the folded summary is
+  // Chinese — is the guidance's, and is asserted in
+  // `packages/socket/test/consistency.test.mjs`; it cannot be a check here,
+  // because language is the model's to produce (principle 1).
+  assert.ok(HOSTED_DISABLED_BROWSER_PANELS.includes("ui-settings-general"),
+    "the General settings page is where a reader would switch the transcript out of Compact");
+  assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes("settings"),
+    "and `settings/*` is how a page would write the change without the row");
+  const rendered = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: false } });
+  assert.match(rendered, /- id: ui-settings-general\n {2}disabled: true/);
+  // The chat itself stays mounted — folding is its behaviour, not ours.
+  assert.doesNotMatch(rendered, /- id: ui-chat\n {2}disabled: true/);
 });
 
 test("an inserted row names the plugin it inserts", () => {

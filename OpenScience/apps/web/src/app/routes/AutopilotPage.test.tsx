@@ -221,14 +221,34 @@ describe("AutopilotPage", () => {
     expect(screen.queryByText("一份交付物等待复核")).not.toBeInTheDocument();
   });
 
-  it("shows an empty page as one sentence, with the header's button the only one", async () => {
+  // The empty page offers six directions to start from (fusion plan §8.5). It
+  // used to be one sentence and nothing else, which asked the reader to invent
+  // the product's use for it — 「还没有定时研究」 is true and useless. The rule
+  // the sentence was protecting survives: the page still explains nothing about
+  // how the system works, and the header's button is still the only button.
+  it("shows an empty page as one sentence plus directions to start from", async () => {
     mocks.listAgendas.mockResolvedValue({ items: [], nextCursor: null });
     mocks.listEpisodes.mockResolvedValue({ items: [], nextCursor: null });
     render();
     const empty = await screen.findByText("还没有定时研究。");
-    expect(empty.parentElement?.textContent).toBe("还没有定时研究。");
+    expect(empty.parentElement?.textContent).toBe("还没有定时研究。选一个方向开始，或者自己写一个。");
     expect(screen.getAllByRole("button", { name: "新建定时研究" })).toHaveLength(1);
     expect(document.body.textContent).not.toMatch(/产生费用|默认/);
+    // Each is a real standing question, not a placeholder.
+    expect(await screen.findByText("一个药的安全信号")).toBeInTheDocument();
+    expect(screen.getByText("同类药的头对头证据")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(6);
+  });
+
+  it("a direction opens the form already filled in, so the first agenda costs one click", async () => {
+    mocks.listAgendas.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.listEpisodes.mockResolvedValue({ items: [], nextCursor: null });
+    const user = userEvent.setup();
+    render();
+    await user.click(await screen.findByText("一个药的安全信号"));
+    expect(await screen.findByLabelText("想持续跟进什么？")).toHaveValue(
+      "司美格鲁肽的胰腺炎与胃轻瘫不良事件信号",
+    );
   });
 
   // An inbox notice or a Feishu card still carries a briefing's address.

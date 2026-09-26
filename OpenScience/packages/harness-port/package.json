@@ -24,6 +24,7 @@
     "./runtime-ui-commands": "./src/runtimeUiCommands.mjs",
     "./runtime-ui-theme": "./src/runtimeUiTheme.mjs",
     "./runtime-ui-toolviews": "./src/runtimeUiToolviews.mjs",
+    "./runtime-ui-sources": "./src/runtimeUiSources.mjs",
     "./runtime-ui-transcript": "./src/runtimeUiTranscript.mjs",
     "./runtime-ui-panels": "./src/runtimeUiPanels.mjs",
     "./runtime-ui-styles": "./src/runtimeUiStyles.mjs"

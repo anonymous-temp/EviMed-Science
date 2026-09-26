@@ -813,6 +813,25 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Codes the 灵豆 settlement routes answer with (`evimedCreditsRoutes.mjs`,
+ * `/api/credits/*`, fusion plan §9.6): the module off, and a request the page
+ * built wrong. They are here so each is held to a Chinese sentence and so the
+ * route test can prove every code it emits is registered.
+ *
+ * The refusal that matters most is deliberately *not* here: a start this
+ * account cannot pay for is refused with `credits_exhausted`, which
+ * `CREDIT_ERROR_CODES` has carried since it was written and which
+ * `usageMetering.mjs` reserved in so many words for 「a balance, which this
+ * deployment does not have」. It has one now, so the reserved code is emitted
+ * rather than duplicated — two codes for one fact would be two sentences to
+ * keep in step.
+ */
+export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
+  'evimed_credits_not_enabled',
+  'evimed_credits_request_invalid',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -834,6 +853,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...sourceIntakeErrorCodes,
   ...libraryErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
+  ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
 ])])
 
 /**
@@ -936,6 +956,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   credits_exhausted: '额度已用尽，充值后即可继续。',
   credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「设置 → 用量」调高上限。',
   credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在「设置 → 用量」调高上限。',
+  // 灵豆 settlement (fusion plan §9.6). A deployment that has not joined
+  // EviMed's billing shows no balance at all, so the first of these is normally
+  // read by a client that asked anyway rather than by a person.
+  evimed_credits_not_enabled: '这个部署还没有接入灵豆计费，因此没有余额和预计消耗可看。',
+  evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个科研工具再看即可。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -1290,6 +1315,11 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   // the usage is recorded late. Calling it `capped` would tell a reader to wait
   // for a window that is not holding anything.
   usage_metering_unavailable: 'upstream',
+  // The 灵豆 routes' own refusals are about the module, never about a run: one
+  // says the deployment has no credits billing, the other that the question was
+  // malformed. Neither is a ceiling — the ceiling is `credits_exhausted`.
+  evimed_credits_not_enabled: 'upstream',
+  evimed_credits_request_invalid: 'upstream',
 })
 
 /**

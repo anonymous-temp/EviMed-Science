@@ -30,7 +30,7 @@
   --brand-100: #dde9f9;
   --brand-200: #bcd3f3;
   --brand-300: #8fb5ea;
-  --brand-400: #5690dd;
+  --brand-400: #5f97e0;
   --brand-500: #2a72d0;
   --brand-600: #0a5dc1;
   --brand-700: #0a4da0;
@@ -45,7 +45,7 @@
   --n-200: #d6dce2;
   --n-300: #bac2ca;
   --n-400: #939ca6;
-  --n-500: #646d77;
+  --n-500: #5f686f;
   --n-600: #535b64;
   --n-700: #3e454d;
   --n-800: #2a3037;
@@ -62,7 +62,7 @@
   --danger-100: #fbe2de;
   --danger-300: #e0877f;
   --danger-400: #d1594e;
-  --danger-600: #c0362c;
+  --danger-600: #bc342a;
   --danger-700: #a72d24;
   --danger-800: #9a2a22;
   --danger-950: #3d100c;
@@ -70,7 +70,7 @@
   --warn-100: #ffeacc;
   --warn-300: #e0b169;
   --warn-400: #c98a1f;
-  --warn-600: #a15c00;
+  --warn-600: #985600;
   --warn-700: #8c5000;
   --warn-800: #7f4800;
   --warn-950: #331d00;
@@ -78,14 +78,14 @@
   --ok-100: #d5ebdf;
   --ok-300: #7cc0a0;
   --ok-400: #3f9c73;
-  --ok-600: #1e7a4c;
+  --ok-600: #1c7347;
   --ok-700: #1a6a42;
   --ok-800: #155636;
   --ok-950: #082418;
   --info-50: #eef4fc;
   --info-100: #dde9f9;
   --info-300: #8fb5ea;
-  --info-400: #5690dd;
+  --info-400: #5f97e0;
   --info-600: #2a72d0;
   --info-700: #0a5dc1;
   --info-800: #0c3e7f;
@@ -106,12 +106,12 @@
   --border-hairline: var(--n-150);
   --border-faint: var(--n-100);
   --border-light: var(--n-200);
-  --border-control: var(--n-control); /* 3.33 on the page, 3.10 on the sidebar */
-  --text: var(--n-900); /* 15.09 on the page */
-  --text-2: var(--n-700); /* 9.30 on the page */
-  --text-3: var(--n-500); /* 5.13 on the page, 4.76 on surface-1 — nothing lighter carries text */
+  --border-control: var(--n-control); /* 3.21 on the page, 3.10 on the sidebar */
+  --text: var(--n-900); /* 16.00 on the page */
+  --text-2: var(--n-700); /* 9.37 on the page */
+  --text-3: var(--n-500); /* 5.48 on the page, 4.76 on surface-1 — nothing lighter carries text */
   --text-graphic: var(--n-400); /* graphics only, 2.90 — never text */
-  --accent: var(--brand-600); /* 6.24 on the page; white on it 6.24 */
+  --accent: var(--brand-600); /* 6.05 on the page; white on it 6.24 */
   --accent-fg: #ffffff;
   --accent-soft: var(--brand-50);
   --accent-pressed: var(--brand-700);
@@ -121,14 +121,14 @@
   --warn: var(--warn-600);
   --warn-soft: var(--warn-50);
   --warn-strong: var(--warn-800); /* on warn-soft: 7.92 */
-  --error: var(--danger-600); /* 5.49 on the page */
+  --error: var(--danger-600); /* 5.53 on the page */
   --error-fg: #ffffff;
   --danger: var(--danger-600);
   --danger-soft: var(--danger-50);
   --danger-strong: var(--danger-800); /* on danger-soft: 8.13 */
   --info: var(--info-700);
   --info-soft: var(--info-50);
-  --link: var(--brand-600); /* 6.24 on the page */
+  --link: var(--brand-600); /* 6.05 on the page */
   --verify-ok: var(--brand-600);
   --verify-pending: var(--warn-600);
   --highlight: #fdeba8;

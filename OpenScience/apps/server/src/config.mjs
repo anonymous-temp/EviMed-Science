@@ -515,6 +515,90 @@ function mediaMarketSettings(overrides) {
   };
 }
 
+/**
+ * 灵豆 settlement (fusion plan §9.6): EviMed Science's usage settles in EviMed's
+ * own credits currency.
+ *
+ * Hidden knowledge:
+ *
+ * - Off by default, and off means off: with `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED`
+ *   unset the routes are not mounted, no schema is created, no start is refused
+ *   and nothing is charged. The usage ledger keeps reserving and settling in CNY
+ *   either way — this is an outbound bridge, not a second ledger.
+ * - **The key is the one EviMed already issued us.**
+ *   `OPEN_SCIENCE_EVIMED_API_KEY_FILE` is the same file the evidence gateway's
+ *   `evimedEvidence` credential is read from; it is named here only as a path,
+ *   because the credits client reads it on every call so a rotation is a file
+ *   write. A second copy of one secret is a second thing to rotate.
+ * - Both addresses are full endpoint URLs, and both must be https unless they
+ *   are loopback: the key travels in an `Authorization` header on every call.
+ * - **The rate is a deployment fact and has no default.** 0 — the default —
+ *   means 「not configured」 and the module settles nothing while saying so. A
+ *   guessed 灵豆-per-CNY rate would charge every user wrongly and look exactly
+ *   like a working deployment, which is the one failure mode money cannot have.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evimedCreditsSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  /** @param {string} key @param {string} name */
+  const endpoint = (key, name) => {
+    const value = String(read(key, name, "")).trim().replace(/\/+$/, "");
+    if (!value) return "";
+    let parsed = null;
+    try { parsed = new URL(value); } catch { parsed = null; }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error(`${name} must be an http(s) URL with an optional path and no credentials.`);
+    }
+    if (parsed.protocol === "http:" && !["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) {
+      throw new Error(`${name} must be https: the shared key travels in every request.`);
+    }
+    return value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const value = read(key, name, fallback);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+    }
+    return number;
+  };
+  const enabled = overrides.evimedCreditsEnabled ?? boolEnv("OPEN_SCIENCE_EVIMED_CREDITS_ENABLED", false);
+  const keyFile = String(read("evimedCreditsApiKeyFile", "OPEN_SCIENCE_EVIMED_API_KEY_FILE", "")).trim();
+  // Only when the module is on. `.env.example` has carried a path relative to
+  // the compose directory for this variable since before there was a credits
+  // client — that value is what docker's `secrets:` mapping reads, never what
+  // the process is handed, and refusing it here would stop every deployment
+  // that has nothing to do with 灵豆.
+  if (enabled && keyFile && !path.isAbsolute(keyFile)) {
+    throw new Error("OPEN_SCIENCE_EVIMED_API_KEY_FILE must be an absolute path when 灵豆 settlement is enabled.");
+  }
+  const rateValue = read("evimedCreditsPerCny", "OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY", 0);
+  const rate = Number(rateValue);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100_000) {
+    throw new Error(`OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY must be a number from 0 to 100000, got ${JSON.stringify(rateValue)}.`);
+  }
+  return {
+    evimedCreditsEnabled: enabled,
+    // Where a finished run's 灵豆 are deducted, and where a balance is read.
+    evimedCreditsUrl: endpoint("evimedCreditsUrl", "OPEN_SCIENCE_EVIMED_CREDITS_URL"),
+    evimedCreditsBalanceUrl: endpoint("evimedCreditsBalanceUrl", "OPEN_SCIENCE_EVIMED_CREDITS_BALANCE_URL"),
+    evimedCreditsTimeoutMs: integer("evimedCreditsTimeoutMs", "OPEN_SCIENCE_EVIMED_CREDITS_TIMEOUT_MS", 10_000, 1_000, 60_000),
+    // The shared EviMed key file — the same one `publicSourceCredentialSpecs`'
+    // `evimedEvidence` profile resolves. Read per call, never held here.
+    evimedCreditsApiKeyFile: keyFile,
+    evimedCreditsPerCny: rate,
+    // How often the retry sweep looks for a settlement whose backoff elapsed.
+    evimedCreditsPollMs: integer("evimedCreditsPollMs", "OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS", 60_000, 5_000, 3_600_000),
+  };
+}
+
 /** @param {Record<string, any>} overrides */
 function reviewConfigured(overrides) {
   return overrides.reviewEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_ENABLED", false);
@@ -1047,6 +1131,38 @@ export function loadConfig(overrides = {}) {
       overrides.oidcAllowedEmailDomains ?? listEnv("OPEN_SCIENCE_OIDC_ALLOWED_EMAIL_DOMAINS"),
     oidcTimeoutMs: Number(overrides.oidcTimeoutMs ?? process.env.OPEN_SCIENCE_OIDC_TIMEOUT_MS ?? 10_000),
     oidcFlowTtlMs: Number(overrides.oidcFlowTtlMs ?? process.env.OPEN_SCIENCE_OIDC_FLOW_TTL_MS ?? 10 * 60_000),
+    // --- the `evimed` login mode (fusion plan 2026-09-26 §9.2, step one) ---
+    // The EviMed shell hands the control plane the credential its own user is
+    // signed in with; the control plane introspects it server side and mints a
+    // session of its own. Off by default, and `authMode = "evimed"` turns it on
+    // by itself: a deployment that selected the mode and left the switch unset
+    // meant to have it.
+    //
+    // It is a switch rather than only a mode because the two have to be able to
+    // run together. Under `local` with this on, the operator accounts keep
+    // signing in with a password while the shell's researchers arrive through
+    // EviMed; flipping the whole mode would have locked the operators out of
+    // the deployment they run.
+    evimedAuthEnabled: overrides.evimedAuthEnabled ?? boolEnv("OPEN_SCIENCE_EVIMED_AUTH_ENABLED", authMode === "evimed"),
+    // The EviMed endpoint that turns that credential into an identity. Empty
+    // means the mode cannot be used, which readiness says by name rather than
+    // leaving every sign-in to fail at the first call.
+    evimedUserIntrospectUrl: String(
+      overrides.evimedUserIntrospectUrl ?? process.env.OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL ?? "",
+    ).trim(),
+    // One introspection, start to finish. It sits between the shell's page load
+    // and the first thing a researcher sees, so it is seconds, not the minute a
+    // gateway gets.
+    evimedIntrospectTimeoutMs: Number(
+      overrides.evimedIntrospectTimeoutMs ?? process.env.OPEN_SCIENCE_EVIMED_INTROSPECT_TIMEOUT_MS ?? 5_000,
+    ),
+    // How long one introspection result may be reused for the same credential.
+    // Short on purpose: it exists so a shell that reloads a few times in a row
+    // does not ask EviMed each time, not to keep a revoked credential working.
+    // 0 disables the cache.
+    evimedIntrospectCacheTtlMs: Number(
+      overrides.evimedIntrospectCacheTtlMs ?? process.env.OPEN_SCIENCE_EVIMED_INTROSPECT_CACHE_TTL_MS ?? 60_000,
+    ),
     production,
     deploymentProfile: String(
       overrides.deploymentProfile ?? process.env.OPEN_SCIENCE_DEPLOYMENT_PROFILE ?? "controlled-pilot",
@@ -1772,6 +1888,8 @@ export function loadConfig(overrides = {}) {
     ...geoSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),
+    // --- 灵豆 settlement: EviMed Science's usage in EviMed's currency (2026-09-26) ---
+    ...evimedCreditsSettings(overrides),
     ...reviewJevSettings(overrides, Boolean(typesafeSecret.value)),
     // The learning loop's own knobs.
     //
