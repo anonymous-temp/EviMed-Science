@@ -7,19 +7,19 @@ const banned = (pattern, message) => [
 const tokenRules = [
   ...banned(
     "/text-\\[\\d+(\\.\\d+)?px\\]/",
-    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-badge / text-meta / text-caption (12) / text-ui (14) / text-body / text-wordmark (16) / text-title (20) / text-display (24) — five sizes, no more (see DESIGN.md and fontSize in tailwind.config.js).",
+    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-badge / text-meta / text-caption (12) / text-compact (13) / text-ui (14) / text-body / text-wordmark (16) / text-section (18) / text-heading (20) / text-title / text-doc-title / text-display (24) / text-metric (32) / text-metric-lg / text-hero (40) — nine sizes, no more, and 32/40 only on a data page (see DESIGN.md and @evimed/design-tokens).",
   ),
   ...banned(
     "/(^|[\\s:])text-(xs|sm|base|lg|xl|[2-9]xl)($|\\s)/",
-    "Tailwind's default text sizes bypass the type scale. Use text-meta or text-caption (12px) / text-ui (14px) / text-body (16px) / text-title (20px) / text-display (24px) (see fontSize in tailwind.config.js).",
+    "Tailwind's default text sizes bypass the type scale. Use text-meta / text-caption (12) / text-compact (13) / text-ui (14) / text-body (16) / text-section (18) / text-heading (20) / text-title (24) / text-metric (32) / text-metric-lg (40) (see @evimed/design-tokens).",
   ),
   ...banned(
     "/rounded-\\[\\d+px\\]/",
-    "Arbitrary px radii are banned in components. Use rounded (8px: controls and rows), rounded-tag (4px: tags), rounded-card (12px: cards, popovers and dialogs), rounded-composer (24px) or rounded-full (pills) (see borderRadius in tailwind.config.js).",
+    "Arbitrary px radii are banned in components. Use rounded (8px: controls and rows), rounded-tag (6px: tags), rounded-card (12px: cards and popovers), rounded-panel (16px: dialogs, drawers and panels), rounded-composer (24px) or rounded-full (pills) (see @evimed/design-tokens).",
   ),
   ...banned(
     "/\\bshadow-(sm|md|lg)\\b/",
-    "Bare shadow-sm/md/lg are banned in components. A static card has no shadow (its 1px border is its edge); use shadow-pop for menus and popovers, shadow-modal for dialogs and drawers (see boxShadow in tailwind.config.js).",
+    "Bare shadow-sm/md/lg are banned in components. Structure is hairlines first: shadow-e1 for a card that must lift, shadow-e2 for the composer, menus and popovers, shadow-e3 for dialogs and drawers (see @evimed/design-tokens).",
   ),
   // Two tiers and a hairline (appendix D §9.3): the static-card shadow is gone.
   ...banned(
@@ -34,7 +34,7 @@ const tokenRules = [
   // slash is written `\x2F` because an esquery regex literal cannot contain
   // one.
   ...banned(
-    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|unread|unread-fg|dot-[a-z]+)\\x2F\\d+/",
+    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|unread|unread-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
     "An opacity modifier on a design-token colour generates no CSS (the tokens are var() colours). Use a solid token or its -soft / -strong partner from src/index.css.",
   ),
   ...banned(
@@ -51,15 +51,16 @@ const retiredTypeRules = banned(
   "text-ui-sm (13px) was merged into text-ui (14px): the 13 and 13.5 px rungs were one rung half a pixel apart. Use text-ui, or text-caption for metadata.",
 );
 
-// The serif family is gone (DESIGN.md, 2026-09-20): `font-serif` resolves to
-// the sans stack so an unmigrated page renders in it rather than falling to
-// the browser's Georgia, which makes the class silently inert — exactly the
-// kind of thing that grows back. Scoped to the primitives this rectification
-// rewrote; the page streams drop their own call sites, and the override widens
-// to `src/**` once they have.
+// The serif is back and confined (fusion plan §5.2): the wordmark, the home
+// headline, and the title of a document — three brand moments and no fourth.
+// An evidence platform borrows its authority from the journals and every one of
+// them is set in a serif; a serif on a button reads as an old intranet. So the
+// ban stays exactly where a button lives: the primitives, the layout chrome and
+// the card set never use it, and the rungs that may (`text-wordmark`,
+// `text-hero`, `text-doc-title`) carry the family themselves.
 const serifRules = banned(
   "/(^|[\\s:])font-serif($|\\s)/",
-  "There is no serif family. One sans stack carries the shell and the kernel conversation; the class resolves to it and does nothing (see fontFamily in tailwind.config.js and DESIGN.md).",
+  "The serif is for three brand moments only — the wordmark, the home headline and a document title — and a primitive is none of them. Use text-wordmark / text-hero / text-doc-title, which carry the family themselves (see @evimed/design-tokens).",
 );
 
 // One component set (2026-09-23 plan §7, gate 1). A bordered pill and a
@@ -89,7 +90,7 @@ const componentRules = [
 const iconRules = [
   {
     selector: "JSXAttribute[name.name='size'] > JSXExpressionContainer > Literal[raw=/^(?!(16|20)$)\\d+$/]",
-    message: "Icons are 16 (inline with text) or 20 (a chrome glyph) — ICON_SIZES in @evimed/domain/design-tokens.",
+    message: "Icons are 16 (inline with text) or 20 (a chrome glyph) — ICON_SIZES in @evimed/design-tokens.",
   },
   {
     selector: "JSXOpeningElement[name.name=/^[A-Z]/] > JSXAttribute[name.name='strokeWidth']",
@@ -153,8 +154,9 @@ module.exports = {
       },
     },
     {
-      // The design-system primitives: the type scale, the four radii and the
-      // one sans stack are theirs to hold, so they take the serif ban too.
+      // The design-system primitives: the type scale, the radii and the sans
+      // stack are theirs to hold, so they take the serif ban too — a brand
+      // moment is a page's, never a primitive's.
       files: [
         "src/components/ui/**/*.{ts,tsx}",
         "src/components/layout/**/*.{ts,tsx}",

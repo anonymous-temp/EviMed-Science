@@ -28,7 +28,7 @@
     "report:context-fidelity": "python3 evals/context-fidelity/report.py",
     "eval:geo-gate-coverage": "python3 evals/geo-gate-coverage/run_gate_coverage.py --package ${GEO_SKILLS_PACKAGE:?set GEO_SKILLS_PACKAGE to the unpacked geo-skills root}",
     "test:server": "pnpm --filter @ai4s/server test",
-    "test:web": "pnpm test:mcp && pnpm test:acceptance-ledger && pnpm test:eval-briefs && pnpm test:specialist-driver && pnpm test:release-audit && pnpm test:phi-masking && pnpm test:packages && pnpm test:server && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket && pnpm typecheck:domain && pnpm typecheck:port && pnpm typecheck:socket && pnpm typecheck:server && pnpm typecheck && pnpm test",
+    "test:web": "pnpm tokens:check && pnpm test:tokens && pnpm lint:tokens && pnpm typecheck:tokens && pnpm test:mcp && pnpm test:acceptance-ledger && pnpm test:eval-briefs && pnpm test:specialist-driver && pnpm test:release-audit && pnpm test:phi-masking && pnpm test:packages && pnpm test:server && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket && pnpm typecheck:domain && pnpm typecheck:port && pnpm typecheck:socket && pnpm typecheck:server && pnpm typecheck && pnpm test",
     "test:web:e2e": "pnpm --filter @ai4s/server test:e2e",
     "walk:ui": "node scripts/ops/ui-walk.mjs",
     "audit:hosted-compliance": "node scripts/ops/audit-hosted-compliance.mjs",
@@ -106,7 +106,12 @@
     "typecheck:socket": "pnpm --filter @evimed/dsh-socket typecheck",
     "typecheck:port": "pnpm --filter @evimed/harness-port typecheck",
     "receipt:renew": "node scripts/ops/release-receipt-scheduler.mjs once",
-    "receipt:health": "node scripts/ops/release-receipt-scheduler.mjs health"
+    "receipt:health": "node scripts/ops/release-receipt-scheduler.mjs health",
+    "tokens:build": "pnpm --filter @evimed/design-tokens build && pnpm tokens:css",
+    "tokens:check": "pnpm --filter @evimed/design-tokens check && node scripts/build/generate-design-tokens.mjs --check",
+    "test:tokens": "pnpm --filter @evimed/design-tokens test",
+    "lint:tokens": "pnpm --filter @evimed/design-tokens lint",
+    "typecheck:tokens": "pnpm --filter @evimed/design-tokens typecheck"
   },
   "engines": {
     "node": ">=22.22.0"

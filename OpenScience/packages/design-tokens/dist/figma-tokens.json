@@ -1,0 +1,1215 @@
+{
+  "$themes": [],
+  "global": {
+    "ramp": {
+      "brand": {
+        "50": {
+          "value": "#eef4fc",
+          "type": "color"
+        },
+        "100": {
+          "value": "#dde9f9",
+          "type": "color"
+        },
+        "200": {
+          "value": "#bcd3f3",
+          "type": "color"
+        },
+        "300": {
+          "value": "#8fb5ea",
+          "type": "color"
+        },
+        "400": {
+          "value": "#5690dd",
+          "type": "color"
+        },
+        "500": {
+          "value": "#2a72d0",
+          "type": "color"
+        },
+        "600": {
+          "value": "#0a5dc1",
+          "type": "color"
+        },
+        "700": {
+          "value": "#0a4da0",
+          "type": "color"
+        },
+        "800": {
+          "value": "#0c3e7f",
+          "type": "color"
+        },
+        "900": {
+          "value": "#0e305f",
+          "type": "color"
+        },
+        "950": {
+          "value": "#0a1f3e",
+          "type": "color"
+        }
+      },
+      "n": {
+        "0": {
+          "value": "#ffffff",
+          "type": "color"
+        },
+        "25": {
+          "value": "#fafbfc",
+          "type": "color"
+        },
+        "50": {
+          "value": "#f5f7f9",
+          "type": "color"
+        },
+        "100": {
+          "value": "#edf0f3",
+          "type": "color"
+        },
+        "150": {
+          "value": "#e4e8ec",
+          "type": "color"
+        },
+        "200": {
+          "value": "#d6dce2",
+          "type": "color"
+        },
+        "300": {
+          "value": "#bac2ca",
+          "type": "color"
+        },
+        "400": {
+          "value": "#939ca6",
+          "type": "color"
+        },
+        "500": {
+          "value": "#646d77",
+          "type": "color"
+        },
+        "600": {
+          "value": "#535b64",
+          "type": "color"
+        },
+        "700": {
+          "value": "#3e454d",
+          "type": "color"
+        },
+        "800": {
+          "value": "#2a3037",
+          "type": "color"
+        },
+        "900": {
+          "value": "#1a1f25",
+          "type": "color"
+        },
+        "950": {
+          "value": "#12161b",
+          "type": "color"
+        },
+        "control": {
+          "value": "#858e97",
+          "type": "color"
+        }
+      },
+      "dark": {
+        "bg": {
+          "value": "#0f1318",
+          "type": "color"
+        },
+        "surface": {
+          "value": "#161b21",
+          "type": "color"
+        },
+        "surface-2": {
+          "value": "#1e242b",
+          "type": "color"
+        },
+        "border-faint": {
+          "value": "#1e242b",
+          "type": "color"
+        },
+        "border": {
+          "value": "#262d35",
+          "type": "color"
+        },
+        "border-strong": {
+          "value": "#646e78",
+          "type": "color"
+        }
+      },
+      "danger": {
+        "50": {
+          "value": "#fdf1ef",
+          "type": "color"
+        },
+        "100": {
+          "value": "#fbe2de",
+          "type": "color"
+        },
+        "300": {
+          "value": "#e0877f",
+          "type": "color"
+        },
+        "400": {
+          "value": "#d1594e",
+          "type": "color"
+        },
+        "600": {
+          "value": "#c0362c",
+          "type": "color"
+        },
+        "700": {
+          "value": "#a72d24",
+          "type": "color"
+        },
+        "800": {
+          "value": "#9a2a22",
+          "type": "color"
+        },
+        "950": {
+          "value": "#3d100c",
+          "type": "color"
+        }
+      },
+      "warn": {
+        "50": {
+          "value": "#fff5e5",
+          "type": "color"
+        },
+        "100": {
+          "value": "#ffeacc",
+          "type": "color"
+        },
+        "300": {
+          "value": "#e0b169",
+          "type": "color"
+        },
+        "400": {
+          "value": "#c98a1f",
+          "type": "color"
+        },
+        "600": {
+          "value": "#a15c00",
+          "type": "color"
+        },
+        "700": {
+          "value": "#8c5000",
+          "type": "color"
+        },
+        "800": {
+          "value": "#7f4800",
+          "type": "color"
+        },
+        "950": {
+          "value": "#331d00",
+          "type": "color"
+        }
+      },
+      "ok": {
+        "50": {
+          "value": "#eaf5ef",
+          "type": "color"
+        },
+        "100": {
+          "value": "#d5ebdf",
+          "type": "color"
+        },
+        "300": {
+          "value": "#7cc0a0",
+          "type": "color"
+        },
+        "400": {
+          "value": "#3f9c73",
+          "type": "color"
+        },
+        "600": {
+          "value": "#1e7a4c",
+          "type": "color"
+        },
+        "700": {
+          "value": "#1a6a42",
+          "type": "color"
+        },
+        "800": {
+          "value": "#155636",
+          "type": "color"
+        },
+        "950": {
+          "value": "#082418",
+          "type": "color"
+        }
+      },
+      "info": {
+        "50": {
+          "value": "#eef4fc",
+          "type": "color"
+        },
+        "100": {
+          "value": "#dde9f9",
+          "type": "color"
+        },
+        "300": {
+          "value": "#8fb5ea",
+          "type": "color"
+        },
+        "400": {
+          "value": "#5690dd",
+          "type": "color"
+        },
+        "600": {
+          "value": "#2a72d0",
+          "type": "color"
+        },
+        "700": {
+          "value": "#0a5dc1",
+          "type": "color"
+        },
+        "800": {
+          "value": "#0c3e7f",
+          "type": "color"
+        },
+        "950": {
+          "value": "#0a1f3e",
+          "type": "color"
+        }
+      }
+    },
+    "light": {
+      "bg": {
+        "value": "#fafbfc",
+        "type": "color"
+      },
+      "surface": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "surface-1": {
+        "value": "#f5f7f9",
+        "type": "color"
+      },
+      "surface-2": {
+        "value": "#edf0f3",
+        "type": "color"
+      },
+      "surface-3": {
+        "value": "#e4e8ec",
+        "type": "color"
+      },
+      "scrim": {
+        "value": "rgba(15, 19, 24, 0.32)",
+        "type": "color"
+      },
+      "border-hairline": {
+        "value": "#e4e8ec",
+        "type": "color"
+      },
+      "border-faint": {
+        "value": "#edf0f3",
+        "type": "color"
+      },
+      "border-light": {
+        "value": "#d6dce2",
+        "type": "color"
+      },
+      "border-control": {
+        "value": "#858e97",
+        "type": "color"
+      },
+      "text": {
+        "value": "#1a1f25",
+        "type": "color"
+      },
+      "text-2": {
+        "value": "#3e454d",
+        "type": "color"
+      },
+      "text-3": {
+        "value": "#646d77",
+        "type": "color"
+      },
+      "text-graphic": {
+        "value": "#939ca6",
+        "type": "color"
+      },
+      "accent": {
+        "value": "#0a5dc1",
+        "type": "color"
+      },
+      "accent-fg": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "accent-soft": {
+        "value": "#eef4fc",
+        "type": "color"
+      },
+      "accent-pressed": {
+        "value": "#0a4da0",
+        "type": "color"
+      },
+      "accent-strong": {
+        "value": "#0c3e7f",
+        "type": "color"
+      },
+      "ok": {
+        "value": "#1e7a4c",
+        "type": "color"
+      },
+      "ok-soft": {
+        "value": "#eaf5ef",
+        "type": "color"
+      },
+      "warn": {
+        "value": "#a15c00",
+        "type": "color"
+      },
+      "warn-soft": {
+        "value": "#fff5e5",
+        "type": "color"
+      },
+      "warn-strong": {
+        "value": "#7f4800",
+        "type": "color"
+      },
+      "error": {
+        "value": "#c0362c",
+        "type": "color"
+      },
+      "error-fg": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "danger": {
+        "value": "#c0362c",
+        "type": "color"
+      },
+      "danger-soft": {
+        "value": "#fdf1ef",
+        "type": "color"
+      },
+      "danger-strong": {
+        "value": "#9a2a22",
+        "type": "color"
+      },
+      "info": {
+        "value": "#0a5dc1",
+        "type": "color"
+      },
+      "info-soft": {
+        "value": "#eef4fc",
+        "type": "color"
+      },
+      "link": {
+        "value": "#0a5dc1",
+        "type": "color"
+      },
+      "verify-ok": {
+        "value": "#0a5dc1",
+        "type": "color"
+      },
+      "verify-pending": {
+        "value": "#a15c00",
+        "type": "color"
+      },
+      "highlight": {
+        "value": "#fdeba8",
+        "type": "color"
+      },
+      "focus": {
+        "value": "#0a5dc1",
+        "type": "color"
+      },
+      "badge": {
+        "value": "#c0362c",
+        "type": "color"
+      },
+      "badge-fg": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "member-from": {
+        "value": "#f6d58e",
+        "type": "color"
+      },
+      "member-to": {
+        "value": "#fbe7be",
+        "type": "color"
+      },
+      "dot-running": {
+        "value": "#2a72d0",
+        "type": "color"
+      },
+      "dot-done": {
+        "value": "#1e7a4c",
+        "type": "color"
+      },
+      "dot-review": {
+        "value": "#a15c00",
+        "type": "color"
+      },
+      "dot-failed": {
+        "value": "#c0362c",
+        "type": "color"
+      },
+      "dot-canceled": {
+        "value": "#939ca6",
+        "type": "color"
+      },
+      "chart-grid": {
+        "value": "#e4e8ec",
+        "type": "color"
+      },
+      "chart-axis": {
+        "value": "#858e97",
+        "type": "color"
+      },
+      "chart-band": {
+        "value": "#eef4fc",
+        "type": "color"
+      },
+      "chart-target": {
+        "value": "#3e454d",
+        "type": "color"
+      }
+    },
+    "dark": {
+      "bg": {
+        "value": "#0f1318",
+        "type": "color"
+      },
+      "surface": {
+        "value": "#161b21",
+        "type": "color"
+      },
+      "surface-1": {
+        "value": "#161b21",
+        "type": "color"
+      },
+      "surface-2": {
+        "value": "#1e242b",
+        "type": "color"
+      },
+      "surface-3": {
+        "value": "#262d35",
+        "type": "color"
+      },
+      "scrim": {
+        "value": "rgba(0, 0, 0, 0.56)",
+        "type": "color"
+      },
+      "border-hairline": {
+        "value": "#262d35",
+        "type": "color"
+      },
+      "border-faint": {
+        "value": "#1e242b",
+        "type": "color"
+      },
+      "border-light": {
+        "value": "#262d35",
+        "type": "color"
+      },
+      "border-control": {
+        "value": "#646e78",
+        "type": "color"
+      },
+      "text": {
+        "value": "#eef1f4",
+        "type": "color"
+      },
+      "text-2": {
+        "value": "#c3cad2",
+        "type": "color"
+      },
+      "text-3": {
+        "value": "#8d96a0",
+        "type": "color"
+      },
+      "text-graphic": {
+        "value": "#535b64",
+        "type": "color"
+      },
+      "accent": {
+        "value": "#5690dd",
+        "type": "color"
+      },
+      "accent-fg": {
+        "value": "#0f1318",
+        "type": "color"
+      },
+      "accent-soft": {
+        "value": "#0a1f3e",
+        "type": "color"
+      },
+      "accent-pressed": {
+        "value": "#8fb5ea",
+        "type": "color"
+      },
+      "accent-strong": {
+        "value": "#8fb5ea",
+        "type": "color"
+      },
+      "ok": {
+        "value": "#7cc0a0",
+        "type": "color"
+      },
+      "ok-soft": {
+        "value": "#082418",
+        "type": "color"
+      },
+      "warn": {
+        "value": "#e0b169",
+        "type": "color"
+      },
+      "warn-soft": {
+        "value": "#331d00",
+        "type": "color"
+      },
+      "warn-strong": {
+        "value": "#e0b169",
+        "type": "color"
+      },
+      "error": {
+        "value": "#e0877f",
+        "type": "color"
+      },
+      "error-fg": {
+        "value": "#0f1318",
+        "type": "color"
+      },
+      "danger": {
+        "value": "#e0877f",
+        "type": "color"
+      },
+      "danger-soft": {
+        "value": "#3d100c",
+        "type": "color"
+      },
+      "danger-strong": {
+        "value": "#e0877f",
+        "type": "color"
+      },
+      "info": {
+        "value": "#8fb5ea",
+        "type": "color"
+      },
+      "info-soft": {
+        "value": "#0a1f3e",
+        "type": "color"
+      },
+      "link": {
+        "value": "#5690dd",
+        "type": "color"
+      },
+      "verify-ok": {
+        "value": "#8fb5ea",
+        "type": "color"
+      },
+      "verify-pending": {
+        "value": "#e0b169",
+        "type": "color"
+      },
+      "highlight": {
+        "value": "#7f4800",
+        "type": "color"
+      },
+      "focus": {
+        "value": "#5690dd",
+        "type": "color"
+      },
+      "badge": {
+        "value": "#c0362c",
+        "type": "color"
+      },
+      "badge-fg": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "member-from": {
+        "value": "#7a6329",
+        "type": "color"
+      },
+      "member-to": {
+        "value": "#5c4a1d",
+        "type": "color"
+      },
+      "dot-running": {
+        "value": "#5690dd",
+        "type": "color"
+      },
+      "dot-done": {
+        "value": "#7cc0a0",
+        "type": "color"
+      },
+      "dot-review": {
+        "value": "#c98a1f",
+        "type": "color"
+      },
+      "dot-failed": {
+        "value": "#d1594e",
+        "type": "color"
+      },
+      "dot-canceled": {
+        "value": "#535b64",
+        "type": "color"
+      },
+      "chart-grid": {
+        "value": "#262d35",
+        "type": "color"
+      },
+      "chart-axis": {
+        "value": "#646e78",
+        "type": "color"
+      },
+      "chart-band": {
+        "value": "#0a1f3e",
+        "type": "color"
+      },
+      "chart-target": {
+        "value": "#bac2ca",
+        "type": "color"
+      }
+    },
+    "data": {
+      "own": {
+        "value": "#0a5dc1",
+        "type": "color"
+      },
+      "rival": {
+        "1": {
+          "value": "#5a626b",
+          "type": "color"
+        },
+        "2": {
+          "value": "#8a939c",
+          "type": "color"
+        },
+        "3": {
+          "value": "#b4bcc5",
+          "type": "color"
+        }
+      },
+      "series": {
+        "1": {
+          "value": "#0a5dc1",
+          "type": "color"
+        },
+        "2": {
+          "value": "#e07b39",
+          "type": "color"
+        },
+        "3": {
+          "value": "#1d9a87",
+          "type": "color"
+        },
+        "4": {
+          "value": "#7b5cd6",
+          "type": "color"
+        },
+        "5": {
+          "value": "#c94f7c",
+          "type": "color"
+        },
+        "6": {
+          "value": "#c7a12b",
+          "type": "color"
+        },
+        "7": {
+          "value": "#5a626b",
+          "type": "color"
+        },
+        "8": {
+          "value": "#b4bcc5",
+          "type": "color"
+        }
+      },
+      "heat": {
+        "0": {
+          "value": "#f3f6fa",
+          "type": "color"
+        },
+        "1": {
+          "value": "#dce8f7",
+          "type": "color"
+        },
+        "2": {
+          "value": "#b3cdef",
+          "type": "color"
+        },
+        "3": {
+          "value": "#7fa9e3",
+          "type": "color"
+        },
+        "4": {
+          "value": "#3e7ed4",
+          "type": "color"
+        },
+        "5": {
+          "value": "#0a5dc1",
+          "type": "color"
+        }
+      },
+      "severity": {
+        "s3": {
+          "value": "#c0362c",
+          "type": "color"
+        },
+        "s2": {
+          "value": "#e0877f",
+          "type": "color"
+        },
+        "s1": {
+          "value": "#939ca6",
+          "type": "color"
+        }
+      }
+    },
+    "study": {
+      "synthesis": {
+        "fg": {
+          "value": "#0c3e7f",
+          "type": "color"
+        },
+        "bg": {
+          "value": "#eef4fc",
+          "type": "color"
+        },
+        "label": {
+          "value": "Meta 分析 / 系统综述",
+          "type": "text"
+        }
+      },
+      "rct": {
+        "fg": {
+          "value": "#8a4b12",
+          "type": "color"
+        },
+        "bg": {
+          "value": "#fcf0e4",
+          "type": "color"
+        },
+        "label": {
+          "value": "随机对照试验",
+          "type": "text"
+        }
+      },
+      "guideline": {
+        "fg": {
+          "value": "#5b3fb0",
+          "type": "color"
+        },
+        "bg": {
+          "value": "#f2eefc",
+          "type": "color"
+        },
+        "label": {
+          "value": "指南",
+          "type": "text"
+        }
+      },
+      "label": {
+        "fg": {
+          "value": "#0f6b5e",
+          "type": "color"
+        },
+        "bg": {
+          "value": "#e8f5f2",
+          "type": "color"
+        },
+        "label": {
+          "value": "说明书",
+          "type": "text"
+        }
+      },
+      "other": {
+        "fg": {
+          "value": "#3e454d",
+          "type": "color"
+        },
+        "bg": {
+          "value": "#edf0f3",
+          "type": "color"
+        },
+        "label": {
+          "value": "其他研究",
+          "type": "text"
+        }
+      }
+    },
+    "type": {
+      "badge": {
+        "fontSize": {
+          "value": "12px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "meta": {
+        "fontSize": {
+          "value": "12px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.5",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "caption": {
+        "fontSize": {
+          "value": "12px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "20px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "compact": {
+        "fontSize": {
+          "value": "13px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "20px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "ui": {
+        "fontSize": {
+          "value": "14px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "22px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "ui-sm": {
+        "fontSize": {
+          "value": "14px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "22px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "body": {
+        "fontSize": {
+          "value": "16px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.75",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "wordmark": {
+        "fontSize": {
+          "value": "16px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.3",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "\"Source Serif 4\", \"Songti SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", Georgia, serif",
+          "type": "fontFamilies"
+        }
+      },
+      "section": {
+        "fontSize": {
+          "value": "18px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "26px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "heading": {
+        "fontSize": {
+          "value": "20px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "28px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "title": {
+        "fontSize": {
+          "value": "24px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "32px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "doc-title": {
+        "fontSize": {
+          "value": "24px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "34px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "\"Source Serif 4\", \"Songti SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", Georgia, serif",
+          "type": "fontFamilies"
+        }
+      },
+      "display": {
+        "fontSize": {
+          "value": "24px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "1.3",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "metric": {
+        "fontSize": {
+          "value": "32px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "40px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "metric-lg": {
+        "fontSize": {
+          "value": "40px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "48px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+          "type": "fontFamilies"
+        }
+      },
+      "hero": {
+        "fontSize": {
+          "value": "40px",
+          "type": "fontSizes"
+        },
+        "lineHeight": {
+          "value": "50px",
+          "type": "lineHeights"
+        },
+        "fontFamily": {
+          "value": "\"Source Serif 4\", \"Songti SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", Georgia, serif",
+          "type": "fontFamilies"
+        }
+      }
+    },
+    "space": {
+      "4": {
+        "value": "4px",
+        "type": "spacing"
+      },
+      "8": {
+        "value": "8px",
+        "type": "spacing"
+      },
+      "12": {
+        "value": "12px",
+        "type": "spacing"
+      },
+      "16": {
+        "value": "16px",
+        "type": "spacing"
+      },
+      "20": {
+        "value": "20px",
+        "type": "spacing"
+      },
+      "24": {
+        "value": "24px",
+        "type": "spacing"
+      },
+      "32": {
+        "value": "32px",
+        "type": "spacing"
+      },
+      "40": {
+        "value": "40px",
+        "type": "spacing"
+      },
+      "48": {
+        "value": "48px",
+        "type": "spacing"
+      },
+      "64": {
+        "value": "64px",
+        "type": "spacing"
+      }
+    },
+    "radius": {
+      "tag": {
+        "value": "6px",
+        "type": "borderRadius"
+      },
+      "control": {
+        "value": "8px",
+        "type": "borderRadius"
+      },
+      "card": {
+        "value": "12px",
+        "type": "borderRadius"
+      },
+      "panel": {
+        "value": "16px",
+        "type": "borderRadius"
+      },
+      "composer": {
+        "value": "24px",
+        "type": "borderRadius"
+      },
+      "chip": {
+        "value": "999px",
+        "type": "borderRadius"
+      }
+    },
+    "size": {
+      "tag": {
+        "value": "22px",
+        "type": "sizing"
+      },
+      "sm": {
+        "value": "28px",
+        "type": "sizing"
+      },
+      "inline": {
+        "value": "28px",
+        "type": "sizing"
+      },
+      "control": {
+        "value": "36px",
+        "type": "sizing"
+      },
+      "formPrimary": {
+        "value": "44px",
+        "type": "sizing"
+      }
+    },
+    "container": {
+      "narrow": {
+        "value": "560px",
+        "type": "sizing"
+      },
+      "read": {
+        "value": "720px",
+        "type": "sizing"
+      },
+      "content": {
+        "value": "720px",
+        "type": "sizing"
+      },
+      "page": {
+        "value": "1040px",
+        "type": "sizing"
+      },
+      "wide": {
+        "value": "1200px",
+        "type": "sizing"
+      },
+      "wideMax": {
+        "value": "1280px",
+        "type": "sizing"
+      },
+      "full": {
+        "value": "1040px",
+        "type": "sizing"
+      },
+      "measure": {
+        "value": "560px",
+        "type": "sizing"
+      },
+      "measureBody": {
+        "value": "640px",
+        "type": "sizing"
+      },
+      "sidebar": {
+        "value": "280px",
+        "type": "sizing"
+      },
+      "sidebarCollapsed": {
+        "value": "56px",
+        "type": "sizing"
+      }
+    },
+    "shadow": {
+      "e1": {
+        "value": "0 1px 2px rgba(20, 32, 48, 0.04), 0 0 0 1px rgba(20, 32, 48, 0.06)",
+        "type": "boxShadow"
+      },
+      "e2": {
+        "value": "0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05)",
+        "type": "boxShadow"
+      },
+      "e3": {
+        "value": "0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06)",
+        "type": "boxShadow"
+      }
+    }
+  }
+}

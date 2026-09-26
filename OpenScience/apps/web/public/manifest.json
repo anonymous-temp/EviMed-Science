@@ -1,18 +1,33 @@
 {
   "id": "/app/chat",
-  "name": "EviMed 循证医学科研智能体",
+  "name": "EviMed \u5faa\u8bc1\u533b\u5b66\u79d1\u7814\u667a\u80fd\u4f53",
   "short_name": "EviMed",
-  "description": "向 EviMed 提问、派发研究任务，在手机上查看运行记录与报告。",
+  "description": "\u5411 EviMed \u63d0\u95ee\u3001\u6d3e\u53d1\u7814\u7a76\u4efb\u52a1\uff0c\u5728\u624b\u673a\u4e0a\u67e5\u770b\u8fd0\u884c\u8bb0\u5f55\u4e0e\u62a5\u544a\u3002",
   "lang": "zh-CN",
   "dir": "ltr",
   "start_url": "/app/chat",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#fafbfc",
+  "theme_color": "#fafbfc",
   "icons": [
-    { "src": "/icons/evimed-192.png?v=1", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/evimed-512.png?v=1", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/evimed-maskable-512.png?v=1", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/evimed-192.png?v=1",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/evimed-512.png?v=1",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/evimed-maskable-512.png?v=1",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

@@ -5,7 +5,7 @@
 # Apply in Python with:  import matplotlib.pyplot as plt; plt.style.use(str(path))
 
 # --- Color cycle: categorical slots 1..8, fixed order (light-surface hues) ---
-axes.prop_cycle: cycler('color', ['2a78d6', 'eb6834', '1baf7a', 'eda100', 'e87ba4', '008300', '4a3aa7', 'e34948'])
+axes.prop_cycle: cycler('color', ['0a5dc1', 'e07b39', '1d9a87', '7b5cd6', 'c94f7c', 'c7a12b', '5a626b', 'b4bcc5'])
 
 # --- Figure & surface ---
 figure.facecolor: white
@@ -16,19 +16,19 @@ figure.figsize: 6.0, 4.0
 axes.facecolor: white
 
 # --- Ink & chrome: recessive axes, hairline grid, no top/right spines ---
-text.color: 2a2723
-axes.labelcolor: 2a2723
-axes.edgecolor: cbc6bb
+text.color: 1a1f25
+axes.labelcolor: 1a1f25
+axes.edgecolor: 858e97
 axes.linewidth: 0.8
 axes.grid: True
 axes.grid.axis: y
-grid.color: e7e3da
+grid.color: e4e8ec
 grid.linewidth: 0.8
 grid.linestyle: -
 axes.spines.top: False
 axes.spines.right: False
-xtick.color: 8c877d
-ytick.color: 8c877d
+xtick.color: 646d77
+ytick.color: 646d77
 xtick.labelcolor: 2a2723
 ytick.labelcolor: 2a2723
 xtick.direction: out

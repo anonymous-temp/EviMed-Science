@@ -398,18 +398,28 @@ export interface ChartPalette {
   status: { good: string; warning: string; serious: string; critical: string };
 }
 
-/** Light-mode palette (chart surface #ffffff). */
+/**
+ * Light-mode palette (chart surface #ffffff).
+ *
+ * Slot 1 is the brand: in a comparison chart "ours" is always the brand blue
+ * and every competitor is a grey (slots 7, 8 and `--chart-rival-*`). A chart of
+ * eight rainbow brands tells a reader nothing about which one is theirs.
+ *
+ * Kept as literals rather than imported so this package stays dependency-free;
+ * `apps/web/src/lib/chartPalette.test.ts` asserts they equal
+ * `@evimed/design-tokens`' `CHART_SERIES`, so drift is a red test.
+ */
 export const CHART_PALETTE_LIGHT: ChartPalette = {
-  categorical: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
-  sequential: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#104281"],
-  status: { good: "#0ca30c", warning: "#c98a2b", serious: "#ec835a", critical: "#d03b3b" },
+  categorical: ["#0a5dc1", "#e07b39", "#1d9a87", "#7b5cd6", "#c94f7c", "#c7a12b", "#5a626b", "#b4bcc5"],
+  sequential: ["#f3f6fa", "#dce8f7", "#b3cdef", "#7fa9e3", "#3e7ed4", "#0a5dc1"],
+  status: { good: "#1e7a4c", warning: "#a15c00", serious: "#d1594e", critical: "#c0362c" },
 };
 
-/** Dark-mode palette — the same hues stepped for the dark surface (#1d2225). */
+/** Dark-mode palette — the same hues stepped for the dark surface (#161b21). */
 export const CHART_PALETTE_DARK: ChartPalette = {
-  categorical: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
-  sequential: ["#104281", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
-  status: { good: "#0ca30c", warning: "#d7a24a", serious: "#ec835a", critical: "#d03b3b" },
+  categorical: ["#5690dd", "#e8975f", "#3fb5a2", "#9b82e2", "#d7749a", "#d4b551", "#8a939c", "#c8cfd6"],
+  sequential: ["#0a1f3e", "#0c3e7f", "#0a5dc1", "#3e7ed4", "#7fa9e3", "#b3cdef"],
+  status: { good: "#7cc0a0", warning: "#e0b169", serious: "#e0877f", critical: "#d1594e" },
 };
 
 export function chartPalette(theme: ChartTheme): ChartPalette {

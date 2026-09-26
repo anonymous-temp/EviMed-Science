@@ -21,7 +21,7 @@ import {
   DESIGN_TOKENS_CSS_BEGIN,
   DESIGN_TOKENS_CSS_END,
   designTokensCss,
-} from '../../packages/domain/src/designTokens.mjs'
+} from '../../packages/design-tokens/src/css.mjs'
 
 const target = fileURLToPath(new URL('../../apps/web/src/index.css', import.meta.url))
 
