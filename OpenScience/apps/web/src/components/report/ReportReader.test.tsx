@@ -85,9 +85,11 @@ describe("ReportReader", () => {
     const check = screen.getByRole("button", { name: "查看这句话的依据（1 条主张，其中有未核对上的引文）" });
     expect(check).toHaveTextContent("依据 ⚠");
     await userEvent.click(check);
-    expect(await screen.findByText(/这段引文没有在保存的原文中找到：请打开原文核对措辞与数字。/)).toBeInTheDocument();
-    // The way to the preserved original.
-    expect(screen.getByRole("link", { name: /定位原文/ })).toHaveAttribute(
+    const guidance = await screen.findByText(/这段引文没有在保存的原文中找到：请打开原文核对措辞与数字。/);
+    // The way to the preserved original. Scoped to the popover: the source
+    // cards below the report offer the same way in, from the other direction.
+    const popover = guidance.closest("[data-claim-id]")!;
+    expect(within(popover as HTMLElement).getByRole("link", { name: /定位原文/ })).toHaveAttribute(
       "href",
       "/app/runs/run_1/files/.evimed-sources/aspree/fulltext.md?quote=higher%20risk%20of%20major%20hemorrhage",
     );

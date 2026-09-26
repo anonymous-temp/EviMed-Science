@@ -1,36 +1,53 @@
 import { cn } from "@/lib/cn";
 
 /**
- * A GEO trend: one line in the accent, the last reading marked by a hollow dot
- * — the frontier feed's sparkline — plus the target as a dashed hairline when
- * there is one. The scale spans the readings and the target together, so the
- * gap between them is drawn to size. With fewer than two readings nothing is
- * drawn; the number beside it is the fact.
+ * A metric's trend beside its number: one brand line, the latest reading a
+ * hollow dot, the target a dashed hairline. The scale spans the readings and
+ * the target together, so the distance between them is drawn to size.
+ *
+ * **One reading is drawn, not dropped.** A single measurement is a baseline
+ * against a target, which is exactly what a reader wants to see in the first
+ * week of a programme; leaving the box blank is what made the old board look
+ * broken (appendix E §4.5). Only a metric with nothing measured at all draws
+ * nothing, and then the number beside it already says 「—」.
  *
  * A picture of numbers the page states in words, so it is hidden from
- * assistive technology.
+ * assistive technology. Action markers belong on the main trend chart and
+ * never here.
  */
+
+export interface SparklineShape {
+  path: string;
+  points: Array<{ x: number; y: number }>;
+  last: { x: number; y: number };
+  target: number | null;
+}
+
 export function geoSparkline(
   values: ReadonlyArray<number | null>,
   target: number | null,
   width: number,
   height: number,
   inset = 3,
-): { path: string; last: { x: number; y: number }; target: number | null } | null {
+): SparklineShape | null {
   const read = values.flatMap((value, index) => (value === null || !Number.isFinite(value) ? [] : [{ index, value }]));
-  if (read.length < 2) return null;
+  if (read.length === 0) return null;
   const span = Math.max(1, values.length - 1);
-  const levels = [...read.map((point) => point.value), ...(target !== null && Number.isFinite(target) ? [target] : [])];
+  const targeted = target !== null && Number.isFinite(target);
+  const levels = [...read.map((point) => point.value), ...(targeted ? [target as number] : [])];
   const low = Math.min(...levels);
   const high = Math.max(...levels);
   const round = (value: number) => Math.round(value * 10) / 10;
-  const x = (index: number) => round(inset + (index / span) * (width - inset * 2));
+  // A single reading sits where it would sit in a series — at its own index —
+  // so the space to its right reads as the measurements still to come.
+  const x = (index: number) => round(inset + (read.length === 1 ? 0 : index / span) * (width - inset * 2));
   const y = (value: number) => round(high === low ? height / 2 : inset + (1 - (value - low) / (high - low)) * (height - inset * 2));
-  const coords = read.map((point) => ({ x: x(point.index), y: y(point.value) }));
+  const points = read.map((point) => ({ x: x(point.index), y: y(point.value) }));
   return {
-    path: coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`).join(" "),
-    last: coords[coords.length - 1],
-    target: target !== null && Number.isFinite(target) ? y(target) : null,
+    path: points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`).join(" "),
+    points,
+    last: points[points.length - 1],
+    target: targeted ? y(target as number) : null,
   };
 }
 
@@ -53,6 +70,7 @@ export function GeoSparkline({
     <svg
       aria-hidden="true"
       data-geo-sparkline=""
+      data-geo-readings={line.points.length}
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
@@ -65,13 +83,15 @@ export function GeoSparkline({
           x2={width}
           y1={line.target}
           y2={line.target}
-          className="text-text-3"
+          className="text-chart-target"
           stroke="currentColor"
           strokeWidth={1}
           strokeDasharray="3 3"
         />
       )}
-      <path d={line.path} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      {line.points.length > 1 && (
+        <path d={line.path} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      )}
       <circle cx={line.last.x} cy={line.last.y} r={2.5} className="fill-bg" stroke="currentColor" strokeWidth={1.5} />
     </svg>
   );

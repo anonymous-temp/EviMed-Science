@@ -585,4 +585,15 @@ describe("SourcesPage", () => {
     expect(screen.queryByText("研究方案.docx")).not.toBeInTheDocument();
     expect(mocks.listSources).toHaveBeenLastCalledWith("project-two", {});
   });
+
+  it("names whose knowledge base this is, and what is in it", async () => {
+    // The page used to name neither: a library of twelve documents gave a
+    // reader no way to tell which project's twelve they were looking at.
+    render(<SourcesPage />);
+    // Wait for the library itself: the rail only exists once there is one.
+    expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
+    const rail = screen.getByRole("navigation", { name: "项目与类型" });
+    expect(within(rail).getByText("项目")).toBeInTheDocument();
+  });
+
 });

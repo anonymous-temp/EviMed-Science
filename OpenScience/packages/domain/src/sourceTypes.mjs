@@ -168,3 +168,46 @@ export function evidenceSourceTypeOf(record) {
   }
   return 'other'
 }
+
+/**
+ * Which badge colour a source type wears.
+ *
+ * The palette carries five pairs (`STUDY_TYPE_BADGES` in `@evimed/design-tokens`:
+ * `--study-<kind>-fg/bg`) and this vocabulary carries twelve types, so the two
+ * need a stated mapping and had none — the badge tokens shipped with no
+ * consumer while every claim in the product carried one of the twelve. The
+ * mapping is here, beside the types, because it is a fact about evidence and
+ * not about colour: a systematic review and a meta-analysis are one family to
+ * a reader, and a regulator's notice reads as the label it accompanies.
+ *
+ * `other` is the honest ground: a narrative review, a trial registration and
+ * an unrecognised record are not a study design, and giving any of them a
+ * study colour would say something the table does not know.
+ *
+ * @type {Readonly<Record<EvidenceSourceType, 'synthesis' | 'rct' | 'guideline' | 'label' | 'other'>>}
+ */
+export const STUDY_BADGE_KINDS = Object.freeze({
+  guideline: 'guideline',
+  'systematic-review': 'synthesis',
+  'meta-analysis': 'synthesis',
+  rct: 'rct',
+  'clinical-trial': 'rct',
+  observational: 'other',
+  'case-report': 'other',
+  review: 'other',
+  label: 'label',
+  regulatory: 'label',
+  'trial-registration': 'other',
+  other: 'other',
+})
+
+/**
+ * The badge kind of a source type, `other` for anything this build does not
+ * know — never a thrown error: a badge is presentation, and a record from a
+ * newer table must still draw.
+ * @param {unknown} value @returns {'synthesis' | 'rct' | 'guideline' | 'label' | 'other'}
+ */
+export function studyBadgeKind(value) {
+  const type = String(value ?? '')
+  return Object.hasOwn(STUDY_BADGE_KINDS, type) ? STUDY_BADGE_KINDS[/** @type {EvidenceSourceType} */ (type)] : 'other'
+}

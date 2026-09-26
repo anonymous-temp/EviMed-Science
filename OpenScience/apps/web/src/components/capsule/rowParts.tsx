@@ -25,14 +25,18 @@ export function InferredMark() {
 /**
  * A row's one sentence: at most 40 CJK characters a line (`max-w-measure`),
  * and 「推断」 after its last visible line, never clipped off with the words.
- * `clamp` is for a row that opens: closed, it shows one line — two on a phone,
- * where a line holds a dozen characters — and opening it shows the rest. A
- * row with nothing to open shows its whole sentence.
+ * `clamp` is for a row that opens: closed it shows two lines, and opening it
+ * shows the rest. A row with nothing to open shows its whole sentence.
+ *
+ * It was one line on a desktop until 2026-09-26. A memory is a sentence about
+ * the reader — 「更关心 65 岁以上人群的用药安全」 — and one line truncated it to a
+ * fragment they then had to open the row to finish reading, on a page whose
+ * whole job is to let them see what the system believes about them.
  */
 export function RowSentence({ text, inferred = false, clamp = false }: { text: string; inferred?: boolean; clamp?: boolean }) {
   return (
     <span className="flex max-w-measure items-end gap-1.5">
-      <span className={clamp ? "line-clamp-2 sm:line-clamp-1" : undefined}>{text}</span>
+      <span className={clamp ? "line-clamp-2" : undefined}>{text}</span>
       {inferred && <InferredMark />}
     </span>
   );

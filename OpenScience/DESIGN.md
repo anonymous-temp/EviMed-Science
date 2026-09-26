@@ -56,12 +56,12 @@ ran.
 | `border-control` | `#858e97` | `#646e78` | the visible boundary of a control — 3.21:1, and 3.10:1 on the sidebar (WCAG 1.4.11) |
 | `text` | `#1a1f25` | `#eef1f4` | body and headings, 16.00:1 |
 | `text-2` | `#3e454d` | `#c3cad2` | secondary lines, 9.37:1 |
-| `text-3` | `#646d77` | `#8d96a0` | metadata, 5.07:1 — **nothing lighter carries text** |
+| `text-3` | `#5f686f` | `#8d96a0` | metadata, 5.48:1 — **nothing lighter carries text** |
 | `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word** |
-| `accent` | `#0a5dc1` | `#5690dd` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
+| `accent` | `#0a5dc1` | `#5f97e0` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
 | `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
 | `accent-pressed` | `#0a4da0` | `#8fb5ea` | the pressed state of an accent surface |
-| `accent-strong` | `#0c3e7f` | `#8fb5ea` | text on `accent-soft`, 9.93:1 |
+| `accent-strong` | `#0c3e7f` | `#8fb5ea` | text on `accent-soft`, 10.08:1 |
 | `ok` `warn` `error` | 600 step | 300 step | **status only**, always beside a shape and a word |
 | `member-from` / `member-to` | `#f6d58e` → `#fbe7be` | — | the membership card's one gradient |
 

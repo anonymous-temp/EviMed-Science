@@ -37,7 +37,7 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#646d77",
+        "color": "#5f686f",
         "fontSize": 12,
         "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
       },
@@ -65,7 +65,7 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#646d77",
+        "color": "#5f686f",
         "fontSize": 12,
         "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
       },
@@ -88,7 +88,7 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#646d77",
+        "color": "#5f686f",
         "fontSize": 12,
         "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
       },
@@ -116,7 +116,7 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#646d77",
+        "color": "#5f686f",
         "fontSize": 12,
         "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
       },
@@ -202,7 +202,7 @@
         ]
       },
       "textStyle": {
-        "color": "#646d77"
+        "color": "#5f686f"
       }
     },
     "heatmap": {

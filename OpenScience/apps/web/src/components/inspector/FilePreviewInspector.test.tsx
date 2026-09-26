@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
@@ -63,7 +63,10 @@ describe("FilePreviewInspector — markdown", () => {
     render(<FilePreviewInspector data={{ ...md, path: "deliverables/d1/clinical-evidence-report.md", filename: "clinical-evidence-report.md",
       content: "MIMIC-IV 为单一机构数据库 [1]<!-- claim:CLM-001 -->。" }} onClose={() => {}} />);
     await userEvent.click(await screen.findByRole("button", { name: "查看这句话的依据（1 条主张）" }));
-    expect(await screen.findByText("“covering a decade”")).toBeInTheDocument();
+    // Scoped to the popover: the source cards under the report quote the same
+    // passage, from the other end of the same citation system.
+    const claim = await screen.findByText("MIMIC-IV 是单一机构数据库。");
+    expect(within(claim.closest("[data-claim-id]") as HTMLElement).getByText("“covering a decade”")).toBeInTheDocument();
     expect(vi.mocked(readArtifact)).toHaveBeenCalledWith("deliverables/d1/clinical-evidence-matrix.json", undefined);
   });
 

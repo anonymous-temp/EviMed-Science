@@ -25,7 +25,7 @@
   "scripts": {
     "build": "node src/generate.mjs",
     "check": "node src/generate.mjs --check",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
     "lint": "eslint src test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

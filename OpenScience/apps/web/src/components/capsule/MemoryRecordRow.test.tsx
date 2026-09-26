@@ -98,7 +98,8 @@ describe("one memory, as one row", () => {
     const long = "排除标准第 3 条在题录层级无法判定时记为待定，不硬判；全文阶段再由两名评审独立判定。";
     row({ summary: long, evidence: [{ fingerprint: "f1", sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/m1", quote: "原话", observedAt: null, weight: 1 }] });
     const sentence = screen.getByText(long);
-    expect(sentence).toHaveClass("line-clamp-2", "sm:line-clamp-1");
+    expect(sentence).toHaveClass("line-clamp-2");
+    expect(sentence).not.toHaveClass("sm:line-clamp-1");
     await userEvent.click(screen.getByRole("button", { name: /排除标准第 3 条/ }));
     expect(sentence).not.toHaveClass("line-clamp-2");
     cleanup();

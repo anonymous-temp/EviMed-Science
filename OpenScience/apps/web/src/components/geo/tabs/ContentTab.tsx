@@ -13,6 +13,7 @@ import { useProjectStore } from "@/lib/projects";
 import { snapshotHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
+import { StatBand, StatTile } from "@/components/ui/StatTile";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { List, ListRow } from "@/components/ui/ListRow";
@@ -79,7 +80,9 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
   };
 
   return (
-    <div data-geo-tab="content">
+    <div data-geo-tab="content" className="flex flex-col gap-6">
+      <Pipeline articles={articles} />
+      <div>
       <FilterRow summary={`${articles.length} 篇 · 已发布 ${published}`}>
         <FilterChips label="稿件层级" options={options} value={current} onChange={setLayer} />
       </FilterRow>
@@ -111,6 +114,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
           );
         })}
       </List>
+      </div>
       {pending?.kind === "withdraw" && (
         <ConfirmDialog
           title={`撤回「${pending.article.title || "这篇稿件"}」？`}
@@ -147,4 +151,31 @@ function articleMeta(article: GeoArticle): string {
 function statusLine(article: GeoArticle): string {
   const word = GEO_ARTICLE_STATUS_WORDS[article.status] ?? "—";
   return article.cited ? `${word} · 已被 AI 引用` : word;
+}
+
+/**
+ * The pipeline as four counts, left to right: written, ready to publish, live,
+ * and quoted by an AI — the one place a reader can see whether the work turned
+ * into anything (fusion plan §4.8, mockup m11). Each count is a fact about the
+ * articles on file, never a percentage of a run.
+ */
+function Pipeline({ articles }: { articles: GeoArticle[] }) {
+  const counts = [
+    { key: "written", label: "已写好", value: articles.length },
+    { key: "publishable", label: "可发布", value: articles.filter((article) => article.status === "publishable" || article.status === "placed" || article.status === "published").length },
+    { key: "live", label: "已上线", value: articles.filter((article) => article.status === "published").length },
+    { key: "cited", label: "被 AI 引用", value: articles.filter((article) => article.cited).length },
+  ];
+  const held = articles.filter((article) => article.safety === "open").length;
+  return (
+    <StatBand
+      label="稿件流水线"
+      columns={4}
+      footnote={held > 0 ? `其中 ${held} 篇等你看过安全问题后才能投放` : null}
+    >
+      {counts.map((count) => (
+        <StatTile key={count.key} label={count.label} value={String(count.value)} unit="篇" />
+      ))}
+    </StatBand>
+  );
 }

@@ -25,8 +25,9 @@
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { listWebAgentRuns, type WebAgentRun } from "./apiClient";
+import { gradeAnswerEvidence } from "@evimed/domain/answer-evidence-grade";
 import { readArtifact, readClaimVerification } from "./artifactFile";
-import { claimMatrixPathFor, parseClaimMatrix, type ClaimVerification } from "./claimCitations";
+import { claimMatrixPathFor, claimSources, parseClaimMatrix, type ClaimVerification } from "./claimCitations";
 import { subscribeRunEvents, type RunStreamEvent } from "./runEvents";
 import { listSources, type SourceRecord } from "./sourceClient";
 
@@ -57,19 +58,50 @@ export interface FrameRunState {
   updatedAt?: string;
 }
 
-/** The claims and sources behind a run's report (the frame's `evidence`). */
+/**
+ * The claims and sources behind a run's report (the frame's `evidence`).
+ *
+ * The sources carry what a source card draws (融合方案 §8.3): the study-type
+ * badge's kind, the identifier a reader copies, the quotation the claim rests
+ * on and the verdict `claim_verification` reached on it, and any retraction or
+ * correction notice Crossref returned. `journal`, `year` and `funding` are
+ * optional because the matrix contract does not require them — a card shows
+ * what the package recorded and invents nothing.
+ */
 export interface FrameEvidence {
   runId: string;
   reportPath: string;
   matrixPath: string;
   claims: Array<{ claimId: string; claim: string; claimType: string; status: string; sourceTitle?: string; identifier?: string; url?: string; sourceType?: string }>;
-  sources: Array<{ title: string; identifier?: string; url?: string; sourceType?: string; claims: number }>;
+  sources: Array<{
+    title: string; identifier?: string; url?: string; sourceType?: string; claims: number;
+    journal?: string; year?: string; funding?: string;
+    /** The source's own words this report rests on, and whether they were found in it. */
+    quote?: string; status?: string; claimId?: string;
+    updates?: Array<{ kind: string; noticeDoi: string | null; date: string | null; source: string | null }>;
+  }>;
+  /**
+   * The answer-level evidence grade (§5.8 答案级), computed in code by
+   * `@evimed/domain`'s `gradeAnswerEvidence` from the decidable items — the
+   * design of each source, how many there are, whether they agree, whether
+   * the interval crosses no effect. `U` when they cannot decide, never a
+   * guess, and the frame draws no badge for a letter it has no word for.
+   */
+  grade?: { letter: string; reasons: string[] };
+  /**
+   * The assumptions the answer holds under (「按：成人 · 肾功能正常 · 非妊娠」).
+   * Nothing writes them yet: the plan's clarifications are the run's own notes
+   * and reach no surface today, so this stays absent and the row does not
+   * draw. It is the seam that lights up when they do.
+   */
+  premises?: string[];
 }
 
 const REPORT_NAME = "clinical-evidence-report.md";
 const MAX_CLAIMS = 400;
 const MAX_CLAIM_TEXT = 300;
 const MAX_SOURCES = 200;
+const MAX_QUOTE_TEXT = 600;
 
 /** The run bound to a conversation: the most recent one on its root session. */
 export function boundRunFor(runs: readonly WebAgentRun[], sessionId: string | null | undefined): WebAgentRun | null {
@@ -192,24 +224,46 @@ export function reportPathOf(state: FrameRunState): string | null {
   return paths.find((path) => path.split("/").pop() === REPORT_NAME) ?? null;
 }
 
+/** A string field of a raw matrix record, bounded, or undefined. */
+function matrixText(value: unknown, max: number): string | undefined {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return text ? text.slice(0, max) : undefined;
+}
+
 /** The claims and cited sources of a matrix, bounded for the channel. */
-export function frameEvidenceFrom(runId: string, reportPath: string, matrixPath: string, matrixText: string,
+export function frameEvidenceFrom(runId: string, reportPath: string, matrixPath: string, matrixJson: string,
   verification: ClaimVerification | null): FrameEvidence {
   const statuses = new Map((verification?.claims ?? []).map((claim) => [claim.claimId, String(claim.status)]));
-  const matrix = parseClaimMatrix(matrixText);
-  // `sourceType` rides in the matrix when the run wrote it (C8); the parser
-  // does not keep it, so it is read beside it.
-  const types = new Map<string, string>();
+  const verified = new Map((verification?.claims ?? []).map((claim) => [claim.claimId, claim]));
+  const matrix = parseClaimMatrix(matrixJson);
+  // `sourceType` rides in the matrix when the run wrote it (C8) and so may the
+  // journal, the year and the funder; the parser keeps none of them, so they
+  // are read beside it. Read by name, never by scanning the record: a card
+  // says what the package recorded.
+  const extras = new Map<string, { sourceType?: string; journal?: string; year?: string; funding?: string }>();
   try {
-    const parsed = JSON.parse(matrixText) as { claims?: Array<Record<string, unknown>> };
+    const parsed = JSON.parse(matrixJson) as { claims?: Array<Record<string, unknown>> };
     for (const claim of parsed.claims ?? []) {
-      if (typeof claim?.claimId === "string" && typeof claim.sourceType === "string") types.set(claim.claimId, claim.sourceType);
+      if (typeof claim?.claimId !== "string") continue;
+      extras.set(claim.claimId, {
+        ...(typeof claim.sourceType === "string" ? { sourceType: claim.sourceType } : {}),
+        ...(matrixText(claim.journal ?? claim.publication, 60) ? { journal: matrixText(claim.journal ?? claim.publication, 60) } : {}),
+        ...(matrixText(claim.year ?? claim.publicationYear ?? claim.version, 24) ? { year: matrixText(claim.year ?? claim.publicationYear ?? claim.version, 24) } : {}),
+        ...(claim.funding === "industry" ? { funding: "industry" } : {}),
+      });
     }
   } catch { /* an unreadable matrix has no claims either */ }
   const claims: FrameEvidence["claims"] = [];
   const sources = new Map<string, FrameEvidence["sources"][number]>();
+  // What the grade is computed over: one record per distinct source, with the
+  // design the platform decided for it. The other three inputs — study count,
+  // participants, the interval — are the matrix's to carry; it carries none
+  // today, so a body of evidence grades on its designs and its size alone and
+  // says so in its reasons.
+  const graded: Array<{ design?: string }> = [];
   for (const claim of matrix.values()) {
     if (claims.length >= MAX_CLAIMS) break;
+    const extra = extras.get(claim.claimId) ?? {};
     const text = claim.claim.length > MAX_CLAIM_TEXT ? `${claim.claim.slice(0, MAX_CLAIM_TEXT - 1)}…` : claim.claim;
     claims.push({
       claimId: claim.claimId,
@@ -219,25 +273,47 @@ export function frameEvidenceFrom(runId: string, reportPath: string, matrixPath:
       ...(claim.sourceTitle ? { sourceTitle: claim.sourceTitle } : {}),
       ...(claim.identifier ? { identifier: claim.identifier } : {}),
       ...(claim.sourceUrl ? { url: claim.sourceUrl } : {}),
-      ...(types.get(claim.claimId) ? { sourceType: types.get(claim.claimId) } : {}),
+      ...(extra.sourceType ? { sourceType: extra.sourceType } : {}),
     });
-    const cited = [claim, ...(claim.supportingSources ?? [])];
-    for (const source of cited) {
+    const record = verified.get(claim.claimId);
+    // `claimSources` is the one reading of which sources a claim rests on —
+    // the same one the report reader's 「依据」 popover uses, and the order
+    // `claim_verification` reports its verdicts in.
+    const cited = claimSources(claim);
+    cited.forEach((source, index) => {
       const key = source.identifier || source.sourceUrl || source.sourceTitle;
-      if (!key) continue;
+      if (!key) return;
       const known = sources.get(key);
-      if (known) { known.claims += 1; continue; }
-      if (sources.size >= MAX_SOURCES) continue;
+      if (known) { known.claims += 1; return; }
+      if (sources.size >= MAX_SOURCES) return;
+      const checked = record?.sources?.[index];
+      const type = checked?.sourceType ?? (index === 0 ? extra.sourceType : undefined) ?? source.sourceType;
+      graded.push({ ...(type ? { design: type } : {}) });
       sources.set(key, {
         title: source.sourceTitle || source.identifier || key,
-        ...(source.identifier ? { identifier: source.identifier } : {}),
+        ...(source.identifier || checked?.doi ? { identifier: source.identifier ?? `DOI ${checked?.doi}` } : {}),
         ...(source.sourceUrl ? { url: source.sourceUrl } : {}),
-        ...(source === claim && types.get(claim.claimId) ? { sourceType: types.get(claim.claimId) } : {}),
+        ...(type ? { sourceType: type } : {}),
+        ...(index === 0 && extra.journal ? { journal: extra.journal } : {}),
+        ...(index === 0 && extra.year ? { year: extra.year } : {}),
+        ...(index === 0 && extra.funding ? { funding: extra.funding } : {}),
+        ...(source.supportQuote ? { quote: source.supportQuote.slice(0, MAX_QUOTE_TEXT) } : {}),
+        ...(checked?.status ? { status: checked.status } : {}),
+        ...(checked?.updates?.length ? { updates: checked.updates.slice(0, 4) } : {}),
+        claimId: claim.claimId,
         claims: 1,
       });
-    }
+    });
   }
-  return { runId, reportPath, matrixPath, claims, sources: [...sources.values()] };
+  const { grade, reasons } = gradeAnswerEvidence({ sources: graded });
+  return {
+    runId,
+    reportPath,
+    matrixPath,
+    claims,
+    sources: [...sources.values()],
+    grade: { letter: grade, reasons: reasons.map((reason) => reason.text).slice(0, 4) },
+  };
 }
 
 /** Reads the evidence behind a report, or null when there is no matrix beside it. */

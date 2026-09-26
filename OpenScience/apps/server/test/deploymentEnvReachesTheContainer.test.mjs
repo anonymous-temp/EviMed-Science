@@ -220,6 +220,15 @@ const operatorLevers = {
   // web API is the only caller — no runtime ever talks to Jev.
   OPEN_SCIENCE_REVIEW_JEV_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_REVIEW_JEV_TIMEOUT_MS: ["open-science-web"],
+  // The `evimed` login mode (fusion plan 2026-09-26 §9.2): the switch is how a
+  // deployment lets the EviMed shell sign its researchers in, and the
+  // introspection URL is the one setting the mode cannot default. A lever that
+  // never arrives leaves the mode off while the operator believes it is on —
+  // and, worse, leaves `OPEN_SCIENCE_AUTH_MODE=evimed` with nowhere to ask.
+  OPEN_SCIENCE_EVIMED_AUTH_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL: ["open-science-web"],
+  OPEN_SCIENCE_EVIMED_INTROSPECT_TIMEOUT_MS: ["open-science-web"],
+  OPEN_SCIENCE_EVIMED_INTROSPECT_CACHE_TTL_MS: ["open-science-web"],
 };
 
 async function composeFiles() {

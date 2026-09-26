@@ -30,7 +30,12 @@ export type GeoLoad<T> =
  * is in flight the last answer stays on screen, so an action's refresh does
  * not flash a skeleton; a first read that fails is an error with 重试.
  */
-export function useGeoLoad<T>(key: string, load: () => Promise<T>): { state: GeoLoad<T>; reload: () => void } {
+export interface GeoLoadResult<T> {
+  state: GeoLoad<T>;
+  reload: () => void;
+}
+
+export function useGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoadResult<T> {
   const [state, setState] = useState<GeoLoad<T>>({ kind: "loading" });
   const [round, setRound] = useState(0);
   const loader = useRef(load);

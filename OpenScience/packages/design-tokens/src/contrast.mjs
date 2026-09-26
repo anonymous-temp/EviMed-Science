@@ -30,15 +30,30 @@ export function luminance(hex) {
 }
 
 /**
- * The contrast ratio of two opaque colours, rounded to two decimals the way
- * the notes quote it.
+ * The exact contrast ratio of two opaque colours.
+ *
+ * Unrounded on purpose. `contrastRatio` used to round to the two decimals the
+ * notes quote, and a pair at 4.4995 then read as "4.50" and passed a 4.5 floor
+ * — a measurement that flatters itself is worse than no measurement, and the
+ * kernel frame's own test, which does not round, is what caught it.
+ *
  * @param {string} a
  * @param {string} b
  * @returns {number}
  */
 export function contrastRatio(a, b) {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
-  return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/**
+ * The same ratio at the two decimals a note quotes. Never compared to a floor.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+export function quotedContrast(a, b) {
+  return Math.round(contrastRatio(a, b) * 100) / 100
 }
 
 /**
@@ -65,11 +80,21 @@ export const CONTRAST_RULES = Object.freeze([
   { fg: 'text-2', bg: 'surface-1', min: 4.5, what: 'secondary text on the sidebar' },
   { fg: 'text-3', bg: 'bg', min: 4.5, what: 'metadata on the canvas' },
   { fg: 'text-3', bg: 'surface-1', min: 4.5, what: 'metadata on the sidebar — the lightest text there is' },
+  { fg: 'text-3', bg: 'surface-2', min: 4.5, what: 'metadata on a hovered row' },
+  // The darkest ground text is drawn on: an inset track here, `bg-layer-3` in
+  // the kernel frame. It was missing from this list, and the frame's own test
+  // is what found the 4.27:1 that followed.
+  { fg: 'text-3', bg: 'surface-3', min: 4.5, what: 'metadata on an inset track' },
+  { fg: 'text-2', bg: 'surface-3', min: 4.5, what: 'secondary text on an inset track' },
   { fg: 'accent', bg: 'bg', min: 4.5, what: 'a link on the canvas' },
   { fg: 'accent', bg: 'surface', min: 4.5, what: 'a link on a card' },
   { fg: 'accent-fg', bg: 'accent', min: 4.5, what: 'the primary button label' },
   { fg: 'accent-strong', bg: 'accent-soft', min: 4.5, what: 'text on a selected row' },
   { fg: 'error', bg: 'bg', min: 4.5, what: 'a safety notice on the canvas' },
+  { fg: 'error', bg: 'surface-3', min: 4.5, what: 'a safety notice on an inset track' },
+  { fg: 'warn', bg: 'surface-3', min: 4.5, what: 'an attention mark on an inset track' },
+  { fg: 'ok', bg: 'surface-3', min: 4.5, what: 'a completed state on an inset track' },
+  { fg: 'accent', bg: 'surface-3', min: 4.5, what: 'a link on an inset track' },
   { fg: 'danger-strong', bg: 'danger-soft', min: 4.5, what: 'text in a safety card' },
   { fg: 'error-fg', bg: 'error', min: 4.5, what: 'the label of a destructive button' },
   { fg: 'warn-strong', bg: 'warn-soft', min: 4.5, what: 'text in an attention notice' },

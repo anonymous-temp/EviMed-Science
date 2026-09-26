@@ -1,6 +1,6 @@
 {
   "--dsw-static-deepseek-500": {
-    "light": "#646d77",
+    "light": "#5f686f",
     "dark": "#8d96a0"
   },
   "--dsw-static-deepseek-200": {
@@ -9,7 +9,7 @@
   },
   "--dsw-static-deepseek-450": {
     "light": "#2a72d0",
-    "dark": "#5690dd"
+    "dark": "#5f97e0"
   },
   "--dsw-static-deepseek-50": {
     "light": "#eef4fc",
@@ -20,8 +20,8 @@
     "dark": "#dde9f9"
   },
   "--dsw-static-deepseek-400": {
-    "light": "#5690dd",
-    "dark": "#5690dd"
+    "light": "#5f97e0",
+    "dark": "#5f97e0"
   },
   "--dsw-alias-button-info-fill": {
     "light": "#0a5dc1",
@@ -33,11 +33,11 @@
   },
   "--dsw-alias-link": {
     "light": "#0a5dc1",
-    "dark": "#5690dd"
+    "dark": "#5f97e0"
   },
   "--dsw-alias-state-business-primary": {
     "light": "#0a5dc1",
-    "dark": "#5690dd"
+    "dark": "#5f97e0"
   },
   "--dsw-alias-state-business-tertiary": {
     "light": "#dde9f9",
@@ -45,7 +45,7 @@
   },
   "--dsw-alias-markdown-citation": {
     "light": "#0a5dc1",
-    "dark": "#5690dd"
+    "dark": "#5f97e0"
   },
   "--dsw-alias-bg-multi-select": {
     "light": "#dde9f9",
@@ -128,12 +128,12 @@
     "dark": "#c3cad2"
   },
   "--dsw-alias-label-tertiary": {
-    "light": "#646d77",
+    "light": "#5f686f",
     "dark": "#8d96a0"
   },
   "--dsw-alias-label-caption": {
     "light": "#535b64",
-    "dark": "#646d77"
+    "dark": "#5f686f"
   },
   "--dsw-alias-label-dimmed": {
     "light": "#bac2ca",
@@ -168,19 +168,19 @@
     "dark": "#646e78"
   },
   "--dsw-alias-state-error-primary": {
-    "light": "#c0362c",
+    "light": "#bc342a",
     "dark": "#e0877f"
   },
   "--dsw-alias-state-error-secondary": {
-    "light": "#c0362c",
+    "light": "#bc342a",
     "dark": "#d1594e"
   },
   "--dsw-alias-state-warn-primary": {
-    "light": "#a15c00",
+    "light": "#985600",
     "dark": "#e0b169"
   },
   "--dsw-alias-state-warn-secondary": {
-    "light": "#a15c00",
+    "light": "#985600",
     "dark": "#e0b169"
   },
   "--dsw-alias-state-warn-tertiary": {
@@ -188,15 +188,15 @@
     "dark": "#27241f"
   },
   "--dsw-alias-state-warn-label": {
-    "light": "#a15c00",
+    "light": "#985600",
     "dark": "#e0b169"
   },
   "--dsw-alias-state-success-primary": {
-    "light": "#1e7a4c",
+    "light": "#1c7347",
     "dark": "#7cc0a0"
   },
   "--dsw-alias-state-success-secondary": {
-    "light": "#1e7a4c",
+    "light": "#1c7347",
     "dark": "#7cc0a0"
   },
   "--dsw-alias-state-success-tertiary": {

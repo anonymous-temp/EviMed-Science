@@ -10,6 +10,12 @@ if (typeof window !== "undefined") {
       disconnect() {}
     };
   }
+  // jsdom has no 2D context and shouts about it through the virtual console
+  // on every chart render. A quiet `null` is the same answer, and `null` is
+  // exactly what `canPaintChart()` reads to decide not to paint.
+  if (typeof HTMLCanvasElement !== "undefined") {
+    HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  }
   if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = () => {};
   }

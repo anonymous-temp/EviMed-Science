@@ -13,10 +13,10 @@ import {
 } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
+import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
-import { AskAi } from "../AskAi";
 import { formatGeoValue } from "../GeoCellText";
 import { engineName, GEO_POOL_KINDS, GEO_SOURCE_LAYER_WORDS } from "../geoText";
 import { MENTION_ONLY_WORD, mentionOnly, metricName, metricUnit, sourceKindWord, yuan } from "./geoTabText";
@@ -46,7 +46,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   return (
     <div data-geo-tab="sources">
       {sources.length > 0 && <SourceTable sources={sources} engines={project.engines} />}
-      {expectations.length > 0 && <Expectations geoId={geoId} project={project} rows={expectations} />}
+      {expectations.length > 0 && <Expectations geoId={geoId} rows={expectations} />}
       {data.battlefield && (data.battlefield.groups?.length || data.battlefield.reason) && <Battlefield battlefield={data.battlefield} />}
       {tiers.length > 0 && <Tiers geoId={geoId} tiers={tiers} chosen={data.chosenTier ?? project.tier ?? null} onChanged={reload} />}
     </div>
@@ -71,6 +71,7 @@ function SourceTable({ sources, engines }: { sources: GeoSourceRow[]; engines: s
   const rows = sources
     .filter((source) => !source.impostor && (engine === "all" || citedCount(source, engine) > 0))
     .sort((a, b) => citedCount(b, engine) - citedCount(a, engine));
+  const top = rows.reduce((max, source) => Math.max(max, citedCount(source, engine)), 0);
 
   return (
     <section aria-label="信源">
@@ -82,40 +83,76 @@ function SourceTable({ sources, engines }: { sources: GeoSourceRow[]; engines: s
           onChange={setEngine}
         />
       </FilterRow>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[44rem] border-collapse">
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className={`${TH} sticky left-0 bg-bg`}>信源</th>
-              <th scope="col" className={TH}>类型</th>
-              <th scope="col" className={TH}>三条件</th>
-              <th scope="col" className={`${TH} text-right`}>被引用</th>
-              <th scope="col" className={TH}>和你的关系</th>
-              <th scope="col" className={TH}>布局</th>
-              <th scope="col" className={`${TH} text-right`}>单篇价格</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((source) => {
-              const kind = sourceKindWord(source.kind);
-              return (
-                <tr key={source.id || source.domain} data-geo-source={source.domain} className="border-b border-faint">
-                  <th scope="row" className={`${TD} sticky left-0 bg-bg text-left font-normal`}>
-                    <span className="block">{source.name || source.domain}</span>
-                    {source.name && <span className="block text-caption text-text-3">{source.domain}</span>}
-                  </th>
-                  <td className={TD}>{kind ? <Tag>{kind}</Tag> : "—"}</td>
-                  <td className={TD}><Conditions conditions={source.conditions} /></td>
-                  <td className={`${TD} text-right tabular-nums`}>{citedCount(source, engine)}</td>
-                  <td className={TD}><Relation source={source} /></td>
-                  <td className={TD}>{source.layer ? GEO_SOURCE_LAYER_WORDS[source.layer] ?? "—" : "—"}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{source.market && typeof source.market.price === "number" ? yuan(source.market.price) : "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        className="mt-3"
+        label="信源"
+        minWidth="min-w-[44rem]"
+        rows={rows}
+        rowKey={(source) => source.id || source.domain}
+        rowAttrs={(source) => ({ "data-geo-source": source.domain })}
+        columns={[
+          {
+            key: "source",
+            header: "信源",
+            rowHeader: true,
+            // The reader's name for the site, and the domain under it — never
+            // the row's internal id, which means nothing to anyone.
+            cell: (source) => (
+              <>
+                <span className="block">{source.name || source.domain}</span>
+                {source.name && <span className="block text-caption text-text-3">{source.domain}</span>}
+              </>
+            ),
+          },
+          {
+            key: "kind",
+            header: "类型",
+            cell: (source) => { const word = sourceKindWord(source.kind); return word ? <Tag>{word}</Tag> : "—"; },
+            isEmpty: (source) => !sourceKindWord(source.kind),
+          },
+          {
+            key: "conditions",
+            header: "三条件",
+            cell: (source) => <Conditions conditions={source.conditions} />,
+            isEmpty: (source) => CONDITION_WORDS.every(({ key }) => source.conditions?.[key] == null),
+          },
+          {
+            key: "bar",
+            header: "",
+            width: "w-24",
+            cell: (source) => <InlineBar value={citedCount(source, engine)} max={top} tone="quiet" label={`${source.name || source.domain} 被引用的次数`} />,
+            isEmpty: (source) => citedCount(source, engine) === 0,
+          },
+          {
+            key: "cited",
+            header: "被引用",
+            align: "right",
+            width: "w-20",
+            cell: (source) => citedCount(source, engine),
+            isEmpty: (source) => citedCount(source, engine) === 0,
+          },
+          {
+            key: "relation",
+            header: "和你的关系",
+            cell: (source) => <Relation source={source} />,
+            isEmpty: (source) => source.wrongOurs === 0 && source.mentionsOurs === 0,
+          },
+          {
+            key: "layer",
+            header: "布局",
+            cell: (source) => (source.layer ? GEO_SOURCE_LAYER_WORDS[source.layer] ?? "—" : "—"),
+            isEmpty: (source) => !source.layer,
+          },
+          {
+            key: "price",
+            header: "单篇价格",
+            align: "right",
+            width: "w-24",
+            cell: (source) => (source.market && typeof source.market.price === "number" ? yuan(source.market.price) : "—"),
+            isEmpty: (source) => !source.market || typeof source.market.price !== "number",
+          },
+        ]}
+      />
       {impostors.length > 0 && (
         <Disclosure summary="冒名站" className="mt-4">
           <ul className="flex flex-col gap-1">
@@ -169,9 +206,7 @@ function Relation({ source }: { source: GeoSourceRow }) {
   );
 }
 
-function Expectations({ geoId, project, rows }: { geoId: string; project: GeoProject; rows: GeoSources["expectations"] }) {
-  const target = { projectId: project.projectId, sessionId: project.sessionId };
-  const product = project.product?.brandName || project.product?.genericName || project.name;
+function Expectations({ geoId, rows }: { geoId: string; rows: GeoSources["expectations"] }) {
   return (
     <TabSection title="预期匹配" className="mt-10">
       <div className="overflow-x-auto">
@@ -182,7 +217,6 @@ function Expectations({ geoId, project, rows }: { geoId: string; project: GeoPro
               <th scope="col" className={`${TH} text-right`}>检索触发率</th>
               <th scope="col" className={TH}>投哪一层</th>
               <th scope="col" className={TH}>这个周期能做到</th>
-              <th scope="col" className={TH}><span className="sr-only">问 AI</span></th>
             </tr>
           </thead>
           <tbody>
@@ -202,9 +236,6 @@ function Expectations({ geoId, project, rows }: { geoId: string; project: GeoPro
                   </td>
                   <td className={TD}>{layers.length ? layers.join(" + ") : "—"}</td>
                   <td className={`${TD} max-w-measure`}>{row.promise || "—"}</td>
-                  <td className={`${TD} w-16 text-right`}>
-                    {!only && <AskAi project={target} product={product} scope={engineName(row.engine)} name="检索触发率" cell={cell} />}
-                  </td>
                 </tr>
               );
             })}

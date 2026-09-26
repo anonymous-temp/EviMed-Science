@@ -15,14 +15,15 @@ import {
   questionsFilled,
   sourcesFilled,
 } from "../__fixtures__/geoTabs";
+import { AccuracyTab } from "./AccuracyTab";
 import { ContentTab } from "./ContentTab";
-import { DiagnosisTab } from "./DiagnosisTab";
 import { DistributionTab } from "./DistributionTab";
+import { EffectSection } from "./EffectSection";
 import { EvidenceTab } from "./EvidenceTab";
 import { JourneyTab } from "./JourneyTab";
-import { MonitoringTab } from "./MonitoringTab";
 import { QuestionsTab } from "./QuestionsTab";
 import { SourcesTab } from "./SourcesTab";
+import { VisibilityTab } from "./VisibilityTab";
 
 const client = vi.hoisted(() => ({
   getGeoEvidence: vi.fn(),
@@ -107,10 +108,8 @@ describe("a tab with nothing yet", () => {
     ["evidence", EvidenceTab, () => client.getGeoEvidence.mockResolvedValue({ product: {}, competitors: [], claims: [] })],
     ["journey", JourneyTab, () => client.getGeoJourney.mockResolvedValue({ subtypes: [], personas: [], stages: [], careNodes: [], files: [] })],
     ["questions", QuestionsTab, () => client.getGeoQuestions.mockResolvedValue({ sets: [], version: null, groups: [] })],
-    ["diagnosis", DiagnosisTab, () => client.getGeoDiagnosis.mockResolvedValue({ round: null, rounds: [], byEngine: [], byPool: [], failureModes: {}, errors: [], noise: null, more: [] })],
     ["sources", SourcesTab, () => client.getGeoSources.mockResolvedValue({ sources: [], expectations: [], battlefield: null, tiers: [], chosenTier: null })],
     ["content", ContentTab, () => client.getGeoArticles.mockResolvedValue({ articles: [] })],
-    ["monitoring", MonitoringTab, () => client.getGeoMonitoring.mockResolvedValue({ series: [], arms: { pilot: [], control: [], netEffect: {} }, byEngine: [], cited: [], newErrors: [], next: null })],
   ] as const)("%s: a finished step with nothing to show offers 让 AI 做", async (step, Tab, arrange) => {
     arrange();
     renderTab(<Tab {...props(geoProject({ [step]: "done" }))} />);
@@ -207,40 +206,6 @@ describe("问题", () => {
     await userEvent.click(within(row).getByRole("button", { name: "移出测量问句" }));
     await waitFor(() => expect(client.unmeasureGeoQuestion).toHaveBeenCalledWith("geo_1", "q_1"));
     await waitFor(() => expect(client.getGeoQuestions).toHaveBeenCalledTimes(2));
-  });
-});
-
-describe("诊断", () => {
-  it("reads the round four ways, with 只测提及 for 百度 and every number opening its answers", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
-    renderTab(<DiagnosisTab {...props()} />);
-    expect(await screen.findByText("3 个引擎 · 310 次回答 · 网页端、非深度思考、每题新对话 · 10月13日")).toBeInTheDocument();
-    const modes = document.querySelector("[data-geo-failure-modes]") as HTMLElement;
-    expect(within(modes).getByText("41")).toBeInTheDocument();
-    const wrong = modes.querySelector("[data-geo-mode='wrongOurs']") as HTMLElement;
-    expect(within(wrong).getByRole("link")).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
-    expect(within(wrong).getByText("2")).toHaveClass("text-danger");
-
-    const doubao = document.querySelector("[data-geo-engine='doubao']") as HTMLElement;
-    expect(within(doubao).getByRole("link", { name: /22%.*14 次.*豆包的品牌提及率/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_doubao");
-    const baidu = document.querySelector("[data-geo-engine='baidu']") as HTMLElement;
-    expect(within(baidu).getAllByText("只测提及")).toHaveLength(3);
-    const kimi = document.querySelector("[data-geo-engine='kimi']") as HTMLElement;
-    expect(within(kimi).getAllByText("样本不足").length).toBeGreaterThan(0);
-    expect(within(kimi).getByText("未测")).toBeInTheDocument();
-    for (const row of [doubao, baidu, kimi]) expect(within(row).getByRole("button", { name: "问 AI" })).toBeInTheDocument();
-
-    expect(screen.getByText("多数回答只列司美格鲁肽")).toBeInTheDocument();
-    const error = screen.getByRole("link", { name: "DeepSeek：它需要每天注射一次" });
-    expect(error).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
-    expect(screen.getByText("数字说错 · 需监测或干预 · 稳定出现 · 出处 baike.baidu.com（百科词条） · 修改百科词条 · 纠正中")).toBeInTheDocument();
-  });
-
-  it("switches rounds", async () => {
-    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
-    renderTab(<DiagnosisTab {...props()} />);
-    await userEvent.click(await screen.findByRole("button", { name: "基线 · 9月22日" }));
-    await waitFor(() => expect(client.getGeoDiagnosis).toHaveBeenLastCalledWith("geo_1", "rnd_1"));
   });
 });
 
@@ -350,34 +315,108 @@ describe("投放", () => {
   });
 });
 
-describe("监测", () => {
-  it("draws the trend against the target, the two arms with the net effect, each engine, cited articles and new errors", async () => {
+describe("准确与安全", () => {
+  it("leads with the accuracy rate, grades every wrong statement and groups them by handling", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    renderTab(<MonitoringTab {...props()} />);
-    expect(await screen.findByText("下次 每周复测 · 10月20日")).toBeInTheDocument();
-    expect(screen.getByText("目标 55")).toBeInTheDocument();
-    expect(document.querySelector("[data-geo-chart-target]")).not.toBeNull();
-    const arms = document.querySelector("[data-geo-arms]") as HTMLElement;
-    expect(within(arms).getByText("+14")).toBeInTheDocument();
-    expect(within(arms).getByText("+2")).toBeInTheDocument();
-    expect(within(arms).getByText("+12")).toBeInTheDocument();
-    expect(within(arms).getByText("波动范围 ±3")).toBeInTheDocument();
-    expect(document.querySelector("[data-geo-chart-series='control']")).not.toBeNull();
-    const kimi = document.querySelector("[data-geo-engine-trend='kimi']") as HTMLElement;
-    expect(within(kimi).getByText("样本不足")).toBeInTheDocument();
-    expect(screen.getByText("豆包、元宝")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /DeepSeek：它需要每天注射一次/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
+    renderTab(<AccuracyTab {...props()} />);
+    const accuracy = await screen.findByRole("region", { name: "事实准确率" });
+    expect(accuracy).toHaveTextContent("92");
+    expect(accuracy).toHaveTextContent("目标 98%");
+    // The denominator is declared once for the whole band.
+    expect(within(screen.getByRole("region", { name: "准确与安全" })).getAllByText(/次有效回答计算/)).toHaveLength(1);
+
+    // The grade is said as the level, its colour and its consequence.
+    const graded = document.querySelector("[data-severity='S2']") as HTMLElement;
+    expect(graded).toHaveAttribute("title", "需监测或干预");
+    expect(screen.getByText(/它需要每天注射一次/)).toBeInTheDocument();
+    // Red is the badge and the ✗ — not the sentence.
+    expect(screen.getByText(/它需要每天注射一次/)).not.toHaveClass("text-danger");
+    expect(screen.getByRole("link", { name: "看回答" })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
   });
 
-  it("says 样本不足 for a rate on fewer than 30 answers, and a net effect inside the band is flat", async () => {
+  it("opens the conversation with the correction brief, and never asks about a single number", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<AccuracyTab {...props()} />);
+    await screen.findByRole("region", { name: "事实准确率" });
+    expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "写纠错稿" })[0]);
+    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
+  });
+});
+
+describe("可见度", () => {
+  it("draws the trend against the target, each engine, and the pools — hiding a column nothing fills", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    await screen.findByRole("heading", { name: /综合可见度指数 38，比上次高 9/ });
+    expect(document.querySelector("[data-chart='trend']")).toHaveAttribute("data-chart-mode", "series");
+    expect(document.querySelector("[data-geo-engine-trend='kimi']")).not.toBeNull();
+
+    const pools = screen.getByRole("table", { name: "按问句池的品牌提及率" });
+    const headers = within(pools).getAllByRole("columnheader").map((header) => header.textContent);
+    expect(headers).toContain("头部竞品");
+    expect(headers).toContain("主要问题");
+  });
+
+  it("hides a column that would be 「—」 in every row", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    client.getGeoDiagnosis.mockResolvedValue({
+      ...diagnosisFilled,
+      byPool: diagnosisFilled.byPool.map((row) => ({ ...row, topCompetitor: null, mainIssue: null })),
+    });
+    renderTab(<VisibilityTab {...props()} />);
+    const pools = await screen.findByRole("table", { name: "按问句池的品牌提及率" });
+    const headers = within(pools).getAllByRole("columnheader").map((header) => header.textContent);
+    expect(headers).not.toContain("头部竞品");
+    expect(headers).not.toContain("主要问题");
+    expect(within(pools).queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("draws a baseline rather than an empty frame when there is one measurement", async () => {
+    client.getGeoMonitoring.mockResolvedValue({
+      ...monitoringFilled,
+      series: [{ key: "gvi", points: [{ date: "2026-09-22", value: 24, n: 310, k: null }] }],
+    });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    await screen.findByText(/综合可见度指数基线 24/);
+    const chart = document.querySelector("[data-chart='trend']") as HTMLElement;
+    expect(chart).toHaveAttribute("data-chart-mode", "baseline");
+    expect(chart).toHaveAttribute("data-chart-readings", "1");
+    expect(document.querySelector("[data-chart-empty]")).toBeNull();
+  });
+
+  it("says why a metric has nothing to draw instead of drawing an empty frame", async () => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [], byEngine: [] });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText("还没有开始持续监测，第一次复测后这里会画出趋势。")).toBeInTheDocument();
+  });
+});
+
+describe("效果", () => {
+  it("compares the placed groups with the control, and never paints the control in the brand colour", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    renderTab(<EffectSection project={geoProject()} />);
+    await screen.findByText(/投放的语义群比对照组多涨 12/);
+    const own = document.querySelector("[data-legend-mark='own']") as HTMLElement;
+    const control = document.querySelector("[data-legend-mark='rival-1']") as HTMLElement;
+    expect(own.style.background).toBe("var(--chart-own)");
+    expect(control.style.background).toBe("var(--chart-rival-1)");
+    expect(control.style.background).not.toBe(own.style.background);
+    expect(screen.getByText("豆包、元宝")).toBeInTheDocument();
+  });
+
+  it("a net effect inside the fluctuation band is 持平", async () => {
     client.getGeoMonitoring.mockResolvedValue({
       ...monitoringFilled,
       arms: { ...monitoringFilled.arms, netEffect: { ...monitoringFilled.arms.netEffect, value: 2 } },
     });
-    renderTab(<MonitoringTab {...props()} />);
+    renderTab(<EffectSection project={geoProject()} />);
     expect(await screen.findByText("持平")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "品牌提及率" }));
-    expect(screen.getAllByText("样本不足").length).toBeGreaterThan(0);
-    expect(screen.queryByText("21%")).not.toBeInTheDocument();
+    expect(screen.getByText(/还在波动范围内/)).toBeInTheDocument();
   });
 });

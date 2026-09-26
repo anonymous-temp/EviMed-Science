@@ -103,6 +103,26 @@ function displayPath(path: string) {
 /** The filters, in the words the rows say (`SourceListState` on the server). */
 type Filter = "all" | SourceListState | "duplicates";
 
+/**
+ * The reader's grouping of a knowledge base, by extension. Deliberately not
+ * `ArtifactKind`: that is a preview concern (which viewer opens the bytes),
+ * and a researcher filing a document thinks 「文献」 and 「表格」.
+ */
+type Kind = "paper" | "document" | "sheet" | "slides" | "page" | "image" | "other";
+const KIND_LABELS: ReadonlyArray<[Kind, string]> = [
+  ["paper", "文献"], ["document", "文档"], ["sheet", "表格"],
+  ["slides", "幻灯"], ["page", "网页"], ["image", "图片"], ["other", "其他"],
+];
+const KIND_BY_EXT: Record<string, Kind> = {
+  pdf: "paper", docx: "document", doc: "document", md: "document", txt: "document", rtf: "document", epub: "document",
+  xlsx: "sheet", xls: "sheet", csv: "sheet", tsv: "sheet",
+  pptx: "slides", ppt: "slides",
+  html: "page", htm: "page",
+  png: "image", jpg: "image", jpeg: "image", gif: "image", webp: "image", svg: "image",
+};
+const kindOf = (source: SourceRecord): Kind =>
+  KIND_BY_EXT[extOf(source.payload.paths[0] ?? source.id).toLowerCase()] ?? "other";
+
 const STATUS_FILTERS: readonly FilterOption<Filter>[] = [
   { value: "all", label: "全部" },
   { value: "attention", label: "需要处理" },
@@ -137,7 +157,15 @@ export function SourcesPage() {
 }
 
 function ProjectSourcesPage({ projectId }: { projectId: string }) {
+  // Whose knowledge base this is, and the account's other ones. The page used
+  // to name neither, so a reader looking at a library of twelve documents had
+  // no way to tell which project's twelve they were.
+  const projects = useProjectStore(state => state.projects);
+  const select = useProjectStore(state => state.select);
+  const projectName = projects.find(project => project.id === projectId)?.name ?? null;
   const [filter, setFilter] = useState<Filter>("all");
+  /** The rail's kind selection; `null` is 全部. */
+  const [kind, setKind] = useState<Kind | null>(null);
   const [query, setQuery] = useState("");
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,7 +290,15 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
   // one is a sentence and the two buttons above it (m07b).
   const hasLibrary = filter !== "all" || (sources?.length ?? 0) > 0;
   const needle = query.trim().toLowerCase();
-  const shown = (sources ?? []).filter(source => (filter !== "duplicates" || groupOf(source.id)) && (!needle || matches(source, needle)));
+  const shown = (sources ?? []).filter(source => (filter !== "duplicates" || groupOf(source.id))
+    && (kind === null || kindOf(source) === kind)
+    && (!needle || matches(source, needle)));
+  // What is in this knowledge base, by kind, over everything loaded — not over
+  // what the current filter shows, or the counts would move as the reader
+  // filters and stop being an inventory.
+  const kindCounts = new Map<Kind, number>();
+  for (const source of sources ?? []) kindCounts.set(kindOf(source), (kindCounts.get(kindOf(source)) ?? 0) + 1);
+  const kinds = KIND_LABELS.filter(([kind]) => (kindCounts.get(kind) ?? 0) > 0);
   const filterOptions: FilterOption<Filter>[] = [
     ...STATUS_FILTERS,
     ...(duplicateCount > 0 || filter === "duplicates" ? [{ value: "duplicates" as const, label: "疑似重复", count: duplicateCount }] : []),
@@ -281,6 +317,8 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
       )}
       <PageShell
         title="知识库"
+        width="wide"
+        meta={projectName}
         actions={<>
           {hasLibrary && <SearchInput label="搜索资料" value={query} onChange={(event) => setQuery(event.target.value)} className="w-60" />}
           <Button variant="secondary" onClick={() => setConnecting(true)}><Cloud size={16} aria-hidden="true" />连接网盘</Button>
@@ -289,10 +327,62 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
           </Button>
         </>}
       >
+        <div className="flex gap-6">
+          {/* The rail answers the question the page could not: whose knowledge
+              base is this, and what is in it. A project switch lands back here,
+              so browsing another project's library is one click rather than a
+              trip through the sidebar. */}
+          {hasLibrary && (
+            <nav aria-label="项目与类型" className="hidden w-44 shrink-0 space-y-6 lg:block">
+              <div>
+                <p className="mb-2 text-meta text-text-3">项目</p>
+                <ul className="space-y-0.5">
+                  {projects.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        aria-current={item.id === projectId ? "true" : undefined}
+                        className={cn(
+                          "block w-full truncate rounded px-2 py-1 text-left text-ui",
+                          item.id === projectId ? "bg-accent-soft text-accent-strong" : "text-text-2 hover:bg-surface-2 hover:text-text",
+                        )}
+                        onClick={() => { if (item.id !== projectId) void select(item.id); }}
+                      >{item.name}</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {kinds.length > 1 && (
+                <div>
+                  <p className="mb-2 text-meta text-text-3">类型</p>
+                  <ul className="space-y-0.5">
+                    {[["全部", null, sources?.length ?? 0] as const,
+                      ...kinds.map(([value, label]) => [label, value, kindCounts.get(value) ?? 0] as const)].map(([label, value, count]) => (
+                      <li key={label}>
+                        <button
+                          type="button"
+                          aria-pressed={kind === value}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded px-2 py-1 text-left text-ui",
+                            kind === value ? "bg-accent-soft text-accent-strong" : "text-text-2 hover:bg-surface-2 hover:text-text",
+                          )}
+                          onClick={() => setKind(value)}
+                        >
+                          <span className="truncate">{label}</span>
+                          <span className="ml-2 text-meta text-text-3 tabular-nums">{count}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </nav>
+          )}
+          <div className="min-w-0 flex-1">
         {hasLibrary && <FilterChips label="资料状态" className="mb-4" options={filterOptions} value={filter} onChange={setFilter} />}
         {error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
         {sources === null ? <FilesSkeleton /> : shown.length === 0 ? (error ? null
-          : filter === "all" && !needle ? <EmptyState icon={Folder} title="还没有资料。拖进来，或点右上角上传。" />
+          : filter === "all" && kind === null && !needle ? <EmptyState icon={Folder} title="还没有资料。拖进来，或点右上角上传。" />
             : <EmptyState icon={Search} title={needle ? "没有找到相关资料" : filter === "duplicates" ? "没有疑似重复的资料" : "这一类里没有资料"} />
         ) : (
           <List label="资料">
@@ -309,6 +399,8 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
               onDelete={() => setDeleting(source)} />)}
           </List>
         )}
+          </div>
+        </div>
       </PageShell>
       {previewing && (
         <Drawer title={baseName(previewing.payload.paths[0] ?? previewing.id)} onClose={() => setPreviewing(null)} widthClassName="max-w-3xl" bare>

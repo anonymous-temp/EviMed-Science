@@ -12,6 +12,7 @@ import test from 'node:test';
 import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
 import { apply, BODY, evimedThemeTokens, THEME_LAYER_SOURCE } from '../src/runtimeUiTheme.mjs';
 import { fakeCtx, fakeTarget, kitFor } from './helpers/frameFakes.mjs';
+import { kernelThemeTokens } from '@evimed/design-tokens/kernel'
 
 /** @param {string} hex */
 function luminance(hex) {
@@ -191,7 +192,13 @@ test('the body lays its layer once, under its own name, and takes it away on unl
   apply(ctx, {}, target, undefined, kitFor(ctx, target));
   assert.deepEqual([...ctx.theme.layers.keys()], [THEME_LAYER_SOURCE]);
   assert.equal(THEME_LAYER_SOURCE, '@evimed/dsh-socket');
-  assert.equal(ctx.theme.layers.get(THEME_LAYER_SOURCE).tokens['--dsw-alias-button-info-fill'].light, '#00756b');
+  // Derived, not typed: the send button's glyph is a hard-coded #fff in the
+  // kernel, so this is the one fill that must carry white in both schemes, and
+  // a literal here went stale the day the brand changed.
+  assert.equal(
+    ctx.theme.layers.get(THEME_LAYER_SOURCE).tokens['--dsw-alias-button-info-fill'].light,
+    kernelThemeTokens()['--dsw-alias-button-info-fill'].light,
+  );
   let changes = 0;
   ctx.on('theme/change', () => { changes++; });
   ctx.dispose();

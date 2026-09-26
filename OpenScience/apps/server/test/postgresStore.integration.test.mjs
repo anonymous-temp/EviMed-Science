@@ -206,7 +206,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     }
 
     const readiness = await first.app.store.readiness();
-    assert.deepEqual(readiness, { mode: "postgres", shared: true, schemaVersion: 2 });
+    assert.deepEqual(readiness, { mode: "postgres", shared: true, schemaVersion: 3 });
     for (const file of [
       path.join(dataDir, "users.json"),
       path.join(dataDir, ".openscience", "sessions.json"),

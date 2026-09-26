@@ -10,8 +10,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { MCP_TOOL_NAMES } from '@evimed/domain';
 import {
-  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf,
+  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf, toolLineView, toolResultCount, toolSubjectHost,
 } from '../src/runtimeUiToolviews.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -144,20 +145,91 @@ function frame() {
   apply(ctx, {}, target, undefined, frameKit);
   frameKit.hub.deliver('session', { sessionId: 'session-a' });
   frameKit.hub.deliver('run-state', LIVE);
-  const view = (/** @type {string} */ key) => ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'tool.call.toolview' && entry.options.key === key).component;
+  // Ours, not the kernel's: a takeover (`bash`) shares its key with the
+  // shipped entry the fake registry pre-registers at priority 0.
+  const view = (/** @type {string} */ key) => ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'tool.call.toolview'
+    && entry.options.key === key && entry.component !== 'shipped').component;
   return { ctx, target, view };
 }
 
 test('every view is registered under its tool name, in the conversation namespace', () => {
   const f = frame();
   const views = f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'tool.call.toolview' && entry.component !== 'shipped');
-  assert.deepEqual(views.map((/** @type {any} */ entry) => entry.options.key).sort(),
+  const keys = views.map((/** @type {any} */ entry) => entry.options.key);
+  assert.deepEqual(keys.filter((/** @type {string} */ key) => key.startsWith('evimed_')).sort(),
     ['evimed_await', 'evimed_claim_upsert', 'evimed_delegate', 'evimed_package_check', 'evimed_plan', 'evimed_submit_deliverable']);
   assert.ok(views.every((/** @type {any} */ entry) => entry.options.locale === 'conversation'));
   assert.deepEqual(f.target.warnings, []);
   assert.equal(BODY.name, 'toolviews');
 });
 
+test('every research tool the domain publishes has a Chinese row, and the shell takes the kernel\'s own over from below', () => {
+  const f = frame();
+  const views = f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'tool.call.toolview' && entry.component !== 'shipped');
+  const keys = new Set(views.map((/** @type {any} */ entry) => entry.options.key));
+  assert.ok(MCP_TOOL_NAMES.length >= 30, `only ${MCP_TOOL_NAMES.length} research tools were read`);
+  for (const name of MCP_TOOL_NAMES) assert.ok(keys.has(name), `${name} has no row, so the conversation shows its wire name`);
+  // `bash` is a key the kernel already draws, so the entry must sit below the
+  // shipped one or the registry refuses it silently.
+  const bash = views.find((/** @type {any} */ entry) => entry.options.key === 'bash');
+  assert.ok(bash, 'the shell row was not registered');
+  assert.equal(bash.options.priority, -1);
+  assert.ok(views.filter((/** @type {any} */ entry) => entry.options.key.startsWith('mcp__'))
+    .every((/** @type {any} */ entry) => entry.options.priority === undefined), 'a research tool is an addition, not a takeover');
+  assert.deepEqual(f.target.warnings, []);
+});
+
+test('a research call reads as a verb and its subject, never as a tool name; the shell says only that it ran', () => {
+  const f = frame();
+  const label = renderStatic(f.view('mcp__evimed__drug_label_search'), {
+    block: settled('mcp__evimed__drug_label_search', { drug: '玛仕度肽' },
+      JSON.stringify({ status: 'success', summary: 'drug_label_search returned evidence.', data: { items: [1, 2, 3] }, sources: [{}] })),
+  });
+  assert.match(label, /检索说明书 · 玛仕度肽/);
+  assert.match(label, /3 条/);
+  assert.doesNotMatch(label, /mcp__|evimed__|drug_label_search|returned evidence/, 'the wire name or the server\'s English reached the row');
+
+  const streaming = renderStatic(f.view('mcp__evimed__literature_search'), { block: running('mcp__evimed__literature_search', '{"query":"二甲双胍 心血管结局","limit":') });
+  assert.match(streaming, /检索文献 · 二甲双胍 心血管结局/, 'a subject is read while the arguments are still arriving');
+  assert.match(streaming, /进行中/);
+
+  const page = renderStatic(f.view('mcp__evimed__web_read'), {
+    block: settled('mcp__evimed__web_read', { url: 'https://www.nmpa.gov.cn/directory/web/nmpa/a/b/c?x=1' }, JSON.stringify({ status: 'success', summary: 'ok', data: { text: 'x' } })),
+  });
+  assert.match(page, /读网页 · www\.nmpa\.gov\.cn/);
+  assert.doesNotMatch(page, /directory|\?x=1/, 'the address is the host, not the path');
+
+  const shell = renderStatic(f.view('bash'), { block: settled('bash', { command: 'python3 count.py' }, 'competitor aliases: 12') });
+  assert.match(shell, /运行脚本/);
+  assert.doesNotMatch(shell, /python3|count\.py|competitor|aliases/, 'the command and its output are the 运行 view\'s, not the conversation\'s');
+
+  const failed = renderStatic(f.view('mcp__evimed__guideline_search'), {
+    block: settled('mcp__evimed__guideline_search', { query: '房颤' }, JSON.stringify({ status: 'error', summary: 'upstream refused', error: { code: 'x' } })),
+  });
+  assert.match(failed, /检索指南 · 房颤/);
+  assert.match(failed, /未取到/);
+  assert.doesNotMatch(failed, /upstream|refused/);
+});
+
+test('an outcome is counted from the result, and a quotation check says what it found', () => {
+  const kitted = kit();
+  const quote = toolLineView(settled('mcp__evimed__locate_quote', { quote: '36% for all-cause mortality' },
+    JSON.stringify({ status: 'success', summary: 'ok', data: { found: true } })), { verb: '核对引文', subject: ['quote'] }, kitted);
+  assert.deepEqual(quote, { label: '核对引文 · 36% for all-cause mortal…', outcome: '原文中有' }, 'a long subject is cut, never wrapped');
+  const missing = toolLineView(settled('mcp__evimed__locate_quote', { quote: 'x' },
+    JSON.stringify({ status: 'success', summary: 'ok', data: { found: false } })), { verb: '核对引文', subject: ['quote'] }, kitted);
+  assert.equal(missing.outcome, '原文中未找到');
+  const empty = toolLineView(settled('mcp__evimed__web_search', { query: 'x' },
+    JSON.stringify({ status: 'warning', summary: 'ok', data: { results: [] }, warnings: ['none'], next_actions: ['a'] })), { verb: '检索网页', subject: ['query'] }, kitted);
+  assert.equal(empty.outcome, '无结果');
+  const opaque = toolLineView(settled('mcp__evimed__health', {}, 'not json at all'), { verb: '检查数据服务状态' }, kitted);
+  assert.deepEqual(opaque, { label: '检查数据服务状态', outcome: '完成' });
+  assert.equal(toolResultCount({ data: { hits: [1, 2] } }), 2);
+  assert.equal(toolResultCount({ data: { label: {} }, sources: [{}, {}, {}] }), 3);
+  assert.equal(toolResultCount({ data: { label: {} } }), null, 'an answer that is not a list is not counted');
+  assert.equal(toolSubjectHost('https://user@PubMed.ncbi.nlm.nih.gov:443/x'), 'pubmed.ncbi.nlm.nih.gov');
+  assert.equal(toolSubjectHost('not a url'), '');
+});
 test('the plan card is its list; the subtask card its title, state and 「查看」', () => {
   const f = frame();
   const plan = renderStatic(f.view('evimed_plan'), { block: settled('evimed_plan', PLAN_ARGS, PLAN_RESULT) });

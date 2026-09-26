@@ -112,20 +112,22 @@ const BACK_OFFICE = [
 const BUDGET = { controls: 8, colors: 5, borders: 3 };
 const FRONTIER_BUDGET = { controls: 9, colors: 8 };
 /**
- * 循证 GEO may spend one more text colour — the red of 讲错我方, its one alarm —
- * and one more kind of control, 「问 AI」 beside every number (build spec
- * 2026-09-25 §6).
+ * 循证 GEO is the product's one data page (fusion plan §5.5, §5.9): it spends
+ * the severity reds of 讲错我方 and the single-hue heat ramp on top of the
+ * chrome, and its header carries a rail of eight steps beside the tabs. The
+ * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced
+ * them — so the control budget covers the rail, not a control per row.
  */
 const GEO_BUDGET = { controls: 9, colors: 6 };
 const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
-  geo: GEO_BUDGET, "geo-project": GEO_BUDGET, "geo-diagnosis": GEO_BUDGET,
+  geo: GEO_BUDGET, "geo-project": GEO_BUDGET, "geo-accuracy": GEO_BUDGET, "geo-visibility": GEO_BUDGET,
 };
 
 /**
- * One GEO project's 概览 and 诊断, when the account has a GEO project to walk
- * — the first the list names. None when the module is off here or the account
- * has none: the home is walked either way.
+ * One GEO project's 总览, 可见度 and 准确与安全, when the account has a GEO
+ * project to walk — the first the list names. None when the module is off here
+ * or the account has none: the home is walked either way.
  * @param {any} context a logged-in browser context @param {string} base
  * @returns {Promise<Array<[string, string]>>}
  */
@@ -136,7 +138,7 @@ async function geoProjectRoutes(context, base) {
   const id = Array.isArray(projects) && typeof projects[0]?.id === "string" ? projects[0].id : null;
   if (!id) return [];
   const at = `/app/geo/${encodeURIComponent(id)}`;
-  return [["geo-project", at], ["geo-diagnosis", `${at}/diagnosis`]];
+  return [["geo-project", at], ["geo-visibility", `${at}/visibility`], ["geo-accuracy", `${at}/accuracy`]];
 }
 
 /**

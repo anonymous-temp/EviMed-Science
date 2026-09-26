@@ -24,6 +24,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "docx-preview": "^0.3.7",
+    "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
     "highlight.js": "^11.10.0",
     "jszip": "^3.10.1",

@@ -102,18 +102,6 @@ export const GEO_STEP_WORK: Readonly<Record<GeoStepKey, string>> = Object.freeze
   monitoring: "监测",
 });
 
-export type GeoTabKey = "overview" | GeoStepKey;
-
-/** The project page's tabs, in order: 概览 then the eight steps. */
-export const GEO_TABS: ReadonlyArray<{ key: GeoTabKey; label: string }> = Object.freeze([
-  { key: "overview", label: "概览" },
-  ...(Object.entries(GEO_STEP_NAMES) as Array<[GeoStepKey, string]>).map(([key, label]) => ({ key, label })),
-]);
-
-export function isGeoTab(value: string | null | undefined): value is GeoTabKey {
-  return !!value && GEO_TABS.some((tab) => tab.key === value);
-}
-
 /**
  * What an untouched step's tab says above 「让 AI 做」 — one sentence, what
  * the step will produce, never how the system works.

@@ -19,6 +19,7 @@ import { pageForSource } from "@/lib/readPages";
 import { ReadPageCard } from "@/components/runs/ReadPages";
 import { ClaimAppraisalSummary } from "./ClaimAppraisal";
 import { SourceUpdateBadges } from "./SourceUpdateBadges";
+import { StudyTypeBadge } from "./StudyTypeBadge";
 
 const TONE_CLASS = { ok: "text-verify-ok", warn: "text-verify-pending", muted: "text-text-3" } as const;
 
@@ -50,7 +51,7 @@ export function preservedSourceHref(runId: string, artifactPath: string, quote?:
   return `/app/runs/${encodeURIComponent(runId)}/files/${path}${quote ? `?quote=${encodeURIComponent(quote.slice(0, 400))}` : ""}`;
 }
 
-function Source({ source, index, status, runId, pagesRead, updates }: {
+function Source({ source, index, status, runId, pagesRead, updates, sourceType }: {
   source: ClaimSource;
   index: number;
   status?: string;
@@ -58,25 +59,32 @@ function Source({ source, index, status, runId, pagesRead, updates }: {
   pagesRead?: readonly WebReadPage[];
   /** The cited work's retraction and correction notices, when Crossref answered. */
   updates?: readonly SourceUpdate[];
+  /** What the preserving tool stamped beside the capture (C8), when the check read it. */
+  sourceType?: string;
 }) {
   const href = safeHref(source.sourceUrl);
   const page = pageForSource(pagesRead, source);
   const statusText = status ? CLAIM_STATUS_TEXT[status] : undefined;
   // What a reader acts on: whether this quotation was found (✓ / ⚠), the
-  // quotation, and where it is from. The source's kind, its access level and
-  // the ordinal of the quotation were the checker's bookkeeping (2026-09-23
-  // inventory §1.11); a retraction or correction notice stays — that one is
-  // about the evidence.
+  // quotation itself, and what it is from. The access level and the ordinal of
+  // the quotation were the checker's bookkeeping and stay gone (2026-09-23
+  // inventory §1.11); a retraction or correction notice is about the evidence,
+  // and since 2026-09-26 so is the study-type badge — the fusion plan's trust
+  // design asks every citation surface to say what kind of study it rests on
+  // before the reader reads a word (§5.8 来源级, m02's popover).
   const mark = statusText ? (statusText.tone === "ok" ? "✓" : statusText.tone === "warn" ? "⚠" : null) : null;
+  // The quotation is the one thing in the popover a reader compares against
+  // the sentence, so it is marked rather than merely quoted (`--highlight`).
   return (
     <div className="mt-2 space-y-1" data-quote-index={index}>
       {source.supportQuote && (
         <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">
           {mark && <span className={cn("mr-1", TONE_CLASS[statusText!.tone])} aria-label={statusText!.label}>{mark}</span>}
-          “{source.supportQuote}”
+          <mark className="bg-highlight text-text">“{source.supportQuote}”</mark>
         </blockquote>
       )}
       <p className="flex flex-wrap items-center gap-1.5 text-caption text-text-3">
+        <StudyTypeBadge sourceType={sourceType ?? source.sourceType} />
         {href ? (
           <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-link hover:underline">
             {source.sourceTitle ?? source.identifier ?? "来源"}
@@ -142,6 +150,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
                 runId={reading?.runId}
                 pagesRead={reading?.pagesRead}
                 updates={verified?.sources[index]?.updates}
+                sourceType={verified?.sources[index]?.sourceType}
               />
             ))}
             {(claim.claimType === "derived" && claim.method) || claim.uncertainty ? (

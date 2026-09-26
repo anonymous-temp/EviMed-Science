@@ -465,8 +465,38 @@ export function validateDeploymentConfig(values, envFile) {
         "OIDC production access requires an allowed group or verified email-domain admission rule.",
       );
     }
-  } else {
-    throw failure("preflight_auth_mode", "OPEN_SCIENCE_AUTH_MODE must be local or oidc in production.");
+  } else if (authMode !== "evimed") {
+    throw failure("preflight_auth_mode", "OPEN_SCIENCE_AUTH_MODE must be local, oidc or evimed in production.");
+  }
+
+  // The `evimed` login mode (fusion plan §9.2): the shell's signed-in user
+  // becomes a Science session, introspected server side. It is checked whenever
+  // it is ON — not only when it is the selected mode — because the realistic
+  // production shape is `local` for the operator accounts WITH this switched on
+  // for everybody else, and a mode-shaped check would have skipped exactly that
+  // deployment. A blank introspect URL there is not a misconfiguration the
+  // control plane can refuse at start: it answers 503 per request, which looks
+  // like an outage rather than a setting nobody filled in.
+  if (authMode === "evimed" || boolValue(values.OPEN_SCIENCE_EVIMED_AUTH_ENABLED, false)) {
+    let introspect;
+    try {
+      introspect = new URL(required(values, "OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL"));
+    } catch {
+      throw failure("preflight_evimed_introspect_url", "OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL must be an absolute HTTPS URL.");
+    }
+    if (introspect.protocol !== "https:" || introspect.username || introspect.password || introspect.hash) {
+      throw failure(
+        "preflight_evimed_introspect_url",
+        "OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL must use HTTPS without credentials or fragments — the EviMed credential travels on it.",
+      );
+    }
+    // The key authenticates us to EviMed. A world-readable file on a host that
+    // runs other products is the same exposure as committing it.
+    const keyFile = resolveDeploymentPath(required(values, "OPEN_SCIENCE_EVIMED_API_KEY_FILE"), envFile);
+    const key = readRegularFileNoFollow(keyFile, { privateFile: true, maxBytes: 8194 }).replace(/\r?\n$/, "");
+    if (!key || key !== key.trim() || isPlaceholder(key)) {
+      throw failure("preflight_evimed_api_key", "The EviMed platform key file must hold a real key, without surrounding whitespace.");
+    }
   }
 
   const monitoringEnabled = boolValue(values.OPEN_SCIENCE_PREFLIGHT_MONITORING, true);

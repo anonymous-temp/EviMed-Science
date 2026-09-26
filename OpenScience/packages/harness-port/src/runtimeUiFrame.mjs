@@ -25,7 +25,9 @@
  * @module @evimed/harness-port/runtime-ui-frame
  */
 
-import { kernelThemeTokens } from '@evimed/domain/design-tokens';
+import { ANSWER_EVIDENCE_GRADE_LABELS_ZH } from '@evimed/domain/answer-evidence-grade';
+import { STUDY_TYPE_BADGES } from '@evimed/design-tokens';
+import { kernelThemeTokens } from '@evimed/design-tokens/kernel';
 
 import {
   CONTRACT_KIND_LABELS,
@@ -35,6 +37,10 @@ import {
   RUN_ACTIVITY_PHASE_LABELS_ZH,
   RUN_ACTIVITY_PHASES,
   SOCKET_TOOL_NAMES,
+  SOURCE_UPDATE_LABELS_ZH,
+  SOURCE_UPDATE_WEIGHT,
+  STUDY_BADGE_KINDS,
+  toolViewPhraseTable,
 } from '@evimed/domain';
 
 import { BODY as BRIDGE } from './runtimeUiBridge.mjs';
@@ -45,6 +51,7 @@ import { BODY as PANELS } from './runtimeUiPanels.mjs';
 import { BODY as REPLY_CHECKS } from './runtimeUiReplyChecks.mjs';
 import { BODY as SHELL } from './runtimeUiShell.mjs';
 import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
+import { BODY as SOURCES } from './runtimeUiSources.mjs';
 import { BODY as THEME } from './runtimeUiTheme.mjs';
 import { BODY as TOOLVIEWS } from './runtimeUiToolviews.mjs';
 import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
@@ -64,7 +71,7 @@ import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
  * in the language pack.)
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, COMMANDS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, SOURCES, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));
@@ -99,6 +106,26 @@ export const FRAME_VOCABULARY = Object.freeze({
     title: '循证 GEO',
     capabilities: Object.freeze(['geo-insight', 'geo-strategy', 'geo-content', 'geo-proposal']),
   }),
+  // What a tool call says in the conversation, by the name its row is keyed
+  // on: 「检索说明书 · 玛仕度肽」 rather than `mcp__evimed__drug_label_search`
+  // (融合方案 §8.2). Derived from the domain's own tool list, so a tool added
+  // there arrives here or fails the domain's completeness test; `shipped`
+  // marks a key the kernel already draws, which a takeover registers below.
+  toolViews: toolViewPhraseTable(),
+  // Which of the five badge colours a source type wears, and the colours
+  // themselves. Inlined because a frame body may import nothing and the
+  // shell's `--study-*` custom properties are defined on the shell's
+  // document, not on this one.
+  studyBadgeKinds: STUDY_BADGE_KINDS,
+  studyBadges: STUDY_TYPE_BADGES,
+  // A cited work's retraction or correction notice, in the words a card puts
+  // on its strip and the weight that decides how loud the strip is.
+  sourceUpdateLabels: SOURCE_UPDATE_LABELS_ZH,
+  sourceUpdateWeights: SOURCE_UPDATE_WEIGHT,
+  // The answer-level evidence grade's badge words (A/B/C/D/U, §5.8 答案级).
+  // The letter itself is computed in code by `gradeAnswerEvidence` and reaches
+  // the frame with the evidence; this is only how each letter reads.
+  gradeLabels: ANSWER_EVIDENCE_GRADE_LABELS_ZH,
   // The socket tools whose calls the frame draws. The names are contractual
   // (C6/C7 of the 2026-09-18 plan); the domain's table is preferred where it
   // already lists one, so a rename there reaches the frame.

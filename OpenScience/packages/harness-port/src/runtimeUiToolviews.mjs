@@ -15,6 +15,22 @@
  * — not accepted for work or for judgement — still says so, because that is
  * the one case in which the reader learns something went wrong.
  *
+ * Since 2026-09-26 (融合方案 §8.2) the research tools and the kernel's shell
+ * have rows here too. A running conversation used to show
+ * `mcp__evimed__drug_label_search · 玛仕度肽` and `Bash · Count competitor
+ * aliases in baseline answers` — the wire name and the model's English note on
+ * the screen a clinician watches while the work happens, which appendix B §3.1
+ * calls the least medical-looking screen in the product. Each such call is now
+ * one line: a Chinese verb phrase, the thing it was about when the call names
+ * one, and what came back. The name, the arguments and the raw result are not
+ * lost — they are the kernel's own 「运行」 view, one tab away, which this
+ * deployment offers to every account.
+ *
+ * The words are data, not code: `FRAME_VOCABULARY.toolViews`, built from
+ * `@evimed/domain`'s `toolViewPhraseTable()` over its own tool list. Nothing
+ * here names a tool; a tool added to the domain either arrives with words or
+ * fails the domain's completeness test.
+ *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
  *  - `ui-tool` renders every call through `renderSlot('tool.call.toolview',
@@ -246,6 +262,103 @@ export function gateRefusal(block, live, kit, known = new Map()) {
 }
 
 /**
+ * A short, single-line rendering of one of the researcher's own words.
+ * @param {unknown} value @param {number} [max]
+ * @returns {string}
+ */
+export function toolSubjectText(value, max = 24) {
+  const first = Array.isArray(value) ? value.find((entry) => typeof entry === 'string' && entry.trim()) : value;
+  const text = String(first ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/**
+ * The host of an address, for a row that reads a page.
+ *
+ * A full URL in the conversation body is machinery, and a long one pushes the
+ * verb off the row; the host is the part a reader recognises
+ * (「读网页 · www.nmpa.gov.cn」). Parsed without `URL`, which the loader's
+ * context is not promised to carry.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function toolSubjectHost(value) {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(String(value ?? '').trim());
+  if (!match) return '';
+  return match[1].replace(/^[^@]*@/, '').replace(/:\d+$/, '').toLowerCase();
+}
+
+/**
+ * How many things a research tool brought back, or null when its answer is not
+ * a list.
+ *
+ * The research server's envelope is `{ status, summary, data, sources, … }`
+ * (`server.py`'s `success`/`warning`/`failure`), and every tool that returns a
+ * list puts it under `data` beside one of a handful of names. Read as a closed
+ * set: a number a reader sees must come from a field we know, never from the
+ * first array the payload happens to contain.
+ * @param {any} body the parsed result envelope
+ * @returns {number | null}
+ */
+export function toolResultCount(body) {
+  const data = body && typeof body === 'object' ? body.data : null;
+  if (data && typeof data === 'object') {
+    for (const key of ['results', 'items', 'records', 'entries', 'hits', 'posts', 'papers', 'labels', 'trials', 'guidelines']) {
+      if (Array.isArray(data[key])) return data[key].length;
+    }
+    if (Number.isFinite(data.count)) return Number(data.count);
+    if (Array.isArray(data)) return data.length;
+  }
+  if (Array.isArray(body?.sources)) return body.sources.length;
+  return null;
+}
+
+/**
+ * One research or shell call as a conversation row: a verb phrase, the thing
+ * it was about, and what came back.
+ *
+ * The result is the tool's own JSON — an MCP tool answers with the research
+ * server's envelope, not with the socket tools' `ok\n<JSON>` text, so the kit's
+ * `parseToolText` reads null for it and the envelope is parsed here. A payload
+ * that does not parse still gets a row: the verb and whether it worked are
+ * what the reader is watching for.
+ *
+ * @param {any} block the kernel's call node
+ * @param {{ verb: string, subject?: readonly string[], subjectKind?: string }} phrase
+ * @param {any} kit
+ * @returns {{ label: string, outcome: string | null }}
+ */
+export function toolLineView(block, phrase, kit) {
+  const call = kit.toolCallState(block);
+  const keys = Array.isArray(phrase?.subject) ? phrase.subject : [];
+  let subject = '';
+  for (const key of keys) {
+    const raw = call.args && Object.hasOwn(call.args, key) ? call.args[key] : kit.partialArgField(call.argsRaw, key);
+    const text = phrase.subjectKind === 'host' ? toolSubjectHost(raw) : toolSubjectText(raw);
+    if (text) { subject = text; break; }
+  }
+  const label = subject ? `${phrase.verb} · ${subject}` : phrase.verb;
+  if (call.running) return { label, outcome: '进行中' };
+  if (call.stopped) return { label, outcome: '已停止' };
+  let body = null;
+  try {
+    const parsed = call.text ? JSON.parse(call.text) : null;
+    body = parsed && typeof parsed === 'object' ? parsed : null;
+  } catch { body = null; }
+  if (call.isError || body?.status === 'error') return { label, outcome: '未取到' };
+  if (!body) return { label, outcome: '完成' };
+  // One documented field of one tool, read by name: whether a quotation is in
+  // the source it claims. It is the only outcome a reader acts on directly.
+  const found = body.data && typeof body.data === 'object' ? body.data.found : undefined;
+  if (found === true) return { label, outcome: '原文中有' };
+  if (found === false) return { label, outcome: '原文中未找到' };
+  const count = toolResultCount(body);
+  if (count != null) return { label, outcome: count > 0 ? `${count} 条` : '无结果' };
+  return { label, outcome: body.status === 'warning' ? '无结果' : '完成' };
+}
+
+/**
  * 「查看」: the kernel's own view of a child, reached through the parent's
  * catalogue — the only address `sessions.openSubagent` accepts, and only with
  * the exact mode the catalogue lists. Disabled until the catalogue lists the
@@ -383,6 +496,22 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return refused ? h(GateRefusalRow, { block }) : null;
   }
 
+  /**
+   * One research or shell tool's row. Built per tool name at start, so the
+   * component identity is stable and the phrase is a closure constant.
+   * @param {{ verb: string, subject?: readonly string[], subjectKind?: string }} phrase
+   */
+  function toolRowFor(phrase) {
+    /** @param {{ block: any }} props */
+    return function ToolRow({ block }) {
+      const model = modelOf(phrase.verb, () => toolLineView(block, phrase, kit));
+      if (!model) return h(PlainRow, { label: phrase.verb });
+      return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'tool' },
+        h('span', { style: { ...title, flex: '0 1 auto' } }, model.label),
+        model.outcome ? h('span', { style: tag }, model.outcome) : null);
+    };
+  }
+
   const views = [
     [tools.plan, PlanView],
     [tools.delegate, DelegateView],
@@ -395,11 +524,24 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (typeof name !== 'string' || !name) continue;
     kit.guarded(`${name} view`, () => kit.occupy({ slot: 'tool.call.toolview', key: name, locale: 'conversation' }, View));
   }
+
+  // The research tools and the kernel's shell, in the reader's language. A
+  // name the kernel already draws (`bash`) is a takeover and goes below the
+  // shipped entry; the `mcp__evimed__*` names are additions and sit at the
+  // default priority, as our socket tools' rows do.
+  const toolViews = (kit.vocabulary && kit.vocabulary.toolViews) || {};
+  for (const [name, phrase] of Object.entries(toolViews)) {
+    if (!phrase || typeof phrase.verb !== 'string' || !phrase.verb) continue;
+    /** @type {{ slot: string, key: string, locale: string, priority?: number }} */
+    const spec = { slot: 'tool.call.toolview', key: name, locale: 'conversation' };
+    if (phrase.shipped) spec.priority = -1;
+    kit.guarded(`${name} view`, () => kit.occupy(spec, toolRowFor(phrase)));
+  }
 }
 
 /** The body as the socket's build composes it. */
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, childLinkFor, apply]),
+  parts: Object.freeze([frameStyles, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, childLinkFor, apply]),
 });

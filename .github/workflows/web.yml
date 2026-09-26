@@ -83,6 +83,18 @@ jobs:
           pnpm test:release-audit
           pnpm test:phi-masking
 
+      # The design language has one table and six generated artifacts, read by
+      # this repository AND by the Vue shell in another one. A generated file
+      # nobody checks is exactly how the two tables drifted before there was a
+      # generator, so a stale artifact fails here, and so does a contrast
+      # promise the table stopped keeping.
+      - name: Check the design tokens
+        run: |
+          pnpm tokens:check
+          CI=true pnpm test:tokens
+          pnpm lint:tokens
+          pnpm typecheck:tokens
+
       - name: Check generated artifacts are current
         run: |
           pnpm check:capabilities

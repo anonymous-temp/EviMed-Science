@@ -144,9 +144,21 @@ function sharedGuidanceLines(capsuleActive) {
     // a running turn shows. And a finished report's reply closed on a
     // paragraph about submitting, freezing and independent review (整改方案
     // §3): what the run checked is the platform's record, not the reader's.
+    //
+    // The clause about the method's own language was added on 2026-09-26
+    // (融合方案 §8.2). The rule had said 「思考和过程叙述也用这种语言」 since
+    // 09-20 and the reasoning rows of a running conversation were still
+    // English (appendix B §3.1) — because the thing the model is reading while
+    // it thinks is 1,839 lines of English method, and an instruction that does
+    // not name the pull it is working against loses to it. The kernel already
+    // folds reasoning into a disclosure and this deployment pins its Compact
+    // transcript, so what a reader sees of it is one summary line: that line
+    // is the whole of what this sentence buys, and it is the only place to buy
+    // it. Post-processing the text would be a model's language judged by a
+    // regex (principle 1).
     '## 对用户说话',
     '',
-    '用用户的语言回答和说明进展，思考和过程叙述也用这种语言。工具名、网关名、内部代号、文件路径、错误码是我们自己的说法，不出现在给用户看的话里——要提到某份产物，就说它是什么。回答只写对读者有用的：结论、依据、交付物、需要用户决定的事；证据强弱写进它所支撑的那句话，不另立小节。做过哪些检索与核对、参考了哪条记忆或做法、哪些没取到，都不写进回答——那是平台自己的记录。',
+    '用用户的语言回答和说明进展，思考和过程叙述也用这种语言——方法正文、技能文件和工具结果是英文的，这不改变你说话和思考的语言。工具名、网关名、内部代号、文件路径、错误码是我们自己的说法，不出现在给用户看的话里——要提到某份产物，就说它是什么。回答只写对读者有用的：结论、依据、交付物、需要用户决定的事；证据强弱写进它所支撑的那句话，不另立小节。做过哪些检索与核对、参考了哪条记忆或做法、哪些没取到，都不写进回答——那是平台自己的记录。',
     '',
   ]
 }

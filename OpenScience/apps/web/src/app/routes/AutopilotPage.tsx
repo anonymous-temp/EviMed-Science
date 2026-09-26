@@ -168,13 +168,32 @@ function lastResult(episodes: readonly EpisodeRecord[]): { episode: EpisodeRecor
  * the service sets `enabled: false` — so this spends nothing until the
  * researcher turns its switch on.
  */
-function NewAgendaForm({ projectId, onCreated, onError, onCancel }: {
+/**
+ * Six directions a reader can start from.
+ *
+ * An empty page that only says 「还没有定时研究」 asks the reader to invent the
+ * product's use for it. Every one of these is a real standing question — a
+ * safety signal, a guideline that moves, a competitor's trial reading out — and
+ * picking one opens the form already filled in, so the first agenda costs a
+ * click instead of a blank field.
+ */
+const STARTERS: ReadonlyArray<{ title: string; direction: string }> = [
+  { title: "一个药的安全信号", direction: "司美格鲁肽的胰腺炎与胃轻瘫不良事件信号" },
+  { title: "一条指南的更新", direction: "2 型糖尿病降糖治疗指南的更新与推荐变化" },
+  { title: "同类药的头对头证据", direction: "替尔泊肽与司美格鲁肽在减重与血糖控制上的直接比较研究" },
+  { title: "一个适应证的新证据", direction: "GLP-1 受体激动剂在慢性肾脏病中的结局研究" },
+  { title: "对手在研管线", direction: "国内减重适应证在研药物的 III 期试验进展与读出时间" },
+  { title: "一个人群的用药安全", direction: "妊娠期与哺乳期使用降压药的安全性证据" },
+];
+
+function NewAgendaForm({ projectId, initialDirection = "", onCreated, onError, onCancel }: {
   projectId: string;
+  initialDirection?: string;
   onCreated: () => void;
   onError: (message: string) => void;
   onCancel: () => void;
 }) {
-  const [direction, setDirection] = useState("");
+  const [direction, setDirection] = useState(initialDirection);
   const [title, setTitle] = useState("");
   const [taskTypes, setTaskTypes] = useState<string[]>([...AGENDA_DEFAULTS.taskTypes]);
   const [maxEpisodeCny, setMaxEpisodeCny] = useState<string>(AGENDA_DEFAULTS.maxEpisodeCny);
@@ -331,7 +350,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   /** The agenda a researcher asked to run now, held until they confirm the
    *  spend: running is the one control on this page that costs money. */
   const [running, setRunning] = useState<AgendaRecord | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<{ direction: string } | null>(null);
   const [history, setHistory] = useState<AgendaRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
@@ -414,14 +433,28 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   return (
     <PageShell
       title="主动科研"
-      actions={<Button disabled={busy} onClick={() => setCreating(true)}><Plus size={16} aria-hidden="true" />新建定时研究</Button>}
+      actions={<Button disabled={busy} onClick={() => setCreating({ direction: "" })}><Plus size={16} aria-hidden="true" />新建定时研究</Button>}
     >
       {decisions > 0 && (
         <Link to="/app/inbox" className="mb-4 inline-flex rounded text-ui text-text-2 hover:text-text">{decisions} 项待你决定 →</Link>
       )}
       {error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
       {agendas === null ? <FilesSkeleton /> : agendas.length === 0
-        ? (error ? null : <EmptyState icon={CalendarClock} title="还没有定时研究。" />)
+        ? (error ? null : (
+          <>
+            <EmptyState icon={CalendarClock} title="还没有定时研究。" description="选一个方向开始，或者自己写一个。" />
+            <List label="可以从这些方向开始" divided>
+              {STARTERS.map((starter) => (
+                <ListRow
+                  key={starter.title}
+                  title={starter.title}
+                  meta={starter.direction}
+                  onOpen={() => setCreating({ direction: starter.direction })}
+                />
+              ))}
+            </List>
+          </>
+        ))
         : (
           <List label="定时研究" divided>
             {agendas.map((agenda) => {
@@ -467,10 +500,10 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
         }}
       />}
       {creating && (
-        <Drawer title="新建定时研究" onClose={() => setCreating(false)}>
-          <NewAgendaForm projectId={projectId} onCancel={() => setCreating(false)}
-            onCreated={() => { setCreating(false); void load({ background: true }); }}
-            onError={(message) => { setCreating(false); toast.error(message); }} />
+        <Drawer title="新建定时研究" onClose={() => setCreating(null)}>
+          <NewAgendaForm projectId={projectId} initialDirection={creating.direction} onCancel={() => setCreating(null)}
+            onCreated={() => { setCreating(null); void load({ background: true }); }}
+            onError={(message) => { setCreating(null); toast.error(message); }} />
         </Drawer>
       )}
       {history && (

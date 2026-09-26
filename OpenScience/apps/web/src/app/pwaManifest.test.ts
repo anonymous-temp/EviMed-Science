@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { COLOR_ROLES, colorRole } from "@evimed/domain/design-tokens";
+import { COLOR_ROLES, colorRole } from "@evimed/design-tokens";
 
 /**
  * The web app manifest: what a phone's 「添加到主屏幕」 installs. A Feishu card

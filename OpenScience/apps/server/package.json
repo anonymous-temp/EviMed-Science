@@ -22,6 +22,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@evimed/design-tokens": "workspace:*",
     "@evimed/domain": "workspace:*",
     "@evimed/harness-port": "workspace:*",
     "@larksuiteoapi/node-sdk": "1.74.0",

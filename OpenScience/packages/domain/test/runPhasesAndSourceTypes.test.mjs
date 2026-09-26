@@ -6,7 +6,9 @@ import {
   RUN_ACTIVITY_PHASE_LABELS_ZH,
   EVIDENCE_SOURCE_TYPES,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
+  STUDY_BADGE_KINDS,
   phaseOfToolCall,
+  studyBadgeKind,
   evidenceSourceTypeOf,
   summarizeRunPhases,
 } from "../index.mjs";
@@ -87,4 +89,26 @@ test("source types fall back to the finding tool, then the host, then other", ()
   assert.equal(evidenceSourceTypeOf(null), "other");
   assert.equal(evidenceSourceTypeOf({ sourceType: "label", publicationTypes: ["Review"] }), "label");
   assert.equal(evidenceSourceTypeOf({ sourceType: "not-a-type", publicationTypes: ["Review"] }), "review");
+});
+
+test("every source type wears one of the five study badges, and an unknown one is not given a study colour", () => {
+  // The five names are the palette's (`STUDY_TYPE_BADGES` in
+  // `@evimed/design-tokens`, `--study-<kind>-fg/bg`). They are written out
+  // here because this package has no dependency on the palette and must not
+  // grow one for a vocabulary check; that the two agree is asserted where both
+  // are present, in `packages/harness-port/test/runtimeUiSources.test.mjs`.
+  const kinds = ["synthesis", "rct", "guideline", "label", "other"];
+  assert.ok(EVIDENCE_SOURCE_TYPES.length >= 12, `only ${EVIDENCE_SOURCE_TYPES.length} source types were read, so this test walked nothing`);
+  for (const type of EVIDENCE_SOURCE_TYPES) {
+    const kind = studyBadgeKind(type);
+    assert.ok(kinds.includes(kind), `${type} maps to "${kind}", which is not one of the five badges`);
+  }
+  assert.equal(Object.keys(STUDY_BADGE_KINDS).length, EVIDENCE_SOURCE_TYPES.length, "a source type without a badge would draw uncoloured");
+  assert.equal(studyBadgeKind("rct"), "rct");
+  assert.equal(studyBadgeKind("meta-analysis"), "synthesis");
+  assert.equal(studyBadgeKind("systematic-review"), "synthesis");
+  assert.equal(studyBadgeKind("regulatory"), "label");
+  assert.equal(studyBadgeKind("trial-registration"), "other", "a registration has no results, so it is not a study design");
+  assert.equal(studyBadgeKind("from-a-newer-table"), "other");
+  assert.equal(studyBadgeKind(undefined), "other");
 });

@@ -52,7 +52,7 @@ if (process.argv.includes('--check')) {
 }
 
 if (current === next) {
-  console.log('design tokens: apps/web/src/index.css already matches @evimed/domain/design-tokens')
+  console.log('design tokens: apps/web/src/index.css already matches @evimed/design-tokens')
 } else {
   writeFileSync(target, next)
   console.log('design tokens: wrote apps/web/src/index.css')

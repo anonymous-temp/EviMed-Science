@@ -5,7 +5,7 @@
 :root {
   --el-color-primary: #0a5dc1;
   --el-color-primary-light-1: #2a72d0;
-  --el-color-primary-light-2: #5690dd;
+  --el-color-primary-light-2: #5f97e0;
   --el-color-primary-light-3: #8fb5ea;
   --el-color-primary-light-4: #8fb5ea;
   --el-color-primary-light-5: #bcd3f3;
@@ -14,15 +14,15 @@
   --el-color-primary-light-8: #dde9f9;
   --el-color-primary-light-9: #eef4fc;
   --el-color-primary-dark-2: #0a4da0;
-  --el-color-success: #1e7a4c;
-  --el-color-warning: #a15c00;
-  --el-color-danger: #c0362c;
-  --el-color-error: #c0362c;
-  --el-color-info: #646d77;
+  --el-color-success: #1c7347;
+  --el-color-warning: #985600;
+  --el-color-danger: #bc342a;
+  --el-color-error: #bc342a;
+  --el-color-info: #5f686f;
   --el-text-color-primary: #1a1f25;
   --el-text-color-regular: #3e454d;
-  --el-text-color-secondary: #646d77;
-  --el-text-color-placeholder: #646d77;
+  --el-text-color-secondary: #5f686f;
+  --el-text-color-placeholder: #5f686f;
   --el-text-color-disabled: #939ca6;
   --el-border-color: #858e97;
   --el-border-color-light: #d6dce2;

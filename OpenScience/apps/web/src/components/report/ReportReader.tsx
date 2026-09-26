@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Tabs } from "@/components/ui/Tabs";
 import { EvidenceMatrixTable } from "./EvidenceMatrixTable";
+import { SourceCardList } from "./SourceCards";
 import { useClaimMatrix } from "./useClaimMatrix";
 
 interface TocEntry {
@@ -262,6 +263,11 @@ export function ReportReader({
       <div ref={articleRef}>
         <MarkdownViewer variant="document" claims={matrix?.claims} claimStatuses={statuses} reading={reading}>{text}</MarkdownViewer>
       </div>
+      {/* The sources the report stands on, as cards (融合方案 §8.3): what kind
+        * of study each is, whether its quotation is in it, and whether it has
+        * since been retracted — none of which a numbered reference list can
+        * say. The report's own 参考文献 prose stays where the writer put it. */}
+      {matrix && <SourceCardList claims={matrix.claims} verified={verified} runId={reading.runId} className="mt-8 border-t border-border pt-6" />}
     </div>
   );
 
