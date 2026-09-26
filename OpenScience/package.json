@@ -112,7 +112,8 @@
     "test:tokens": "pnpm --filter @evimed/design-tokens test",
     "lint:tokens": "pnpm --filter @evimed/design-tokens lint",
     "typecheck:tokens": "pnpm --filter @evimed/design-tokens typecheck",
-    "gallery:shot": "node scripts/ops/gallery-shot.mjs"
+    "gallery:shot": "node scripts/ops/gallery-shot.mjs",
+    "gallery:check": "node scripts/ops/gallery-shot.mjs --check"
   },
   "engines": {
     "node": ">=22.22.0"
