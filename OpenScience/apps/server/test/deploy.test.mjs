@@ -2224,3 +2224,42 @@ test("every optional-channel lever the server reads is forwarded by compose", as
     );
   }
 });
+
+test("every workspace package the runtime's frame bundle imports is packed into the image", async () => {
+  // The socket's `node_modules/@evimed/*` is not a pnpm install — it is a
+  // handful of source trees copied in by name, because `.dockerignore` keeps
+  // `packages/socket/node_modules` out. So a package the bundle starts
+  // importing is absent from the image until someone adds a COPY line, and
+  // nothing upstream notices: every test passes, the web image builds, and the
+  // delta stops twenty minutes in at `build-client.mjs` with
+  // ERR_MODULE_NOT_FOUND. That is what happened on 2026-09-26 when the design
+  // tokens became their own package.
+  const sources = [];
+  for (const dir of ["packages/harness-port/src", "packages/socket/src", "packages/socket/plugins"]) {
+    const full = path.join(repoRoot, dir);
+    if (!existsSync(full)) continue;
+    for (const name of await readdir(full)) {
+      if (name.endsWith(".mjs")) sources.push(path.join(full, name));
+    }
+  }
+  assert.ok(sources.length > 20, `expected the bundle's sources, found ${sources.length}`);
+
+  const imported = new Set();
+  for (const file of sources) {
+    const text = await readFile(file, "utf8");
+    for (const match of text.matchAll(/from\s+['"]@evimed\/([a-z-]+)(?:\/[a-z-]+)?['"]/g)) imported.add(match[1]);
+  }
+  // `dsh-socket` is the bundle itself; it is not copied into its own node_modules.
+  imported.delete("dsh-socket");
+  assert.ok(imported.has("domain"), "the scan found no @evimed/domain import — it is not looking where it thinks");
+
+  for (const dockerfile of ["deploy/runtime-dsh/Dockerfile", "deploy/runtime-dsh/Dockerfile.delta"]) {
+    const text = await readFile(path.join(repoRoot, dockerfile), "utf8");
+    const packed = new Set(
+      [...text.matchAll(/^COPY packages\/([a-z-]+) \/opt\/evimed\/socket\/node_modules\/@evimed\/([a-z-]+)$/gm)]
+        .map((match) => match[2]),
+    );
+    const missing = [...imported].filter((name) => !packed.has(name)).sort();
+    assert.deepEqual(missing, [], `${dockerfile} does not pack: ${missing.join(", ")}`);
+  }
+});

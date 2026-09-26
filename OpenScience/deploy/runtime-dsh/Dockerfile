@@ -162,6 +162,13 @@ COPY capability-skills /opt/evimed/capability-skills
 # on `domain` in turn and resolves it by walking up to this same directory.
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+# `design-tokens` joined them on 2026-09-26: the frame bundle draws the study-
+# type badges and hands the kernel its theme, and both come from that table now
+# that it is its own package. It is the same shape as `domain` — source only,
+# no dependencies, browser-safe — so it is copied the same way, and the failure
+# it caused was identical in kind: the delta's `build-client.mjs` stopped with
+# ERR_MODULE_NOT_FOUND while every test upstream was green.
+COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-tokens
 RUN bash /usr/local/lib/evimed/install-runtime.sh socket-client
 
 # The preset ships inside the bundle as a *system*-trusted root, so a copy a
