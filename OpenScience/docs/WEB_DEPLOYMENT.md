@@ -626,6 +626,52 @@ keeps declaring `oidc-identity` unconfigured, because a local password store is
 not a managed identity provider and declaring otherwise would be a claim the
 deployment cannot back.
 
+## Serving From EviMed's Hostname (the fusion topology)
+
+The fusion plan puts EviMed Science behind `www.evimed.com`, the Vue shell's own
+name, so that a reader sees one product and the session cookie never has to
+leave one host. Nothing in the control plane changes for this; it is two reverse
+proxy rules on EviMed's front end, and three values here.
+
+On EviMed's front end:
+
+```text
+# The Java platform, unchanged. EviMed's own API already lives under this prefix.
+/api-evimed/*   ->  the Java gateway
+
+# The control plane, same origin, so no CORS and no third-party cookie.
+/api/*          ->  the Science control plane
+
+# The conversation frame: the SAME hostname on its own port.
+:8789           ->  the Science runtime-UI proxy
+```
+
+Then, in `deploy/web/.env`:
+
+```bash
+OPEN_SCIENCE_PUBLIC_URL=https://www.evimed.com
+OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN=https://www.evimed.com:8789
+```
+
+**The frame port is not decoration.** `runtimeUiOrigins()` requires the shell and
+the frame to share a protocol and a hostname and to differ in origin, which on
+one hostname means the port. The tempting alternative — putting the frame on
+`frame.evimed.com` — only works if the login cookie is widened from host-only to
+`.evimed.com`, and that hands the Science session to every other subdomain of
+the platform. It is refused in code, and `apps/server/test/fusionFrameTopology.test.mjs`
+is what keeps it refused. If a subdomain ever becomes necessary, the design is a
+one-time ticket issued with the frame which the frame's own origin exchanges for
+a cookie of its own — a separate change, with its own security review.
+
+Same-origin cuts both ways: once the control plane answers on `www.evimed.com`,
+any XSS in the Vue shell can call Science's API as the signed-in user. The
+plan's P0-1 (the three Markdown renderers that pass model output to `v-html`)
+and P0-2 (the JS-readable parent-domain credential) are prerequisites for this
+switch, not follow-ups to it.
+
+EviMed's own hostname is the only public name needed: the Science host does not
+have to be reachable from the internet under a name of its own.
+
 ## Production OIDC
 
 Register this exact redirect URI with the identity provider:
