@@ -12,6 +12,12 @@ Thumbs.db
 # Node
 node_modules/
 dist/
+# ...except the design tokens' generated artifacts. They are the interface the
+# Vue shell of EviMed consumes — another repository, which cannot run this
+# monorepo's build — so they are reviewed like source and `pnpm tokens:check`
+# fails when they go stale. Until the package is published to the private
+# registry, a commit is how a token reaches the other front end.
+!packages/design-tokens/dist/
 dist-ssr/
 *.local
 .vite/

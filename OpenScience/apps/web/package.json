@@ -15,9 +15,11 @@
   "dependencies": {
     "3dmol": "^2.5.5",
     "@ai4s/shared": "workspace:*",
+    "@evimed/design-tokens": "workspace:*",
     "@evimed/domain": "workspace:*",
     "@fontsource/inter": "^5.0.18",
     "@fontsource/jetbrains-mono": "^5.0.20",
+    "@fontsource/source-serif-4": "5.3.0",
     "@radix-ui/react-popover": "^1.1.2",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",

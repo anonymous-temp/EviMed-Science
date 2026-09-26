@@ -115,26 +115,40 @@ per-project workspace + JSONL provenance.
 
 - UI baseline language is **Simplified Chinese** (code/comments stay English);
   technical identifiers (URLs, enum values, model/provider ids) stay as-is.
-- **The design tokens are one module — `packages/domain/src/designTokens.mjs` —
-  and `DESIGN.md` is its prose.** Three consumers derive from it and none
-  restates it: the generated block in `src/index.css` (`pnpm tokens:css`),
-  `tailwind.config.js` (imports it), and the kernel frame's theme override
-  (`kernelThemeTokens()`). `apps/web/src/app/designTokens.test.ts` regenerates
-  and compares, so editing a consumer instead of the module is a red test.
-  The shell conforms to the kernel, not the other way around.
-- One sans stack, **no serif in the chrome**; five sizes only (12/14/16/20/24)
-  as `text-badge/meta/caption/ui/body/wordmark/title/display`; weights 400/500/600;
-  a line of text at most 40 CJK characters (`max-w-measure` 560 / `-body` 640).
-  Every page sits in **one 960 px column** (`max-w-page`) through **`PageShell`**,
-  whose header is one line with **no subtitle**. Radii: `rounded-tag` 4, `rounded` 8
-  (controls, rows), `rounded-card` 12 (cards, popovers, dialogs), `rounded-composer`
-  24, `rounded-full` pills. Heights: 24 in a row, 32 on a page, 40 only for a form's
-  primary button, tags 20. Icons 16 / 20, one stroke. One accent (links too).
-  Static cards have no shadow — `shadow-pop` (menus, popovers) / `shadow-modal`
-  (dialogs, drawers). The component set (`PageShell`, `Tabs`, `FilterChips`, `Tag`,
-  `Button`, `IconButton`, `List`/`ListRow`, `Panel`, `EmptyState`, plus `Menu`,
-  `Switch`, `SearchInput`) is in `DESIGN.md`; ESLint rejects a hand-made bordered
-  pill or bordered button outside `components/ui/`.
+- **The design tokens are one package — `@evimed/design-tokens`
+  (`packages/design-tokens/src/index.mjs`) — and `DESIGN.md` is its prose.** It
+  generates six artifacts into `dist/` and no consumer restates a value: the
+  block in `src/index.css` (`pnpm tokens:css`), the Tailwind preset both front
+  ends extend, the Element Plus theme the Vue shell links, the ECharts theme both
+  sides register, the kernel frame's `overrideTokens` map, and a Figma token
+  file. `pnpm tokens:check` fails on a stale artifact and
+  `apps/web/src/app/designTokens.test.ts` regenerates and compares, so editing a
+  consumer instead of the table is a red test. Contrast is recomputed at build
+  time and a shortfall fails the build. The shell conforms to the kernel, not the
+  other way around.
+- Brand is **循证蓝 `#0a5dc1`** (EviMed's live colour; 循证青 retired 2026-09-26).
+  One sans stack for the chrome; the **serif is three brand moments only** — the
+  wordmark, the home headline, a document title (`text-wordmark`/`text-hero`/
+  `text-doc-title` carry the family). Nine sizes
+  (12/13/14/16/18/20/24/32/40) as `text-badge/meta/caption/compact/ui/body/
+  wordmark/section/heading/title/doc-title/display/metric/metric-lg/hero`, still
+  at most four size × weight pairs per page, and **32/40 on data pages only**;
+  weights 400/500/600; a line of text at most 40 CJK characters (`max-w-measure`
+  560 / `-body` 640). **Three columns through `PageShell`**: `max-w-read` 720
+  (answers, reports), `max-w-page` 1040 (lists), `max-w-wide` 1200 (dashboards);
+  its header is one line with **no subtitle**. Radii: `rounded-tag` 6, `rounded`
+  8 (controls, rows), `rounded-card` 12, `rounded-panel` 16 (dialogs, drawers),
+  `rounded-composer` 24, `rounded-full` pills. Heights: 28 small, 36 default, 44
+  primary, tags 22. Icons 16 / 20, one stroke (1.5). One accent (links too).
+  Static cards have no shadow — `shadow-e1` / `shadow-e2` (composer, menus,
+  popovers) / `shadow-e3` (dialogs, drawers). **Restraint is the default and
+  expression has a budget**: one brand moment per page, charts and metric rungs
+  on data pages. In a comparison chart we are the brand and every rival is a grey
+  (`CHART_COLORS`). The component set (`PageShell`, `Tabs`, `FilterChips`, `Tag`,
+  `Button`, `IconButton`, `List`/`ListRow`, `Panel`, `EmptyState`, `StatTile`,
+  `Delta`, `ChartCard`, `DataTable`, plus `Menu`, `Switch`, `SearchInput`) is in
+  `DESIGN.md`; ESLint rejects a hand-made bordered pill or bordered button
+  outside `components/ui/`.
 - **The interface never explains the system** (2026-09-23 plan): no subtitle, no hint
   under a card title, no 「为什么入选」; no internal state as text (已交付, 核对 N 条,
   用过 N 次, token, tok/s, API names, ids). Say what the user can do and the result.

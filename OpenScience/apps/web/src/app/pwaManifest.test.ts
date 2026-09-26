@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { colorRole } from "@evimed/domain/design-tokens";
+import { COLOR_ROLES, colorRole } from "@evimed/domain/design-tokens";
 
 /**
  * The web app manifest: what a phone's 「添加到主屏幕」 installs. A Feishu card
@@ -65,10 +65,13 @@ describe("the web app manifest", () => {
   it("takes its colours from the tokens: the light canvas, as the page's own theme-color does", () => {
     // The manifest has one colour, and the page's per-scheme meta tags take
     // over once it has loaded. Read the role rather than a primitive step: the
-    // canvas moved from the cool paper grey to white on 2026-09-20, and a test
-    // pinned to `--n-50` would have gone green on the wrong colour.
+    // canvas has moved twice (cool paper grey, white, and now the blue-grey the
+    // fusion brought), and a test pinned to a ramp step would have gone green on
+    // the wrong colour each time. In the stylesheet the role points at its step,
+    // so the assertion follows the same indirection.
     const canvas = colorRole("bg", "light");
-    expect(css).toContain(`--bg: ${canvas}`);
+    expect(css).toContain(`--bg: var(--${COLOR_ROLES.bg.light})`);
+    expect(css).toContain(`--${COLOR_ROLES.bg.light}: ${canvas}`);
     expect(manifest.theme_color).toBe(canvas);
     expect(manifest.background_color).toBe(canvas);
     expect(html).toContain(`<meta name="theme-color" media="(prefers-color-scheme: light)" content="${canvas}" />`);

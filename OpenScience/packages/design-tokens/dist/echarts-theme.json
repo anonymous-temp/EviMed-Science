@@ -1,0 +1,430 @@
+{
+  "light": {
+    "color": [
+      "#0a5dc1",
+      "#e07b39",
+      "#1d9a87",
+      "#7b5cd6",
+      "#c94f7c",
+      "#c7a12b",
+      "#5a626b",
+      "#b4bcc5"
+    ],
+    "backgroundColor": "transparent",
+    "textStyle": {
+      "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+      "color": "#1a1f25"
+    },
+    "title": {
+      "show": false
+    },
+    "grid": {
+      "left": 8,
+      "right": 8,
+      "top": 8,
+      "bottom": 8,
+      "containLabel": true
+    },
+    "valueAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#858e97",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#646d77",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#e4e8ec",
+          "width": 1,
+          "type": "solid"
+        }
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "categoryAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#858e97",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#646d77",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": false
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "logAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#858e97",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#646d77",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#e4e8ec",
+          "width": 1,
+          "type": "solid"
+        }
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "timeAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#858e97",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#646d77",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#e4e8ec",
+          "width": 1,
+          "type": "solid"
+        }
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "legend": {
+      "textStyle": {
+        "color": "#3e454d",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "icon": "roundRect",
+      "itemWidth": 10,
+      "itemHeight": 10,
+      "itemGap": 16
+    },
+    "tooltip": {
+      "backgroundColor": "#ffffff",
+      "borderColor": "#e4e8ec",
+      "borderWidth": 1,
+      "padding": [
+        8,
+        12
+      ],
+      "extraCssText": "border-radius:8px;box-shadow:0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05);",
+      "textStyle": {
+        "color": "#1a1f25",
+        "fontSize": 13,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "axisPointer": {
+        "lineStyle": {
+          "color": "#858e97"
+        },
+        "crossStyle": {
+          "color": "#858e97"
+        }
+      }
+    },
+    "line": {
+      "symbol": "circle",
+      "symbolSize": 5,
+      "smooth": false,
+      "lineStyle": {
+        "width": 2
+      }
+    },
+    "bar": {
+      "itemStyle": {
+        "borderRadius": [
+          3,
+          3,
+          0,
+          0
+        ]
+      }
+    },
+    "pie": {
+      "itemStyle": {
+        "borderColor": "#ffffff",
+        "borderWidth": 1
+      }
+    },
+    "visualMap": {
+      "inRange": {
+        "color": [
+          "#f3f6fa",
+          "#dce8f7",
+          "#b3cdef",
+          "#7fa9e3",
+          "#3e7ed4",
+          "#0a5dc1"
+        ]
+      },
+      "textStyle": {
+        "color": "#646d77"
+      }
+    },
+    "heatmap": {
+      "itemStyle": {
+        "borderColor": "#ffffff",
+        "borderWidth": 1,
+        "borderRadius": 3
+      }
+    }
+  },
+  "dark": {
+    "color": [
+      "#5690dd",
+      "#e8975f",
+      "#3fb5a2",
+      "#9b82e2",
+      "#d7749a",
+      "#d4b551",
+      "#8a939c",
+      "#c8cfd6"
+    ],
+    "backgroundColor": "transparent",
+    "textStyle": {
+      "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+      "color": "#eef1f4"
+    },
+    "title": {
+      "show": false
+    },
+    "grid": {
+      "left": 8,
+      "right": 8,
+      "top": 8,
+      "bottom": 8,
+      "containLabel": true
+    },
+    "valueAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#646e78",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#8d96a0",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#262d35",
+          "width": 1,
+          "type": "solid"
+        }
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "categoryAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#646e78",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#8d96a0",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": false
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "logAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#646e78",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#8d96a0",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#262d35",
+          "width": 1,
+          "type": "solid"
+        }
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "timeAxis": {
+      "axisLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#646e78",
+          "width": 1
+        }
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#8d96a0",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "splitLine": {
+        "show": true,
+        "lineStyle": {
+          "color": "#262d35",
+          "width": 1,
+          "type": "solid"
+        }
+      },
+      "splitArea": {
+        "show": false
+      }
+    },
+    "legend": {
+      "textStyle": {
+        "color": "#c3cad2",
+        "fontSize": 12,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "icon": "roundRect",
+      "itemWidth": 10,
+      "itemHeight": 10,
+      "itemGap": 16
+    },
+    "tooltip": {
+      "backgroundColor": "#161b21",
+      "borderColor": "#262d35",
+      "borderWidth": 1,
+      "padding": [
+        8,
+        12
+      ],
+      "extraCssText": "border-radius:8px;box-shadow:0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05);",
+      "textStyle": {
+        "color": "#eef1f4",
+        "fontSize": 13,
+        "fontFamily": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+      },
+      "axisPointer": {
+        "lineStyle": {
+          "color": "#646e78"
+        },
+        "crossStyle": {
+          "color": "#646e78"
+        }
+      }
+    },
+    "line": {
+      "symbol": "circle",
+      "symbolSize": 5,
+      "smooth": false,
+      "lineStyle": {
+        "width": 2
+      }
+    },
+    "bar": {
+      "itemStyle": {
+        "borderRadius": [
+          3,
+          3,
+          0,
+          0
+        ]
+      }
+    },
+    "pie": {
+      "itemStyle": {
+        "borderColor": "#161b21",
+        "borderWidth": 1
+      }
+    },
+    "visualMap": {
+      "inRange": {
+        "color": [
+          "#f3f6fa",
+          "#dce8f7",
+          "#b3cdef",
+          "#7fa9e3",
+          "#3e7ed4",
+          "#0a5dc1"
+        ]
+      },
+      "textStyle": {
+        "color": "#8d96a0"
+      }
+    },
+    "heatmap": {
+      "itemStyle": {
+        "borderColor": "#161b21",
+        "borderWidth": 1,
+        "borderRadius": 3
+      }
+    }
+  }
+}

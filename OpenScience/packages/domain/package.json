@@ -2,7 +2,7 @@
   "name": "@evimed/domain",
   "version": "0.1.0",
   "type": "module",
-  "description": "Pure EviMed domain vocabulary: contract kinds, gate rules, state machines, error codes, workspace layout. Zero dependencies, browser-safe.",
+  "description": "Pure EviMed domain vocabulary: contract kinds, gate rules, state machines, error codes, workspace layout. Browser-safe; its only dependency is the token table it re-exports.",
   "license": "MIT",
   "files": [
     "index.mjs",
@@ -10,6 +10,7 @@
   ],
   "exports": {
     ".": "./index.mjs",
+    "./answer-evidence-grade": "./src/answerEvidenceGrade.mjs",
     "./clinical-evidence": "./src/clinicalEvidence.mjs",
     "./design-tokens": "./src/designTokens.mjs",
     "./package.json": "./package.json"
@@ -35,5 +36,8 @@
     "url": "git+https://github.com/anonymous-temp/EviMed-Science.git",
     "directory": "OpenScience/packages/domain"
   },
-  "directory": null
+  "directory": null,
+  "dependencies": {
+    "@evimed/design-tokens": "workspace:*"
+  }
 }

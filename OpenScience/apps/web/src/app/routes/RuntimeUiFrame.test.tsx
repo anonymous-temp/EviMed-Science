@@ -13,6 +13,7 @@ import { apply as applyFrameTheme } from "../../../../../packages/harness-port/s
 import { useUiStore } from "@/lib/store";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
+import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
@@ -611,7 +612,13 @@ describe("the shell's theme in the frame", () => {
       applyFrameTheme(ctx, {}, target, undefined, kit);
     });
     await waitFor(() => expect(setTheme).toHaveBeenCalledWith("dark"));
-    expect(overrideTokens).toHaveBeenCalledWith("@evimed/dsh-socket", expect.objectContaining({ "--dsw-alias-button-info-fill": { light: "#00756b", dark: "#00756b" } }));
+    // Derived, not typed: the send button's glyph is a hard-coded #fff in the
+    // kernel, so this fill is the one token that must carry white in both
+    // schemes, and a literal here would have gone stale when the brand changed.
+    expect(overrideTokens).toHaveBeenCalledWith(
+      "@evimed/dsh-socket",
+      expect.objectContaining({ "--dsw-alias-button-info-fill": kernelThemeTokens()["--dsw-alias-button-info-fill"] }),
+    );
     act(() => useUiStore.getState().setTheme("light"));
     await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("light"));
     for (const dispose of disposers.reverse()) dispose();

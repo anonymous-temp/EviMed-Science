@@ -37,6 +37,7 @@
     "node": ">=22.22.0"
   },
   "dependencies": {
+    "@evimed/design-tokens": "workspace:*",
     "@evimed/domain": "workspace:^0.1.0"
   },
   "peerDependencies": {

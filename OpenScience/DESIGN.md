@@ -5,46 +5,65 @@ window, so they obey the same table. Colour already crossed that boundary; type 
 did not, and the seam was visible in a screenshot. **The shell conforms to the kernel**, not the
 other way around.
 
-**The table is `packages/domain/src/designTokens.mjs`, and nowhere else.** Three consumers read
-it and none of them restates it:
+**The table is `packages/design-tokens/src/index.mjs`, and nowhere else.** It became its own
+package (`@evimed/design-tokens`) on 2026-09-26, when the fusion gave it a consumer in another
+repository: the Vue shell of EviMed cannot import a module out of `@evimed/domain`'s source tree.
+`@evimed/domain/design-tokens` is now a re-export shim holding no values, for the same reason
+`clinicalEvidenceQuality.mjs` holds no rules.
+
+Six consumers read the table and none of them restates it:
 
 | Consumer | How it reads the table | What keeps it honest |
 |---|---|---|
 | `apps/web/src/index.css` | a generated block between two markers, written by `pnpm tokens:css` | `designTokens.test.ts` regenerates and compares byte for byte |
-| `apps/web/tailwind.config.js` | imports `@evimed/domain/design-tokens` directly | the same test asserts each scale equals the module's |
+| `apps/web/tailwind.config.js` | extends the generated `dist/tailwind-preset.js` | the same test asserts each scale equals the table's |
 | `packages/harness-port/src/runtimeUiTheme.mjs` | `kernelThemeTokens()` → `ctx.theme.overrideTokens` | the same test asserts the accent, the canvas and the sidebar grey |
+| the Vue shell's `tailwind.config.js` | extends the same generated preset | `pnpm tokens:check` fails on a stale artifact |
+| the Vue shell's Element Plus theme | links `dist/element-plus.css` | every derived `--el-color-primary-light-N` is written out, so nine teal-adjacent shades cannot survive |
+| both sides' charts | register `dist/echarts-theme.json` | `chartPalette.test.ts` asserts the shared palette equals `CHART_SERIES` |
 
-Changing a value means editing the module and running `pnpm tokens:css`. Editing the CSS or the
-Tailwind config instead is caught by the test, which is the point: the shell and the frame were
+Changing a value means editing the table, running `pnpm tokens:build`, and committing the
+regenerated artifacts. Editing an artifact, the CSS or a Tailwind config instead is caught by
+`pnpm tokens:check`, which is the point: the shell and the frame were
 two hand-maintained tables, and "change it in both places" is an instruction, not a mechanism.
 
 ---
 
 ## Colour
 
-One accent — **循证青 `#00756b`** — one cool neutral ramp, four semantic ramps. White on the
-accent is 5.59:1, against 4.23:1 on the kernel's own blue, which is why the frame takes ours.
+One accent — **循证蓝 `#0a5dc1`** — one blue-grey neutral ramp, four semantic ramps, and a closed
+set of data colours. White on the accent is 6.24:1. The value is EviMed's live brand colour and is
+not ours to tune: the platform has users and a logo already, and 循证青 `#00756b` retired with the
+fusion (2026-09-26).
+
+Every contrast figure below is **recomputed at build time** by
+`packages/design-tokens/src/contrast.mjs`, which fails the build on a shortfall. The notes used to
+be typed by hand and went stale silently; two of them were already fiction when the check first
+ran.
 
 ### Roles
 
 | Role | Light | Dark | What it is |
 |---|---|---|---|
-| `bg` | `#ffffff` | `#14181a` | the page. White, as the conversation is |
-| `surface` | `#ffffff` | `#1d2225` | card, dialog, menu, popover |
-| `surface-1` | `#f8f8f9` | `#1d2225` | the one grey step: sidebar, table header, inset track, code block |
-| `surface-2` | `#f0f1f2` | `#272d30` | hover, the neutral selected row, a skeleton bar |
-| `scrim` | `rgba(20,24,26,.32)` | `rgba(0,0,0,.56)` | behind a dialog or drawer |
-| `border-hairline` | `#dfe2e4` | `#3a4044` | decoration: separators, a card's edge |
-| `border-faint` | `#e9ebed` | `#292f32` | the quietest rule, inside a list |
-| `border-control` | `#8b9195` | `#646c71` | the visible boundary of a control — 3.19:1 (WCAG 1.4.11) |
-| `text` | `#242628` | `#f0f1f2` | body and headings, 15.19:1 |
-| `text-2` | `#4c5154` | `#c8cdcf` | secondary lines, 8.04:1 |
-| `text-3` | `#606669` | `#acb2b5` | metadata, 5.83:1 — **nothing lighter carries text** |
-| `accent` | `#00756b` | `#63c5b9` | primary action, focus ring, selected row, the ✓ verified mark |
-| `accent-soft` | `#f0fbf9` | `#004841` | selected row background, the verified chip. Never text |
-| `accent-pressed` | `#005e56` | `#98dbd2` | the pressed state of an accent surface |
-| `accent-strong` | `#005e56` | `#98dbd2` | text on `accent-soft`, 7.26:1 |
-| `ok` `warn` `error` `info` | 700 step | 300 step | **status only**, always beside a shape and a word |
+| `bg` | `#fafbfc` | `#0f1318` | the page — a hair off white, so a card has an edge without a border |
+| `surface` | `#ffffff` | `#161b21` | card, dialog, menu, popover, the reading column |
+| `surface-1` | `#f5f7f9` | `#161b21` | the one grey step: sidebar, table header, inset track, code block |
+| `surface-2` | `#edf0f3` | `#1e242b` | hover, the neutral selected row, a skeleton bar |
+| `scrim` | `rgba(15, 19, 24, 0.32)` | `rgba(0, 0, 0, 0.56)` | behind a dialog or drawer |
+| `border-hairline` | `#e4e8ec` | `#262d35` | decoration: separators, a card's edge |
+| `border-faint` | `#edf0f3` | `#1e242b` | the quietest rule, inside a list |
+| `border-light` | `#d6dce2` | `#262d35` | a pill or segment whose ground already separates it |
+| `border-control` | `#858e97` | `#646e78` | the visible boundary of a control — 3.21:1, and 3.10:1 on the sidebar (WCAG 1.4.11) |
+| `text` | `#1a1f25` | `#eef1f4` | body and headings, 16.00:1 |
+| `text-2` | `#3e454d` | `#c3cad2` | secondary lines, 9.37:1 |
+| `text-3` | `#646d77` | `#8d96a0` | metadata, 5.07:1 — **nothing lighter carries text** |
+| `text-graphic` | `#939ca6` | `#535b64` | icons and rules only, 2.69:1 — **never a word** |
+| `accent` | `#0a5dc1` | `#5690dd` | primary action, link, focus ring, selected row, the ✓ verified mark, and "our" chart series |
+| `accent-soft` | `#eef4fc` | `#0a1f3e` | selected row background, the verified chip. Never text |
+| `accent-pressed` | `#0a4da0` | `#8fb5ea` | the pressed state of an accent surface |
+| `accent-strong` | `#0c3e7f` | `#8fb5ea` | text on `accent-soft`, 9.93:1 |
+| `ok` `warn` `error` | 600 step | 300 step | **status only**, always beside a shape and a word |
+| `member-from` / `member-to` | `#f6d58e` → `#fbe7be` | — | the membership card's one gradient |
 
 Every role has its `-soft` background; `danger`, `warn` and `accent` also have a `-strong` text
 colour for use on it. The retired names `border`, `border-strong` and `muted` are aliases of
@@ -56,8 +75,18 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   errors, the unread badge. Nothing else.
 - **"Needs checking" is amber, never red.** A claim awaiting verification is not a clinical alarm.
 - **`ok` is not the verified mark.** A verified claim is the brand colour, on purpose.
-- **One accent.** Links wear it too (2026-09-23): a blue link beside a teal primary was a second
-  accent on every screen. A primary button stands apart by being solid, not by hue.
+- **One accent.** Links wear it too (2026-09-23): a second hue for links was an accent on every
+  screen. A primary button stands apart by being solid, not by hue.
+- **A comparison puts us in the brand and every rival in grey.** `CHART_COLORS.own` is the brand;
+  `CHART_COLORS.rivals` is three greys, darkest for the highest rank. At most one rival may take a
+  colour, and only when the reader pins it. A chart of eight rainbow brands tells a reader nothing
+  about which one is theirs, and that is what the GEO dashboard shipped.
+- **Certainty is a single-hue scale, never a traffic light.** Four brand-blue steps. Low certainty
+  is not harm, and red is reserved for safety.
+- **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
+  A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
+  32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
+  look cheap, and un-banning them without a budget is how a product gets loud.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -92,7 +121,7 @@ surface: use `text-accent-fg` / `text-error-fg`.
 
 ## Type
 
-**One sans stack. No serif anywhere in the chrome.**
+**One sans stack for the chrome. The serif is for three brand moments and nothing else.**
 
 ```
 Inter, system-ui, "PingFang SC", "HarmonyOS Sans SC", MiSans, "Microsoft YaHei",
@@ -104,28 +133,52 @@ against; then every Chinese face a reader's OS might carry — without named CJK
 falls to the bitmap-hinted SimSun. Mono (`JetBrains Mono`, falling back to the Chinese sans
 faces) is for identifiers compared character by character: DOI, PMID, NCT, run id.
 
-`font-serif` survives only as an alias of the sans stack, so a page nobody has migrated renders
-in it rather than falling back to the browser's Georgia. ESLint rejects the class in
-`components/ui`, `components/layout` and `components/cards`; the ban widens to `src/**` once the
-page rewrites have dropped their call sites.
+The serif came back on 2026-09-26, confined (fusion plan §5.2). An evidence platform borrows its
+authority from the journals and every one of them is set in a serif, so the **wordmark**, the
+**home headline** and the **title of a document** wear one — and nothing else does, because a
+serif on a button reads as an old intranet. Three rungs carry the family themselves
+(`text-wordmark`, `text-hero`, `text-doc-title`), so a page never names `font-serif` to get it.
 
-### The five sizes
+```
+"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif
+```
 
-12 / 14 / 16 / 20 / 24 (2026-09-23: 13 is gone — a 13 px caption beside 12 px metadata and
-14 px interface text was three sizes a reader could not tell apart). The set is closed — a sixth
-is a defect, and the test says so. A page uses at most four size × weight pairs: title 20/600,
-item title 14/500, text 14/400, metadata 12/400; reading prose 15–16.
+Only the two latin cuts ship as a webfont; the CJK serif is deliberately not one — a Source Han
+Serif subset is megabytes and the systems that matter already carry Songti SC or Noto Serif CJK.
+ESLint still rejects `font-serif` in `components/ui`, `components/layout` and `components/cards`:
+a brand moment belongs to a page, never to a primitive.
+
+### The nine sizes
+
+**12 / 13 / 14 / 16 / 18 / 20 / 24 / 32 / 40.** The set is closed — a tenth is a defect, and the
+test says so.
+
+Five was the 2026-09-23 number, and it was the right cure for a page carrying eleven size ×
+weight pairs and the wrong medicine for a dashboard: with 24 px as the ceiling a KPI could not
+out-shout its own label, which is a large part of why 循证 GEO read as small. 13 returns for dense
+controls, 18 for a section heading inside a reading page, and 32 / 40 for metrics — **the metric
+rungs are admissible on a data page only.**
+
+A page still uses at most **four size × weight pairs**. That budget is what the five-size scale
+was protecting, and it survives unchanged.
 
 | Rung | Size / line | What it is |
 |---|---|---|
 | `badge` | 12 / 1 | a count inside a pill |
-| `meta` | 12 / 1.5 | the densest metadata: timestamps, counts, units |
+| `meta` | 12 / 1.5 | the densest metadata: dates, journals, counts, legends |
 | `caption` | 12 / 20px | captions and secondary one-liners (a line in a row) |
+| `compact` | 13 / 20px | a small control, a filter chip, a dense data table |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
-| `wordmark` | 16 / 1.3 | the EviMed lockup in the sidebar |
-| `title` | 20 / 1.3 | every page H1 |
-| `display` | 24 / 1.3 | the home hero, the login page, a full-page empty state |
+| `wordmark` | 16 / 1.3 · serif | the EviMed lockup in the sidebar |
+| `section` | 18 / 26px | a section heading inside an answer or a report |
+| `heading` | 20 / 28px | a card heading on a data page, a document title in a preview pane |
+| `title` | 24 / 32px | every page H1 |
+| `doc-title` | 24 / 34px · serif | the title of a report, article or evidence card |
+| `display` | 24 / 1.3 | the login page, a full-page empty state |
+| `metric` | 32 / 40px | a KPI number — **data pages only** |
+| `metric-lg` | 40 / 48px | the one leading KPI of a dashboard |
+| `hero` | 40 / 50px · serif | the home headline — one per product |
 
 Weights **400 / 500 / 600**, nothing else. No `letter-spacing` and no `uppercase` on Chinese —
 tracking breaks the character grid. Mixed-script spacing is the browser's job (`text-autospace:
@@ -142,26 +195,35 @@ times are set in tabular numbers.
 
 ## Space, containers, radii, heights
 
-**Base 4. Seven steps: 4 / 8 / 12 / 16 / 24 / 32 / 48** — 8 inside a group, 16–24 between
+**Base 4. Ten steps: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64** — 8 inside a group, 16–24 between
 groups, 32–48 between sections. Card padding 16, grid gap 12, page gutter 24. Separate by space
 first, then a quiet ground, and draw a line last.
 
 ### Containers — a page has one left edge
 
+**Three columns, and a page uses exactly one for its title and its body both.**
+
 | Name | Width | For |
 |---|---|---|
-| `max-w-page` | **960** | every page — the one column (2026-09-23) |
+| `max-w-read` | **720** | an answer, a report, an article, an evidence card |
+| `max-w-page` | **1040** | a list: tools, the frontier feed, capsules, settings |
+| `max-w-wide` | **1200** (1280 at ≥1440) | a dashboard: GEO, the evidence zone, the three-column knowledge base |
 | `max-w-measure` / `max-w-measure-body` | 560 / 640 | a paragraph's line length |
-| `max-w-content` | 748 | a reading column inside a page: report prose |
+| `max-w-content` | *retired* → 720 | an unmigrated reading column converges here |
 | `max-w-content-narrow` | 560 | a form inside a drawer |
-| `max-w-content-wide`, `-full` | *retired* → 960 | an unmigrated call site converges here |
+| `max-w-content-wide`, `-full` | *retired* → 1040 | an unmigrated call site converges here |
+
+The single 960 column of 2026-09-23 is gone: it made a reading page too wide and a dashboard too
+narrow, and a dashboard squeezed into a document column is the structural half of why 循证 GEO
+looked cheap. `max-w-full` is deliberately **not** a token — a blanket map of the container table
+would redefine Tailwind's own `max-w-full` as a pixel width.
 
 Sidebar 280, collapsed 56 — the kernel's constants.
 
-**Use `PageShell`.** It puts the title, the actions and the body inside the same 960 px box,
-because three pages shipped with five different left edges (327 / 356 / 388 / 440 / 461 px) when
-each page chose its own, and on 2026-09-23 the inbox still sat 126 px right of the rest. A page
-that must lay itself out takes `width="full"` and still shares the gutter.
+**Use `PageShell`.** It puts the title, the actions and the body inside the same box, because
+three pages shipped with five different left edges (327 / 356 / 388 / 440 / 461 px) when each
+page chose its own, and on 2026-09-23 the inbox still sat 126 px right of the rest. A page that
+must lay itself out takes `width="full"` and still shares the gutter.
 
 **A page header is one line**: the title, optionally a grey count or update time, and at the
 right at most one primary button and two icon buttons or a search box. **No subtitle** — nothing
@@ -169,19 +231,21 @@ under the title explains how the system works; `PageHeader` has no place to put 
 
 ### Radii
 
-4 tags (`rounded-tag`) · 8 controls and rows (bare `rounded`) · 12 cards, popovers and dialogs
-(`rounded-card`; `rounded-panel` is its retired name) · 24 the composer (`rounded-composer`) ·
-`rounded-full` pills. One border width (1 px) and one border colour; at most one bordered
-container deep, and no rule under a card's title.
+6 tags (`rounded-tag`) · 8 controls and rows (bare `rounded`) · 12 cards and popovers
+(`rounded-card`) · 16 dialogs, drawers and panels (`rounded-panel`) · 24 the composer
+(`rounded-composer`) · `rounded-full` pills. A chart's bars and cells take 2–4 and are not
+counted. One border width (1 px) and one border colour; at most one bordered container deep, and
+no rule under a card's title.
 
 ### Heights
 
-**24 inside a row · 32 on a page · 40 for a form's primary button and nothing else** · a tag is
-20. Controls on one line share a height. Icons are **16 inline / 20 in the chrome**, one stroke
-(1.75, set once on `svg.lucide`). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8).
+**28 small · 36 the default · 44 for a primary action** · a tag is 22. Controls on one line share
+a height. Icons are **16 inline / 20 in the chrome**, one stroke (1.5, set once on `svg.lucide`;
+it splits the difference between the kernel's 1.75 and EviMed's hand-drawn 1.4). Minimum hit area
+24×24 CSS px (WCAG 2.2 SC 2.5.8).
 
-`Button` sizes map onto that: `sm` 24, `md` 32 (the default), `lg` 40. `Input` and `Textarea` are
-32 and 8 px round.
+`Button` sizes map onto that: `sm` 28, `md` 36 (the default), `lg` 44. `Input` and `Textarea` are
+36 and 8 px round.
 
 ### The component set (2026-09-23)
 
@@ -209,8 +273,10 @@ above a feed, a tool in a grid — and never for a list of like things.
 ## Surfaces, states, motion
 
 **Flat.** Structure is 1 px hairlines and the surface ladder. A static card has **no shadow** —
-its border is its whole edge. Only what genuinely floats casts one: `shadow-pop` (menus,
-popovers, toasts), `shadow-modal` (dialogs, drawers). No gradients, no tinted cards, no coloured
+its border is its whole edge. Only what genuinely floats casts one: `shadow-e1` (a card that must
+lift), `shadow-e2` (the composer, menus, popovers, toasts), `shadow-e3` (dialogs, drawers);
+`shadow-pop` and `shadow-modal` are retired names of `e2` and `e3`. One brand moment per page, no
+tinted cards, no coloured
 icon tiles, no sparkles, no shimmer. A list beats a wall of cards.
 
 **States**, the same everywhere:
@@ -293,16 +359,19 @@ state; a fourth coloured element on a screen that already has three.
 **Never without measuring**: contrast. The figures here and in the generated CSS come from the
 WCAG 2.1 relative-luminance formula. Re-measure, never estimate.
 
-**Three places at once**: the chart series (`designTokens.mjs`'s `CHART_SERIES`, `packages/shared`'s
-`CHART_PALETTE_*`, `openscience.mplstyle`), with the dataviz validator re-run.
+**Three places at once**: the chart series (`@evimed/design-tokens`' `CHART_SERIES`,
+`packages/shared`'s `CHART_PALETTE_*`, `openscience.mplstyle`), with adjacent-pair ΔE re-measured
+(the floor is 15; the current order is ≥ 22 in both schemes).
 
-**One place, then regenerate**: everything else. Edit `packages/domain/src/designTokens.mjs`, run
-`pnpm tokens:css`, run `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
+**One place, then regenerate**: everything else. Edit `packages/design-tokens/src/index.mjs`, run
+`pnpm tokens:build`, run `pnpm test:tokens` and
+`pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
 
 ## Known gaps
 
-- `font-serif` and `max-w-content-full` are aliases, not errors, until the page rewrites drop
-  their call sites; the ESLint serif ban is scoped to the primitives until then.
+- `max-w-content-full` and `text-ui-sm` are aliases, not errors, until the page rewrites drop
+  their call sites. The ESLint serif ban stays scoped to the primitives on purpose now: the serif
+  is a page's brand moment, so the ban is where a button lives, not everywhere.
 - The kernel frame's own geometry (radii, spacing) has no token family upstream; the little of it
   the shell touches lives in a stylesheet pinned to the kernel version. Only colour and type
   cross through `overrideTokens`.

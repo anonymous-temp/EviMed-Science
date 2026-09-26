@@ -1,0 +1,48 @@
+{
+  "name": "@evimed/design-tokens",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "EviMed design language 2.0: one token table, generated into CSS, a Tailwind preset, an Element Plus theme, an ECharts theme, the conversation kernel's theme override and a Figma token file. Zero dependencies, browser-safe.",
+  "license": "MIT",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.mjs",
+    "./contrast": "./src/contrast.mjs",
+    "./css": "./src/css.mjs",
+    "./kernel": "./src/kernel.mjs",
+    "./artifacts": "./src/artifacts.mjs",
+    "./tailwind": "./dist/tailwind-preset.js",
+    "./tokens.css": "./dist/tokens.css",
+    "./element-plus.css": "./dist/element-plus.css",
+    "./echarts-theme.json": "./dist/echarts-theme.json",
+    "./dsh-theme.json": "./dist/dsh-theme.json",
+    "./figma-tokens.json": "./dist/figma-tokens.json",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node src/generate.mjs",
+    "check": "node src/generate.mjs --check",
+    "test": "node --test test/*.test.mjs",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anonymous-temp/EviMed-Science.git",
+    "directory": "OpenScience/packages/design-tokens"
+  }
+}
