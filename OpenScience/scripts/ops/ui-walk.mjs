@@ -112,16 +112,27 @@ const BACK_OFFICE = [
 const BUDGET = { controls: 8, colors: 5, borders: 3 };
 const FRONTIER_BUDGET = { controls: 9, colors: 8 };
 /**
- * 循证 GEO is the product's one data page (fusion plan §5.5, §5.9): it spends
+ * The data-page budget (fusion plan §6.3): 10 controls, 7 text colours, 3
+ * borders, against the reading page's 8 / 5 / 3. A dashboard legitimately
+ * carries more — a metric band, a chart's legend and axis labels, a severity
+ * scale, a table's own header — and it is a wider budget, not the absence of
+ * one: 循证 GEO shipped inside the old budget and still looked cheap, which is
+ * why the fix was its information architecture and not its allowance.
+ *
+ * 循证 GEO is the page it was written for (fusion plan §5.5, §5.9): it spends
  * the severity reds of 讲错我方 and the single-hue heat ramp on top of the
  * chrome, and its header carries a rail of eight steps beside the tabs. The
  * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced
  * them — so the control budget covers the rail, not a control per row.
  */
-const GEO_BUDGET = { controls: 9, colors: 6 };
+const GEO_BUDGET = { controls: 10, colors: 7, borders: 3 };
 const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
   geo: GEO_BUDGET, "geo-project": GEO_BUDGET, "geo-accuracy": GEO_BUDGET, "geo-visibility": GEO_BUDGET,
+  // The rest of the seven tabs, and the knowledge base, which became a data
+  // page when it grew its project-and-type rail.
+  "geo-overview": GEO_BUDGET, "geo-questions": GEO_BUDGET, "geo-sources": GEO_BUDGET,
+  "geo-actions": GEO_BUDGET, "geo-plan": GEO_BUDGET, knowledge: GEO_BUDGET,
 };
 
 /**
