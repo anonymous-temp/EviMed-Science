@@ -237,4 +237,17 @@ describe("ProgressRail", () => {
     render(<MemoryRouter><ProgressRail label="进度" steps={steps} /></MemoryRouter>);
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
+
+  it("sets a word that stands in for a number smaller than a number", () => {
+    // 「未测」 and 「样本不足」 are words, and a word at the 40 px metric rung
+    // shouts a non-measurement louder than every measurement beside it.
+    const { container, rerender } = render(<StatTile label="豆包" value="未测" placeholder />);
+    const word = container.querySelector("[data-stat-value]");
+    expect(word).toHaveClass("text-heading");
+    expect(word).not.toHaveClass("text-metric");
+    expect(word).not.toHaveClass("text-metric-lg");
+    rerender(<StatTile label="品牌提及率" value="21" unit="%" lead />);
+    expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric-lg");
+  });
+
 });

@@ -387,7 +387,12 @@ export function rivalRanking(project: GeoProject, diagnosis: GeoDiagnosis | null
     name: ours,
     value: mention?.cell.status === "ok" ? mention.cell.value : null,
     ours: true,
-    scope: "本品",
+    // What the reading is OVER, not who it belongs to: the row already says
+    // it is ours, in the accent ground and in its own label. Saying 「本品」 in
+    // both places put the word on one row twice and told the reader nothing
+    // about where the number came from — which is the column's only job, and
+    // the reason a rival's number is not comparable to ours without it.
+    scope: "本品问句池",
   });
   return rows.sort((left, right) => (right.value ?? -1) - (left.value ?? -1));
 }
@@ -461,6 +466,34 @@ export function engineConclusion(project: GeoProject, diagnosis: GeoDiagnosis | 
   if (measured.length === 0) return "这一轮还没有可以比较的引擎读数";
   const best = measured.reduce((top, row) => ((row.cell.value ?? 0) > (top.cell.value ?? 0) ? row : top));
   return `${engineName(best.engine)}提到${product}最多`;
+}
+
+/**
+ * The per-engine trend card's own conclusion: which engine mentions us most and
+ * which least, from the latest stated reading of each.
+ *
+ * Its heading used to be 「各引擎的走势」, which is the chart's name — something
+ * the reader can already see. Every chart states what it shows in a sentence
+ * (§5.9), and the best and worst engine are what a reader would work out by
+ * reading this one.
+ *
+ */
+export function engineTrendConclusion(
+  rows: ReadonlyArray<{ engine?: string | null; points?: readonly GeoSeriesPoint[] | null } | null | undefined> | null | undefined,
+): string {
+  const stated = (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const points = Array.isArray(row?.points) ? row.points : [];
+      return { engine: row?.engine, cell: readGeoCell(points[points.length - 1]?.cell) };
+    })
+    .filter((row): row is { engine: string; cell: GeoCell } =>
+      !!row.engine && row.cell.status === "ok" && row.cell.value !== null);
+  if (stated.length === 0) return "各引擎的最新读数";
+  const best = stated.reduce((top, row) => ((row.cell.value ?? 0) > (top.cell.value ?? 0) ? row : top));
+  if (stated.length === 1) return `本轮只有${engineName(best.engine)}测到读数`;
+  const worst = stated.reduce((low, row) => ((row.cell.value ?? 0) < (low.cell.value ?? 0) ? row : low));
+  if (best.engine === worst.engine) return `各引擎读数相同，都是 ${best.cell.value}`;
+  return `${engineName(best.engine)}提及最多，${engineName(worst.engine)}最少`;
 }
 
 /* ------------------------------------------------------------------- week */

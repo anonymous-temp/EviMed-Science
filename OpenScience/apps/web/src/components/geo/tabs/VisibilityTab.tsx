@@ -18,6 +18,7 @@ import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
+  engineTrendConclusion,
   denominatorLine,
   pointCell,
   readingDelta,
@@ -128,7 +129,7 @@ function ByEngine({ rows }: { rows: GeoMonitoring["byEngine"] | null | undefined
   const lines = (Array.isArray(rows) ? rows : []).filter((row) => row && row.engine && Array.isArray(row.points) && row.points.length > 0);
   if (lines.length === 0) return null;
   return (
-    <ChartCard title="各引擎的走势">
+    <ChartCard title={engineTrendConclusion(lines)}>
       <ul className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
         {lines.map((row) => {
           const unit: GeoUnit = row.points.some((point) => typeof point.k === "number") ? "percent" : "index";
@@ -217,7 +218,7 @@ function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking
         rowAttrs={(row) => ({ "data-rank-row": row.key })}
         columns={[
           { key: "name", header: "同类药", rowHeader: true, cell: (row) => <>{row.name}{row.ours && <span className="ml-1.5 text-caption text-accent-strong">本品</span>}</> },
-          { key: "scope", header: "读数范围", cell: (row) => row.scope },
+          { key: "scope", header: "读数范围", cell: (row) => <span className="text-text-3">{row.scope}</span> },
           { key: "bar", header: "", width: "w-40", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
           { key: "value", header: "提及率", align: "right", width: "w-20", cell: (row) => (row.value === null ? geoCellWord(null) : `${Math.round(row.value)}%`) },
         ]}
