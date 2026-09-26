@@ -363,6 +363,13 @@ WCAG 2.1 relative-luminance formula. Re-measure, never estimate.
 `packages/shared`'s `CHART_PALETTE_*`, `openscience.mplstyle`), with adjacent-pair ΔE re-measured
 (the floor is 15; the current order is ≥ 22 in both schemes).
 
+**With a picture**: a component's look. `/__gallery` draws every primitive in
+every state; `pnpm gallery:shot` records it and `pnpm gallery:check` fails when
+more than 0.5% of pixels move. Changing a component therefore means looking at
+the new image and re-recording it, which is a review rather than a surprise
+three pages later. (Proven to fail, not assumed to: the dark scheme differs by
+99.6%.)
+
 **One place, then regenerate**: everything else. Edit `packages/design-tokens/src/index.mjs`, run
 `pnpm tokens:build`, run `pnpm test:tokens` and
 `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
