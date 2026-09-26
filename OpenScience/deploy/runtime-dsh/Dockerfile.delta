@@ -69,6 +69,7 @@ COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
 COPY capability-skills /opt/evimed/capability-skills
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-tokens
 
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \
