@@ -75,6 +75,7 @@ export function StatTile({
     <section aria-label={label} title={hint} className={cn("flex min-w-0 flex-col p-4", className)}>
       <h3 className="truncate text-compact text-text-3">{label}</h3>
       <p
+        data-stat-value
         className={cn(
           "mt-1.5 flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums",
           // A word does not get a number's size: 「样本不足」 set in 32 px

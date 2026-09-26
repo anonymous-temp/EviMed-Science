@@ -53,7 +53,11 @@ export function SeverityBadge({
         className={cn("inline-flex h-5 items-center rounded-tag px-1.5 text-meta font-semibold", TONES[level])}
       >
         {level}
-        <span className="sr-only">{`，${word}`}</span>
+        {/* The grade alone says nothing to a reader who cannot see the colour,
+            so the consequence follows it — but only when it is not already
+            printed beside it, or a screen reader says 「S3，可致暂时伤害可致暂时
+            伤害」. */}
+        {!label && <span className="sr-only">{`，${word}`}</span>}
       </span>
       {label && <span className="text-caption text-text-2">{word}</span>}
     </span>

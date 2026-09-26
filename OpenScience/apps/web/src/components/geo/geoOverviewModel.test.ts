@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GeoDiagnosis, GeoProject } from "@/lib/geoClient";
-import { diagnosisFilled, geoProject } from "./__fixtures__/geoTabs";
+import { cell, diagnosisFilled, geoProject } from "./__fixtures__/geoTabs";
 import {
   denominatorLine,
   engineConclusion,
+  engineTrendConclusion,
   engineMatrix,
   headlineSentence,
   nextSteps,
@@ -104,6 +105,21 @@ describe("the tiles", () => {
 });
 
 describe("the engine matrix", () => {
+  it("states the best and worst engine instead of naming the chart", () => {
+    // 「各引擎的走势」 is the chart's name, which a reader can already see.
+    const rows = [
+      { engine: "doubao", points: [{ cell: cell(44, 27, 62) }] },
+      { engine: "deepseek", points: [{ cell: cell(12, 7, 60) }] },
+    ];
+    expect(engineTrendConclusion(rows as never)).toBe("豆包提及最多，DeepSeek最少");
+    expect(engineTrendConclusion([{ engine: "doubao", points: [{ cell: cell(44, 27, 62) }] }] as never))
+      .toBe("本轮只有豆包测到读数");
+    // Nothing stated is not a zero and not a guess: the chart keeps its name.
+    expect(engineTrendConclusion([{ engine: "kimi", points: [{ cell: cell(null, null, 12, { status: "insufficient" }) }] }] as never))
+      .toBe("各引擎的最新读数");
+    expect(engineTrendConclusion(null)).toBe("各引擎的最新读数");
+  });
+
   it("gives an engine that dropped out a reason instead of a zero", () => {
     const matrix = engineMatrix(project(), diagnosisFilled);
     const qianwen = matrix.rows.find((row) => row.key === "qianwen");
