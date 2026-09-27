@@ -47,6 +47,7 @@ import {
   sourceTypeSidecarPath,
   workspaceLayout,
 } from '@evimed/domain'
+import { capabilityCatalogue } from './guidance.mjs'
 import {
   configSchema,
   defineTool,
@@ -200,6 +201,15 @@ export const Config = Schema.object({
     .description('How often a submission asks after its running review.'),
   reviewWaitMs: Schema.number().default(16 * 60_000)
     .description('How long a submission waits for its review before answering with the verdict alone. Above the control plane\'s own editor timeout.'),
+  // The capability catalogue a plan is validated against is published by the
+  // guidance row. Switched off, that row publishes nothing, and every plan
+  // naming a capability would be refused as unknown — a session whose
+  // `evimed_plan` could never succeed. So with guidance off this row reads the
+  // same manifests itself, filtered by the same switched-off tools.
+  guidanceEnabled: Schema.boolean().default(true)
+    .description('Whether the guidance row is on; off, this row loads the capability catalogue itself (EVIMED_GUIDANCE_ENABLED).'),
+  disabledToolsFile: Schema.string().default('')
+    .description('The switched-off base tools, as the guidance row reads them; used only when that row is off.'),
 })
 
 /**
@@ -323,6 +333,9 @@ function revisionSubmissionGrantMatches(entry, item, grant) {
 
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   if (config.enabled === false) return
+  if (config.guidanceEnabled === false) {
+    ctx.provide('evimedCapabilities', await capabilityCatalogue(ctx, config.capabilitiesDir, config.disabledToolsFile ?? ''), true)
+  }
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
   /** A child may submit only the one parent-plan item that created it. */

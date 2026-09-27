@@ -57,6 +57,8 @@ export const inject = ['systemPrompt']
  * @property {boolean} reviewEnabled
  * @property {string} [disabledToolsFile]
  * @property {string} answerPersonaDir
+ * @property {boolean} [runPolicyEnabled]
+ * @property {boolean} [capsuleEnabled]
  */
 
 export const Config = Schema.object({
@@ -85,6 +87,14 @@ export const Config = Schema.object({
     .description('Whether the cross-deliverable reviewer is composed in this deployment.'),
   disabledToolsFile: Schema.string().default('')
     .description('File holding the base tool names this runtime does not offer (the MCP server\'s EVIMED_DISABLED_TOOLS); a capability built on a switched-off module tool is not offered. Empty offers every capability.'),
+  // The switches of the rows whose tools this text names. Each switch has to
+  // leave a coherent session: the guidance names no plan, delegation or
+  // submission tool when run-policy is off, and no capsule tool when the
+  // capsule row is.
+  runPolicyEnabled: Schema.boolean().default(true)
+    .description('Whether the run-policy row (plan, delegation, submission tools) is on; off, the guidance names none of its tools (EVIMED_RUN_POLICY_ENABLED).'),
+  capsuleEnabled: Schema.boolean().default(true)
+    .description('Whether the capsule row (evimed_capsule_recall) is on; off, the guidance does not name its tools (EVIMED_CAPSULE_ENABLED).'),
 })
 
 /**
@@ -94,11 +104,13 @@ export const Config = Schema.object({
  */
 export async function apply(ctx, config) {
   if (config.enabled === false) return
-  const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(await readDisabledTools(ctx, config.disabledToolsFile ?? '')))
+  const capabilities = await capabilityCatalogue(ctx, config.capabilitiesDir, config.disabledToolsFile ?? '')
   const text = buildGuidanceText(capabilities, {
     askUserEnabled: config.askUserEnabled,
     capsuleActive: config.capsuleActive,
     reviewEnabled: config.reviewEnabled,
+    runPolicyEnabled: config.runPolicyEnabled !== false,
+    capsuleToolEnabled: config.capsuleEnabled !== false,
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))
@@ -117,7 +129,7 @@ export async function apply(ctx, config) {
   // assembled: the orchestration guidance by the part that holds for any agent
   // doing the work, the answer persona by nothing. Nothing of the root's
   // prompt changes.
-  const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive })
+  const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive, capsuleToolEnabled: config.capsuleEnabled !== false })
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     if (!isSubagentSession(agent) || !agent?.ctx) return
     try {
@@ -269,7 +281,7 @@ export const MODULE_TOOLS = Object.freeze(['geo_read', 'geo_write'])
  * @param {any} ctx @param {string} file
  * @returns {Promise<string>}
  */
-async function readDisabledTools(ctx, file) {
+export async function readDisabledTools(ctx, file) {
   if (!file) return ''
   const slash = file.lastIndexOf('/')
   if (slash <= 0) return ''
@@ -278,6 +290,18 @@ async function readDisabledTools(ctx, file) {
   } catch {
     return ''
   }
+}
+
+/**
+ * The capabilities this runtime offers: the mounted manifests, less those
+ * built on a switched-off module tool. What the guidance lists and the
+ * run-policy validates plans against — the run-policy reads it itself when
+ * the guidance row is switched off, so a plan still has a catalogue.
+ * @param {any} ctx @param {string} capabilitiesDir @param {string} disabledToolsFile
+ * @returns {Promise<Record<string, any>[]>}
+ */
+export async function capabilityCatalogue(ctx, capabilitiesDir, disabledToolsFile) {
+  return offeredCapabilities(await loadCapabilities(ctx, capabilitiesDir), disabledTools(await readDisabledTools(ctx, disabledToolsFile)))
 }
 
 /** @param {string | undefined} raw @returns {Set<string>} */

@@ -112,7 +112,9 @@ test("the work happens in the conversation, and delegation states what it is for
   // is a judgement now, in one sentence, in the two places every session reads.
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
   assert.match(preset, /默认就在这次对话里把它做完/);
-  assert.match(preset, /只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才用 evimed_delegate 委派/);
+  // The persona names no tool (a switched-off row's tool would be named to a
+  // session without it); the guidance names `evimed_delegate` where it is on.
+  assert.match(preset, /只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才委派/);
   assert.doesNotMatch(preset, /立即委派/, "nothing orders a delegation any more");
   assert.doesNotMatch(preset, /evimed_complete_run/, "the completion tool is gone");
 

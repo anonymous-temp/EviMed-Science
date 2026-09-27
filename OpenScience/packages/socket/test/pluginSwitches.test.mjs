@@ -16,9 +16,12 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
+import { SOCKET_TOOL_NAME_LIST } from "@evimed/domain";
 import { loadHarnessModule } from "@evimed/harness-port";
 
 import { AGENT_PLUGIN_IDS, PLUGIN_SPECIFIERS } from "../index.mjs";
@@ -228,11 +231,23 @@ async function mountComposition(env, only = AGENT_PLUGIN_IDS) {
   const ctx = new Context();
   /** @type {string[]} */
   const sections = [];
-  ctx.provide("systemPrompt", { tools: () => () => {}, section: (/** @type {any} */ section) => { sections.push(section.name); return () => {}; } });
+  /** @type {string[]} */
+  const texts = [];
+  ctx.provide("systemPrompt", { tools: () => () => {}, section: (/** @type {any} */ section) => {
+    sections.push(section.name);
+    texts.push(String(section.text ?? ""));
+    return () => {};
+  } });
   ctx.provide("agents", { get: () => undefined, list: () => [] });
   ctx.provide("sessions", {});
   ctx.provide("subagents", {});
   ctx.provide("storageDomain", { open: async () => ({ table: () => ({}) }) });
+  // The image's read-only filesystem, as far as the manifests go.
+  ctx.provide("fs", {
+    resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => path.resolve(cwd, relative),
+    listDir: async (/** @type {string} */ target) => (await readdir(target, { withFileTypes: true })).map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory() })),
+    readText: async (/** @type {string} */ target) => readFile(target, "utf8"),
+  });
   const runtime = new ToolRuntime(ctx);
   for (const row of ROWS.filter((candidate) => only.includes(candidate.id))) {
     if (row.disabled && evaluate(row.disabled, env) === true) continue;
@@ -242,8 +257,26 @@ async function mountComposition(env, only = AGENT_PLUGIN_IDS) {
   }
   await new Promise((resolve) => setTimeout(resolve, 20));
   const tools = [...runtime.view().visible.keys()].sort();
+  const capabilities = ctx.get("evimedCapabilities") ?? null;
   await ctx.fiber.dispose();
-  return { tools, sections };
+  return { tools, sections, text: texts.join("\n"), capabilities };
+}
+
+/**
+ * The persona row's prefix, as the preset writes it: the kernel's own row,
+ * mounted whatever our switches say.
+ */
+function personaPrefix() {
+  const lines = PRESET.split("\n");
+  const at = lines.findIndex((line) => /^\s+prefix: >-\s*$/.test(line));
+  assert.ok(at > 0, "the preset has a persona prefix");
+  const indent = lines[at].length - lines[at].trimStart().length;
+  const body = [];
+  for (const line of lines.slice(at + 1)) {
+    if (line.trim() && line.length - line.trimStart().length <= indent) break;
+    body.push(line.trim());
+  }
+  return body.join(" ");
 }
 
 test("with every switch off the agent composition mounts and adds nothing; each switch removes exactly its own tools", async () => {
@@ -261,4 +294,48 @@ test("with every switch off the agent composition mounts and adds nothing; each 
     const without = await mountComposition({ ...PRODUCTION, [switchOf(row).variable]: "0" });
     assert.deepEqual(without.tools, on.tools.filter((tool) => !own.includes(tool)), `${switchOf(row).variable}=0 must remove ${row.id}'s tools and nothing else`);
   }
+});
+
+/** The deployment's compiled manifests, where the image mounts them from. */
+const CAPABILITIES_DIR = fileURLToPath(new URL("../../../deploy/runtime-dsh/capabilities/", import.meta.url));
+
+test("every switch leaves a coherent session: no prompt names a tool the session does not have", async () => {
+  // With run-policy off the persona still told the model to call evimed_plan
+  // and evimed_delegate, and the guidance still described the plan, the
+  // delegation and the submission; with the capsule row off it still named
+  // evimed_capsule_recall. A model told to call a tool it does not have is
+  // told to fail.
+  const deployed = { ...PRODUCTION, EVIMED_CAPABILITIES_DIR: CAPABILITIES_DIR, EVIMED_CAPSULE_ACTIVE: "1" };
+  const everything = await mountComposition(deployed);
+  const vocabulary = [...new Set([...SOCKET_TOOL_NAME_LIST, ...everything.tools])];
+  const named = (/** @type {string} */ text) => vocabulary.filter((tool) => new RegExp(`(^|[^a-z_])${tool}([^a-z_]|$)`).test(text));
+  assert.ok(named(everything.text).includes("evimed_plan"), "the guidance names the plan tool when its row is on; the check reads the text");
+
+  const persona = personaPrefix();
+  assert.deepEqual(named(persona), [], "the persona is the kernel's row, mounted whatever our switches say: it names no tool of ours");
+
+  const environments = [
+    ["all on", deployed],
+    ["all off", { ...deployed, ...ALL_OFF }],
+    ...ROWS.map((row) => [`${switchOf(row).variable}=0`, { ...deployed, [switchOf(row).variable]: "0" }]),
+  ];
+  for (const [label, env] of environments) {
+    const session = await mountComposition(/** @type {Record<string, string>} */ (env));
+    const missing = named(`${persona}\n${session.text}`).filter((tool) => !session.tools.includes(tool));
+    assert.deepEqual(missing, [], `${label}: the prompt names ${missing.join(", ")}, which the session does not mount`);
+  }
+});
+
+test("with the guidance row off, the run policy still has the capability catalogue its plans are checked against", async () => {
+  const deployed = { ...PRODUCTION, EVIMED_CAPABILITIES_DIR: CAPABILITIES_DIR };
+  const on = await mountComposition(deployed);
+  assert.ok(Array.isArray(on.capabilities) && on.capabilities.length >= 10, `the guidance publishes the catalogue (${on.capabilities?.length})`);
+  const withoutGuidance = await mountComposition({ ...deployed, EVIMED_GUIDANCE_ENABLED: "0" });
+  assert.equal(withoutGuidance.sections.length === on.sections.length, false, "the guidance's sections are gone");
+  assert.deepEqual((withoutGuidance.capabilities ?? []).map((/** @type {any} */ manifest) => manifest.id).sort(),
+    on.capabilities.map((/** @type {any} */ manifest) => manifest.id).sort(), "evimed_plan validates against the same catalogue");
+  assert.ok(withoutGuidance.tools.includes("evimed_plan"));
+  // And with both off, nobody publishes one: there is no plan tool to use it.
+  const neither = await mountComposition({ ...deployed, EVIMED_GUIDANCE_ENABLED: "0", EVIMED_RUN_POLICY_ENABLED: "0" });
+  assert.equal(neither.capabilities, null);
 });
