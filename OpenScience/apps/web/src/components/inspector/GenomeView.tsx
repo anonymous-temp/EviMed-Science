@@ -9,6 +9,7 @@ import {
   type GenomeFeature,
 } from "@/lib/genome";
 import { cn } from "@/lib/cn";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 const ROW_H = 15;
 const MAX_ROWS = 60; // cap drawn rows so a dense contig can't blow up the DOM
@@ -257,7 +258,7 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+      className={iconButtonClasses({ size: "sm" })}
     >
       {children}
     </button>

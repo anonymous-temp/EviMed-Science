@@ -30,6 +30,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { humanSize } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 const EXT_LANG: Record<string, string> = {
   py: "python", r: "r", jl: "julia", sh: "bash", tex: "latex", md: "markdown",
@@ -206,7 +207,7 @@ export function FilesPage() {
             <>
               <span className="min-w-2 flex-1" />
               <button
-                className="flex h-7 w-7 items-center justify-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+                className={iconButtonClasses({ size: "sm" })}
                 aria-label="上传资料"
                 title={`上传资料到个人知识库。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
                 onClick={() => void uploadFiles()}
@@ -390,7 +391,7 @@ export function SessionFilesPane({
         {controls}
         {hasWebApi && (
           <button
-            className="flex h-7 w-7 items-center justify-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+            className={iconButtonClasses({ size: "sm" })}
             aria-label="上传文件"
             title="上传文件到本次对话"
             onClick={() => void uploadFiles()}

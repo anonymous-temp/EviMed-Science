@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
 import { labelFor } from "@/lib/statusLabel";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 /** The task states in words: `timed out` and `succeeded` reached the page as
  *  English enum values (review B, WebTasksCard P1). */
@@ -70,7 +71,7 @@ export function WebTasksCard() {
           <p className="mt-0.5 text-caption text-muted">当前项目的任务队列</p>
         </div>
         <button
-          className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          className={iconButtonClasses({ size: "sm" })}
           onClick={() => void refresh()}
           disabled={loading}
           title="刷新任务"
@@ -106,7 +107,7 @@ export function WebTasksCard() {
                 </span>
                 {!TERMINAL.has(task.status) && (
                   <button
-                    className="flex h-6 w-6 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-error disabled:opacity-50"
+                    className={iconButtonClasses({ size: "sm", destructive: true })}
                     onClick={() => void cancel(task.id)}
                     disabled={canceling === task.id}
                     title={`取消 ${task.command}`}

@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { LEDGER_STATUS_LABEL, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 export function WebAuditCard() {
   const [events, setEvents] = useState<WebAuditRecord[]>([]);
@@ -33,7 +34,7 @@ export function WebAuditCard() {
           <p className="mt-0.5 text-caption text-muted">该工作区最近的项目操作</p>
         </div>
         <button
-          className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          className={iconButtonClasses({ size: "sm" })}
           onClick={() => void refresh()}
           disabled={loading}
           title="刷新审计事件"

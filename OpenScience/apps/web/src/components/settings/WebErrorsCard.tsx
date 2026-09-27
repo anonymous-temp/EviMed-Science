@@ -4,6 +4,7 @@ import { webErrorMessage, listWebErrorEvents, type WebErrorEvent } from "@/lib/a
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 export function WebErrorsCard() {
   const [events, setEvents] = useState<WebErrorEvent[]>([]);
@@ -32,7 +33,7 @@ export function WebErrorsCard() {
           <p className="mt-0.5 text-caption text-muted">该项目最近失败的 API 请求</p>
         </div>
         <button
-          className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          className={iconButtonClasses({ size: "sm" })}
           onClick={() => void refresh()}
           disabled={loading}
           title="刷新错误列表"

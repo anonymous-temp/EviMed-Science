@@ -6,6 +6,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { extOf } from "@/lib/artifacts";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 /**
  * Interactive 3D viewer for mesh / CAD-export files (stl, obj, ply, gltf, glb),
@@ -289,7 +290,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
           onClick={resetView}
           aria-label="重置视图"
           title="重置视图"
-          className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+          className={iconButtonClasses({ size: "sm" })}
         >
           <RotateCcw size={16} aria-hidden="true" />
         </button>

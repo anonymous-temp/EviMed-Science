@@ -11,6 +11,7 @@ import {
 } from "@/lib/molecule";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode; label: string }> = [
   { value: "stick", label: "球棍" },
@@ -204,7 +205,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
           onClick={resetView}
           aria-label="重置视图"
           title="重置视图"
-          className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+          className={iconButtonClasses({ size: "sm" })}
         >
           <RotateCcw size={16} aria-hidden="true" />
         </button>

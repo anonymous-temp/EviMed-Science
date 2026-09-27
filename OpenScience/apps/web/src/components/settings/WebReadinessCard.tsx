@@ -4,6 +4,7 @@ import { webErrorMessage, fetchWebReadiness, type WebReadiness, type WebReadines
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { humanSize } from "@/lib/format";
+import { iconButtonClasses } from "@/components/ui/IconButton";
 
 const CHECK_LABELS: Record<string, string> = {
   dataDir: "数据卷",
@@ -78,7 +79,7 @@ export function WebReadinessCard() {
           {readiness ? (readiness.ok ? "就绪" : "未就绪") : "正在读取"}
         </span>
         <button
-          className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          className={iconButtonClasses({ size: "sm" })}
           onClick={() => void refresh()}
           disabled={loading}
           title="刷新就绪状态"

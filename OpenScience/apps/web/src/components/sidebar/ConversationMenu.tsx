@@ -140,7 +140,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
             event.preventDefault();
             setRenaming(false);
           }}
-          className={inputClasses({ className: "h-6 px-2" })}
+          className={inputClasses({ size: "sm", className: "px-2" })}
         />
       </form>
     );

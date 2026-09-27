@@ -5,6 +5,8 @@ import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { iconButtonClasses } from "@/components/ui/IconButton";
+import { buttonClasses } from "@/components/ui/Button";
 
 export function WebResourcesCard() {
   const [metrics, setMetrics] = useState<WebMetrics | null>(null);
@@ -87,7 +89,7 @@ export function WebResourcesCard() {
           </p>
         </div>
         <button
-          className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          className={iconButtonClasses({ size: "sm" })}
           onClick={() => void refresh()}
           disabled={loading || runtimeAction != null}
           title="刷新资源状态"
@@ -157,8 +159,8 @@ export function WebResourcesCard() {
   );
 }
 
-const runtimeButtonCls =
-  "inline-flex h-8 items-center gap-1.5 rounded-input border border-strong px-3 text-caption font-medium text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-40";
+// The small secondary button (spec §17.1): there are no outline buttons.
+const runtimeButtonCls = buttonClasses({ variant: "secondary", size: "sm" });
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
