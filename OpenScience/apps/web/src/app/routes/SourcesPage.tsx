@@ -567,7 +567,7 @@ function SourceState({ source, name, busy, onRetry }: { source: SourceRecord; na
       <span className={cn("inline-flex items-center gap-1", failed ? "text-danger" : "text-warn")}>
         <span title={tooltip}>{label}</span>
         <span aria-hidden="true">·</span>
-        <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新读取“${name}”`} onClick={onRetry} className="px-1 text-caption">重试</Button>
+        <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新读取“${name}”`} onClick={onRetry} className="px-1">重试</Button>
       </span>
     );
   }
