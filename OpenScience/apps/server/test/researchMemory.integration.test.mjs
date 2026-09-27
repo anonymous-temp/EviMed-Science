@@ -323,13 +323,15 @@ test("listing filters, orders and searches without crossing accounts", options, 
   await assert.rejects(() => store.listRecords(alpha, { kinds: ["not-a-kind"] }),
     (error) => error?.status === 400 && error?.code === "memory_payload_invalid");
 
-  const profile = await store.profile(alpha, { projectId: "study-one" });
+  const profile = await store.profile(alpha);
   assert.deepEqual(Object.keys(profile.groups).sort(), ["analysis", "behavior", "correction", "decision",
     "follow_up", "preference", "profile", "project_fact", "run_summary"], "every kind is a key, present or empty");
   assert.equal(profile.activeCount, 2);
   assert.equal(profile.pendingCount, 0);
-  assert.deepEqual((await store.profile(alpha, { projectId: null })).records.map((row) => row.key),
-    ["profile.role", "pref.language"], "another project's facts are not this project's profile");
+  // Every project's memory, whichever project the page was opened from: each
+  // row names its project and the page filters by it (2026-09-26 audit, M-4).
+  assert.deepEqual(profile.records.map((row) => row.key), ["profile.role", "pref.language", "fact.cohort"],
+    "another project's memory is on the page too");
   await store.purgeUserMemory(alpha);
   await store.purgeUserMemory(beta);
 });

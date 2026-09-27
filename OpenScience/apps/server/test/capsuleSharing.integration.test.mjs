@@ -116,6 +116,7 @@ test("a newer snapshot is taken in place of the one the recipient holds, with wh
   assert.deepEqual(preview.upgrades, { capsuleId: held.id, title: held.payload.title, added: 2, removed: 1, kept: 1 });
   assert.equal(preview.card.changelog, "新增 2 条、移除 1 条、保留 1 条");
 
+  const packsBefore = (await capsules.list(recipient)).items.filter((item) => item.payload.imported).length;
   const upgraded = await transfers.import(recipient, { archive: second.archive, password, expectedDigest: preview.archiveSha256, confirmed: true });
   assert.equal(upgraded.id, held.id, "the same capsule: still enabled, still where it was");
   assert.equal(upgraded.payload.transfer.snapshotId, second.snapshot.id);
@@ -126,6 +127,6 @@ test("a newer snapshot is taken in place of the one the recipient holds, with wh
     ["先 PROSPERO 登记。", "报告先写结论。", "高质量队列研究也纳入。"]);
   assert.ok(facts.filter((fact) => fact.payload.status === "retired").every((fact) => fact.payload.retiredBy?.type === "upgrade"));
   assert.deepEqual((await capsules.active(recipient)).items.map((item) => item.capsuleId), [held.id], "in force as before");
-  assert.equal((await capsules.list(recipient)).items.filter((item) => item.payload.imported).length, 2,
-    "the upgrade made no second pack (the other is the earlier test's)");
+  assert.equal((await capsules.list(recipient)).items.filter((item) => item.payload.imported).length, packsBefore,
+    "the upgrade made no second pack");
 });

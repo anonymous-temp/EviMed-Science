@@ -107,10 +107,13 @@ export function capsuleCardSummary(entries) {
   /** @type {Map<string, number>} */
   const counts = new Map();
   for (const entry of entries) {
-    const label = CARD_KIND_LABELS[/** @type {keyof typeof CARD_KIND_LABELS} */ (entry.factKind)] ?? "条目";
+    const label = CARD_KIND_LABELS[/** @type {keyof typeof CARD_KIND_LABELS} */ (entry.factKind)] ?? "其他内容";
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return [...counts].map(([label, count]) => `${count} 条${label}`).join("、");
+  // In the table's order, whatever order the entries were read in.
+  const order = [...Object.values(CARD_KIND_LABELS), "其他内容"];
+  return [...counts].sort(([left], [right]) => order.indexOf(left) - order.indexOf(right))
+    .map(([label, count]) => `${count} 条${label}`).join("、");
 }
 
 /**
