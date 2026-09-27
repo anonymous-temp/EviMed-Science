@@ -71,6 +71,7 @@ function measureControls(controls) {
   const base = {
     display: "block", visibility: "visible", opacity: "1", color: "rgb(20, 20, 20)", backgroundColor: "rgba(0, 0, 0, 0)",
     fontSize: "14px", fontWeight: "400", lineHeight: "22px", borderTopLeftRadius: "0px", paddingTop: "0px", paddingBottom: "0px",
+    clip: "auto", clipPath: "none",
     ...Object.fromEntries(["Top", "Right", "Bottom", "Left"].flatMap((side) => [
       [`border${side}Width`, "0px"], [`border${side}Style`, "none"], [`border${side}Color`, "rgb(20, 20, 20)"],
     ])),
@@ -81,12 +82,12 @@ function measureControls(controls) {
     if (attribute) return attribute[2] === undefined ? attribute[1] in el.attributes : el.attributes[attribute[1]] === attribute[2];
     return el.tag === part;
   };
-  const make = ({ tag, text = "", height, declaredHeight = "auto", icon = false, style = {} }) => {
+  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", icon = false, style = {} }) => {
     const el = {
       tag, text, attributes: {}, tagName: tag.toUpperCase(), id: "", style: { ...base, ...style },
       children: [], childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
       get textContent() { return text; },
-      getBoundingClientRect: () => ({ width: 120, height, left: 0 }),
+      getBoundingClientRect: () => ({ width, height, left: 0 }),
       computedStyleMap: () => ({ get: (property) => ({ toString: () => (property === "height" ? declaredHeight : "auto") }) }),
       matches: (selector) => selector.split(",").some((part) => matchesOne(el, part.trim())),
       querySelector: (selector) => el.children.find((child) => child.matches(selector)) ?? null,
@@ -119,10 +120,12 @@ function measureControls(controls) {
   }
 }
 
+/** A list row's title: a text button with no height of its own, `lines` lines of 22 px. */
+const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
+
 test("a text control that wraps is one kind of control, and a control with a height of its own is not", () => {
   // A list row's title is a button with no height of its own: one line is
   // 22 px, two are 44, three are 66 — one kind, as a wrapped inline link is.
-  const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
   const wrapped = measureControls([title(1), title(2), title(3)]);
   assert.equal(wrapped.controlKinds, 1);
   assert.deepEqual(Object.keys(wrapped.controlLooks), ["text 14px/400 r0px"]);
@@ -146,6 +149,17 @@ test("a text control that wraps is one kind of control, and a control with a hei
   assert.deepEqual(measured.controlLooks["text+8 14px/400 r0px"], { count: 2, example: "button: 一个很长的资料标题" });
   // An inline link stays what it was.
   assert.equal(measureControls([{ tag: "a", text: "原文", height: 44, style: { display: "inline" } }]).controlLooks["inline 14px/400 r0px"].count, 1);
+});
+
+test("a visually hidden control is not a kind of control on the page", () => {
+  // The skip link is clipped to a 1 px box until it has focus (`sr-only`);
+  // it counted as a kind of control on every page.
+  const skip = { tag: "a", text: "跳到主要内容", height: 1, width: 1, style: { clip: "rect(0px, 0px, 0px, 0px)" } };
+  const measured = measureControls([skip, title(1)]);
+  assert.equal(measured.controlKinds, 1);
+  assert.deepEqual(Object.keys(measured.controlLooks), ["text 14px/400 r0px"]);
+  // Clipped by a clip path, the same.
+  assert.equal(measureControls([{ ...skip, width: 120, height: 22, style: { clipPath: "inset(50%)" } }, title(1)]).controlKinds, 1);
 });
 
 /**

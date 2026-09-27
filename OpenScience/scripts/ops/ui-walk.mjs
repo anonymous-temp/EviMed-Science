@@ -271,10 +271,14 @@ function required(name) {
 export function measure([leakSources, backOfficeSources]) {
   const leaks = leakSources.map(([source, flags]) => new RegExp(source, flags));
   const backOffice = backOfficeSources.map(([source, flags]) => new RegExp(source, flags));
+  // Visually hidden is not visible: the skip link until it has focus and a
+  // screen-reader-only phrase are clipped to a 1 px box (`sr-only`), and the
+  // skip link counted as a kind of control on every page (2026-09-27 walk).
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
-    return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && cs.opacity !== "0";
+    const clipped = cs.clip === "rect(0px, 0px, 0px, 0px)" || cs.clipPath === "inset(50%)" || (r.width <= 1 && r.height <= 1);
+    return r.width > 0 && r.height > 0 && !clipped && cs.visibility !== "hidden" && cs.display !== "none" && cs.opacity !== "0";
   };
   const text = document.body.innerText || "";
   const kinds = (values) => new Set(values).size;
