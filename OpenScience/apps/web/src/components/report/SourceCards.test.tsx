@@ -1,9 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { parseClaimMatrix, type ClaimVerification } from "@/lib/claimCitations";
 import type { VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
-import { SourceCardList, sourceCardEntries, sourceCompositionOf } from "./SourceCards";
+import { useToastStore } from "@/lib/toast";
+import { SourceCardList, referenceOf, sourceCardEntries, sourceCompositionOf } from "./SourceCards";
 
 // One matrix with a source of each kind the composition line names, one of
 // them retracted and one whose quotation was not found in its preserved copy.
@@ -91,6 +93,45 @@ describe("the sources a report stands on, as cards", () => {
     expect(notice).toHaveTextContent("已撤稿 · 2024-03-01");
     // The check answered with the work's DOI, so the card can offer it.
     expect(within(card as HTMLElement).getByRole("button", { name: /复制/ })).toHaveTextContent("10.1000/meta");
+  });
+
+  it("copies a source as GB/T 7714 or as Vancouver from its 「⋯」 (spec §23.2 rule 4)", async () => {
+    const user = userEvent.setup();
+    const recorded = parseClaimMatrix(JSON.stringify({ claims: [{
+      claimId: "CLM-020", claim: "急诊再入院与合并症数目相关。", claimType: "direct",
+      sourceTitle: "Comorbidity and repeat admission to hospital for adverse drug reactions in older adults: retrospective cohort study",
+      identifier: "PMID:19129307", sourceUrl: "https://pubmed.ncbi.nlm.nih.gov/19129307/", sourceType: "cohort",
+      authors: ["Zhang M", "Holman CD", "Price SD", "Sanfilippo FM", "Preen DB", "Bulsara MK"],
+      journal: "BMJ", year: 2009, volume: 338, pages: "a2752", supportQuote: "repeat admission",
+    }] }));
+    const doi = new Map<string, VerifiedClaim>([["CLM-020", { claimId: "CLM-020", claimType: "direct", status: "verified",
+      sources: [{ artifactPath: null, status: "verified", doi: "10.1136/bmj.a2752" }] }]]);
+    render(<MemoryRouter><SourceCardList claims={recorded} verified={doi} /></MemoryRouter>);
+    // What the package recorded is on the card as well.
+    expect(screen.getByText("BMJ")).toBeInTheDocument();
+    expect(screen.getByText("2009")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "来源 1 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "复制为 GB/T 7714" }));
+    expect(await navigator.clipboard.readText()).toBe(
+      "ZHANG M, HOLMAN C D, PRICE S D, et al. Comorbidity and repeat admission to hospital for adverse drug reactions in older adults: "
+      + "retrospective cohort study[J]. BMJ, 2009, 338: a2752. DOI: 10.1136/bmj.a2752. PMID: 19129307.",
+    );
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe("已复制");
+
+    await user.click(screen.getByRole("button", { name: "来源 1 的操作" }));
+    await user.click(await screen.findByRole("menuitem", { name: "复制为 Vancouver" }));
+    expect(await navigator.clipboard.readText()).toBe(
+      "Zhang M, Holman CD, Price SD, Sanfilippo FM, Preen DB, Bulsara MK. Comorbidity and repeat admission to hospital for adverse drug "
+      + "reactions in older adults: retrospective cohort study. BMJ. 2009;338:a2752. doi:10.1136/bmj.a2752. PMID: 19129307.",
+    );
+  });
+
+  it("builds a reference from only what the card knows, the identifier included", () => {
+    const [ukpds] = sourceCardEntries(parseClaimMatrix(JSON.stringify({ claims: [
+      { claimId: "CLM-002", claim: "x", claimType: "direct", sourceTitle: "UKPDS 34", identifier: "PMID 9742977", sourceType: "rct" },
+    ] })).values());
+    expect(referenceOf(ukpds!)).toEqual({ title: "UKPDS 34", pmid: "9742977" });
   });
 
   it("draws nothing at all when the claims name no source", () => {

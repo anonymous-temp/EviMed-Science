@@ -28,6 +28,17 @@ export interface ClaimSource {
   sourceType: EvidenceSourceType;
   /** The source's risk of bias by a named tool, as the run recorded it (read by `claimAppraisalDisplay`). */
   riskOfBias?: unknown;
+  /**
+   * The work's bibliographic parts, when the package recorded them: what a
+   * source card shows beside its title and what a copied reference is built
+   * from (spec §23.2). None is required, and none is guessed when absent.
+   */
+  authors?: string[];
+  journal?: string;
+  year?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
 }
 
 export interface ClaimEvidence extends ClaimSource {
@@ -190,6 +201,17 @@ export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
     const claim = item as Record<string, unknown>;
     if (typeof claim.claimId !== "string" || typeof claim.claim !== "string") continue;
     const text = (entry: unknown) => (typeof entry === "string" && entry.trim() ? entry : undefined);
+    /** A bibliographic part: a string, or a number as a year or volume is often written. */
+    const part = (entry: unknown) => (typeof entry === "number" && Number.isFinite(entry) ? String(entry) : text(entry)?.trim());
+    const authorsOf = (entry: unknown) => {
+      const list = (Array.isArray(entry) ? entry : [entry]).map(text).filter((name): name is string => Boolean(name)).map((name) => name.trim());
+      return list.length ? { authors: list } : {};
+    };
+    const bibliographic = (record: Record<string, unknown>) => Object.fromEntries(
+      (["journal", "year", "volume", "issue", "pages"] as const)
+        .map((key) => [key, part(record[key])] as const)
+        .filter(([, value]) => value !== undefined),
+    ) as Pick<ClaimSource, "journal" | "year" | "volume" | "issue" | "pages">;
     const source = (record: Record<string, unknown>): ClaimSource => ({
       sourceTitle: text(record.sourceTitle),
       sourceUrl: text(record.sourceUrl),
@@ -199,6 +221,8 @@ export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
       artifactPath: safeWorkspacePath(record.artifactPath),
       sourceType: evidenceSourceTypeOf(record),
       ...(record.riskOfBias !== undefined && record.riskOfBias !== null ? { riskOfBias: record.riskOfBias } : {}),
+      ...authorsOf(record.authors),
+      ...bibliographic(record),
     });
     const referenceNumber = Number(claim.referenceNumber);
     claims.set(claim.claimId, {

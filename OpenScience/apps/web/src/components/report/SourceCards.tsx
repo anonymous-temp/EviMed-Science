@@ -5,6 +5,9 @@ import { EVIDENCE_SOURCE_TYPES, EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/d
 import { claimSources, type ClaimEvidence, type ClaimSource, type SourceUpdate } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
 import { tagClasses } from "@/components/ui/Tag";
+import { Menu } from "@/components/ui/Menu";
+import { formatGbt7714, formatVancouver, identifiersOf, type ReferenceMetadata } from "@/lib/references";
+import { toast } from "@/lib/toast";
 import { preservedSourceHref, type VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
 import { SourceUpdateBadges } from "@/components/markdown-viewer/SourceUpdateBadges";
 import { StudyTypeBadge } from "@/components/markdown-viewer/StudyTypeBadge";
@@ -39,6 +42,13 @@ export interface SourceCardEntry {
   /** The journal or issuing body, and the year or version, when the package recorded them. */
   journal?: string;
   year?: string;
+  /** The rest of the bibliographic record, when the package recorded it (a copied reference is built from it). */
+  authors?: string[];
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  /** The DOI Crossref confirmed for the work, when it was asked. */
+  doi?: string;
   url?: string;
   identifier?: string;
   /** Industry funding, when the package recorded it. */
@@ -95,6 +105,13 @@ export function sourceCardEntries(
         ...(checked?.status ? { status: checked.status } : {}),
         ...(checked?.updates?.length ? { updates: checked.updates } : {}),
         ...(source.artifactPath ? { artifactPath: source.artifactPath } : {}),
+        ...(source.authors?.length ? { authors: source.authors } : {}),
+        ...(source.journal ? { journal: source.journal } : {}),
+        ...(source.year ? { year: source.year } : {}),
+        ...(source.volume ? { volume: source.volume } : {}),
+        ...(source.issue ? { issue: source.issue } : {}),
+        ...(source.pages ? { pages: source.pages } : {}),
+        ...(checked?.doi ? { doi: checked.doi } : {}),
         claims: 1,
       });
     });
@@ -116,6 +133,42 @@ export function sourceCompositionOf(entries: readonly SourceCardEntry[]): { type
   return (EVIDENCE_SOURCE_TYPES as readonly string[])
     .filter((type) => counts.has(type))
     .map((type) => ({ type, label: EVIDENCE_SOURCE_TYPE_LABELS_ZH[type as keyof typeof EVIDENCE_SOURCE_TYPE_LABELS_ZH], count: counts.get(type)! }));
+}
+
+/** A card's source as a reference: what it records, and the DOI and PMID its identifier and address name. */
+export function referenceOf(entry: SourceCardEntry): ReferenceMetadata {
+  const named = identifiersOf(entry.identifier, entry.url);
+  const doi = entry.doi ?? named.doi;
+  return {
+    title: entry.title,
+    ...(entry.authors?.length ? { authors: entry.authors } : {}),
+    ...(entry.journal ? { journal: entry.journal } : {}),
+    ...(entry.year ? { year: entry.year } : {}),
+    ...(entry.volume ? { volume: entry.volume } : {}),
+    ...(entry.issue ? { issue: entry.issue } : {}),
+    ...(entry.pages ? { pages: entry.pages } : {}),
+    ...(doi ? { doi } : {}),
+    ...(named.pmid ? { pmid: named.pmid } : {}),
+    ...(entry.url ? { url: entry.url } : {}),
+  };
+}
+
+/**
+ * The two reference styles a reader copies a source in (spec §23.2 rule 4):
+ * GB/T 7714 for Chinese writing, Vancouver for English. Without the card's
+ * number — a copied entry goes into someone else's list.
+ */
+function copyReference(entry: SourceCardEntry, style: "gbt" | "vancouver"): void {
+  const reference = referenceOf(entry);
+  const text = style === "gbt" ? formatGbt7714(reference) : formatVancouver(reference);
+  if (!navigator.clipboard) {
+    toast.error("无法复制：这个浏览器不允许网页写入剪贴板");
+    return;
+  }
+  void navigator.clipboard.writeText(text).then(
+    () => toast.success("已复制"),
+    () => toast.error("无法复制：浏览器没有允许写入剪贴板"),
+  );
 }
 
 /** One source card. */
@@ -160,6 +213,13 @@ export function SourceCard({ entry, runId }: { entry: SourceCardEntry; runId?: s
             </Link>
           )}
         </div>
+        <Menu
+          label={`来源 ${entry.index} 的操作`}
+          items={[
+            { label: "复制为 GB/T 7714", onSelect: () => copyReference(entry, "gbt") },
+            { label: "复制为 Vancouver", onSelect: () => copyReference(entry, "vancouver") },
+          ]}
+        />
       </div>
     </li>
   );
