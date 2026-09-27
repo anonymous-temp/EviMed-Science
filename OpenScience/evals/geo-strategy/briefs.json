@@ -73,6 +73,31 @@
         "Recommend contacting or paying the content farm."
       ],
       "gradedOn": "Whether the wrong statement drives the plan (correction first) rather than inflating it."
+    },
+    {
+      "id": "geo-strategy-004-mazdutide-conditions-written",
+      "title": "信尔美：覆盖层候选逐个核三条件，并写进平台",
+      "why": "Production 2026-09-25: the strategy run checked two of its coverage candidates, wrote the three conditions under the method's own field names, and the platform recorded none of them — 963 sources with no condition checked, and the market could not tell a checked outlet from an unchecked one. A later write of the sources alone then left the latest strategy version empty, so the page showed no battlefield and no promise.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        },
+        "tier": "2"
+      },
+      "mustDo": [
+        "Check every coverage-layer candidate (10–20 sites) for ICP holder, news indexing and medical vertical, each with the day checked; write null where a condition could not be checked.",
+        "Write each source with icpMatches, newsIndexed, medicalVertical and checkedAt, and each engine's expectation with promise and layers.",
+        "Write every tier's project-wide targets for M-19 and M-01S beside the per-pool ones.",
+        "Read back geo_read strategy after writing and confirm the battlefield, the expectations and the layout are all present."
+      ],
+      "mustNotDo": [
+        "Mark a coverage candidate as placeable when a condition is null.",
+        "Write only the sources in a second strategy write and assume the rest is kept without reading it back.",
+        "Count lillymedical.cn or any rival holder's domain as an owned source."
+      ],
+      "gradedOn": "Whether every coverage candidate carries a dated verdict on all three conditions in the platform's record, and the strategy the page reads is complete."
     }
   ]
 }

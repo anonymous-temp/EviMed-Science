@@ -84,6 +84,30 @@
         "Tell a patient to stop or switch the medicine."
       ],
       "gradedOn": "Whether every claim names the right holder's label, and whether the interaction and bleeding questions are measured rather than answered."
+    },
+    {
+      "id": "geo-insight-004-mazdutide-identity-counts",
+      "title": "信尔美（玛仕度肽注射液）：产品身份写全，旅程交全",
+      "why": "Production 2026-09-25: the identity carried six fields and no aliases, misspellings, approval number or whether the generic is one holder's, so 84 answers that named only 玛仕度肽 were read as 漏提我方 while a rival counted by its generic; the journey came back without subtypes, personas or the matrix file.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "generic": "玛仕度肽注射液",
+          "holder": "信达生物"
+        }
+      },
+      "mustDo": [
+        "Write aliases, misspellings, approvalNo, rx, identityStatus and singleSource for the product, with genericAliases for the molecule's other names.",
+        "Decide singleSource from the label's holder and the regulator's approvals, and write it for each competitor too.",
+        "Write the journey's subtypes with their size, 3–5 personas, and the full stage × column matrix as a file listed in files.",
+        "Keep each real phrasing's collectedAt and URL from the social search."
+      ],
+      "mustNotDo": [
+        "Put the generic name in aliases to make it count, instead of saying singleSource.",
+        "Invent a real phrasing's date.",
+        "Leave personas or subtypes empty without saying why in the report."
+      ],
+      "gradedOn": "Whether the identity the measurement counts by is complete and correct on both sides, and the journey carries its three expected parts."
     }
   ]
 }
