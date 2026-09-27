@@ -176,7 +176,6 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
   const [historyError, setHistoryError] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<WebPluginConfiguration | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
-  const [updateOpen, setUpdateOpen] = useState(false);
   const historySequence = useRef(0);
 
   // Status observations never overwrite a form the user has started editing.
@@ -270,15 +269,6 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
           <p className="mt-1">插件标识 <span className="font-mono">{plugin.id}</span></p>
           {plugin.tools.length > 0 && <p>提供的工具：<span className="font-mono">{plugin.tools.join("、")}</span></p>}
         </details>
-        <p className="text-ui text-muted">{availabilityText(plugin)}</p>
-        {plugin.availableUpdate && (
-          <>
-            <Button variant="ghost" size="sm" aria-expanded={updateOpen} onClick={() => setUpdateOpen(!updateOpen)}>查看更新</Button>
-            {updateOpen && <p className="mt-1 text-ui text-muted">
-              插件程序随运行时镜像发布：平台发布包含 {plugin.availableUpdate.version} 的新镜像后，此项目会自动使用新版本，本页无需操作，已保存的配置会保留。
-            </p>}
-          </>
-        )}
         {plugin.removed && <p className="mt-1 text-ui text-muted">此项目已移除该插件：已停用并恢复默认配置，配置历史保留。</p>}
       </div>
       {unsupportedSettings && <p role="alert" className="text-ui text-error">当前程序版本不支持配置，请联系平台管理员。</p>}
@@ -362,17 +352,6 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
       }} />}
     </section>
   );
-}
-
-/** Absence is unknown, never "up to date": nothing on this path asks upstream. */
-function availabilityText(plugin: WebPluginState) {
-  if (plugin.availability.state === "update-available" && plugin.availableUpdate) {
-    return `可更新至 ${plugin.availableUpdate.version}（记录于 ${plugin.availableUpdate.recordedAt.slice(0, 10)}）`;
-  }
-  if (plugin.availability.state === "current" && plugin.availability.checkedAt) {
-    return `已是记录中的最新版本（检查于 ${plugin.availability.checkedAt.slice(0, 10)}）`;
-  }
-  return "更新信息暂不可用，尚未记录检查结果";
 }
 
 function configurationText(config: WebPluginConfiguration) {

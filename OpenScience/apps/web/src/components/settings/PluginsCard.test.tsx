@@ -11,7 +11,6 @@ function plugin(overrides: Partial<WebPluginState> = {}): WebPluginState {
   return {
     id: "dsh-cite", binaryVersion: "0.3.2", tools: ["cite_lookup", "cite_check"],
     settingsSchema: { timeoutMs: { min: 2000, max: 15000 } },
-    availableUpdate: null, availability: { state: "unknown", checkedAt: null, reason: "no-record" },
     desired: config(), effective: config(), phase: "effective", error: null, removed: false,
     limits: { minTimeoutMs: 2000, maxTimeoutMs: 15000 }, ...overrides,
   };
@@ -85,28 +84,21 @@ describe("PluginsCard", () => {
     expect(within(panel("dsh-cite")).getByLabelText("已保存配置")).toHaveTextContent("版本 0 · 已启用 · 15000 毫秒");
   });
 
-  // (b) Upgrade: an unrecorded availability must never read as "up to date".
-  it("reports an unknown availability as unknown and offers an update only when one is recorded", async () => {
-    render(<PluginsCard projectId="alpha" />);
-    await ready();
-    expect(screen.getByText("更新信息暂不可用，尚未记录检查结果")).toBeInTheDocument();
-    expect(screen.queryByText(/暂无可用的程序版本更新|已是最新|已是记录中的最新版本/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看更新" })).not.toBeInTheDocument();
-
-    api.listWebPlugins.mockResolvedValue([plugin({ availability: { state: "current", checkedAt: "2026-09-06T02:00:00.000Z", reason: "recorded" } })]);
-    fireEvent.click(screen.getByRole("button", { name: "刷新插件状态" }));
-    expect(await screen.findByText("已是记录中的最新版本（检查于 2026-09-06）")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看更新" })).not.toBeInTheDocument();
-
-    api.listWebPlugins.mockResolvedValue([plugin({
+  // (b) No update hint: a plugin's program ships in the runtime image, and the
+  // availability record the hint read was never populated in production, so it
+  // could only ever say "unknown". Whatever the server still sends, the card
+  // says nothing about updates.
+  it("shows no update information, even when the server records an update", async () => {
+    const recorded = {
       availability: { state: "update-available", checkedAt: "2026-09-06T02:00:00.000Z", reason: "recorded" },
       availableUpdate: { version: "0.3.4", recordedAt: "2026-09-06T02:00:00.000Z", source: "npm" },
-    })]);
-    fireEvent.click(screen.getByRole("button", { name: "刷新插件状态" }));
-    expect(await screen.findByText("可更新至 0.3.4（记录于 2026-09-06）")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "查看更新" }));
-    // Honest about what the action can do: the binary ships in the runtime image.
-    expect(screen.getByText(/随运行时镜像发布/)).toBeInTheDocument();
+    };
+    api.listWebPlugins.mockResolvedValue([{ ...plugin(), ...recorded } as WebPluginState]);
+    render(<PluginsCard projectId="alpha" />);
+    await ready();
+    expect(screen.getByText("已安装版本 0.3.2")).toBeInTheDocument();
+    expect(screen.queryByText(/可更新|更新信息|记录中的最新版本|0\.3\.4/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看更新" })).not.toBeInTheDocument();
   });
 
   // (c)/(e) Removal is a state change the user confirms; history keeps it undoable.

@@ -420,19 +420,6 @@ export interface WebPluginConfiguration {
   settings: Record<string, number>;
 }
 
-/**
- * What the control plane last recorded about a newer build, and when.
- *
- * `unknown` is a first-class answer, not a fallback: nothing on the request
- * path asks upstream, so an absent, stale or unobserved record means nobody
- * knows — which must never be shown as "up to date".
- */
-export interface WebPluginAvailability {
-  state: "unknown" | "current" | "update-available";
-  checkedAt: string | null;
-  reason: string;
-}
-
 export interface WebPluginState {
   id: string;
   binaryVersion: string;
@@ -440,8 +427,6 @@ export interface WebPluginState {
   tools: string[];
   /** The settings this build accepts, with the deployment's own ceilings applied. */
   settingsSchema: Record<string, { min: number; max: number }>;
-  availableUpdate: { version: string; recordedAt: string; source: string } | null;
-  availability: WebPluginAvailability;
   desired: WebPluginConfiguration | null;
   effective: WebPluginConfiguration | null;
   phase: "saved" | "pending" | "applying" | "effective" | "rolled_back" | "unavailable" | "failed";
