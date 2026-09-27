@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { BUDGET_BY_PAGE, GEO_TABS, ROUTES, TYPE_PAIR_NOTICE, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
+import { BUDGET_BY_PAGE, GEO_TABS, ROUTES, TYPE_PAIR_NOTICE, measure, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -59,6 +59,93 @@ test("more than four font-size × weight pairs is a notice, never a failure", ()
   assert.deepEqual(pageFindings("memory", "desktop", clean({ sizeWeightPairs: pairs.slice(0, 4) }), []).notices, []);
   // Measured at the desktop width only, like the rest of the style budget.
   assert.deepEqual(pageFindings("memory", "phone", clean({ sizeWeightPairs: pairs }), []).notices, []);
+});
+
+/**
+ * A page for `measure` to read without a browser: each control is described
+ * by its tag, its box height, its computed style and the height its own CSS
+ * declares (`auto` unless it sets one) — the few DOM calls `measure` makes,
+ * answered from that description. Returns what `measure` returned.
+ */
+function measureControls(controls) {
+  const base = {
+    display: "block", visibility: "visible", opacity: "1", color: "rgb(20, 20, 20)", backgroundColor: "rgba(0, 0, 0, 0)",
+    fontSize: "14px", fontWeight: "400", lineHeight: "22px", borderTopLeftRadius: "0px", paddingTop: "0px", paddingBottom: "0px",
+    ...Object.fromEntries(["Top", "Right", "Bottom", "Left"].flatMap((side) => [
+      [`border${side}Width`, "0px"], [`border${side}Style`, "none"], [`border${side}Color`, "rgb(20, 20, 20)"],
+    ])),
+  };
+  const matchesOne = (el, part) => {
+    if (part === "body *") return true;
+    const attribute = /^\[([\w-]+)(?:='([^']*)')?\]$/.exec(part);
+    if (attribute) return attribute[2] === undefined ? attribute[1] in el.attributes : el.attributes[attribute[1]] === attribute[2];
+    return el.tag === part;
+  };
+  const make = ({ tag, text = "", height, declaredHeight = "auto", icon = false, style = {} }) => {
+    const el = {
+      tag, text, attributes: {}, tagName: tag.toUpperCase(), id: "", style: { ...base, ...style },
+      children: [], childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
+      get textContent() { return text; },
+      getBoundingClientRect: () => ({ width: 120, height, left: 0 }),
+      computedStyleMap: () => ({ get: (property) => ({ toString: () => (property === "height" ? declaredHeight : "auto") }) }),
+      matches: (selector) => selector.split(",").some((part) => matchesOne(el, part.trim())),
+      querySelector: (selector) => el.children.find((child) => child.matches(selector)) ?? null,
+      getAttribute: (name) => el.attributes[name] ?? null,
+      closest: () => null,
+    };
+    if (icon) el.children.push(make({ tag: "svg", height: 16 }));
+    if (icon) el.children[0].attributes["aria-hidden"] = "true";
+    return el;
+  };
+  const elements = controls.map(make).flatMap((el) => [el, ...el.children]);
+  const body = { innerText: controls.map((control) => control.text ?? "").join("\n"), contains: () => true };
+  const saved = Object.fromEntries(["document", "window", "getComputedStyle", "CSS"].map((name) => [name, globalThis[name]]));
+  Object.assign(globalThis, {
+    document: {
+      body,
+      title: "知识库 · EviMed",
+      documentElement: { scrollWidth: 1512 },
+      querySelector: () => null,
+      querySelectorAll: (selector) => elements.filter((el) => el.matches(selector)),
+    },
+    window: { innerWidth: 1512 },
+    getComputedStyle: (el) => el.style,
+    CSS: { escape: (value) => value },
+  });
+  try {
+    return measure([[], []]);
+  } finally {
+    Object.assign(globalThis, saved);
+  }
+}
+
+test("a text control that wraps is one kind of control, and a control with a height of its own is not", () => {
+  // A list row's title is a button with no height of its own: one line is
+  // 22 px, two are 44, three are 66 — one kind, as a wrapped inline link is.
+  const title = (lines) => ({ tag: "button", text: "一个很长的资料标题".repeat(lines), height: 22 * lines });
+  const wrapped = measureControls([title(1), title(2), title(3)]);
+  assert.equal(wrapped.controlKinds, 1);
+  assert.deepEqual(Object.keys(wrapped.controlLooks), ["text 14px/400 r0px"]);
+  assert.equal(wrapped.controlLooks["text 14px/400 r0px"].count, 3);
+
+  // A 44 px button whose CSS sets that height is a control of its own, though
+  // 44 is two of its lines; so is a title with an icon in it, and a text
+  // control stretched to a height that is not a whole number of its lines.
+  const fixed = { tag: "button", text: "开始研究", height: 44, declaredHeight: "44px" };
+  const withIcon = { tag: "a", text: "知识库", height: 44, icon: true };
+  const stretched = { tag: "button", text: "全部", height: 30 };
+  const mixed = measureControls([title(1), title(2), fixed, withIcon, stretched]).controlLooks;
+  assert.deepEqual(Object.keys(mixed), ["text 14px/400 r0px", "44h 14px/400 r0px", "30h 14px/400 r0px"]);
+  assert.equal(mixed["44h 14px/400 r0px"].count, 2);
+
+  // What surrounds the lines is part of the look: a padded text button is a
+  // kind beside the bare title, whether it wraps or not.
+  const padded = (lines) => ({ ...title(lines), height: 22 * lines + 8, style: { paddingTop: "4px", paddingBottom: "4px" } });
+  const measured = measureControls([title(1), padded(1), padded(2)]);
+  assert.equal(measured.controlKinds, 2);
+  assert.deepEqual(measured.controlLooks["text+8 14px/400 r0px"], { count: 2, example: "button: 一个很长的资料标题" });
+  // An inline link stays what it was.
+  assert.equal(measureControls([{ tag: "a", text: "原文", height: 44, style: { display: "inline" } }]).controlLooks["inline 14px/400 r0px"].count, 1);
 });
 
 /**

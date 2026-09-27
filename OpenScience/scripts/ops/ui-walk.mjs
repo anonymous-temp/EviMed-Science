@@ -22,7 +22,8 @@
  *     data page — the knowledge base and 循证 GEO), 5 text colours (8 on the
  *     frontier feed, which adds the safety red and the rank colours; 7 on a
  *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
- *     measured number — see GEO_BUDGET); the title and the page
+ *     measured number — see GEO_BUDGET), with each kind of control named in
+ *     the report by its first example; the title and the page
  *     body's blocks start on one left edge; within a list, every row's title
  *     (`[data-row-title]`) starts on one left edge;
  *   - no page is replaced by the router's English error page, and a lazy page
@@ -262,8 +263,12 @@ function required(name) {
   return value;
 }
 
-/** What one page shows, measured in the page. */
-function measure([leakSources, backOfficeSources]) {
+/**
+ * What one page shows, measured in the page. It runs in the browser
+ * (`page.evaluate`), so it reads nothing from this module; exported so a test
+ * can run it over a page it describes.
+ */
+export function measure([leakSources, backOfficeSources]) {
   const leaks = leakSources.map(([source, flags]) => new RegExp(source, flags));
   const backOffice = backOfficeSources.map(([source, flags]) => new RegExp(source, flags));
   const visible = (el) => {
@@ -295,15 +300,46 @@ function measure([leakSources, backOfficeSources]) {
     const cs = getComputedStyle(el);
     return `${cs.fontSize}/${cs.fontWeight}`;
   }))].sort();
+  // A control's height, the first part of its look. A text control's height
+  // is its number of lines, and a headline that wraps is the same control as
+  // one that does not: an inline link by its display, and a text-only control
+  // whose height is its content — no height and no minimum set on it, its box
+  // a whole number of its line-height — by what surrounds the lines (its
+  // vertical padding and border), not by how many there are. A list row's
+  // title that wraps to 44 px counted as a second kind beside the 22 px one
+  // (2026-09-27 walk). A control with a height of its own, or an icon in it,
+  // keeps its measured height: a 44 px button and a two-line title are not
+  // one kind.
+  const sizeOf = (el, cs, r) => {
+    if (cs.display === "inline") return "inline";
+    const declared = typeof el.computedStyleMap === "function" ? el.computedStyleMap() : null;
+    const contentSized = declared !== null && String(declared.get("height")) === "auto"
+      && ["auto", "0px"].includes(String(declared.get("min-height")));
+    const textOnly = !el.querySelector("svg, img, canvas, video, input, select, textarea");
+    const lineHeight = parseFloat(cs.lineHeight);
+    const around = ["Top", "Bottom"].reduce((sum, side) => sum + (parseFloat(cs[`padding${side}`]) || 0) + (parseFloat(cs[`border${side}Width`]) || 0), 0);
+    const lines = (r.height - around) / lineHeight;
+    if (contentSized && textOnly && lineHeight > 0 && Math.round(lines) >= 1 && Math.abs(lines - Math.round(lines)) < 0.05) {
+      return around ? `text+${Math.round(around)}` : "text";
+    }
+    return `${Math.round(r.height)}h`;
+  };
+  const looks = new Map();
   const controlLooks = all.filter((el) => el.matches("button, a, [role='button'], [role='tab'], select, input, summary")).map((el) => {
     const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
     const framed = parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== "none";
     const filled = cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== "rgb(255, 255, 255)";
-    // A text link's height is its number of lines: a headline that wraps is
-    // the same control as one that does not.
-    const size = cs.display === "inline" ? "inline" : `${Math.round(r.height)}h`;
-    return `${size} ${cs.fontSize}/${cs.fontWeight}${framed ? " framed" : ""}${filled ? " filled" : ""} r${cs.borderTopLeftRadius}`;
+    const look = `${sizeOf(el, cs, r)} ${cs.fontSize}/${cs.fontWeight}${framed ? " framed" : ""}${filled ? " filled" : ""} r${cs.borderTopLeftRadius}`;
+    // The report names each kind by its first control, so a page over budget
+    // says which controls to converge, not only how many kinds it has.
+    const seen = looks.get(look);
+    if (seen) seen.count += 1;
+    else {
+      const name = (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      looks.set(look, { count: 1, example: `${el.tagName.toLowerCase()}${name ? `: ${name}` : ""}` });
+    }
+    return look;
   });
 
   // One left edge: the title and the page body's top-level blocks, and within
@@ -333,6 +369,7 @@ function measure([leakSources, backOfficeSources]) {
   return {
     title: document.title,
     controlKinds: kinds(controlLooks),
+    controlLooks: Object.fromEntries(looks),
     colorKinds: kinds(colors),
     borderKinds: kinds(borders),
     sizeWeightPairs,
