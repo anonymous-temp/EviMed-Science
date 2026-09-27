@@ -1,6 +1,6 @@
 ---
 name: geo-insight
-description: Steps 1–3 of a 「循证 GEO」 project for one medicine — verified identity and label, a claim library with verbatim quotes, patient subtypes, journey and care nodes, and a four-pool question map with control groups, written into the project.
+description: Steps 1–3 of a “循证 GEO” project for one medicine — verified identity and label, a claim library with verbatim quotes, patient subtypes, journey and care nodes, and a four-pool question map with control groups, written into the project.
 metadata:
   evimed-agent: geo-insight
 ---
@@ -40,8 +40,8 @@ it and follow it; this page only says how it runs here. Where a skill writes
 | one step on its own | `geo-run-single-step` (the minimal upstream table) |
 
 If the `skill` tool cannot find a `geo-*` skill, this deployment does not carry
-the method pack. Say so once in the reply — 「本部署未安装 GEO 方法包，以下按平台
-内置的简要方法完成」 — and do the step with this page alone.
+the method pack. Say so once in the reply — “本部署未安装 GEO 方法包，以下按平台
+内置的简要方法完成” — and do the step with this page alone.
 
 ## Tools, not clients
 
@@ -55,25 +55,41 @@ probe host, a social crawler or a marketplace.
   `mcp__evimed__locate_quote` to find the exact passage in a preserved source.
 - Real phrasings: `mcp__evimed__social_posts_search`, one platform per call (a crawl takes
   30–120 s): ask the platforms that carry the product's patients — usually 知乎、抖音、
-  小红书 — one after another. A platform with no posts is 「无信号」,
+  小红书 — one after another. A platform with no posts is “无信号”,
   never zero; when the channel fails, questions are written as kind `typical`
-  and the report says the phrasings were not collected.
+  and the report says the phrasings were not collected. A real phrasing keeps
+  its post's `collectedAt` and `url` (as `sourceUrl`) from the search result.
 - Project data: `mcp__evimed__geo_read` for what the project already holds (never redo a
   step that is done and not stale); `mcp__evimed__geo_write` to register what you produce —
   `product`, `claims`, `journey`, `questions`, then `lock_questions`, then
-  `step`. A write answers item by item; fix the refused items and write again.
-  `product` carries `competitors` (`brandName`, `genericName`, `aliases`,
-  `holder`, `indication`, `reason`): the measurement recognises a rival only by a
-  registered name, so without them share of voice is never computed. `aliases`
-  are the other names an answer uses for it — the molecule's short name (替尔泊肽),
-  the English brand (Mounjaro).
-  The project page shows the journey as four columns, so every `journey` stage
-  carries all four: `emotion`, `thinking`, `questions` (the questions a patient
+  `step`. A write answers item by item; fix the refused items and write again;
+  a `notice` is written already and says what is still missing.
+  `product` is the identity every answer is counted by, so write all of it:
+  `brandName`, `genericName`, `aliases` (the other names an answer uses for the
+  product), `misspellings` (how people misspell it), `approvalNo` (批准文号),
+  `rx` (`rx` or `otc`), `identityStatus` (`confirmed`, `ambiguous`, `unknown`)
+  and **`singleSource`** — whether exactly one approved holder markets this
+  generic. Look it up (the label's holder, the regulator's approval list); when
+  it is true, an answer that names only the generic (玛仕度肽) counts as naming
+  this product, and when it is false or unknown only the brand counts. The
+  generic's other forms (the molecule's short name, the INN in English, a code
+  name) go in `genericAliases`.
+  `product` also carries `competitors` (`brandName`, `genericName`, `aliases`,
+  `genericAliases`, `singleSource`, `holder`, `indication`, `reason`), counted
+  by the same rule: the measurement recognises a rival only by a registered
+  name, so without them share of voice is never computed. `aliases` are the
+  other names of that product — its English brand (Mounjaro); the molecule's
+  name (替尔泊肽) is a generic form and counts only when `singleSource` is true.
+  A full `journey` carries, beside its stages and care nodes, `subtypes` (the
+  patient subtype tree with each subtype's size), `personas` (3–5 typical
+  people) and `files` (the full stage × column matrix saved as a file in this
+  deliverable and listed by its path). The project page shows the journey as
+  four columns, so every `journey` stage carries all four: `emotion`, `thinking`, `questions` (the questions a patient
   at that stage asks an AI — take them from the question map's typical
   questions and real phrasings) and `infoSources` (where they look: 小红书、
   抖音、百度、公众号、医生、药师 …). An empty list is an empty column. Give each
-  claim `sourceRefLabel`, the source as a reader names it (「玛仕度肽注射液说明书
-  （国家药监局 2025）」); the page never shows a preserved page's id.
+  claim `sourceRefLabel`, the source as a reader names it (“玛仕度肽注射液说明书
+  （国家药监局 2025）”); the page never shows a preserved page's id.
 - Measurement is the platform's. Never batch-probe inside a run: once the set
   is locked the platform runs the baseline on its own. `mcp__evimed__geo_visibility_probe`
   is only for a single question the user asks about in the conversation.

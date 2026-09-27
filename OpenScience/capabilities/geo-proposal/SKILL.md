@@ -1,6 +1,6 @@
 ---
 name: geo-proposal
-description: The client-facing output of a 「循证 GEO」 project — the proposal package (Excel, two Word reports, PowerPoint, HTML) or the weekly report (PDF and Word), built only from the project's frozen platform data.
+description: The client-facing output of a “循证 GEO” project — the proposal package (Excel, two Word reports, PowerPoint, HTML) or the weekly report (PDF and Word), built only from the project's frozen platform data.
 metadata:
   evimed-agent: geo-proposal
 ---
@@ -9,7 +9,7 @@ metadata:
 
 You turn what the project already holds into files a client reads. You add no
 data: every number, quote and outlet comes from `mcp__evimed__geo_read` at one moment you
-freeze, and a step the project has not done is written as 「未做」, not filled
+freeze, and a step the project has not done is written as “未做”, not filled
 in. Two modes, named in the brief:
 
 - **proposal** — the 提案资料包: one Excel workbook, two Word reports
@@ -38,7 +38,7 @@ are platform skills and make the files.
 | the weekly report | `geo-monitor-iterate` (its report section; the schedule is the platform's) |
 
 If a `geo-*` skill cannot be found, the method pack is not installed here: say
-so once — 「本部署未安装 GEO 方法包，以下按平台内置的简要方法完成」 — and build the
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and build the
 files with the office skills and this page.
 
 ## Tools
@@ -52,8 +52,8 @@ files with the office skills and this page.
 
 ## Numbers
 
-Every rate carries its sample — 「18%，310 次里 56 次」 — and a cell under 30
-answers says 「样本不足」; an engine not measured says 「未测」, never zero.
+Every rate carries its sample — “18%，310 次里 56 次” — and a cell under 30
+answers says “样本不足”; an engine not measured says “未测”, never zero.
 Measured, client-provided, derived, forecast and commercial figures never share
 a cell or a column. Acceptance is by net effect. Screenshots and answer quotes
 are the platform's snapshots, cited by date and engine.

@@ -1,6 +1,6 @@
 ---
 name: geo-content
-description: Step 6 of a 「循证 GEO」 project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
+description: Step 6 of a “循证 GEO” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
 metadata:
   evimed-agent: geo-content
 ---
@@ -32,7 +32,7 @@ the `geo-private` root.
 | one step on its own | `geo-run-single-step` |
 
 If a `geo-*` skill cannot be found, the method pack is not installed here: say
-so once — 「本部署未安装 GEO 方法包，以下按平台内置的简要方法完成」 — and write
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and write
 with this page.
 
 ## What goes into a batch
@@ -89,7 +89,10 @@ default with its reason in `assumptions[]`.
   `groupId` (the id of the question group it
   answers, from `geo_read questions` — required for every layer but `correction`), `claimIds`
   (ids from `geo_read claims`), `contentSha256` (of the file as written) and `safety`
-  (`clear` or `open`). Do not send a gate verdict: the platform takes it from this
+  (`clear` or `open`). A correction also carries `errorIds`: the ids (from
+  `geo_read errors`) of the 讲错我方 it corrects — registering it attaches it to
+  them and moves them to 处置中; the platform closes them only when a later
+  measurement no longer hears them. Do not send a gate verdict: the platform takes it from this
   deliverable's own submission, and only a person clears an `open` safety finding.
 - `mcp__evimed__drug_label_search`, `mcp__evimed__guideline_search`, `mcp__evimed__literature_search`,
   `mcp__evimed__clinical_trial_search`, `mcp__evimed__open_access_full_text`, `mcp__evimed__locate_quote` for a claim

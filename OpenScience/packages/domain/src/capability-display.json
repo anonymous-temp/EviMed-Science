@@ -264,7 +264,7 @@
         "每周周报：PDF 与 Word"
       ],
       "knownLimits": [
-        "只呈现项目里已有的数据；没做过的步骤写「未做」。"
+        "只呈现项目里已有的数据；没做过的步骤写“未做”。"
       ],
       "evaluation": {
         "lastStatus": "not-run",

@@ -1,6 +1,6 @@
 ---
 name: geo-strategy
-description: Step 5 of a 「循证 GEO」 project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
+description: Step 5 of a “循证 GEO” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
 metadata:
   evimed-agent: geo-strategy
 ---
@@ -42,7 +42,7 @@ the `geo-private` root.
 | one step on its own | `geo-run-single-step` |
 
 If a `geo-*` skill cannot be found, the method pack is not installed here: say
-so once — 「本部署未安装 GEO 方法包，以下按平台内置的简要方法完成」 — and continue
+so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and continue
 with this page.
 
 ## Tools
@@ -50,10 +50,34 @@ with this page.
 - `mcp__evimed__geo_read` — `project`, `claims`, `questions`, `metrics`, `snapshots`
   (answer text is truncated per item; ask by engine, pool or group), `errors`,
   `sources`, `targets`, `strategy`. This is the only source of measured numbers.
-- `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout), `targets`
-  (three tiers; a target is a forecast or a commercial figure, never
-  "measured"), `placement_plan` (preferred layers and outlets — a proposal; the
-  control plane decides and places orders), `step`.
+- `mcp__evimed__geo_write` — `strategy` (battlefield, expectations, gaps, layout, and the
+  source table as `sources`), `targets` (three tiers; a target is a forecast or
+  a commercial figure, never "measured"), `placement_plan` (preferred layers
+  and outlets — a proposal; the control plane decides and places orders),
+  `step`. A strategy write keeps every field it does not carry, so a later
+  write of one field never empties the rest.
+  Write in the platform's field names (the method's snake-case names are read
+  too, but these are the ones the page shows):
+  - each source: `domain`, `name`, `kind` (`news`, `vertical`, `wemedia`,
+    `brand`, `government`, `encyclopedia`, `academic`, `qa`, `video`,
+    `ecommerce`, `other`), `layer` (`anchor`, `coverage`, `owned`),
+    `icpMatches`, `newsIndexed`, `medicalVertical` (true, false, or null when it
+    could not be checked), `checkedAt` (the day you checked), `impostor`,
+    `blacklistReason`;
+  - each engine's expectation: `engine`, `promise` (what this cycle can
+    promise, in a sentence), `layers` (which layers to place into),
+    `leverage`;
+  - `battlefield`: `{ groups, reason, secondary }`; `gaps`: `{ class, groupId,
+    text, priority }`; `layout`: the method's `{ layers, byEngine,
+    constraints }`.
+  - targets: every tier carries a project-wide (`pool: "all"`) target for
+    `M-19` (the index) and `M-01S` (mention over P2 and P3) — the two numbers
+    the page states a target beside — besides the per-pool ones.
+- The three conditions decide placement: the market only ever places into a
+  site whose `icpMatches`, `newsIndexed` and `medicalVertical` are all true.
+  Check **every** coverage-layer candidate (usually 10–20 sites), not a sample —
+  a site left unchecked is never placed — and every site an 讲错我方 is traced
+  to; the long tail may stop at its kind.
 - `mcp__evimed__web_read`, `mcp__evimed__web_search` to check an outlet: who holds the ICP record, whether
   it is indexed as news, whether it is a medical vertical. An outlet displaying
   one name while hosted on another's domain is an impostor and goes on the
@@ -90,8 +114,8 @@ Inside this deliverable's `deliverables/<id>/` directory:
 - `geo-strategy.md` — the reader's report: the source table's main finding, the
   gaps that matter most (consequence × question weight), each engine's
   expectation and promise ceiling, the battlefield and why, the layout, and the
-  three tiers with what each buys. Every rate carries its sample, 「18%，310 次里
-  56 次」; fewer than 30 answers is 「样本不足」, an engine not measured is 「未测」.
+  three tiers with what each buys. Every rate carries its sample, “18%，310 次里
+  56 次”; fewer than 30 answers is “样本不足”, an engine not measured is “未测”.
 - `strategy.json` — `{ minimal, sources, gaps, expectations, battlefield,
   secondary, layout, tiers, chosenTier, assumptions }`. `gaps[].class` is one of
   缺证据、丢条件、过时、信源弱、只讲获益不讲安全、讲错、受众看不懂.
