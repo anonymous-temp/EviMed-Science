@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
+import { AriaComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsCoreOption } from "echarts/core";
 import theme from "@evimed/design-tokens/echarts-theme.json";
@@ -26,6 +27,13 @@ import { useColorScheme } from "@/lib/colorScheme";
  * (spec §32.13 — ECharts reads both), and a chart already on screen is
  * redrawn when the setting changes.
  *
+ * Colour is not the only thing that tells series apart (spec §32.13 rule 4):
+ * a reader who asked for more contrast (`prefers-contrast: more`) or runs a
+ * Windows contrast theme (`forced-colors: active`) gets ECharts' decal
+ * patterns on every filled mark, and a chart that has three or more
+ * categories with no direct label asks for them always (`useEChart(option,
+ * { decal: true })`). A chart already on screen follows the setting too.
+ *
  * In a test environment there is no 2D context, and a chart that cannot be
  * painted simply is not: the component's own DOM — its heading, its legend
  * and its `data-chart-*` attributes — is what a test reads, which is also
@@ -35,9 +43,13 @@ import { useColorScheme } from "@/lib/colorScheme";
 export const CHART_THEMES = Object.freeze({ light: "evimed-light", dark: "evimed-dark" });
 
 let registered = false;
-function registerOnce(): void {
+/**
+ * The renderer, the component the decal patterns live in, and both themes —
+ * once per document. Exported so a test can draw what the app draws.
+ */
+export function registerCharts(): void {
   if (registered) return;
-  echarts.use([CanvasRenderer]);
+  echarts.use([CanvasRenderer, AriaComponent]);
   echarts.registerTheme(CHART_THEMES.light, theme.light);
   echarts.registerTheme(CHART_THEMES.dark, theme.dark);
   registered = true;
@@ -77,6 +89,44 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
+const MORE_CONTRAST = "(prefers-contrast: more)";
+const FORCED_COLORS = "(forced-colors: active)";
+
+/** Whether the reader asked for more contrast, or runs a forced-colours theme, right now. */
+export function readContrastSetting(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(MORE_CONTRAST).matches || window.matchMedia(FORCED_COLORS).matches;
+}
+
+/** The reader's contrast setting, kept current as either query changes. */
+export function useContrastSetting(): boolean {
+  const [more, setMore] = useState(readContrastSetting);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const queries = [window.matchMedia(MORE_CONTRAST), window.matchMedia(FORCED_COLORS)];
+    const update = () => setMore(queries.some((query) => query.matches));
+    update();
+    for (const query of queries) query.addEventListener("change", update);
+    return () => { for (const query of queries) query.removeEventListener("change", update); };
+  }, []);
+  return more;
+}
+
+/**
+ * An option with decal patterns on its filled marks (spec §32.13 rule 4):
+ * ECharts' `aria.decal`, which needs `aria.enabled`. ECharts' own generated
+ * description is left off unless the option asks for it — it would replace
+ * the chart host's accessible name, which is the conclusion the chart shows.
+ */
+export function decalOption(option: EChartsCoreOption, on: boolean): EChartsCoreOption {
+  if (!on) return option;
+  const aria = (option.aria ?? {}) as { label?: object; decal?: object };
+  return {
+    ...option,
+    aria: { ...aria, enabled: true, label: { enabled: false, ...aria.label }, decal: { ...aria.decal, show: true } },
+  } as EChartsCoreOption;
+}
+
 /**
  * An option as it is drawn for a reader who asked for less motion: no
  * animation at the root and none on any series — a series that sets its own
@@ -95,20 +145,23 @@ export function motionOption(option: EChartsCoreOption, reduced: boolean): EChar
 
 /**
  * Mounts one chart into the returned element and keeps it in step with the
- * container's width, the page's scheme and the reader's motion setting. `option` of `null` paints nothing,
- * which is how a caller says “there is no reading to draw” without
- * unmounting its card.
+ * container's width, the page's scheme, and the reader's motion and contrast
+ * settings. `option` of `null` paints nothing, which is how a caller says
+ * “there is no reading to draw” without unmounting its card. `decal: true`
+ * is for a chart with three or more categories and no direct label, which
+ * needs its patterns whatever the reader's settings.
  */
-export function useEChart(option: EChartsCoreOption | null): React.RefObject<HTMLDivElement | null> {
+export function useEChart(option: EChartsCoreOption | null, { decal = false }: { decal?: boolean } = {}): React.RefObject<HTMLDivElement | null> {
   const host = useRef<HTMLDivElement | null>(null);
   const scheme = useColorScheme();
   const reduced = useReducedMotion();
+  const patterned = useContrastSetting() || decal;
   useEffect(() => {
     const node = host.current;
     if (!node || !option || !canPaintChart()) return undefined;
-    registerOnce();
+    registerCharts();
     const chart = echarts.init(node, scheme === "dark" ? CHART_THEMES.dark : CHART_THEMES.light, { renderer: "canvas" });
-    chart.setOption(motionOption(option, reduced));
+    chart.setOption(decalOption(motionOption(option, reduced), patterned));
     const resize = () => chart.resize();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
     observer?.observe(node);
@@ -118,7 +171,7 @@ export function useEChart(option: EChartsCoreOption | null): React.RefObject<HTM
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [option, scheme, reduced]);
+  }, [option, scheme, reduced, patterned]);
   return host;
 }
 
