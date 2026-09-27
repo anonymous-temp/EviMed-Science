@@ -18,9 +18,11 @@
  *     carries no subtitle;
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
- *     control (9 on the frontier feed, whose headlines are links), 5 text
- *     colours (8 on the frontier feed, which adds the safety red and the rank
- *     colours) and 3 kinds of border; the title and the page
+ *     control (9 on the frontier feed, whose headlines are links; 10 on a
+ *     data page — the knowledge base and 循证 GEO), 5 text colours (8 on the
+ *     frontier feed, which adds the safety red and the rank colours; 7 on a
+ *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
+ *     measured number — see GEO_BUDGET); the title and the page
  *     body's blocks start on one left edge; within a list, every row's title
  *     (`[data-row-title]`) starts on one left edge;
  *   - no page is replaced by the router's English error page, and a lazy page
@@ -29,17 +31,33 @@
  *   - no call a page makes to the control plane's API is refused (4xx/5xx).
  * It also records, without failing on them, small click targets, decorative
  * SVGs without aria-hidden, console errors and other HTTP errors — the things
- * that need a person to judge.
+ * that need a person to judge — and, as a NOTICE, a page that sets its text in
+ * more than four font-size × font-weight pairs (design spec chapter 5 rule 1,
+ * acceptance row 4). A notice is reported, never failed on (principle 4: a
+ * check ships as a notice until its real distribution is known); the per-page
+ * counts are in the report so a budget can be set from them.
  *
- * Read-only: it logs in, reads pages and logs out. It opens the chat page only
- * when asked (`OPEN_SCIENCE_WALK_CHAT=1`), because a frame bound to a live
- * session starts the account's default runtime — and it should be asked after
+ * What it changes on the deployment: a session (it logs in and logs out), and
+ * — only when asked for the chat page — the account's default runtime. The
+ * shell warms that runtime from every page, not only the conversation, so a
+ * walk that let those requests through started a runtime on each run
+ * (2026-09-26 audit, F-G20: a walk began 14:46:59Z, the acceptance account's
+ * default runtime started 14:47:07Z). Every `start_runtime` is therefore
+ * refused in the browser, and counted per page in the report.
+ *
+ * It opens the chat page only when asked (`OPEN_SCIENCE_WALK_CHAT=1`), and
+ * there it lets `start_runtime` through, because a frame bound to a live
+ * session needs the account's default runtime — and it should be asked after
  * every release: on 2026-09-21 every page here walked clean while no
  * conversation of the acceptance account could load at all (its kernel frame
  * fetched a plugin bundle from a runtime that had not composed it, a 404, and
  * stopped at 「对话界面 60 秒内没有载入完成」). With it the walk waits for the
  * frame's composer, fails on any 4xx for a kernel application file, and
  * records whether the kernel's session statistics line is on screen.
+ *
+ * The release switch (host-release-switch.sh) runs it after every release, in
+ * a container of the release's runtime image, as the account
+ * `shared/ui-walk.env` names.
  *
  * Nothing is added to package.json: a browser automation dependency would
  * change the lockfile, and a changed lockfile makes the next release a full
@@ -57,23 +75,25 @@
  * Exit 0 when every assertion holds, 1 when one does not (the report names
  * which), 2 when the walk could not run at all.
  */
+import { realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * The pages, by the name the report uses. 知识库 and 记忆胶囊 are one page each
  * since 2026-09-20; 设置 is walked section by section. The frontier feed's
  * views are walked only where the account is offered the feed.
  */
-const ROUTES = [
+export const ROUTES = [
   ["frontier", "/app/frontier"],
   ["frontier-hot", "/app/frontier?view=hot"],
   ["frontier-daily", "/app/frontier?view=daily"],
   ["frontier-all", "/app/frontier?view=all"],
   ["capabilities", "/app/capabilities"],
   // 循证 GEO's home — its one sentence where the account is not offered the
-  // module; one project's 概览 and 诊断 are added when the account has one
+  // module; one project's seven tabs are added when the account has one
   // (`geoProjectRoutes`).
   ["geo", "/app/geo"],
   ["files", "/app/files"],
@@ -125,20 +145,39 @@ const FRONTIER_BUDGET = { controls: 9, colors: 8 };
  * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced
  * them — so the control budget covers the rail, not a control per row.
  */
-const GEO_BUDGET = { controls: 10, colors: 7, borders: 3 };
-const BUDGET_BY_PAGE = {
+const DATA_BUDGET = { controls: 10, colors: 7, borders: 3 };
+/**
+ * A GEO project's tabs spend more kinds of border than any other page, and the
+ * number is the measured one, not a wish: the 2026-09-26 walk of the rebuilt
+ * pages counted 6 (总览), 6 (可见度) and 5 (准确与安全) — the card frame,
+ * the rail's step dots, the tab underline, the table's row rule and the
+ * metric band's divider — against the reading page's 3 (fusion audit F-G2).
+ * The other four tabs were first walked by this script after that date; a tab
+ * that goes past the measured six is a new kind of border, which is what this
+ * budget is for. Colours and controls stay the data page's.
+ */
+const GEO_BUDGET = { ...DATA_BUDGET, borders: 6 };
+/** The seven tabs of one GEO project, by the report's name and path segment. */
+export const GEO_TABS = [
+  ["geo-overview", ""], ["geo-visibility", "/visibility"], ["geo-accuracy", "/accuracy"],
+  ["geo-questions", "/questions"], ["geo-sources", "/sources"], ["geo-actions", "/actions"], ["geo-plan", "/plan"],
+];
+export const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
-  geo: GEO_BUDGET, "geo-project": GEO_BUDGET, "geo-accuracy": GEO_BUDGET, "geo-visibility": GEO_BUDGET,
-  // The rest of the seven tabs, and the knowledge base, which became a data
-  // page when it grew its project-and-type rail.
-  "geo-overview": GEO_BUDGET, "geo-questions": GEO_BUDGET, "geo-sources": GEO_BUDGET,
-  "geo-actions": GEO_BUDGET, "geo-plan": GEO_BUDGET, knowledge: GEO_BUDGET,
+  geo: DATA_BUDGET,
+  ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
+  // The knowledge base became a data page when it grew its project-and-type
+  // rail. Its route is `files`: the key used to read `knowledge`, a page name
+  // no route has, so the page kept the reading budget and failed on its ninth
+  // control (2026-09-26 walk).
+  files: DATA_BUDGET,
 };
 
 /**
- * One GEO project's 总览, 可见度 and 准确与安全, when the account has a GEO
- * project to walk — the first the list names. None when the module is off here
- * or the account has none: the home is walked either way.
+ * One GEO project's seven tabs, when the account has a GEO project to walk —
+ * the first the list names. None when the module is off here or the account
+ * has none: the home is walked either way. It walked three of the seven until
+ * 2026-09-27, so four tabs had never been through the walk.
  * @param {any} context a logged-in browser context @param {string} base
  * @returns {Promise<Array<[string, string]>>}
  */
@@ -149,7 +188,7 @@ async function geoProjectRoutes(context, base) {
   const id = Array.isArray(projects) && typeof projects[0]?.id === "string" ? projects[0].id : null;
   if (!id) return [];
   const at = `/app/geo/${encodeURIComponent(id)}`;
-  return [["geo-project", at], ["geo-visibility", `${at}/visibility`], ["geo-accuracy", `${at}/accuracy`]];
+  return GEO_TABS.map(([name, segment]) => [name, `${at}${segment}`]);
 }
 
 /**
@@ -167,6 +206,51 @@ function shoutedCapabilityKeys(ids) {
   return ids
     .filter((id) => /^[a-z][a-z0-9-]{3,}$/.test(id))
     .map((id) => new RegExp(`\\b${id.toUpperCase().replace(/-/g, "[-_ ]")}\\b`));
+}
+
+/**
+ * At most four font-size × font-weight pairs per page (design spec chapter 5
+ * rule 1). Reported as a NOTICE: the rule has no measured distribution yet
+ * (the 2026-09-26 walk counted 4–16 per page), and a check ships as a notice
+ * until it has one.
+ */
+export const TYPE_PAIR_NOTICE = 4;
+
+/**
+ * What one measured page view fails on, and what it is only noticed for.
+ * @param {string} name the report's page name @param {"desktop" | "phone"} viewportName
+ * @param {any} measured what `measure` returned for the page
+ * @param {string[]} httpErrors `<status> <path>` of every response ≥ 400 the page drew
+ * @returns {{ failures: string[], notices: string[] }}
+ */
+export function pageFindings(name, viewportName, measured, httpErrors) {
+  const current = `${name}@${viewportName}`;
+  const failures = [];
+  const notices = [];
+  // A page whose own API call is refused shows an error state and otherwise
+  // measures clean: the 主动科研 page answered every load with a 400 through
+  // two walks that passed (2026-09-24).
+  const refused = httpErrors.filter((entry) => / \/api\//.test(entry));
+  if (refused.length) failures.push(`${current}: the page's API refused it: ${refused.join(", ")}`);
+  if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
+  if (measured.backOfficeHits.length) failures.push(`${current}: the back office on the page: ${measured.backOfficeHits.join(", ")}`);
+  if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
+  if (!measured.title || measured.title.trim() === "EviMed") failures.push(`${current}: the page has no title of its own`);
+  if (measured.subtitle.length) failures.push(`${current}: the page header has a subtitle: ${measured.subtitle.join(" / ")}`);
+  if (viewportName === "phone" && measured.overflowX) failures.push(`${current}: the page overflows horizontally at 390 px`);
+  if (viewportName === "desktop") {
+    const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[name] ?? {}) };
+    if (measured.controlKinds > budget.controls) failures.push(`${current}: ${measured.controlKinds} kinds of control (budget ${budget.controls})`);
+    if (measured.colorKinds > budget.colors) failures.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
+    if (measured.borderKinds > budget.borders) failures.push(`${current}: ${measured.borderKinds} kinds of border (budget ${budget.borders})`);
+    if (measured.pageLefts.length > 1) failures.push(`${current}: the page's blocks start on ${measured.pageLefts.length} left edges (${measured.pageLefts.join(", ")})`);
+    for (const lefts of measured.rowTitleLefts) {
+      if (lefts.length > 1) failures.push(`${current}: a list's row titles start on ${lefts.length} left edges (${lefts.join(", ")})`);
+    }
+    const pairs = measured.sizeWeightPairs ?? [];
+    if (pairs.length > TYPE_PAIR_NOTICE) notices.push(`${current}: ${pairs.length} font-size × weight pairs (rule ${TYPE_PAIR_NOTICE}): ${pairs.join(", ")}`);
+  }
+  return { failures, notices };
 }
 
 function required(name) {
@@ -204,6 +288,13 @@ function measure([leakSources, backOfficeSources]) {
   }
   const texty = all.filter((el) => [...el.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim()));
   const colors = texty.map((el) => getComputedStyle(el).color);
+  // Type pairs are counted in the page body, not the sidebar: the rule is
+  // about what a page sets, and the chrome is the same on every page.
+  const typeScope = document.querySelector("main") ?? document.body;
+  const sizeWeightPairs = [...new Set(texty.filter((el) => typeScope.contains(el)).map((el) => {
+    const cs = getComputedStyle(el);
+    return `${cs.fontSize}/${cs.fontWeight}`;
+  }))].sort();
   const controlLooks = all.filter((el) => el.matches("button, a, [role='button'], [role='tab'], select, input, summary")).map((el) => {
     const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
@@ -244,6 +335,7 @@ function measure([leakSources, backOfficeSources]) {
     controlKinds: kinds(controlLooks),
     colorKinds: kinds(colors),
     borderKinds: kinds(borders),
+    sizeWeightPairs,
     pageLefts,
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],
@@ -273,9 +365,22 @@ async function main() {
     args: ["--no-sandbox"],
   });
   const failures = [];
+  const notices = [];
   const report = { base, startedAt: new Date().toISOString(), pages: {} };
+  /** Per page view, the `start_runtime` calls the browser refused. */
+  const runtimeStartsRefused = {};
+  let current = "";
+  let allowRuntimeStart = false;
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: "zh-CN", timezoneId: "Asia/Shanghai" });
+    // The walk starts no runtime (F-G20): the shell warms the account's
+    // default runtime from every page. Refused here, before any page loads;
+    // let through only for the chat page, which cannot load without one.
+    await context.route(/\/api\/commands\/start_runtime(?:[/?]|$)/, (route) => {
+      if (allowRuntimeStart) return route.continue();
+      runtimeStartsRefused[current] = (runtimeStartsRefused[current] ?? 0) + 1;
+      return route.abort();
+    });
     const login = await context.request.post(`${base}/api/auth/login`, {
       data: { username, password }, headers: { "content-type": "application/json" },
     });
@@ -295,7 +400,6 @@ async function main() {
     const leaks = [...LEAKS, ...shoutedCapabilityKeys([...ids, "open-domain-answer"])];
     const routes = [...ROUTES, ...await geoProjectRoutes(context, base)];
     const page = await context.newPage();
-    let current = "";
     const consoleErrors = {};
     const httpErrors = {};
     page.on("console", (message) => { if (message.type() === "error") (consoleErrors[current] ||= []).push(message.text().slice(0, 160)); });
@@ -343,28 +447,11 @@ async function main() {
           await page.waitForTimeout(3_000);
           await page.screenshot({ path: path.join(out, `${current}.png`) });
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags])]);
-          report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
-          // A page whose own API call is refused shows an error state and
-          // otherwise measures clean: the 主动科研 page answered every load with
-          // a 400 through two walks that passed (2026-09-24).
-          const refused = (httpErrors[current] ?? []).filter((entry) => / \/api\//.test(entry));
-          if (refused.length) failures.push(`${current}: the page's API refused it: ${refused.join(", ")}`);
-          if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
-          if (measured.backOfficeHits.length) failures.push(`${current}: the back office on the page: ${measured.backOfficeHits.join(", ")}`);
-          if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
-          if (!measured.title || measured.title.trim() === "EviMed") failures.push(`${current}: the page has no title of its own`);
-          if (measured.subtitle.length) failures.push(`${current}: the page header has a subtitle: ${measured.subtitle.join(" / ")}`);
-          if (viewportName === "phone" && measured.overflowX) failures.push(`${current}: the page overflows horizontally at 390 px`);
-          if (viewportName === "desktop") {
-            const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[name] ?? {}) };
-            if (measured.controlKinds > budget.controls) failures.push(`${current}: ${measured.controlKinds} kinds of control (budget ${budget.controls})`);
-            if (measured.colorKinds > budget.colors) failures.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
-            if (measured.borderKinds > budget.borders) failures.push(`${current}: ${measured.borderKinds} kinds of border (budget ${budget.borders})`);
-            if (measured.pageLefts.length > 1) failures.push(`${current}: the page's blocks start on ${measured.pageLefts.length} left edges (${measured.pageLefts.join(", ")})`);
-            for (const lefts of measured.rowTitleLefts) {
-              if (lefts.length > 1) failures.push(`${current}: a list's row titles start on ${lefts.length} left edges (${lefts.join(", ")})`);
-            }
-          }
+          report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [],
+            runtimeStartsRefused: runtimeStartsRefused[current] ?? 0 };
+          const verdict = pageFindings(name, viewportName, measured, httpErrors[current] ?? []);
+          failures.push(...verdict.failures);
+          notices.push(...verdict.notices);
         } catch (error) {
           failures.push(`${current}: did not load (${String(error).slice(0, 120)})`);
         }
@@ -372,6 +459,7 @@ async function main() {
     }
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
+      allowRuntimeStart = true;
       await page.setViewportSize(VIEWPORTS[0][1]);
       const kernelMisses = [];
       page.on("response", (response) => {
@@ -401,9 +489,13 @@ async function main() {
     await browser.close();
   }
   report.failures = failures;
+  report.notices = notices;
+  report.runtimeStartsRefused = Object.values(runtimeStartsRefused).reduce((sum, count) => sum + count, 0);
   await writeFile(path.join(out, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   for (const failure of failures) console.log(`FAIL ${failure}`);
-  console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s); report and screenshots in ${out}`);
+  for (const notice of notices) console.log(`NOTICE ${notice}`);
+  console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s), ${notices.length} notice(s), `
+    + `${report.runtimeStartsRefused} runtime start(s) refused; report and screenshots in ${out}`);
   return failures.length ? 1 : 0;
 }
 
@@ -430,7 +522,11 @@ async function walkChat(page, base) {
   return { loaded: false, state: "no composer within two minutes" };
 }
 
-main().then((code) => process.exit(code), (error) => {
-  console.error(`walk failed: ${String(error).slice(0, 300)}`);
-  process.exit(2);
-});
+// Run only as a program: the tests import the budgets and the verdict. By
+// real path, because the host runs it through `current`, a symlink.
+if (process.argv[1] && realpathSync(path.resolve(process.argv[1])) === fileURLToPath(import.meta.url)) {
+  main().then((code) => process.exit(code), (error) => {
+    console.error(`walk failed: ${String(error).slice(0, 300)}`);
+    process.exit(2);
+  });
+}
