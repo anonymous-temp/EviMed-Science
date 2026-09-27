@@ -1,0 +1,120 @@
+# API-only: the memory capsule service, and nothing else of the product.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.api-only.yml up -d
+#
+# What runs: the control plane (`open-science-web`, API only), PostgreSQL (the
+# record store every memory lives in) and OpenViking (the derived recall index,
+# with its one-shot init). What does not: the browser application, the runtime
+# controller and every research runtime, and the six specialist engines. This is
+# the shape the TCM CDSS plan asks for — 「记忆胶囊以独立服务方式部署，通过接口与中医
+# CDSS 对接」 — where the CDSS is the only client and reaches memory through
+# `/api/agent-memory/v1` (docs/AGENT_MEMORY_API.md): recall with methods and
+# named capsules, episodes, notes, the doctor dashboard and prescription-edit
+# observations, per doctor through `X-Subject`. Habits learned from
+# observations are counted and written by the control plane itself, so no
+# runtime image is needed for them.
+#
+# Requirements and limits, each of which is a reason for a line below:
+#
+# - Docker Compose 2.20 or newer: the web service's dependencies on the
+#   runtime controller and the engines are marked `required: false` here, which
+#   is what lets it start without them. The runtime UI port the base file
+#   publishes stays bound to loopback with nothing behind it.
+# - The same `.env` as a full deployment. Compose interpolates the whole base
+#   file before it drops a service, so every `:?`-required variable must still
+#   be set; a host file for a service this overlay does not start may point at
+#   /dev/null (the Docker socket group, the Materials Project key, the release
+#   receipt).
+# - The agent-memory API is switched on here, and it publishes an account's
+#   memory to whoever holds one of its keys. Put a TLS terminator in front that
+#   forwards `/api/agent-memory/v1/` and, for the operator, `/api/auth/*`,
+#   `/api/me`, `/api/agent-keys` and `/api/capsules/*`; nothing else of the
+#   control plane needs to be reachable from outside.
+# - With no browser application, the operator works over HTTP with a session:
+#   sign in (`POST /api/auth/login`), read the CSRF token from `GET /api/me`
+#   and send it as `X-Open-Science-CSRF` on every write, then mint the CDSS's
+#   integration key with
+#   `POST /api/agent-keys {"name":"CDSS","scopes":["memory.read","memory.write","memory.manage","memory.observe"],"subjects":true}`
+#   and import the lineage packs (`scripts/ops/pack-lineage-capsule.mjs`) with
+#   `POST /api/capsules/transfers/preview` then `.../import`.
+# - Only the base file and this one. The product overlays (ingestion,
+#   knowledge, AgentBay, SaaS) add to what this one takes away; monitoring and
+#   backup combine with it.
+# - Research runs, learning from runs, proactive research, the frontier feed,
+#   GEO and the reviewer are off: each is a runtime client or a product surface
+#   this deployment does not have. Starting a run answers with the runtime's
+#   own refusal, never with a fake one (the runtime mode stays `kernel`).
+
+services:
+  open-science-web:
+    environment:
+      # No browser application: nothing is served from the static tree, and
+      # readiness skips the check it would otherwise fail.
+      OPEN_SCIENCE_STATIC_DIR: ""
+      # Every switch below is this shape's default, and .env still moves it
+      # (a lever written as a literal is one .env can no longer reach).
+      OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ${OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:-true}
+      # The kernel's own browser application, which only a runtime serves.
+      OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-false}
+      OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ${OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:-false}
+      # The engines are not composed; readiness must not require them.
+      OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS: ${OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS:-false}
+      # The two workers that start runs of their own: distillation and
+      # consolidation, and proactive research. Without a runtime each would
+      # dispatch into a refusal on its schedule. (Habits learned from
+      # prescription edits do not need the worker: the control plane counts
+      # and writes them when the observation arrives.)
+      OPEN_SCIENCE_LEARNING_ENABLED: ${OPEN_SCIENCE_LEARNING_ENABLED:-false}
+      OPEN_SCIENCE_AUTOPILOT_ENABLED: ${OPEN_SCIENCE_AUTOPILOT_ENABLED:-false}
+      # Product surfaces this shape does not have; off by default already.
+      # A .env copied from a full deployment that turns them on turns them on
+      # here too, so remove those lines from it.
+      OPEN_SCIENCE_FRONTIER_ENABLED: ${OPEN_SCIENCE_FRONTIER_ENABLED:-false}
+      OPEN_SCIENCE_GEO_ENABLED: ${OPEN_SCIENCE_GEO_ENABLED:-false}
+      OPEN_SCIENCE_REVIEW_ENABLED: ${OPEN_SCIENCE_REVIEW_ENABLED:-false}
+      OPEN_SCIENCE_IM_ENABLED: ${OPEN_SCIENCE_IM_ENABLED:-false}
+    # Merged into the base file's list: the same dependencies, no longer
+    # required, because their services are not started in this shape.
+    depends_on:
+      open-science-runtime-controller:
+        condition: service_healthy
+        required: false
+      evimed-meta-agent:
+        condition: service_healthy
+        required: false
+      evimed-mr-agent:
+        condition: service_healthy
+        required: false
+      evimed-bibliometric-agent:
+        condition: service_healthy
+        required: false
+      evimed-research-topic-agent:
+        condition: service_healthy
+        required: false
+      evimed-peer-review-agent:
+        condition: service_healthy
+        required: false
+      evimed-drug-safety-agent:
+        condition: service_healthy
+        required: false
+      evimed-drug-evidence-adapter:
+        condition: service_healthy
+        required: false
+
+  # Not started unless a profile names them, which nothing in this shape does.
+  open-science-runtime-controller:
+    profiles: ["full-product"]
+  evimed-meta-agent:
+    profiles: ["full-product"]
+  evimed-mr-agent:
+    profiles: ["full-product"]
+  evimed-bibliometric-agent:
+    profiles: ["full-product"]
+  evimed-research-topic-agent:
+    profiles: ["full-product"]
+  evimed-peer-review-agent:
+    profiles: ["full-product"]
+  evimed-drug-safety-agent:
+    profiles: ["full-product"]
+  evimed-drug-evidence-adapter:
+    profiles: ["full-product"]

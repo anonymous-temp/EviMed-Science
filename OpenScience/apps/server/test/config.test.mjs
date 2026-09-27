@@ -153,6 +153,13 @@ const FALLBACK_RULES = {
   // A feature module the hosted deployment turns on (the IM module, 2026-09-20):
   // off is the code's default because it needs a public URL and PostgreSQL.
   OPEN_SCIENCE_IM_ENABLED: ["deployment", "switch"],
+  // docker-compose.api-only.yml (2026-09-27): the memory capsule service alone.
+  // It turns on the one API it exists for and off the workers and warm-ups
+  // that would start runs in a runtime this shape does not have.
+  OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["deployment", "switch"],
+  OPEN_SCIENCE_LEARNING_ENABLED: ["deployment", "switch"],
+  OPEN_SCIENCE_AUTOPILOT_ENABLED: ["deployment", "switch"],
+  OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["deployment", "switch"],
   OPEN_SCIENCE_PUBLIC_URL: ["deployment", "url"],
   OPEN_SCIENCE_OPENVIKING_URL: ["deployment", "url"],
   OPEN_SCIENCE_DOCUMENT_PARSER_URL: ["deployment", "url"],
