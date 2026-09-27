@@ -222,10 +222,17 @@ export function rankChangeLabel(change: FrontierHotEvent["rankChange"]): string 
   return typeof change === "number" && change > 0 ? `↑${change}` : null;
 }
 
-/** 「3 小时前更新」, 「9/20更新」. */
+/**
+ * “3 小时前更新”, “9月20日更新”, “2025-09-20 更新”: a time that ends in a digit
+ * takes the typed half-width space before 更新 (spec §5.5).
+ */
+export function updatedText(when: string): string {
+  return /[A-Za-z0-9]$/.test(when) ? `${when} 更新` : `${when}更新`;
+}
+
 function updated(value: string | null, now: number): string | null {
   const when = ago(value, now);
-  return when ? `${when}更新` : null;
+  return when ? updatedText(when) : null;
 }
 
 /**
@@ -330,7 +337,7 @@ const FIRST_QUESTION: Readonly<Record<Grounds, string>> = Object.freeze({
 export function itemBrief(item: FrontierItem): string {
   const kind = [item.sourceTypeLabel, item.evidenceTypeLabel].filter(Boolean).join(" · ");
   const lines = [
-    `「${item.title}」`,
+    `“${item.title}”`,
     ...(item.titleZh && item.titleRaw !== item.titleZh ? [`原标题：${item.titleRaw}`] : []),
     `来源：${item.source.name}${kind ? `（${kind}）` : ""}`,
     ...item.flags.filter((flag) => ["preprint", "press-release", "retracted", "corrected"].includes(flag.key)).map((flag) => `注意：${flag.label}`),

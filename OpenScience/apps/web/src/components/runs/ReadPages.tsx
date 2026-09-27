@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { ExternalLink, FileText } from "lucide-react";
 import type { WebReadPage } from "@/lib/apiClient";
-import { formatDateTime } from "@/lib/format";
+import { formatClock, formatDate } from "@/lib/format";
 import { safeWebHref, snapshotHref } from "@/lib/readPages";
 import { cn } from "@/lib/cn";
 import { Tag } from "@/components/ui/Tag";
@@ -46,7 +46,7 @@ export function ReadPageCard({ page, runId, compact = false, showSnapshot = true
       <p className="flex flex-wrap items-center gap-x-1.5 text-caption text-muted">
         <span className="break-all">{page.site}</span>
         <span aria-hidden="true">·</span>
-        <time dateTime={page.fetchedAt}>{formatDateTime(page.fetchedAt)}</time>
+        <time dateTime={page.fetchedAt}>{formatDate(page.fetchedAt, "iso")} {formatClock(page.fetchedAt)}</time>
       </p>
       {showSnapshot && runId && page.snapshotPath && (
         <Link

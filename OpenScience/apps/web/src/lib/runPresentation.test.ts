@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
+import { compactTime, relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
 
 // The run ledger's presentation had no direct test (2026-09-16 review, D5):
 // every page that shows a run reads its title, its dot and its outcome here.
@@ -59,6 +59,12 @@ describe("the state a run is shown in", () => {
     expect(relativeTime(now - 30_000, now)).toBe("刚刚");
     expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3 小时前");
     expect(relativeTime(0, now)).toBe("");
+    // Older than a day: the spec's date forms, never Intl's 9/20 or 2025/9/20.
+    const today = new Date(now);
+    const earlier = new Date(today.getFullYear(), 0, 2, 9, 0).getTime();
+    if (now - earlier > 86_400_000) expect(relativeTime(earlier, now)).toBe("1月2日");
+    expect(relativeTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe("2020-09-20");
+    expect(compactTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe("2020-09-20");
   });
 });
 

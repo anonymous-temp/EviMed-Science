@@ -29,6 +29,7 @@ import {
   eventResearchDraft,
   institutionsLine,
   primaryHeld,
+  updatedText,
 } from "@/components/frontier/frontierText";
 
 type EventState =
@@ -152,7 +153,7 @@ function EventBody({ event }: { event: FrontierEvent }) {
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">
         {event.sourceCount72h > 0 && <span>{event.sourceCount72h} 家机构报道</span>}
         {event.sourceCount72h > 0 && updated && <span aria-hidden="true">·</span>}
-        {updated && <span>{updated}更新</span>}
+        {updated && <span>{updatedText(updated)}</span>}
         {specialty && <Tag className="ml-1">{specialty.label}</Tag>}
       </div>
 

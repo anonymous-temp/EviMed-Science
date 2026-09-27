@@ -1,5 +1,6 @@
 import { errorCodeMessage, runOutcomeKind } from "@evimed/domain";
 import type { WebAgentRun, WebAgentRunStatus } from "@/lib/apiClient";
+import { formatDate, formatDay } from "@/lib/format";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 
 export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
@@ -113,7 +114,9 @@ export function runMoment(run: Pick<WebAgentRun, "startedAt" | "finishedAt">): n
 
 /**
  * How long ago, in the words the lists use: 刚刚 / N 分钟前 / N 小时前, then a
- * date. The single implementation — the sidebar and the ledger each had one.
+ * date — 9月20日 this year, 2025-09-20 before (spec §14.3–§14.4; it used to be
+ * Intl's zh-CN default, 9/20 and 2025/9/20, which the spec rules out). The
+ * single implementation — the sidebar and the ledger each had one.
  */
 export function relativeTime(ms: number, now = Date.now()): string {
   if (!ms) return "";
@@ -121,14 +124,12 @@ export function relativeTime(ms: number, now = Date.now()): string {
   if (seconds < 60) return "刚刚";
   if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
   if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时前`;
-  const date = new Date(ms);
-  const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+  return formatDay(formatDate(ms, "iso"), new Date(now));
 }
 
 /**
- * A list's time column: 刚刚 / N 分钟 / N 小时 / 月/日 (and the year when it is
- * not this one) — the sidebar's one-line rows have room for no more.
+ * A list's time column: 刚刚 / N 分钟 / N 小时, then the day as `relativeTime`
+ * writes it — the sidebar's one-line rows have room for no more.
  */
 export function compactTime(ms: number, now = Date.now()): string {
   if (!ms) return "";
@@ -136,9 +137,7 @@ export function compactTime(ms: number, now = Date.now()): string {
   if (seconds < 60) return "刚刚";
   if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟`;
   if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时`;
-  const date = new Date(ms);
-  const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return sameYear ? `${date.getMonth() + 1}/${date.getDate()}` : `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  return formatDay(formatDate(ms, "iso"), new Date(now));
 }
 
 /**

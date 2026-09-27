@@ -12,7 +12,7 @@ const correction = { kind: "correction", noticeDoi: "10.1016/s0140-6736(04)15715
 describe("retraction and correction notices on a cited source", () => {
   it("says what happened to the work, when, who recorded it, and links the notice", () => {
     render(<SourceUpdateBadges updates={[retraction, correction]} />);
-    const retracted = screen.getByRole("link", { name: /该文献已撤稿（2010-02-06），据Retraction Watch记录/ });
+    const retracted = screen.getByRole("link", { name: /该文献已撤稿（2010-02-06），据 Retraction Watch 记录/ });
     expect(retracted).toHaveTextContent("已撤稿 · 2010-02-06");
     expect(retracted).toHaveAttribute("href", "https://doi.org/10.1016/s0140-6736(10)60175-4");
     expect(retracted.className).toMatch(/bg-danger-soft/);

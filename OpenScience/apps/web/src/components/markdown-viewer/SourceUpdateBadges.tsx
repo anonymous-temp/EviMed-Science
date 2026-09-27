@@ -27,9 +27,10 @@ export function SourceUpdateBadges({ updates, className }: {
       {shown.map((update, index) => {
         const label = SOURCE_UPDATE_LABELS_ZH[update.kind as keyof typeof SOURCE_UPDATE_LABELS_ZH];
         const withdrawn = SOURCE_UPDATE_WEIGHT[update.kind as keyof typeof SOURCE_UPDATE_WEIGHT] === "withdrawn";
-        const recorder = update.source === "retraction-watch" ? "Retraction Watch" : update.source === "publisher" ? "出版方" : null;
+        // A Latin name takes a typed space on both sides (spec §5.5).
+        const recorder = update.source === "retraction-watch" ? "据 Retraction Watch 记录" : update.source === "publisher" ? "据出版方记录" : null;
         const text = `${label}${update.date ? ` · ${update.date}` : ""}`;
-        const title = `该文献${label}${update.date ? `（${update.date}）` : ""}${recorder ? `，据${recorder}记录` : ""}。`;
+        const title = `该文献${label}${update.date ? `（${update.date}）` : ""}${recorder ? `，${recorder}` : ""}。`;
         // A retraction is a safety tag; a correction or an expression of
         // concern the amber one. Never a hand-made pill (2026-09-23 plan §4).
         const chip = cn(tagClasses({ tone: withdrawn ? "safety" : "warn" }), "gap-0.5");
