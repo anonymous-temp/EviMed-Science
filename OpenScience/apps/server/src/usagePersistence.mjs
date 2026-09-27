@@ -145,6 +145,27 @@ END $purpose$;
 -- whole ledger, which grows by every model request the platform makes.
 CREATE INDEX IF NOT EXISTS usage_model_requests_time_purpose_idx
   ON evimed_usage.model_requests(created_at,purpose);
+-- What an uncertain row counts for in the rolling spend windows (2026-09-27).
+-- The reservation is a worst-case ceiling (every prompt token uncached, the
+-- whole output allowance); on production it ran about 70 times what calls
+-- settled at, and an uncertain row used to hold all of it in every window it
+-- was inside. This is the caller's bounded estimate instead: the prompt as the
+-- reservation priced it plus the output the caller saw arrive. Written once,
+-- when a row becomes uncertain; never above the reservation; NULL when the
+-- caller saw nothing it could count, and the row then counts at its
+-- reservation as before. No backfill: nothing recorded what a past call had
+-- streamed. A constant-free nullable column is a catalogue-only change.
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS estimated_cost numeric(20,8);
+DO $estimate$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='evimed_usage.model_requests'::regclass AND conname='usage_model_requests_estimated_cost_check'
+  ) THEN
+    ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT usage_model_requests_estimated_cost_check
+      CHECK (estimated_cost IS NULL OR (estimated_cost >= 0 AND estimated_cost <= reserved_cost)) NOT VALID;
+    ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT usage_model_requests_estimated_cost_check;
+  END IF;
+END $estimate$;
 `;
 
 /** The purpose CHECK's current name, for the tests that pin the migration. */

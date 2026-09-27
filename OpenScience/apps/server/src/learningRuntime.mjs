@@ -457,7 +457,7 @@ export function createLearningRuntime({
       // Wait only for a request still in flight. An `uncertain` one is a request
       // whose settlement will never arrive — the stream was cut — and waiting on
       // it held the first successful distillation back for good (2026-09-21: 48
-      // settled calls, 1 uncertain). Its reserved cost still counts where caps do.
+      // settled calls, 1 uncertain). It still counts where caps do (usageLedger.mjs `OPEN_COST_VALUE`).
       if (usage.reservedCalls) return { status: "pending", reason: "learning_usage_unsettled" };
       if (!usage.settledCalls || !usage.modelId || usage.incompleteUsageCalls) {
         throw new HttpError(409, "learning_usage_invalid", "The learning run has no unambiguous settled model receipt.");

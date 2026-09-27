@@ -111,6 +111,35 @@ test("a spent budget is not asked again, and an editor without an owner makes no
   assert.equal(new FrontierEditor({ ...config, deepseekApiKey: "" }, { owner }).available, false);
 });
 
+test("a batch the provider fails with an error status is not asked again entry by entry", async () => {
+  // 2026-09-23: DeepSeek answered every call 402 for two hours, and each
+  // failing batch of twenty was asked again whole and then one entry at a
+  // time — 22 calls and 22 ledger rows a batch, booked uncertain then.
+  /** @param {number} status @param {string} code */
+  const provider = (status, code) => () => {
+    throw Object.assign(new Error(`HTTP ${status}`), { code, upstreamStatus: status });
+  };
+  const spent = stubModel([provider(402, "model_gateway_payment_required")]);
+  const balance = await new FrontierEditor(config, { owner, callModel: spent.callModel }).screen(batch(20));
+  assert.equal(spent.calls.length, 1, "a spent balance is not different a second later");
+  assert.deepEqual([...new Set(balance.errors.values())], ["model_gateway_payment_required"]);
+  assert.equal(balance.errors.size, 20);
+
+  const busy = stubModel([provider(503, "model_gateway_upstream_error"), provider(503, "model_gateway_upstream_error")]);
+  const overloaded = new FrontierEditor(config, { owner, callModel: busy.callModel });
+  const result = await overloaded.screen(batch(20));
+  assert.equal(busy.calls.length, 2, "a 5xx is asked again once, whole, and not split into twenty more");
+  assert.equal(result.errors.size, 20);
+  assert.equal(overloaded.counters.screenSingles, 0);
+
+  // A call that ran out of time may have been too big: that one is still split.
+  const slow = stubModel([refuse("frontier_model_timeout"), refuse("frontier_model_timeout"),
+    () => verdicts(1), () => verdicts(1)]);
+  const timed = await new FrontierEditor(config, { owner, callModel: slow.callModel }).screen(batch(2));
+  assert.equal(slow.calls.length, 4);
+  assert.equal(timed.verdicts.size, 2);
+});
+
 test("screening says whether a piece covers several stories, and it defaults to one", () => {
   const batch = [{ key: "a", title: "Pharmalittle: two read-outs and more", sourceName: "STAT", allowedLanes: ["evidence", "pipeline"] }];
   const digest = validateScreen(batch, { items: [{ id: "1", medical: true, news: true, lane: "pipeline", specialties: [], language: "en", digest: true }] });

@@ -84,6 +84,22 @@ test("the tail keeps the end of a large body without holding the body", () => {
   });
 });
 
+test("a stream's events are counted once each, however the chunks cut them, and keep-alives are not events", () => {
+  // What the gateway knows of the output a call produced when the call is
+  // lost before its usage frame (usageLedger.mjs OPEN_COST_VALUE).
+  const body = 'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n: keep-alive\n\n'
+    + Array.from({ length: 12 }, (_, index) => `data: {"choices":[{"delta":{"content":"t${index}"}}]}\r\n\r\n`).join("")
+    + ": keep-alive\n\n";
+  for (const size of [1, 2, 3, 5, 6, 7, 64, body.length]) {
+    const tail = createUsageTail(256, { stream: true });
+    for (let offset = 0; offset < body.length; offset += size) tail.observe(Buffer.from(body.slice(offset, offset + size)));
+    assert.equal(tail.streamedEvents(), 13, `chunks of ${size}`);
+  }
+  const json = createUsageTail(256);
+  json.observe('{"id":"x","choices":[{"message":{"content":"data: not an event"}}]}');
+  assert.equal(json.streamedEvents(), 0, "a JSON body has no events");
+});
+
 test("a large non-stream response incrementally retains top-level id and usage", () => {
   const body = JSON.stringify({
     id: "provider-large-response",

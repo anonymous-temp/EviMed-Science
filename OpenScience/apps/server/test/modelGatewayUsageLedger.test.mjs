@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
 import { REFERENCE_PRICE_LIST } from "@evimed/domain";
-import { callModelForControlPlane, createModelGatewayHandler, issueModelGatewayBudgetMarker } from "../src/modelGateway.mjs";
+import { callModelForControlPlane, createModelGatewayHandler, estimateModelReservation, issueModelGatewayBudgetMarker, uncertainCallCost } from "../src/modelGateway.mjs";
 import { providerRefusalCount } from "../src/providerRefusals.mjs";
 
 const signingSecret = "test-only-model-gateway-signing-secret-32-bytes";
@@ -238,6 +238,81 @@ test("a caller that leaves after the usage frame leaves a settled call; one that
     if (expected === "uncertain") assert.equal(events[1].code, "provider_response_incomplete", label);
     else assert.deepEqual(events[1].input.usage, { cacheHitTokens: 32, cacheMissTokens: 8, completionTokens: 5 }, label);
   }
+});
+
+test("an uncertain call is bounded by its prompt and the output that streamed past, never held at its whole reservation", async (t) => {
+  // The reservation prices every prompt token uncached and the whole output
+  // allowance — on production about 70 times what calls settled at. A call
+  // lost before its usage frame used to count at all of it in every spend
+  // window; it now carries what the gateway saw (usageLedger.mjs OPEN_COST_VALUE).
+  const events = [];
+  let sent = null;
+  const controller = new AbortController();
+  const response = await call(t, async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    sent = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write('data: {"id":"provider-cut","choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n'
+      + 'data: {"id":"provider-cut","choices":[{"index":0,"delta":{"content":"part"}}]}\n\n');
+    setTimeout(() => { if (!res.destroyed) res.end(`${USAGE_FRAME}data: [DONE]\n\n`); }, 300);
+  }, ledger(events), { messages: [{ role: "user", content: "Answer at length." }], stream: true }, manager(), controller.signal);
+  await readLikeTheKernel(response, controller, '"content":"part"');
+  await waitFor(() => events.some((event) => event.type !== "reserve"));
+  assert.deepEqual(events.map((event) => event.type), ["reserve", "uncertain"]);
+  const reserve = events[0].input;
+  const estimate = estimateModelReservation(sent, config("http://unused"), reserve.now);
+  assert.equal(estimate.cost, reserve.estimatedCost, "the estimate below is the reservation's own");
+  const bounded = events[1].input.estimatedCost;
+  assert.equal(bounded, uncertainCallCost(estimate, reserve.model, reserve.now, 2), "the prompt plus the two events that arrived");
+  assert.ok(bounded > 0 && bounded * 100 < reserve.estimatedCost, `${bounded} against a reservation of ${reserve.estimatedCost}`);
+
+  // An error answered before any output produced none: the prompt alone.
+  const failed = [];
+  let failedBody = null;
+  await (await call(t, async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    failedBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    res.writeHead(503, { "content-type": "application/json" });
+    res.end('{"error":{"message":"busy"}}');
+  }, ledger(failed), { messages: [{ role: "user", content: "Provider is busy." }] })).text();
+  assert.deepEqual(failed.map((event) => [event.type, event.code]).slice(1), [["uncertain", "provider_response_incomplete"]]);
+  const failedEstimate = estimateModelReservation(failedBody, config("http://unused"), failed[0].input.now);
+  assert.equal(failed[1].input.estimatedCost, uncertainCallCost(failedEstimate, failed[0].input.model, failed[0].input.now, 0));
+
+  // Lost before any answer: nothing was seen, so the reservation stands.
+  const lost = [];
+  await call(t, async (req) => {
+    for await (const _chunk of req) { /* consume before losing the connection */ }
+    req.socket.destroy();
+  }, ledger(lost), { messages: [{ role: "user", content: "Lost." }] });
+  assert.deepEqual(lost.map((event) => event.type), ["reserve", "uncertain"]);
+  assert.equal(lost[1].input.estimatedCost, null);
+});
+
+test("a control-plane call the provider fails before any output is bounded by its prompt; one lost on the way in keeps its reservation", async () => {
+  const body = { model: "deepseek-v4-flash", max_tokens: 3_000, messages: [{ role: "user", content: "Screen these twenty entries." }] };
+  const at = new Date("2026-09-23T08:00:00.000Z");
+  const events = [];
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger(events),
+    fetchImpl: async () => new Response("unavailable", { status: 503 }),
+  }, { userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", at, body }));
+  assert.deepEqual(events.map((event) => [event.type, event.code]).slice(1), [["uncertain", "provider_response_incomplete"]]);
+  const estimate = estimateModelReservation({ ...body, stream: false }, config("https://api.deepseek.com"), at);
+  assert.equal(events[1].input.estimatedCost, uncertainCallCost(estimate, body.model, at, 0));
+  assert.ok(events[1].input.estimatedCost < events[0].input.estimatedCost, "the output allowance it never used is not held");
+
+  // A JSON answer arrives only whole; one cut on the way in may have been
+  // generated in full, so nothing below the reservation can be claimed.
+  const cut = [];
+  await assert.rejects(callModelForControlPlane({
+    config: config("https://api.deepseek.com"), usageLedger: ledger(cut),
+    fetchImpl: async () => new Response(new ReadableStream({ start(stream) { stream.error(new Error("socket hang up")); } }), { status: 200 }),
+  }, { userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", at, body }));
+  assert.deepEqual(cut.map((event) => [event.type, event.code]).slice(1), [["uncertain", "provider_response_incomplete"]]);
+  assert.equal(cut[1].input.estimatedCost, null);
 });
 
 /** @param {() => boolean} predicate */

@@ -966,12 +966,16 @@ export class FrontierEditor {
     };
     /** @param {ScreenInput[]} group */
     const attempt = async (group) => {
-      try { return { verdicts: await ask(group), error: null }; }
-      catch (error) { return { verdicts: null, error: errorCode(error) }; }
+      try { return { verdicts: await ask(group), error: null, providerError: false }; }
+      catch (error) {
+        return { verdicts: null, error: errorCode(error), providerError: Number.isInteger(/** @type {any} */ (error)?.upstreamStatus) };
+      }
     };
     let whole = await attempt(items);
-    // A spent budget or a missing owner will not be different a second later.
-    const final = (/** @type {string | null} */ code) => code === "usage_budget_exceeded" || code === "frontier_editor_unavailable";
+    // A spent budget, a missing owner or a spent provider balance will not be
+    // different a second later.
+    const final = (/** @type {string | null} */ code) => code === "usage_budget_exceeded" || code === "frontier_editor_unavailable"
+      || code === "model_gateway_payment_required";
     if (!whole.verdicts && !final(whole.error)) {
       this.counters.screenRetries += 1;
       whole = await attempt(items);
@@ -980,7 +984,14 @@ export class FrontierEditor {
       for (const [key, verdict] of whole.verdicts) verdicts.set(key, verdict);
       return { verdicts, errors, calls };
     }
-    if (final(whole.error) || items.length === 1) {
+    // Entry by entry helps only when the batch itself was the trouble: an
+    // answer that did not fit it, or a call that ran out of time on its size.
+    // A provider that answered the call with an error status — a refused key,
+    // a rate limit, a 5xx — answers twenty smaller calls the same way, and
+    // each is one more request and one more ledger row. On 2026-09-23, while
+    // DeepSeek answered every call 402, each batch of twenty made 22 calls and
+    // 22 rows (then `uncertain`); the entries wait for the pipeline's own retry.
+    if (final(whole.error) || whole.providerError || items.length === 1) {
       for (const entry of items) errors.set(entry.key, whole.error ?? "frontier_screen_invalid");
       this.counters.screenFailures += items.length;
       return { verdicts, errors, calls };

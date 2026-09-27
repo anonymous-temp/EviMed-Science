@@ -462,6 +462,29 @@ export function estimateModelReservation(body, config, at = new Date(), { cached
 }
 
 /**
+ * What a call booked `uncertain` is counted at in the spend windows
+ * (usageLedger.mjs `OPEN_COST_VALUE`): its prompt as the reservation priced it
+ * — every token uncached that the caller did not know to be cached — plus the
+ * output the caller saw arrive, and never more than the reservation.
+ *
+ * Null when the caller cannot say how much output there was: a JSON answer
+ * arrives only whole, so one lost before it arrived may have been generated in
+ * full and billed. The ledger then holds the reservation, which is the bound.
+ * @param {ReturnType<typeof estimateModelReservation> | null} estimate the reservation's own estimate
+ * @param {string} model @param {Date} at when the call was made (the peak rate is the call's)
+ * @param {number | null} outputTokens output tokens seen; 0 when the provider answered an error before any output
+ * @returns {number | null}
+ */
+export function uncertainCallCost(estimate, model, at, outputTokens) {
+  if (!estimate || outputTokens == null || !Number.isFinite(outputTokens) || outputTokens < 0) return null;
+  const { cost } = priceUsage({
+    resourceType: "model", model, cacheHit: estimate.cacheHitTokens, cacheMiss: estimate.promptTokens - estimate.cacheHitTokens,
+    output: Math.min(Math.floor(outputTokens), estimate.outputTokens), peak: isPeak(at),
+  });
+  return Math.min(cost, estimate.cost);
+}
+
+/**
  * The prompt a conversation last sent, so the next request's reservation can
  * price the repeated prefix as cached. Keyed by the caller's token and the
  * conversation's opening messages — an agent loop resends its whole history
@@ -618,6 +641,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
     const abortController = new AbortController();
     let reservation = null;
     let reservationUserId = null;
+    /** @type {ReturnType<typeof estimateModelReservation> | null} */
+    let reservationEstimate = null;
+    let streamRequested = false;
     let providerDisposition = "not-dispatched";
     /** The provider's status when it answered with an error before any output. */
     let upstreamStatus = 0;
@@ -628,6 +654,14 @@ export function createModelGatewayHandler(config, runtimeManager, {
     let deliveredBytes = 0;
     let modelName = null;
     const requestStartedAt = new Date();
+    /** What an uncertain call is bounded at (`uncertainCallCost`): an error
+     *  answered before any output produced none; a stream shows its events as
+     *  they pass; a JSON body shows nothing until it is whole, so null. */
+    const uncertainEstimate = () => {
+      const output = providerDisposition === "rejected" ? 0
+        : providerDisposition === "accepted" && streamRequested && usageTail ? usageTail.streamedEvents() : null;
+      return uncertainCallCost(reservationEstimate, modelName, requestStartedAt, output);
+    };
     /** Book the provider's own count against the reservation. */
     const settleExact = async (exactUsage) => {
       const actual = priceUsage({
@@ -686,12 +720,14 @@ export function createModelGatewayHandler(config, runtimeManager, {
       const scoped = consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
       modelName = normalized.model;
+      streamRequested = normalized.stream === true;
       if (config.requireDurableUsageLedger === true && !usageLedger) {
         throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
       }
       if (usageLedger) {
         const prefixKey = prefixes.key(token, normalized);
         const estimate = estimateModelReservation(normalized, config, requestStartedAt, { cachedTokens: prefixes.cached(prefixKey) });
+        reservationEstimate = estimate;
         prefixes.remember(prefixKey, estimate.promptTokens);
         const fingerprint = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
         reservationUserId = caller.userId;
@@ -806,7 +842,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
         if (exactUsage) {
           await settleExact(exactUsage);
         } else {
-          await usageLedger.markUncertain(caller.userId, reservation.id, "response_usage_missing", { providerRequestId });
+          await usageLedger.markUncertain(caller.userId, reservation.id, "response_usage_missing", {
+            providerRequestId, estimatedCost: uncertainEstimate(),
+          });
         }
         usageTerminal = true;
       } else {
@@ -829,6 +867,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
           else {
             await closeUnsettledReservation(usageLedger, reservationUserId, reservation.id, {
               dispatched: providerDisposition !== "not-dispatched", status: upstreamStatus, providerRequestId,
+              estimatedCost: uncertainEstimate(),
             });
           }
           usageTerminal = true;
@@ -920,8 +959,10 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
   }
   let reservation = null;
+  /** @type {ReturnType<typeof estimateModelReservation> | null} */
+  let estimate = null;
   if (usageLedger) {
-    const estimate = estimateModelReservation(body, config, at);
+    estimate = estimateModelReservation(body, config, at);
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
       runId: call.runId ?? null, purpose: call.purpose,
@@ -994,10 +1035,16 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     // (a 402 from a spent balance, a 429, a 400) or never dispatched is a
     // release; dispatched and then lost is uncertain — the provider may have
     // billed it. Quietly dropping either would leave a reservation counting
-    // against the account's cap until the sweep expires it.
+    // against the account's cap until the sweep expires it. An error answered
+    // before any output (a 5xx) produced none, so it is bounded by its prompt;
+    // an answer lost on the way in may have been generated whole, so it keeps
+    // its reservation (`uncertainCallCost`).
     if (usageLedger && reservation) {
       try {
-        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus });
+        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, {
+          dispatched, status: refusedStatus,
+          estimatedCost: refusedStatus ? uncertainCallCost(estimate, body.model, at, 0) : null,
+        });
       } catch {
         process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
       }

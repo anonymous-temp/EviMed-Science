@@ -58,19 +58,107 @@ export const PROVIDER_REFUSAL_STATUSES = Object.freeze([400, 401, 402, 403, 404,
  * is settled on it before it gets here.
  * @param {{ release: Function, markUncertain: Function }} usageLedger
  * @param {string} userId @param {string} id
- * @param {{ dispatched: boolean, status?: number, providerRequestId?: string | null }} outcome
- *   `status` is the HTTP status of an answer that arrived without output; 0 when none did
+ * @param {{ dispatched: boolean, status?: number, providerRequestId?: string | null, estimatedCost?: number | null }} outcome
+ *   `status` is the HTTP status of an answer that arrived without output; 0 when none did.
+ *   `estimatedCost` is what the caller can bound an uncertain call at (`OPEN_COST_VALUE`); null when it saw nothing to count.
  */
-export function closeUnsettledReservation(usageLedger, userId, id, { dispatched, status = 0, providerRequestId = null }) {
+export function closeUnsettledReservation(usageLedger, userId, id, { dispatched, status = 0, providerRequestId = null, estimatedCost = null }) {
   if (!dispatched) return usageLedger.release(userId, id, "provider_not_accepted");
   if (PROVIDER_REFUSAL_STATUSES.includes(Number(status))) return usageLedger.release(userId, id, `provider_refused_${Number(status)}`);
-  return usageLedger.markUncertain(userId, id, "provider_response_incomplete", { providerRequestId });
+  return usageLedger.markUncertain(userId, id, "provider_response_incomplete", { providerRequestId, estimatedCost });
 }
+
+/**
+ * Rows this process booked `uncertain`, by the code that says why, for
+ * `/api/ops/metrics` (`open_science_usage_uncertain_total`).
+ *
+ * `provider_response_incomplete`: the call was sent and ended without the
+ * provider's count — a 5xx, a timeout, a connection or a caller lost before the
+ * usage frame. `response_usage_missing`: an answer arrived whole with no count.
+ * `reservation_expired`: nothing closed the reservation, because the process
+ * holding the call exited mid-call (a release) or its terminal write failed;
+ * the reconciliation sweep booked it.
+ *
+ * Hidden knowledge: production held 649 uncertain rows on 2026-09-27, and none
+ * of them was waiting on anything — each is already terminal, with
+ * `settled_at` set, and no provider count will ever arrive for it (DeepSeek
+ * has no per-request usage lookup). 645 were `provider_response_incomplete`,
+ * and the two bursts among them were two defects since fixed, not a steady
+ * rate: 479 frontier rows on 2026-09-23 (07–13 UTC), booked by
+ * `callModelForControlPlane` when every non-2xx answer was uncertain — the
+ * DeepSeek balance was exhausted from 11:49 UTC and every call was answered
+ * 402, and the feed's screening asked each failing batch of twenty again, then
+ * entry by entry, 22 calls a batch (released since, `PROVIDER_REFUSAL_STATUSES`,
+ * and no longer fanned out, `frontierEditor.screen`); and 125 learning and
+ * source-understanding rows on 2026-09-21, answers the kernel had read to
+ * `[DONE]` and dropped while the gateway waited for DeepSeek to close its body
+ * (fixed in `pipeModelGatewayBody`). What was left of their harm was the
+ * ceiling they held in the spend windows, which `OPEN_COST_VALUE` bounds; the
+ * rows stay `uncertain`, the honest state, and leave the windows by age. This
+ * counter is what makes the next burst visible while it happens rather than
+ * in a query four days later.
+ */
+const UNCERTAIN_CODES = Object.freeze(["provider_response_incomplete", "response_usage_missing", "reservation_expired"]);
+/** Seeded at zero, so the first booking shows as an increase; any code outside
+ *  the known set is counted as `other`, so the label set stays closed.
+ *  @type {Map<string, number>} */
+const uncertainBooked = new Map([...UNCERTAIN_CODES, "other"].map((code) => [code, 0]));
+
+/** @param {string} code @param {number} [rows] */
+function countUncertain(code, rows = 1) {
+  if (!(rows > 0)) return;
+  const label = uncertainBooked.has(code) ? code : "other";
+  uncertainBooked.set(label, (uncertainBooked.get(label) ?? 0) + rows);
+}
+
+/** How many rows this process has booked `uncertain` under `code`. @param {string} code */
+export function usageUncertainCount(code) {
+  return uncertainBooked.get(code) ?? 0;
+}
+
+/**
+ * The counts as the operator's metric family.
+ * @returns {{ name: string, help: string, type: "counter", series: Array<{ value: number, labels: Record<string, string> }> }}
+ */
+export function usageUncertainMetricFamily() {
+  return {
+    name: "open_science_usage_uncertain_total",
+    help: "Model requests this process booked uncertain (sent, no provider count), by code: provider_response_incomplete (lost before the usage frame: 5xx, timeout, dropped connection), response_usage_missing (an answer without a count), reservation_expired (never closed by its call; booked by the reconciliation sweep).",
+    type: "counter",
+    series: [...uncertainBooked].map(([code, value]) => ({ value, labels: { code } })),
+  };
+}
+
+/**
+ * What one open row counts for in a spend window, once `openCostPredicate`
+ * has said it counts at all.
+ *
+ * A reservation counts at its ceiling: the call is in flight and may yet
+ * spend all of it. An `uncertain` row counts at the bounded estimate recorded
+ * when it became uncertain (`estimated_cost`: the prompt as its reservation
+ * priced it plus the output its caller saw arrive, never above the
+ * reservation), and at its ceiling only where nothing could be counted — a
+ * JSON answer lost before it arrived, a row the sweep booked after its process
+ * died, a row older than the estimate.
+ *
+ * Why not the ceiling, as before: limits protect resources, not opinions. The
+ * ceiling prices every prompt token uncached and the whole output allowance;
+ * measured on production it ran about 70 times what calls settled at, so a
+ * handful of lost streams could hold an account's week at its cap for spend
+ * that never happened. Why not zero: the provider may well have billed the
+ * call, and the input and the output it streamed are what it most likely
+ * billed. The row keeps counting while it is inside the window, as a settled
+ * call would, and leaves it by age.
+ *
+ * Spliced into SQL; a constant, never built from input.
+ */
+export const OPEN_COST_VALUE = "(CASE status WHEN 'uncertain' THEN coalesce(estimated_cost,reserved_cost) ELSE reserved_cost END)";
 
 /** Cost a new call must respect on top of settled spend: a reservation counts
  *  until it expires, and an `uncertain` row counts while it is still inside the
- *  rolling window. `uncertain` used to count forever, so one truncated provider
- *  response removed that budget from the account permanently.
+ *  rolling window (each at `OPEN_COST_VALUE`). `uncertain` used to count
+ *  forever, so one truncated provider response removed that budget from the
+ *  account permanently.
  *  Written once because `reserveModel` and `assertWithinLimits` both ask this
  *  question and a divergence between them is invisible until it costs money.
  *
@@ -141,6 +229,7 @@ function record(row) {
     revision: Number(row.revision),
     reservedCost: Number(row.reserved_cost),
     actualCost: row.actual_cost == null ? null : Number(row.actual_cost),
+    estimatedCost: row.estimated_cost == null ? null : Number(row.estimated_cost),
     priced: row.priced,
     providerRequestId: row.provider_request_id,
     errorCode: row.error_code,
@@ -216,10 +305,10 @@ export class UsageLedger {
       const totals = await client.query(`SELECT
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open,
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
-          WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS run_committed
+          WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS run_committed
         FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($4::text[])`,
       [values.userId, values.now, values.runId, [...UNCAPPED_USAGE_PURPOSES]]);
       const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].day_open);
@@ -328,18 +417,27 @@ export class UsageLedger {
   }
 
   /** @param {string} userId @param {string} id @param {string} errorCode */
-  async release(userId, id, errorCode) { return this.#terminal(userId, id, "released", errorCode, null); }
+  async release(userId, id, errorCode) { return this.#terminal(userId, id, "released", errorCode, null, null); }
 
-  /** @param {string} userId @param {string} id @param {string} errorCode @param {{providerRequestId?:string|null}} options */
-  async markUncertain(userId, id, errorCode, { providerRequestId = null } = {}) {
-    return this.#terminal(userId, id, "uncertain", errorCode, providerRequestId);
+  /**
+   * @param {string} userId @param {string} id @param {string} errorCode
+   * @param {{providerRequestId?:string|null,estimatedCost?:number|null}} options
+   *   `estimatedCost` is the caller's bound on what the call may have cost (the
+   *   prompt as reserved plus the output it saw arrive); stored no higher than
+   *   the reservation, and what the row then counts for in the spend windows
+   *   (`OPEN_COST_VALUE`). Null when the caller saw nothing it could count.
+   */
+  async markUncertain(userId, id, errorCode, { providerRequestId = null, estimatedCost = null } = {}) {
+    return this.#terminal(userId, id, "uncertain", errorCode, providerRequestId, estimatedCost);
   }
 
-  async #terminal(userId, id, status, errorCode, providerRequestId) {
+  async #terminal(userId, id, status, errorCode, providerRequestId, estimatedCost) {
     const code = text(errorCode, "error code", 120);
     const provider = providerRequestId == null ? null : text(providerRequestId, "provider request id", 512);
+    const estimate = status !== "uncertain" || estimatedCost == null ? null : money(estimatedCost, "estimated cost");
     await migrateUsageLedger(this.database);
-    return this.database.transaction(async (client) => {
+    let booked = false;
+    const row = await this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${productId(userId, "user")}`]);
       const current = await this.#locked(client, userId, id);
       if (current.status === status && current.error_code === code && current.provider_request_id === provider) return record(current);
@@ -352,11 +450,18 @@ export class UsageLedger {
       if (current.status !== "reserved" && !sweptPlaceholder) {
         throw new HttpError(409, "usage_settlement_conflict", "The request already reached another state.");
       }
+      // The estimate is clamped here, in the row's own terms, because the
+      // reservation is the one number both sides agree bounds the call.
       const result = await client.query(`UPDATE evimed_usage.model_requests SET status=$2,revision=revision+1,
-        error_code=$3,provider_request_id=$4,settled_at=clock_timestamp() WHERE id=$1 RETURNING *`,
-      [current.id, sweptPlaceholder ? current.status : status, code, provider]);
+        error_code=$3,provider_request_id=$4,
+        estimated_cost=CASE WHEN $5::numeric IS NULL THEN estimated_cost ELSE LEAST(reserved_cost,$5::numeric) END,
+        settled_at=clock_timestamp() WHERE id=$1 RETURNING *`,
+      [current.id, sweptPlaceholder ? current.status : status, code, provider, estimate]);
+      booked = status === "uncertain" && current.status === "reserved";
       return record(result.rows[0]);
     });
+    if (booked) countUncertain(code);
+    return row;
   }
 
   /** Move reservations whose settlement never arrived out of `reserved`.
@@ -420,6 +525,7 @@ export class UsageLedger {
         failedAccounts += 1;
       }
     }
+    countUncertain("reservation_expired", reconciled);
     const rest = await this.database.query(`SELECT count(*)::integer AS remaining FROM evimed_usage.model_requests
       WHERE status='reserved' AND reservation_expires_at <= coalesce($1::timestamptz,clock_timestamp())`, [at]);
     return { reconciled, remaining: Number(rest.rows[0]?.remaining ?? 0), failedAccounts };
@@ -442,7 +548,7 @@ export class UsageLedger {
       count(*) FILTER (WHERE status='uncertain')::integer AS uncertain_calls,
       coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS actual_cost,
       coalesce(sum(reserved_cost) FILTER (WHERE status IN ('reserved','uncertain')),0) AS reserved_cost,
-      coalesce(sum(reserved_cost) FILTER (WHERE status='uncertain'),0) AS uncertain_cost,
+      coalesce(sum(coalesce(estimated_cost,reserved_cost)) FILTER (WHERE status='uncertain'),0) AS uncertain_cost,
       coalesce(sum(cache_hit_tokens) FILTER (WHERE status='settled'),0) AS cache_hit_tokens,
       coalesce(sum(cache_miss_tokens) FILTER (WHERE status='settled'),0) AS cache_miss_tokens,
       coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
@@ -456,8 +562,10 @@ export class UsageLedger {
       since: at, totalCalls: row.total_calls, reservedCalls: row.reserved_calls, settledCalls: row.settled_calls,
       releasedCalls: row.released_calls, uncertainCalls: row.uncertain_calls,
       actualCost: Number(row.actual_cost), reservedCost: Number(row.reserved_cost),
-      // What the uncertain calls alone hold of the account's limits: their
-      // reserved ceilings, since the provider never reported what they used.
+      // What the uncertain calls alone are counted at where the account's
+      // limits count them: their bounded estimates, or their reserved ceilings
+      // where nothing could be counted (`OPEN_COST_VALUE`), since the provider
+      // never reported what they used.
       uncertainCost: Number(row.uncertain_cost), currency: "CNY",
       cacheHitTokens: Number(row.cache_hit_tokens), cacheMissTokens: Number(row.cache_miss_tokens),
       completionTokens: Number(row.output_tokens), unpricedCalls: row.unpriced_calls,
@@ -614,8 +722,8 @@ export class UsageLedger {
       const result = await client.query(`SELECT
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open
         FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])
           AND ($4::text[] IS NULL OR purpose = ANY($4::text[]))`,
       [user, at, [...UNCAPPED_USAGE_PURPOSES], only]);

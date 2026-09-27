@@ -47,7 +47,7 @@ import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
-import { UsageLedger } from "./usageLedger.mjs";
+import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
 import { accountUsageRuns } from "./accountUsageRuns.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
@@ -6362,6 +6362,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // pages (providerRefusals.mjs, alert ModelProviderBalanceExhausted).
   const refusals = providerRefusalMetricFamily();
   addMetric(lines, refusals.name, refusals.help, refusals.type, refusals.series);
+  // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
+  // provider or a caller losing calls, and shows here while it happens.
+  const uncertain = usageUncertainMetricFamily();
+  addMetric(lines, uncertain.name, uncertain.help, uncertain.type, uncertain.series);
 
   return `${lines.join("\n")}\n`;
 }

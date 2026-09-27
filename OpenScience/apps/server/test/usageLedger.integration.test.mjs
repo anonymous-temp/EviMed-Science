@@ -29,20 +29,22 @@ const capped = `usage_${randomUUID()}`;
 // Again its own account: this one deletes a project out from under settled
 // spend and then asserts what the caps still count.
 const orphaned = `usage_${randomUUID()}`;
+// Its own account: the bounded-estimate test asserts exact window totals.
+const bounded = `usage_${randomUUID()}`;
 let database;
 let ledger;
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 8, databaseConnectionTimeoutMs: 2_000 });
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development'),($4,'Capped owner','development'),($5,'Orphaned owner','development')", [owner, other, stale, capped, orphaned]);
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576),($4,'default','Capped',1048576),($5,'doomed','Doomed',1048576)", [owner, other, stale, capped, orphaned]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development'),($4,'Capped owner','development'),($5,'Orphaned owner','development'),($6,'Bounded owner','development')", [owner, other, stale, capped, orphaned, bounded]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576),($4,'default','Capped',1048576),($5,'doomed','Doomed',1048576),($6,'default','Bounded',1048576)", [owner, other, stale, capped, orphaned, bounded]);
   ledger = new UsageLedger(database);
 });
 
 after(async () => {
   if (!database) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale, capped, orphaned]]);
+  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale, capped, orphaned, bounded]]);
   await database.close();
 });
 
@@ -231,6 +233,39 @@ test("an uncertain reservation leaves the rolling budget window instead of holdi
   const reserved = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.4, dailyLimit: 0.5, weeklyLimit: 0.5 }));
   assert.equal(reserved.status, "reserved");
   await ledger.release(stale, reserved.id, "test_cleanup");
+});
+
+test("an uncertain row holds the windows at its bounded estimate, never above its reservation, and at the reservation only when nothing was counted", options, async () => {
+  // The reservation is a worst-case ceiling (about 70 times what production
+  // calls settled at); a lost call used to hold all of it for a week.
+  const lost = await ledger.reserveModel(reservation(bounded, { estimatedCost: 0.6 }));
+  const marked = await ledger.markUncertain(bounded, lost.id, "provider_response_incomplete", { estimatedCost: 0.05 });
+  assert.equal(marked.status, "uncertain");
+  assert.equal(marked.estimatedCost, 0.05);
+  assert.deepEqual(await ledger.assertWithinLimits(bounded, { dailyLimit: 0.5, weeklyLimit: 0.5 }), { allowed: true },
+    "the 0.6 ceiling of a call that streamed almost nothing no longer holds the account at its cap");
+  await assert.rejects(ledger.assertWithinLimits(bounded, { dailyLimit: 0.05 }), { code: "usage_budget_exceeded" },
+    "it still counts: the provider may have billed the prompt it read");
+  const fits = await ledger.reserveModel(reservation(bounded, { estimatedCost: 0.4, dailyLimit: 0.5, weeklyLimit: 0.5 }));
+  await ledger.release(bounded, fits.id, "test_cleanup");
+
+  // Clamped to the reservation, whatever the caller claims.
+  const small = await ledger.reserveModel(reservation(bounded, { estimatedCost: 0.02 }));
+  assert.equal((await ledger.markUncertain(bounded, small.id, "provider_response_incomplete", { estimatedCost: 9 })).estimatedCost, 0.02);
+  // Nothing counted (a JSON answer lost on the way in): the reservation, as before.
+  const blind = await ledger.reserveModel(reservation(bounded, { estimatedCost: 0.3 }));
+  assert.equal((await ledger.markUncertain(bounded, blind.id, "provider_response_incomplete")).estimatedCost, null);
+
+  // 0.05 + 0.02 + 0.3, in both windows and in what the account is told it holds.
+  await assert.rejects(ledger.assertWithinLimits(bounded, { dailyLimit: 0.37 }), { code: "usage_budget_exceeded" });
+  assert.deepEqual(await ledger.assertWithinLimits(bounded, { dailyLimit: 0.38, weeklyLimit: 0.38 }), { allowed: true });
+  assert.equal((await ledger.summary(bounded)).uncertainCost, 0.37);
+  // And it leaves by age like any other: eight days on, nothing is held.
+  await database.query("UPDATE evimed_usage.model_requests SET created_at=now()-interval '8 days' WHERE user_id=$1", [bounded]);
+  assert.deepEqual(await ledger.assertWithinLimits(bounded, { dailyLimit: 0.01, weeklyLimit: 0.01 }), { allowed: true });
+  // The constraint holds the rule where the code does not reach.
+  await assert.rejects(database.query("UPDATE evimed_usage.model_requests SET estimated_cost=reserved_cost+1 WHERE id=$1", [blind.id]),
+    { code: "23514" });
 });
 
 test("an expired reservation is reconciled to uncertain rather than left stranded", options, async () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { UsageLedger, openCostPredicate, openCostWindows } from "../src/usageLedger.mjs";
+import { OPEN_COST_VALUE, UsageLedger, openCostPredicate, openCostWindows, usageUncertainCount, usageUncertainMetricFamily } from "../src/usageLedger.mjs";
 
 // These tests run without PostgreSQL. They drive the real UsageLedger against a
 // database double that records every statement, so what is asserted is the SQL
@@ -299,7 +299,7 @@ test("a late terminal call replaces the sweep's placeholder cause and keeps its 
   assert.equal(marked.status, "uncertain");
   assert.equal(marked.errorCode, "response_usage_missing", "the real cause must not be lost behind the placeholder");
   const update = database.calls.find((call) => call.text.startsWith("UPDATE evimed_usage.model_requests SET status=$2"));
-  assert.deepEqual(update.params, ["req-1", "uncertain", "response_usage_missing", "provider-late"]);
+  assert.deepEqual(update.params, ["req-1", "uncertain", "response_usage_missing", "provider-late", null]);
 
   const releasing = terminalDatabase(sweptRow);
   const released = await new UsageLedger(releasing).release("owner", "req-1", "provider_refused");
@@ -335,4 +335,70 @@ test("a run receipt reports lifetime open cost, not the windowed budget term", a
     "a finished run's receipt must not change as its rows age out of a rolling window");
   assert.ok(!query.text.includes("reservation_expires_at"),
     "the receipt reports open cost, not the cost a new call would be charged");
+});
+
+test("an uncertain row counts in every spend window at its bounded estimate, its reservation only where none was recorded", async () => {
+  const database = fakeDatabase(budgetResponder);
+  const ledger = new UsageLedger(database);
+  await ledger.reserveModel(reservation({ runId: "run-1", runLimit: 0, dailyLimit: 0, weeklyLimit: 0 }));
+  await ledger.assertWithinLimits("owner", { dailyLimit: 10, now: new Date("2026-09-06T00:00:00.000Z") });
+  const budget = database.calls.filter((call) => call.text.includes("day_settled"));
+  assert.equal(budget.length, 2);
+  for (const call of budget) {
+    assert.ok(!/THEN reserved_cost ELSE 0/.test(call.text), "no window may count an open row at its bare ceiling");
+    for (const window of [openCostWindows.day, openCostWindows.week]) {
+      assert.ok(call.text.includes(`WHEN ${openCostPredicate(window, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END`),
+        `the ${window} term values its open rows through the one shared rule`);
+    }
+  }
+  assert.ok(budget[0].text.includes(`WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END`),
+    "the per-run cap values its open rows the same way");
+  assert.equal(OPEN_COST_VALUE, "(CASE status WHEN 'uncertain' THEN coalesce(estimated_cost,reserved_cost) ELSE reserved_cost END)");
+});
+
+test("the estimate an uncertain row carries is stored no higher than its reservation, and a release carries none", async () => {
+  const marking = terminalDatabase(reservedRow);
+  await new UsageLedger(marking).markUncertain("owner", "req-1", "provider_response_incomplete", { estimatedCost: 0.0123 });
+  const update = marking.calls.find((call) => call.text.startsWith("UPDATE evimed_usage.model_requests SET status=$2"));
+  assert.match(update.text, /estimated_cost=CASE WHEN \$5::numeric IS NULL THEN estimated_cost ELSE LEAST\(reserved_cost,\$5::numeric\) END/);
+  assert.deepEqual(update.params, ["req-1", "uncertain", "provider_response_incomplete", null, 0.0123]);
+
+  const releasing = terminalDatabase(reservedRow);
+  await new UsageLedger(releasing).release("owner", "req-1", "provider_refused_402");
+  assert.equal(releasing.calls.find((call) => call.text.startsWith("UPDATE ")).params[4], null, "a released call holds nothing");
+
+  await assert.rejects(new UsageLedger(terminalDatabase(reservedRow)).markUncertain("owner", "req-1", "provider_response_incomplete", { estimatedCost: -1 }),
+    { code: "usage_payload_invalid" });
+});
+
+test("every row booked uncertain is counted by its code, once, for the operator's metrics", async () => {
+  const before = usageUncertainCount("provider_response_incomplete");
+  await new UsageLedger(terminalDatabase(reservedRow)).markUncertain("owner", "req-1", "provider_response_incomplete");
+  assert.equal(usageUncertainCount("provider_response_incomplete"), before + 1);
+
+  // A late diagnosis of a row the sweep already booked is not a second booking.
+  const late = usageUncertainCount("response_usage_missing");
+  await new UsageLedger(terminalDatabase(sweptRow)).markUncertain("owner", "req-1", "response_usage_missing");
+  assert.equal(usageUncertainCount("response_usage_missing"), late);
+
+  const expired = usageUncertainCount("reservation_expired");
+  const database = fakeDatabase((text) => {
+    if (text.startsWith("SELECT user_id,id FROM evimed_usage.model_requests")) {
+      return { rows: [{ user_id: "owner", id: "req-1" }, { user_id: "owner", id: "req-2" }], rowCount: 2 };
+    }
+    if (text.startsWith("UPDATE evimed_usage.model_requests")) return { rows: [{ id: "req-1" }, { id: "req-2" }], rowCount: 2 };
+    if (text.includes("AS remaining")) return { rows: [{ remaining: 0 }], rowCount: 1 };
+    return undefined;
+  });
+  await new UsageLedger(database).reconcileExpiredReservations({ limit: 10 });
+  assert.equal(usageUncertainCount("reservation_expired"), expired + 2);
+
+  const family = usageUncertainMetricFamily();
+  assert.equal(family.name, "open_science_usage_uncertain_total");
+  assert.equal(family.type, "counter");
+  assert.deepEqual(family.series.map((sample) => sample.labels.code).sort(),
+    ["other", "provider_response_incomplete", "reservation_expired", "response_usage_missing"], "a closed label set, seeded at zero");
+  const unknown = usageUncertainCount("other");
+  await new UsageLedger(terminalDatabase(reservedRow)).markUncertain("owner", "req-1", "some_new_code");
+  assert.equal(usageUncertainCount("other"), unknown + 1, "an unforeseen code is counted, under `other`");
 });

@@ -107,6 +107,12 @@ const SSE_DONE_EVENT = /(?:^|\n)data: ?\[DONE\][ \t]*\r?\n\r?\n/;
 export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
   let tail = "";
   let finished = false;
+  let events = 0;
+  // The last characters of what came before, so a `data:` split across two
+  // chunks is seen exactly once: five of them cannot hold the six-character
+  // marker, so no marker is counted twice. It starts as a line break because
+  // the body's first line opens an event too.
+  let lineCarry = "\n";
   const envelope = stream ? null : createTopLevelReceipt(maxBytes);
   return {
     /** @param {Uint8Array | string} chunk */
@@ -118,11 +124,24 @@ export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
       // Only the new bytes and the few before them can complete the sentinel,
       // so a long answer is not re-scanned once per chunk.
       if (stream && !finished) finished = SSE_DONE_EVENT.test(tail.slice(-(value.length + 32)));
+      if (stream) {
+        const text = lineCarry + value;
+        for (let at = text.indexOf("\ndata:"); at !== -1; at = text.indexOf("\ndata:", at + 1)) events += 1;
+        lineCarry = text.slice(-5);
+      }
     },
     /** Whether a stream has delivered its `[DONE]` event, blank line included:
      *  everything after it is the provider closing the connection. */
     finished() {
       return finished;
+    },
+    /** How many SSE events a stream has carried so far (0 for a JSON body).
+     *  The provider streams output a token or so per event, so this is what the
+     *  gateway knows of the output a call produced when the call is lost before
+     *  its usage frame. It errs high by the opening role event and the closing
+     *  ones; keep-alive comments are not events and are not counted. */
+    streamedEvents() {
+      return events;
     },
     usage() {
       return envelope ? envelope.usage() : parseModelUsage(tail);
