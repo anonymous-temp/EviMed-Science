@@ -74,7 +74,7 @@ export function ShortcutHelp() {
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- click-outside dismisses the panel; the keyboard equivalent is the global Escape handler above.
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim pt-[16vh]"
+      className="fixed inset-0 z-modal flex items-start justify-center bg-scrim pt-[16vh]"
       onClick={() => setOpen(false)}
     >
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation only, so clicks inside do not dismiss; no activation semantics here. */}
@@ -85,7 +85,7 @@ export function ShortcutHelp() {
           aria-modal="true"
           aria-label="键盘快捷键"
           tabIndex={-1}
-          className="w-full max-w-md rounded-panel border border-border bg-surface shadow-modal outline-none"
+          className="w-full max-w-md rounded-panel border border-border bg-surface shadow-e3 outline-none"
         >
           <header className="flex h-11 items-center gap-2 border-b border-border px-4">
             <h2 className="flex-1 text-ui font-medium text-text">键盘快捷键</h2>

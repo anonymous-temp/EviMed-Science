@@ -34,7 +34,7 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "group inline-flex shrink-0 items-center gap-2 text-ui text-text-2 outline-none disabled:cursor-not-allowed disabled:opacity-40",
+        "group inline-flex shrink-0 items-center gap-2 text-ui text-text-2 outline-none disabled:cursor-not-allowed disabled:opacity-disabled",
         className,
       )}
     >

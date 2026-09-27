@@ -24,10 +24,10 @@ import { Tag } from "./Tag";
 const BORDER = /(^|\s)border(\s|$)/;
 
 describe("Tag", () => {
-  it("is a 20 px, borderless label, red only for safety", () => {
+  it("is a 22 px, borderless label, red only for safety", () => {
     render(<><Tag>RCT</Tag><Tag tone="safety">安全警示</Tag></>);
     const tag = screen.getByText("RCT");
-    expect(tag).toHaveClass("h-5", "rounded-tag", "text-meta", "bg-surface-2");
+    expect(tag).toHaveClass("h-tag", "rounded-tag", "text-meta", "bg-surface-2");
     expect(tag.className).not.toMatch(BORDER);
     expect(screen.getByText("安全警示")).toHaveClass("bg-danger-soft", "text-danger-strong");
   });
@@ -39,7 +39,8 @@ describe("IconButton", () => {
     render(<IconButton icon={Pencil} label="编辑" onClick={onClick} size="sm" />);
     const button = screen.getByRole("button", { name: "编辑" });
     expect(button).toHaveAttribute("title", "编辑");
-    expect(button).toHaveClass("h-6", "w-6");
+    // 28 in a row, 36 in a header (appendix E #9).
+    expect(button).toHaveClass("h-sm", "w-7");
     await userEvent.click(button);
     expect(onClick).toHaveBeenCalledOnce();
   });
@@ -64,6 +65,8 @@ describe("FilterChips", () => {
     // Six inline chips and the 「更多」 chip.
     expect(chips).toHaveLength(7);
     for (const chip of chips) expect(chip.className).not.toMatch(BORDER);
+    // 28 px and 13 px text (spec §20.3, appendix E #10).
+    for (const chip of chips) expect(chip).toHaveClass("h-sm", "text-compact");
     expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
 
     await userEvent.click(screen.getByRole("button", { name: /更多/ }));
@@ -109,6 +112,20 @@ describe("Tabs", () => {
 });
 
 describe("ListRow", () => {
+  // Appendix E #27: 500 renders as 400 in Microsoft YaHei, so unread was
+  // invisible on Windows. Unread is 600.
+  it("sets an unread title in 600, a weight every Chinese face has", () => {
+    render(
+      <List>
+        <ListRow title="研究已完成" unread />
+        <ListRow title="已读的通知" />
+      </List>,
+    );
+    expect(screen.getByText("研究已完成")).toHaveClass("font-semibold");
+    expect(screen.getByText("研究已完成").className).not.toMatch(/font-medium/);
+    expect(screen.getByText("已读的通知").className).not.toMatch(/font-(medium|semibold)/);
+  });
+
   it("makes the title the row's target and keeps its actions clickable", async () => {
     const onEdit = vi.fn();
     render(
@@ -181,6 +198,8 @@ describe("SearchInput", () => {
     render(<SearchInput label="搜索工具" />);
     const box = screen.getByRole("searchbox", { name: "搜索工具" });
     expect(box).toHaveAttribute("placeholder", "搜索工具");
-    expect(box).toHaveClass("h-8", "bg-surface-2");
+    expect(box).toHaveClass("h-control", "bg-surface-2");
+    render(<SearchInput label="搜索记忆" size="sm" />);
+    expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveClass("h-sm");
   });
 });

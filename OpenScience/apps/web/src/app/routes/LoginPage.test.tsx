@@ -82,8 +82,8 @@ describe("LoginPage", () => {
       expect(field.parentElement?.querySelector("svg")).toBeNull();
     }
     expect(container.textContent).not.toMatch(/循证医学科研智能体|个人知识库|科研工作空间|不替代临床诊疗/);
-    // The form's primary button is the one 40 px control.
-    expect(screen.getByRole("button", { name: "登录" })).toHaveClass("h-10");
+    // The form's primary button is the one 44 px control.
+    expect(screen.getByRole("button", { name: "登录" })).toHaveClass("h-form-primary");
   });
 
   it("redirects an existing session straight into the workbench", async () => {

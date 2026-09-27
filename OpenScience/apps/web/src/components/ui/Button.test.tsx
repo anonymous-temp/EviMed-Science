@@ -41,8 +41,9 @@ describe("Button", () => {
         </Button>
       </>,
     );
-    // 32 is a page's control height (md); `sm` is 24, inside a row.
-    expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-8");
+    // 36 is a page's control height (md); `sm` is 28 with 13 px text, inside a
+    // row (spec §16.3, appendix E #9).
+    expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-control", "text-ui");
     // No outline buttons: the secondary look is a grey ground, and `ghost` is its retired name.
     for (const name of ["次按钮", "旧名"]) {
       const button = screen.getByRole("button", { name });
@@ -50,13 +51,13 @@ describe("Button", () => {
       expect(button.className).not.toMatch(/(^|\s)border(\s|$)/);
     }
     expect(screen.getByRole("button", { name: "移除" })).toHaveClass("bg-transparent", "text-danger");
-    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-6");
+    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-sm", "text-compact");
   });
 
   it("merges caller classes with conflict resolution", () => {
     render(<Button className="h-11 w-full">宽按钮</Button>);
     expect(screen.getByRole("button", { name: "宽按钮" })).toHaveClass("h-11", "w-full");
-    expect(screen.getByRole("button", { name: "宽按钮" })).not.toHaveClass("h-8");
+    expect(screen.getByRole("button", { name: "宽按钮" })).not.toHaveClass("h-control");
   });
 
   it("loading shows a spinner, sets aria-busy and disables the button", () => {
@@ -83,7 +84,7 @@ describe("buttonClasses", () => {
     expect(buttonClasses({ variant: "danger", size: "sm" })).toContain("bg-error");
     expect(buttonClasses({ className: "w-full" })).toContain("w-full");
     expect(buttonClasses()).toContain("bg-accent");
-    // 40 px is a form's primary button and nothing else.
-    expect(buttonClasses({ size: "lg" })).toContain("h-10");
+    // 44 px is a form's primary action and nothing else.
+    expect(buttonClasses({ size: "lg" })).toContain("h-form-primary");
   });
 });

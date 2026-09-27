@@ -50,7 +50,7 @@ export function SeverityBadge({
       <span
         data-severity={level}
         title={word}
-        className={cn("inline-flex h-5 items-center rounded-tag px-1.5 text-meta font-semibold", TONES[level])}
+        className={cn("inline-flex h-tag items-center rounded-tag px-1.5 text-meta font-semibold", TONES[level])}
       >
         {level}
         {/* The grade alone says nothing to a reader who cannot see the colour,

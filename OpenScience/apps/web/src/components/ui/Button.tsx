@@ -14,8 +14,12 @@ import { cn } from "@/lib/cn";
  *    confirmation and nowhere else. A destructive action that is not the
  *    view's main one is `secondary` or `text` with `destructive`.
  *
- * Heights: 24 inside a row (`sm`), 32 on a page (`md`), 40 for a form's
- * primary button (`lg`). The shell mixed 28 / 32 / 36 / 40 / 44 on one screen.
+ * Heights (spec §16.3, appendix E #9): 28 inside a row, a table or a toolbar
+ * (`sm`, 13 px text), 36 on a page, a form, a dialog (`md`, the default), 44
+ * for a form's primary action and the login (`lg`) — the heights the Vue
+ * shell's Element Plus theme already had, so one product has one set. They
+ * are the token heights (`h-sm` / `h-control` / `h-form-primary`), not steps
+ * of the spacing scale. The 2026-09-23 set was 24 / 32 / 40.
  *
  * `ghost` is the retired name of `secondary`; it renders the new look so a
  * page nobody has touched yet loses its border with everyone else's.
@@ -36,10 +40,11 @@ const variantClasses: Record<Exclude<ButtonVariant, "ghost">, string> = {
   danger: "bg-error text-error-fg hover:bg-danger-strong active:bg-danger-strong",
 };
 
+// Padding 10 / 14 / 18 and icon gap 4 / 6 / 8, from the size table (§16.3).
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-6 gap-1 px-2 text-ui", // 24 — inside a row
-  md: "h-8 gap-1.5 px-3 text-ui", // 32 — a page's controls
-  lg: "h-10 gap-2 px-4 text-ui", // 40 — a form's primary button
+  sm: "h-sm gap-1 px-2.5 text-compact", // 28 — inside a row, a table, a toolbar
+  md: "h-control gap-1.5 px-3.5 text-ui", // 36 — a page's controls, a form, a dialog
+  lg: "h-form-primary gap-2 px-[18px] text-ui", // 44 — a form's primary action, the login
 };
 
 export function buttonClasses({
@@ -59,7 +64,7 @@ export function buttonClasses({
     "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded font-medium outline-none transition-colors duration-fast",
     // No ring here: the global `:focus-visible` outline in index.css draws the
     // 2 px focus ring on every control alike.
-    "disabled:cursor-not-allowed disabled:opacity-40",
+    "disabled:cursor-not-allowed disabled:opacity-disabled",
     variantClasses[look],
     destructive && look !== "primary" && look !== "danger" && "text-danger hover:text-danger",
     sizeClasses[size],

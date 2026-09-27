@@ -3,9 +3,11 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
- * A button that is only an icon: 24 inside a row, 32 in a page header or the
- * sidebar. The label is required, because it is the button's whole name —
- * it becomes the accessible name and the tooltip.
+ * A button that is only an icon: 28 inside a row, a table or the composer's
+ * toolbar (`sm`), 36 in a page header, the sidebar or a dialog's corner
+ * (`md`) — spec §17.2, appendix E #9; the icon is 16 either way. The label is
+ * required, because it is the button's whole name — it becomes the accessible
+ * name and the tooltip.
  *
  * There were three hand-written recipes (32, 28 and 24 px, two different
  * hover grounds, `rounded` and `rounded-input` mixed) across a dozen files.
@@ -29,8 +31,8 @@ export function iconButtonClasses({ size = "md", destructive = false, active = f
 } = {}): string {
   return cn(
     "inline-grid shrink-0 place-items-center rounded text-text-3 outline-none transition-colors duration-fast",
-    "hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40",
-    size === "sm" ? "h-6 w-6" : "h-8 w-8",
+    "hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-disabled",
+    size === "sm" ? "h-sm w-7" : "h-control w-9",
     destructive && "hover:text-danger",
     active && "bg-surface-2 text-text",
     className,

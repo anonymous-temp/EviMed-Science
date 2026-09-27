@@ -113,7 +113,7 @@ export function DataTable<T>({
                   key={column.key}
                   scope="col"
                   className={cn(
-                    "sticky top-0 z-10 bg-bg px-2 pb-2 pt-1 text-compact font-normal text-text-3",
+                    "sticky top-0 z-sticky bg-bg px-2 pb-2 pt-1 text-compact font-normal text-text-3",
                     column.align === "right" ? "text-right" : "text-left",
                     column.width,
                   )}

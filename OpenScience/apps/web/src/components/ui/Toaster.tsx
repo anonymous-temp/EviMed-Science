@@ -4,17 +4,22 @@ import { useToastStore, type Toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
 /**
- * Bottom-center stack of transient notifications (download saved/failed, …).
- * A11y (P1-7, spec §11.4): success toasts are polite live regions, errors are
- * assertive alerts; hovering or keyboard-focusing a toast pauses its
- * auto-dismiss; long messages expand on click; toasts can carry an action
- * (e.g. undo) next to an explicit close button.
+ * Bottom-center stack of transient notifications (a download saved or not).
+ *
+ * Spec §22.1: one card whatever it reports — a surface, a hairline edge,
+ * `shadow-e2` — and the status is the icon's to say (a green `CheckCircle2`,
+ * a red `XCircle`), not a coloured border (appendix E #7). A success is a
+ * polite `status`, an error an assertive `alert`; neither takes focus.
+ * Hovering or focusing a toast pauses its timer; a long message expands on
+ * click; a toast can carry one action (撤销) beside its close button. It sits
+ * on the toast tier (`z-toast`), above a dialog, and rises 8 px as it arrives
+ * — a pure fade under reduced motion.
  */
 export function Toaster() {
   const { toasts, dismiss, pause, resume } = useToastStore();
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2">
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-toast flex flex-col items-center gap-2">
       {toasts.map((t) => (
         <ToastCard
           key={t.id}
@@ -49,10 +54,7 @@ function ToastCard({
       onMouseLeave={onResume}
       onFocus={onPause}
       onBlur={onResume}
-      className={cn(
-        "pointer-events-auto flex min-h-9 max-w-[70vw] items-center gap-2 rounded-card border px-3 py-2 text-ui shadow-pop",
-        isError ? "border-danger bg-surface text-error" : "border-ok bg-surface text-text",
-      )}
+      className="pointer-events-auto flex min-h-9 max-w-[70vw] animate-toast-in items-center gap-2 rounded-card border border-border bg-surface px-3 py-2 text-ui text-text shadow-e2"
     >
       {isError ? (
         <XCircle size={16} className="shrink-0 text-error" aria-hidden="true" />
@@ -82,7 +84,7 @@ function ToastCard({
       <button
         type="button"
         aria-label="关闭"
-        className="shrink-0 text-muted hover:text-text"
+        className="shrink-0 text-text-3 hover:text-text"
         onClick={onDismiss}
       >
         <X size={16} aria-hidden="true" />

@@ -35,7 +35,11 @@ describe("Input", () => {
     expect(container.firstElementChild).toBe(input);
     expect(input).not.toHaveAttribute("aria-invalid");
     // The control boundary token (3:1), not the decorative hairline.
-    expect(input).toHaveClass("border-strong");
+    expect(input).toHaveClass("border-border-control");
+    // Focus is an outline forced colours can paint, never a ring shadow
+    // (appendix E #1).
+    expect(input).toHaveClass("focus:outline-focus", "focus:outline-1", "focus:-outline-offset-2");
+    expect(input.className).not.toMatch(/ring-/);
   });
 
   it("forwards refs, values and change handlers", async () => {
@@ -76,7 +80,12 @@ describe("Textarea", () => {
 
 describe("class helpers", () => {
   it("share the control look for selects and custom controls", () => {
-    expect(inputClasses()).toContain("h-8");
+    // 36 on a page, 28 in a table or a toolbar (appendix E #9).
+    expect(inputClasses()).toContain("h-control");
+    expect(inputClasses({ size: "sm" })).toContain("h-sm");
+    expect(inputClasses({ size: "sm" })).not.toContain("h-control");
+    // A caller's own height replaces the primitive's rather than sitting beside it.
+    expect(inputClasses({ className: "h-7" })).not.toContain("h-control");
     expect(inputClasses({ error: true })).toContain("border-error");
     expect(textareaClasses()).toContain("resize-y");
     expect(inputClasses({ className: "pl-9" })).toContain("pl-9");

@@ -79,7 +79,11 @@ export function ListRow({
   actions?: ReactNode;
   /** A `Menu`, always visible. */
   menu?: ReactNode;
-  /** Unread: the title is set in the medium weight. */
+  /**
+   * Unread: the title is set in 600. Not 500 — Microsoft YaHei has no 500 cut,
+   * so on Windows a 500 title renders at 400 and unread looked read (spec
+   * §5.3, appendix E #27).
+   */
   unread?: boolean;
   /** Read or inactive: the title steps down to the secondary colour. */
   muted?: boolean;
@@ -90,7 +94,7 @@ export function ListRow({
   const stretched = "after:absolute after:inset-0 after:rounded after:content-['']";
   const titleClass = cn(
     "min-w-0 text-left text-ui",
-    unread ? "font-medium text-text" : muted ? "text-text-2" : "text-text",
+    unread ? "font-semibold text-text" : muted ? "text-text-2" : "text-text",
   );
   // `data-row-title` is what the release walk measures: every title in a
   // list must start on one left edge (scripts/ops/ui-walk.mjs).

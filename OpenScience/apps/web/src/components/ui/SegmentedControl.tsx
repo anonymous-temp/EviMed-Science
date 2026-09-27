@@ -8,8 +8,12 @@ import { cn } from "@/lib/cn";
  * selection — focus follows selection, as in a native radio group. Fully
  * controlled: `value` + `onChange`.
  *
- * Visual: a 32 px inset track (the control height) with the selected segment
- * lifted onto the surface — one implementation, no second copy to drift.
+ * Visual (spec §20.2): an inset track at the height of the row it sits in —
+ * 36 (`md`, the default) or 28 (`sm`) — with the selected segment lifted onto
+ * the surface. Keyboard focus is the global outline, not a `ring-*` shadow
+ * that forced-colours mode would erase (appendix E #1); the selected
+ * segment's hairline ring is decoration, and forced colours underline the
+ * checked radio instead (the token package's accessibility layer).
  */
 export interface SegmentedControlOption<T extends string> {
   value: T;
@@ -21,12 +25,15 @@ export function SegmentedControl<T extends string>({
   onChange,
   options,
   "aria-label": ariaLabel,
+  size = "md",
   className,
 }: {
   value: T;
   onChange: (value: T) => void;
   options: SegmentedControlOption<T>[];
   "aria-label": string;
+  /** The height of the row it sits in: `md` 36, `sm` 28. */
+  size?: "sm" | "md";
   className?: string;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
@@ -62,7 +69,11 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
-      className={cn("inline-flex h-8 items-center rounded border border-strong bg-surface-1 p-0.5", className)}
+      className={cn(
+        "inline-flex items-stretch rounded border border-border-control bg-surface-1 p-0.5",
+        size === "sm" ? "h-sm" : "h-control",
+        className,
+      )}
     >
       {options.map((option, i) => {
         const checked = option.value === value;
@@ -77,9 +88,9 @@ export function SegmentedControl<T extends string>({
             className={cn(
               // A control nested in another wears the outer radius minus the
               // padding: 8 - 2 = 6.
-              "h-7 rounded-md px-3 text-ui outline-none transition-colors",
-              "focus-visible:ring-2 focus-visible:ring-focus",
-              checked ? "bg-surface font-medium text-text ring-1 ring-border" : "text-muted hover:text-text",
+              "rounded-md px-3 outline-none transition-colors duration-fast",
+              size === "sm" ? "text-compact" : "text-ui",
+              checked ? "bg-surface font-medium text-text ring-1 ring-border" : "text-text-3 hover:text-text",
             )}
           >
             {option.label}

@@ -88,7 +88,9 @@ export function Menu({
             event.preventDefault();
             requestAnimationFrame(() => enabled()[0]?.focus());
           }}
-          className={cn("z-50 min-w-40 rounded-card border border-border bg-surface p-1 shadow-pop outline-none", className)}
+          // The popover tier (60), above a dialog, so a menu opened inside one
+          // is still seen (spec §7.4); drops 4 px as it opens.
+          className={cn("z-popover min-w-40 animate-menu-in rounded-card border border-border bg-surface p-1 shadow-e2 outline-none", className)}
         >
           <div ref={list} role="menu" aria-label={label} tabIndex={-1} onKeyDown={onKeyDown} className="flex flex-col outline-none">
             {items.map((item, index) => item === "separator" ? (
@@ -106,7 +108,7 @@ export function Menu({
                 }}
                 className={cn(
                   "flex h-8 w-full items-center gap-2 rounded px-2 text-left text-ui outline-none transition-colors duration-fast",
-                  "hover:bg-surface-2 focus-visible:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40",
+                  "hover:bg-surface-2 focus-visible:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-disabled",
                   item.destructive ? "text-danger" : "text-text",
                 )}
               >

@@ -7,25 +7,26 @@ import { Menu } from "@/components/ui/Menu";
  * Filters: one row of quiet chips, and what does not fit goes into a chip of
  * the same kind that opens a menu (2026-09-23 plan §4).
  *
- * A chip is 32 px high, 14 px text, fully round, with no border: unselected it
- * is plain text, selected it sits on the grey ground. The frontier feed used
- * to wrap into a second row that held nothing but 「只看收藏」, beside a native
- * select dressed as a pill (inventory §2.1, §2.5). One dimension, one control:
- * a single-choice dimension is `FilterChips` (six chips at most, the rest in
- * 「更多 ▾」), another dimension is a `FilterSelect` at the row's end, and an
+ * A chip is 28 px high, 13 px text (`text-compact`), fully round, with no
+ * border (spec §20.3, appendix E #10 — it was 32 / 14): unselected it is plain
+ * text, selected it sits on the grey ground. The frontier feed used to wrap
+ * into a second row that held nothing but “只看收藏”, beside a native select
+ * dressed as a pill (inventory §2.1, §2.5). One dimension, one control: a
+ * single-choice dimension is `FilterChips` (six chips at most, the rest in
+ * “更多 ▾”), another dimension is a `FilterSelect` at the row's end, and an
  * on/off filter is a `FilterChip` with `pressed`.
  */
 
 export interface FilterOption<V extends string = string> {
   value: V;
   label: string;
-  /** A count after the label (「未读 2」). */
+  /** A count after the label (“未读 2”). */
   count?: number;
 }
 
 export function filterChipClasses({ selected = false, className }: { selected?: boolean; className?: string } = {}): string {
   return cn(
-    "inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 text-ui outline-none transition-colors duration-fast",
+    "inline-flex h-sm shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 text-compact outline-none transition-colors duration-fast",
     selected ? "bg-surface-2 font-medium text-text hover:bg-surface-3" : "text-text-2 hover:bg-surface-2 hover:text-text",
     className,
   );

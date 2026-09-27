@@ -2,34 +2,47 @@ import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type Texta
 import { cn } from "@/lib/cn";
 
 /**
- * Text field primitives (P2-1, spec §7): default / focus(accent border + ring)
- * / error(error border + message slot below) / disabled. Both forward refs and
- * take an optional `label` (associated via id) and `error` (wired with
- * aria-invalid + aria-errormessage).
+ * Text field primitives (spec §18.2): default / focus / error (error border +
+ * message slot below) / disabled. Both forward refs and take an optional
+ * `label` (associated via id) and `error` (wired with aria-invalid +
+ * aria-errormessage).
  *
  * With neither `label` nor `error` they render the bare control, so existing
  * label-wrapping markup (icon inputs, search boxes) can adopt them in place.
  * `inputClasses` exposes the same look for <select> and read-only displays.
  *
- * 32 px tall and 8 px round — the control height and radius of DESIGN.md, so a
- * field, the button beside it and the kernel's own inputs line up.
+ * 36 px tall (`h-control`; appendix E #9) and 8 px round, so a field, the
+ * button beside it and the kernel's own inputs line up. 16 px text below
+ * 768 px, so iOS does not zoom the page when a field takes focus (§18.1).
+ *
+ * Focus is the border turning `--focus` plus a 1 px inner line of the same
+ * colour — 2 px in all — and the line is an *outline*, not a `ring-*` box
+ * shadow: forced-colours mode removes shadows, and the field's focus went with
+ * it (appendix E #1). The global rule gives every text field a transparent
+ * outline; these utilities colour it and pull it inside the border.
  */
 
 const controlBase = cn(
-  "w-full rounded border bg-surface px-3 text-ui text-text outline-none transition-colors",
-  "placeholder:text-muted disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted",
+  "w-full rounded border bg-surface px-3 text-ui text-text outline-none transition-colors duration-fast max-md:text-body",
+  "placeholder:text-text-3 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-3",
+  "focus:outline-1 focus:-outline-offset-2",
 );
 
 function borderClasses(error: boolean): string {
   return error
-    ? "border-error focus:border-error focus-visible:ring-1 focus-visible:ring-danger"
-    // `border-strong`: a text field's edge is the only thing that says where
+    ? "border-error focus:border-error focus:outline-error"
+    // `border-control`: a text field's edge is the only thing that says where
     // it is, so it gets the 3:1 control boundary, not the decorative hairline.
-    : "border-strong focus:border-focus focus-visible:ring-1 focus-visible:ring-focus";
+    : "border-border-control focus:border-focus focus:outline-focus";
 }
 
-export function inputClasses({ error = false, className }: { error?: boolean; className?: string } = {}): string {
-  return cn(controlBase, "h-8", borderClasses(error), className);
+export function inputClasses({ error = false, size = "md", className }: {
+  error?: boolean;
+  /** `md` 36 on a page or a form; `sm` 28 inside a table or a toolbar. */
+  size?: "sm" | "md";
+  className?: string;
+} = {}): string {
+  return cn(controlBase, size === "sm" ? "h-sm" : "h-control", borderClasses(error), className);
 }
 
 export function textareaClasses({ error = false, className }: { error?: boolean; className?: string } = {}): string {

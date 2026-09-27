@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { TOAST_DURATIONS } from "@evimed/design-tokens";
 
 /** Optional CTA on a toast (e.g. undo) — clicking it also dismisses the toast. */
 export interface ToastAction {
@@ -21,14 +22,27 @@ interface ToastState {
   toasts: Toast[];
   push: (tone: Toast["tone"], message: string, options?: ToastOptions) => void;
   dismiss: (id: number) => void;
-  /** Hovering or focusing a toast pauses its auto-dismiss timer (P1-7). */
+  /** Hovering or focusing a toast pauses its auto-dismiss timer. */
   pause: (id: number) => void;
   resume: (id: number) => void;
 }
 
+/** At most three on screen; a fourth sends the oldest away early (spec §22.1). */
+export const MAX_TOASTS = 3;
+
+/**
+ * How long a toast stays, from the token table (`TOAST_DURATIONS`, spec
+ * §22.1, appendix E #7): a success 5 s, one that carries an action (撤销,
+ * 查看) 10 s — long enough to reach the button — and an error until it is
+ * closed. An error that left by itself after six seconds was an error a reader
+ * who looked away never saw. `null` means no timer.
+ */
+export function toastDuration(tone: Toast["tone"], hasAction: boolean): number | null {
+  if (tone === "error") return TOAST_DURATIONS.error > 0 ? TOAST_DURATIONS.error : null;
+  return hasAction ? TOAST_DURATIONS.action : TOAST_DURATIONS.success;
+}
+
 let nextId = 1;
-/** Errors stay up longer — they carry the "what went wrong" detail (P1-7). */
-const TOAST_MS: Record<Toast["tone"], number> = { success: 3500, error: 6000 };
 
 interface Timer {
   handle: ReturnType<typeof setTimeout>;
@@ -38,7 +52,7 @@ interface Timer {
 }
 const timers = new Map<number, Timer>();
 
-export const useToastStore = create<ToastState>((set) => {
+export const useToastStore = create<ToastState>((set, get) => {
   const remove = (id: number) => {
     const timer = timers.get(id);
     if (timer) clearTimeout(timer.handle);
@@ -52,8 +66,11 @@ export const useToastStore = create<ToastState>((set) => {
     toasts: [],
     push: (tone, message, options) => {
       const id = nextId++;
+      // The oldest leaves first, even an error: a fourth message is newer news.
+      for (const old of get().toasts.slice(0, Math.max(0, get().toasts.length - (MAX_TOASTS - 1)))) remove(old.id);
       set((s) => ({ toasts: [...s.toasts, { id, tone, message, action: options?.action }] }));
-      schedule(id, TOAST_MS[tone]);
+      const ms = toastDuration(tone, Boolean(options?.action));
+      if (ms !== null) schedule(id, ms);
     },
     dismiss: remove,
     // Idempotent: pointer/focus moving across the toast's children may fire

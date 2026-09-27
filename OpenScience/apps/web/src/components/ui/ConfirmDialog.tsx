@@ -3,14 +3,20 @@ import { trapTab } from "@/lib/focusTrap";
 import { Button } from "@/components/ui/Button";
 
 /**
- * The one confirmation dialog: a 16 px panel on the scrim, 24 px inside, the
- * two buttons at the standard control height. `window.confirm` cannot be
- * styled, translated or focus-managed, so destructive actions ask here.
+ * The one confirmation dialog: a 16 px panel on the scrim, 24 px inside, a
+ * 16 / 600 title, a 14 px body in `text-2`, the two buttons at the standard
+ * control height. `window.confirm` cannot be styled, translated or
+ * focus-managed, so destructive actions ask here.
  *
- * Focus management (P1-7, spec §11.3): initial focus lands on 取消 (the safe
- * choice), Tab is trapped inside the dialog, Enter confirms, Escape / clicking
- * the overlay cancels, and closing returns focus to the element that opened
- * the dialog.
+ * Focus management (spec §22.7): initial focus lands on 取消 (the safe
+ * choice), Tab is trapped inside the dialog, Escape / clicking the overlay
+ * cancels, and closing returns focus to the element that opened the dialog.
+ *
+ * Enter is the focused button's and nobody else's. It used to be mapped to
+ * "confirm" whenever focus was not on a button (appendix E #4) — so a stray
+ * Enter on the panel deleted what the dialog was asking about. Now Enter on
+ * 取消, where focus starts, cancels, and confirming a destruction takes a
+ * deliberate move to the red button.
  */
 export function ConfirmDialog({
   title,
@@ -38,19 +44,16 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const bodyId = useId();
-  // Always call the latest callbacks from the mount-once effect below, so a
+  // Always call the latest callback from the mount-once effect below, so a
   // parent re-render neither re-focuses nor re-arms the key listener.
-  const callbacks = useRef({ onConfirm, onCancel });
-  callbacks.current = { onConfirm, onCancel };
+  const cancel = useRef(onCancel);
+  cancel.current = onCancel;
 
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") callbacks.current.onCancel();
-      // Enter confirms from anywhere in the dialog — except when a button has
-      // focus, because that button's own click would fire the callback twice.
-      if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) callbacks.current.onConfirm();
+      if (e.key === "Escape") cancel.current();
       if (e.key === "Tab") trapTab(dialogRef.current, e);
     };
     document.addEventListener("keydown", onKey);
@@ -65,7 +68,7 @@ export function ConfirmDialog({
     // and the keyboard equivalent is Escape. role="presentation" keeps it
     // out of the accessibility tree.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -77,14 +80,14 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className="w-full max-w-sm rounded-panel border border-border bg-surface p-6 shadow-modal"
+        className="w-full max-w-[400px] rounded-panel border border-border bg-surface p-6 shadow-e3"
       >
-        <h2 id={titleId} className="text-ui font-semibold text-text">{title}</h2>
-        <p id={bodyId} className="mt-2 text-ui text-muted">
+        <h2 id={titleId} className="text-body font-semibold text-text">{title}</h2>
+        <p id={bodyId} className="mt-2 text-ui text-text-2">
           {body}
         </p>
         <div className="mt-6 flex justify-end gap-2">
-          <Button ref={cancelRef} variant="ghost" onClick={onCancel}>
+          <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
             取消
           </Button>
           <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>

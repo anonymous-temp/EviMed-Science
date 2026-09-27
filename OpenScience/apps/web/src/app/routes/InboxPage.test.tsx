@@ -136,7 +136,7 @@ it("offers 「标为已读」 on the row, including one that carries actions", a
   open();
   const mark = await screen.findByRole("button", { name: "标为已读" });
   // An icon, shown with the row's other quiet actions on hover or focus.
-  expect(mark).toHaveClass("h-6", "w-6");
+  expect(mark).toHaveClass("h-sm", "w-7");
   await userEvent.click(mark);
   await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledWith("with-action", 1));
   expect(api.announceInboxChanged).toHaveBeenCalled();

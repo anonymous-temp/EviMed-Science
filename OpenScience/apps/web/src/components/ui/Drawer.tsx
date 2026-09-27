@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { focusableIn, trapTab } from "@/lib/focusTrap";
+import { IconButton } from "@/components/ui/IconButton";
 
 /**
  * A panel that slides over the page from the right: a capability's card, a
@@ -67,7 +68,7 @@ export function Drawer({
     // equivalent, bound above; role="presentation" keeps it out of the tree.
     <div
       role="presentation"
-      className="fixed inset-0 z-40 flex justify-end bg-scrim"
+      className="fixed inset-0 z-drawer flex justify-end bg-scrim"
       onClick={(event) => { if (event.target === event.currentTarget) close.current(); }}
     >
       <div
@@ -78,7 +79,9 @@ export function Drawer({
         aria-label={bare && typeof title === "string" ? title : undefined}
         aria-describedby={description && !bare ? descriptionId : undefined}
         className={cn(
-          "flex h-full w-full flex-col border-l border-border bg-surface shadow-modal motion-safe:animate-drawer-in",
+          // Slides in 24 px; a pure fade under reduced motion (the distance
+          // token is 0 there), which is why this is not `motion-safe:` only.
+          "flex h-full w-full flex-col border-l border-border bg-surface shadow-e3 animate-drawer-in",
           widthClassName,
           className,
         )}
@@ -93,15 +96,9 @@ export function Drawer({
                 {description && <p id={descriptionId} className="mt-1 text-caption text-muted">{description}</p>}
               </div>
               {actions}
-              <button
-                ref={closeRef}
-                type="button"
-                onClick={() => close.current()}
-                aria-label="关闭"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
+              {/* The dialog's corner close: a 36 px icon button (spec §17.2). */}
+              <IconButton ref={closeRef} icon={X} label="关闭" onClick={() => close.current()} />
+
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{children}</div>
           </>

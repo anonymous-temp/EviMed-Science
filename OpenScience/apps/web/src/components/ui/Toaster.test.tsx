@@ -34,8 +34,22 @@ describe("Toaster", () => {
     expect(screen.getByText("hover me")).toBeInTheDocument();
 
     fireEvent.mouseOut(card);
-    act(() => vi.advanceTimersByTime(3000));
+    act(() => vi.advanceTimersByTime(4000));
     expect(screen.queryByText("hover me")).not.toBeInTheDocument();
+  });
+
+  // Appendix E #7: the status is the icon's to say; the card is one card with
+  // a hairline edge whatever it reports, and an error reads in the body colour.
+  it("says the status with its icon, not a coloured border or coloured text", () => {
+    toast.success("已保存");
+    toast.error("无法下载报告");
+    render(<Toaster />);
+    for (const card of [screen.getByRole("status"), screen.getByRole("alert")]) {
+      expect(card).toHaveClass("border-border");
+      expect(card.className).not.toMatch(/border-(ok|danger|error)\b/);
+      expect(card.className).not.toMatch(/(^|\s)text-error(\s|$)/);
+      expect(card.querySelector("svg")).not.toBeNull();
+    }
   });
 
   it("expands a truncated message on click and collapses it again", async () => {

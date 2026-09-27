@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * The one metadata tag: 20 px high, 12 px text, a 4 px corner, a quiet ground
- * and no border. It is not clickable — a clickable chip is a filter
- * (`FilterChips`).
+ * The one metadata tag: 22 px high (`h-tag`, spec §20.4 — it was 20), 12 px
+ * text, a 6 px corner, a quiet ground and no border. It is not clickable — a
+ * clickable chip is a filter (`FilterChips`).
  *
  * Colour is for safety: `safety` is the only tone a page uses as a matter of
  * course. `accent` and `warn` exist for the two state badges of the frontier
- * hot list (「新」 and 「升温」) and nothing else. There were about seventeen tag
+ * hot list (“新” and “升温”) and nothing else. There were about seventeen tag
  * recipes, five of them on one frontier card (2026-09-23 inventory §2.1); a
  * screen now carries at most two kinds — this one, and a filter chip.
  */
@@ -23,7 +23,7 @@ const toneClasses: Record<TagTone, string> = {
 
 export function tagClasses({ tone = "neutral", className }: { tone?: TagTone; className?: string } = {}): string {
   return cn(
-    "inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-tag px-1.5 text-meta font-normal",
+    "inline-flex h-tag shrink-0 items-center whitespace-nowrap rounded-tag px-1.5 text-meta font-normal",
     toneClasses[tone],
     className,
   );

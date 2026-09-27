@@ -37,18 +37,28 @@ describe("ConfirmDialog", () => {
     expect(confirm).toHaveFocus();
   });
 
-  it("confirms on Enter outside the buttons and does not double-fire on a focused button", async () => {
+  // Appendix E #4 (spec §22.7): Enter is the focused control's and nobody
+  // else's. A stray Enter on the panel used to confirm a deletion.
+  it("never maps Enter to confirm: Enter outside a button does nothing", () => {
     const p = props();
     render(<ConfirmDialog {...p} />);
     fireEvent.keyDown(document.body, { key: "Enter" });
-    expect(p.onConfirm).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(p.onConfirm).not.toHaveBeenCalled();
+    expect(p.onCancel).not.toHaveBeenCalled();
+  });
 
-    // Focus is on 取消: Enter activates that button's own click — cancel once,
-    // and the document-level Enter handler must not confirm on top of it.
-    p.onConfirm.mockClear();
+  it("Enter where focus starts cancels; confirming takes a move to the red button", async () => {
+    const p = props();
+    render(<ConfirmDialog {...p} />);
     await userEvent.keyboard("{Enter}");
     expect(p.onCancel).toHaveBeenCalledTimes(1);
     expect(p.onConfirm).not.toHaveBeenCalled();
+
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "删除" })).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(p.onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Escape and overlay click as cancel", async () => {
