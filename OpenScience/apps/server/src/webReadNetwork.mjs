@@ -19,11 +19,35 @@
  * @module webReadNetwork
  */
 
+import dns from "node:dns";
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
 import zlib from "node:zlib";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { edgeRequest, edgeStats } from "./edgeProxy.mjs";
+
+/**
+ * Every outbound connection this process makes goes over IPv4 when the name
+ * has an IPv4 address. Called once, before the server starts (`index.mjs`).
+ *
+ * Node 22 races the address families ("Happy Eyeballs") and gives each
+ * attempt 250 ms. The web container has no IPv6 route at all (connect answers
+ * ENETUNREACH), and from the Beijing host the IPv4 handshake with NCBI,
+ * ClinicalTrials.gov, DailyMed and some twenty other dual-stack upstreams
+ * takes 220–270 ms: an attempt past 250 ms was abandoned and the whole
+ * connection failed ETIMEDOUT — 20 to 80 % of ClinicalTrials.gov calls,
+ * varying by the hour, reported to the run as "the source returned an error"
+ * (2026-09-26 audit I1-1). Raising the attempt budget to a second (what this
+ * process did before) halved it and left a lost SYN, retransmitted after a
+ * second, still failing. There is nothing to race: IPv4 first, one attempt,
+ * the kernel's own connect timeout. A name with only AAAA records still
+ * resolves and connects as before.
+ */
+export function preferIpv4Egress() {
+  net.setDefaultAutoSelectFamily(false);
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 /** True when a literal IPv4 address is one this server must never be sent to. */
 export function privateIpv4Address(host) {

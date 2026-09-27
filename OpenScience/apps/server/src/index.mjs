@@ -1,18 +1,11 @@
-import net from "node:net";
 import { createWebApiApp } from "./server.mjs";
+import { preferIpv4Egress } from "./webReadNetwork.mjs";
 
-// Happy Eyeballs gives each address family 250 ms by default, and that is a
-// choice between two working stacks, not a fallback budget. Several official
-// upstreams publish AAAA records that black-hole from here (NOAA's SWPC is one:
-// eight IPv6 addresses, none reachable, a working IPv4 path behind them), and
-// the IPv4 attempt does not finish inside 250 ms on a cross-Pacific route. The
-// connection then fails with ETIMEDOUT and the runtime is told the source
-// returned an error -- which reads as "the source is down" about a source that
-// is up. Raising the per-attempt budget costs nothing when the first family
-// connects, because the first successful socket still wins immediately.
-net.setDefaultAutoSelectFamilyAttemptTimeout(
-  Math.max(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1_000),
-);
+// Several official upstreams publish AAAA records that black-hole from here
+// (NOAA's SWPC: eight IPv6 addresses, none reachable), the container has no
+// IPv6 route, and Node's per-family race abandoned IPv4 handshakes that took
+// longer than 250 ms — most of the Pacific. Before anything connects.
+preferIpv4Egress();
 
 // The last line of defence for a background promise nobody awaited. Node
 // makes an unhandled rejection fatal, and on 2026-09-09 one from a scheduler
