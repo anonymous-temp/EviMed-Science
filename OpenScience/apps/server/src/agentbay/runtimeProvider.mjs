@@ -605,6 +605,7 @@ export class AgentBayRuntimeProvider {
         workloadTokenFile: `${SESSION_PATHS.dshHome}/evimed-workload.token`,
         bundleVersion: String(config.socketBundleVersion ?? ""),
         compaction: compactionRuntimeEnv(runtimeCompactionSettings(config)),
+        disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
         flags: {
           hosted: Boolean(config.production),
           askUser: Boolean(config.runtimeAskUserEnabled),

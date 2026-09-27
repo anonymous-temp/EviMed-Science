@@ -123,6 +123,10 @@ const operatorLevers = {
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ["open-science-web", "open-science-runtime-controller"],
+  // The socket plugins' off switches (2026-09-27): the controller writes them
+  // into every runtime, so a list that reached only the web API would measure
+  // a plugin "off" that every runtime still ran.
+  OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS: ["open-science-web", "open-science-runtime-controller"],
   // How long an idle runtime stays warm and when it gives way (2026-09-22):
   // the web API's runtime manager keeps and reaps them.
   OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS: ["open-science-web"],

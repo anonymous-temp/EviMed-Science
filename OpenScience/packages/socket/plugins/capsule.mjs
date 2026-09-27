@@ -46,6 +46,7 @@ const METHODS_SECTION_MAX_CHARS = 12_000
 
 /**
  * @typedef {object} Config
+ * @property {boolean} [enabled]
  * @property {string} methodsDir
  * @property {string} recallUrl
  * @property {string} tokenFile
@@ -53,6 +54,8 @@ const METHODS_SECTION_MAX_CHARS = 12_000
  */
 
 export const Config = Schema.object({
+  enabled: Schema.boolean().default(true)
+    .description('Off registers nothing: no recall or note tool, no methods section (EVIMED_CAPSULE_ENABLED=0). Delegation then stops handing children the recall tool.'),
   methodsDir: Schema.string().default('')
     .description('Read-only directory of distilled SKILL.md methods for the active capsule. Empty means no capsule is mounted.'),
   recallUrl: Schema.string().default('')
@@ -69,6 +72,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
+  if (config.enabled === false) return
   const methods = await loadMethods(ctx, config.methodsDir)
   ctx.provide('evimedCapsuleMethods', methods, true)
   // The root session's receipt of what it carries, in the run-state

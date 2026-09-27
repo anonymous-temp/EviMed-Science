@@ -474,9 +474,9 @@ function toolUniverseRows(input) {
 /**
  * Rows this patch may configure at all.
  *
- * Only two of our plugins are mounted in the host composition — the bundle's
- * patch inserts them — and a profile's `cordis.patch.yml` can reach exactly
- * those. The six agent-face plugins are mounted in agent scope from the
+ * Only the host-scope plugins are mounted in the host composition — the
+ * bundle's patch inserts them — and a profile's `cordis.patch.yml` can reach
+ * exactly those. The agent-scope plugins are mounted in agent scope from the
  * preset's own `agent.cordis.yml`, so naming them here does not override them:
  * DSH reports an unmatched target on stderr and drops the row, and the plugins
  * then run on their schema defaults while the deployment believes it configured
@@ -581,6 +581,23 @@ function presetRows(input) {
 }
 
 /**
+ * The socket plugins a deployment may switch off, by the variable their preset
+ * row reads (`enabled: !!js process.env.<NAME> !== '0'`). Off, a plugin
+ * registers nothing and the session runs on the kernel's own composition — the
+ * control a plugin is measured against. Review and the citation tools are not
+ * here: each already follows its own lever (the review module, the project's
+ * plugin settings), and a second path to the same switch would disagree with it.
+ */
+export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
+  "evimed-guidance": "EVIMED_GUIDANCE_ENABLED",
+  "evimed-run-policy": "EVIMED_RUN_POLICY_ENABLED",
+  "evimed-evidence": "EVIMED_EVIDENCE_ENABLED",
+  "evimed-capsule": "EVIMED_CAPSULE_ENABLED",
+  "evimed-screening": "EVIMED_SCREENING_ENABLED",
+  "evimed-compaction": "EVIMED_COMPACTION_ENABLED",
+});
+
+/**
  * The environment the container must carry for the preset's rows to resolve.
  *
  * Every key here is read by a `!!js` expression in
@@ -594,7 +611,7 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[] }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -602,7 +619,16 @@ function presetRows(input) {
 export function runtimeEnvironment(input) {
   const pluginConfig = input.pluginConfig ?? { revision: 0, enabled: true, settings: { timeoutMs: 15000 } };
   validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings });
+  const disabledPlugins = new Set(input.disabledPlugins ?? []);
+  const unknownPlugins = [...disabledPlugins].filter((id) => !Object.hasOwn(SOCKET_PLUGIN_SWITCHES, id));
+  // A name that switches nothing off would leave that plugin on while the
+  // deployment believes it is off; config.mjs refuses it first.
+  if (unknownPlugins.length) throw new Error(`Unknown socket plugin to switch off: ${unknownPlugins.join(", ")}`);
   return {
+    // Every switch is always sent, so a row never falls back to its default
+    // while the deployment believes it set one.
+    ...Object.fromEntries(Object.entries(SOCKET_PLUGIN_SWITCHES)
+      .map(([id, name]) => [name, disabledPlugins.has(id) ? "0" : "1"])),
     EVIMED_CITE_ENABLED: pluginConfig.enabled ? "1" : "0",
     EVIMED_CITE_TIMEOUT_MS: String(pluginConfig.settings.timeoutMs),
     EVIMED_CITE_CONFIG_REVISION: String(pluginConfig.revision),

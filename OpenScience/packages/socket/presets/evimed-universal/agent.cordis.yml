@@ -16,6 +16,16 @@
 # them is reported as an unmatched target on stderr and dropped — the plugins
 # would then run on their schema defaults while the deployment believed it had
 # configured them. `!!js` is how a row reads what the container was given.
+#
+# Every row of ours has an off switch read the same way, because native DSH +
+# DeepSeek is the control a plugin is measured against (principle 11): with all
+# of them off a session still boots and answers. Six are `enabled:` configs,
+# default on, and `0` makes the plugin return before it registers anything —
+# EVIMED_GUIDANCE_ENABLED, EVIMED_RUN_POLICY_ENABLED, EVIMED_EVIDENCE_ENABLED,
+# EVIMED_CAPSULE_ENABLED, EVIMED_SCREENING_ENABLED, EVIMED_COMPACTION_ENABLED
+# (the control plane sets them from OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS).
+# Review follows the control plane's review module (EVIMED_REVIEW_ENABLED) and
+# the citation tools follow the project's plugin settings (EVIMED_CITE_ENABLED).
 
 - id: persona
   name: '@deepseek-ai/dsh-persona'
@@ -56,6 +66,7 @@
     # tool-guidance band.
     - id: evimed-guidance
       config:
+        enabled: !!js process.env.EVIMED_GUIDANCE_ENABLED !== '0'
         capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
         answerPersonaDir: !!js process.env.EVIMED_ANSWER_PERSONA_DIR
         askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
@@ -70,6 +81,7 @@
     # piece of knowledge.
     - id: evimed-run-policy
       config:
+        enabled: !!js process.env.EVIMED_RUN_POLICY_ENABLED !== '0'
         deliveryAttemptLimit: !!js Number(process.env.EVIMED_DELIVERY_ATTEMPT_LIMIT ?? 3)
         # Two limits, where one name used to mean both: how many children a run
         # may start over its life, and how many may work at the same moment.
@@ -93,6 +105,7 @@
     # the model sees, which is the point — the ledger may not edit the run it records.
     - id: evimed-evidence
       config:
+        enabled: !!js process.env.EVIMED_EVIDENCE_ENABLED !== '0'
         evidenceStaleMinutes: !!js Number(process.env.EVIMED_EVIDENCE_STALE_MINUTES ?? 10)
       name: '@evimed/dsh-socket/plugins/evidence'
 
@@ -100,6 +113,7 @@
     # registered as skills from a deployment-owned read-only directory.
     - id: evimed-capsule
       config:
+        enabled: !!js process.env.EVIMED_CAPSULE_ENABLED !== '0'
         methodsDir: !!js process.env.EVIMED_CAPSULE_METHODS_DIR
         recallUrl: !!js process.env.EVIMED_CAPSULE_GATEWAY_URL
         tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
@@ -109,6 +123,7 @@
 # decides the batch size, the concurrency, the tool restriction and the ledger.
 - id: evimed-screening
   config:
+    enabled: !!js process.env.EVIMED_SCREENING_ENABLED !== '0'
     batchSize: !!js Number(process.env.EVIMED_SCREENING_BATCH_SIZE ?? 50)
     maxConcurrentChildren: !!js Number(process.env.EVIMED_MAX_CONCURRENT_CHILDREN ?? 30)
   name: '@evimed/dsh-socket/plugins/screening'
@@ -205,6 +220,9 @@
     # `structured`; on `basic` it registers nothing and this group is exactly
     # what it was. Two engines are never both active — the row below returns
     # early rather than registering a second one — and a consistency test says so.
+    # The policy is not the off switch: on `basic` the row still guards the
+    # gateway's request-size limit. `enabled` is, and off it leaves exactly the
+    # kernel's own group.
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
       config:
@@ -214,6 +232,7 @@
     - id: evimed-compaction
       name: '@evimed/dsh-socket/plugins/compaction'
       config:
+        enabled: !!js process.env.EVIMED_COMPACTION_ENABLED !== '0'
         policy: !!js process.env.EVIMED_COMPACTION_POLICY ?? 'basic'
         thresholdRatio: !!js Number(process.env.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8)
         retainRatio: !!js Number(process.env.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16)

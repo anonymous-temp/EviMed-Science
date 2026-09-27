@@ -761,8 +761,8 @@ test("a root session is shown only its own research tools, in its own scope, onc
   assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean, capsuleMounted?: boolean }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false, capsuleMounted = true } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -793,6 +793,9 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   });
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
+  // What the capsule row publishes on every mount, methods or not; a composition
+  // with that row switched off publishes nothing.
+  if (capsuleMounted) ctx.provide("evimedCapsuleMethods", []);
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
@@ -908,6 +911,34 @@ test("a delegation carries the memory file the control plane wrote, and the chil
   assert.match(prompt, /个人知识库/);
   assert.match(prompt, /2 项/);
   assert.ok(starts[0].toolFilter.allow.includes("evimed_capsule_recall"), "the child can also ask for more, the way the root can");
+});
+
+test("with the capsule row switched off, a delegation does not hand the child a recall tool nothing registered", async () => {
+  // `tools.restrict()` throws on a name it has never seen, so a child
+  // allow-list naming `evimed_capsule_recall` in a composition where
+  // EVIMED_CAPSULE_ENABLED=0 would fail every delegation.
+  /** @type {any[]} */
+  const starts = [];
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    capsuleMounted: false,
+    subagentStart: (/** @type {string} */ _seam, /** @type {any} */ options) => {
+      starts.push(options);
+      return { id: `child-session-${starts.length}`, result: Promise.resolve({ stopReason: "completed", output: "done" }) };
+    },
+  });
+  f.files.set(`/workspace/${workspaceLayout.briefDir}/research-brief.md`, "请评估 X 的证据");
+  await f.step(1);
+  const owned = { sessionId: "native-session" };
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  }, owned);
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} }, owned);
+  assert.equal(starts.length, 1, "the delegation still starts its child");
+  assert.ok(!starts[0].toolFilter.allow.includes("evimed_capsule_recall"));
+  assert.ok(starts[0].toolFilter.allow.includes("evimed_submit_deliverable"), "the rest of the allow-list is untouched");
 });
 
 test("the capsule tools exist on a deployment with no memory service, and answer that it is absent", async () => {

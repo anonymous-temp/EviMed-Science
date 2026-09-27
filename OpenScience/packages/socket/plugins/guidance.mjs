@@ -50,6 +50,7 @@ export const inject = ['systemPrompt']
 
 /**
  * @typedef {object} Config
+ * @property {boolean} [enabled]
  * @property {string} capabilitiesDir
  * @property {boolean} askUserEnabled
  * @property {boolean} capsuleActive
@@ -59,6 +60,8 @@ export const inject = ['systemPrompt']
  */
 
 export const Config = Schema.object({
+  enabled: Schema.boolean().default(true)
+    .description('Off registers nothing: no prompt section, no capability catalogue, no hook (EVIMED_GUIDANCE_ENABLED=0).'),
   // Where `open-domain-answer/SKILL.md` lives in this image.
   //
   // Principle 7: priors live in context, not control flow. The answer line's
@@ -90,6 +93,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
+  if (config.enabled === false) return
   const capabilities = offeredCapabilities(await loadCapabilities(ctx, config.capabilitiesDir), disabledTools(await readDisabledTools(ctx, config.disabledToolsFile ?? '')))
   const text = buildGuidanceText(capabilities, {
     askUserEnabled: config.askUserEnabled,

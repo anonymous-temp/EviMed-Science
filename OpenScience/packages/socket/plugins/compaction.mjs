@@ -60,6 +60,7 @@ export const inject = ['storageDomain', 'tools']
 
 /**
  * @typedef {object} Config
+ * @property {boolean} [enabled]
  * @property {string} policy
  * @property {number} thresholdRatio
  * @property {number} retainRatio
@@ -68,6 +69,10 @@ export const inject = ['storageDomain', 'tools']
  */
 
 export const Config = Schema.object({
+  // The off switch, and not the policy: `basic` keeps the kernel's engine but
+  // still registers the request-size guard below.
+  enabled: Schema.boolean().default(true)
+    .description('Off registers nothing: no engine swap, no request-size guard, no tool; the kernel\'s own compaction group is left as composed (EVIMED_COMPACTION_ENABLED=0).'),
   policy: Schema.string().default('basic')
     .description('`basic` keeps the kernel engine; `structured` preserves the run\'s durable handles across a compaction.'),
   thresholdRatio: Schema.number().default(0.8)
@@ -86,6 +91,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
+  if (config.enabled === false) return
   const derived = compactionConfigFromEnv({
     EVIMED_COMPACTION_POLICY: config.policy,
     EVIMED_COMPACTION_THRESHOLD_RATIO: String(config.thresholdRatio),

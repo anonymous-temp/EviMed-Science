@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { defaultDeepSeekModel, supportedDeepSeekModels } from "./modelGateway.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MCP_TOOL_CALL_TIMEOUT_MS } from "./dshProfilePatch.mjs";
+import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
 import { GEO_DEFAULT_ENGINES, GEO_ENGINES } from "@evimed/domain";
 
@@ -53,6 +53,21 @@ function parseReasoningEffort(value) {
     throw new Error(`OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of ${DEEPSEEK_REASONING_EFFORTS.join(", ")}, got ${JSON.stringify(value)}.`);
   }
   return effort;
+}
+
+/**
+ * The socket plugins every runtime of this deployment runs without, by preset
+ * row id. A name that matches no switch is refused here: it would leave that
+ * plugin on while the operator believes it is off.
+ * @param {readonly string[]} ids
+ */
+function parseDisabledSocketPlugins(ids) {
+  const known = Object.keys(SOCKET_PLUGIN_SWITCHES);
+  const unknown = ids.filter((id) => !known.includes(id));
+  if (unknown.length) {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS must name plugins among ${known.join(", ")}, got ${JSON.stringify(unknown.join(","))}.`);
+  }
+  return [...new Set(ids)];
 }
 
 function boolEnv(name, fallback) {
@@ -1422,6 +1437,12 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
+    // The socket plugins a runtime runs without (preset row ids, comma
+    // separated). Empty — every plugin on — is the product; naming one is how
+    // a plugin is measured against the kernel's own composition (principle 11).
+    runtimeDisabledSocketPlugins: parseDisabledSocketPlugins(
+      overrides.runtimeDisabledSocketPlugins ?? listEnv("OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS"),
+    ),
     // Whether a runtime's submission asks for the independent review. Since
     // 2026-09-23 the reviewer is the control plane's (`reviewService.mjs`,
     // Qwen3.8-Max behind the review gateway), so the runtime is told to ask

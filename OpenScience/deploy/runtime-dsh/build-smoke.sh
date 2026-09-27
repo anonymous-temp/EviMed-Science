@@ -133,6 +133,9 @@ export EVIMED_CITE_ENABLED=1 EVIMED_CITE_TIMEOUT_MS=15000 EVIMED_CITE_CONFIG_REV
 export EVIMED_DELIVERY_ATTEMPT_LIMIT=3 EVIMED_MAX_CHILDREN_TOTAL=30 EVIMED_MAX_CONCURRENT_CHILDREN=30
 export EVIMED_MAX_STEPS=0 EVIMED_MAX_TOKENS=0
 export EVIMED_EVIDENCE_STALE_MINUTES=10 EVIMED_SCREENING_BATCH_SIZE=50
+# Every socket plugin on, as a run gets it unless the deployment switches one off.
+export EVIMED_GUIDANCE_ENABLED=1 EVIMED_RUN_POLICY_ENABLED=1 EVIMED_EVIDENCE_ENABLED=1
+export EVIMED_CAPSULE_ENABLED=1 EVIMED_SCREENING_ENABLED=1 EVIMED_COMPACTION_ENABLED=1
 # The compaction group reads all five, and the boot proof has to boot under
 # the same environment a run gets. `basic` here is the shipped default: the
 # provider swap registers nothing on it, so this proves the row loads

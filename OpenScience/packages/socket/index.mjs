@@ -2,9 +2,9 @@
  * `@evimed/dsh-socket` — the plug.
  *
  * Hidden knowledge: everything EviMed adds to a DeepSeek Harness, in the shape
- * DSH wants it. Two host-scope plugins (the startup self-check and the run
- * mirror), five agent-scope plugins (guidance, run policy, evidence, capsule,
- * review), one composition, and the patch rows that connect them. The bundle
+ * DSH wants it. The host-scope and agent-scope plugins listed below (each
+ * agent-scope one switchable off from the environment), one composition, and
+ * the patch rows that connect them. The bundle
  * carries no paths and no addresses — those come from the profile patch the
  * deployment generates, which is what lets the same tarball plug into the
  * hosted container and into a laptop.

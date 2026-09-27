@@ -27,11 +27,14 @@ export const inject = ['tools', 'subagents']
 
 /**
  * @typedef {object} Config
+ * @property {boolean} [enabled]
  * @property {number} batchSize
  * @property {number} maxConcurrentChildren
  */
 
 export const Config = Schema.object({
+  enabled: Schema.boolean().default(true)
+    .description('Off registers nothing: no screening tool (EVIMED_SCREENING_ENABLED=0).'),
   batchSize: Schema.number().default(50)
     .description('Records per screening child. A deployment whose records are longer lowers it.'),
   // The same number that bounds a run's concurrent delegations. It is a wave
@@ -47,6 +50,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
+  if (config.enabled === false) return
   // Awaited before registering, not inside the effect: `defineTool` is async and
   // the harness's `tools.register()` reads `definition.output` synchronously, so
   // a Promise makes it throw `TypeError: tool "undefined" must declare output`

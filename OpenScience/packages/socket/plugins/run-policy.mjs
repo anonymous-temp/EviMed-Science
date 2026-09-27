@@ -136,6 +136,7 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
 
 /**
  * @typedef {object} Config
+ * @property {boolean} [enabled]
  * @property {number} deliveryAttemptLimit
  * @property {number} structuralAttemptAllowance
  * @property {number} maxChildrenTotal
@@ -154,6 +155,8 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
  */
 
 export const Config = Schema.object({
+  enabled: Schema.boolean().default(true)
+    .description('Off registers nothing: no plan, delegation or delivery tool, no hook, no budget (EVIMED_RUN_POLICY_ENABLED=0).'),
   // One knob for the whole retry story: the run-side submit ceiling and the
   // control plane's repair loop are the same number, defined once in the
   // control plane's config and derived down through the profile patch.
@@ -319,6 +322,7 @@ function revisionSubmissionGrantMatches(entry, item, grant) {
 }
 
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
+  if (config.enabled === false) return
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
   /** A child may submit only the one parent-plan item that created it. */
@@ -680,6 +684,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    */
   const childToolFilter = (manifest, contractKind) => {
     const tools = delegationToolFilter(manifest, { allowBash: true, contractKind })
+      // The capsule row can be switched off (EVIMED_CAPSULE_ENABLED=0), and
+      // off it registers no recall tool — naming it would fail the delegation.
+      // It publishes its methods on every mount, so their absence is the sign.
+      .filter((tool) => tool !== SOCKET_TOOL_NAMES.capsuleRecall || ctx.get('evimedCapsuleMethods') !== undefined)
     const locator = mcpToolName(QUOTE_LOCATOR)
     if (tools.includes(SOCKET_TOOL_NAMES.claimUpsert) && !tools.includes(locator) && registeredToolNames(ctx).includes(locator)) {
       tools.push(locator)

@@ -29,10 +29,13 @@ export const inject = ['tools']
 
 /**
  * @typedef {object} Config
+ * @property {boolean} [enabled]
  * @property {number} evidenceStaleMinutes
  */
 
 export const Config = Schema.object({
+  enabled: Schema.boolean().default(true)
+    .description('Off registers nothing: no tool observer, no evidence service (EVIMED_EVIDENCE_ENABLED=0).'),
   // How long a source may sit "asked for but never readable" before it counts
   // against the unresolved metric. A deployment whose upstreams are slower
   // raises it; the control plane owns the value.
@@ -46,6 +49,7 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
+  if (config.enabled === false) return
   let failures = 0
   /** @type {Map<string, any[]>} */
   const bySession = new Map()
