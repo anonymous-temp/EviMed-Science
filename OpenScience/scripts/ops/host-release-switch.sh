@@ -53,6 +53,15 @@
 #   9. The pages are walked after the switch (ui-walk.mjs), when the operator
 #      has configured the walk; a failure says the release is live and which
 #      pages regressed.
+#  10. An unhealthy backup never holds the release (2026-09-26 and 09-27). Web
+#      used to wait for the backup container to be healthy; a run's symlink in
+#      its workspace failed the backup's start-up cycle, compose gave up on
+#      web, and the site answered 502 until someone started web by hand. Web
+#      now waits only for the backup to be started (docker-compose.backup.yml),
+#      and the readiness wait below reads `backup` apart from every other
+#      check: the switch finishes each step, prints BACKUP IS UNHEALTHY at once
+#      and again as its last line, and exits non-zero — the readiness check and
+#      its alert keep saying so until the backup is fixed.
 set -euo pipefail
 NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan]}"
 PRUNE=1; [ "${2:-}" = "--no-prune" ] && PRUNE=0
@@ -68,6 +77,18 @@ BACKUP_CONTAINER="${PROJECT}-open-science-backup-1"
 # must not be attempted: `OPEN_SCIENCE_OIDC_SCOPES=openid profile email` is a
 # legal compose value and an illegal shell assignment.
 export COMPOSE_PROFILES="${COMPOSE_PROFILES:-backup,monitoring,receipt,web-search}"
+
+# The backup's readiness code once the switch has read it (item 10); `ok`
+# until then. Every way the switch ends after the release is live goes
+# through `finish`, so an unhealthy backup is its last word and its exit.
+backup_state=ok
+finish() {
+  if [ "$backup_state" != ok ]; then
+    echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE BACKUP IS UNHEALTHY (${backup_state}): fix it before the next backup window (docs/WEB_OPERATIONS_RUNBOOK.md, \"Evidence and Recovery\") ==="
+    exit 1
+  fi
+  exit "$1"
+}
 
 [ -f "${REL}/OpenScience/deploy/web/release-manifest.json" ] || { echo "no release manifest under ${REL}; generate it first"; exit 1; }
 [ -f "$OVERRIDE" ] || { echo "no compose override at ${OVERRIDE}"; exit 1; }
@@ -175,17 +196,23 @@ for mint in 1 2; do
   docker restart "$RECEIPT_CONTAINER" >/dev/null
   # Eight minutes: long enough for the backup scheduler's own five-minute retry,
   # should its start-up cycle have failed on the first mint attempt after all.
+  # The line reads `<ok|notok> <checks> <failing checks but backup, or -> backup=<ok|code>`:
+  # `ok` is every check but the backup (item 10), which is read on its own.
   for _ in $(seq 1 80); do
-    ready=$(docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/ready').then(r=>r.json()).then(j=>{const c=j.data.checks;const bad=Object.keys(c).filter(k=>c[k]&&c[k].ok===false);console.log((j.data.ok?'ok ':'notok ')+Object.keys(c).length+' '+bad.join(','))}).catch(()=>console.log('unreachable'))" 2>/dev/null || echo unreachable)
-    case "$ready" in ok*) break ;; esac
+    ready=$(docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/ready').then(r=>r.json()).then(j=>{const c=j.data.checks;const bad=Object.keys(c).filter(k=>k!=='backup'&&c[k]&&c[k].ok===false);const b=c.backup&&c.backup.ok===false?(c.backup.code||'failed'):'ok';console.log([bad.length?'notok':'ok',Object.keys(c).length,bad.join(',')||'-','backup='+b].join(' '))}).catch(()=>console.log('unreachable'))" 2>/dev/null || echo unreachable)
+    case "$ready" in "ok "*" backup=ok") break ;; esac
     sleep 6
   done
   # Only the receipt (`modelGateway`) earns the second mint; anything else
   # failing is not something minting again can change.
-  case "$ready" in "notok "*" modelGateway") [ "$mint" -eq 1 ] && echo "receipt did not mint (${ready}); minting once more" && continue ;; esac
+  case "$ready" in "notok "*" modelGateway backup="*) [ "$mint" -eq 1 ] && echo "receipt did not mint (${ready}); minting once more" && continue ;; esac
   break
 done
 echo "readiness: ${ready}"
+case "$ready" in *" backup="*) backup_state="${ready##* backup=}" ;; esac
+if [ "$backup_state" != ok ]; then
+  echo "=== BACKUP IS UNHEALTHY (${backup_state}): the site is served regardless and the switch goes on; readiness and OpenScienceReadinessCheckFailed{check=\"backup\"} keep saying so until it is fixed ==="
+fi
 
 echo "=== nothing refers to a path that is not there ==="
 # A bind source, and the compose directory a container was created from: the
@@ -222,6 +249,8 @@ done
 [ "$deleted" -eq 0 ] || { echo "${deleted} bind(s) read a deleted file; the switch is not done until those containers are restarted"; exit 1; }
 echo "  ${verified} bind(s) verified live inside their containers, ${unverified} unverified"
 
+# `ok` here is every check but the backup (item 10): a failing backup is
+# reported, not a reason to keep the old releases or skip the walk.
 case "$ready" in ok*) ;; *) echo "readiness is not ok; leaving old releases in place"; exit 1 ;; esac
 
 echo "=== the runtime image carries the skill trees the manifest records ==="
@@ -251,11 +280,11 @@ echo "=== switched to evimed-${NEW}-1 ==="
 WALK_ENV="${ROOT}/shared/ui-walk.env"
 if [ ! -f "$WALK_ENV" ]; then
   echo "=== UI WALK NOT RUN: ${WALK_ENV} is missing (docs/WEB_OPERATIONS_RUNBOOK.md, \"Post-release UI walk\") ==="
-  exit 0
+  finish 0
 fi
 echo "=== walk the live pages ==="
 walk_password=$(sed -n 's/^OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=//p' "$WALK_ENV")
-[ -f "$walk_password" ] || { echo "UI WALK NOT RUN: OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE in ${WALK_ENV} names no file; evimed-${NEW}-1 is live"; exit 1; }
+[ -f "$walk_password" ] || { echo "UI WALK NOT RUN: OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE in ${WALK_ENV} names no file; evimed-${NEW}-1 is live"; finish 1; }
 walk_image=$(docker exec "$WEB_CONTAINER" printenv OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE)
 walk_out="${ROOT}/shared/ui-walk/${NEW}"
 mkdir -p "$walk_out"
@@ -271,6 +300,7 @@ walked=$?
 set -e
 case "$walked" in
   0) echo "=== UI walk passed; report in ${walk_out} ===" ;;
-  1) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK FAILED: the FAIL lines above name each page; report and screenshots in ${walk_out} ==="; exit 1 ;;
-  *) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK COULD NOT RUN (exit ${walked}); nothing was judged ==="; exit 1 ;;
+  1) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK FAILED: the FAIL lines above name each page; report and screenshots in ${walk_out} ==="; finish 1 ;;
+  *) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK COULD NOT RUN (exit ${walked}); nothing was judged ==="; finish 1 ;;
 esac
+finish 0

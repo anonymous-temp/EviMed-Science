@@ -5,6 +5,7 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
+import YAML from "yaml";
 import { createCommandRegistry } from "../src/commands.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -751,6 +752,27 @@ test("backup compose overlay runs an unexposed least-privilege encrypted schedul
   assert.doesNotMatch(backupService, /^\s+ports:/m);
   assert.match(compose, /OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-\.\/secrets\/backup-passphrase\.txt/);
   assert.match(compose, /OPEN_SCIENCE_OBJECT_BACKUP_CREDENTIALS_FILE:-\/dev\/null/);
+});
+
+test("the site starts whatever the backup's health, and the backup's state still reaches readiness", async () => {
+  // 2026-09-26 and 09-27: a run's symlink failed the recreated backup's
+  // start-up cycle, `service_healthy` made compose give up on web, and the
+  // site answered 502 until web was started by hand. Started, not healthy.
+  const overlay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.backup.yml"), "utf8"));
+  const web = overlay.services["open-science-web"];
+  assert.deepEqual(web.depends_on["open-science-backup"], { condition: "service_started" });
+  // What replaces the wait: the API reads the scheduler's state (readiness
+  // `backup`, whose failure is OpenScienceReadinessCheckFailed), and the
+  // backup keeps its own healthcheck for `docker ps` and the switch.
+  assert.equal(web.environment.OPEN_SCIENCE_BACKUP_MODE, "${OPEN_SCIENCE_BACKUP_MODE:-local}");
+  assert.equal(web.environment.OPEN_SCIENCE_RESTORE_DRILL_ACK, "true");
+  assert.deepEqual(overlay.services["open-science-backup"].healthcheck.test, ["CMD", "node", "scripts/ops/backup-scheduler.mjs", "health"]);
+  const server = await readFile(path.join(repoRoot, "apps/server/src/server.mjs"), "utf8");
+  assert.match(server, /backup: await readinessCheck\(async \(\) => readinessBackup\(/);
+  assert.match(server, /readinessFailure\("backup_scheduler_unhealthy"\)/);
+  const rules = JSON.parse(await readFile(path.join(repoRoot, "deploy/web/monitoring/open-science.rules.json"), "utf8"));
+  const alerts = rules.groups.flatMap((group) => group.rules).map((rule) => rule.alert);
+  assert.ok(alerts.includes("OpenScienceReadinessCheckFailed"), "a failing readiness check must still page");
 });
 
 test("OIDC compose overlay mounts separate file-backed client and flow secrets", async () => {

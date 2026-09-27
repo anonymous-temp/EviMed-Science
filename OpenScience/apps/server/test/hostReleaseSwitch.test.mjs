@@ -79,7 +79,7 @@ if (command === "exec") {
   }
   if (rest[0] === "printenv") { out(state.runtimeImage + "\n"); process.exit(0); }
   const script = rest.join(" ");
-  if (script.includes("/api/ready")) { out("ok 27 \n"); process.exit(0); }
+  if (script.includes("/api/ready")) { out((state.ready ?? "ok 27 - backup=ok") + "\n"); process.exit(0); }
   if (script.includes("/api/health")) process.exit(0);
   process.exit(1);
 }
@@ -101,7 +101,7 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
@@ -128,6 +128,8 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
     runtimeImage: `open-science-runtime:x-${NEW}`,
     restartDoesNotHelp,
     walkExit,
+    // The readiness line the switch's probe prints (`<ok|notok> <checks> <failing but backup> backup=<code>`).
+    ready,
     compose: { "open-science-web": "new", prometheus: "same", "evimed-postgres": "same", "open-science-release-receipt": "same" },
     containers: {
       [`${PROJECT}-open-science-web-1`]: container("open-science-web", "old", [{ source: `${through}/release-manifest.json`, destination: "/run/open-science/release-manifest.json" }], { stale: true }),
@@ -144,6 +146,10 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   await mkdir(bin);
   await writeFile(path.join(bin, "docker"), FAKE_DOCKER);
   await chmod(path.join(bin, "docker"), 0o755);
+  // The switch polls with `sleep`; a readiness that never turns ok would
+  // otherwise hold a test for the switch's full eight minutes.
+  await writeFile(path.join(bin, "sleep"), "#!/bin/sh\nexit 0\n");
+  await chmod(path.join(bin, "sleep"), 0o755);
   await writeFile(path.join(root, "docker-state.json"), JSON.stringify(state));
   if (walkExit !== undefined) {
     await writeFile(path.join(root, "shared/secrets/walk-password"), "x\n");
@@ -201,6 +207,59 @@ test("the switch restarts what still reads the previous release through current,
     assert.deepEqual(tls[0], { targets: ["https://evimed.example.org/api/health"], labels: { probe: "public-tls" } });
     assert.match(result.stdout, /every skill tree the manifest records is in open-science-runtime:x-1cf308956b6e/);
     assert.match(result.stdout, /UI WALK NOT RUN: .*ui-walk\.env is missing/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an unhealthy backup is reported loudly but holds nothing: the switch finishes and walks", { skip }, async () => {
+  // 2026-09-26 and 09-27: the backup failed its start-up cycle over a run's
+  // symlink, and web — then waiting on the backup's health — never started.
+  // Web no longer waits on it; neither may the switch.
+  const { root } = await host({ walkExit: 0, ready: "ok 27 - backup=backup_scheduler_unhealthy" });
+  try {
+    const result = await runSwitch(root, ["--no-prune"]);
+    assert.equal(result.code, 1, "the switch must not read as clean while backups are failing");
+    assert.match(result.stdout, /=== BACKUP IS UNHEALTHY \(backup_scheduler_unhealthy\): the site is served regardless/);
+    // Past the readiness gate that guards retention, to the digest check.
+    assert.doesNotMatch(result.stdout, /readiness is not ok/);
+    assert.match(result.stdout, /every skill tree the manifest records is in/);
+    assert.match(result.stdout, /=== switched to evimed-1cf308956b6e-1 ===/);
+    assert.match(result.stdout, /UI walk passed/);
+    const lines = result.stdout.trim().split("\n");
+    assert.match(lines.at(-1), /^=== RELEASE evimed-1cf308956b6e-1 IS LIVE, BUT THE BACKUP IS UNHEALTHY \(backup_scheduler_unhealthy\)/,
+      "and it is the switch's last word");
+    // It waited for the backup's own retry before saying so, and minted once:
+    // a failing backup is not something a second mint can change.
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    assert.equal(calls.filter((line) => line.includes("/api/ready")).length, 80);
+    assert.equal(calls.filter((line) => line === `restart ${PROJECT}-open-science-release-receipt-1`).length, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("any other failing check still stops the switch before retention, backup healthy or not", { skip }, async () => {
+  for (const ready of ["notok 27 runtime backup=ok", "notok 27 runtime backup=backup_scheduler_unhealthy"]) {
+    const { root } = await host({ ready });
+    try {
+      const result = await runSwitch(root);
+      assert.equal(result.code, 1);
+      assert.match(result.stdout, /readiness is not ok; leaving old releases in place/);
+      assert.doesNotMatch(result.stdout, /=== retention ===/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("a receipt that did not mint is minted once more even while the backup is failing", { skip }, async () => {
+  const { root } = await host({ ready: "notok 27 modelGateway backup=backup_scheduler_unhealthy" });
+  try {
+    const result = await runSwitch(root);
+    assert.match(result.stdout, /receipt did not mint \(notok 27 modelGateway backup=backup_scheduler_unhealthy\); minting once more/);
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    assert.equal(calls.filter((line) => line === `restart ${PROJECT}-open-science-release-receipt-1`).length, 2);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

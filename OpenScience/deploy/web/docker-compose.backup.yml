@@ -17,7 +17,14 @@ services:
           create_host_path: false
     depends_on:
       open-science-backup:
-        condition: service_healthy
+        # Started, not healthy. A backup problem must never keep the site from
+        # starting: on 2026-09-26 and 09-27 a run's symlink in its workspace
+        # failed the recreated backup's start-up cycle, compose gave up on web
+        # ("dependency failed to start: ... is unhealthy"), web sat in Created
+        # and the site answered 502 until it was started by hand. The backup's
+        # state is still the readiness check `backup` (and its alert), and
+        # host-release-switch.sh still reports it — it just no longer holds web.
+        condition: service_started
 
   open-science-backup:
     image: ${OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0.1.3}
