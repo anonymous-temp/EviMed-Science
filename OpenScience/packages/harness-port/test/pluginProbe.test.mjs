@@ -1,8 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { __setHarnessModule, loadHarnessModule } from '../index.mjs'
-__setHarnessModule('@deepseek-ai/dsh-scope',{scopeOf:(/** @type {any} */ ctx)=>ctx.agent,scopeChainOf:(/** @type {any} */ agent)=>[agent]})
+import { loadHarnessModule } from '../index.mjs'
 import { pluginRuntimeBusy, verifyCitationAgent, registerCitationConfiguration } from '../src/pluginProbe.mjs'
+
+/** Every live registration a test made, disposed after it: the registry is
+ *  runtime-wide, as the configuration it holds is. */
+/** @type {(() => void)[]} */
+const mounted = []
+test.afterEach(() => { while (mounted.length) mounted.pop()?.() })
+
+/** An agent, and a context the citation bridge could be mounted in: a Cordis
+ *  context's `effect` runs the install now and keeps its undo for disposal.
+ *  @param {Record<string, any>} [extra] */
+function kernelAgent(extra = {}) {
+  /** @type {any} */ const agent = { runMaintenance: async (/** @type {any} */ operation) => operation(AbortSignal.timeout(1000)), ...extra }
+  const mount = () => ({ effect: (/** @type {() => () => void} */ install) => { const undo = install(); mounted.push(undo); return undo } })
+  return { agent, mount }
+}
 
 test('a queued native input or maintenance task is busy even when status says idle', async () => {
   const idle = { status: 'idle', inbox: { hasPending: false }, runMaintenance: async (/** @type {any} */ fn) => fn() }
@@ -13,7 +27,7 @@ test('a queued native input or maintenance task is busy even when status says id
 test('proof observes actual agent registrations and asks the source one fixed health call', async () => {
   /** @type {any[]} */ const calls=[]
   const config={revision:2,enabled:true,timeoutMs:4000,binaryVersion:'0.3.2'}
-  const agent={ctx:{get:()=>config},runMaintenance:async(/** @type {any} */ fn)=>fn(AbortSignal.timeout(1000))}
+  const { agent, mount } = kernelAgent()
   const names=['cite_lookup','cite_format','cite_bibtex','cite_check','cite_health']
   const { defineTool } = await loadHarnessModule('@deepseek-ai/dsh-tools')
   const definitions = new Map(names.map(name => [name, defineTool({
@@ -26,14 +40,16 @@ test('proof observes actual agent registrations and asks the source one fixed he
   })]))
   const ctx={tools:{get:(/** @type {string} */ name,/** @type {any} */ subject)=>subject===agent?definitions.get(name):undefined,
     execute:async()=>{assert.fail('probe must not broadcast through the research host pipeline')}}}
-  const scope={agent,effect:(/** @type {any} */ fn)=>fn()}
+  const scope=mount()
   await registerCitationConfiguration(scope,config)
   const result=await verifyCitationAgent(ctx,agent)
   assert.equal(result.timeoutMs,4000);assert.equal(result.binaryVersion,'0.3.2');assert.deepEqual(result.tools,names)
   assert.deepEqual(result.upstream,{ok:true,code:null})
   assert.deepEqual(calls.map(x=>[x.name,x.arguments]),[['cite_health',{}]],'one source request per proof')
+  // A remount with the tools switched off, the old mount disposed as a reload would.
+  mounted.pop()?.()
   config.enabled=false
-  await registerCitationConfiguration(scope,config)
+  await registerCitationConfiguration(mount(),config)
   await assert.rejects(verifyCitationAgent(ctx,agent),/registrations/)
   ctx.tools.get=()=>undefined
   const disabled=await verifyCitationAgent(ctx,agent)
@@ -47,13 +63,13 @@ test('proof observes actual agent registrations and asks the source one fixed he
 async function proofWith(health) {
   const { defineTool } = await loadHarnessModule('@deepseek-ai/dsh-tools')
   const names = ['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health']
-  const agent = { runMaintenance: async (/** @type {any} */ operation) => operation(AbortSignal.timeout(1000)) }
+  const { agent, mount } = kernelAgent()
   const definitions = new Map(names.map(name => [name, defineTool({
     name, description: name, parameters: {},
     output: { schema: { type: 'object', additionalProperties: true }, render: () => [] },
     execute: async () => (name === 'cite_health' ? health() : {}),
   })]))
-  await registerCitationConfiguration({ agent, effect: (/** @type {any} */ install) => install() },
+  await registerCitationConfiguration(mount(),
     { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
   return verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => definitions.get(name) } }, agent)
 }
@@ -101,28 +117,31 @@ test('a failed proof says which check failed and why', async () => {
   await assert.rejects(proofWith(() => { throw new Error(`line\nbreak ${'x'.repeat(500)}`) }),
     (/** @type {any} */ error) => !/\n/.test(error.message) && error.message.length <= 'citation_probe_gateway_failed: '.length + 240)
   // And the registrations a proof found, when they are not the ones it needs.
-  const agent = { runMaintenance: async () => {} }
-  await registerCitationConfiguration({ agent, effect: (/** @type {any} */ install) => install() },
-    { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+  const { agent, mount } = kernelAgent()
+  await registerCitationConfiguration(mount(), { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
   await assert.rejects(verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => name === 'cite_health' ? {} : undefined } }, agent),
     { message: 'citation_probe_registrations_invalid: enabled=true, registered cite_health' })
-  await assert.rejects(verifyCitationAgent({ tools: { get: () => undefined } }, { runMaintenance: async () => {} }),
-    { message: 'citation_probe_config_invalid: no citation configuration registered in this agent scope' })
+  // Two different configurations live in one runtime is not a configuration.
+  await registerCitationConfiguration(mount(), { revision: 2, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+  await assert.rejects(verifyCitationAgent({ tools: { get: () => undefined } }, agent),
+    { message: 'citation_probe_config_invalid: 2 different citation configurations are live in this runtime' })
+  while (mounted.length) mounted.pop()?.()
+  await assert.rejects(verifyCitationAgent({ tools: { get: () => undefined } }, agent),
+    { message: 'citation_probe_config_invalid: no citation configuration is registered in this runtime' })
 })
 
 test('the isolated native pipeline still validates registered input and output schemas', async () => {
   const { defineTool } = await loadHarnessModule('@deepseek-ai/dsh-tools')
   for (const invalid of ['input', 'output']) {
     /** @type {string[]} */ const executed = []
-    const agent = { runMaintenance: async (/** @type {any} */ operation) => operation(AbortSignal.timeout(1000)) }
+    const { agent, mount } = kernelAgent()
     const definitions = new Map(['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'].map(name => [name, defineTool({
       name, description: name,
       parameters: name === 'cite_health' && invalid === 'input' ? { requiredField: { type: 'string', required: true } } : {},
       output: { schema: name === 'cite_health' && invalid === 'output' ? { type: 'string' } : { type: 'object', additionalProperties: true }, render: () => [] },
       execute: async () => { executed.push(name); return { ok: true } },
     })]))
-    await registerCitationConfiguration({ agent, effect: (/** @type {any} */ install) => install() },
-      { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+    await registerCitationConfiguration(mount(), { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
     await assert.rejects(verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => definitions.get(name) } }, agent), /citation_probe_gateway_failed/)
     assert.deepEqual(executed, invalid === 'input' ? [] : ['cite_health'])
   }

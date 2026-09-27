@@ -62,12 +62,32 @@ const loaded = new Map()
 const enteringStepContext = new WeakMap()
 
 /**
+ * Kernel packages this port must never import itself.
+ *
+ * `loadHarnessModule` resolves from this package's own location, and in the
+ * runtime image that is inside the profile seed, while the kernel's agent
+ * machinery runs from the CLI's install: two copies of every kernel package
+ * both sides import (measured on a seed projected the way the container boots,
+ * 2026-09-27). A package whose state is plain data or `Symbol.for` survives
+ * that; `@deepseek-ai/dsh-scope` does not -- its scope tag is a module-local
+ * `Symbol('dsh.scope')` and its parent links a module-local WeakMap -- so its
+ * `scopeOf` answered `undefined` for every kernel context and every production
+ * plugin probe failed. What a scope would have answered comes from the kernel
+ * itself instead: the agent its factory hands `setup`, and its own tool
+ * registry (`src/pluginProbe.mjs`).
+ */
+const KERNEL_SINGLETON_PACKAGES = new Set(['@deepseek-ai/dsh-scope'])
+
+/**
  * @param {string} specifier
  * @returns {Promise<any>}
  */
 export async function loadHarnessModule(specifier) {
   if (!Object.prototype.hasOwnProperty.call(SEAMS.packages, specifier)) {
     throw new Error(`evimed: ${specifier} is not listed in seam-manifest.packages`)
+  }
+  if (KERNEL_SINGLETON_PACKAGES.has(specifier)) {
+    throw new Error(`evimed: ${specifier} holds kernel state in module-local symbols; importing it here reaches a second copy in the runtime image -- read it through the kernel's own objects`)
   }
   if (!loaded.has(specifier)) {
     loaded.set(specifier, import(specifier).catch((error) => {

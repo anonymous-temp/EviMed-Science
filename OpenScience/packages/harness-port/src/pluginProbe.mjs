@@ -13,18 +13,46 @@ export async function installedCitationVersion(manifestUrl) {
   return manifest.version
 }
 
-const citationConfigurations = new WeakMap()
-/** Standing-preset scoped observation; no process-global Cordis service is published.
- * @param {any} ctx @param {any} configuration */
+/**
+ * The configurations the citation bridge is live with in this runtime, one
+ * entry per mount, removed when the mount is disposed. No process-global
+ * Cordis service is published.
+ *
+ * What it is keyed by is the point. It used to be keyed by the agent the
+ * bridge's context belonged to, read with this package's own `scopeOf`, and
+ * looked up along the probe agent's scope chain. Both halves read
+ * `@deepseek-ai/dsh-scope`, whose scope tag is a module-local
+ * `Symbol('dsh.scope')` and whose parent links are a module-local WeakMap; in
+ * the runtime image the kernel's agent machinery runs from the CLI's install
+ * while this package, inside the profile seed, resolves the seed's own copy --
+ * two module instances, two symbols -- so `scopeOf` answered `undefined` for
+ * every kernel context: nothing was ever registered and the probe's own setup
+ * found no agent (`citation_probe_agent_unavailable`, production 2026-09-27).
+ *
+ * Nothing here needs a scope. The bridge is a row of the preset's standing
+ * composition -- mounted once and joined by every agent on that preset -- and
+ * its configuration is read from the container's environment
+ * (`EVIMED_CITE_*`), so every live mount in one runtime carries the same
+ * values. Which agent sees the tools is the kernel's own answer
+ * (`ctx.tools.get(name, agent)`), asked of the kernel's own registry.
+ * @type {Set<Readonly<Record<string, any>>>}
+ */
+const citationRegistrations = new Set()
+/** @param {any} ctx @param {any} configuration */
 export async function registerCitationConfiguration(ctx, configuration) {
-  const { scopeOf } = await loadHarnessModule('@deepseek-ai/dsh-scope')
-  const agent = scopeOf(ctx)
-  if (!agent) return
   const value = Object.freeze({ ...configuration })
   ctx.effect(() => {
-    citationConfigurations.set(agent, value)
-    return () => { if (citationConfigurations.get(agent) === value) citationConfigurations.delete(agent) }
+    citationRegistrations.add(value)
+    return () => { citationRegistrations.delete(value) }
   })
+}
+
+/** The one citation configuration this runtime is live with. */
+function liveCitationConfiguration() {
+  const distinct = [...new Map([...citationRegistrations].map((value) => [JSON.stringify(value), value])).values()]
+  if (!distinct.length) throw probeFailure('citation_probe_config_invalid', 'no citation configuration is registered in this runtime')
+  if (distinct.length > 1) throw probeFailure('citation_probe_config_invalid', `${distinct.length} different citation configurations are live in this runtime`)
+  return distinct[0]
 }
 
 /** Includes durable pending input and maintenance, whose public status is idle.
@@ -130,9 +158,7 @@ export function citationUpstreamHealth(health) {
  * is nothing to ask.
  * @param {any} ctx @param {any} agent */
 export async function verifyCitationAgent(ctx, agent) {
-  const { scopeChainOf } = await loadHarnessModule('@deepseek-ai/dsh-scope')
-  const config = scopeChainOf(agent).map((/** @type {object} */ scope) => citationConfigurations.get(scope)).find(Boolean)
-  if (!config) throw probeFailure('citation_probe_config_invalid', 'no citation configuration registered in this agent scope')
+  const config = liveCitationConfiguration()
   if (config.binaryVersion !== '0.3.2' || !Number.isSafeInteger(config.timeoutMs)
     || config.timeoutMs < 2000 || config.timeoutMs > 15000 || !Number.isSafeInteger(config.revision)
     || config.revision < 0 || typeof config.enabled !== 'boolean') {
@@ -200,10 +226,14 @@ export async function registerPluginProbe(ctx) {
           sessionId: `evimed_plugin_${randomUUID()}`,
           meta: { cwd: workspace, agentPreset: 'evimed-universal' },
           signal: AbortSignal.timeout(45000),
-          setup: async (/** @type {any} */ agentCtx) => {
-            const { scopeOf } = await loadHarnessModule('@deepseek-ai/dsh-scope')
-            const agent = scopeOf(agentCtx)
-            if (!agent?.session) throw new Error('citation_probe_agent_unavailable')
+          // The kernel hands setup the agent it is creating
+          // (`setup(agent.ctx, agent)`). It used to be recovered with this
+          // package's own `scopeOf(agentCtx)`, which reads another module's
+          // symbol in the runtime image and found nothing: every production
+          // probe failed here. `Context.filter` is safe to take from any
+          // copy -- cordis registers its symbols with `Symbol.for`.
+          setup: async (/** @type {any} */ agentCtx, /** @type {any} */ agent) => {
+            if (!agent?.session) throw probeFailure('citation_probe_agent_unavailable', 'the kernel handed setup no agent with a session')
             Object.defineProperty(agent, Context.filter, { value: () => false })
             Object.defineProperty(agent.session, Context.filter, { value: () => false })
             await ctx.agentPresets.mount(agentCtx, 'evimed-universal')
