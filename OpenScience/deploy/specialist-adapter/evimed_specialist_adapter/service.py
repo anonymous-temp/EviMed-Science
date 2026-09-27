@@ -16,12 +16,14 @@ import secrets
 import stat
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterator
 
 from fastapi import Body, FastAPI, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -35,6 +37,14 @@ _SAFE_WORKSPACE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_. -]{0,127}$")
 _STATE_LIMIT = 256 * 1024
 _LOG_TAIL_LIMIT = 16 * 1024
 _WORKERS: dict[str, subprocess.Popen[bytes]] = {}
+#: How often a running job's state is rewritten while its engine works. A
+#: poller tells a slow job from a dead one by `updatedAt`: on 2026-09-27 a
+#: research-topic job PubMed was throttling still carried its start time after
+#: fifteen minutes, was recorded as dead, and succeeded six minutes later.
+_HEARTBEAT_SECONDS = 30.0
+#: Where an engine that knows its own stage says so: `{"stage", "percent"}`.
+_PROGRESS_ENV = "EVIMED_JOB_PROGRESS_FILE"
+_PROGRESS_LIMIT = 4 * 1024
 
 
 SPECS: dict[str, dict[str, Any]] = {
@@ -260,6 +270,126 @@ def _read_json(path: Path) -> dict[str, Any]:
         return value
     finally:
         os.close(descriptor)
+
+
+def _moment(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None else None
+
+
+def _seconds_since(value: Any, now: datetime) -> int | None:
+    moment = _moment(value)
+    return None if moment is None else max(0, int((now - moment).total_seconds()))
+
+
+def _liveness(state: dict[str, Any]) -> dict[str, Any]:
+    """What a poller needs to tell a slow job from a dead one."""
+    now = datetime.now(timezone.utc)
+    facts: dict[str, Any] = {
+        "updatedAt": state.get("updatedAt"),
+        "heartbeatSeconds": int(_HEARTBEAT_SECONDS),
+    }
+    for key, moment in (("secondsSinceUpdate", "updatedAt"), ("elapsedSeconds", "createdAt")):
+        seconds = _seconds_since(state.get(moment), now)
+        if seconds is not None:
+            facts[key] = seconds
+    if isinstance(state.get("progress"), dict):
+        facts["progress"] = state["progress"]
+    return facts
+
+
+def _engine_progress(path: Path | None) -> dict[str, Any] | None:
+    """The engine's own `{"stage", "percent"}`, when it reports one; None otherwise."""
+    if path is None:
+        return None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError:
+        return None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= _PROGRESS_LIMIT:
+            return None
+        value = json.loads(os.read(descriptor, _PROGRESS_LIMIT + 1).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    finally:
+        os.close(descriptor)
+    stage = value.get("stage") if isinstance(value, dict) else None
+    if not isinstance(stage, str) or not stage.strip() or len(stage) > 200 or not stage.isprintable():
+        return None
+    progress: dict[str, Any] = {"stage": stage.strip()}
+    if type(value.get("percent")) is int and 0 <= value["percent"] <= 100:
+        progress["percent"] = value["percent"]
+    return progress
+
+
+def _log_line(log_path: Path | None, text: str) -> None:
+    if log_path is None:
+        return
+    try:
+        descriptor = os.open(
+            log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600
+        )
+        with os.fdopen(descriptor, "ab", buffering=0) as log:
+            log.write(f"\n{text}\n".encode("utf-8"))
+    except OSError:
+        pass
+
+
+@contextmanager
+def _heartbeat(
+    state_path: Path,
+    state: dict[str, Any],
+    *,
+    read: Callable[[Path], dict[str, Any]],
+    write: Callable[[Path, dict[str, Any]], None],
+    progress_path: Path | None = None,
+) -> Iterator[None]:
+    """Advance a running job's `updatedAt` while its engine works.
+
+    The state keeps one writer at a time: the worker writes before this starts
+    and after it has stopped, and the status handler writes only for a worker
+    that is gone. Each beat still re-reads first and stops as soon as the state
+    on disk is not this worker's running job, so a beat does not revive a job
+    someone else has ended; the MR store refuses that write under its lock. A
+    beat that cannot be written stops the heartbeat and says why in the job
+    log; the engine goes on and the job ends as it would have.
+    """
+    stop = threading.Event()
+    pid = os.getpid()
+    log_path = state_path.with_suffix(".log")
+
+    def beat() -> None:
+        while not stop.wait(_HEARTBEAT_SECONDS):
+            try:
+                current = read(state_path)
+                if current.get("status") != "running" or current.get("workerPid") != pid:
+                    return
+                state["updatedAt"] = _now()
+                elapsed = _seconds_since(state.get("createdAt"), datetime.now(timezone.utc))
+                if elapsed is not None:
+                    state["elapsedSeconds"] = elapsed
+                progress = _engine_progress(progress_path)
+                if progress is not None:
+                    state["progress"] = progress
+                write(state_path, state)
+            except Exception as error:  # noqa: BLE001 — the engine keeps running; the log says why the state stopped advancing
+                _log_line(log_path, f"heartbeat stopped: {type(error).__name__}: {error}")
+                return
+
+    thread = threading.Thread(target=beat, name="evimed-job-heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join()
 
 
 def _error(
@@ -742,7 +872,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             return {
                 "status": "warning",
                 "summary": f"{_spec()['label']} job {job_id} is {job_status}.",
-                "data": {"jobId": job_id, "jobStatus": job_status, "updatedAt": state.get("updatedAt")},
+                "data": {"jobId": job_id, "jobStatus": job_status, **_liveness(state)},
                 "sources": [_source(job_id)],
                 "warnings": ["The specialist analysis is incomplete; do not draw final conclusions."],
                 "next_actions": ["Poll this job again after additional processing time."],
@@ -797,10 +927,13 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return _error("specialist_execution_failed", message, bool(state.get("retryable")))
     if job_status != "succeeded":
         return _error("specialist_job_state_invalid", "The specialist job state is invalid.")
+    finished = _moment(state.get("finishedAt"))
+    elapsed = _seconds_since(state.get("createdAt"), finished) if finished else None
     return {
         "status": "success",
         "summary": f"{_spec()['label']} job {job_id} completed.",
         "data": {"jobId": job_id, "jobStatus": "succeeded",
+                 **({"elapsedSeconds": elapsed} if elapsed is not None else {}),
                  **({"cleanupError": cleanup} if cleanup else {}),
                  **({"auditReceipt": state["auditReceipt"]} if state.get("auditReceipt") else {})},
         "sources": [_source(job_id)],
@@ -940,16 +1073,7 @@ def _report_usage(state: dict[str, Any], log_path: Path | None) -> None:
             )
         except Exception as error:  # noqa: BLE001 — the job has ended; its log says why no report went
             outcome = f"failed ({type(error).__name__})"
-    if log_path is None:
-        return
-    try:
-        descriptor = os.open(
-            log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600
-        )
-        with os.fdopen(descriptor, "ab", buffering=0) as log:
-            log.write(f"\nusage report: {outcome}\n".encode("utf-8"))
-    except OSError:
-        pass
+    _log_line(log_path, f"usage report: {outcome}")
 
 
 def _run_isolated_mr(
@@ -978,9 +1102,11 @@ def _run_isolated_mr(
         except audit_receipt.AuditReceiptUnavailable:
             raise helper.MRInputError("mr_input_isolation_unavailable", "Signed MR audit requires isolated analysis permissions.") from None
         try:
-            with _mr_store().diagnostic_directory(state_path) as diagnostic_directory:
-                outcome = jobs.execute(helper, job, environment, analysis_credentials=credentials,
-                                       failure_directory=diagnostic_directory)
+            store = _mr_store()
+            with store.diagnostic_directory(state_path) as diagnostic_directory:
+                with _heartbeat(state_path, state, read=store.read, write=store.write):
+                    outcome = jobs.execute(helper, job, environment, analysis_credentials=credentials,
+                                           failure_directory=diagnostic_directory)
         except helper.MRInputError:
             raise
         except (OSError, ValueError):
@@ -1121,16 +1247,26 @@ def run_job(state_file: str) -> int:
         "--output-dir",
         str(output_root),
     ]
-    with os.fdopen(log_descriptor, "ab", buffering=0) as log:
-        completed = subprocess.run(
-            command,
-            cwd=str(root),
-            env=_child_environment(),
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+    # Beside the state, not in the output: it is the engine's word on where it
+    # is, not a deliverable, and it is gone once the job has ended.
+    progress_path = state_path.with_name(f"{state['jobId']}.progress.json")
+    try:
+        with os.fdopen(log_descriptor, "ab", buffering=0) as log:
+            with _heartbeat(state_path, state, read=_read_json, write=_atomic_json, progress_path=progress_path):
+                completed = subprocess.run(
+                    command,
+                    cwd=str(root),
+                    env={**_child_environment(), _PROGRESS_ENV: str(progress_path)},
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                )
+    finally:
+        try:
+            progress_path.unlink()
+        except OSError:
+            pass
     result_path = output_root / "result.json"
     result = _read_json(result_path) if result_path.is_file() else {}
     # What the engine spent at the provider, success or not: a failed job's
