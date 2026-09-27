@@ -1124,7 +1124,8 @@ export function createWebApiApp(overrides = {}) {
       maxDownloadBytes: config.openListMaxDownloadBytes, fetchImpl: overrides.openListFetch ?? globalThis.fetch,
     }) : null;
   const openListConnector = openListClient
-    ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot }) : null;
+    ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot,
+      probeTimeoutMs: config.openListProbeTimeoutMs, probeCacheMs: config.openListProbeCacheMs }) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
@@ -3701,8 +3702,15 @@ export function createWebApiApp(overrides = {}) {
             operator: config.operatorUsers.includes(user.id),
             // Which optional modules this account sees. Presentation too: the
             // module's own routes answer 404 to anyone it does not.
+            // `openList`: whether 连接网盘 has anything to import — OpenList
+            // configured AND a storage under its tenant root, from the probe
+            // readiness uses. The last known answer is served at once and
+            // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
-              geo: Boolean(geo) && geoAudienceAllows(config, user) },
+              geo: Boolean(geo) && geoAudienceAllows(config, user),
+              openList: openListConnector
+                ? await openListConnector.storageStatus({ allowStale: true }).then((status) => status.storage === "mounted", () => false)
+                : false },
             runtime: {
               kernel: RUNTIME_KERNEL_NAME,
               // Where the kernel's own browser application is served. Empty
@@ -6146,6 +6154,21 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       value: memoryIndex.recall?.lastError ? 1 : 0,
       labels: { code: String(memoryIndex.recall?.lastError ?? "none") },
     });
+  // OpenList degraded is a green check (nothing mounted is the operator's
+  // provisioning, not an outage), so the readiness gauge reads `ok` for it and
+  // this is where the state is scraped. The counter is what the probe cache
+  // bounds: probes that actually reached OpenList, by outcome.
+  const openListCheck = readiness.checks.openList ?? {};
+  if (openListCheck.storage) {
+    addMetric(lines, "open_science_openlist_storage_mounted",
+      "Whether OpenList's tenant root holds a storage to import from (0 while the check reports openlist_storage_missing).",
+      "gauge", { value: openListCheck.storage === "mounted" ? 1 : 0 });
+  }
+  if (openList?.probeCounts?.size) {
+    addMetric(lines, "open_science_openlist_storage_probes_total",
+      "Authenticated OpenList tenant-root listings made by the storage probe, by outcome (mounted, missing or an error code).",
+      "counter", [...openList.probeCounts].map(([outcome, value]) => ({ value, labels: { outcome } })));
+  }
   addMetric(lines, "open_science_process_uptime_seconds", "EviMed Web API process uptime.", "gauge", {
     value: process.uptime(),
   });
@@ -6510,11 +6533,30 @@ async function readinessDocumentParser(config, parser) {
   return { required: true, ...(await parser.health()) };
 }
 
+/** Whether 连接网盘 can work, exercised rather than pinged: the connector's
+ *  storage probe lists the configured tenant root with the deployment's own
+ *  credential — the call the browse route makes. It used to request `/ping`,
+ *  which OpenList answers with no credential and no storage, so production read
+ *  `connected` over an empty `x_storages` while every browse answered 502
+ *  (audit I3-4).
+ *
+ *  Red for what is the platform's own: OpenList unconfigured, unreachable, too
+ *  slow, or refusing the credential the bootstrap derived. An OpenList that
+ *  answers with nothing mounted under the tenant root is `degraded` on a green
+ *  check, with `warning: openlist_storage_missing` and `namespaces: 0` — the
+ *  precedent `frontier` and `geo` set for what lies outside the platform. Which
+ *  drive to mount is the operator's provisioning, and the web container's
+ *  healthcheck polls this route: red would mark the whole deployment unhealthy
+ *  over one import entry, which the page hides on the same probe (`/api/me`
+ *  `features.openList`). */
 async function readinessOpenList(config, connector) {
   if (!config.requireOpenList) return { required: false, configured: Boolean(config.openListUrl && config.openListToken) };
   if (config.openListTokenError) throw readinessFailure(config.openListTokenError);
   if (!config.openListUrl || !config.openListToken || !connector) throw readinessFailure("openlist_unconfigured");
-  return { required: true, ...(await connector.health()) };
+  const { storage, namespaces } = await connector.storageStatus();
+  return storage === "mounted"
+    ? { required: true, state: "connected", storage, namespaces }
+    : { required: true, state: "degraded", storage, namespaces, warning: "openlist_storage_missing" };
 }
 
 async function readinessRelationalIntegrity(config, database) {

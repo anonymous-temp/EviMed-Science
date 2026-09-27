@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import { knownErrorCodeMessage } from "@evimed/domain";
+import { OpenListClient } from "../src/openListClient.mjs";
+import { OpenListSourceConnector } from "../src/openListSourceConnector.mjs";
 import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
+import { startFakeOpenList } from "./fakeOpenList.mjs";
 
-async function fixture(t, { withOpenList = false } = {}) {
+async function fixture(t, { withOpenList = false, connector = null } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -41,13 +45,13 @@ async function fixture(t, { withOpenList = false } = {}) {
       return { id };
     },
   };
-  const openList = withOpenList ? {
+  const openList = connector ?? (withOpenList ? {
     list: async (userId, selected, options) => { calls.push({ method: "openList", userId, selected, options }); return { entries: [], nextCursor: null }; },
     stat: async (_userId, selected) => (selected === "/papers"
       ? { path: "/papers", name: "papers", entryType: "dir", size: 0, mtime: null, providerHash: null }
       : { path: "/paper.pdf", name: "paper.pdf", entryType: "file", size: 7,
         mtime: "2026-09-06T00:00:00.000Z", providerHash: `sha256:${"a".repeat(64)}` }),
-  } : null;
+  } : null);
   const route = createSourceRoutes({ store, service, openList, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
@@ -140,6 +144,27 @@ test("OpenList browse and import stay account and project scoped", async (t) => 
   assert.equal(registered.userId, "owner");
   assert.deepEqual(registered.input.connector, { type: "openlist", id: "/paper.pdf" });
   assert.equal(registered.input.sha256, "a".repeat(64));
+});
+
+test("an account with no drive mounted is told so by name; a mounted one lists its root", async (t) => {
+  // Audit I3-4: production answered this browse with an anonymous 502
+  // `openlist_request_failed`, because OpenList had no storage at all.
+  const openList = await startFakeOpenList(t);
+  const connector = new OpenListSourceConnector(new OpenListClient({ baseUrl: openList.url, token: openList.token }), { tenantRoot: "/tenants" });
+  const { base, headers } = await fixture(t, { connector });
+  const browse = () => fetch(`${base}/api/sources/openlist?projectId=owned-project&path=%2F`, { headers });
+  const unmounted = await browse();
+  assert.equal(unmounted.status, 404);
+  const refused = await unmounted.json();
+  assert.equal(refused.code, "openlist_storage_missing");
+  assert.equal(JSON.stringify(refused).includes("/tenants"), false, "the namespace path stays server-side");
+  assert.ok(knownErrorCodeMessage(refused.code), "the browse toast has a sentence for it");
+  assert.deepEqual(openList.requests.map((request) => request.path), ["/tenants/owner"]);
+
+  openList.mount("/tenants/owner", ["paper.txt"]);
+  const mounted = await browse();
+  assert.equal(mounted.status, 200);
+  assert.deepEqual((await mounted.json()).data.entries.map((entry) => [entry.path, entry.entryType]), [["/paper.txt", "file"]]);
 });
 
 test("the OpenList connector is handed to the service the ingestion worker shares", async (t) => {

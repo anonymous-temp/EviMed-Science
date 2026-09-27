@@ -92,18 +92,23 @@ export class OpenListClient {
     this.maxDownloadBytes = maxDownloadBytes;
   }
 
-  /** @param {string} remotePath @param {{page?:number,perPage?:number,refresh?:boolean}} options */
-  async list(remotePath, { page = 1, perPage = 100, refresh = false } = {}) {
+  /** `timeoutMs` shortens this one call below the client's own deadline — a
+   * probe that must answer inside a readiness check — and never lengthens it.
+   * `total` is OpenList's count of every entry in the directory, not the page's.
+   * @param {string} remotePath @param {{page?:number,perPage?:number,refresh?:boolean,timeoutMs?:number}} options */
+  async list(remotePath, { page = 1, perPage = 100, refresh = false, timeoutMs = this.timeoutMs } = {}) {
     if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(perPage) || perPage < 1 || perPage > 500) {
       throw failure("openlist_page_invalid", "OpenList page is invalid.", 400);
     }
     const parent = openListPath(remotePath);
-    const data = await this.request("/api/fs/list", { path: parent, page, per_page: perPage, refresh: Boolean(refresh) });
+    const data = await this.request("/api/fs/list", { path: parent, page, per_page: perPage, refresh: Boolean(refresh) },
+      { timeoutMs: Math.min(this.timeoutMs, timeoutMs) });
     const rows = data?.content;
     if (!Array.isArray(rows) || rows.length > perPage) throw failure("openlist_response_invalid", "OpenList returned an invalid directory listing.");
     const entries = rows.map((row) => entry(row, parent));
-    const total = Number(data?.total ?? entries.length);
-    return { entries, nextCursor: Number.isFinite(total) && page * perPage < total ? String(page + 1) : null };
+    const reported = Number(data?.total ?? entries.length);
+    const total = Number.isSafeInteger(reported) && reported >= entries.length ? reported : entries.length;
+    return { entries, total, nextCursor: page * perPage < total ? String(page + 1) : null };
   }
 
   /** @param {string} remotePath */
@@ -148,46 +153,53 @@ export class OpenListClient {
     } finally { clearTimeout(timer); }
   }
 
-  async health() {
+  /** The deadline covers the whole exchange, body included: a server that sends
+   * its headers and then stalls must not hold a readiness probe past its bound.
+   * @param {string} endpoint @param {Record<string,any>} payload @param {{timeoutMs?:number}} options */
+  async request(endpoint, payload, { timeoutMs = this.timeoutMs } = {}) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.min(this.timeoutMs, 5_000));
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     timer.unref?.();
     try {
-      const response = await this.fetch(`${this.baseUrl}/ping`, { method: "GET", redirect: "error", signal: controller.signal });
-      if (!response.ok) throw failure("openlist_unavailable", `OpenList health returned HTTP ${response.status}.`, 503);
-      await body(response, 1024);
-      return { connected: true };
-    } catch (error) {
-      if (error?.code) throw error;
-      throw failure("openlist_unavailable", "OpenList is unavailable.", 503);
+      let response;
+      try {
+        response = await this.fetch(`${this.baseUrl}${endpoint}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...(this.token ? { authorization: this.token } : {}) },
+          body: JSON.stringify(payload), signal: controller.signal,
+        });
+      } catch (error) {
+        throw failure(error?.name === "AbortError" ? "openlist_timeout" : "openlist_unavailable", "OpenList is unavailable.", 503);
+      }
+      if (!response.ok) throw failure("openlist_request_failed", `OpenList returned HTTP ${response.status}.`);
+      let parsed;
+      try { parsed = JSON.parse((await body(response, this.maxResponseBytes)).toString("utf8")); }
+      catch (error) {
+        if (error?.code === "openlist_response_too_large") throw error;
+        if (controller.signal.aborted) throw failure("openlist_timeout", "OpenList is unavailable.", 503);
+        throw failure("openlist_response_invalid", "OpenList returned invalid JSON.");
+      }
+      if (!parsed || parsed.code !== 200 || !parsed.data || typeof parsed.data !== "object") throw refusal(parsed);
+      return parsed.data;
     } finally { clearTimeout(timer); }
   }
+}
 
-  /** @param {string} endpoint @param {Record<string,any>} payload */
-  async request(endpoint, payload) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    timer.unref?.();
-    let response;
-    try {
-      response = await this.fetch(`${this.baseUrl}${endpoint}`, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...(this.token ? { authorization: this.token } : {}) },
-        body: JSON.stringify(payload), signal: controller.signal,
-      });
-    } catch (error) {
-      throw failure(error?.name === "AbortError" ? "openlist_timeout" : "openlist_unavailable", "OpenList is unavailable.", 503);
-    } finally { clearTimeout(timer); }
-    if (!response.ok) throw failure("openlist_request_failed", `OpenList returned HTTP ${response.status}.`);
-    let parsed;
-    try { parsed = JSON.parse((await body(response, this.maxResponseBytes)).toString("utf8")); }
-    catch (error) {
-      if (error?.code === "openlist_response_too_large") throw error;
-      throw failure("openlist_response_invalid", "OpenList returned invalid JSON.");
-    }
-    if (!parsed || parsed.code !== 200 || !parsed.data || typeof parsed.data !== "object") {
-      throw failure("openlist_request_failed", "OpenList rejected the request.");
-    }
-    return parsed.data;
+/** What OpenList's own refusal means. OpenList 4.2.6 answers every refusal with
+ * HTTP 200 and a JSON `code`/`message`, so the HTTP status says nothing; these
+ * two were read off the pinned image on 2026-09-27:
+ *   - no storage covers the path: `code: 500`, "failed get storage: storage not
+ *     found; …" (its `errs.StorageNotFound`). An empty `x_storages` answers every
+ *     path this way, which production relayed as an anonymous 502 (audit I3-4).
+ *   - a credential it does not accept: `code: 401` ("token is invalidated").
+ * Everything else stays `openlist_request_failed`. The message itself is never
+ * passed on: it can name an internal path.
+ * @param {any} parsed */
+function refusal(parsed) {
+  const message = typeof parsed?.message === "string" ? parsed.message : "";
+  if (parsed?.code === 500 && message.includes("storage not found")) {
+    return failure("openlist_storage_missing", "No OpenList storage is mounted at this path.", 404);
   }
+  if (parsed?.code === 401) return failure("openlist_credential_rejected", "OpenList did not accept this deployment's credential.");
+  return failure("openlist_request_failed", "OpenList rejected the request.");
 }

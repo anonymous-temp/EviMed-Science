@@ -1825,6 +1825,17 @@ export function loadConfig(overrides = {}) {
     openListMaxDownloadBytes: Number(
       overrides.openListMaxDownloadBytes ?? process.env.OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES ?? 64 * 1024 * 1024,
     ),
+    // The storage probe: one authenticated listing of the tenant root, shared by
+    // readiness and `/api/me` (whether 连接网盘 is offered). The deadline sits
+    // inside the web healthcheck's 5 s, which runs every readiness check in turn;
+    // the cache is what keeps a page view from being an OpenList request.
+    // Counted per outcome as open_science_openlist_storage_probes_total.
+    openListProbeTimeoutMs: Number(
+      overrides.openListProbeTimeoutMs ?? process.env.OPEN_SCIENCE_OPENLIST_PROBE_TIMEOUT_MS ?? 3_000,
+    ),
+    openListProbeCacheMs: Number(
+      overrides.openListProbeCacheMs ?? process.env.OPEN_SCIENCE_OPENLIST_PROBE_CACHE_MS ?? 60_000,
+    ),
     requireOpenList: overrides.requireOpenList ?? boolEnv("OPEN_SCIENCE_REQUIRE_OPENLIST", false),
     sourceIngestionEnabled:
       overrides.sourceIngestionEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_INGESTION_ENABLED", production),

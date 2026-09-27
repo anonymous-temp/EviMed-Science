@@ -131,6 +131,10 @@ export function WebReadinessCard() {
 function readinessDetail(key: string, check: WebReadinessCheck): string {
   if (!check.ok) return check.code ?? "check_failed";
   if (check.skipped) return "未配置";
+  // A green check can still be degraded — OpenList answering with no storage
+  // mounted, a frontier plugin out of reach. The server names it in `warning`;
+  // 「可用」 in its place would repeat the false green this row exists to avoid.
+  if (typeof check.warning === "string" && check.warning) return check.warning;
   if (key === "publicUrl") return String(check.origin ?? (check.required ? "必需" : "开发环境"));
   if (key === "auth") return [check.mode, check.users != null ? `${check.users} 个用户` : null].filter(Boolean).join(" · ");
   if (key === "saasProfile") {

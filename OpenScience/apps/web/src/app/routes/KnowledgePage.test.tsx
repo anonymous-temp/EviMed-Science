@@ -10,7 +10,9 @@ vi.mock("@/lib/backend", () => ({ pickFiles: vi.fn(async () => []), uploadFilesT
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()),
   hasWebApi: true,
   getWebProjectId: () => "project-one",
-  fetchWebMe: async () => ({ user: { id: "u", name: "u" }, operator: false, project: { id: "project-one", name: "p" }, projects: [] }),
+  // A deployment with a drive mounted: 连接网盘 is offered only then.
+  fetchWebMe: async () => ({ user: { id: "u", name: "u" }, operator: false, project: { id: "project-one", name: "p" }, projects: [],
+    features: { openList: true } }),
 }));
 
 const source = {
@@ -43,7 +45,7 @@ describe("知识库", () => {
     expect(within(state).queryAllByRole("button")).toEqual([]);
     expect(state.textContent).toBe("还没有资料。拖进来，或点右上角上传。");
     expect(screen.getAllByRole("button", { name: "上传" })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "连接网盘" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "连接网盘" })).toBeInTheDocument();
     // Nothing to filter or search yet.
     expect(screen.queryByRole("group", { name: "资料状态" })).not.toBeInTheDocument();
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();

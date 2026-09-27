@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 import { OpenListClient } from "../src/openListClient.mjs";
 import { openListSourceInput } from "../src/openListSourceConnector.mjs";
+import { startFakeOpenList } from "./fakeOpenList.mjs";
 
 test("OpenList calls only the pinned list, get and link contracts", async (t) => {
   const calls = [];
@@ -134,4 +135,46 @@ test("one entry maps to one source manifest, so import and sync share a version 
     mimeType: "application/octet-stream", sha256: "a".repeat(64), providerHash: `sha256:${"A".repeat(64)}` });
   assert.equal(openListSourceInput("project-one", { ...entry, mtime: null }, { now: () => new Date("2026-09-07T00:00:00.000Z") }).mtime,
     "2026-09-07T00:00:00.000Z");
+});
+
+test("OpenList's own refusals are named, and never carry its message", async (t) => {
+  // Audit I3-4: production's OpenList had no storage mounted, and every browse
+  // came back as an anonymous `openlist_request_failed` 502. OpenList answers
+  // refusals with HTTP 200 and a JSON code (fakeOpenList.mjs, recorded from the
+  // pinned image), so the name has to be read from the body.
+  const openList = await startFakeOpenList(t);
+  const client = new OpenListClient({ baseUrl: openList.url, token: openList.token });
+  await assert.rejects(client.list("/tenants/user-two"), (error) => {
+    assert.equal(error.code, "openlist_storage_missing");
+    assert.equal(error.status, 404);
+    assert.equal(error.message.includes("rawPath"), false, "OpenList's own message names internal paths");
+    return true;
+  });
+  openList.mount("/tenants/user-one", ["paper.txt"]);
+  const root = await client.list("/tenants", { page: 1, perPage: 1 });
+  assert.deepEqual(root.entries.map((item) => [item.name, item.entryType]), [["user-one", "dir"]]);
+  assert.equal(root.total, 1);
+  assert.equal((await client.list("/tenants/user-one")).entries[0].path, "/tenants/user-one/paper.txt");
+  // A path inside a mounted storage that is not there is not a missing storage.
+  await assert.rejects(client.list("/tenants/user-one/missing"), { code: "openlist_request_failed", status: 502 });
+  const stranger = new OpenListClient({ baseUrl: openList.url, token: "not-the-deployment-token" });
+  await assert.rejects(stranger.list("/tenants"), { code: "openlist_credential_rejected", status: 502 });
+});
+
+test("a list's deadline covers the body, and a shorter per-call deadline is honoured", async (t) => {
+  // Headers first, then silence: the old client cleared its timer once the
+  // headers arrived, so a stalled body held the call — and the readiness check
+  // waiting on it — for as long as the socket stayed open.
+  const server = createServer((req, res) => {
+    if (req.url !== "/api/fs/list") { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write("{\"code\":200,");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const client = new OpenListClient({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "t", timeoutMs: 60_000 });
+  const started = Date.now();
+  const guard = new Promise((_, reject) => { setTimeout(() => reject(new Error("the call outlived its deadline")), 10_000).unref(); });
+  await assert.rejects(Promise.race([client.list("/tenants", { timeoutMs: 1_000 }), guard]), { code: "openlist_timeout", status: 503 });
+  assert.ok(Date.now() - started < 5_000, "the per-call deadline, not the client's 60 s, bounded the call");
 });

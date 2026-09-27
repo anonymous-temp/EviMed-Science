@@ -21,6 +21,8 @@ beforeEach(() => {
   setWebProjectId("deleted-project");
   useProjectStore.getState().clear();
   api.listWebProjects.mockResolvedValue([{ id: "default", name: "Default" }]);
+  // The page asks `/api/me` once on mount, for whether to offer 连接网盘.
+  api.fetchWebMe.mockResolvedValue(null);
 });
 afterEach(() => {
   cleanup();
@@ -45,7 +47,10 @@ describe("SourcesPage automatic project fallback", () => {
 
     await act(async () => { resolveDeleted({ items: [{ id: "obsolete", projectId: "deleted-project", payload: { paths: ["obsolete.txt"] } }], nextCursor: null }); });
     expect(screen.queryByText("obsolete.txt")).not.toBeInTheDocument();
-    expect(api.fetchWebMe).not.toHaveBeenCalled();
+    // The repair is not a project switch: a switch proves its project on
+    // `/api/me` first (`fetchWebMe({ projectId })`). The page's own read of
+    // what it may offer names no project and is not one.
+    expect(api.fetchWebMe).not.toHaveBeenCalledWith(expect.objectContaining({ projectId: expect.anything() }));
   });
 
   it("keeps a newer tab selection when a pending project list resolves", async () => {

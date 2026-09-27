@@ -1570,7 +1570,9 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   };
 
   const off = await composedApp(t);
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, geo: false });
+  // `openList` is false here because this composition configures no OpenList
+  // (openListReadiness.test.mjs covers the probe that turns it on).
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, geo: false, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);

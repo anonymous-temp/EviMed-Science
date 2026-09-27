@@ -1,4 +1,5 @@
 import { knownErrorCodeMessage } from "@evimed/domain";
+import type { WebMe } from "./apiClient";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
 export type SourceStatus = "queued" | "parsing" | "complete" | "needs_attention" | "failed" | "missing" | "canceled";
@@ -294,6 +295,12 @@ export function decideDuplicateGroup(input: { projectId: string; groupKey: strin
 export function browseOpenList(projectId: string, path: string) {
   const query = new URLSearchParams({ projectId, path });
   return productRequest<{ entries: OpenListEntry[]; nextCursor: string | null }>(`/sources/openlist?${query}`);
+}
+/** Whether `/api/me` offers 连接网盘: OpenList configured and a storage mounted
+ *  under its tenant root (`features.openList`). A missing `features` is off. */
+export function openListOffered(me: WebMe | null): boolean {
+  const features = (me as (WebMe & { features?: unknown }) | null)?.features;
+  return !!features && typeof features === "object" && (features as Record<string, unknown>).openList === true;
 }
 export function importOpenListSource(projectId: string, path: string) {
   return productRequest<{ source: SourceRecord; duplicate: boolean }>("/sources/openlist/import", "POST", { projectId, path });

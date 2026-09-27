@@ -88,6 +88,24 @@ describe("WebReadinessCard", () => {
     await waitFor(() => expect(mocks.fetchWebReadiness).toHaveBeenCalledTimes(1));
   });
 
+  it("names the warning of a check that passes degraded, instead of 「可用」", async () => {
+    // Audit I3-4: OpenList answering with no storage mounted is a green check
+    // with `warning: openlist_storage_missing`; the row used to read 「可用」.
+    mocks.fetchWebReadiness.mockResolvedValue({
+      ok: true,
+      checks: {
+        openList: { ok: true, required: true, state: "degraded", storage: "missing", namespaces: 0, warning: "openlist_storage_missing" },
+        dataDir: { ok: true },
+      },
+    });
+
+    render(<WebReadinessCard />);
+
+    expect(await screen.findByText("网盘接入")).toBeInTheDocument();
+    expect(screen.getByText("openlist_storage_missing")).toBeInTheDocument();
+    expect(screen.getAllByText("可用")).toHaveLength(1);
+  });
+
   it("renders skipped readiness checks", async () => {
     mocks.fetchWebReadiness.mockResolvedValue({
       ok: true,

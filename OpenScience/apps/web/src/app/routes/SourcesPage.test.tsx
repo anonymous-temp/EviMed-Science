@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   setSourceFolderStatus: vi.fn(), listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(),
   listLibrary: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
 }));
-const context = vi.hoisted(() => ({ projectId: "project-one", operator: false }));
+const context = vi.hoisted(() => ({ projectId: "project-one", operator: false,
+  /** `/api/me` `features`: `undefined` is a control plane that sends none. */
+  features: { openList: true } as Record<string, unknown> | undefined, meFails: false }));
 
 // Only the request functions are replaced. `sourceFailureMessage` is a pure
 // projection over the one error dictionary, and a test that stubbed it would
@@ -27,7 +29,11 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal
   getWebProjectId: () => context.projectId,
   // Operator surfaces (raw codes, pipeline accounting) are shown only to an
   // account `/api/me` marks as one.
-  fetchWebMe: async () => ({ user: { id: "u", name: "u" }, operator: context.operator, project: { id: context.projectId, name: "p" }, projects: [] }),
+  fetchWebMe: async () => {
+    if (context.meFails) throw new Error("HTTP 503");
+    return { user: { id: "u", name: "u" }, operator: context.operator, project: { id: context.projectId, name: "p" }, projects: [],
+      ...(context.features ? { features: context.features } : {}) };
+  },
 }));
 // The preview is the file viewer's own business; the row only has to open it,
 // name the document's format and put its summary above it.
@@ -70,6 +76,8 @@ describe("SourcesPage", () => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     context.projectId = "project-one";
     context.operator = false;
+    context.features = { openList: true };
+    context.meFails = false;
     mocks.listSources.mockResolvedValue({ items: [source], nextCursor: null });
     mocks.overrideSource.mockResolvedValue(source);
     mocks.retrySource.mockResolvedValue(source);
@@ -99,7 +107,7 @@ describe("SourcesPage", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "知识库" })).toBeInTheDocument();
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "连接网盘" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "连接网盘" })).toBeInTheDocument();
     expect(screen.getByText("Word · 4 KB")).toBeInTheDocument();
     // Parts of this document could not be read: the one state it says, with the way out.
     expect(screen.getByText("部分没能读取")).toBeInTheDocument();
@@ -109,6 +117,25 @@ describe("SourcesPage", () => {
     for (const bookkeeping of [/已解析/, /处理台账/, /处理第/, /理解遗漏/, /第 2 版/, /深度分析/, /protocol, SOP or checklist/, /A randomized research protocol/, /上传与浏览原始文件/]) {
       expect(page).not.toMatch(bookkeeping);
     }
+  });
+
+  // Audit I3-4: production offered 连接网盘 over an OpenList with no storage,
+  // and every browse behind it failed. The entry is there only when `/api/me`
+  // says a drive is mounted — off when it says no, says nothing (OpenList not
+  // configured, an older control plane) or cannot be read.
+  it.each([
+    ["no storage is mounted", { openList: false }, false],
+    ["the control plane sends no features", undefined, false],
+    ["the account cannot be read", { openList: true }, true],
+  ] as const)("offers no 连接网盘 when %s", async (_case, features, meFails) => {
+    context.features = features;
+    context.meFails = meFails;
+    render(<SourcesPage />);
+    expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "上传" })).toBeInTheDocument();
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole("button", { name: "连接网盘" })).not.toBeInTheDocument();
+    expect(mocks.browseOpenList).not.toHaveBeenCalled();
   });
 
   it("says nothing about a document that was read, but the day it arrived", async () => {

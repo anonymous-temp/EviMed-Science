@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Cloud, CornerLeftUp, FileText, Folder, FolderSync, Image as ImageIcon, Link2, RefreshCw, Search, Sheet, Upload, XCircle } from "lucide-react";
-import { getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
+import { fetchWebMe, getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { addToLibrary, browseOpenList, cancelSource, decideDuplicateGroup, getSourceFamily, importOpenListSource, listDuplicateCandidates,
-  listLibrary, listSourceFolders, listSources, overrideSource, registerSourceFolder, removeFromLibrary, removeSource, retrySource,
+  listLibrary, listSourceFolders, listSources, openListOffered, overrideSource, registerSourceFolder, removeFromLibrary, removeSource, retrySource,
   setSourceFolderStatus, sourceFailureMessage, syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily,
   type SourceFolderRecord, type SourceListState, type SourceMetadata, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
@@ -174,6 +174,16 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
   const [previewing, setPreviewing] = useState<SourceRecord | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  // 连接网盘 is offered only when there is a drive to open: OpenList configured
+  // and a storage mounted under its tenant root (`/api/me` `features.openList`).
+  // An entry that led to 「网盘」 with nothing in it answered every browse with
+  // an error (audit I3-4). Off until `/api/me` says so, and when it cannot.
+  const [driveOffered, setDriveOffered] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetchWebMe().then((me) => { if (active) setDriveOffered(openListOffered(me)); }).catch(() => { /* not offered */ });
+    return () => { active = false; };
+  }, []);
   const [duplicatesFor, setDuplicatesFor] = useState<string | null>(null);
   const [folderRefresh, setFolderRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -321,7 +331,7 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
         meta={projectName}
         actions={<>
           {hasLibrary && <SearchInput label="搜索资料" value={query} onChange={(event) => setQuery(event.target.value)} className="w-60" />}
-          <Button variant="secondary" onClick={() => setConnecting(true)}><Cloud size={16} aria-hidden="true" />连接网盘</Button>
+          {driveOffered && <Button variant="secondary" onClick={() => setConnecting(true)}><Cloud size={16} aria-hidden="true" />连接网盘</Button>}
           <Button disabled={!hasWebApi || uploading} loading={uploading} onClick={() => void uploadFiles()}>
             {!uploading && <Upload size={16} aria-hidden="true" />}上传
           </Button>
@@ -430,7 +440,7 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
             onSave={(input) => void mutate(() => overrideSource(editing.id, input))} />
         </Drawer>
       )}
-      {connecting && (
+      {connecting && driveOffered && (
         <Drawer title="连接网盘" onClose={() => setConnecting(false)} widthClassName="max-w-2xl">
           <div className="space-y-8">
             <OpenListBrowser projectId={projectId} onImported={() => load()}

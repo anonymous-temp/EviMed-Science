@@ -755,6 +755,11 @@ const sourceIntakeErrorCodes = Object.freeze([
   'source_parser_response_invalid',
   'source_parser_response_too_large',
   'source_changed',
+  // 连接网盘 (`openListClient.mjs`): OpenList's own refusals, named so the
+  // browse toast says what happened rather than a bare 502. No storage covers
+  // the account's namespace; the deployment's credential was not accepted.
+  'openlist_storage_missing',
+  'openlist_credential_rejected',
 ])
 
 /**
@@ -1106,6 +1111,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_parser_response_invalid: '文档解析服务返回的结果无法使用，稍后再重新分析。',
   source_parser_response_too_large: '这份文件解析出的正文超过了可保存的上限，拆分后再上传即可。',
   source_changed: '文件在登记之后被改动过；刷新知识库后再分析。',
+  openlist_storage_missing: '这个账户还没有接入网盘，无法从网盘导入。可以先直接上传文件。',
+  openlist_credential_rejected: '网盘服务没有接受这个部署的凭据，暂时无法浏览网盘。请联系管理员。',
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
   library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
