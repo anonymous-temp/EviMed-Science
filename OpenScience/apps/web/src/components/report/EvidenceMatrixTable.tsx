@@ -8,6 +8,7 @@ import { preservedSourceHref, type VerifiedClaim } from "@/components/markdown-v
 import { ClaimAppraisalSummary } from "@/components/markdown-viewer/ClaimAppraisal";
 import { SourceUpdateBadges } from "@/components/markdown-viewer/SourceUpdateBadges";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -138,17 +139,21 @@ function QuoteLink({ source, runId }: { source: ReturnType<typeof claimSources>[
   const excerpt = `“${source.supportQuote}”`;
   if (runId && source.artifactPath) {
     return (
-      <Link to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)} className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link" title="在保存的原文中定位这段引文">
-        {excerpt}
-      </Link>
+      <Tooltip content="在保存的原文中定位这段引文">
+        <Link to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)} className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link">
+          {excerpt}
+        </Link>
+      </Tooltip>
     );
   }
   if (source.sourceUrl && /^https?:\/\//i.test(source.sourceUrl)) {
     return (
-      <a href={source.sourceUrl} target="_blank" rel="noreferrer" className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link" title="打开原始来源">
-        {excerpt}
-        <ExternalLink size={16} className="ml-0.5 inline" aria-hidden="true" />
-      </a>
+      <Tooltip content="打开原始来源">
+        <a href={source.sourceUrl} target="_blank" rel="noreferrer" className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link">
+          {excerpt}
+          <ExternalLink size={16} className="ml-0.5 inline" aria-hidden="true" />
+        </a>
+      </Tooltip>
     );
   }
   return <span className="line-clamp-4 text-text">{excerpt}</span>;

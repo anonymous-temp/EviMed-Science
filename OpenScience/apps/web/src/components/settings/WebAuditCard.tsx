@@ -6,6 +6,7 @@ import { LEDGER_STATUS_LABEL, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function WebAuditCard() {
   const [events, setEvents] = useState<WebAuditRecord[]>([]);
@@ -33,15 +34,16 @@ export function WebAuditCard() {
           <h2 className="text-body text-text">操作审计</h2>
           <p className="mt-0.5 text-caption text-muted">该工作区最近的项目操作</p>
         </div>
-        <button
-          className={iconButtonClasses({ size: "sm" })}
-          onClick={() => void refresh()}
-          disabled={loading}
-          title="刷新审计事件"
-          aria-label="刷新审计事件"
-        >
-          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-        </button>
+        <Tooltip content="刷新审计事件" kind="label">
+          <button
+            className={iconButtonClasses({ size: "sm" })}
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="刷新审计事件"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
       <div className="px-5 py-4">
         <div className="overflow-hidden rounded-input border border-border">
@@ -57,15 +59,21 @@ export function WebAuditCard() {
                 )}
               >
                 <ClipboardList size={16} className={cn("shrink-0", statusTone(event.status))} aria-hidden="true" />
-                <span className="w-24 shrink-0 truncate font-mono text-caption text-text" title={event.action ?? ""}>
-                  {event.action ?? "操作"}
-                </span>
-                <span className={cn("w-20 shrink-0 text-caption", statusTone(event.status))} title={event.status}>
-                  {labelFor(LEDGER_STATUS_LABEL, event.status)}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted" title={event.target ?? ""}>
-                  {event.target ?? event.command ?? "项目"}
-                </span>
+                <Tooltip content={event.action ?? "操作"} kind="label" whenTruncated>
+                  <span className="w-24 shrink-0 truncate font-mono text-caption text-text">
+                    {event.action ?? "操作"}
+                  </span>
+                </Tooltip>
+                <Tooltip content={event.status}>
+                  <span className={cn("w-20 shrink-0 text-caption", statusTone(event.status))}>
+                    {labelFor(LEDGER_STATUS_LABEL, event.status)}
+                  </span>
+                </Tooltip>
+                <Tooltip content={event.target ?? event.command ?? "项目"} kind="label" whenTruncated>
+                  <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
+                    {event.target ?? event.command ?? "项目"}
+                  </span>
+                </Tooltip>
                 <span className="hidden w-16 shrink-0 text-right font-mono text-caption text-muted sm:block">
                   {event.bytes ? humanSize(event.bytes) : ""}
                 </span>

@@ -6,6 +6,7 @@ import { LEDGER_STATUS_LABEL, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function WebSecurityCard() {
   const [events, setEvents] = useState<WebSecurityEvent[]>([]);
@@ -33,15 +34,16 @@ export function WebSecurityCard() {
           <h2 className="text-body text-text">安全事件</h2>
           <p className="mt-0.5 text-caption text-muted">该账户最近的认证事件</p>
         </div>
-        <button
-          className={iconButtonClasses({ size: "sm" })}
-          onClick={() => void refresh()}
-          disabled={loading}
-          title="刷新安全事件"
-          aria-label="刷新安全事件"
-        >
-          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-        </button>
+        <Tooltip content="刷新安全事件" kind="label">
+          <button
+            className={iconButtonClasses({ size: "sm" })}
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="刷新安全事件"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
       <div className="px-5 py-4">
         <div className="overflow-hidden rounded-input border border-border">
@@ -62,15 +64,16 @@ export function WebSecurityCard() {
                   <ShieldCheck size={16} className="shrink-0 text-accent" aria-hidden="true" />
                 )}
                 <span className="w-20 shrink-0 font-mono text-caption text-text">{event.action}</span>
-                <span
-                  className={cn(
-                    "w-20 shrink-0 text-caption",
-                    event.status === "failed" ? "text-error" : "text-accent",
-                  )}
-                  title={event.status}
-                >
-                  {labelFor(LEDGER_STATUS_LABEL, event.status)}
-                </span>
+                <Tooltip content={event.status}>
+                  <span
+                    className={cn(
+                      "w-20 shrink-0 text-caption",
+                      event.status === "failed" ? "text-error" : "text-accent",
+                    )}
+                  >
+                    {labelFor(LEDGER_STATUS_LABEL, event.status)}
+                  </span>
+                </Tooltip>
                 <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
                   {event.code ?? event.userId ?? event.username ?? "正常"}
                 </span>

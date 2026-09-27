@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function WebErrorsCard() {
   const [events, setEvents] = useState<WebErrorEvent[]>([]);
@@ -32,15 +33,16 @@ export function WebErrorsCard() {
           <h2 className="text-body text-text">错误账本</h2>
           <p className="mt-0.5 text-caption text-muted">该项目最近失败的 API 请求</p>
         </div>
-        <button
-          className={iconButtonClasses({ size: "sm" })}
-          onClick={() => void refresh()}
-          disabled={loading}
-          title="刷新错误列表"
-          aria-label="刷新错误列表"
-        >
-          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-        </button>
+        <Tooltip content="刷新错误列表" kind="label">
+          <button
+            className={iconButtonClasses({ size: "sm" })}
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="刷新错误列表"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
       <div className="px-5 py-4">
         <div className="overflow-hidden rounded-input border border-border">
@@ -57,9 +59,11 @@ export function WebErrorsCard() {
               >
                 <AlertTriangle size={16} className="shrink-0 text-error" aria-hidden="true" />
                 <span className="w-10 shrink-0 font-mono text-caption text-error">{event.status}</span>
-                <span className="min-w-0 flex-1 truncate font-mono text-caption text-text" title={event.route}>
-                  {event.route}
-                </span>
+                <Tooltip content={event.route} kind="label" whenTruncated>
+                  <span className="min-w-0 flex-1 truncate font-mono text-caption text-text">
+                    {event.route}
+                  </span>
+                </Tooltip>
                 <span className="hidden max-w-[9rem] truncate font-mono text-caption text-muted sm:block">
                   {event.code}
                 </span>

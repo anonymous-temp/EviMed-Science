@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
  *  workspace list folds at the same count (`COLLAPSED_SESSION_LIMIT`). */
@@ -650,32 +651,33 @@ function ProjectGroup({
         </form>
       ) : (
         <div className="group/project relative">
-          <button
-            ref={toggleRef}
-            type="button"
-            aria-expanded={expanded}
-            aria-controls={expanded ? listId : undefined}
-            aria-busy={switching || undefined}
-            onClick={onToggle}
-            title={project.name}
-            className={navItemClasses({
-              className: "gap-1.5 pl-1 group-hover/project:pr-16 group-focus-within/project:pr-16 max-lg:pr-16",
-            })}
-          >
-            <ChevronRight
-              size={16}
-              className={cn("shrink-0 text-muted transition-transform duration-fast", expanded && "rotate-90")}
-              aria-hidden="true"
-            />
-            <Icon size={16} className={cn("shrink-0", current ? "text-accent" : "text-muted")} aria-hidden="true" />
-            <span className={cn("min-w-0 flex-1 truncate", current && "font-semibold")}>{project.name}</span>
-            {switching ? (
-              <Loader2 size={16} className="shrink-0 animate-spin text-muted motion-reduce:animate-none" aria-hidden="true" />
-            ) : running && (
-              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-dot-running motion-reduce:animate-none" aria-hidden="true" />
-            )}
-            {status && <span className="sr-only">（{status}）</span>}
-          </button>
+          <Tooltip content={project.name} kind="label" whenTruncated>
+            <button
+              ref={toggleRef}
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={expanded ? listId : undefined}
+              aria-busy={switching || undefined}
+              onClick={onToggle}
+              className={navItemClasses({
+                className: "gap-1.5 pl-1 group-hover/project:pr-16 group-focus-within/project:pr-16 max-lg:pr-16",
+              })}
+            >
+              <ChevronRight
+                size={16}
+                className={cn("shrink-0 text-muted transition-transform duration-fast", expanded && "rotate-90")}
+                aria-hidden="true"
+              />
+              <Icon size={16} className={cn("shrink-0", current ? "text-accent" : "text-muted")} aria-hidden="true" />
+              <span className={cn("min-w-0 flex-1 truncate", current && "font-semibold")}>{project.name}</span>
+              {switching ? (
+                <Loader2 size={16} className="shrink-0 animate-spin text-muted motion-reduce:animate-none" aria-hidden="true" />
+              ) : running && (
+                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-dot-running motion-reduce:animate-none" aria-hidden="true" />
+              )}
+              {status && <span className="sr-only">（{status}）</span>}
+            </button>
+          </Tooltip>
           <span className="absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 max-lg:opacity-100">
             {/* A plus, as the kernel's list has it: the pen-in-a-square of
               * 「新对话」 sat beside the rename pencil as its near twin. The
@@ -818,17 +820,18 @@ function TaskRow({
       {content}
     </Link>
   ) : (
-    <button
-      type="button"
-      data-task-key={taskKey(projectId, run)}
-      title={`切换到“${projectName}”并打开`}
-      onClick={(event) => onOpen(event.currentTarget)}
-      onPointerEnter={onWarm}
-      onFocus={onWarm}
-      className={className}
-    >
-      {content}
-    </button>
+    <Tooltip content={`切换到“${projectName}”并打开`}>
+      <button
+        type="button"
+        data-task-key={taskKey(projectId, run)}
+        onClick={(event) => onOpen(event.currentTarget)}
+        onPointerEnter={onWarm}
+        onFocus={onWarm}
+        className={className}
+      >
+        {content}
+      </button>
+    </Tooltip>
   );
   if (!current) return row;
   return (

@@ -7,6 +7,7 @@ import { formatClock, humanSize } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { buttonClasses } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function WebResourcesCard() {
   const [metrics, setMetrics] = useState<WebMetrics | null>(null);
@@ -88,15 +89,16 @@ export function WebResourcesCard() {
             {metrics ? `${metrics.project.name} · ${formatClock(metrics.createdAt)}` : "当前项目与服务端进程"}
           </p>
         </div>
-        <button
-          className={iconButtonClasses({ size: "sm" })}
-          onClick={() => void refresh()}
-          disabled={loading || runtimeAction != null}
-          title="刷新资源状态"
-          aria-label="刷新资源状态"
-        >
-          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-        </button>
+        <Tooltip content="刷新资源状态" kind="label">
+          <button
+            className={iconButtonClasses({ size: "sm" })}
+            onClick={() => void refresh()}
+            disabled={loading || runtimeAction != null}
+            aria-label="刷新资源状态"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="存储" value={max ? `${humanSize(used)} / ${humanSize(max)}` : humanSize(used)} detail={pct == null ? "无配额" : `已用 ${pct}%`} />
@@ -109,36 +111,39 @@ export function WebResourcesCard() {
         <Metric label="服务端内存" value={humanSize(metrics?.server.memory.rssBytes ?? 0)} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
       </div>
       <div className="flex flex-wrap gap-2 border-t border-border px-5 py-3">
-        <button
-          className={runtimeButtonCls}
-          onClick={() => void startRuntime()}
-          disabled={controlsDisabled || runtimeRunning}
-          title="启动研究运行时"
-          aria-label="启动研究运行时"
-        >
-          <Play size={16} className={cn(runtimeAction === "start" && "animate-pulse")} aria-hidden="true" />
-          启动
-        </button>
-        <button
-          className={runtimeButtonCls}
-          onClick={() => setConfirming("restart")}
-          disabled={controlsDisabled}
-          title="重启研究运行时"
-          aria-label="重启研究运行时"
-        >
-          <RotateCw size={16} className={cn(runtimeAction === "restart" && "animate-spin")} aria-hidden="true" />
-          重启
-        </button>
-        <button
-          className={cn(runtimeButtonCls, "hover:text-error")}
-          onClick={() => setConfirming("stop")}
-          disabled={controlsDisabled || !runtimeRunning}
-          title="停止研究运行时"
-          aria-label="停止研究运行时"
-        >
-          <Square size={16} className={cn(runtimeAction === "stop" && "animate-pulse")} aria-hidden="true" />
-          停止
-        </button>
+        <Tooltip content="启动研究运行时" kind="label">
+          <button
+            className={runtimeButtonCls}
+            onClick={() => void startRuntime()}
+            disabled={controlsDisabled || runtimeRunning}
+            aria-label="启动研究运行时"
+          >
+            <Play size={16} className={cn(runtimeAction === "start" && "animate-pulse")} aria-hidden="true" />
+            启动
+          </button>
+        </Tooltip>
+        <Tooltip content="重启研究运行时" kind="label">
+          <button
+            className={runtimeButtonCls}
+            onClick={() => setConfirming("restart")}
+            disabled={controlsDisabled}
+            aria-label="重启研究运行时"
+          >
+            <RotateCw size={16} className={cn(runtimeAction === "restart" && "animate-spin")} aria-hidden="true" />
+            重启
+          </button>
+        </Tooltip>
+        <Tooltip content="停止研究运行时" kind="label">
+          <button
+            className={cn(runtimeButtonCls, "hover:text-error")}
+            onClick={() => setConfirming("stop")}
+            disabled={controlsDisabled || !runtimeRunning}
+            aria-label="停止研究运行时"
+          >
+            <Square size={16} className={cn(runtimeAction === "stop" && "animate-pulse")} aria-hidden="true" />
+            停止
+          </button>
+        </Tooltip>
       </div>
       {confirming && (
         <ConfirmDialog

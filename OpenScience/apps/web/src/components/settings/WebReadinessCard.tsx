@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { humanSize } from "@/lib/format";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const CHECK_LABELS: Record<string, string> = {
   dataDir: "数据卷",
@@ -78,15 +79,16 @@ export function WebReadinessCard() {
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-caption font-medium", readiness?.ok ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn")}>
           {readiness ? (readiness.ok ? "就绪" : "未就绪") : "正在读取"}
         </span>
-        <button
-          className={iconButtonClasses({ size: "sm" })}
-          onClick={() => void refresh()}
-          disabled={loading}
-          title="刷新就绪状态"
-          aria-label="刷新就绪状态"
-        >
-          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-        </button>
+        <Tooltip content="刷新就绪状态" kind="label">
+          <button
+            className={iconButtonClasses({ size: "sm" })}
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="刷新就绪状态"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
       <div className="px-5 py-4">
         <div className="overflow-hidden rounded-input border border-border">

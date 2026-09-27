@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * One number on a data page, and the three things that make it readable: its
@@ -71,8 +72,8 @@ export function StatTile({
       </div>
     );
   }
-  return (
-    <section aria-label={label} title={hint} className={cn("flex min-w-0 flex-col p-4", className)}>
+  const tile = (
+    <section aria-label={label} className={cn("flex min-w-0 flex-col p-4", className)}>
       <h3 className="truncate text-compact text-text-3">{label}</h3>
       <p
         data-stat-value
@@ -97,6 +98,9 @@ export function StatTile({
       {chart != null && <div className="mt-2.5">{chart}</div>}
     </section>
   );
+  // The sample behind the number, for the pointer that asks; a screen reader
+  // hears it as the tile's description.
+  return hint ? <Tooltip content={hint}>{tile}</Tooltip> : tile;
 }
 
 /** 「第 3 / 6」 beside a number: where it stands among comparable products. */

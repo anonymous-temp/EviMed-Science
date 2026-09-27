@@ -8,6 +8,7 @@ import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { FrontierDetails } from "./FrontierDetails";
 import {
   CARD_FLAG_KEYS,
@@ -124,11 +125,13 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
           {band && (
-            <span title="编辑评分 · 满分 100" className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
-              <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
-              <span className="sr-only">编辑评分</span>
-              {item.score}
-            </span>
+            <Tooltip content="编辑评分 · 满分 100">
+              <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
+                <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
+                <span className="sr-only">编辑评分</span>
+                {item.score}
+              </span>
+            </Tooltip>
           )}
         </div>
 
@@ -149,10 +152,11 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
             </Menu>
           )}
           {tags.map((tag) => (onTag ? (
-            <button key={`${tag.kind}-${tag.key}`} type="button" title={tag.kind === "specialty" ? `只看${tag.label}` : `搜索“${tag.label}”`}
-              onClick={() => onTag(tag)} className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
-              <span className="text-caption">#{tag.label}</span>
-            </button>
+            <Tooltip key={`${tag.kind}-${tag.key}`} content={tag.kind === "specialty" ? `只看${tag.label}` : `搜索“${tag.label}”`}>
+              <button type="button" onClick={() => onTag(tag)} className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
+                <span className="text-caption">#{tag.label}</span>
+              </button>
+            </Tooltip>
           ) : <span key={`${tag.kind}-${tag.key}`} className="px-1 text-caption">#{tag.label}</span>))}
           <div className="ml-auto flex items-center gap-1">
             <IconButton

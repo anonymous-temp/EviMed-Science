@@ -4,7 +4,7 @@ import { Copy, PanelLeft } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TOOLTIP_DELAYS } from "@evimed/design-tokens";
 import { IconButton } from "./IconButton";
-import { Tooltip } from "./Tooltip";
+import { Tooltip, isTruncated } from "./Tooltip";
 
 /**
  * The tooltip's contract (spec §22.8, WCAG 1.4.13): the token's delays, open
@@ -104,6 +104,43 @@ describe("Tooltip", () => {
     expect(shown()).toBe(true);
     expect(tooltip()).toHaveClass("z-tooltip", "bg-text", "text-bg", "rounded-card", "text-caption");
     expect(tooltip()?.parentElement).toBe(document.body);
+  });
+
+  it("gives a line its full text only while the line is cut off (spec §22.8 rules 1 and 4)", () => {
+    const title = "Aspirin in the Primary Prevention of Cardiovascular Disease";
+    render(
+      <Tooltip content={title} kind="label" whenTruncated>
+        <button type="button"><span className="truncate">{title}</span></button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole("button", { name: title });
+    // Whole on screen (jsdom lays nothing out: every box is 0 × 0): nothing to add.
+    fireEvent.pointerEnter(trigger, { pointerType: "mouse" });
+    wait(TOOLTIP_DELAYS.show * 2);
+    expect(shown()).toBe(false);
+    act(() => { trigger.focus(); });
+    expect(shown()).toBe(false);
+    act(() => { trigger.blur(); });
+    fireEvent.pointerLeave(trigger, { pointerType: "mouse" });
+    // Cut off — the line inside the trigger is wider than its box — and it opens.
+    const line = trigger.querySelector("span") as HTMLElement;
+    Object.defineProperty(line, "scrollWidth", { configurable: true, value: 480 });
+    Object.defineProperty(line, "clientWidth", { configurable: true, value: 200 });
+    expect(isTruncated(trigger)).toBe(true);
+    fireEvent.pointerEnter(trigger, { pointerType: "mouse" });
+    wait(TOOLTIP_DELAYS.show);
+    expect(shown()).toBe(true);
+    expect(tooltip()).toHaveTextContent(title);
+    // The line's own text: shown, not announced a second time.
+    expect(tooltip()).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("measures a clamped line by its height as well", () => {
+    const box = document.createElement("p");
+    Object.defineProperty(box, "scrollHeight", { configurable: true, value: 66 });
+    Object.defineProperty(box, "clientHeight", { configurable: true, value: 44 });
+    expect(isTruncated(box)).toBe(true);
+    expect(isTruncated(document.createElement("p"))).toBe(false);
   });
 
   it("is never opened by a touch: a touch screen cannot hover", () => {

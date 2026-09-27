@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { Sparkline } from "./Sparkline";
 import { INLINE_ACTION, hotBoardStamp, hotRowMeta, rankChangeLabel, rankLabel, rankTone } from "./frontierText";
@@ -123,10 +124,12 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
     <li className="flex gap-3 border-b border-border py-4">
       <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
-        <Link to={eventPath(event.id)} title={event.title} data-row-title className="group flex h-control min-w-0 items-center gap-1.5 rounded text-ui">
-          {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
-          <span className="min-w-0 truncate text-body font-semibold text-text group-hover:text-accent">{event.title}</span>
-        </Link>
+        <Tooltip content={event.title} kind="label" whenTruncated>
+          <Link to={eventPath(event.id)} data-row-title className="group flex h-control min-w-0 items-center gap-1.5 rounded text-ui">
+            {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
+            <span className="min-w-0 truncate text-body font-semibold text-text group-hover:text-accent">{event.title}</span>
+          </Link>
+        </Tooltip>
         <p className="text-caption text-text-3">{hotRowMeta(event)}</p>
       </div>
       {event.heat !== null && (

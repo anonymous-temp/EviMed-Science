@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * A matrix — engine against metric, engine against question group — as a
@@ -99,10 +100,9 @@ export function HeatGrid({
                   </td>
                 ) : row.cells.map((cell, index) => {
                   const step = cell.value === null ? null : heatStep(cell.value, low, high);
-                  return (
+                  const td = (
                     <td
                       key={columns[index]?.key ?? index}
-                      title={cell.hint}
                       data-heat-step={step ?? undefined}
                       data-forced-colors={step === null ? undefined : "preserve"}
                       className={cn(
@@ -113,6 +113,9 @@ export function HeatGrid({
                       {cell.text}
                     </td>
                   );
+                  // What the number is made of (the denominator), for a pointer
+                  // that asks; a screen reader hears it with the cell.
+                  return cell.hint ? <Tooltip key={columns[index]?.key ?? index} content={cell.hint}>{td}</Tooltip> : td;
                 })}
               </tr>
             ))}

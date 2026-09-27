@@ -32,6 +32,11 @@ import { TOOLTIP_DELAYS } from "@evimed/design-tokens";
  *    note — because a touch screen never shows it. The pointer events it
  *    listens to are a mouse's and a pen's for that reason.
  *
+ * It is the shell's only tooltip: no element carries the browser's `title`
+ * as one (`app/nativeTitles.test.ts`; an iframe's `title` is its name). The
+ * full text of a line that may be cut off is `whenTruncated`, which opens
+ * only while the line is.
+ *
  * `kind` is how assistive technology hears it. A `description` tooltip adds
  * to the trigger's name, so the trigger points at it with `aria-describedby`
  * (its text stays in the document while hidden, which is what lets a screen
@@ -68,6 +73,15 @@ function place(trigger: HTMLElement, tip: HTMLElement): void {
   tip.dataset.side = side;
 }
 
+/**
+ * Whether a line in the trigger is cut off — the trigger itself or anything in
+ * it runs wider or taller than its box (`truncate`, `line-clamp-*`).
+ */
+export function isTruncated(element: Element): boolean {
+  const cut = (node: Element) => node.scrollWidth - node.clientWidth > 1 || node.scrollHeight - node.clientHeight > 1;
+  return cut(element) || Array.from(element.querySelectorAll("*")).some(cut);
+}
+
 /** Whether focus arrived from the keyboard (or from code after a keyboard action). */
 function keyboardFocus(element: HTMLElement): boolean {
   try {
@@ -80,15 +94,27 @@ function keyboardFocus(element: HTMLElement): boolean {
 export function Tooltip({
   content,
   kind = "description",
+  whenTruncated = false,
   defaultOpen = false,
   children,
 }: {
   /** What the tooltip says: plain words, at most 40 characters. */
   content: string;
   kind?: TooltipKind;
+  /**
+   * The full text of a line that may be cut off: it opens only while the line
+   * is (`isTruncated`), since a tooltip never repeats what is already whole on
+   * screen (§22.8 rule 4). Its text is the line's own, so pair it with
+   * `kind="label"`.
+   */
+  whenTruncated?: boolean;
   /** Open from the first render — the component gallery's photograph. */
   defaultOpen?: boolean;
-  /** The one element it is for; it must be able to take focus. */
+  /**
+   * The one element it is for. A control can take focus and shows it on
+   * focus too; a line of text shows it to the pointer, and its full text is
+   * already in the document for a screen reader.
+   */
   children: ReactElement<TriggerProps>;
 }) {
   const id = useId();
@@ -110,6 +136,7 @@ export function Tooltip({
   const schedule = (next: boolean, delay: number) => {
     clear();
     if (next && dismissed.current) return;
+    if (next && whenTruncated && !(trigger.current && isTruncated(trigger.current))) return;
     if (delay <= 0) setOpen(next);
     else timer.current = window.setTimeout(() => setOpen(next), delay);
   };

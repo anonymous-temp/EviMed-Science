@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * The pieces every memory row shares (2026-09-23 plan §5.6): a fixed left
@@ -11,9 +12,11 @@ import { Textarea } from "@/components/ui/Input";
 /** The left column: 关于你, 做法, or a project's name — 128 px of quiet text, 64 on a phone. */
 export function RowOrigin({ label }: { label: string }) {
   return (
-    <span title={label} className="w-16 self-start truncate pt-px text-caption text-text-3 sm:w-32">
-      {label}
-    </span>
+    <Tooltip content={label} kind="label" whenTruncated>
+      <span className="w-16 self-start truncate pt-px text-caption text-text-3 sm:w-32">
+        {label}
+      </span>
+    </Tooltip>
   );
 }
 

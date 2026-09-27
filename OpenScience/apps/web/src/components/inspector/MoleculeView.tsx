@@ -11,7 +11,7 @@ import {
 } from "@/lib/molecule";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
-import { iconButtonClasses } from "@/components/ui/IconButton";
+import { IconButton } from "@/components/ui/IconButton";
 
 const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode; label: string }> = [
   { value: "stick", label: "球棍" },
@@ -200,15 +200,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={resetView}
-          aria-label="重置视图"
-          title="重置视图"
-          className={iconButtonClasses({ size: "sm" })}
-        >
-          <RotateCcw size={16} aria-hidden="true" />
-        </button>
+        <IconButton icon={RotateCcw} label="重置视图" size="sm" onClick={resetView} />
       </div>
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">

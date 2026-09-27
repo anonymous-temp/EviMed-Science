@@ -10,6 +10,7 @@ import {
 } from "@/lib/genome";
 import { cn } from "@/lib/cn";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const ROW_H = 15;
 const MAX_ROWS = 60; // cap drawn rows so a dense contig can't blow up the DOM
@@ -253,15 +254,16 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
 
 function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={iconButtonClasses({ size: "sm" })}
-    >
-      {children}
-    </button>
+    <Tooltip content={label} kind="label">
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        className={iconButtonClasses({ size: "sm" })}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 

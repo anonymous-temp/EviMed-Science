@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { analyzeColumns, defaultChartSpec, type ChartType } from "@/lib/tableChart";
 import type { ParsedTable } from "@/lib/csv";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * Native chart for a parsed table (P1-5): plots numeric columns with the app's
@@ -94,22 +95,23 @@ export function TableChart({ table }: { table: ParsedTable }) {
           {numericCols.map((c) => {
             const on = ys.includes(c.index);
             return (
-              <button
-                key={c.index}
-                onClick={() => toggleY(c.index)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-caption ring-1 transition-colors",
-                  on ? "text-text ring-border" : "text-muted ring-transparent hover:text-muted",
-                )}
-                style={on ? { background: "var(--surface-2)" } : undefined}
-                title={on ? "隐藏序列" : "显示序列"}
-              >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: on ? SERIES[ys.indexOf(c.index) % 8] : "var(--border)" }}
-                />
-                {c.name}
-              </button>
+              <Tooltip key={c.index} content={on ? "隐藏序列" : "显示序列"}>
+                <button
+                  onClick={() => toggleY(c.index)}
+                  aria-pressed={on}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-caption ring-1 transition-colors",
+                    on ? "text-text ring-border" : "text-muted ring-transparent hover:text-muted",
+                  )}
+                  style={on ? { background: "var(--surface-2)" } : undefined}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: on ? SERIES[ys.indexOf(c.index) % 8] : "var(--border)" }}
+                  />
+                  {c.name}
+                </button>
+              </Tooltip>
             );
           })}
         </div>

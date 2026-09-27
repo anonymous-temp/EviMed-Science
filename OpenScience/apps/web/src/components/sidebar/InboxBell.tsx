@@ -4,6 +4,7 @@ import { Bell, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { fetchInboxUnreadCount, INBOX_CHANGED_EVENT, type InboxUnreadCount } from "@/lib/inboxClient";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /** How often the bell asks while the tab is visible. The route returns two
  *  integers, so a minute is cheap; a change on this page does not wait for it
@@ -84,22 +85,23 @@ export function InboxBell() {
   const Icon = safety ? ShieldAlert : Bell;
   return (
     <>
-      <button
-        type="button"
-        onClick={() => navigate("/app/inbox")}
-        aria-label={inboxBellLabel(count)}
-        title={inboxBellLabel(count)}
-        data-safety={safety || undefined}
-        className={iconButtonClasses({ className: cn("relative ml-auto", safety && "text-danger hover:text-danger") })}
-      >
-        <Icon size={16} aria-hidden="true" />
-        {unread > 0 && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-unread ring-2 ring-surface-1"
-          />
-        )}
-      </button>
+      <Tooltip content={inboxBellLabel(count)} kind="label">
+        <button
+          type="button"
+          onClick={() => navigate("/app/inbox")}
+          aria-label={inboxBellLabel(count)}
+          data-safety={safety || undefined}
+          className={iconButtonClasses({ className: cn("relative ml-auto", safety && "text-danger hover:text-danger") })}
+        >
+          <Icon size={16} aria-hidden="true" />
+          {unread > 0 && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-unread ring-2 ring-surface-1"
+            />
+          )}
+        </button>
+      </Tooltip>
       <span className="sr-only" aria-live="polite">{announcement}</span>
     </>
   );

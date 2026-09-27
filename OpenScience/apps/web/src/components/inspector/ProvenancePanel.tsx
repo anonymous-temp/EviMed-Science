@@ -6,6 +6,7 @@ import { listProvenance, readEnvLockfile } from "@/lib/provenance";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 
 /** The prompt the Reproduce action drafts — prefilled, reviewed, user-sent. */
@@ -143,47 +144,43 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                     <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">{r.model}</span>
                   )}
                   {r.env && (
-                    <span
-                      className="rounded bg-surface-2 px-1.5 py-0.5 font-mono"
-                      title="此版本的运行环境"
-                    >
-                      {[r.env.python && `py ${r.env.python}`, r.env.platform, `app ${r.env.app}`]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
+                    <Tooltip content="此版本的运行环境">
+                      <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+                        {[r.env.python && `py ${r.env.python}`, r.env.platform, `app ${r.env.app}`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </Tooltip>
                   )}
                   {r.env?.packages && (
-                    <button
-                      className={cn(
-                        "flex items-center gap-1 rounded px-1.5 py-0.5 font-mono hover:bg-surface-2 hover:text-text",
-                        lockfile?.hash === r.env.packages.hash && "bg-surface-2 text-text",
-                      )}
-                      onClick={() => toggleLockfile(r.env!.packages!.hash)}
-                      title="查看此版本的 Python 依赖锁定文件"
-                      aria-pressed={lockfile?.hash === r.env.packages.hash}
-                    >
-                      <Package size={16} aria-hidden="true" /> {r.env.packages.count} 个依赖包
-                    </button>
+                    <Tooltip content="查看此版本的 Python 依赖锁定文件">
+                      <button
+                        className={cn(
+                          "flex items-center gap-1 rounded px-1.5 py-0.5 font-mono hover:bg-surface-2 hover:text-text",
+                          lockfile?.hash === r.env.packages.hash && "bg-surface-2 text-text",
+                        )}
+                        onClick={() => toggleLockfile(r.env!.packages!.hash)}
+                        aria-pressed={lockfile?.hash === r.env.packages.hash}
+                      >
+                        <Package size={16} aria-hidden="true" /> {r.env.packages.count} 个依赖包
+                      </button>
+                    </Tooltip>
                   )}
-                  {r.log && <span className="truncate">{r.log}</span>}
+                  {r.log && <Tooltip content={r.log} kind="label" whenTruncated><span className="truncate">{r.log}</span></Tooltip>}
                   <span className="flex-1" />
                   {r.content && (
-                    <button
-                      className="flex items-center gap-1 text-link hover:underline"
-                      onClick={() => reproduce(r)}
-                      title="生成复现此版本并比较结果的任务"
-                    >
-                      <RotateCcw size={16} aria-hidden="true" /> 复现
-                    </button>
+                    <Tooltip content="生成复现此版本并比较结果的任务">
+                      <button className="flex items-center gap-1 text-link hover:underline" onClick={() => reproduce(r)}>
+                        <RotateCcw size={16} aria-hidden="true" /> 复现
+                      </button>
+                    </Tooltip>
                   )}
                   {r.sessionId && (
-                    <button
-                      className="flex items-center gap-1 text-link hover:underline"
-                      onClick={() => navigate(`/app/chat/${r.sessionId}`)}
-                      title="打开此版本的来源对话"
-                    >
-                      <MessageSquare size={16} aria-hidden="true" /> 打开对话
-                    </button>
+                    <Tooltip content="打开此版本的来源对话">
+                      <button className="flex items-center gap-1 text-link hover:underline" onClick={() => navigate(`/app/chat/${r.sessionId}`)}>
+                        <MessageSquare size={16} aria-hidden="true" /> 打开对话
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
                 {r.env?.packages && lockfile?.hash === r.env.packages.hash && (

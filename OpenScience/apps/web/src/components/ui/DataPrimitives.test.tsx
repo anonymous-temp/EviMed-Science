@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { TOOLTIP_DELAYS } from "@evimed/design-tokens";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -74,7 +75,7 @@ describe("StatTile", () => {
     expect(tile).toHaveTextContent("第 3 / 6");
     expect(tile).toHaveTextContent("较基线 · 目标 65");
     // The sample is a tooltip, never a printed line in the tile.
-    expect(tile).toHaveAttribute("title", "61，264 次回答");
+    expect(tile).toHaveAccessibleDescription("61，264 次回答");
     expect(tile).not.toHaveTextContent("264 次回答");
     expect(within(tile).getByText("61")).toHaveClass("text-metric-lg");
   });
@@ -106,11 +107,21 @@ describe("StatTile", () => {
 
 describe("SeverityBadge", () => {
   it("says the grade, its colour and its consequence", () => {
-    render(<SeverityBadge level="S3" />);
-    const badge = screen.getByText(/S3/);
-    expect(badge).toHaveAttribute("title", "可致暂时伤害");
-    expect(badge).toHaveClass("bg-severity-s3");
-    expect(badge).toHaveTextContent("可致暂时伤害");
+    vi.useFakeTimers();
+    try {
+      render(<SeverityBadge level="S3" />);
+      const badge = screen.getByText(/S3/);
+      expect(badge).toHaveClass("bg-severity-s3");
+      // A screen reader hears the consequence with the grade…
+      expect(badge).toHaveTextContent("可致暂时伤害");
+      // …and the pointer gets it as the Tooltip primitive, not the browser's title.
+      expect(badge).not.toHaveAttribute("title");
+      fireEvent.pointerEnter(badge, { pointerType: "mouse" });
+      act(() => { vi.advanceTimersByTime(TOOLTIP_DELAYS.show); });
+      expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("可致暂时伤害");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the deep red for the grades that would reach a patient", () => {

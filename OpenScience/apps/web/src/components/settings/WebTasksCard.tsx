@@ -6,6 +6,7 @@ import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
 import { labelFor } from "@/lib/statusLabel";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /** The task states in words: `timed out` and `succeeded` reached the page as
  *  English enum values (review B, WebTasksCard P1). */
@@ -70,15 +71,16 @@ export function WebTasksCard() {
           <h2 className="text-body text-text">后台任务</h2>
           <p className="mt-0.5 text-caption text-muted">当前项目的任务队列</p>
         </div>
-        <button
-          className={iconButtonClasses({ size: "sm" })}
-          onClick={() => void refresh()}
-          disabled={loading}
-          title="刷新任务"
-          aria-label="刷新任务"
-        >
-          <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
-        </button>
+        <Tooltip content="刷新任务" kind="label">
+          <button
+            className={iconButtonClasses({ size: "sm" })}
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="刷新任务"
+          >
+            <RefreshCw size={16} className={cn(loading && "animate-spin")} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
       <div className="px-5 py-4">
         <div className="overflow-hidden rounded-input border border-border">
@@ -106,15 +108,16 @@ export function WebTasksCard() {
                   {formatClock(task.startedAt ?? task.queuedAt ?? task.createdAt)}
                 </span>
                 {!TERMINAL.has(task.status) && (
-                  <button
-                    className={iconButtonClasses({ size: "sm", destructive: true })}
-                    onClick={() => void cancel(task.id)}
-                    disabled={canceling === task.id}
-                    title={`取消 ${task.command}`}
-                    aria-label={`取消 ${task.command}`}
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
+                  <Tooltip content={`取消 ${task.command}`} kind="label">
+                    <button
+                      className={iconButtonClasses({ size: "sm", destructive: true })}
+                      onClick={() => void cancel(task.id)}
+                      disabled={canceling === task.id}
+                      aria-label={`取消 ${task.command}`}
+                    >
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  </Tooltip>
                 )}
               </div>
             ))

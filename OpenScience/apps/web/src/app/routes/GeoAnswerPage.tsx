@@ -21,6 +21,7 @@ import { FilterSelect } from "@/components/ui/FilterChips";
 import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { AskAi } from "@/components/geo/AskAi";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
 import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
@@ -91,9 +92,11 @@ function Shell({ title, back, header, children }: { title: string; back?: string
 
 function BackLink({ to }: { to: string }) {
   return (
-    <Link to={to} aria-label="返回诊断" title="返回诊断" className={iconButtonClasses()}>
-      <ArrowLeft size={16} aria-hidden="true" />
-    </Link>
+    <Tooltip content="返回诊断" kind="label">
+      <Link to={to} aria-label="返回诊断" className={iconButtonClasses()}>
+        <ArrowLeft size={16} aria-hidden="true" />
+      </Link>
+    </Tooltip>
   );
 }
 

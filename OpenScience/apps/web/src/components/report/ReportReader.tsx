@@ -15,6 +15,7 @@ import { ClaimEvidenceList, type ClaimReading } from "@/components/markdown-view
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Tabs } from "@/components/ui/Tabs";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { EvidenceMatrixTable } from "./EvidenceMatrixTable";
 import { SourceCardList } from "./SourceCards";
 import { useClaimMatrix } from "./useClaimMatrix";
@@ -197,18 +198,19 @@ export function ReportReader({
       <ol className="space-y-0.5 text-ui">
         {toc.map((entry) => (
           <li key={entry.id} className={entry.level === 3 ? "pl-3" : undefined}>
-            <button
-              type="button"
-              onClick={() => scrollTo(entry.id)}
-              aria-current={active === entry.id ? "location" : undefined}
-              className={cn(
-                "w-full truncate rounded px-2 py-1 text-left hover:bg-surface-2",
-                active === entry.id ? "bg-accent-soft text-accent-strong" : entry.level === 2 ? "text-text" : "text-muted",
-              )}
-              title={entry.text}
-            >
-              {entry.text}
-            </button>
+            <Tooltip content={entry.text} kind="label" whenTruncated>
+              <button
+                type="button"
+                onClick={() => scrollTo(entry.id)}
+                aria-current={active === entry.id ? "location" : undefined}
+                className={cn(
+                  "w-full truncate rounded px-2 py-1 text-left hover:bg-surface-2",
+                  active === entry.id ? "bg-accent-soft text-accent-strong" : entry.level === 2 ? "text-text" : "text-muted",
+                )}
+              >
+                {entry.text}
+              </button>
+            </Tooltip>
           </li>
         ))}
       </ol>

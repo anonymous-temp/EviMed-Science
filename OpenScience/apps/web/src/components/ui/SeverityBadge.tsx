@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * How badly a wrong sentence about a medicine would land, as the one red on a
@@ -45,20 +46,24 @@ export function SeverityBadge({
   className?: string;
 }) {
   const word = SEVERITY_WORDS[level];
+  const grade = (
+    <span
+      data-severity={level}
+      className={cn("inline-flex h-tag items-center rounded-tag px-1.5 text-meta font-semibold", TONES[level])}
+    >
+      {level}
+      {/* The grade alone says nothing to a reader who cannot see the colour,
+          so the consequence follows it — but only when it is not already
+          printed beside it, or a screen reader says 「S3，可致暂时伤害可致暂时
+          伤害」. */}
+      {!label && <span className="sr-only">{`，${word}`}</span>}
+    </span>
+  );
   return (
     <span className={cn("inline-flex shrink-0 items-center gap-1.5", className)}>
-      <span
-        data-severity={level}
-        title={word}
-        className={cn("inline-flex h-tag items-center rounded-tag px-1.5 text-meta font-semibold", TONES[level])}
-      >
-        {level}
-        {/* The grade alone says nothing to a reader who cannot see the colour,
-            so the consequence follows it — but only when it is not already
-            printed beside it, or a screen reader says 「S3，可致暂时伤害可致暂时
-            伤害」. */}
-        {!label && <span className="sr-only">{`，${word}`}</span>}
-      </span>
+      {/* Where the word is not printed, the pointer gets it as the grade's
+          tooltip; a screen reader already has it (spec §22.8 rule 4). */}
+      {label ? grade : <Tooltip content={word} kind="label">{grade}</Tooltip>}
       {label && <span className="text-caption text-text-2">{word}</span>}
     </span>
   );

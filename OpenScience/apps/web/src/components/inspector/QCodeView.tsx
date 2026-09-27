@@ -3,6 +3,7 @@ import { AlertTriangle, ShieldCheck } from "lucide-react";
 import { parseQCode, segmentsFor, type QCodeParsed } from "@/lib/qcode";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * Qualitative-coding two-way traceback viewer (P1-3, social science). Renders
@@ -51,9 +52,11 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
           {filename} · {doc.sources.length} 个来源 · {doc.codes.length} 个编码
         </span>
-        <span className="inline-flex items-center gap-1 text-caption text-ok" title="高亮内容来自原文精确片段，引用直接截取自来源，不由模型生成。">
-          <ShieldCheck size={16} aria-hidden="true" /> 引用均为来源原文片段
-        </span>
+        <Tooltip content="高亮内容来自原文精确片段，引用直接截取自来源，不由模型生成。">
+          <span className="inline-flex items-center gap-1 text-caption text-ok">
+            <ShieldCheck size={16} aria-hidden="true" /> 引用均为来源原文片段
+          </span>
+        </Tooltip>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -65,7 +68,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
           {doc.codes.map((c) => {
             const n = doc.countByCode[c.name] ?? 0;
             const on = active === c.name;
-            return (
+            const button = (
               <button
                 key={c.name}
                 onClick={() => setActive(on ? null : c.name)}
@@ -73,7 +76,6 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
                   "mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui transition-colors",
                   on ? "bg-surface-2 ring-1 ring-border" : "hover:bg-surface-2",
                 )}
-                title={c.description}
               >
                 <span
                   className="h-3 w-3 shrink-0 rounded-sm"
@@ -83,6 +85,8 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
                 <span className="shrink-0 font-mono text-caption text-muted">{n}</span>
               </button>
             );
+            // The code's definition, for the pointer or the keyboard that asks.
+            return c.description ? <Tooltip key={c.name} content={c.description}>{button}</Tooltip> : button;
           })}
           {active && (
             <button

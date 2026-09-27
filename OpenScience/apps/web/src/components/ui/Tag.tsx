@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * The one metadata tag: 22 px high (`h-tag`, spec §20.4 — it was 20), 12 px
@@ -36,14 +37,11 @@ export function Tag({
   children,
 }: {
   tone?: TagTone;
-  /** A tooltip, only when the tag abbreviates something. */
+  /** A tooltip (`Tooltip`), only when the tag abbreviates something: what it stands for. */
   title?: string;
   className?: string;
   children: ReactNode;
 }) {
-  return (
-    <span title={title} className={tagClasses({ tone, className })}>
-      {children}
-    </span>
-  );
+  const tag = <span className={tagClasses({ tone, className })}>{children}</span>;
+  return title ? <Tooltip content={title}>{tag}</Tooltip> : tag;
 }

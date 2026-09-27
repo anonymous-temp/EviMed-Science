@@ -468,7 +468,7 @@ describe("SourcesPage", () => {
     const known = knownErrorCodeMessage("source_unreadable") as string;
     expect(known).toBeTruthy();
     const words = await screen.findByText("无法读取");
-    expect(words).toHaveAttribute("title", known);
+    expect(words).toHaveAccessibleDescription(known);
     expect(screen.getByRole("button", { name: "重新读取“研究方案.docx”" })).toBeInTheDocument();
     expect(view.container.textContent).not.toMatch(/Source analysis failed/);
     view.unmount();
@@ -478,7 +478,7 @@ describe("SourcesPage", () => {
     mocks.listSources.mockResolvedValue({ items: [{ ...failed, payload: { ...failed.payload,
       error: { code: "source_teleported_away", message: "Source analysis failed." } } }], nextCursor: null });
     const unmapped = render(<SourcesPage />);
-    expect((await screen.findByText("无法读取")).getAttribute("title")).toMatch(/^本版本还没有为这个原因准备说明/);
+    expect(await screen.findByText("无法读取")).toHaveAccessibleDescription(/^本版本还没有为这个原因准备说明/);
     unmapped.unmount();
 
     // The code is the handle support searches on, so an operator gets it after
@@ -486,7 +486,7 @@ describe("SourcesPage", () => {
     mocks.listSources.mockResolvedValue({ items: [failed], nextCursor: null });
     context.operator = true;
     render(<SourcesPage />);
-    await waitFor(async () => expect((await screen.findByText("无法读取")).getAttribute("title")).toBe(`${known}（source_unreadable）`));
+    await waitFor(async () => expect(await screen.findByText("无法读取")).toHaveAccessibleDescription(`${known}（source_unreadable）`));
   });
 
   it("states the omission notice inside 查看理解, with the one thing to do about it", async () => {

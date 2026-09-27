@@ -63,6 +63,7 @@ import { toast } from "@/lib/toast";
 import { parseFailureMessage } from "@/lib/errorText";
 import { labelFor } from "@/lib/statusLabel";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const HTML_PREVIEW_SANDBOX = "";
 
@@ -121,7 +122,6 @@ export function FilePreviewInspector({
   const [showHistory, setShowHistory] = useState(false);
   const hostedWeb = hasWebApi;
   const fileActionLabel = hostedWeb ? "下载文件" : "用本地应用打开";
-  const fileActionTitle = hostedWeb ? "下载此文件" : "使用默认应用打开";
   const FileActionIcon = hostedWeb ? Download : ExternalLink;
 
   const runFileAction = async () => {
@@ -215,23 +215,25 @@ export function FilePreviewInspector({
           </div>
         )}
         <div className="flex-1" />
-        <button
-          className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
-          aria-label="版本记录"
-          title="查看文件的历史版本、代码与关联对话"
-          aria-pressed={showHistory}
-          onClick={() => setShowHistory((v) => !v)}
-        >
-          <History size={16} aria-hidden="true" />
-        </button>
-        <button
-          className="text-text hover:opacity-60"
-          aria-label={fileActionLabel}
-          title={fileActionTitle}
-          onClick={() => void runFileAction()}
-        >
-          <FileActionIcon size={16} aria-hidden="true" />
-        </button>
+        <Tooltip content="查看文件的历史版本、代码与关联对话">
+          <button
+            className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
+            aria-label="版本记录"
+            aria-pressed={showHistory}
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            <History size={16} aria-hidden="true" />
+          </button>
+        </Tooltip>
+        <Tooltip content={fileActionLabel} kind="label">
+          <button
+            className="text-text hover:opacity-60"
+            aria-label={fileActionLabel}
+            onClick={() => void runFileAction()}
+          >
+            <FileActionIcon size={16} aria-hidden="true" />
+          </button>
+        </Tooltip>
         {controls}
         <button className="text-text hover:opacity-60" aria-label="关闭预览" onClick={onClose}>
           <X size={16} aria-hidden="true" />

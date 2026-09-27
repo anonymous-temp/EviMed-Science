@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Panel, PanelRow } from "@/components/ui/Panel";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const day = (value: string) => new Date(value).toLocaleDateString("zh-CN");
 
@@ -121,7 +122,7 @@ export function ConnectorsSection() {
     return (
       <PanelRow
         key={connector.id}
-        label={<span title={connector.unlocks}>{connector.title}</span>}
+        label={connector.unlocks ? <Tooltip content={connector.unlocks}><span>{connector.title}</span></Tooltip> : connector.title}
         description={description}
         control={(state || !open || menu.length > 0) ? (
           <>

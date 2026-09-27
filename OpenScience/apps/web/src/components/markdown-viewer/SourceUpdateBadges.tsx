@@ -3,6 +3,7 @@ import { SOURCE_UPDATE_LABELS_ZH, SOURCE_UPDATE_WEIGHT } from "@evimed/domain";
 import type { SourceUpdate } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
 import { tagClasses } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * Retraction and correction notices on a cited work (plan §3.9), read from
@@ -34,22 +35,26 @@ export function SourceUpdateBadges({ updates, className }: {
         // A retraction is a safety tag; a correction or an expression of
         // concern the amber one. Never a hand-made pill (2026-09-23 plan §4).
         const chip = cn(tagClasses({ tone: withdrawn ? "safety" : "warn" }), "gap-0.5");
+        // The chip says it in two words; the tooltip says the sentence (the
+        // link already carries it as its name, so there it is shown, not read twice).
         return update.noticeDoi ? (
-          <a
-            key={`${update.kind}:${update.noticeDoi}:${index}`}
-            href={`https://doi.org/${update.noticeDoi}`}
-            target="_blank"
-            rel="noreferrer"
-            title={title}
-            aria-label={`${title}查看声明`}
-            className={cn(chip, "hover:underline")}
-          >
-            <FileWarning size={16} aria-hidden="true" />{text}
-          </a>
+          <Tooltip key={`${update.kind}:${update.noticeDoi}:${index}`} content={title} kind="label">
+            <a
+              href={`https://doi.org/${update.noticeDoi}`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${title}查看声明`}
+              className={cn(chip, "hover:underline")}
+            >
+              <FileWarning size={16} aria-hidden="true" />{text}
+            </a>
+          </Tooltip>
         ) : (
-          <span key={`${update.kind}:${index}`} title={title} className={chip}>
-            <FileWarning size={16} aria-hidden="true" />{text}
-          </span>
+          <Tooltip key={`${update.kind}:${index}`} content={title}>
+            <span className={chip}>
+              <FileWarning size={16} aria-hidden="true" />{text}
+            </span>
+          </Tooltip>
         );
       })}
     </span>

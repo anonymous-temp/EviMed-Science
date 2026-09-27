@@ -366,7 +366,9 @@ describe("准确与安全", () => {
 
     // The grade is said as the level, its colour and its consequence.
     const graded = document.querySelector("[data-severity='S2']") as HTMLElement;
-    expect(graded).toHaveAttribute("title", "需监测或干预");
+    // Printed beside the grade, so not repeated as a tooltip (spec §22.8 rule 4).
+    expect(graded.parentElement).toHaveTextContent("需监测或干预");
+    expect(graded).not.toHaveAttribute("title");
     expect(screen.getByText(/它需要每天注射一次/)).toBeInTheDocument();
     // Red is the badge and the ✗ — not the sentence.
     expect(screen.getByText(/它需要每天注射一次/)).not.toHaveClass("text-danger");

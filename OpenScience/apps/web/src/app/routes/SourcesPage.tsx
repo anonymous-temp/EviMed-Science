@@ -28,6 +28,7 @@ import { navItemClasses } from "@/components/ui/NavItem";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Switch } from "@/components/ui/Switch";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
@@ -512,7 +513,7 @@ function SourceRow({ source, busy, shared, duplicate, onPreview, onDetails, onDu
   return (
     <ListRow
       leading={<SourceIcon name={name} />}
-      title={<span className="block truncate" title={name}>{name}</span>}
+      title={<Tooltip content={name} kind="label" whenTruncated><span className="block truncate">{name}</span></Tooltip>}
       onOpen={onPreview}
       meta={<SourceMeta source={source} name={name} shared={shared === true} duplicate={duplicate !== null} />}
       trailing={<SourceState source={source} name={name} busy={busy} onRetry={onRetry} />}
@@ -565,7 +566,7 @@ function SourceState({ source, name, busy, onRetry }: { source: SourceRecord; na
     const tooltip = reason && operator && failure ? `${reason}（${failure.code}）` : reason ?? undefined;
     return (
       <span className={cn("inline-flex items-center gap-1", failed ? "text-danger" : "text-warn")}>
-        <span title={tooltip}>{label}</span>
+        {tooltip ? <Tooltip content={tooltip}><span>{label}</span></Tooltip> : <span>{label}</span>}
         <span aria-hidden="true">·</span>
         <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新读取“${name}”`} onClick={onRetry} className="px-1">重试</Button>
       </span>
@@ -634,8 +635,8 @@ function OmissionNotice({ notice, onRaiseDepth }: { notice?: SourceOmissionNotic
       <p className="min-w-0 max-w-measure flex-1">抽查 {notice.audited} 个片段，约 {percent(over)} 的内容没有被理解进来，高于当前分析深度的参考值 {percent(notice.target)}。</p>
       <Button size="sm" variant="secondary" onClick={onRaiseDepth}>提高分析深度</Button>
     </div>}
-    {operator && disagreements > 0 && <p className="text-caption text-text-3" title={notice.disagreements.join("\n")}>
-      运行自报的审计与它实际交付的引用至少有 {disagreements} 处对不上；遗漏率按交付内容重算。</p>}
+    {operator && disagreements > 0 && <Tooltip content={notice.disagreements.join("；")}><p className="text-caption text-text-3">
+      运行自报的审计与它实际交付的引用至少有 {disagreements} 处对不上；遗漏率按交付内容重算。</p></Tooltip>}
   </div>;
 }
 
@@ -818,7 +819,7 @@ export function SyncedFolders({ projectId, refreshToken }: { projectId: string; 
             return <ListRow
               key={folder.id}
               leading={<Folder size={20} className="text-text-3" aria-hidden="true" />}
-              title={<span title={path}>{name}</span>}
+              title={<Tooltip content={path}><span>{name}</span></Tooltip>}
               meta={<FolderSyncLine folder={folder} operator={operator} />}
               actions={<IconButton icon={RefreshCw} label="立即同步" size="sm" disabled={busy || !active}
                 onClick={() => void mutate(() => syncSourceFolder(folder.id, folder.revision))} />}
@@ -841,7 +842,9 @@ function FolderSyncLine({ folder, operator }: { folder: SourceFolderRecord; oper
   const lastError = folder.payload.lastError;
   return <div className="space-y-0.5">
     {lastError
-      ? <p className="text-danger" title={operator ? lastError.code : undefined}>上次无法同步：{sourceFailureMessage(lastError)}</p>
+      ? operator
+        ? <Tooltip content={lastError.code}><p className="text-danger">上次无法同步：{sourceFailureMessage(lastError)}</p></Tooltip>
+        : <p className="text-danger">上次无法同步：{sourceFailureMessage(lastError)}</p>
       : <p>{sync ? `上次同步${sync.at ? ` ${formatDay(sync.at)} ${formatClock(sync.at)}` : ""} · 新增 ${sync.registered}` : "尚未同步"}</p>}
     {sync && sync.skippedCount > 0 && <Disclosure summary={`跳过 ${sync.skippedCount} 项`} summaryClassName="text-caption">
       <ul className="space-y-0.5">

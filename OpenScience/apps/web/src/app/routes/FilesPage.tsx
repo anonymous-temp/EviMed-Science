@@ -31,6 +31,7 @@ import { humanSize } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const EXT_LANG: Record<string, string> = {
   py: "python", r: "r", jl: "julia", sh: "bash", tex: "latex", md: "markdown",
@@ -206,15 +207,16 @@ export function FilesPage() {
           {hasWebApi && (
             <>
               <span className="min-w-2 flex-1" />
-              <button
-                className={iconButtonClasses({ size: "sm" })}
-                aria-label="上传资料"
-                title={`上传资料到个人知识库。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
-                onClick={() => void uploadFiles()}
-                disabled={uploading}
-              >
-                {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
-              </button>
+              <Tooltip content={`上传资料到个人知识库。${KNOWLEDGE_BASE_UPLOAD_HINT}`}>
+                <button
+                  className={iconButtonClasses({ size: "sm" })}
+                  aria-label="上传资料"
+                  onClick={() => void uploadFiles()}
+                  disabled={uploading}
+                >
+                  {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
+                </button>
+              </Tooltip>
             </>
           )}
         </div>
@@ -383,22 +385,27 @@ export function SessionFilesPane({
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <Folder size={16} className="shrink-0 text-text" aria-hidden="true" />
-        <span className="truncate text-ui font-medium text-text" title={workspace ?? undefined}>
-          {baseName(workspace)}
-        </span>
+        {workspace ? (
+          <Tooltip content={workspace}>
+            <span className="truncate text-ui font-medium text-text">{baseName(workspace)}</span>
+          </Tooltip>
+        ) : (
+          <span className="truncate text-ui font-medium text-text">{baseName(workspace)}</span>
+        )}
         <span className="text-caption text-muted">本次对话的文件</span>
         <div className="flex-1" />
         {controls}
         {hasWebApi && (
-          <button
-            className={iconButtonClasses({ size: "sm" })}
-            aria-label="上传文件"
-            title="上传文件到本次对话"
-            onClick={() => void uploadFiles()}
-            disabled={uploading}
-          >
-            {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
-          </button>
+          <Tooltip content="上传文件到本次对话">
+            <button
+              className={iconButtonClasses({ size: "sm" })}
+              aria-label="上传文件"
+              onClick={() => void uploadFiles()}
+              disabled={uploading}
+            >
+              {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}
+            </button>
+          </Tooltip>
         )}
         <button className="text-text hover:opacity-60" aria-label="关闭对话文件" onClick={onClose}>
           <X size={16} aria-hidden="true" />
