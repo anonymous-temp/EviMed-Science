@@ -104,6 +104,31 @@ jobs:
           pnpm lint:tokens
           pnpm typecheck:tokens
 
+      # The DTCG export against the community group's own schemas (spec §11.6,
+      # appendix E.6 #11). The rules are also written down as code
+      # (dtcgFormat.test.mjs, above, no network); this adds the published
+      # 2025.10 files, fetched here so the test itself never reaches the
+      # network and the package gains no dependency. A download that fails is
+      # a warning — the export did not change — and a schema that was fetched
+      # and does not validate fails the job.
+      - name: Validate the DTCG export against the official schema
+        shell: bash
+        run: |
+          dir="$RUNNER_TEMP/dtcg-2025.10"
+          mkdir -p "$dir"
+          fetched=true
+          for name in format resolver; do
+            curl -fsSL --retry 3 --max-time 30 -o "$dir/$name.json" "https://www.designtokens.org/schemas/2025.10/$name.json" \
+              && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$dir/$name.json" \
+              || fetched=false
+          done
+          if [ "$fetched" != true ]; then
+            echo "::warning::The DTCG 2025.10 schemas could not be downloaded; the export was checked against the rules in dtcgFormat.test.mjs only."
+            exit 0
+          fi
+          sha256sum "$dir"/*.json
+          DTCG_SCHEMA_DIR="$dir" node --test packages/design-tokens/test/dtcgSchema.test.mjs
+
       - name: Check generated artifacts are current
         run: |
           pnpm check:capabilities

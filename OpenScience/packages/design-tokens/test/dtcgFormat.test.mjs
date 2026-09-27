@@ -2,10 +2,11 @@
  * The shipped DTCG export (`dist/dtcg/`) read against the DTCG 2025.10 format
  * rules (spec §11.6; appendix E.6 #15).
  *
- * The official JSON Schemas are not fetched: a test that needs the network is
- * a test CI cannot run offline, and a schema pinned by URL changes under it.
- * So the rules the Format, Color and Resolver modules state are written down
- * here instead, and applied to the files on disk — the bytes a designer
+ * This test never fetches anything: a test that needs the network is a test
+ * that cannot run offline, and a schema pinned by URL changes under it. So the
+ * rules the Format, Color and Resolver modules state are written down here,
+ * and applied to the files on disk (the official JSON Schemas are applied too,
+ * by `dtcgSchema.test.mjs`, when CI has downloaded them) — the bytes a designer
  * imports, not the generator's in-memory copy (`designTokens.test.mjs` reads
  * that one):
  *
