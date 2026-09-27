@@ -39,7 +39,7 @@ describe("飞书 under 账户", () => {
   beforeEach(() => { vi.clearAllMocks(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it("walks from one 「绑定」 to a connected bot, polling the server while the code waits", async () => {
+  it("walks from one “绑定” to a connected bot, polling the server while the code waits", async () => {
     mocks.fetchImStatus.mockResolvedValueOnce(unbound).mockResolvedValueOnce(bound);
     mocks.startFeishuRegistration.mockResolvedValue({ state: "polling", qrCodeUrl: QR_URL, remainingSeconds: 590 });
     mocks.fetchFeishuRegistration.mockResolvedValue({ state: "succeeded", result: { botName: "bot", pendingApproval: false, tenantBrand: "feishu" } });
@@ -70,7 +70,7 @@ describe("飞书 under 账户", () => {
     expect(screen.getByRole("button", { name: "重新绑定" })).toBeInTheDocument();
   });
 
-  it("shows a bound bot's state, and keeps where each chat goes and 解除绑定 in its 「⋯」", async () => {
+  it("shows a bound bot's state, and keeps where each chat goes and 解除绑定 in its “⋯”", async () => {
     const user = userEvent.setup();
     mocks.fetchImStatus.mockResolvedValueOnce(bound).mockResolvedValue(unbound);
     mocks.unbindFeishu.mockResolvedValue({ removed: 1 });
@@ -81,7 +81,7 @@ describe("飞书 under 账户", () => {
     await user.click(screen.getByRole("button", { name: "飞书的更多操作" }));
     await user.click(await screen.findByRole("menuitem", { name: "对话去向" }));
     expect(screen.getByText("单聊 · 跟随你最近使用的项目")).toBeInTheDocument();
-    expect(screen.getByText("群聊 · 项目「肿瘤免疫」")).toBeInTheDocument();
+    expect(screen.getByText("群聊 · 项目“肿瘤免疫”")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "飞书的更多操作" }));
     await user.click(await screen.findByRole("menuitem", { name: "解除绑定" }));
     const dialog = screen.getByRole("alertdialog");

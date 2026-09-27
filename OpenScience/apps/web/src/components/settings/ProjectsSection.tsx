@@ -36,7 +36,7 @@ const DEFAULT_PROJECT_ID = "default";
  */
 const DELETE_ERRORS = {
   project_busy: "这个项目还有排队或运行中的任务，等它们结束或取消后再删除。",
-  default_project_protected: "「我的研究」是每个账号都有的项目，不能删除。",
+  default_project_protected: "“我的研究”是每个账号都有的项目，不能删除。",
 };
 
 /** A row inside a settings group: the group's own padding, no row corners. */
@@ -103,7 +103,7 @@ export function ProjectsSection() {
       setCreateOpen(false);
       // A project made here is the one the researcher is about to work in.
       await useProjectStore.getState().select(project.id).then(() => setCurrentId(project.id), (error) => {
-        toast.error(`没能切换到「${project.name}」：${webErrorMessage(error)}`);
+        toast.error(`没能切换到“${project.name}”：${webErrorMessage(error)}`);
       });
     } catch (error) {
       setCreateError(projectErrorMessage(error, projects.length, "项目没有建成，请稍后重试。"));
@@ -134,9 +134,9 @@ export function ProjectsSection() {
     try {
       const blob = await exportWebProject(project.id);
       downloadBlob(blob, `evimed-project-${project.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.tar.gz`);
-      toast.success(`已导出「${project.name}」`);
+      toast.success(`已导出“${project.name}”`);
     } catch (error) {
-      toast.error(`没能导出「${project.name}」：${webErrorMessage(error)}`);
+      toast.error(`没能导出“${project.name}”：${webErrorMessage(error)}`);
     } finally {
       setBusyProjectId(null);
     }
@@ -162,9 +162,9 @@ export function ProjectsSection() {
         }
       }
       refreshSidebar();
-      toast.success(`已删除「${project.name}」`);
+      toast.success(`已删除“${project.name}”`);
     } catch (error) {
-      toast.error(`没能删除「${project.name}」：${webErrorMessage(error, { codes: DELETE_ERRORS })}`);
+      toast.error(`没能删除“${project.name}”：${webErrorMessage(error, { codes: DELETE_ERRORS })}`);
     } finally {
       setBusyProjectId(null);
     }
@@ -211,7 +211,7 @@ export function ProjectsSection() {
             control={<Button variant="text" onClick={() => void refresh()}>重试</Button>}
           />
         )}
-        {projects.length === 0 && loading && <PanelRow label={<span className="text-text-3">正在读取…</span>} />}
+        {projects.length === 0 && loading && <PanelRow label={<span className="text-text-3">正在读取</span>} />}
         {projects.length > 0 && (
           <List label="项目列表" divided>
             {projects.map((project) => renamingId === project.id ? (
@@ -220,7 +220,7 @@ export function ProjectsSection() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Input
                       ref={renameRef}
-                      aria-label={`「${project.name}」的新名字`}
+                      aria-label={`“${project.name}”的新名字`}
                       value={renameDraft}
                       maxLength={PROJECT_NAME_MAX}
                       className="w-72"
@@ -243,15 +243,15 @@ export function ProjectsSection() {
                 trailing={project.id === currentId ? <Tag>当前</Tag> : undefined}
                 actions={(
                   <>
-                    <IconButton icon={Pencil} label={`重命名「${project.name}」`} size="sm" disabled={disabled}
+                    <IconButton icon={Pencil} label={`重命名“${project.name}”`} size="sm" disabled={disabled}
                       onClick={() => { setRenamingId(project.id); setRenameDraft(project.name); setRenameError(null); }} />
-                    <IconButton icon={Download} label={`导出「${project.name}」`} size="sm" disabled={disabled}
+                    <IconButton icon={Download} label={`导出“${project.name}”`} size="sm" disabled={disabled}
                       onClick={() => void exportProject(project)} />
                   </>
                 )}
                 menu={project.id === DEFAULT_PROJECT_ID ? undefined : (
                   <Menu
-                    label={`「${project.name}」的更多操作`}
+                    label={`“${project.name}”的更多操作`}
                     items={[{ label: "删除", destructive: true, disabled, onSelect: () => setPendingDelete(project) }]}
                   />
                 )}
@@ -265,7 +265,7 @@ export function ProjectsSection() {
 
       {pendingDelete && createPortal(
         <ConfirmDialog
-          title={`删除项目「${pendingDelete.name}」？`}
+          title={`删除项目“${pendingDelete.name}”？`}
           body="这个项目的文件、对话与研究环境都会删除，无法恢复；需要留底的话，先导出。"
           confirmLabel="删除项目"
           onConfirm={() => void confirmDeleteProject()}
@@ -317,7 +317,7 @@ function ArchivedConversations() {
       {error ? (
         <PanelRow label={<span role="alert">{error}</span>} control={<Button variant="text" onClick={() => void load()}>重试</Button>} />
       ) : conversations === null ? (
-        <PanelRow label={<span className="text-text-3">正在读取…</span>} />
+        <PanelRow label={<span className="text-text-3">正在读取</span>} />
       ) : conversations.length === 0 ? (
         <PanelRow label={<span className="text-text-3">没有归档的对话</span>} />
       ) : (
@@ -330,7 +330,7 @@ function ArchivedConversations() {
               to={chatPath(conversation.sessionId)}
               meta={relativeTime(runMoment(conversation.lead))}
               actions={(
-                <IconButton icon={ArchiveRestore} label={`恢复「${runTitle(conversation.titleRun)}」`} size="sm" disabled={busy !== null}
+                <IconButton icon={ArchiveRestore} label={`恢复“${runTitle(conversation.titleRun)}”`} size="sm" disabled={busy !== null}
                   onClick={() => void restore(conversation)} />
               )}
             />

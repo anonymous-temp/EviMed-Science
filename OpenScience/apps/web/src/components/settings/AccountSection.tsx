@@ -126,7 +126,7 @@ export function AccountSection({ imEnabled }: { imEnabled: boolean }) {
               <p className="text-ui text-text">将删除账户及全部项目，不可恢复。</p>
               <Input
                 ref={confirmField}
-                label={`输入账户 ID「${account.id}」确认`}
+                label={`输入账户 ID“${account.id}”确认`}
                 value={confirmId}
                 autoComplete="off"
                 className="font-mono"

@@ -121,7 +121,7 @@ export function RunFilePage() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {locating && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开…
+              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开
             </p>
           )}
           {!locating && !path && (
@@ -129,7 +129,7 @@ export function RunFilePage() {
           )}
           {!locating && path && readsText && loading && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取 {filename}…
+              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取 {filename}
             </p>
           )}
           {!locating && path && readsText && !loading && error && (
@@ -141,7 +141,7 @@ export function RunFilePage() {
               : <ReportReader path={path} root="workspace" text={text} run={run} runId={run?.id ?? runId} layout="page" focusClaim={focusClaim} highlight={quote} />
           )}
           {!locating && path && !readsText && (
-            <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
+            <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览</p>}>
               <div className="h-full">
                 <FilePreviewInspector
                   data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}

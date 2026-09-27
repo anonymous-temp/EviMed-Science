@@ -219,9 +219,9 @@ describe("PluginsCard", () => {
 
   it.each([
     ["saved", "已保存，首次启动后验证生效", false],
-    ["rolled_back", "应用失败，已恢复上次有效配置", true],
+    ["rolled_back", "无法应用，已恢复上次有效配置", true],
     ["unavailable", "插件暂不可用，尚未确认恢复成功", true],
-    ["failed", "应用失败，尚未确认恢复成功", true],
+    ["failed", "无法应用，尚未确认恢复成功", true],
   ] as const)("reports %s truthfully and only retries failed application", async (phase, label, retry) => {
     api.listWebPlugins.mockResolvedValue([plugin({ phase, effective: phase === "saved" ? null : config() })]);
     api.retryWebPlugin.mockResolvedValue(plugin({ phase: "pending" }));
@@ -254,7 +254,7 @@ describe("PluginsCard", () => {
     expect(await screen.findByText("等待应用")).toBeInTheDocument();
     expect(api.rollbackWebPlugin.mock.calls[0].slice(0, 3)).toEqual(["alpha", "dsh-cite", { expectedRevision: 2, targetRevision: 1 }]);
     expect(screen.getByLabelText("已保存配置")).toHaveTextContent("版本 3");
-    expect(screen.queryByText("应用失败，已恢复上次有效配置")).not.toBeInTheDocument();
+    expect(screen.queryByText("无法应用，已恢复上次有效配置")).not.toBeInTheDocument();
   });
 
   it("preserves unsaved input after refresh and requires review of a conflicting revision", async () => {

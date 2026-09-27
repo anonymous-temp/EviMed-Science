@@ -64,11 +64,11 @@ export function UsageSection() {
       <Panel title="本月用量">
         {error ? (
           <PanelRow
-            label={<span role="alert">读取用量失败：{error}</span>}
+            label={<span role="alert">无法读取用量：{error}</span>}
             control={<Button variant="text" onClick={load}>重试</Button>}
           />
         ) : !usage ? (
-          <PanelRow label={<span className="text-text-3">正在读取…</span>} />
+          <PanelRow label={<span className="text-text-3">正在读取</span>} />
         ) : (
           <PanelRow
             label={<span className="text-title font-semibold tabular-nums">{formatCny(usage.cost) || "¥0.00"}</span>}

@@ -63,7 +63,7 @@ export function FeedList({
         </Button>
       )}
       {listing.items.length === 0 ? (
-        q ? <EmptyState icon={Search} title={`没有找到和「${q}」相关的动态`} />
+        q ? <EmptyState icon={Search} title={`没有找到和“${q}”相关的动态`} />
           : filtered ? <EmptyState icon={Filter} title="没有结果" />
             : firstRun || view === "all" ? <EmptyState icon={Newspaper} title="暂无内容" />
               : <EmptyState icon={Newspaper} title="暂无精选" action={<Button variant="secondary" onClick={onAll}>看全部</Button>} />

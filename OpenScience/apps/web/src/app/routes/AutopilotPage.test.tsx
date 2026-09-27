@@ -58,7 +58,7 @@ function render(page = "/app/autopilot") {
 
 /** The ⋯ menu of a task's row, opened. */
 async function openMenu(title = "心衰证据追踪") {
-  await userEvent.click(await screen.findByRole("button", { name: `「${title}」的更多操作` }));
+  await userEvent.click(await screen.findByRole("button", { name: `“${title}”的更多操作` }));
 }
 
 describe("AutopilotPage", () => {
@@ -83,7 +83,7 @@ describe("AutopilotPage", () => {
     const tasks = await screen.findByRole("list", { name: "定时研究" });
     const row = within(tasks).getByText("心衰证据追踪").closest("li")!;
     expect(row).toHaveTextContent("每天 01:00 · 下次 今天");
-    expect(within(row).getByRole("switch", { name: "定时运行「心衰证据追踪」" })).toHaveAttribute("aria-checked", "true");
+    expect(within(row).getByRole("switch", { name: "定时运行“心衰证据追踪”" })).toHaveAttribute("aria-checked", "true");
     expect(row).toHaveTextContent("上次结果 ›");
     const page = document.body.textContent ?? "";
     for (const gone of [/简报/, /重点发现/, /待验证线索/, /需要你决定/, /Asia\/Shanghai/, /每日 ¥/, /heart failure/, /证据更新/, /运行中/]) {
@@ -128,9 +128,9 @@ describe("AutopilotPage", () => {
   it("pauses and starts a task with its switch", async () => {
     mocks.listAgendas.mockResolvedValue({ items: [agenda, { ...paused, id: "agenda-two", payload: { ...paused.payload, title: "疳证临床试验注册跟踪" } }], nextCursor: null });
     render();
-    await userEvent.click(await screen.findByRole("switch", { name: "定时运行「心衰证据追踪」" }));
+    await userEvent.click(await screen.findByRole("switch", { name: "定时运行“心衰证据追踪”" }));
     await waitFor(() => expect(mocks.stopAgenda).toHaveBeenCalledWith("agenda-one", 2));
-    const off = screen.getByRole("switch", { name: "定时运行「疳证临床试验注册跟踪」" });
+    const off = screen.getByRole("switch", { name: "定时运行“疳证临床试验注册跟踪”" });
     expect(off).toHaveAttribute("aria-checked", "false");
     await userEvent.click(off);
     await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith("agenda-two", 2));

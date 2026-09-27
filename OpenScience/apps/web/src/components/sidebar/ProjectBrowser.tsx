@@ -179,7 +179,7 @@ export function ProjectBrowser({ geo = false }: {
     if (announced.current === currentId) return;
     announced.current = currentId;
     const name = projects.find((project) => project.id === currentId)?.name;
-    if (name) setAnnouncement(`已切换到项目「${name}」`);
+    if (name) setAnnouncement(`已切换到项目“${name}”`);
   }, [currentId, projects]);
 
   // Opening another project's task swaps its button for a link (the project
@@ -460,7 +460,7 @@ export function ProjectBrowser({ geo = false }: {
             {results.length > SEARCH_RESULTS_MAX && (
               <p className="px-2 py-1 text-caption text-text-3">仅显示前 {SEARCH_RESULTS_MAX} 条</p>
             )}
-            {unsearchedLoading && <p role="status" className="px-2 py-1 text-caption text-muted">正在读取其余项目的对话…</p>}
+            {unsearchedLoading && <p role="status" className="px-2 py-1 text-caption text-muted">正在读取其余项目的对话</p>}
             {!unsearchedLoading && unsearched.length > 0 && (
               <button
                 type="button"
@@ -478,7 +478,7 @@ export function ProjectBrowser({ geo = false }: {
         ) : (
           <>
             {loading && projects.length === 0 && !error && (
-              <p className="px-2 py-1 text-caption text-muted">正在读取项目…</p>
+              <p className="px-2 py-1 text-caption text-muted">正在读取项目</p>
             )}
             {(projects.length > 0 || error) && (
               <ul className="flex flex-col gap-1">
@@ -682,7 +682,7 @@ function ProjectGroup({
           <span className="absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 max-lg:opacity-100">
             <button
               type="button"
-              aria-label={`在「${project.name}」新建对话`}
+              aria-label={`在“${project.name}”新建对话`}
               title="在此项目新建对话"
               onClick={onNewTask}
               className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
@@ -694,7 +694,7 @@ function ProjectGroup({
             {!standIn && (
               <button
                 type="button"
-                aria-label={`重命名项目「${project.name}」`}
+                aria-label={`重命名项目“${project.name}”`}
                 title="重命名"
                 onClick={() => { setDraft(project.name); setRenameError(null); setRenaming(true); }}
                 className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
@@ -708,9 +708,9 @@ function ProjectGroup({
       {renameError && <p role="alert" className="px-2 py-1 text-caption text-error">{renameError}</p>}
       {failure && <p role="alert" className="py-1 pl-7 pr-2 text-caption text-error">{failure}</p>}
       {expanded && (
-        <ul id={listId} aria-label={`「${project.name}」的对话`} className="mt-0.5 flex flex-col">
+        <ul id={listId} aria-label={`“${project.name}”的对话`} className="mt-0.5 flex flex-col">
           {(runs === undefined || runs.status === "loading") && (
-            <li className="py-1 pl-11 pr-2 text-caption text-muted">正在读取…</li>
+            <li className="py-1 pl-11 pr-2 text-caption text-muted">正在读取</li>
           )}
           {runs?.status === "failed" && (
             <li className="flex items-center gap-2 py-1 pl-11 pr-2 text-caption text-muted">
@@ -833,7 +833,7 @@ function TaskRow({
     <button
       type="button"
       data-task-key={taskKey(projectId, run)}
-      title={`切换到「${projectName}」并打开`}
+      title={`切换到“${projectName}”并打开`}
       onClick={(event) => onOpen(event.currentTarget)}
       onPointerEnter={onWarm}
       onFocus={onWarm}

@@ -474,10 +474,10 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
                       // visible handle, so they are not a second tab stop.
                       ? <Button variant="text" size="sm" tabIndex={-1} aria-hidden="true" onClick={open}>{result.label} ›</Button>
                       : <span className="px-2 text-ui">{result.label}</span>}
-                    <Switch checked={active} label={`定时运行「${title}」`} disabled={busy}
+                    <Switch checked={active} label={`定时运行“${title}”`} disabled={busy}
                       onChange={(on) => void mutate(() => (on ? startAgenda : stopAgenda)(agenda.id, agenda.revision))} />
                   </>}
-                  menu={<Menu label={`「${title}」的更多操作`} items={[
+                  menu={<Menu label={`“${title}”的更多操作`} items={[
                     ...(active ? [{ label: "立即运行", onSelect: () => setRunning(agenda), disabled: busy }] : []),
                     { label: "历史", onSelect: () => setHistory(agenda) },
                   ]} />}

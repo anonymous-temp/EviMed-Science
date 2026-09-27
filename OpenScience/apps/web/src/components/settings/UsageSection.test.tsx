@@ -115,7 +115,7 @@ describe("用量", () => {
   it("reports a read failure instead of showing zero usage", async () => {
     mocks.fetchWebAccountUsage.mockRejectedValue(new WebApiError("HTTP 503", { status: 503, code: "runtime_unavailable" }));
     open();
-    expect(await screen.findByText(/读取用量失败：运行时出现问题，稍后重试。/)).toBeInTheDocument();
+    expect(await screen.findByText(/无法读取用量：运行时出现问题，稍后重试。/)).toBeInTheDocument();
     expect(screen.queryByText("¥0.00")).not.toBeInTheDocument();
   });
 

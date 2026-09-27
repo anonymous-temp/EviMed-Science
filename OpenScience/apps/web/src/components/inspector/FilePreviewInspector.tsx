@@ -52,7 +52,7 @@ function ViewerFallback() {
   return (
     <div className="flex h-full min-h-0 items-center justify-center gap-2 text-ui text-muted" role="status" aria-live="polite">
       <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-      正在载入查看器…
+      正在载入查看器
     </div>
   );
 }
@@ -244,7 +244,7 @@ export function FilePreviewInspector({
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
         {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-ui text-muted">
-            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}…
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}
           </div>
         )}
         {!showHistory && !loading && error && (
@@ -503,7 +503,7 @@ function Body({
 /** A clinical evidence matrix opened on its own: the table, with its checks. */
 function MatrixFileView({ path, root, runId }: { path: string; root?: FileRoot; runId: string | null }) {
   const { document, verified } = useClaimMatrix(path, root);
-  if (!document) return <Note text="正在读取证据矩阵…" />;
+  if (!document) return <Note text="正在读取证据矩阵" />;
   return (
     <div className="p-4">
       <EvidenceMatrixTable claims={document.claims} verified={verified} runId={runId} />

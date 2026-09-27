@@ -99,7 +99,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   if (records === null) {
     return (
       <div className="flex items-center gap-2 p-4 text-ui text-muted">
-        <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载版本记录…
+        <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载版本记录
       </div>
     );
   }
@@ -193,7 +193,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                     </div>
                     {lockfile.text === null ? (
                       <div className="flex items-center gap-2 px-2.5 py-2 text-caption text-muted">
-                        <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载…
+                        <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载
                       </div>
                     ) : (
                       <pre className="max-h-48 overflow-auto px-2.5 py-2 font-mono text-caption leading-relaxed text-text">

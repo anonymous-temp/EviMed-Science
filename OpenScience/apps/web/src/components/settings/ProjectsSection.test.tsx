@@ -93,13 +93,13 @@ describe("项目", () => {
     expect(screen.queryByText(/项目插件|隐私与数据流向/)).not.toBeInTheDocument();
   });
 
-  it("offers 重命名 and 导出 on the row, and 删除 in the row's 「⋯」", async () => {
+  it("offers 重命名 and 导出 on the row, and 删除 in the row's “⋯”", async () => {
     open();
     await screen.findByText("Paper 1");
-    const rename = within(row("Paper 1")).getByRole("button", { name: "重命名「Paper 1」" });
+    const rename = within(row("Paper 1")).getByRole("button", { name: "重命名“Paper 1”" });
     expect(rename.parentElement).not.toHaveClass("opacity-0");
-    expect(within(row("Paper 1")).getByRole("button", { name: "导出「Paper 1」" })).toBeInTheDocument();
-    expect(within(row("Paper 1")).getByRole("button", { name: "「Paper 1」的更多操作" })).toBeInTheDocument();
+    expect(within(row("Paper 1")).getByRole("button", { name: "导出“Paper 1”" })).toBeInTheDocument();
+    expect(within(row("Paper 1")).getByRole("button", { name: "“Paper 1”的更多操作" })).toBeInTheDocument();
     // The account's own project cannot be deleted, so it has no 「⋯」.
     expect(within(row("我的研究")).queryByRole("button", { name: /更多操作/ })).not.toBeInTheDocument();
   });
@@ -130,8 +130,8 @@ describe("项目", () => {
   it("renames a project in place", async () => {
     open();
     await screen.findByText("Paper 1");
-    fireEvent.click(screen.getByRole("button", { name: "重命名「Paper 1」" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "「Paper 1」的新名字" }), { target: { value: "论文一" } });
+    fireEvent.click(screen.getByRole("button", { name: "重命名“Paper 1”" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "“Paper 1”的新名字" }), { target: { value: "论文一" } });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith("paper1", "论文一"));
     expect(await screen.findByText("论文一")).toBeInTheDocument();
@@ -140,25 +140,25 @@ describe("项目", () => {
   it("exports a project archive", async () => {
     open();
     await screen.findByText("Paper 1");
-    fireEvent.click(screen.getByRole("button", { name: "导出「Paper 1」" }));
+    fireEvent.click(screen.getByRole("button", { name: "导出“Paper 1”" }));
     await waitFor(() => expect(mocks.exportWebProject).toHaveBeenCalledWith("paper1"));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("已导出「Paper 1」");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已导出“Paper 1”");
   });
 
-  it("deletes after a confirmation, and moves the shell to 「我的研究」 when it was in that project", async () => {
+  it("deletes after a confirmation, and moves the shell to “我的研究” when it was in that project", async () => {
     mocks.projectId = "paper1";
     open();
     await screen.findByText("Paper 1");
-    fireEvent.click(within(row("Paper 1")).getByRole("button", { name: "「Paper 1」的更多操作" }));
+    fireEvent.click(within(row("Paper 1")).getByRole("button", { name: "“Paper 1”的更多操作" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
-    const dialog = await screen.findByRole("alertdialog", { name: "删除项目「Paper 1」？" });
+    const dialog = await screen.findByRole("alertdialog", { name: "删除项目“Paper 1”？" });
     expect(within(dialog).getByText(/无法恢复/)).toBeInTheDocument();
     expect(mocks.deleteWebProject).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "删除项目" }));
     await waitFor(() => expect(mocks.deleteWebProject).toHaveBeenCalledWith("paper1"));
     await waitFor(() => expect(mocks.select).toHaveBeenCalledWith("default"));
     await waitFor(() => expect(screen.queryByText("Paper 1")).not.toBeInTheDocument());
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除「Paper 1」");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除“Paper 1”");
     expect(mocks.load).toHaveBeenCalled();
   });
 
@@ -167,10 +167,10 @@ describe("项目", () => {
     mocks.select.mockRejectedValue(new Error("该项目当前不可用。"));
     open();
     await screen.findByText("Paper 1");
-    fireEvent.click(within(row("Paper 1")).getByRole("button", { name: "「Paper 1」的更多操作" }));
+    fireEvent.click(within(row("Paper 1")).getByRole("button", { name: "“Paper 1”的更多操作" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除项目" }));
-    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除「Paper 1」"));
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除“Paper 1”"));
     expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
@@ -184,7 +184,7 @@ describe("项目", () => {
     const link = await screen.findByRole("link", { name: "阿司匹林一级预防" });
     expect(link).toHaveAttribute("href", "/app/chat/ses_1");
     expect(mocks.listWebAgentRuns).toHaveBeenCalledWith({ projectId: "default", archived: true });
-    fireEvent.click(screen.getByRole("button", { name: "恢复「阿司匹林一级预防」" }));
+    fireEvent.click(screen.getByRole("button", { name: "恢复“阿司匹林一级预防”" }));
     await waitFor(() => expect(mocks.archiveWebAgentRun).toHaveBeenCalledWith("run_1", false));
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已恢复到对话列表");
   });

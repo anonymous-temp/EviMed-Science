@@ -193,7 +193,7 @@ describe("the page and its views", () => {
 });
 
 describe("the filter row", () => {
-  it("is one row: 全部 and five lanes, the rest under 「更多」, then 专科 and 收藏", async () => {
+  it("is one row: 全部 and five lanes, the rest under “更多”, then 专科 and 收藏", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
     const lanes = screen.getByRole("group", { name: "栏目" });
@@ -274,7 +274,7 @@ describe("search", () => {
   it("says in one sentence that nothing matched", async () => {
     feed = async (query) => (query.q ? page([]) : page([today]));
     renderPage("/app/frontier?view=all&q=%E6%97%A0%E6%AD%A4%E8%8D%AF");
-    expect(await screen.findByText("没有找到和「无此药」相关的动态")).toBeInTheDocument();
+    expect(await screen.findByText("没有找到和“无此药”相关的动态")).toBeInTheDocument();
   });
 });
 
@@ -312,7 +312,7 @@ describe("精选's safety strip", () => {
       return page([alert]);
     };
     renderPage();
-    const failed = await screen.findByText("安全警示读取失败");
+    const failed = await screen.findByText("无法读取安全警示");
     fail = false;
     await userEvent.click(within(failed.closest("[role=alert]") as HTMLElement).getByRole("button", { name: "重试" }));
     expect(await screen.findByRole("region", { name: "安全警示" })).toHaveTextContent("安全警示 1");

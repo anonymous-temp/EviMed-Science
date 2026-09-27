@@ -156,7 +156,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
 
   return (
     <div className={className}>
-      <Menu label={`「${title}」的操作`} items={items} />
+      <Menu label={`“${title}”的操作`} items={items} />
       {confirming === "stop" && (
         <ConfirmDialog
           title="停止这条对话？"
@@ -168,7 +168,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
       )}
       {confirming === "delete" && (
         <ConfirmDialog
-          title={`删除「${title}」？`}
+          title={`删除“${title}”？`}
           body={working.length ? "会先停止；删除后不可恢复，产出文件仍在项目工作区。" : "删除后不可恢复；产出文件仍在项目工作区。"}
           confirmLabel="删除"
           tone="danger"

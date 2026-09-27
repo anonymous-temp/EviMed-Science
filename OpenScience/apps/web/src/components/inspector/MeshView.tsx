@@ -302,7 +302,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       {(rendering || error) && (
         <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
-          {rendering ? "正在渲染模型…" : error}
+          {rendering ? "正在渲染模型" : error}
         </div>
       )}
 

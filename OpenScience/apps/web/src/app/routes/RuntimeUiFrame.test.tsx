@@ -247,16 +247,16 @@ describe("native frame identity and readiness", () => {
     expect(mocks.create).toHaveBeenCalledWith("default"); expect(frame.src).toBe(binding.frameUrl);
     act(() => frame.dispatchEvent(new Event("load")));
     // One quiet line while the document loads, never the machinery behind it.
-    await waitFor(() => expect(screen.getByText("正在打开…")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("正在打开")).toBeInTheDocument());
     expect(screen.queryByText(/内核|准备环境|载入界面/)).toBeNull();
     emit(frame, { type: "evimed.runtime-ui.ready" }, "https://evil.example");
     emit(frame, { type: "evimed.runtime-ui.ready" }, mocks.profile.uiOrigin, window);
     emit(frame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
-    expect(screen.getByText("正在打开…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开")).toBeInTheDocument();
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("正在打开…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开")).toBeInTheDocument();
     const command = post.mock.calls[0][0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -366,9 +366,9 @@ describe("native frame identity and readiness", () => {
     expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-a", frameId: "frame-a", intent: { sessionId: "session-new", draft: "Evidence brief" } });
     expect(post.mock.calls[0][1]).toBe(mocks.profile.uiOrigin);
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "wrong", ok: true, sessionId: "session-new" });
-    expect(screen.getByText("正在打开…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
-    await waitFor(() => expect(screen.queryByText("正在打开…")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("正在打开")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
   });
 
@@ -461,7 +461,7 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "wrong-session" });
-    expect(screen.getByText("正在打开…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
@@ -736,7 +736,7 @@ describe("opening a task", () => {
     const cover = () => screen.getByRole("status");
     const machinery = /准备环境|同步文件|启动内核|载入界面|打开对话|内核|研究环境/;
     expect(cover()).toHaveTextContent("ASPREE试验主要结论");
-    expect(cover()).toHaveTextContent("正在打开…");
+    expect(cover()).toHaveTextContent("正在打开");
     expect(cover()).not.toHaveTextContent(machinery);
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     reported = { running: false, provider: "agentbay", startStage: "sync", startError: null };
@@ -750,7 +750,7 @@ describe("opening a task", () => {
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(cover()).toHaveTextContent("正在打开…");
+    expect(cover()).toHaveTextContent("正在打开");
     const navigateCommand = post.mock.calls.find(([data]) => data.type === "evimed.runtime-ui.navigate")![0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigateCommand.requestId, ok: true, sessionId: "session-a" });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
@@ -762,7 +762,7 @@ describe("opening a task", () => {
     mocks.create.mockImplementation(() => new Promise(() => {}));
     mount(null, "/app/chat/session-unlisted");
     const cover = await screen.findByRole("status");
-    expect(cover).toHaveTextContent(/^正在打开…$/);
+    expect(cover).toHaveTextContent(/^正在打开$/);
   });
 
   it("says a slot cap is a slot cap, with the action that frees one, never as a slow start", async () => {
@@ -1018,7 +1018,7 @@ describe("the conversation surface outlives the route", () => {
       expect(container.querySelectorAll("iframe")).toHaveLength(1);
       expect(mocks.create).not.toHaveBeenCalledWith("project-c");
       expect(mocks.start).not.toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-c" }));
-      expect(hostCover(container)).toHaveTextContent("正在打开…");
+      expect(hostCover(container)).toHaveTextContent("正在打开");
 
       await act(async () => { confirm(); await settle(); });
       await waitFor(() => expect(mocks.start).toHaveBeenCalledWith({ projectId: "project-c", opening: true }));
@@ -1096,7 +1096,7 @@ describe("the conversation surface outlives the route", () => {
     await userEvent.click(screen.getByText("Open B"));
     await waitFor(() => expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(2));
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.queryByText("正在打开…")).toBeNull();
+    expect(screen.queryByText("正在打开")).toBeNull();
     expect(container.querySelector("iframe")).toBe(frame);
   });
 });

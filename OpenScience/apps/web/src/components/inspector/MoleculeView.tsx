@@ -217,7 +217,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
 
       {(rendering || error) && (
         <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
-          {rendering ? "正在渲染结构…" : error}
+          {rendering ? "正在渲染结构" : error}
         </div>
       )}
     </div>

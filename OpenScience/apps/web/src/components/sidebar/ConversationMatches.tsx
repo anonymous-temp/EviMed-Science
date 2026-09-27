@@ -56,7 +56,7 @@ export function ConversationMatches({ query, shownSessionIds }: { query: string;
   return (
     <section aria-label="对话内容匹配" className="mt-2">
       <h3 className="px-2 py-1 text-caption font-semibold text-muted">对话内容匹配</h3>
-      {searching && rows.length === 0 && <div className="px-2 py-1 text-caption text-muted">正在搜索对话…</div>}
+      {searching && rows.length === 0 && <div className="px-2 py-1 text-caption text-muted">正在搜索对话</div>}
       {rows.map((item) => (
         <NavLink
           key={item.sessionId}

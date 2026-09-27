@@ -59,7 +59,7 @@ export function LoginPage() {
  * which knows about `Retry-After`.
  */
 function signInMessage(error: unknown): string {
-  if (error instanceof WebApiError && error.status === 401) return "账号或密码错误，请重新输入。";
+  if (error instanceof WebApiError && error.status === 401) return "账号或密码不正确，请重新输入。";
   return webErrorMessage(error, { fallback: "登录没有完成，请检查网络后重试。" });
 }
 
@@ -166,5 +166,5 @@ function registrationMessage(error: unknown): string {
   if (code === "invalid_username" || code === "invalid_field") return "账号只能用字母、数字、连字符和下划线。";
   if (code === "self_registration_disabled") return "这个部署暂不开放注册。";
   if (code === "auth_rate_limited") return "尝试太频繁了，请稍后再试。";
-  return "注册失败，请稍后重试。";
+  return "无法注册，请稍后重试。";
 }

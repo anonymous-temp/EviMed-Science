@@ -30,9 +30,9 @@ const phaseLabels: Record<WebPluginState["phase"], string> = {
   pending: "等待应用",
   applying: "正在应用并验证配置",
   effective: "配置已验证生效",
-  rolled_back: "应用失败，已恢复上次有效配置",
+  rolled_back: "无法应用，已恢复上次有效配置",
   unavailable: "插件暂不可用，尚未确认恢复成功",
-  failed: "应用失败，尚未确认恢复成功",
+  failed: "无法应用，尚未确认恢复成功",
 };
 /** The settings this version of the card knows how to render. A plugin that
  *  declares anything else is shown, but not configured from here. */
@@ -118,7 +118,7 @@ function ProjectPluginsCard({ projectId }: { projectId: string }) {
         <div>
           <h2 className="text-body text-text">项目插件</h2>
           {/* The project's name, never its id: the id is the server's key. */}
-          <p className="mt-0.5 text-ui text-muted">{projectName ? `作用于项目「${projectName}」` : "作用于当前项目"}</p>
+          <p className="mt-0.5 text-ui text-muted">{projectName ? `作用于项目“${projectName}”` : "作用于当前项目"}</p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => void refresh(true)} disabled={fetching || mutating !== null} aria-label="刷新插件状态">
           <RefreshCw size={16} aria-hidden="true" />刷新

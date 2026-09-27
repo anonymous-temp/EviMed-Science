@@ -87,7 +87,7 @@ describe("RunFilePage", () => {
     mocks.openRunProject.mockReturnValue(new Promise(() => {}));
     mocks.readArtifact.mockResolvedValue(null);
     renderAt(`/app/runs/run_other/files/${REPORT}`);
-    expect(await screen.findByText("正在打开…")).toBeInTheDocument();
+    expect(await screen.findByText("正在打开")).toBeInTheDocument();
     expect(mocks.openRunProject).toHaveBeenCalledWith("run_other");
     expect(screen.queryByRole("alert")).toBeNull();
   });

@@ -170,7 +170,7 @@ const RENEW_RETRY_MS = [1_000, 3_000, 10_000, 30_000] as const;
  * the kernel, and made every project switch read as a restart (UI plan §2.2
  * #3); how long each moment may take still decides when this gives up.
  */
-export function FrameSkeleton({ title = null, line = "正在打开…" }: { title?: string | null; line?: string }) {
+export function FrameSkeleton({ title = null, line = "正在打开" }: { title?: string | null; line?: string }) {
   return (
     <div role="status" aria-live="polite" data-frame-skeleton="" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg px-6 text-center">
       {title && <p className="line-clamp-2 max-w-content-narrow text-ui font-medium text-text">{title}</p>}
@@ -364,7 +364,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         // The renewal answers with the same envelope the creation does, so an
         // expired login or a revoked project says so instead of arriving as a
         // sentence about the connection.
-        setLeaseFailure({ text: webErrorMessage(cause, { fallback: "连接中断，正在重连…" }), final: expiredLogin });
+        setLeaseFailure({ text: webErrorMessage(cause, { fallback: "连接中断，正在重连" }), final: expiredLogin });
         if (!expiredLogin) after(RENEW_RETRY_MS[Math.min(failures - 1, RENEW_RETRY_MS.length - 1)]);
       }).finally(() => {
         inFlight = null;
@@ -810,7 +810,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         <>
           {navigated && (connectionNotice || !ready) && (
             <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
-              <p>{connectionNotice ?? "正在重连…"}</p>
+              <p>{connectionNotice ?? "正在重连"}</p>
               {connectionNotice && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
             </div>
           )}

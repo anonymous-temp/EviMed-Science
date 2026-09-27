@@ -37,7 +37,7 @@ export function RouteError() {
     <div role={updating ? "status" : "alert"} className="pointer-events-auto flex h-full items-center justify-center bg-bg">
       <EmptyState
         icon={updating ? RefreshCw : AlertCircle}
-        title={updating ? "页面已更新，正在刷新…" : "出了点问题"}
+        title={updating ? "页面已更新，正在刷新" : "出了点问题"}
         action={<Button variant="ghost" onClick={reloadPage}>重新载入</Button>}
       />
     </div>

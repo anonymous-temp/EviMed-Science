@@ -127,10 +127,10 @@ describe("账户", () => {
     expect(within(form).getByText("将删除账户及全部项目，不可恢复。")).toBeInTheDocument();
     const confirm = within(form).getByRole("button", { name: "删除账户" });
     expect(confirm).toBeDisabled();
-    await user.type(within(form).getByLabelText("输入账户 ID「alice」确认"), "alice-other");
+    await user.type(within(form).getByLabelText("输入账户 ID“alice”确认"), "alice-other");
     expect(confirm).toBeDisabled();
-    await user.clear(within(form).getByLabelText("输入账户 ID「alice」确认"));
-    await user.type(within(form).getByLabelText("输入账户 ID「alice」确认"), "alice");
+    await user.clear(within(form).getByLabelText("输入账户 ID“alice”确认"));
+    await user.type(within(form).getByLabelText("输入账户 ID“alice”确认"), "alice");
     await user.type(within(form).getByLabelText("当前密码（如需要）"), "secret-password");
     expect(confirm).toBeEnabled();
     await user.click(confirm);

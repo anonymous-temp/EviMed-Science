@@ -79,7 +79,7 @@ describe("a page that fails", () => {
     mocks.reloadForNewRelease.mockReturnValue(true);
     mocks.pageError = new TypeError("Failed to fetch dynamically imported module: https://science.example/assets/InboxPage-0ld4a5h.js");
     open("/app/inbox");
-    expect(await screen.findByText("页面已更新，正在刷新…")).toBeInTheDocument();
+    expect(await screen.findByText("页面已更新，正在刷新")).toBeInTheDocument();
     expect(screen.getByText("侧栏")).toBeInTheDocument();
     expect(mocks.reloadForNewRelease).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "重新载入" })).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe("a page that fails", () => {
     mocks.pageError = new TypeError("Failed to fetch dynamically imported module: https://science.example/assets/InboxPage-0ld4a5h.js");
     open("/app/inbox");
     expect(await screen.findByText("出了点问题")).toBeInTheDocument();
-    expect(screen.queryByText("页面已更新，正在刷新…")).toBeNull();
+    expect(screen.queryByText("页面已更新，正在刷新")).toBeNull();
     expect(screen.getByText("侧栏")).toBeInTheDocument();
   });
 });

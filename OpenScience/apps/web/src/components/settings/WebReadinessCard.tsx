@@ -75,7 +75,7 @@ export function WebReadinessCard() {
           </p>
         </div>
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-caption font-medium", readiness?.ok ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn")}>
-          {readiness ? (readiness.ok ? "就绪" : "未就绪") : "加载中"}
+          {readiness ? (readiness.ok ? "就绪" : "未就绪") : "正在读取"}
         </span>
         <button
           className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"

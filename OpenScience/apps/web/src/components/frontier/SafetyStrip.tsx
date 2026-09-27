@@ -54,7 +54,7 @@ export function SafetyStrip({ alerts, onRetry, onOpened }: {
     return (
       <div role="alert" className="flex h-10 items-center gap-3 rounded bg-danger-soft px-3 text-ui text-danger-strong">
         <ShieldAlert size={16} className="shrink-0" aria-hidden="true" />
-        <span className="min-w-0 flex-1">安全警示读取失败</span>
+        <span className="min-w-0 flex-1">无法读取安全警示</span>
         <button type="button" onClick={onRetry} className={cn(INLINE_ACTION, "px-1.5")}>重试</button>
       </div>
     );

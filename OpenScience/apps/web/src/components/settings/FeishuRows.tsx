@@ -21,6 +21,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Menu } from "@/components/ui/Menu";
 import { PanelRow } from "@/components/ui/Panel";
 import { Switch } from "@/components/ui/Switch";
+import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 
 /** How often a waiting registration is asked about; the SDK itself polls Feishu every 5 s. */
@@ -142,7 +143,7 @@ export function FeishuAccountRow() {
       toast.success("已解除飞书绑定");
       await load();
     } catch (error) {
-      toast.error(`解除绑定失败：${webErrorMessage(error)}`);
+      toast.error(`无法解除绑定：${webErrorMessage(error)}`);
     } finally {
       setBusy(null);
     }
@@ -175,7 +176,7 @@ export function FeishuAccountRow() {
     return (
       <PanelRow
         label="飞书"
-        description={`${binding.botName ?? "EviMed 研究助手"} · 绑定于 ${new Date(binding.boundAt).toLocaleDateString("zh-CN")}`}
+        description={`${binding.botName ?? "EviMed 研究助手"} · 绑定于 ${formatDate(binding.boundAt, "iso")}`}
         control={(
           <>
             <span className={state.healthy ? undefined : "text-warn-strong"}>{state.text}</span>
@@ -198,7 +199,7 @@ export function FeishuAccountRow() {
                 {binding.chats.length === 0 && <li>还没有收到消息。</li>}
                 {binding.chats.map((chat, index) => (
                   <li key={`${chat.chatType}-${index}`}>
-                    {chat.chatType === "p2p" ? "单聊" : "群聊"} · {chat.projectName ? `项目「${chat.projectName}」` : "跟随你最近使用的项目"}
+                    {chat.chatType === "p2p" ? "单聊" : "群聊"} · {chat.projectName ? `项目“${chat.projectName}”` : "跟随你最近使用的项目"}
                   </li>
                 ))}
               </ul>
@@ -222,7 +223,7 @@ export function FeishuAccountRow() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           {url && !saving ? <FeishuQrCode value={url} /> : (
             <div className="grid h-48 w-48 shrink-0 place-items-center rounded bg-surface-2 text-caption text-text-3" role="status">
-              {saving ? "正在保存机器人…" : "正在生成二维码…"}
+              {saving ? "正在保存机器人" : "正在生成二维码"}
             </div>
           )}
           <div className="flex flex-col gap-1 text-caption text-text-3">

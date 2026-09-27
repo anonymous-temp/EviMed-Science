@@ -151,7 +151,7 @@ function ToolCard({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boolean;
       type="button"
       onClick={onOpen}
       disabled={busy}
-      aria-label={`用「${agent.title}」开始一次对话`}
+      aria-label={`用“${agent.title}”开始一次对话`}
       className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2 disabled:cursor-wait disabled:opacity-40"
     >
       <span className="flex items-center gap-2 text-ui font-semibold text-text">

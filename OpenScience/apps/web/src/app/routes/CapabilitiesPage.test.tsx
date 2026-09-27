@@ -127,7 +127,7 @@ function renderPage() {
 }
 
 /** A card, by the tool it opens. */
-const card = (title: string) => screen.getByRole("button", { name: `用「${title}」开始一次对话` });
+const card = (title: string) => screen.getByRole("button", { name: `用“${title}”开始一次对话` });
 
 describe("CapabilitiesPage", () => {
   beforeEach(() => {
@@ -176,7 +176,7 @@ describe("CapabilitiesPage", () => {
     // and no 「N 项」 after a group's name.
     expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["临床证据", "药学评价", "写作与传播"]);
     const pharmacy = screen.getByRole("heading", { level: 2, name: "药学评价" }).closest("section")!;
-    const safety = within(pharmacy).getByRole("button", { name: "用「药品安全性分析」开始一次对话" });
+    const safety = within(pharmacy).getByRole("button", { name: "用“药品安全性分析”开始一次对话" });
     // The whole sentence, never cut to 「…」 by the card.
     expect(safety).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
     expect(safety).toHaveTextContent("约 20–40 分钟");
@@ -218,7 +218,7 @@ describe("CapabilitiesPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: "用「药品安全性分析」开始一次对话" }));
+    await userEvent.click(await screen.findByRole("button", { name: "用“药品安全性分析”开始一次对话" }));
     // Bound before the conversation exists, so the router honours the choice
     // rather than re-deciding it.
     await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
@@ -242,7 +242,7 @@ describe("CapabilitiesPage", () => {
     await screen.findByRole("button", { name: /药品安全性分析/ });
     expect(card("论文审稿")).toBeInTheDocument();
     for (const entry of geo) {
-      expect(screen.queryByRole("button", { name: `用「${CAPABILITY_DISPLAY[entry.id].title}」开始一次对话` })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: `用“${CAPABILITY_DISPLAY[entry.id].title}”开始一次对话` })).not.toBeInTheDocument();
     }
     expect(screen.queryByText(/循证 GEO/)).not.toBeInTheDocument();
   });

@@ -202,7 +202,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   it("starts a new task in another project: the switch first, then an intent minted there", async () => {
     renderBrowser("/app/files");
 
-    await userEvent.click(await screen.findByRole("button", { name: "在「Paper 1」新建对话" }));
+    await userEvent.click(await screen.findByRole("button", { name: "在“Paper 1”新建对话" }));
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat/));
     expect(useProjectStore.getState().currentId).toBe("paper1");
@@ -214,7 +214,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   it("starts a new task in the current project without asking the server anything", async () => {
     renderBrowser("/app/files");
 
-    await userEvent.click(await screen.findByRole("button", { name: "在「我的研究」新建对话" }));
+    await userEvent.click(await screen.findByRole("button", { name: "在“我的研究”新建对话" }));
 
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat/);
     expect(JSON.parse(screen.getByTestId("intent").textContent!)).toMatchObject({ kind: "create", projectId: "default" });
@@ -241,7 +241,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     mocks.fetchWebMe.mockImplementation(async () => ({ user: { id: "alice", name: "Alice" }, project: { id: "default", name: "我的研究" }, projects: PROJECTS }));
     renderBrowser("/app/files");
 
-    await userEvent.click(await screen.findByRole("button", { name: "在「Paper 1」新建对话" }));
+    await userEvent.click(await screen.findByRole("button", { name: "在“Paper 1”新建对话" }));
 
     // Said in the dictionary's words for a switch, as the dropdown before this did.
     expect(await screen.findByRole("alert")).toHaveTextContent("无法切换到这个项目，请稍后重试。");
@@ -289,7 +289,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1", { speculative: true });
 
     mocks.warmWebRuntime.mockClear();
-    act(() => screen.getByRole("button", { name: "在「心衰」新建对话" }).focus());
+    act(() => screen.getByRole("button", { name: "在“心衰”新建对话" }).focus());
     expect(mocks.warmWebRuntime).toHaveBeenCalledWith("p-heart", { speculative: true });
 
     mocks.warmWebRuntime.mockClear();
@@ -391,7 +391,7 @@ describe("ProjectBrowser — task rows", () => {
   it("offers stop and rename on a running conversation's row, and the identifiers to operators only", async () => {
     mocks.runs.default = [run({ id: "run-1", question: "进行中的研究", status: "running", finishedAt: null })];
     const view = renderBrowser();
-    await userEvent.click(await screen.findByRole("button", { name: "「进行中的研究」的操作" }));
+    await userEvent.click(await screen.findByRole("button", { name: "“进行中的研究”的操作" }));
     expect(await screen.findByRole("menuitem", { name: "停止" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "复制诊断信息" })).toBeNull();
@@ -400,7 +400,7 @@ describe("ProjectBrowser — task rows", () => {
     const researcher = mocks.fetchWebMe.getMockImplementation();
     mocks.fetchWebMe.mockImplementation(async (options: { projectId?: string } = {}) => ({ ...(await researcher?.(options)), operator: true }));
     renderBrowser();
-    await userEvent.click(await screen.findByRole("button", { name: "「进行中的研究」的操作" }));
+    await userEvent.click(await screen.findByRole("button", { name: "“进行中的研究”的操作" }));
     expect(await screen.findByRole("menuitem", { name: "复制诊断信息" })).toBeInTheDocument();
   });
 
@@ -421,7 +421,7 @@ describe("ProjectBrowser — task rows", () => {
   it("does not offer 停止 on a conversation that has finished", async () => {
     mocks.runs.default = [run({ id: "run-1", question: "做完的研究" })];
     renderBrowser();
-    await userEvent.click(await screen.findByRole("button", { name: "「做完的研究」的操作" }));
+    await userEvent.click(await screen.findByRole("button", { name: "“做完的研究”的操作" }));
     expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "停止" })).toBeNull();
   });
@@ -459,10 +459,10 @@ describe("ProjectBrowser — task rows", () => {
   });
 
   it("titles a row with the ledger's title before its question", async () => {
-    mocks.runs.default = [run({ id: "t", title: "阿司匹林一级预防（≥70 岁）", question: "请以「临床证据深度分析」能力完成以下任务：原题" })];
+    mocks.runs.default = [run({ id: "t", title: "阿司匹林一级预防（≥70 岁）", question: "请以“临床证据深度分析”能力完成以下任务：原题" })];
     renderBrowser();
     expect(await screen.findByRole("link", { name: /阿司匹林一级预防（≥70 岁）/ })).toBeInTheDocument();
-    expect(screen.queryByText(/请以「/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/请以“/)).not.toBeInTheDocument();
   });
 });
 
@@ -597,7 +597,7 @@ describe("ProjectBrowser — creating and renaming", () => {
 
   it("renames a project in place, and gives the focus back to its group", async () => {
     renderBrowser();
-    await userEvent.click(await screen.findByRole("button", { name: "重命名项目「Paper 1」" }));
+    await userEvent.click(await screen.findByRole("button", { name: "重命名项目“Paper 1”" }));
     const input = screen.getByRole("textbox", { name: "新的项目名" });
     expect(input).toHaveValue("Paper 1");
     await userEvent.clear(input);
@@ -609,7 +609,7 @@ describe("ProjectBrowser — creating and renaming", () => {
 
   it("leaves a rename with Escape, untouched", async () => {
     renderBrowser();
-    await userEvent.click(await screen.findByRole("button", { name: "重命名项目「Paper 1」" }));
+    await userEvent.click(await screen.findByRole("button", { name: "重命名项目“Paper 1”" }));
     await userEvent.keyboard("{Escape}");
 
     expect(screen.queryByRole("textbox", { name: "新的项目名" })).not.toBeInTheDocument();
@@ -619,7 +619,7 @@ describe("ProjectBrowser — creating and renaming", () => {
 
   it("refuses an empty name in a rename, without calling the API", async () => {
     renderBrowser();
-    await userEvent.click(await screen.findByRole("button", { name: "重命名项目「Paper 1」" }));
+    await userEvent.click(await screen.findByRole("button", { name: "重命名项目“Paper 1”" }));
     await userEvent.clear(screen.getByRole("textbox", { name: "新的项目名" }));
     await userEvent.keyboard("{Enter}");
 

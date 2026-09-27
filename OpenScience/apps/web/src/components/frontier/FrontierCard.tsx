@@ -149,7 +149,7 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
             </Menu>
           )}
           {tags.map((tag) => (onTag ? (
-            <button key={`${tag.kind}-${tag.key}`} type="button" title={tag.kind === "specialty" ? `只看${tag.label}` : `搜索「${tag.label}」`}
+            <button key={`${tag.kind}-${tag.key}`} type="button" title={tag.kind === "specialty" ? `只看${tag.label}` : `搜索“${tag.label}”`}
               onClick={() => onTag(tag)} className={cn(INLINE_ACTION, "px-1 hover:text-text")}>
               <span className="text-caption">#{tag.label}</span>
             </button>
