@@ -1,0 +1,18 @@
+[Unit]
+Description=EviMed knowledge-plugin database (evimed_knowledge) encrypted backup and verified restore
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/evimed-postgres-backup
+Environment=EVIMED_POSTGRES_DATABASE=evimed_knowledge
+Environment=EVIMED_POSTGRES_BACKUP_DIR=/srv/evimed-science/shared/backups/postgres-knowledge
+User=root
+Group=root
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/evimed-science/shared/backups/postgres-knowledge
+TimeoutStartSec=30m
+TimeoutStopSec=90s

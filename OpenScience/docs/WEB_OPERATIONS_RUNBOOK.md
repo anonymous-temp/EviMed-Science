@@ -464,7 +464,8 @@ not sufficient containment for those events.
   The shared passphrase must be mode 0400 for this host script. When
   `configure:backup` initially creates it as 0600, tighten its mode before the
   first host backup while preserving the existing passphrase bytes.
-  Do not create a second scheduler. The source container's PostgreSQL 16 tools
+  Do not create a second scheduler for the platform database (the one second
+  timer is the knowledge-plugin database's, below). The source container's PostgreSQL 16 tools
   produce an encrypted snapshot and verify exact application tables/row counts
   in a uniquely named temporary database; the source database is never a
   restore target. The existing 30-day retention and encrypted archive format
@@ -496,8 +497,30 @@ not sufficient containment for those events.
   `/usr/local/sbin/evimed-postgres-backup`; until then the previous script
   keeps dumping the vectors, which restores correctly and only costs size, and
   readiness accepts receipts of either kind. The knowledge-source plugin's own
-  database (`evimed_knowledge`) is not in this dump at all: it is the plugin
-  team's to back up.
+  database (`evimed_knowledge`, same PostgreSQL instance) is not in this dump:
+  it has its own timer, `evimed-knowledge-db-backup.timer` (daily 03:20
+  Asia/Shanghai, after the platform window), which runs the same installed
+  script with `EVIMED_POSTGRES_DATABASE=evimed_knowledge` and its own
+  directory `/srv/evimed-science/shared/backups/postgres-knowledge` — its own
+  archives, retention and receipt (`status/state.json` there). Role and
+  passphrase are the platform unit's defaults. Install it next to the
+  platform timer (the unit files are in `deploy/host/`):
+
+  ```bash
+  sudo install -d -m 0700 /srv/evimed-science/shared/backups/postgres-knowledge
+  sudo install -m 0644 deploy/host/evimed-knowledge-db-backup.service \
+    deploy/host/evimed-knowledge-db-backup.timer /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl start evimed-knowledge-db-backup.service   # first run, in the foreground
+  sudo jq '{status, database, restoreVerified}' \
+    /srv/evimed-science/shared/backups/postgres-knowledge/status/state.json
+  sudo systemctl enable --now evimed-knowledge-db-backup.timer
+  ```
+
+  Restoring it follows the platform procedure with the same variables set.
+  Readiness does not read this receipt: an outage of the plugin database
+  degrades 「前沿动态」, not the platform, and the unit's own failure is what
+  `systemctl --failed` shows.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,
