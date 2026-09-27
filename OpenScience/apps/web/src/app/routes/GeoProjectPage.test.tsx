@@ -88,9 +88,10 @@ describe("a GEO project's page", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "周报" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "对话" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "更多操作" })).toBeInTheDocument();
+    // The header's 「⋯」 is the header's 36 px icon button, not a row's 28.
+    expect(screen.getByRole("button", { name: "更多操作" })).toHaveClass("h-control", "w-9");
 
-    const tabs = within(screen.getByRole("tablist", { name: "项目视图" })).getAllByRole("tab").map((tab) => tab.textContent);
+    const tabs =within(screen.getByRole("tablist", { name: "项目视图" })).getAllByRole("tab").map((tab) => tab.textContent);
     expect(tabs).toEqual(["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案"]);
     expect(screen.getByRole("tab", { name: "总览" })).toHaveAttribute("aria-selected", "true");
 

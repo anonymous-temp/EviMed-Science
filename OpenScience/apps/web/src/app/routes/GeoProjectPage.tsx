@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { useNavigate, useParams } from "react-router";
-import { FileDown, MessageSquare, Radar } from "lucide-react";
+import { FileDown, MessageSquare, MoreHorizontal, Radar } from "lucide-react";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import {
   deleteGeoProject,
@@ -18,6 +18,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { ProgressRail } from "@/components/ui/ProgressRail";
 import { Tabs } from "@/components/ui/Tabs";
@@ -179,7 +180,11 @@ export function GeoProjectPage() {
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>
-          <Menu label="更多操作" items={menu} />
+          {/* The header's 「⋯」 is the header's icon button, 36 beside the two
+            * 36 px buttons (spec §8.3) — the menu's own trigger is a row's 28. */}
+          <Menu label="更多操作" items={menu}>
+            <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
+          </Menu>
         </>
       )}
     >
