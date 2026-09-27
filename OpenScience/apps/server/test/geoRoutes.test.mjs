@@ -125,3 +125,42 @@ test("metric families: one line off, the module's counts on", () => {
   assert.ok(byName.get("open_science_geo_social_requests_total")?.series.some((series) => series.labels?.outcome === "failed" && series.value === 1));
   for (const family of families) assert.match(family.name, /^open_science_geo_[a-z_]+$/);
 });
+
+test("metric families: the worker's loops and the probe's paused engines, which the evimed-geo alerts read", () => {
+  // Audit I3-7: readiness showed the worker and nothing alerted on it.
+  const snapshot = {
+    tables: null, service: {}, social: null,
+    worker: { loops: {
+      probe: { wired: true, stalled: false, lastOkAt: "2026-09-26T15:03:00.000Z", last: { paused: 3, asked: 0 } },
+      parse: { wired: true, stalled: true, lastOkAt: null, last: null },
+      topups: { wired: false, stalled: false, lastOkAt: null, last: null },
+    } },
+  };
+  const byName = new Map(geoMetricFamilies(true, snapshot).map((family) => [family.name, family]));
+  assert.deepEqual(byName.get("open_science_geo_loop_last_ok_timestamp_seconds")?.series,
+    [{ labels: { loop: "probe" }, value: Date.parse("2026-09-26T15:03:00.000Z") / 1000 }, { labels: { loop: "parse" }, value: 0 }]);
+  assert.deepEqual(byName.get("open_science_geo_loop_stalled")?.series.map((series) => [series.labels.loop, series.value]), [["probe", 0], ["parse", 1]]);
+  assert.equal(byName.get("open_science_geo_probe_paused_engines")?.series[0].value, 3);
+  // A worker that reports nothing adds nothing: no series is invented.
+  const quiet = new Map(geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null }).map((family) => [family.name, family]));
+  assert.equal(quiet.has("open_science_geo_loop_stalled"), false);
+  assert.equal(quiet.has("open_science_geo_probe_paused_engines"), false);
+});
+
+test("the evimed-geo alerts read series the module exports", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const rules = JSON.parse(await readFile(new URL("../../../deploy/web/monitoring/open-science.rules.json", import.meta.url), "utf8"));
+  const group = rules.groups.find((entry) => entry.name === "evimed-geo");
+  assert.ok(group, "an evimed-geo rule group exists");
+  const alerts = new Map(group.rules.map((rule) => [rule.alert, rule]));
+  assert.deepEqual([...alerts.keys()].sort(), ["GeoProbeEnginesPaused", "GeoProbeLoopStalled", "GeoUrgentFindingsOpen"]);
+  const exported = new Set(geoMetricFamilies(true, {
+    tables: { projects: 1, active: 1, openErrors: 1, urgentErrors: 1, safetyStops: 0, openRounds: 0 }, service: {}, social: null,
+    worker: { loops: { probe: { wired: true, stalled: false, lastOkAt: null, last: { paused: 0 } } } },
+  }).map((family) => family.name));
+  for (const rule of group.rules) {
+    const names = [...String(rule.expr).matchAll(/\b(open_science_geo_[a-z_]+)/g)].map((match) => match[1]);
+    assert.ok(names.length > 0, `${rule.alert} reads no GEO series`);
+    for (const name of names) assert.ok(exported.has(name), `${rule.alert} reads ${name}, which geoMetricFamilies does not export`);
+  }
+});

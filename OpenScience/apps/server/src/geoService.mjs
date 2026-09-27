@@ -1332,7 +1332,7 @@ export async function geoReadiness({ config, geo, database }) {
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
-  return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null };
+  return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null };
 }
 
 /**
@@ -1369,6 +1369,24 @@ export function geoMetricFamilies(enabled, snapshot) {
   if (social?.counters) {
     add("social_requests_total", "Social-channel requests by outcome.", "counter",
       Object.entries(social.counters).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+  }
+  // The worker, which readiness shows and nothing alerted on (2026-09-26
+  // audit, I3-7: a probe host logged out, engines paused and 11 urgent
+  // findings open, all visible only to someone reading /api/ready). A loop's
+  // last success and whether it is past its lease, for the wired loops; and
+  // how many engines the probe's breaker has paused after its last tick.
+  const worker = snapshot.worker;
+  const loops = Object.entries(worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
+  if (loops.length) {
+    add("loop_last_ok_timestamp_seconds", "When each GEO worker loop last finished without an error (Unix seconds; 0 = not since this process started).", "gauge",
+      loops.map(([loop, state]) => ({ labels: { loop }, value: state.lastOkAt ? Math.floor(Date.parse(state.lastOkAt) / 1000) : 0 })));
+    add("loop_stalled", "Whether a GEO worker loop is still running past its lease (OPEN_SCIENCE_GEO_LEASE_MS).", "gauge",
+      loops.map(([loop, state]) => ({ labels: { loop }, value: state.stalled ? 1 : 0 })));
+  }
+  const paused = worker?.loops?.probe?.last?.paused;
+  if (typeof paused === "number") {
+    add("probe_paused_engines", "Consumer AI engines the probe's circuit breaker has paused after its last tick (a login page, an empty shell or errors in a row).", "gauge",
+      [{ value: paused }]);
   }
   return families;
 }
