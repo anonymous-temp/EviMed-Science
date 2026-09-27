@@ -31,7 +31,8 @@
 
 import { createHash } from "node:crypto";
 
-import { METHOD_OPERATIONS, parseSkillFrontmatter, SKILL_AUTHORING_LIMITS } from "@evimed/domain";
+import { METHOD_OPERATIONS, parseSkillFrontmatter, SKILL_AUTHORING_LIMITS, unwrapUserWrappers } from "@evimed/domain";
+import { LEARNING_PROJECT_ID } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
 import { learnedMethodId } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
@@ -54,7 +55,10 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 // "2" since 2026-09-21: every version-1 dispatch ran without its method and
 // failed; a re-queued lesson must start a run of its own rather than adopt one
 // of those by identity.
-export const DISTILLATION_EXTRACTOR_VERSION = "2";
+// "3" since 2026-09-27: the input opens with the researcher's own corrections
+// and edits and says what the lesson rests on (`signal`), and a lesson read
+// under the old shape would be learnt without them.
+export const DISTILLATION_EXTRACTOR_VERSION = "3";
 
 /**
  * How many messages of context each trigger is worth.
@@ -70,13 +74,75 @@ const TRIGGER_WINDOW = Object.freeze({ edit_diff: 60, repair_accepted: 80, corre
  *  is only as trustworthy as whoever queued it. */
 const MAX_PEER_RUNS = 4;
 
+/** How many of the researcher's own corrections one lesson carries. */
+const MAX_CORRECTIONS = 12;
+
+/**
+ * What a lesson's evidence is, from what the input holds — a closed reading,
+ * not a judgement of any sentence:
+ *
+ *  - `researcher` — the researcher corrected the run or edited what it
+ *    delivered. Their own words; the only source a personal method may come
+ *    from (build spec iron rule 3).
+ *  - `reviewer` — the run repaired against the platform's own findings and
+ *    nothing else: no correction, no edit. What it teaches is how to pass
+ *    EviMed's checks, which is the capability's handbook, not this person's
+ *    way of working (audit 2026-09-26, L-G3).
+ *  - `run` — a delivery or a repeated routine: what the researcher's own work
+ *    did, with nobody correcting it.
+ * @param {{trigger: string, corrections?: readonly any[], feedback?: readonly any[]}} input
+ * @returns {"researcher" | "reviewer" | "run"}
+ */
+export function lessonSignal(input) {
+  if ((input.corrections?.length ?? 0) > 0 || (input.feedback?.length ?? 0) > 0) return "researcher";
+  return input.trigger === "repair_accepted" ? "reviewer" : "run";
+}
+
+/**
+ * The corrections the researcher typed into the run, in their own words.
+ *
+ * A message the researcher sends into a running turn is wrapped in
+ * `<evimed-correction>` so a compaction keeps it (`PLATFORM_CONTEXT_TAGS`);
+ * the wrapper is a closed tag we write, so finding it is structural, and what
+ * is inside it is theirs. Read from the whole transcript rather than from the
+ * excerpt window — the window ends where the run ended, and a correction early
+ * in a long run is the one most likely to fall outside it. The excerpt's own
+ * cleaning applies: a message carrying a credential or a patient identifier
+ * is dropped, and counted.
+ * @param {{messages?: any[]} | null | undefined} transcript
+ * @returns {{corrections: {source: "steered", sessionId: string | null, seq: number | null, text: string}[], dropped: {sensitive: number, bounded: number}}}
+ */
+export function steeredCorrections(transcript) {
+  const wrapped = (transcript?.messages ?? []).filter((message) => message?.role === "user"
+    && (message.parts ?? []).some((part) => part?.type === "text" && String(part.text ?? "").includes("<evimed-correction")));
+  const cleaned = transcriptExcerpt(wrapped, { limit: MAX_CORRECTIONS });
+  return {
+    corrections: cleaned.messages.map((message) => ({
+      source: /** @type {"steered"} */ ("steered"),
+      sessionId: message.sessionId ?? null,
+      seq: Number.isSafeInteger(message.seq) ? message.seq : null,
+      text: unwrapUserWrappers((message.parts ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("\n")).slice(0, 4000),
+    })).filter((entry) => entry.text),
+    dropped: cleaned.dropped,
+  };
+}
+
 /**
  * Assemble the frozen input for one distillation run.
  *
  * Pure apart from the transcript read, so the cleaning rules are testable
  * without a container.
+ *
+ * The researcher comes first. What they corrected and what they changed in a
+ * delivery are the evidence a personal method may rest on, so they open the
+ * input — before the transcript and before the platform reviewer's findings —
+ * and `signal` says which of the three kinds of evidence this lesson has
+ * (`lessonSignal`). Both production methods of 2026-09 were learnt from the
+ * reviewer's findings alone and read as the researcher's own way of working
+ * (audit 2026-09-26, L-G3).
  * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
- *   peerRuns?: {runId: string, transcript: {header: any, messages: any[]} | null}[]}} input
+ *   peerRuns?: {runId: string, transcript: {header: any, messages: any[]} | null}[],
+ *   correctionRecords?: {recordId: string, key?: string | null, text: string}[]}} input
  */
 export function buildDistillationInput(input) {
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
@@ -86,10 +152,23 @@ export function buildDistillationInput(input) {
   const excerpt = input.transcript
     ? transcriptExcerpt(input.transcript.messages, { limit })
     : { messages: [], dropped: { sensitive: 0, bounded: 0 } };
+  const steered = steeredCorrections(input.transcript);
+  const corrections = [
+    ...steered.corrections,
+    ...(input.correctionRecords ?? [])
+      .filter((record) => record && typeof record.text === "string" && record.text.trim())
+      .map((record) => ({ source: /** @type {"memory"} */ ("memory"), recordId: String(record.recordId ?? ""), key: record.key ?? null, text: record.text.slice(0, 4000) })),
+  ].slice(0, MAX_CORRECTIONS);
+  const feedback = (input.feedback ?? []).slice(0, 20);
   return {
     schemaVersion: 1,
     extractorVersion: DISTILLATION_EXTRACTOR_VERSION,
     trigger: input.trigger,
+    signal: lessonSignal({ trigger: input.trigger, corrections, feedback }),
+    // The researcher's own corrections, in their words, then their edits.
+    corrections,
+    correctionsDropped: steered.dropped,
+    feedback,
     runId: input.run?.id ?? "",
     capabilityId: input.run?.effectiveAgentId ?? null,
     // Said out loud rather than implied by a short list: a run whose transcript
@@ -100,7 +179,7 @@ export function buildDistillationInput(input) {
     transcriptCompleteness: input.transcript?.header?.completeness ?? "unavailable",
     excerptDropped: excerpt.dropped,
     transcriptExcerpts: excerpt.messages,
-    feedback: (input.feedback ?? []).slice(0, 20),
+    // The platform reviewer's findings, after everything the researcher did.
     repairIssues: (input.repairIssues ?? []).slice(0, 20),
     relatedMethods: (input.relatedMethods ?? []).slice(0, 8).map((method) => ({
       id: method.id,
@@ -140,9 +219,15 @@ export function distillationDispatchId(runId, trigger) {
 
 export class MethodDistillationRuns {
   /**
-   * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any, jobs?: any, notifications?: any}} dependencies
+   * `readCorrections` reads the correction memories a `correction` lesson
+   * names (`job.payload.corrections`) — the researcher's own words, quoted and
+   * checked when the extractor wrote them — so they open the input rather than
+   * stay behind a record id the run cannot resolve. Optional: without it the
+   * corrections typed into the run itself still come first.
+   * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any, jobs?: any, notifications?: any,
+   *   readCorrections?: ((userId: string, recordIds: string[]) => Promise<{recordId: string, key?: string | null, text: string}[]>) | null}} dependencies
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null }) {
+  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -152,6 +237,7 @@ export class MethodDistillationRuns {
     this.learning = learning;
     this.jobs = jobs;
     this.notifications = notifications;
+    this.readCorrections = readCorrections;
   }
 
   /**
@@ -161,6 +247,12 @@ export class MethodDistillationRuns {
   async execute({ job, project, run, feedback = [], repairIssues = [] }) {
     const trigger = String(job.payload?.trigger ?? "");
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
+    const recordIds = Array.isArray(job.payload?.corrections)
+      ? job.payload.corrections.map((entry) => String(entry?.recordId ?? "")).filter(Boolean).slice(0, MAX_CORRECTIONS)
+      : [];
+    const correctionRecords = recordIds.length && this.readCorrections
+      ? await this.readCorrections(job.userId, recordIds).catch(() => [])
+      : [];
     // The researcher's whole library: a method learnt in another project is
     // the one to amend, not a near-duplicate to write beside it.
     const related = await this.learning.listMethods(job.userId, { limit: 20 })
@@ -173,7 +265,7 @@ export class MethodDistillationRuns {
     for (const runId of peerRunIds) {
       peerRuns.push({ runId, transcript: await readRunTranscript(project, runId).catch(() => null) });
     }
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns });
+    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords });
     const dispatchId = distillationDispatchId(run.id, trigger);
     const identity = await this.dispatch({
       userId: job.userId,
@@ -202,7 +294,7 @@ export class MethodDistillationRuns {
     if (result.status !== "succeeded") {
       throw new HttpError(409, "method_distillation_run_failed", "The distillation run did not succeed.");
     }
-    const applied = await this.applyCandidate(job, run, result.output ?? {});
+    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal });
     return { state: "complete", ...identityRecord, ...applied };
   }
 
@@ -212,15 +304,33 @@ export class MethodDistillationRuns {
    * The contract validator has already checked the SKILL.md against the same
    * `validateMethodSkill` the store will run again — deliberately twice, once
    * where the run can repair it and once where nothing can talk past it.
+   *
+   * A lesson whose only evidence is the platform reviewer's findings
+   * (`lessonSignal` = `reviewer`) is kept as a handbook candidate and never
+   * reaches the researcher's library, whatever operation it proposes: it is
+   * about passing EviMed's checks, not about how this person works.
    * @param {any} job @param {any} run @param {Record<string, any>} output
+   * @param {{signal?: string}} [context] what the lesson's evidence was; read from the job when absent
    */
-  async applyCandidate(job, run, output) {
+  async applyCandidate(job, run, output, context = {}) {
     const candidate = output.candidate ?? output["method-candidate.json"] ?? output;
     const operation = String(candidate?.operation ?? "no_change");
     if (!METHOD_OPERATIONS.includes(operation)) {
       throw new HttpError(422, "method_candidate_invalid", `Unknown operation ${JSON.stringify(operation)}.`);
     }
     if (operation === "no_change") return { operation, methodId: undefined };
+    const signal = context.signal ?? lessonSignal({
+      trigger: String(job.payload?.trigger ?? ""),
+      corrections: [...(Array.isArray(job.payload?.corrections) ? job.payload.corrections : []),
+        ...(Number(job.payload?.steeredCorrections ?? 0) > 0 ? [{ steered: true }] : [])],
+      feedback: Array.isArray(job.payload?.feedback) ? job.payload.feedback : [],
+    });
+    // Where the lesson came from: the job's own project, or — when that
+    // project was deleted while the lesson waited and the job moved to the
+    // learning project — the project it names (`learningPreservation.mjs`).
+    const sourceProjectId = typeof job.payload?.sourceProjectId === "string" && job.payload.sourceProjectId
+      ? job.payload.sourceProjectId
+      : job.projectId && job.projectId !== LEARNING_PROJECT_ID ? String(job.projectId) : null;
     const skillText = String(output.skill ?? output["SKILL.md"] ?? "");
     const parsed = parseSkillFrontmatter(skillText);
     if (parsed.issues.length) {
@@ -242,10 +352,19 @@ export class MethodDistillationRuns {
     // is still the model's, and text nobody has read yet goes through the gate.
     // Explicit origin is reserved for a method a researcher authored, which
     // arrives through a route that carries their session.
+    //
+    // `safetyRelated` is the run's own claim and buys one thing only: the
+    // method is never proposed for retirement because it is rarely used. It
+    // used to exempt the method from every outcome rule as well (audit
+    // 2026-09-26, L-G2); `retirementProposal` no longer reads it that way.
     const provenance = {
       origin: "inferred",
       runId: run.id,
       feedbackEventIds: job.payload?.feedbackEventIds ?? [],
+      ...(sourceProjectId ? { sourceProjectId } : {}),
+      ...(typeof run.effectiveAgentId === "string" && run.effectiveAgentId ? { capabilityId: run.effectiveAgentId } : {}),
+      ...(job.payload?.trigger ? { trigger: String(job.payload.trigger) } : {}),
+      signal,
       ...(candidate?.risk?.touchesSafety ? { safetyRelated: true } : {}),
     };
     // Only what the proposal itself attaches. `output.files` is the delivered
@@ -255,6 +374,22 @@ export class MethodDistillationRuns {
     // after its run had passed the same rules (2026-09-21, the first two
     // lessons production ever finished).
     const files = candidate?.files;
+    // The steps in the researcher's language, beside the method and never in
+    // it (M-5); cleaned by the store.
+    const steps = typeof candidate?.display?.steps === "string" ? candidate.display.steps : undefined;
+    if (signal === "reviewer") {
+      const kept = await this.learning.recordHandbookCandidate(job.userId, {
+        frontmatter: parsed.frontmatter,
+        body: parsed.body,
+        ...(files ? { files } : {}),
+        provenance,
+        dependencies: candidate?.dependencies ?? [],
+        capabilityId: provenance.capabilityId ?? null,
+        ...(candidate?.display ? { display: candidate.display } : {}),
+        ...(steps ? { steps } : {}),
+      });
+      return { operation: "handbook", methodId: kept?.id };
+    }
     // A method's id is its name, account-wide (`learnedMethodId`). A `create`
     // under a name the library already holds is that method's next revision,
     // not a second method: without this it was refused as a revision conflict,
@@ -264,7 +399,9 @@ export class MethodDistillationRuns {
       : null;
     if (operation === "create" && !existing) {
       const created = await this.learning.createCandidate(job.userId, {
-        projectId: job.projectId,
+        // The project it was learnt in, as provenance; the method itself is
+        // the account's (`LearningService.createCandidate`).
+        projectId: sourceProjectId,
         frontmatter: parsed.frontmatter,
         body: parsed.body,
         ...(files ? { files } : {}),
@@ -273,6 +410,7 @@ export class MethodDistillationRuns {
         // The researcher's line, cleaned by the service; a candidate without
         // one is named on the next consolidation pass.
         ...(candidate?.display ? { display: candidate.display } : {}),
+        ...(steps ? { steps } : {}),
       });
       await this.#enqueueIntegrate(job, created.id, created.revision);
       return { operation, methodId: created.id };
@@ -288,6 +426,7 @@ export class MethodDistillationRuns {
       provenance,
       dependencies: candidate?.dependencies ?? target.payload.dependencies ?? [],
       ...(candidate?.display ? { display: candidate.display } : {}),
+      ...(steps ? { steps } : {}),
     });
     await this.#enqueueIntegrate(job, amended.id, amended.revision);
     return { operation: existing ? "amend" : operation, methodId: amended.id };
@@ -298,6 +437,11 @@ export class MethodDistillationRuns {
    * is consolidated now, not at the next hourly pass. Keyed on the revision, so
    * each change gets its own pass and a retried distillation does not queue a
    * second one.
+   *
+   * Filed under the learning project, where every model step of the loop runs
+   * (`learningRuntime.dispatch`) and which the distillation that is calling
+   * this has just used. Filed under the lesson's own project they were deleted
+   * with it (audit 2026-09-26, L-G1).
    * @param {any} job @param {string} methodId @param {number} [revision]
    */
   async #enqueueIntegrate(job, methodId, revision = 0) {
@@ -305,7 +449,7 @@ export class MethodDistillationRuns {
     try {
       await this.jobs.enqueue(job.userId, "consolidate", { action: "integrate", methodId }, {
         idempotencyKey: `consolidate:integrate:${methodId}:${revision}`,
-        projectId: job.projectId,
+        projectId: LEARNING_PROJECT_ID,
       });
     } catch {
       // isolated: evimed_learning_integrate_enqueue_failed_total
@@ -313,7 +457,7 @@ export class MethodDistillationRuns {
     try {
       await this.jobs.enqueue(job.userId, "consolidate", { action: "sleep", date: new Date().toISOString(), after: methodId }, {
         idempotencyKey: `consolidate:sleep:after:${methodId}:${revision}`,
-        projectId: job.projectId,
+        projectId: LEARNING_PROJECT_ID,
       });
     } catch {
       // isolated: the hourly pass consolidates it instead

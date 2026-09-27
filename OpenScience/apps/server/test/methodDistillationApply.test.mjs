@@ -15,8 +15,9 @@ import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA, parseSkillFrontmatter, validateMethodSkill } from "@evimed/domain";
 
+import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import { decodeLearningOutput } from "../src/learningRuntime.mjs";
-import { MethodDistillationRuns } from "../src/methodDistillationRuns.mjs";
+import { MethodDistillationRuns, buildDistillationInput, lessonSignal } from "../src/methodDistillationRuns.mjs";
 
 const BODY = [
   "## Purpose", "Do a thing.", "",
@@ -52,11 +53,14 @@ function fakeLearning(existing = []) {
   const created = [];
   /** @type {any[]} */
   const amended = [];
+  /** @type {any[]} */
+  const handbook = [];
   const held = new Set(existing);
   return {
-    created, amended,
+    created, amended, handbook,
     async createCandidate(userId, input) { created.push({ userId, ...input }); return { id: "method:learned:do-the-thing", revision: 1 }; },
     async amendMethod(userId, methodId, input) { amended.push({ userId, methodId, ...input }); return { id: methodId, revision: 4 }; },
+    async recordHandbookCandidate(userId, input) { handbook.push({ userId, ...input }); return { id: "method:handbook:do-the-thing", revision: 1 }; },
     async getMethod(_userId, methodId) {
       if (!held.has(methodId)) throw Object.assign(new Error("not found"), { code: "method_not_found" });
       return { id: methodId, revision: 3, payload: { dependencies: [] } };
@@ -108,8 +112,9 @@ test("the same refusal holds for an amendment, which is the other way into an ex
 });
 
 test("a safety-touching candidate keeps the one flag it is allowed to raise", async () => {
-  // `safetyRelated` is the opposite of an exemption: it makes a method harder
-  // to retire, never easier to promote, so the run is trusted to raise it.
+  // `safetyRelated` is never an exemption from outcomes: it keeps a method
+  // from being proposed for disuse and nothing else (L-G2), so the run is
+  // trusted to raise it.
   const { distillation, learning } = runs();
   await distillation.applyCandidate(job, run, {
     candidate: { operation: "create", risk: { touchesSafety: true } },
@@ -213,4 +218,118 @@ test("the researcher's line a candidate carries travels to the store beside the 
   }));
   assert.deepEqual(learning.created[0].display, display);
   assert.doesNotMatch(learning.created[0].body, /GRADE 再报/, "the line is not part of SKILL.md");
+});
+
+/* ------------------------------------------------ audit 2026-09-26: L-G1, L-G3, M-5 */
+
+test("a learnt method records where it was learnt and from which capability, and its passes run in the learning project", async () => {
+  const { distillation, learning, enqueued } = runs();
+  await distillation.applyCandidate({ userId: "u1", projectId: "paper", payload: { trigger: "delivered" } },
+    { id: "run_1", effectiveAgentId: "meta-analysis" },
+    { candidate: { operation: "create", display: { title: "先报等级", summary: "先报证据等级再报效应量。", steps: "1. 先报等级\n2. 再报效应量" } }, skill: SKILL });
+  const written = learning.created[0];
+  assert.equal(written.projectId, "paper", "the source project, which the store records as provenance");
+  assert.equal(written.provenance.sourceProjectId, "paper");
+  assert.equal(written.provenance.capabilityId, "meta-analysis", "the family a later launch filters by (L-G7)");
+  assert.equal(written.provenance.trigger, "delivered");
+  assert.equal(written.provenance.signal, "run");
+  assert.equal(written.steps, "1. 先报等级\n2. 再报效应量", "the steps travel beside the method (M-5)");
+  assert.ok(enqueued.every((entry) => entry.opts.projectId === LEARNING_PROJECT_ID),
+    "filed under the lesson's project, a pass went with it when that project was deleted (L-G1)");
+
+  // A lesson that moved to the learning project when its project was deleted
+  // still names the project it came from.
+  const moved = runs();
+  await moved.distillation.applyCandidate({ userId: "u1", projectId: LEARNING_PROJECT_ID, payload: { trigger: "delivered", sourceProjectId: "gone" } },
+    { id: "run_2" }, { candidate: { operation: "create" }, skill: SKILL });
+  assert.equal(moved.learning.created[0].provenance.sourceProjectId, "gone");
+  const orphan = runs();
+  await orphan.distillation.applyCandidate({ userId: "u1", projectId: LEARNING_PROJECT_ID, payload: { trigger: "delivered" } },
+    { id: "run_3" }, { candidate: { operation: "create" }, skill: SKILL });
+  assert.equal(orphan.learning.created[0].provenance.sourceProjectId, undefined, "the learning project is never a source");
+});
+
+test("a lesson taught only by the platform's reviewer is kept for the handbook and never touches the researcher's library", async () => {
+  // Both methods production learnt in September: `repair_accepted` against
+  // the reviewer's own findings, filed as 「我的做法」 (L-G3).
+  const reviewerJob = { userId: "u1", projectId: "meta", payload: { trigger: "repair_accepted", repairRounds: { content: 0, structural: 0 }, inRunAttempts: 2 } };
+  const created = runs();
+  const applied = await created.distillation.applyCandidate(reviewerJob, { id: "run_1", effectiveAgentId: "meta-analysis" },
+    { candidate: { operation: "create" }, skill: SKILL });
+  assert.deepEqual(applied, { operation: "handbook", methodId: "method:handbook:do-the-thing" });
+  assert.equal(created.learning.created.length, 0);
+  assert.equal(created.learning.handbook.length, 1);
+  assert.equal(created.learning.handbook[0].capabilityId, "meta-analysis");
+  assert.equal(created.learning.handbook[0].provenance.signal, "reviewer");
+  assert.equal(created.enqueued.length, 0, "nothing of the researcher's library to consolidate");
+
+  // Even an amendment of a method the researcher holds: the reviewer's lesson
+  // does not rewrite their method.
+  const amending = runs(fakeLearning(["method:learned:do-the-thing"]));
+  await amending.distillation.applyCandidate(reviewerJob, { id: "run_1" },
+    { candidate: { operation: "amend", targetMethodId: "method:learned:do-the-thing" }, skill: SKILL });
+  assert.equal(amending.learning.amended.length, 0);
+  assert.equal(amending.learning.handbook.length, 1);
+
+  // The same trigger with the researcher's own edit or correction is theirs.
+  for (const payload of [{ ...reviewerJob.payload, feedback: [{ id: "fe_1" }] }, { ...reviewerJob.payload, steeredCorrections: 1 }]) {
+    const theirs = runs();
+    await theirs.distillation.applyCandidate({ ...reviewerJob, payload }, { id: "run_1" }, { candidate: { operation: "create" }, skill: SKILL });
+    assert.equal(theirs.learning.created.length, 1);
+    assert.equal(theirs.learning.created[0].provenance.signal, "researcher");
+  }
+  // And the signal a run's own input carried decides when it is given.
+  const told = runs();
+  await told.distillation.applyCandidate(reviewerJob, { id: "run_1" }, { candidate: { operation: "create" }, skill: SKILL }, { signal: "researcher" });
+  assert.equal(told.learning.created.length, 1);
+});
+
+test("the researcher's own corrections and edits open the input, before the transcript and the reviewer's findings", () => {
+  const transcript = {
+    header: { completeness: "complete" },
+    messages: [
+      { sessionId: "root", seq: 1, role: "user", parts: [{ type: "text", text: "<evimed-brief>请做一个 Meta 分析</evimed-brief>" }] },
+      { sessionId: "root", seq: 2, role: "assistant", parts: [{ type: "text", text: "好的。" }] },
+      { sessionId: "root", seq: 3, role: "user", parts: [{ type: "text", text: "<evimed-correction>先报 GRADE 等级，再报效应量</evimed-correction>" }] },
+      { sessionId: "root", seq: 4, role: "user", parts: [{ type: "text", text: "<evimed-correction>我的手机号 13800138000，发我</evimed-correction>" }] },
+    ],
+  };
+  const input = buildDistillationInput({
+    run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "repair_accepted", transcript,
+    repairIssues: [{ round: 1, code: "claim_quote_missing", message: "…" }],
+    correctionRecords: [{ recordId: "mem_1", key: "reporting.order", text: "先写结论再写证据" }],
+  });
+  const keys = Object.keys(input);
+  assert.ok(keys.indexOf("corrections") < keys.indexOf("transcriptExcerpts"));
+  assert.ok(keys.indexOf("feedback") < keys.indexOf("transcriptExcerpts"));
+  assert.ok(keys.indexOf("transcriptExcerpts") < keys.indexOf("repairIssues"), "the reviewer's findings come after the researcher");
+  assert.deepEqual(input.corrections, [
+    { source: "steered", sessionId: "root", seq: 3, text: "先报 GRADE 等级，再报效应量" },
+    { source: "memory", recordId: "mem_1", key: "reporting.order", text: "先写结论再写证据" },
+  ], "their own words, unwrapped; a message carrying a patient's phone number is dropped whole");
+  assert.equal(input.correctionsDropped.sensitive, 1);
+  assert.equal(input.signal, "researcher");
+  assert.equal(buildDistillationInput({ run: { id: "r" }, trigger: "repair_accepted", transcript: null }).signal, "reviewer");
+  assert.equal(buildDistillationInput({ run: { id: "r" }, trigger: "delivered", transcript: null }).signal, "run");
+  assert.equal(lessonSignal({ trigger: "repair_accepted", feedback: [{ id: "fe" }] }), "researcher");
+});
+
+test("a distillation reads the correction memories its lesson names and hands them to the run first", async () => {
+  /** @type {any[]} */
+  const dispatched = [];
+  /** @type {any[]} */
+  const asked = [];
+  const distillation = new MethodDistillationRuns({
+    learning: { ...fakeLearning(), async listMethods() { return { items: [] }; } },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+    readCorrections: async (userId, ids) => { asked.push({ userId, ids }); return [{ recordId: "mem_1", key: "k", text: "不要用固定剂量" }]; },
+  });
+  const project = { id: "paper", rootDir: "/nonexistent", metaDir: "/nonexistent/.openscience" };
+  const result = await distillation.execute({ job: { userId: "u1", projectId: "paper", payload: { trigger: "correction", corrections: [{ recordId: "mem_1", key: "k" }] } },
+    project, run: { id: "run_1" } });
+  assert.equal(result.state, "pending");
+  assert.deepEqual(asked, [{ userId: "u1", ids: ["mem_1"] }]);
+  assert.deepEqual(dispatched[0].input.corrections, [{ source: "memory", recordId: "mem_1", key: "k", text: "不要用固定剂量" }]);
+  assert.equal(dispatched[0].input.signal, "researcher");
 });

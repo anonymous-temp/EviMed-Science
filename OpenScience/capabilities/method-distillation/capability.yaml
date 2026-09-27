@@ -1,6 +1,6 @@
 id: method-distillation
 visibility: internal
-version: 1.0.0
+version: 1.1.0
 title: Method Distillation
 category: Self-Evolution
 description: Induce one reusable method from one run's transcript, feedback and repair rounds, and propose exactly one of create, amend, merge or no change.
