@@ -96,6 +96,22 @@ export class MemoryRerank {
     this.report = report;
     this.lastError = this.keyError;
     this.reportedError = null;
+    // How often this reranker was asked, and how it answered — what
+    // `/api/ops/metrics` exports (spec §13, audit 2026-09-26 M-14). A reranker
+    // fails open by design, so without a count "it reranked" and "it silently
+    // returned the vector order every time" look identical from outside; the
+    // one-line stderr report per outage is gone with the next restart.
+    this.succeeded = 0;
+    /** @type {Map<string, number>} */
+    this.failed = new Map();
+  }
+
+  /** The counters, for the metrics scrape: calls that reordered, and calls
+   *  that kept the arriving order, by the code they failed with. A reranker
+   *  that was never asked — unconfigured, or fewer than two candidates — is
+   *  in neither. */
+  counts() {
+    return { succeeded: this.succeeded, failed: Object.fromEntries([...this.failed].sort(([left], [right]) => left.localeCompare(right))) };
   }
 
   /** True when there is somewhere to ask and something to ask it with. */
@@ -164,6 +180,7 @@ export class MemoryRerank {
     if (!ordered) return this.#failOpen(identity, "memory_rerank_response_invalid");
     this.lastError = null;
     this.reportedError = null;
+    this.succeeded += 1;
     return [...ordered, ...tail];
   }
 
@@ -181,6 +198,7 @@ export class MemoryRerank {
    *  @param {number[]} identity @param {string} code */
   #failOpen(identity, code) {
     this.lastError = code;
+    this.failed.set(code, (this.failed.get(code) ?? 0) + 1);
     // One line per outage, not per recall: a reranker that cannot be reached
     // is asked again on every question a researcher types, and a log that
     // repeats it thousands of times hides the outage it is reporting.

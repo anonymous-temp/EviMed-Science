@@ -6326,6 +6326,19 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       "Authenticated OpenList tenant-root listings made by the storage probe, by outcome (mounted, missing or an error code).",
       "counter", [...openList.probeCounts].map(([outcome, value]) => ({ value, labels: { outcome } })));
   }
+  // The reranker fails open, so its outages cost nothing visible: the vector
+  // order stands. Counted per call so a deployment can tell "reranking" from
+  // "configured and never once succeeding" (audit 2026-09-26, M-14). Codes are
+  // the closed set `MemoryRerank` fails with, so the series cannot grow.
+  const rerankCounts = typeof memorySubstrate?.rerank?.counts === "function" ? memorySubstrate.rerank.counts() : null;
+  if (rerankCounts) {
+    addMetric(lines, "open_science_memory_rerank_total",
+      "Recall rerank calls since process start, by outcome: succeeded reordered the candidates, failed kept the order they arrived in.",
+      "counter", [
+        { value: rerankCounts.succeeded, labels: { outcome: "succeeded", code: "none" } },
+        ...Object.entries(rerankCounts.failed).map(([code, value]) => ({ value, labels: { outcome: "failed", code } })),
+      ]);
+  }
   addMetric(lines, "open_science_process_uptime_seconds", "EviMed Web API process uptime.", "gauge", {
     value: process.uptime(),
   });

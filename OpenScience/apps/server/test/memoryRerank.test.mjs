@@ -206,3 +206,23 @@ test("an instance's own task instruction rides both envelopes; without one the m
   await plain.rerank.order("q", ["a", "b"], { instruct: "" });
   assert.equal("instruct" in plain.fetchImpl.calls[1].body, false);
 });
+
+// 2026-09-26 audit (M-14): only a degraded recall had a metric, so whether the
+// reranker ever succeeded could not be told from outside.
+test("every call is counted by how it answered, and a reranker that was never asked counts nothing", async () => {
+  const { rerank } = reranker({}, [
+    { status: 200, body: flatResults([0.2, 0.9]) },
+    { status: 503, body: {} },
+    { status: 401, body: {} },
+    { status: 503, body: {} },
+    { status: 200, body: flatResults([0.9, 0.2]) },
+  ]);
+  for (let call = 0; call < 5; call += 1) await rerank.order("q", ["a", "b"]);
+  assert.deepEqual(rerank.counts(), { succeeded: 2, failed: { memory_rerank_auth_failed: 1, memory_rerank_upstream_error: 2 } });
+
+  await rerank.order("q", ["only one"]);
+  const idle = new MemoryRerank({ model: "qwen3-rerank", apiBase: flatBase });
+  await idle.order("q", ["a", "b"]);
+  assert.deepEqual(idle.counts(), { succeeded: 0, failed: {} });
+  assert.equal(rerank.counts().succeeded, 2, "one candidate is not a rerank");
+});
