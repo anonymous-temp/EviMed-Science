@@ -29,6 +29,7 @@
 
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE, LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
+import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
 const METHOD_STATUSES = Object.freeze(["candidate", "approved", "retired"]);
 const JOB_STATUSES = Object.freeze(["queued", "running", "succeeded", "failed", "canceled"]);
@@ -121,7 +122,7 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
   let spend = null;
   try {
     const [row] = await rows(`SELECT coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS settled,
-        coalesce(sum(reserved_cost) FILTER (WHERE status IN ('reserved','uncertain')),0) AS open
+        coalesce(sum(${OPEN_COST_VALUE}) FILTER (WHERE status IN ('reserved','uncertain')),0) AS open
       FROM evimed_usage.model_requests
       WHERE purpose='learning' AND created_at >= $1::timestamptz - interval '24 hours' AND ($2::text IS NULL OR user_id=$2)`,
     [now.toISOString(), owner]);

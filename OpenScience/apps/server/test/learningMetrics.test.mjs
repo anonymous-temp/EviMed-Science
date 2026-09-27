@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "../src/learningMetrics.mjs";
+import { OPEN_COST_VALUE } from "../src/usageLedger.mjs";
 
 /** A database that answers the three reads by what they select, and records who asked. */
 function ledger({ usageFails = false } = {}) {
@@ -33,6 +34,11 @@ function ledger({ usageFails = false } = {}) {
       }
       if (sql.includes("FROM evimed_usage.model_requests")) {
         if (usageFails) throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
+        // An uncertain call counts at the ledger's bounded estimate, as the
+        // spend caps count it — never at its whole reservation (09-21: 118
+        // learning calls held ¥184.77 of reservations and settled at 0).
+        assert.ok(sql.includes(OPEN_COST_VALUE), "open learning spend reads the ledger's estimate for uncertain calls");
+        assert.ok(!/sum\(reserved_cost\)/.test(sql), "no whole-reservation sum");
         return { rows: [{ settled: "1.25", open: "0.5" }] };
       }
       throw new Error(`unexpected query: ${sql}`);
