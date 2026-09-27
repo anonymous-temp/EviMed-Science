@@ -186,7 +186,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
     diagnosisEmpty(project, { roundId }) {
       return send(project, "diagnosis_done", {
         title: `${geoProductName(project)}：诊断没有测到回答`,
-        body: "这一轮没有从任何 AI 引擎拿到有效回答，已通知管理员检查探测通道。处理好后，在诊断页点「让 AI 做」重新测。",
+        body: "这一轮没有从任何 AI 引擎拿到有效回答，已通知管理员检查探测通道。处理好后，在诊断页点“让 AI 做”重新测。",
         severity: "attention", source: source(project.id, "diagnosis"), idempotencyKey: `geo:${project.id}:diagnosis-empty:${roundId}`,
       });
     },
@@ -206,7 +206,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       // What the reader can do next. Without a media market on this
       // deployment no budget places anything, so none is asked for.
       const market = mediaMarketConfigured(config);
-      const next = !market ? "可以在「内容」里查看。" : budgetSet ? "会在预算内自动投放。" : "设置投放预算后会自动投放。";
+      const next = !market ? "可以在“行动”里查看；投放渠道接通后才能投放。" : budgetSet ? "会在预算内自动投放。" : "设置投放预算后会自动投放。";
       return send(project, "first_publishable", {
         title: `${geoProductName(project)}：首批稿件可发布`,
         body: `${count} 篇稿件可以发布了，${next}`,
@@ -234,7 +234,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       const row = normalizedError(error);
       const idempotencyKey = key || `geo:wrong_ours:${row.id}:first`;
       const target = row.snapshotId ? source(project.id, "answers", row.snapshotId) : source(project.id, "diagnosis");
-      const body = row.evidenceQuote ? `依据：「${clip(row.evidenceQuote, 200)}」` : "点开看这条回答和依据。";
+      const body = row.evidenceQuote ? `依据：“${clip(row.evidenceQuote, 200)}”` : "点开看这条回答和依据。";
       if (GEO_URGENT_SEVERITIES.includes(String(row.severity))) {
         return send(project, "wrong_or_safety", {
           title: wrongOursTitle(project, row), body, severity: "safety", source: target, idempotencyKey,
@@ -364,8 +364,35 @@ async function projectRow(store, geoProjectId, userId) {
   return { id: String(row.id), userId: String(row.user_id), projectId: String(row.project_id), product: row.product ?? {}, tier: String(row.tier) };
 }
 
-/** What an operator alert says beyond its title: the amounts and counts it carries, never a key. @param {Record<string, any>} event */
-function operatorBody(event) {
+/**
+ * Where an operator handles an alert, by what it is about (G21, 2026-09-26:
+ * every alert — an engine logged out on the probe host included — said to
+ * handle it in the GEO placement account). The probe host's engines are
+ * browser tabs logged in by a person; the market is the placement account.
+ */
+const OPERATOR_WHERE = Object.freeze({
+  probeEngine: "在探测机上重新登录这家 AI，或重开它的标签页；恢复后会自动续测。",
+  probeHost: "检查探测机是否在线、有没有卡在某个页面。",
+  probeConfig: "检查探测通道的地址和密钥配置。",
+  measurement: "检查探测通道和这一轮的测量任务。",
+  market: "在“循证 GEO”的投放账户里处理。",
+});
+
+/** @param {string} type */
+function operatorWhere(type) {
+  if (["geo_probe_engine_paused", "geo_probe_suspect"].includes(type)) return OPERATOR_WHERE.probeEngine;
+  if (["geo_probe_host_down", "geo_probe_busy"].includes(type)) return OPERATOR_WHERE.probeHost;
+  if (["geo_probe_misconfigured", "geo_probe_unconfigured"].includes(type)) return OPERATOR_WHERE.probeConfig;
+  if (["diagnosis_empty", "metrics_missing"].includes(type)) return OPERATOR_WHERE.measurement;
+  return OPERATOR_WHERE.market;
+}
+
+/**
+ * What an operator alert says beyond its title: the amounts and counts it
+ * carries, never a key, and where to handle it.
+ * @param {Record<string, any>} event
+ */
+export function operatorBody(event) {
   const parts = [];
   if (event.day) parts.push(`日期 ${event.day}`);
   if (Number.isFinite(Number(event.amountCny)) && event.amountCny != null) parts.push(`金额 ¥${Number(event.amountCny).toFixed(2)}`);
@@ -373,5 +400,6 @@ function operatorBody(event) {
   if (Number.isFinite(Number(event.balance)) && event.balance != null) parts.push(`余额 ¥${Number(event.balance).toFixed(2)}`);
   if (Array.isArray(event.orderIds)) parts.push(`${event.orderIds.length} 笔订单`);
   if (event.engine) parts.push(`引擎 ${geoEngineLabel(String(event.engine))}`);
-  return parts.length ? `${parts.join("，")}。在「循证 GEO」的投放账户里处理。` : "在「循证 GEO」的投放账户里处理。";
+  const where = operatorWhere(String(event?.type ?? event?.kind ?? ""));
+  return parts.length ? `${parts.join("，")}。${where}` : where;
 }

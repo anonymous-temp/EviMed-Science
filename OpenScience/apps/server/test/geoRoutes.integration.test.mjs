@@ -195,7 +195,7 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   assert.equal(listed.coverageDays, 90);
   assert.deepEqual(listed.headline.gvi, { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent",
     dataType: "measured", reason: null, target: null, trend: [] }, "an unmeasured number is absent, never zero");
-  assert.deepEqual(listed.alert, { wrongOurs: 0, safety: 0, text: null });
+  assert.deepEqual(listed.alert, { wrongOurs: 0, safety: 0, text: null, severity: null });
   assert.ok(audits.some((entry) => entry.event === "geo.project.create" && entry.code === created.payload.data.id));
   const unnamed = await call("POST", "/api/geo/projects", { body: {} });
   assert.equal(unnamed.status, 201);
@@ -312,8 +312,8 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
       screenshot_sha256, surface) VALUES ($1, $8, $2, $3, $4, 'deepseek', now(), 'valid', $5, $6::jsonb, $7, '{"mode":"web"}'::jsonb)`,
   [`s1-${id}`, roundId, id, question.id, "玛仕度肽每天注射一次。", JSON.stringify([{ url: "https://www.39.net/a", domain: "39.net", title: "a", inBody: true }]), sha,
     ALICE]);
-  await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text)
-    VALUES ($1, $5, $2, $3, $4, 'doubao', now(), 'suspect', '请登录')`, [`s2-${id}`, roundId, id, question.id, ALICE]);
+  await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, warnings)
+    VALUES ($1, $5, $2, $3, $4, 'doubao', now(), 'suspect', '请登录', '["sanity:session_invalid:请登录"]'::jsonb)`, [`s2-${id}`, roundId, id, question.id, ALICE]);
   await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, statements, failure_mode, mentions_ours)
     VALUES ($1, $5, $2, $3::jsonb, $4::jsonb, 'wrong_ours', true)`, [`s1-${id}`, id,
     JSON.stringify([{ name: "替尔泊肽", ours: false, competitor: true, count: 2 }]),
@@ -355,6 +355,10 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(diagnosis.round.id, roundId);
   assert.equal(diagnosis.round.sampleDate, "2026-09-24");
   assert.deepEqual(diagnosis.round.engines, ["doubao", "deepseek"]);
+  // Which engines answered, and why the other did not (G13): 豆包 gave only login pages.
+  assert.deepEqual(diagnosis.round.measuredEngines, ["deepseek"]);
+  assert.deepEqual(diagnosis.round.absent, [{ engine: "doubao", reason: "login" }]);
+  assert.deepEqual(diagnosis.round.linklessEngines, [], "deepseek's citation carries its link");
   const deepseek = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "deepseek");
   assert.deepEqual(deepseek.mention, { value: 0.42, numerator: 20, denominator: 48, ciLow: null, ciHigh: null, status: "ok", dataType: "measured",
     reason: null, snapshotIds: [`s1-${id}`] }, "a cell names the answers it rests on (the suspect one is out)");
@@ -414,7 +418,8 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(page.availableEngines, ["doubao", "deepseek", "kimi"]);
   assert.ok(page.startedAt && Date.parse(page.startedAt) <= Date.now(), "the coverage window's start");
   const row = (await call("GET", "/api/geo/projects")).payload.data.projects.find((/** @type {any} */ entry) => entry.id === id);
-  assert.deepEqual(row.alert, { wrongOurs: 1, safety: 1, text: "DeepSeek：把玛仕度肽说成每天注射一次" });
+  // The sentence carries its severity: the home row draws the badge red, never the sentence (F-G10).
+  assert.deepEqual(row.alert, { wrongOurs: 1, safety: 1, text: "DeepSeek：把玛仕度肽说成每天注射一次", severity: "S3" });
   assert.equal(row.headline.gvi.value, 31.5);
   assert.equal(row.headline.mention.denominator, 310);
 
@@ -427,6 +432,14 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42 }]);
   assert.equal(monitoring.newErrors[0].id, `e-${id}`);
   assert.equal(monitoring.next.kind, "weekly", "past a baseline, the next is the weekly round");
+  // G6: a confirmation round in the queue is not the next measurement; the
+  // weekly re-measure is, on a Monday the schedule will not skip.
+  await insert(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status, planned) VALUES ($1, $2, $3, 'confirm', 'queued', 10)`,
+    [`rc-${id}`, ALICE, id]);
+  const next = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data.next;
+  assert.equal(next.kind, "weekly");
+  assert.equal(new Date(`${next.date}T00:00:00Z`).getUTCDay(), 1, "a Monday");
+  assert.ok(Date.parse(`${next.date}T00:00:00Z`) - Date.now() > 2 * 86_400_000, "never within the baseline's three-day rest");
 });
 
 test("distribution reads the orders; budget, cancel, run and export go to their hooks or answer 503", options, async () => {
@@ -553,4 +566,49 @@ test("the marketplace account is an operator's: others get 403, top-ups are conf
   assert.equal(withBalance.topups[0].id, topup, "newest request first");
   await database.query(`DELETE FROM evimed_geo.topups WHERE id = $1`, [topup]);
   hooks.market = null;
+});
+
+test("a rival's mention rate over full measurements is a series of its own; the risk pool's issue is never 漏提; sources read full measurements only", options, async () => {
+  const { project } = await seededProject();
+  const id = project.id;
+  const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
+  const round = (/** @type {string} */ rid, /** @type {string} */ kind, /** @type {string} */ day) => insert(`INSERT INTO evimed_geo.rounds (id, user_id,
+      geo_project_id, kind, set_version, engines, status, planned, done, sample_date, finished_at)
+    VALUES ($1, $2, $3, $4, 1, ARRAY['deepseek','qianwen'], 'done', 10, 10, $5::date, $6::timestamptz)`, [rid, ALICE, id, kind, day, `${day}T12:00:00Z`]);
+  await round(`rw1-${id}`, "baseline", "2026-09-21");
+  await round(`rw2-${id}`, "weekly", "2026-09-28");
+  await round(`rs-${id}`, "sentinel", "2026-09-29");
+  const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
+      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+  [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null,
+    row.value ?? null, row.status ?? "ok", row.at]);
+  await metric("r1", { round: `rw1-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 31, n: 100, value: 31, at: "2026-09-21T10:00:00Z" });
+  await metric("r2", { round: `rw2-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 34, n: 100, value: 34, at: "2026-09-28T10:00:00Z" });
+  // A sentinel's sliver never draws a point.
+  await metric("r3", { round: `rs-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 9, n: 10, value: 90, at: "2026-09-29T10:00:00Z" });
+  // The retrieval rate the sources page reads: the full rounds', never the sentinel's.
+  await metric("t1", { round: `rw2-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 99, n: 100, value: 99, at: "2026-09-28T10:00:00Z" });
+  await metric("t2", { round: `rs-${id}`, scope: "engine", engine: "deepseek", metricId: "M-10", k: 5, n: 5, value: 100, status: "insufficient",
+    at: "2026-09-29T10:00:00Z" });
+  // 千问's sources come back as titles without a link: its citations cannot be traced (G8).
+  const [group] = (await store.questionMap(id, 1)).filter((entry) => entry.pool === "P4");
+  await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
+    VALUES ($1, $2, $3, $4, $5, 'qianwen', '2026-09-28T09:00:00Z', 'valid', '不推荐自行使用。', $6::jsonb)`,
+  [`sq-${id}`, ALICE, `rw2-${id}`, id, group.questions[0].id, JSON.stringify([{ url: "", domain: "", title: "某百科" }])]);
+  await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours) VALUES ($1, $2, $3, 'omitted', false)`,
+    [`sq-${id}`, ALICE, id]);
+
+  const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [{ date: "2026-09-21", value: 31, n: 100, k: 31 }, { date: "2026-09-28", value: 34, n: 100, k: 34 }] }]);
+
+  const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
+  const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
+  assert.deepEqual([deepseek?.retrieval.value, deepseek?.retrieval.status], [99, "ok"], "the weekly's 99 %, not the sentinel's five answers");
+  assert.deepEqual(sources.linklessEngines, ["qianwen"]);
+
+  const diagnosis = (await call("GET", `/api/geo/projects/${id}/diagnosis?round=rw2-${id}`)).payload.data;
+  assert.deepEqual(diagnosis.round.linklessEngines, ["qianwen"]);
+  const p4 = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P4");
+  assert.equal(p4.mainIssue, null, "not being named on a risk question is the aim, not an issue (G19)");
 });

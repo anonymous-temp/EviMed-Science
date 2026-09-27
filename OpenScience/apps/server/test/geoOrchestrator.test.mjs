@@ -4,10 +4,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  GEO_SCHEDULE, contentBrief, dispatchIdFor, exportBrief, insightBrief, postPublicationCheckpoints, sentinelEngines, sentinelSlot, strategyBrief,
-  topQuestions, wantedSteps, weeklySlot, zonedInstant,
+  GEO_SCHEDULE, baselineTooRecent, contentBrief, dispatchIdFor, exportBrief, geoRunPrompt, insightBrief, nextWeeklySlot, postPublicationCheckpoints,
+  sentinelEngines, sentinelSlot, strategyBrief, topQuestions, wantedSteps, weeklySlot, zonedInstant,
 } from "../src/geoOrchestrator.mjs";
-import { GEO_NOTICE_KINDS, createGeoNotifier, geoNoticeHref, wrongOursTitle } from "../src/geoNotify.mjs";
+import { GEO_NOTICE_KINDS, createGeoNotifier, geoNoticeHref, operatorBody, wrongOursTitle } from "../src/geoNotify.mjs";
+import { memorySourceRejection } from "../src/memoryIntelligence.mjs";
 import { geoRoutePattern } from "../src/geoRoutes.mjs";
 
 const SHANGHAI = "Asia/Shanghai";
@@ -110,16 +111,26 @@ test("a run's brief says, in plain Chinese, the step, minimal or not, the produc
   assert.equal(full.includes("单步模式"), false);
   const minimal = insightBrief(project, { scope: [{ step: "evidence", fidelity: "minimal" }, { step: "questions", fidelity: "minimal" }],
     target: "sources", full: false });
-  for (const phrase of ["单步模式", "「信源」", "最小版", "共 30 个测量问句", "minimal:true", "geo_read", "geo_write"]) {
+  for (const phrase of ["单步模式", "“信源”", "最小版", "共 30 个测量问句", "minimal:true", "geo_read", "geo_write"]) {
     assert.ok(minimal.includes(phrase), `${phrase} missing from the minimal brief`);
   }
   assert.equal(minimal.includes("· 旅程"), false, "a single step does not do the journey");
   assert.ok(strategyBrief(project, { minimal: true }).includes("30 个问句"));
   const batch = contentBrief(project, { number: 1, size: 3, reason: "first", groups: [{ name: "减重效果", pool: "P2", typicalQuestion: "玛仕度肽能减多少？" }],
     errors: [{ engine: "deepseek", statement: "每天注射一次" }] });
-  for (const phrase of ["第 1 批", "最多 3 篇", "语义群「减重效果」", "通用名与品类类", "DeepSeek讲错「每天注射一次」", "safety: open", "geo_write articles"]) {
+  for (const phrase of ["第 1 批", "最多 3 篇", "语义群“减重效果”", "通用名与品类类", "DeepSeek 讲错“每天注射一次”", "safety: open", "geo_write articles",
+    "errorIds"]) {
     assert.ok(batch.includes(phrase), `${phrase} missing from the content brief`);
   }
+  // What the identity, the journey and the strategy are asked to carry (G5, G10, G3, G16).
+  for (const phrase of ["aliases", "misspellings", "approvalNo", "identityStatus", "singleSource", "subtypes", "personas", "files", "collectedAt"]) {
+    assert.ok(full.includes(phrase), `${phrase} missing from the full brief`);
+  }
+  const strategy = strategyBrief(project, { minimal: false });
+  for (const phrase of ["10–20", "icpMatches", "newsIndexed", "medicalVertical", "checkedAt", "impostor: true", "promise", "layers", "M-19", "M-01S"]) {
+    assert.ok(strategy.includes(phrase), `${phrase} missing from the strategy brief`);
+  }
+  for (const brief of [full, minimal, batch, strategy]) assert.equal(/[「」]/.test(brief), false, "a person reads a brief: quotes are “”");
   assert.ok(exportBrief(project, { kind: "weekly", week: "2026-09-28" }).includes("周报"));
   assert.ok(exportBrief(project, { kind: "proposal" }).includes("提案资料包"));
   for (const brief of [full, minimal, batch]) assert.equal(/gq_|ggr_|geo_[0-9a-f]{8}/.test(brief), false, "no ids in what a person can read");
@@ -170,7 +181,7 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   ]);
   assert.deepEqual(user.map((input) => input.idempotencyKey), ["geo:geo_1:diagnosis:r1", "geo:geo_1:targets:1", "geo:geo_1:first-publishable",
     "geo:geo_1:first-cited", "geo:wrong_ours:e1:first", "geo:wrong_ours:e2:first", "geo:article-safety:a1"]);
-  assert.deepEqual([user[2].body, user[2].source.id], ["3 篇稿件可以发布了，可以在「内容」里查看。", "geo_1/content"],
+  assert.deepEqual([user[2].body, user[2].source.id], ["3 篇稿件可以发布了，可以在“行动”里查看；投放渠道接通后才能投放。", "geo_1/content"],
     "with no media market configured, no budget is asked for");
   assert.deepEqual(user[4].source, { type: "geo", id: "geo_1/answers/s1" }, "a 讲错我方 opens on its answer");
   assert.equal(user[4].groupKey, undefined, "an S3 stands alone");
@@ -179,6 +190,8 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   const operator = sent.filter((entry) => entry.userId === "ops");
   assert.deepEqual(operator.map((entry) => [entry.input.title, entry.input.severity]), [["测量：一家 AI 引擎暂停探测", "attention"]],
     "machinery goes to operators only");
+  // G21: an engine down on the probe host is handled there, never in the placement account.
+  assert.equal(operator[0].input.body, "引擎 Kimi。在探测机上重新登录这家 AI，或重开它的标签页；恢复后会自动续测。");
   assert.deepEqual(GEO_NOTICE_KINDS, ["diagnosis_done", "targets_ready", "first_publishable", "first_cited", "wrong_or_safety"]);
   // The measurement's event reads the error row and keeps the event's own key.
   const rowStore = { async query(/** @type {string} */ sql) {
@@ -195,4 +208,50 @@ test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severit
   const replay = createGeoNotifier({ notifications: { async create() { throw Object.assign(new Error("x"), { code: "notification_idempotency_conflict" }); } }, store });
   assert.equal(await replay.diagnosisDone(project, { roundId: "r1", engines: 5, answers: 310, wrongOurs: 0 }), true);
   assert.equal(replay.counts.failed, 0);
+});
+
+test("an operator is told where each alert is handled: the probe host, the probe config, the measurement or the placement account", () => {
+  assert.match(operatorBody({ type: "geo_probe_engine_paused", engine: "deepseek" }), /探测机上重新登录这家 AI/);
+  assert.match(operatorBody({ kind: "geo_probe_suspect" }), /探测机上重新登录/);
+  assert.match(operatorBody({ kind: "geo_probe_host_down" }), /探测机是否在线/);
+  assert.match(operatorBody({ kind: "geo_probe_unconfigured" }), /探测通道的地址和密钥/);
+  assert.match(operatorBody({ type: "metrics_missing" }), /测量任务/);
+  assert.equal(operatorBody({ type: "reconciliation_mismatch", diff: 12 }), "差额 ¥12.00。在“循证 GEO”的投放账户里处理。");
+  for (const type of ["geo_probe_engine_paused", "geo_probe_busy", "diagnosis_empty"]) {
+    assert.equal(operatorBody({ type }).includes("投放账户"), false, `${type} is not a placement matter`);
+  }
+});
+
+test("the next weekly re-measure is the one the schedule will run: taken weeks and the baseline rest are skipped", () => {
+  // The first production baseline finished on Thursday 2026-09-25 17:59Z; the Monday 09-28 03:00 (Shanghai) re-measure falls within three days of it.
+  const baselineFinishedAt = "2026-09-25T17:59:00Z";
+  const now = new Date("2026-09-26T06:00:00Z");
+  assert.equal(baselineTooRecent(baselineFinishedAt, zonedInstant("2026-09-28", 3, SHANGHAI)), true);
+  assert.equal(nextWeeklySlot({ now, timeZone: SHANGHAI, baselineFinishedAt }).monday, "2026-10-05", "09-28 is skipped by the rest, as the schedule skips it");
+  // On the Monday itself, after 03:00, a week already skipped is taken: the next is the following Monday.
+  const monday = new Date("2026-09-28T02:00:00Z");
+  assert.equal(nextWeeklySlot({ now: monday, timeZone: SHANGHAI, baselineFinishedAt: "2026-09-01T00:00:00Z", taken: new Set(["weekly:2026-09-28"]) }).monday,
+    "2026-10-05");
+  assert.equal(nextWeeklySlot({ now: monday, timeZone: SHANGHAI, baselineFinishedAt: "2026-09-01T00:00:00Z" }).monday, "2026-09-28",
+    "a week due and not yet taken is this one");
+  assert.equal(nextWeeklySlot({ now, timeZone: SHANGHAI, baselineFinishedAt: "2026-09-20T00:00:00Z" }).monday, "2026-09-28");
+});
+
+test("every GEO dispatch's prompt carries the platform's mark, and memory takes none of it as the researcher's words", () => {
+  const briefs = [
+    insightBrief(project, { scope: [{ step: "evidence", fidelity: "full" }], target: null, full: true }),
+    strategyBrief(project, { minimal: false }),
+    contentBrief(project, { number: 1, size: 1, reason: "first", groups: [], errors: [] }),
+    exportBrief(project, { kind: "weekly", week: "2026-09-28" }),
+    exportBrief(project, { kind: "proposal" }),
+  ];
+  for (const brief of briefs) {
+    const prompt = geoRunPrompt(brief, "geo-content-1-a1");
+    assert.ok(prompt.startsWith(brief), "the brief first: the kernel names a session after its first message");
+    assert.ok(prompt.endsWith("<evimed-geo-run>geo-content-1-a1</evimed-geo-run>"));
+    // Sent as the prompt itself, it arrives with the user's source; the tag is what marks it ours.
+    const message = { info: { role: "user", source: "user" }, parts: [{ type: "text", text: prompt }] };
+    assert.equal(memorySourceRejection(message), "injected", "a brief is never stored as what the researcher said");
+  }
+  assert.equal(geoRunPrompt("x", "geo-a b<c>").endsWith("<evimed-geo-run>geo-a-b-c-</evimed-geo-run>"), true, "the id is one token");
 });

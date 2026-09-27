@@ -109,6 +109,11 @@ const DAY_MS = 86_400_000;
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_orchestrator_failed");
 /** @param {string} engine */
 const engineLabel = (engine) => /** @type {Record<string, string>} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine;
+/** An engine's name before Chinese text: a Latin name takes a space (「Kimi 讲错」, 「豆包讲错」). @param {string} engine */
+const spacedEngine = (engine) => {
+  const label = engineLabel(engine);
+  return /[A-Za-z0-9]$/.test(label) ? `${label} ` : label;
+};
 /** @param {string} step */
 const stepLabel = (step) => /** @type {Record<string, string>} */ (GEO_STEP_LABELS_ZH)[step] ?? step;
 
@@ -136,6 +141,26 @@ export function wantedSteps(steps) {
     /** @param {string} step @returns {"full" | "minimal"} */
     fidelity: (step) => (requested.has(step) ? "full" : "minimal"),
   };
+}
+
+/**
+ * The steps as the program will read them on its next tick: a step a run
+ * marked `queued` is requested, and a project nothing was requested for whose
+ * questions are locked has started the program itself — the full program for
+ * a full set, a diagnosis for a minimal one (`#implicitProgram`, without the
+ * writes). What a page may promise is what this says.
+ * @param {Record<string, { status: string, requested: boolean }>} steps
+ */
+export function programSteps(steps) {
+  /** @type {Record<string, { status: string, requested: boolean }>} */
+  const out = Object.fromEntries(GEO_STEPS.map((step) => {
+    const entry = steps?.[step] ?? { status: "none", requested: false };
+    return [step, { ...entry, requested: entry.requested === true || entry.status === "queued" }];
+  }));
+  if (GEO_STEPS.some((step) => out[step].requested)) return out;
+  if (out.questions.status === "done") for (const step of GEO_STEPS) out[step].requested = true;
+  else if (out.questions.status === "minimal") out.diagnosis.requested = true;
+  return out;
 }
 
 // ------------------------------------------------------------------ calendar arithmetic
@@ -180,6 +205,39 @@ export function weeklySlot(now, timeZone) {
   const monday = addDays(parts.date, -(parts.weekday - GEO_SCHEDULE.weeklyWeekday));
   const dueAt = zonedInstant(monday, GEO_SCHEDULE.weeklyHour, timeZone);
   return { monday, dueAt, due: now.getTime() >= dueAt.getTime() };
+}
+
+/**
+ * Whether a weekly re-measure falls too soon after the baseline to measure
+ * anything but noise: the baseline finished within `baselineRestDays` before
+ * the week's due instant. The one rule the schedule skips by and the page
+ * dates the next measurement by.
+ * @param {Date | string | null | undefined} baselineFinishedAt @param {Date} dueAt
+ */
+export function baselineTooRecent(baselineFinishedAt, dueAt) {
+  const finished = baselineFinishedAt ? new Date(baselineFinishedAt).getTime() : 0;
+  return finished > dueAt.getTime() - GEO_SCHEDULE.baselineRestDays * DAY_MS;
+}
+
+/**
+ * The next weekly re-measure the schedule will actually run: from this
+ * week's Monday on, the first whose key is not already taken (done or
+ * skipped) and that the baseline rest does not skip. G6, 2026-09-26: the page
+ * named a confirmation round as the next measurement, and its fallback named
+ * a Monday the schedule was about to skip.
+ * @param {{ now: Date, timeZone: string, baselineFinishedAt: Date | string | null | undefined, taken?: ReadonlySet<string> }} input
+ * @returns {{ monday: string, dueAt: Date }}
+ */
+export function nextWeeklySlot({ now, timeZone, baselineFinishedAt, taken = new Set() }) {
+  const first = weeklySlot(now, timeZone).monday;
+  for (let week = 0; week < 60; week += 1) {
+    const monday = addDays(first, 7 * week);
+    const dueAt = zonedInstant(monday, GEO_SCHEDULE.weeklyHour, timeZone);
+    if (taken.has(`weekly:${monday}`) || baselineTooRecent(baselineFinishedAt, dueAt)) continue;
+    return { monday, dueAt };
+  }
+  const monday = addDays(first, 7 * 60);
+  return { monday, dueAt: zonedInstant(monday, GEO_SCHEDULE.weeklyHour, timeZone) };
 }
 
 /** Today's sentinel: its day, and whether 08:00 has come. @param {Date} now @param {string} timeZone */
@@ -267,9 +325,9 @@ const DATA_LINE = "项目里已有的数据用 geo_read 读（做过且没有过
  * @param {any} project @param {{ scope: Array<{ step: string, fidelity: "full" | "minimal" }>, target: string | null, full: boolean }} plan
  */
 export function insightBrief(project, { scope, target, full }) {
-  const lines = [`「循证 GEO」自动运行 · ${full ? "完整方案" : "单步"} · 第 1–3 步（证据、旅程、问题）`, productLine(project), scopeLine(project)];
+  const lines = [`“循证 GEO”自动运行 · ${full ? "完整方案" : "单步"} · 第 1–3 步（证据、旅程、问题）`, productLine(project), scopeLine(project)];
   if (!full && target) {
-    lines.push(`单步模式：用户要的是「${stepLabel(target)}」。只补它需要的最小上游，报告里写明哪些部分是最小版、完整版还会补什么。`);
+    lines.push(`单步模式：用户要的是“${stepLabel(target)}”。只补它需要的最小上游，报告里写明哪些部分是最小版、完整版还会补什么。`);
   }
   lines.push("这次要做：");
   for (const { step, fidelity } of scope) {
@@ -277,11 +335,16 @@ export function insightBrief(project, { scope, target, full }) {
       lines.push(fidelity === "full"
         ? "· 证据：核实产品身份和说明书，竞品，完整主张库（通常 30–50 条，每条带说明书或文献原文引用）。"
         : "· 证据（最小版）：核实产品身份，只从说明书取主张——适应证、用法用量、禁忌、特殊人群、主要不良反应、相互作用。");
+      // The identity the measurement counts by (G5): without the aliases,
+      // the misspellings and whether one holder markets the generic, a
+      // mention by another name is read as 「漏提我方」.
+      lines.push("  产品身份写全：aliases（回答里会用的其他叫法）、misspellings（常见错写）、approvalNo（批准文号）、rx（处方药 rx / 非处方药 otc）、identityStatus，"
+        + "以及 singleSource（这个通用名是否只有这一家持证：是则回答里说通用名也算提到本品，否则只按商品名计）。每个竞品同样写 singleSource。");
     } else if (step === "journey") {
-      lines.push("· 旅程：人群分型与规模、人物画像、患者旅程、就医节点与就医红旗。");
+      lines.push("· 旅程：人群分型与规模（subtypes）、3–5 个典型人物（personas）、12 个阶段的患者旅程、就医节点与就医红旗；完整的阶段 × 列矩阵另存一个文件，并在 journey 的 files 里登记。");
     } else if (step === "questions") {
       lines.push(fidelity === "full"
-        ? "· 问题：采集真实问法，四池问题地图，3–5 个对照组，锁定 40–120 个测量问句（lock_questions）。"
+        ? "· 问题：采集真实问法（每条写上帖子的 collectedAt 和链接），四池问题地图，3–5 个对照组，锁定 40–120 个测量问句（lock_questions）。"
         : "· 问题（最小版）：四池都有、共 30 个测量问句，没采到真实问法的写成 typical；用 lock_questions 并设 minimal:true 锁定。");
     }
   }
@@ -293,11 +356,15 @@ export function insightBrief(project, { scope, target, full }) {
 /** The brief of the strategy run (step 5). @param {any} project @param {{ minimal: boolean }} plan */
 export function strategyBrief(project, { minimal }) {
   return [
-    `「循证 GEO」自动运行 · 第 5 步（信源）`,
+    `“循证 GEO”自动运行 · 第 5 步（信源）`,
     productLine(project), scopeLine(project),
     `诊断已经测完${minimal ? "（最小版：30 个问句测一轮，数字只代表这 30 个问句，报告里写明）" : "（基线）"}。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。`,
     "这次要做：信源表、七类缺口、每个引擎本周期能做到什么、主战场与布局、三档目标（每档写目标、稿件数和预算）。",
-    "写回：geo_write strategy（信源放在 sources 里）和 targets（档一、档二、档三，dataType 为 forecast）。",
+    // G3: every coverage candidate is checked, and a site no one checked is
+    // never placed into — the market admits only all three conditions true.
+    "覆盖层候选（通常 10–20 个）每个都要核三条件：备案主体一致、被新闻源收录、主营医疗健康，写 icpMatches、newsIndexed、medicalVertical（核不了写 null）和 checkedAt；冒名站写 impostor: true。三条件没核过或不全满足的站，平台不会下单。",
+    "写回：geo_write strategy（battlefield、expectations、gaps、layout，信源放在 sources 里；每个引擎的 expectations 写 promise 和 layers）"
+      + "和 targets（档一、档二、档三，dataType 为 forecast；每档都写 M-19 综合可见度和 M-01S 品牌提及率，pool 为 all）。",
     DATA_LINE,
   ].join("\n");
 }
@@ -309,16 +376,17 @@ export function strategyBrief(project, { minimal }) {
  *   errors: Array<{ engine: string, statement: string | null }>, reason: "first" | "next" | "single", size: number }} batch
  */
 export function contentBrief(project, { number, groups, errors, reason, size }) {
-  const lines = [`「循证 GEO」自动运行 · 第 6 步（内容）· ${typeof number === "number" ? `第 ${number} 批` : number}`, productLine(project)];
+  const lines = [`“循证 GEO”自动运行 · 第 6 步（内容）· ${typeof number === "number" ? `第 ${number} 批` : number}`, productLine(project)];
   if (reason === "next") lines.push("这是每周复测之后的下一轮：补离目标还差的语义群、投了没被引用的主题、复测里还在的讲错我方。");
   lines.push(`这一批最多 ${size} 篇，先写主战场语义群，再写纠错材料：`);
   for (const group of groups) {
     const pool = group.pool ? /** @type {Record<string, string>} */ (GEO_POOL_LABELS_ZH)[group.pool] ?? group.pool : "";
-    lines.push(`· 语义群「${group.name ?? "未命名"}」${pool ? `（${pool}）` : ""}${group.typicalQuestion ? `：典型问句「${group.typicalQuestion}」` : ""}`);
+    lines.push(`· 语义群“${group.name ?? "未命名"}”${pool ? `（${pool}）` : ""}${group.typicalQuestion ? `：典型问句“${group.typicalQuestion}”` : ""}`);
   }
-  for (const error of errors) lines.push(`· 纠错材料：${engineLabel(error.engine)}讲错「${error.statement ?? ""}」`);
+  for (const error of errors) lines.push(`· 纠错材料：${spacedEngine(error.engine)}讲错“${error.statement ?? ""}”`);
   if (!groups.length && !errors.length) lines.push("· 由你按主张库和问题地图挑最需要的主题。");
-  lines.push("语义群的 groupId 用 geo_read questions 查，讲错我方的依据用 geo_read errors 查。每篇写好后用 geo_write articles 登记（deliverableId 即本交付物的 id、path、layer、groupId、claimIds、safety、contentSha256）；闸门结论由平台从交付记录读取，不必填 gate。有临床安全问题就如实标 safety: open，不要自己放行。");
+  lines.push("语义群的 groupId 用 geo_read questions 查，讲错我方的依据和它的 id 用 geo_read errors 查。每篇写好后用 geo_write articles 登记（deliverableId 即本交付物的 id、path、layer、groupId、claimIds、safety、contentSha256）；"
+    + "纠错材料在 errorIds 里写上它纠正的讲错 id，这条讲错就会转为处置中。闸门结论由平台从交付记录读取，不必填 gate。有临床安全问题就如实标 safety: open，不要自己放行。");
   lines.push(DATA_LINE);
   return lines.join("\n");
 }
@@ -327,19 +395,36 @@ export function contentBrief(project, { number, groups, errors, reason, size }) 
 export function exportBrief(project, { kind, week = null }) {
   if (kind === "weekly") {
     return [
-      `「循证 GEO」自动运行 · 周报${week ? `（${week} 这一周）` : ""}`,
+      `“循证 GEO”自动运行 · 周报${week ? `（${week} 这一周）` : ""}`,
       productLine(project),
       "用周报模式出一份 PDF 和一份 Word：本周复测、投放组和对照组的净效应、被 AI 引用的稿件、新出现的讲错我方、下一轮做什么。",
-      "所有数字都来自 geo_read，不补测、不编数；样本不足 30 写「样本不足」，没测的引擎写「未测」。",
+      "所有数字都来自 geo_read，不补测、不编数；样本不足 30 写“样本不足”，没测的引擎写“未测”。",
       DATA_LINE,
     ].join("\n");
   }
   return [
-    "「循证 GEO」 · 导出提案资料包",
+    "“循证 GEO” · 导出提案资料包",
     productLine(project),
-    "出一套提案资料包：一个 Excel、两份 Word、一份 PPT、一份 HTML。只用项目已有的数据（geo_read），没做的步骤写「未做」。",
+    "出一套提案资料包：一个 Excel、两份 Word、一份 PPT、一份 HTML。只用项目已有的数据（geo_read），没做的步骤写“未做”。",
     DATA_LINE,
   ].join("\n");
+}
+
+/**
+ * The prompt a GEO run is dispatched with: the brief, then the platform's
+ * mark naming the dispatch. Every GEO dispatch carries it, into a runtime
+ * the researcher has open as much as into a bounded one (M-2, 2026-09-26: a
+ * brief dispatched into an open runtime carried no platform tag at all, and
+ * the memory extractor stored 「产品：信尔美（通用名：玛仕度肽注射液）。」 as
+ * something the researcher said). The mark is one of the domain's
+ * `PLATFORM_CONTEXT_TAGS`, so a message carrying it is machine text to the
+ * extractor; it goes after the brief because the kernel names a session
+ * after the start of its first message.
+ * @param {string} brief @param {string} dispatchId
+ */
+export function geoRunPrompt(brief, dispatchId) {
+  const id = String(dispatchId).replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 80);
+  return `${brief}\n\n<evimed-geo-run>${id}</evimed-geo-run>`;
 }
 
 // ------------------------------------------------------------------ the orchestrator
@@ -1345,6 +1430,38 @@ export class GeoOrchestrator {
     return counts;
   }
 
+  /**
+   * Today's sentinel asked again on an engine it skipped (paused, or no
+   * channel), once that engine has answered again since (G1, 2026-09-26: the
+   * 09-26 sentinel picked 千问 and DeepSeek, DeepSeek was paused, and its ten
+   * questions were simply gone). A make-up is a round of its own, keyed by
+   * the day and the engine and made once; the first round keeps its counts.
+   * Only today's: a day that has passed is the next day's sentinel's to cover.
+   * @param {any} project @param {string} sentinelKey @param {string} day
+   */
+  async #sentinelMakeUp(project, sentinelKey, day) {
+    const mark = await this.#mark(project.id, sentinelKey);
+    if (!mark?.round_id) return 0;
+    const round = (await this.store.query(`SELECT id, status, finished_at FROM evimed_geo.rounds WHERE id = $1`, [mark.round_id])).rows[0];
+    if (!round || !["done", "partial"].includes(String(round.status)) || !round.finished_at) return 0;
+    const skipped = (await this.store.query(`SELECT engine, array_agg(DISTINCT question_id) AS questions FROM evimed_geo.probe_jobs
+      WHERE round_id = $1 AND status = 'skipped' AND error_code IN ('engine_paused', 'engine_unavailable') GROUP BY engine ORDER BY engine`,
+    [round.id])).rows;
+    let made = 0;
+    for (const row of skipped) {
+      const engine = String(row.engine);
+      const key = `${sentinelKey}:retry:${engine}`;
+      if (await this.#mark(project.id, key)) continue;
+      const back = (await this.store.query(`SELECT 1 FROM evimed_geo.snapshots WHERE engine = $1 AND asked_at > $2
+        AND status IN ('valid', 'refusal') AND coalesce(surface ->> 'mode', 'web') <> 'inclusion' LIMIT 1`, [engine, round.finished_at])).rows.length > 0;
+      if (!back) continue;
+      const questionIds = (Array.isArray(row.questions) ? row.questions : []).map(String);
+      if (!questionIds.length) continue;
+      if (await this.#enqueueOnce(project, key, { kind: "sentinel", questionIds, engines: [engine], ref: { day, retryOf: String(round.id) } })) made += 1;
+    }
+    return made;
+  }
+
   /** @param {any} project */
   async #schedule(project) {
     const counts = { weekly: 0, sentinel: 0, postPublication: 0, skipped: 0 };
@@ -1357,8 +1474,7 @@ export class GeoOrchestrator {
       const slot = weeklySlot(now, this.timeZone);
       const weeklyKey = `weekly:${slot.monday}`;
       if (slot.due && !(await this.#mark(project.id, weeklyKey))) {
-        const finished = baseline.finished_at ? new Date(baseline.finished_at).getTime() : 0;
-        if (finished > slot.dueAt.getTime() - GEO_SCHEDULE.baselineRestDays * DAY_MS) {
+        if (baselineTooRecent(baseline.finished_at, slot.dueAt)) {
           await this.#skip(project, weeklyKey, "baseline_recent");
           counts.skipped += 1;
         } else if (await this.#enqueueOnce(project, weeklyKey, { kind: "weekly", engines: project.engines, ref: { week: slot.monday } })) {
@@ -1388,6 +1504,7 @@ export class GeoOrchestrator {
           counts.sentinel += 1;
         }
       }
+      if (sentinel.due) counts.sentinel += await this.#sentinelMakeUp(project, sentinelKey, sentinel.day);
     }
     // Every published article, whatever else the project asked for.
     const published = (await this.store.query(`SELECT a.id AS article_id, a.group_id, min(e.at) AS published_at, min(o.id) AS order_id

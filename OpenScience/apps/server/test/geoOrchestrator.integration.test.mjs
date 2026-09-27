@@ -230,7 +230,7 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   await world.orchestrator.advance(project.id);
   assert.equal(world.dispatched.length, 3);
   assert.equal(world.dispatched[2].capabilityId, "geo-content");
-  assert.match(world.dispatched[2].brief, /语义群「语义群1」[\s\S]*语义群「语义群2」/);
+  assert.match(world.dispatched[2].brief, /语义群“语义群1”[\s\S]*语义群“语义群2”/);
   const claim = (await store.listClaims(project.id))[0];
   const set = await store.questionMap(project.id, 1);
   const battlefield = ["语义群1", "语义群2"].map((name) => set.find((group) => group.name === name));
@@ -272,8 +272,8 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   // …and, the battlefield being covered, the next first-round batch is its correction material.
   assert.equal(world.dispatched.length, 4);
   assert.deepEqual([world.dispatched[3].capabilityId, world.dispatched[3].dispatchId], ["geo-content", "geo-content-2-a1"]);
-  assert.match(world.dispatched[3].brief, /纠错材料：DeepSeek讲错「把玛仕度肽说成每天注射一次」/);
-  assert.equal(world.dispatched[3].brief.includes("语义群「"), false);
+  assert.match(world.dispatched[3].brief, /纠错材料：DeepSeek 讲错“把玛仕度肽说成每天注射一次”/);
+  assert.equal(world.dispatched[3].brief.includes("语义群“"), false);
   await geoRuntimeWrite({ store, project: current, what: "articles", articleGate: passedGate, body: { items: [{ path: "deliverables/c2/articles/fix.md", layer: "correction",
     title: "更正函", claimIds: [claim.id], gate: "passed", safety: "clear", contentSha256: sha("fix") }] } });
   await finishRun(world, control, 3);
@@ -487,7 +487,8 @@ test("the sentinel engines come from the latest full measurement's retrieval rat
   }
   world.setClock("2026-09-29T00:10:00Z"); // 08:10 in Shanghai
   await world.orchestrator.tickSchedules();
-  const sentinel = world.enqueued.find((entry) => entry.kind === "sentinel");
+  // The schedule tick reads every project of the database: this test's own sentinel is the one.
+  const sentinel = world.enqueued.find((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id);
   assert.deepEqual(sentinel?.engines, ["kimi", "doubao"]);
 });
 
@@ -561,4 +562,36 @@ test("a conversation that locks a set with nothing requested starts the program;
   assert.deepEqual(await second.leaseLoop("orders", async () => "second"), { acquired: true, value: "second" });
   assert.equal(await world.orchestrator.claimDay("reconcile", "2026-10-05"), true);
   assert.equal(await second.claimDay("reconcile", "2026-10-05"), false);
+});
+
+test("a sentinel that skipped a paused engine is asked again on that engine the same day, once the engine answers again; the first keeps its counts", options, async () => {
+  const { world, project } = await lockedProgram();
+  const baseline = world.enqueued[0].id;
+  await finishRound(baseline, { finishedAt: "2026-09-20T12:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  world.setClock("2026-09-29T00:10:00Z"); // 08:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const sentinel = world.enqueued.find((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id);
+  assert.ok(sentinel);
+  const [engine] = sentinel.engines;
+  const [question] = (await store.questionMap(project.id, 1))[0].questions;
+  // The probe closed it with that engine paused: its asks skipped.
+  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1, finished_at = '2026-09-29T00:30:00Z' WHERE id = $1`, [sentinel.id]);
+  await q(`INSERT INTO evimed_geo.probe_jobs (id, user_id, round_id, geo_project_id, question_id, engine, status, error_code)
+    VALUES ($1, $2, $3, $4, $5, $6, 'skipped', 'engine_paused')`, [`job-${sentinel.id}`, project.userId, sentinel.id, project.id, question.id, engine]);
+  const makeUps = () => world.enqueued.filter((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id && entry.ref?.retryOf);
+  world.setClock("2026-09-29T01:00:00Z");
+  await world.orchestrator.tickSchedules();
+  assert.equal(makeUps().length, 0, "not back yet: nothing is asked again");
+
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4, '2026-09-29T01:05:00Z',
+    'valid', '{"mode":"web"}'::jsonb)`, [`back-${project.id}`, project.userId, project.id, engine]);
+  world.setClock("2026-09-29T01:10:00Z");
+  await world.orchestrator.tickSchedules();
+  const [makeUp] = makeUps();
+  assert.deepEqual([makeUp?.engines, makeUp?.questionIds, makeUp?.ref?.retryOf, makeUp?.ref?.day], [[engine], [question.id], sentinel.id, "2026-09-29"]);
+  const [first] = await q(`SELECT status, done, failed FROM evimed_geo.rounds WHERE id = $1`, [sentinel.id]);
+  assert.deepEqual({ ...first }, { status: "partial", done: 0, failed: 1 }, "the skipped round keeps its counts");
+  await world.orchestrator.tickSchedules();
+  assert.equal(makeUps().length, 1, "made once");
 });

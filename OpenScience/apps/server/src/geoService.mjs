@@ -48,6 +48,7 @@ import {
   GEO_OVERVIEW_METRICS, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoCellRows,
 } from "@evimed/domain";
 import { geoLockCheck, geoProgramMinimal } from "./geoWrites.mjs";
+import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
@@ -68,6 +69,8 @@ export const GEO_READ_MAX_ITEMS = 50;
 export const GEO_DEFAULT_PROJECT_NAME = "新 GEO 项目";
 
 const DIAGNOSIS_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
+/** A rival's mention rate: the owner's M-16, over the same pools as our headline M-01S. */
+const GEO_RIVAL_METRIC_ID = "M-16";
 /** The measurement package writes one `NOISE` row per metric (its `variant`); the band shown is mention's. */
 const NOISE_BAND_OF = GEO_VIEW_METRIC_IDS.mention;
 /** …and the project-scope `NET` row of the index (pool-scope rows carry each pool's metric). */
@@ -151,16 +154,6 @@ function rowDay(row, timeZone) {
   return dayIn(new Date(row.computed_at), timeZone);
 }
 
-/** The next Monday on or after tomorrow, in the zone. @param {Date} now @param {string} timeZone */
-function nextMonday(now, timeZone) {
-  for (let offset = 1; offset <= 7; offset += 1) {
-    const candidate = new Date(now.getTime() + offset * 86_400_000);
-    const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(candidate);
-    if (weekday === "Mon") return dayIn(candidate, timeZone);
-  }
-  return dayIn(now, timeZone);
-}
-
 /** @param {unknown} value @param {number} max */
 const clip = (value, max) => {
   const string = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -169,6 +162,11 @@ const clip = (value, max) => {
 
 /** @param {string} engine */
 const engineLabel = (engine) => /** @type {Record<string, string>} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine;
+/** An engine's name before Chinese text: a Latin name takes a space (「Kimi 讲错」, 「豆包讲错」). @param {string} engine */
+const spacedLabel = (engine) => {
+  const label = engineLabel(engine);
+  return /[A-Za-z0-9]$/.test(label) ? `${label} ` : label;
+};
 
 /** @param {any} row */
 function errorView(row) {
@@ -357,6 +355,31 @@ export class GeoService {
     return byProject;
   }
 
+  /**
+   * Each registered rival's mention rate (M-16, P2 and P3 — the same
+   * questions our headline rate M-01S is over) per full measurement, oldest
+   * first, the last 26: the grey lines beside ours (G15). A rival no round
+   * measured has no series.
+   * @param {string} geoId @returns {Promise<Array<{ name: string, points: Array<{ date: string, value: number | null, n: number | null, k: number | null }> }>>}
+   */
+  async #rivalSeries(geoId) {
+    const rows = (await this.store.query(`SELECT * FROM (
+        SELECT DISTINCT ON (m.round_id, m.rival) m.*, r.sample_date
+        FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
+        WHERE m.geo_project_id = $1 AND m.scope = 'project' AND m.metric_id = $2 AND m.rival IS NOT NULL AND m.pool IS NULL
+          AND m.variant IS NULL AND m.group_id IS NULL AND m.arm IS NULL
+        ORDER BY m.round_id, m.rival, m.computed_at DESC
+      ) latest ORDER BY computed_at`, [geoId, GEO_RIVAL_METRIC_ID, [...GEO_HEADLINE_ROUND_KINDS]])).rows;
+    /** @type {Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null }>>} */
+    const byRival = new Map();
+    for (const row of rows) {
+      const points = byRival.get(String(row.rival)) ?? [];
+      points.push({ date: rowDay(row, this.timeZone), value: row.status === "ok" ? num(row.value) : null, n: num(row.denominator), k: num(row.numerator) });
+      byRival.set(String(row.rival), points);
+    }
+    return [...byRival].map(([name, points]) => ({ name, points: points.slice(-TREND_POINTS) }));
+  }
+
   /** The chosen tier's target for a metric, project-wide first. @param {Awaited<ReturnType<import("./geoStore.mjs").GeoStore["latestTargets"]>>} targets @param {string} tier @param {string} metricId */
   #target(targets, tier, metricId) {
     if (!targets) return null;
@@ -426,16 +449,16 @@ export class GeoService {
   /**
    * 讲错我方 still open and safety stops, per project, with the one sentence
    * the home row shows in red: the most severe open error, in the engine's name.
-   * @param {string[]} geoIds @returns {Promise<Map<string, { wrongOurs: number, safety: number, text: string | null }>>}
+   * @param {string[]} geoIds @returns {Promise<Map<string, { wrongOurs: number, safety: number, text: string | null, severity?: string | null }>>}
    */
   async #alerts(geoIds) {
-    /** @type {Map<string, { wrongOurs: number, safety: number, text: string | null }>} */
+    /** @type {Map<string, { wrongOurs: number, safety: number, text: string | null, severity?: string | null }>} */
     const alerts = new Map();
     if (!geoIds.length) return alerts;
     const [errors, worst, safety] = await Promise.all([
       this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.errors
         WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed' GROUP BY geo_project_id`, [geoIds]),
-      this.store.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, engine, statement FROM evimed_geo.errors
+      this.store.query(`SELECT DISTINCT ON (geo_project_id) geo_project_id, engine, statement, severity FROM evimed_geo.errors
         WHERE geo_project_id = ANY($1::text[]) AND status <> 'closed'
         ORDER BY geo_project_id, severity DESC NULLS LAST, updated_at DESC`, [geoIds]),
       this.store.query(`SELECT geo_project_id, count(*)::integer AS n FROM evimed_geo.articles
@@ -446,8 +469,12 @@ export class GeoService {
     const stops = count(safety);
     const sentences = new Map(worst.rows.map((/** @type {any} */ row) => [row.geo_project_id,
       row.statement ? `${engineLabel(String(row.engine))}：${clip(row.statement, 60)}` : null]));
+    const severities = new Map(worst.rows.map((/** @type {any} */ row) => [row.geo_project_id, text(row.severity)]));
     for (const id of geoIds) {
-      alerts.set(id, { wrongOurs: wrong.get(id) ?? 0, safety: stops.get(id) ?? 0, text: sentences.get(id) ?? (stops.get(id) ? "有稿件的安全问题待确认" : null) });
+      // The sentence's severity travels with it: the home row sets the
+      // sentence in body text and lets the severity badge carry the red (F-G10).
+      alerts.set(id, { wrongOurs: wrong.get(id) ?? 0, safety: stops.get(id) ?? 0, text: sentences.get(id) ?? (stops.get(id) ? "有稿件的安全问题待确认" : null),
+        severity: sentences.get(id) ? severities.get(id) ?? null : null });
     }
     return alerts;
   }
@@ -528,6 +555,9 @@ export class GeoService {
       name: geoProjectName(project, names.get(project.projectId)),
       startedAt: started.get(project.id) ?? project.createdAt,
       availableEngines: geoAvailableEngines(this.config),
+      // Whether step 7 can run at all on this deployment: without a market a
+      // page never asks for a budget or says the reader owes one (G20).
+      market: { configured: geoMarketConfigured(this.config) },
       overview: {
         metrics,
         week,
@@ -619,15 +649,15 @@ export class GeoService {
     /** @type {Array<{ kind: string, text: string, tab: string, ref: Record<string, string> | null, at: string | null }>} */
     const items = [];
     for (const row of errors.rows) {
-      items.push({ kind: "wrong_ours", text: `${engineLabel(String(row.engine))}讲错：${clip(row.statement, 60)}`, tab: "diagnosis",
+      items.push({ kind: "wrong_ours", text: `${spacedLabel(String(row.engine))}讲错：${clip(row.statement, 60)}`, tab: "diagnosis",
         ref: { errorId: String(row.id), ...(row.last_snapshot_id ? { snapshotId: String(row.last_snapshot_id) } : {}) }, at: iso(row.created_at) });
     }
     for (const row of stops.rows) {
-      items.push({ kind: "safety", text: `「${clip(row.title ?? "稿件", 30)}」有安全问题待确认`, tab: "content", ref: { articleId: String(row.id) },
+      items.push({ kind: "safety", text: `“${clip(row.title ?? "稿件", 30)}”有安全问题待确认`, tab: "content", ref: { articleId: String(row.id) },
         at: iso(row.updated_at) });
     }
     for (const row of changed.rows) {
-      items.push({ kind: "safety", text: `「${clip(row.title ?? "稿件", 30)}」发布后被媒体改动`, tab: "distribution", ref: { orderId: String(row.id) },
+      items.push({ kind: "safety", text: `“${clip(row.title ?? "稿件", 30)}”发布后被媒体改动`, tab: "distribution", ref: { orderId: String(row.id) },
         at: iso(row.at) });
     }
     for (const row of rounds.rows) {
@@ -796,6 +826,8 @@ export class GeoService {
         FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id
         WHERE s.round_id = $1 AND s.geo_project_id = $2 AND s.status IN ('valid', 'refusal')
           AND f.failure_mode IN ('omitted', 'wrong_ours', 'wrong_competitor')
+          -- Not being named on a risk question is the aim, not the issue (G19).
+          AND NOT (q.pool = 'P4' AND f.failure_mode = 'omitted')
         GROUP BY q.pool, f.failure_mode ORDER BY q.pool, n DESC, f.failure_mode`, [round.id, project.id])).rows;
       for (const pool of GEO_POOLS) {
         pools.set(pool, {
@@ -824,10 +856,12 @@ export class GeoService {
       mainIssue: failureModeWord(pools.get(pool)?.issue ?? null),
     }));
     await this.#attachSnapshotIds(project.id, traced);
+    const coverage = round ? { ...await this.#roundCoverage(round, engines), linklessEngines: await this.#linklessEngines(String(round.id)) }
+      : { measuredEngines: [], absent: [], linklessEngines: [] };
     return {
       round: round ? {
         id: String(round.id), kind: String(round.kind), sampleDate: round.sample_date ? rowDay(round, this.timeZone) : null,
-        surface: round.surface ?? null, planned: Number(round.planned), done: Number(round.done), engines,
+        surface: round.surface ?? null, planned: Number(round.planned), done: Number(round.done), engines, ...coverage,
       } : null,
       rounds: rounds.map((/** @type {any} */ row) => ({ id: String(row.id), kind: String(row.kind), sampleDate: row.sample_date ? rowDay(row, this.timeZone) : null })),
       byEngine,
@@ -837,6 +871,57 @@ export class GeoService {
       noise: noiseRow ? { band: num(noiseRow.value), measuredAt: iso(noiseRow.computed_at) } : null,
       more,
     };
+  }
+
+  /**
+   * Which of a round's engines answered at all, and why each other one did
+   * not (G13, 2026-09-26: the page said 「按 5 个引擎」 of a baseline 豆包
+   * never answered, and 豆包's row said only 「未测」). The reason is a code
+   * from the platform's own records, never the probe host's prose:
+   * `login` — its answers were login pages (the sanity check's
+   * `session_invalid`); `paused` — the breaker skipped its questions;
+   * `unavailable` — this deployment has no channel for it; `no_answer` —
+   * asked, and nothing came back that counts.
+   * @param {any} round @param {string[]} engines
+   */
+  async #roundCoverage(round, engines) {
+    const [answered, skipped, suspect] = await Promise.all([
+      this.store.query(`SELECT engine, count(*)::integer AS n FROM evimed_geo.snapshots WHERE round_id = $1 AND status IN ('valid', 'refusal')
+        GROUP BY engine`, [round.id]),
+      this.store.query(`SELECT engine, error_code, count(*)::integer AS n FROM evimed_geo.probe_jobs WHERE round_id = $1 AND status = 'skipped'
+        GROUP BY engine, error_code`, [round.id]),
+      this.store.query(`SELECT DISTINCT engine FROM evimed_geo.snapshots WHERE round_id = $1 AND status = 'suspect'
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(warnings) = 'array' THEN warnings ELSE '[]'::jsonb END) AS w(value)
+          WHERE starts_with(w.value, 'sanity:session_invalid'))`, [round.id]),
+    ]);
+    const counts = new Map(answered.rows.map((/** @type {any} */ row) => [String(row.engine), Number(row.n)]));
+    const login = new Set(suspect.rows.map((/** @type {any} */ row) => String(row.engine)));
+    const codes = new Map();
+    for (const row of skipped.rows) codes.set(String(row.engine), [...(codes.get(String(row.engine)) ?? []), String(row.error_code ?? "")]);
+    const measuredEngines = engines.filter((engine) => (counts.get(engine) ?? 0) > 0);
+    const absent = engines.filter((engine) => !measuredEngines.includes(engine)).map((engine) => ({
+      engine,
+      reason: login.has(engine) ? "login"
+        : (codes.get(engine) ?? []).includes("engine_unavailable") ? "unavailable"
+          : (codes.get(engine) ?? []).includes("engine_paused") ? "paused" : "no_answer",
+    }));
+    return { measuredEngines, absent };
+  }
+
+  /**
+   * The engines of a round whose retrieval came back as titles without a
+   * single link: whether they cited us cannot be told (G8, 千问 on 2026-09-25,
+   * 1,021 of 1,021). The page says 「引用不可测」 for them rather than leaving
+   * them out of the sources or showing a rate of zero.
+   * @param {string} roundId @returns {Promise<string[]>}
+   */
+  async #linklessEngines(roundId) {
+    const rows = (await this.store.query(`SELECT s.engine, count(*)::integer AS total,
+        count(*) FILTER (WHERE coalesce(c.value ->> 'url', '') <> '' OR coalesce(c.value ->> 'domain', '') <> '')::integer AS linked
+      FROM evimed_geo.snapshots s
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END) AS c(value)
+      WHERE s.round_id = $1 AND s.status IN ('valid', 'refusal') GROUP BY s.engine`, [roundId])).rows;
+    return rows.filter((/** @type {any} */ row) => Number(row.total) > 0 && Number(row.linked) === 0).map((/** @type {any} */ row) => String(row.engine)).sort();
   }
 
   /**
@@ -910,8 +995,14 @@ export class GeoService {
       this.store.listSources(project.id),
       this.store.latestStrategy(project.id),
       this.store.latestTargets(project.id),
-      this.store.query(`SELECT DISTINCT ON (m.engine) * FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2
-        AND m.pool IS NULL AND ${PLAIN_ROW} ORDER BY m.engine, m.computed_at DESC`, [project.id, GEO_VIEW_METRIC_IDS.retrieval]),
+      // Each engine's rate from the latest full measurement it was measured
+      // in (G11): a sentinel's ten questions on two engines read 「样本不足」
+      // for one and 「未测」 for the other, against the baseline's 99 % and 85 %.
+      this.store.query(`SELECT DISTINCT ON (m.engine) m.* FROM evimed_geo.metrics m
+          JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
+        WHERE m.geo_project_id = $1 AND m.scope = 'engine' AND m.metric_id = $2 AND m.pool IS NULL AND m.arm IS NULL AND ${PLAIN_ROW}
+          AND m.status <> 'absent'
+        ORDER BY m.engine, m.computed_at DESC`, [project.id, GEO_VIEW_METRIC_IDS.retrieval, [...GEO_HEADLINE_ROUND_KINDS]]),
     ]);
     const retrievalByEngine = new Map(retrieval.rows.map((/** @type {any} */ row) => [String(row.engine), row]));
     const stated = Array.isArray(strategy?.expectations) ? strategy.expectations.filter((/** @type {any} */ entry) => entry && typeof entry === "object") : [];
@@ -934,7 +1025,11 @@ export class GeoService {
       };
     });
     await this.#attachSnapshotIds(project.id, expectations.map((entry) => ({ cell: entry.retrieval, row: retrievalByEngine.get(entry.engine) })));
+    const latestFull = (await this.store.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[])
+      AND status IN ('done', 'partial') ORDER BY finished_at DESC NULLS LAST, created_at DESC LIMIT 1`, [project.id, [...GEO_HEADLINE_ROUND_KINDS]])).rows[0];
+    const linklessEngines = latestFull ? await this.#linklessEngines(String(latestFull.id)) : [];
     return {
+      linklessEngines,
       sources: sources.map((source) => ({
         id: source.id, domain: source.domain, name: source.name, kind: source.kind, layer: source.layer,
         conditions: { icp: source.icpMatches, newsIndexed: source.newsIndexed, medical: source.medicalVertical },
@@ -1061,7 +1156,7 @@ export class GeoService {
   async monitoringOf(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
     const since = new Date(this.now().getTime() - WEEK_MS).toISOString();
-    const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline] = await Promise.all([
+    const [series, arms, byEngine, net, noise, cited, newErrors, queued, baseline, rivals] = await Promise.all([
       this.#series([project.id], metricIds),
       this.#series([project.id], [GEO_ARM_METRIC_ID], "arm", "arm"),
       this.#series([project.id], [GEO_VIEW_METRIC_IDS.mention], "engine", "engine"),
@@ -1072,18 +1167,30 @@ export class GeoService {
       this.store.citedArticles(project.id),
       this.store.query(`SELECT * FROM evimed_geo.errors WHERE geo_project_id = $1 AND created_at >= $2
         ORDER BY severity DESC NULLS LAST, created_at DESC LIMIT 50`, [project.id, since]),
-      this.store.query(`SELECT kind, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status = 'queued'
-        ORDER BY created_at LIMIT 1`, [project.id]),
-      this.store.query(`SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'baseline' AND status IN ('done', 'partial') LIMIT 1`, [project.id]),
+      // The next measurement is a full one (G6): a confirmation, a sentinel
+      // or a noise round measures a sliver and is never 「下次复测」.
+      this.store.query(`SELECT kind, created_at FROM evimed_geo.rounds WHERE geo_project_id = $1 AND status IN ('queued', 'running')
+        AND kind = ANY($2::text[]) ORDER BY created_at LIMIT 1`, [project.id, [...GEO_HEADLINE_ROUND_KINDS]]),
+      this.store.query(`SELECT finished_at, (SELECT coalesce(array_agg(key), '{}') FROM evimed_geo.schedule_marks
+          WHERE geo_project_id = $1 AND starts_with(key, 'weekly:')) AS taken
+        FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'single_step') AND status IN ('done', 'partial')
+        ORDER BY finished_at LIMIT 1`, [project.id]),
+      this.#rivalSeries(project.id),
     ]);
     const projectSeries = series.get(project.id) ?? new Map();
     const armSeries = arms.get(project.id) ?? new Map();
     const engineSeries = byEngine.get(project.id) ?? new Map();
     const points = (/** @type {string} */ key) => (armSeries.get(`${GEO_ARM_METRIC_ID}\u0000${key}`) ?? []).map(({ date, value }) => ({ date, value }));
     const netRow = net.rows[0];
+    // Otherwise the weekly re-measure the schedule will run, by its own skip
+    // rules, and only while the program monitors at all.
+    const measured = baseline.rows[0];
     const next = queued.rows[0]
       ? { date: dayIn(new Date(queued.rows[0].created_at), this.timeZone), kind: String(queued.rows[0].kind) }
-      : baseline.rows.length ? { date: nextMonday(this.now(), this.timeZone), kind: "weekly" } : null;
+      : measured && wantedSteps(programSteps(project.steps)).want.has("monitoring")
+        ? { date: nextWeeklySlot({ now: this.now(), timeZone: this.timeZone, baselineFinishedAt: measured.finished_at,
+          taken: new Set(Array.isArray(measured.taken) ? measured.taken.map(String) : []) }).monday, kind: "weekly" }
+        : null;
     return {
       series: GEO_OVERVIEW_METRICS.map(({ key, metricId }) => ({ key, points: projectSeries.get(metricId) ?? [] })),
       arms: {
@@ -1094,6 +1201,7 @@ export class GeoService {
       byEngine: project.engines.map((engine) => ({
         engine, points: (engineSeries.get(`${GEO_VIEW_METRIC_IDS.mention}\u0000${engine}`) ?? []).map(({ date, value }) => ({ date, value })),
       })),
+      rivals,
       cited,
       newErrors: newErrors.rows.map(errorView),
       next,

@@ -160,7 +160,7 @@ import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } fro
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
 // The moving parts (packages B, C and F): measurement ticks and rounds, the
 // marketplace's ticks and hooks, the orchestrator, the worker and the notices.
-import { GeoOrchestrator } from "./geoOrchestrator.mjs";
+import { GeoOrchestrator, geoRunPrompt } from "./geoOrchestrator.mjs";
 import { GeoWorker, withGeoWorkerWarnings } from "./geoWorker.mjs";
 import { createGeoNotifier } from "./geoNotify.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
@@ -3142,7 +3142,8 @@ export function createWebApiApp(overrides = {}) {
         });
         return runtimeManager.dispatchPrompt(project, session.id, {
           // The brief first: the kernel names a session after its first message.
-          text: marker ? `${promptText}\n\n${marker}` : promptText,
+          // The GEO mark always, open runtime or not: a brief is never the researcher's words.
+          text: marker ? `${geoRunPrompt(promptText, dispatchId)}\n\n${marker}` : geoRunPrompt(promptText, dispatchId),
           system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
