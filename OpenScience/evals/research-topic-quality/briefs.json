@@ -4,7 +4,7 @@
   "briefs": [
     {
       "id": "ordinary-constrained-cohort",
-      "request": {
+      "inputs": {
         "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
         "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
         "population": "Adults receiving maintenance hemodialysis",
@@ -30,7 +30,7 @@
     },
     {
       "id": "sparse-evidence",
-      "request": {
+      "inputs": {
         "researchDirection": "Assess feasible research questions about care transitions for adults with a rare inherited metabolic disorder.",
         "availableData": "Retrospective case records; uncertain external comparator access.",
         "population": "Adults with the selected rare disorder",
@@ -62,7 +62,7 @@
     },
     {
       "id": "already-answered-novelty-trap",
-      "request": {
+      "inputs": {
         "researchDirection": "Assess the proposed claim that home blood-pressure telemonitoring improves control compared with usual care as a first-ever research topic.",
         "availableData": "Routine clinic records; no randomization infrastructure.",
         "population": "Adults with hypertension",
