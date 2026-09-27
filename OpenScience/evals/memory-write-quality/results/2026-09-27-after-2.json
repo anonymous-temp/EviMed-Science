@@ -1,0 +1,209 @@
+{
+  "ranAt": "2026-09-27T01:47:44.362Z",
+  "offline": false,
+  "model": "deepseek-flash",
+  "cases": [
+    {
+      "id": "2026-09-26-default-project-follow-up",
+      "class": "default-project-follow-up",
+      "verdict": "passed",
+      "verdicts": [
+        {
+          "check": "no project_fact/decision/follow_up record in default",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "written": []
+    },
+    {
+      "id": "2026-09-26-hollow-summary",
+      "class": "hollow-summary",
+      "verdict": "needs-judgement",
+      "verdicts": [],
+      "written": [
+        {
+          "kind": "project_fact",
+          "scope": "project",
+          "key": "project.trial.glory1",
+          "summary": "GLORY-1 是玛仕度肽在中国成人超重或肥胖人群中的 3 期试验，每周一次皮下注射，分两个剂量组。",
+          "value": "GLORY-1 是玛仕度肽在中国成人超重或肥胖人群中的 3 期试验，注册号 NCT-PLACEHOLDER-1，每周一次皮下注射，分两个剂量组。"
+        },
+        {
+          "kind": "project_fact",
+          "scope": "project",
+          "key": "project.trial.glory1.population",
+          "summary": "GLORY-1 的人群为 BMI≥28，或 BMI≥24 且伴至少一种合并症的成人。",
+          "value": "GLORY-1 纳入标准为 BMI≥28，或 BMI≥24 且伴至少一种合并症的成人。"
+        },
+        {
+          "kind": "follow_up",
+          "scope": "project",
+          "key": "project.glory1.writeup",
+          "summary": "GLORY-1 的关键信息整理是为后续写文章做准备。",
+          "value": "GLORY-1 的关键信息整理用于后续写文章。"
+        }
+      ],
+      "judge": "Does each written summary state a fact a reader can use without opening the row? A list of field names (「注册号、剂量、人群与文献标识」) is a no."
+    },
+    {
+      "id": "2026-09-26-internal-id",
+      "class": "internal-id",
+      "verdict": "passed",
+      "verdicts": [
+        {
+          "check": "no record carries ge_c4de7529",
+          "passed": true,
+          "detail": ""
+        }
+      ],
+      "written": []
+    },
+    {
+      "id": "2026-09-26-near-duplicates",
+      "class": "near-duplicates",
+      "verdict": "passed",
+      "verdicts": [
+        {
+          "check": "at most 1 record(s)",
+          "passed": true,
+          "detail": "project.geo.label_verification_basis"
+        }
+      ],
+      "written": [
+        {
+          "kind": "follow_up",
+          "scope": "project",
+          "key": "project.geo.label_verification_basis",
+          "summary": "说明书核对目前依据转载页，待拿到官方原件后替换引用并升版文章。",
+          "value": "说明书核对目前依据的是转载页，尚未拿到官方原件；拿到官方原件后需替换引用并把文章升版，引用来源改为官方原件。"
+        }
+      ]
+    },
+    {
+      "id": "2026-09-26-one-off-bookkeeping",
+      "class": "one-off-bookkeeping",
+      "verdict": "needs-judgement",
+      "verdicts": [],
+      "written": [],
+      "judge": "Is any written record a fact about one run (its date, its snapshot, a status value, a tool's limits) rather than about the research? Any such record is a failure."
+    },
+    {
+      "id": "2026-09-26-platform-brief-as-user-words",
+      "class": "platform-brief-as-user-words",
+      "verdict": "passed",
+      "verdicts": [
+        {
+          "check": "a brief tagged evimed-brief is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-capsule is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-capsule-trial is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-agenda is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-budget is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-run is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-skill is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-orchestration is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-method is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-delegated is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-memory is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-knowledge is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-specialist is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-autopilot-episode is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-autopilot-verification is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-source-understanding is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-repair is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-budget-scope is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-claim is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-claim-source is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-claim-effect is not a source",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "a brief tagged evimed-context is not a source",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    }
+  ]
+}

@@ -156,6 +156,9 @@ test("the extraction instructions say what the catch-all project is, so the mode
   await intelligence.recordRun(project("default"), run(), [message("u1", "房颤抗凝该怎么选？")]);
   assert.match(instructions, /"default" is the catch-all/);
   assert.match(instructions, /no project_fact, decision or follow_up there/);
+  // The two judgement classes evals/memory-write-quality replays (M-9).
+  assert.match(instructions, /summary is the one sentence the researcher reads/);
+  assert.match(instructions, /Store nothing that is true of this run only/);
 });
 
 test("one conversation leaves one 「做过的研究」 summary, keyed by the conversation", async () => {

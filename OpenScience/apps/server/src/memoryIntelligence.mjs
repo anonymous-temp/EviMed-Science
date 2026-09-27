@@ -1303,6 +1303,12 @@ export class MemoryIntelligence {
                 // be refused (the commonest rejection already).
                 "evidenceQuote must be a short exact substring of the referenced source, copied character for character in the source's own language, never translated. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
                 "Store durable facts and compact analytical essentials: dataset or artifact reference, population/filter, parameter, unit, method, result, decision, and unresolved follow-up.",
+                // The two write-quality classes only language can judge
+                // (2026-09-26 audit, M-9; evals/memory-write-quality replays
+                // both): a summary that names fields instead of stating them,
+                // and what is true of one run only.
+                "summary is the one sentence the researcher reads on their memory page: it states the fact itself (「GLORY-1 为 3 期试验，每周一次皮下注射」), never a list of what the value contains (「GLORY-1 的注册号、剂量与人群」).",
+                "Store nothing that is true of this run only: the date it searched, a snapshot it refreshed, what a status field read, what a tool could or could not reach, or that something was compiled for later use. Those describe the work in progress, not the research, and are stale by the next conversation.",
                 "Do not store greetings, transient requests, chain-of-thought, secrets, full documents, or unsupported conclusions.",
                 // Production, 2026-09-19: 30 of the acceptance account's 54
                 // records were about the platform — gates, quotes, artifacts,

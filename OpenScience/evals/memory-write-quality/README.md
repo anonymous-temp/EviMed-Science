@@ -28,3 +28,20 @@ A `needs-judgement` verdict prints what was written beside the case's `judge`
 question; it is read by a person or a model judge, never matched by a pattern.
 `apps/server/test/memoryWriteQualityCorpus.test.mjs` holds the corpus shape and
 the code-decidable checks offline.
+
+## 2026-09-27, deepseek-flash — the two judgement classes, before and after one instruction
+
+Replays of the reconstructed conversations through the real extractor; the
+records written, read by hand. "Before" is `main@1cf308956`'s instructions,
+"after" adds two sentences (a summary states the fact; nothing true of one run
+only). Raw outputs in `results/`.
+
+| Replay | before (2 samples) | after (3 samples) |
+|---|---|---|
+| `one-off-bookkeeping` — records written from 「本轮检索日期…」「快照已更新」「状态均为 clear」「工具能力缺口」 | 4, 1 | 0, 0, 0 |
+| `hollow-summary` — a summary that lists fields | 0, 0 | 0, 0, 0 |
+| `hollow-summary` — 「…整理，供后续写文章使用」 kept as a follow-up | 1, 1 | 0, 1, 1 |
+
+The decided classes passed in every sample. The last row is still open: the
+reason a conversation compiled something is recorded as a to-do in most
+samples.

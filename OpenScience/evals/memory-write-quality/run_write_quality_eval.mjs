@@ -152,6 +152,8 @@ async function main() {
   const { conversationMemorySources, MemoryIntelligence } = await import(pathToFileURL(path.join(serverSrc, "memoryIntelligence.mjs")).href);
   const { PLATFORM_CONTEXT_TAGS } = await import(pathToFileURL(path.join(repoRoot, "packages/domain/index.mjs")).href);
   const results = [];
+  /** The model the live replay ran on, so a result names what was measured. */
+  let model = null;
   for (const item of cases) {
     const verdicts = briefVerdicts(item, { conversationMemorySources, tags: PLATFORM_CONTEXT_TAGS });
     /** @type {any[] | null} */
@@ -160,6 +162,7 @@ async function main() {
       const { loadConfig } = await import(pathToFileURL(path.join(serverSrc, "config.mjs")).href);
       const config = loadConfig({ memoryExtractionEnabled: true });
       if (!config.deepseekApiKey) throw new Error("no DeepSeek key: set OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE, or run --offline");
+      model = config.memoryExtractionModel || config.deepseekModel || null;
       const store = new ReplayStore(item.replay.existingKeys ?? []);
       const before = new Set(store.records.keys());
       await new MemoryIntelligence(config, store).recordRun({ id: item.replay.projectId, userId: "eval-write-quality" },
@@ -175,7 +178,7 @@ async function main() {
       verdicts, ...(written ? { written } : {}), ...(item.judge ? { judge: item.judge } : {}),
     });
   }
-  const report = { ranAt: new Date().toISOString(), offline, cases: results };
+  const report = { ranAt: new Date().toISOString(), offline, model, cases: results };
   const text = `${JSON.stringify(report, null, 2)}\n`;
   if (out) {
     await mkdir(path.dirname(path.resolve(out)), { recursive: true });
