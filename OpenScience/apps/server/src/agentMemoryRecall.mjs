@@ -13,13 +13,12 @@
  * integrator is handed and what one of our runs would mount cannot come from
  * two different rules.
  *
- * Two things differ from the mount, on purpose:
+ * The budget is spent in the mount's order, which is the build spec's 「你本次
+ * 明说的 > 你自己的 > 对方的 > 平台默认」: the person's own capsule methods, then
+ * the methods learnt from their work, then what a received pack brings.
  *
- *  - **The person's own methods come first.** The build spec's order is 「你本次
- *    明说的 > 你自己的 > 对方的 > 平台默认」; the account's learned methods take
- *    the budget first and a capsule's fill what is left. (The runtime mount
- *    still spends it capsules-first; audit M §1.4 has that as a defect of its
- *    own.)
+ * One thing differs from the mount, on purpose:
+ *
  *  - **`capsuleIds` names the capsules.** 同病异治对照 asks one school at a
  *    time; a recall that could only read the capsules in force could never put
  *    two schools side by side. At most eight, as in force. A subject may name
@@ -122,10 +121,14 @@ async function ownMethods(learning, userId, projectId, budget) {
  * @param {any} capsules @param {string} userId @param {string | null} projectId
  * @param {{ capsuleId: string, mode: string }[] | null} selection null: the capsules in force
  * @param {Map<string, string>} titles
+ * @param {boolean} [borrowed] the capsules are not the person's own (an institution's shelf)
  */
-async function capsuleMethods(capsules, userId, projectId, selection, titles) {
+async function capsuleMethods(capsules, userId, projectId, selection, titles, borrowed = false) {
   const reading = selection
-    ? { active: async () => ({ items: selection }), entries: (/** @type {any[]} */ ...args) => capsules.entries(...args) }
+    // `get` lets the selector tell a received pack from the person's own and
+    // rank it after them, as the mount does.
+    ? { active: async () => ({ items: selection }), entries: (/** @type {any[]} */ ...args) => capsules.entries(...args),
+      get: (/** @type {any[]} */ ...args) => capsules.get(...args) }
     : capsules;
   const selected = await selectCapsuleMethods(reading, { userId, projectId: /** @type {any} */ (projectId) });
   return selected.map((method) => ({
@@ -139,6 +142,8 @@ async function capsuleMethods(capsules, userId, projectId, selection, titles) {
     digest: `sha256:${sha256(method.content)}`,
     bytes: method.bytes,
     since: null,
+    // A received pack's, which the budget spends after the person's own.
+    received: borrowed || method.received === true,
     contextOnly: true,
   }));
 }
@@ -207,26 +212,28 @@ export async function recallForAgent({ capsules, memorySubstrate = null, learnin
       maxCount: MAX_MOUNTED_LEARNED_METHODS, maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES,
     });
     /** @type {any[]} */
-    const borrowed = [];
+    const fromCapsules = [];
     if (methodMode !== "own") {
       if (named) {
         for (const ownerId of [...new Set(named.map((capsule) => capsule.ownerId))]) {
-          borrowed.push(...await capsuleMethods(capsules, ownerId, ownerId === user?.id ? input.projectId ?? null : null,
-            named.filter((capsule) => capsule.ownerId === ownerId).map((capsule) => ({ capsuleId: capsule.id, mode: "named" })), titles));
+          fromCapsules.push(...await capsuleMethods(capsules, ownerId, ownerId === user?.id ? input.projectId ?? null : null,
+            named.filter((capsule) => capsule.ownerId === ownerId).map((capsule) => ({ capsuleId: capsule.id, mode: "named" })), titles, ownerId !== user?.id));
         }
       } else if (capsules && user) {
-        borrowed.push(...await capsuleMethods(capsules, user.id, input.projectId ?? null, null, titles));
+        fromCapsules.push(...await capsuleMethods(capsules, user.id, input.projectId ?? null, null, titles));
       }
     }
-    // One budget, the person's own first.
+    // One budget, in the mount's order: the person's own capsule methods,
+    // their learned methods, then a received pack's.
+    const ordered = [...fromCapsules.filter((method) => !method.received), ...own, ...fromCapsules.filter((method) => method.received)];
     let bytes = 0;
-    for (const method of [...own, ...borrowed]) {
+    for (const method of ordered) {
       if (methods.length >= MAX_MOUNTED_CAPSULE_METHODS) break;
       if (methods.length > 0 && bytes + method.bytes > MAX_MOUNTED_CAPSULE_METHOD_BYTES) continue;
       bytes += method.bytes;
       methods.push(method);
     }
-    methods = methods.map(({ bytes: _bytes, ...method }) => method);
+    methods = methods.map(({ bytes: _bytes, received: _received, ...method }) => method);
   }
 
   return {

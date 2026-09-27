@@ -111,7 +111,9 @@ test("a habit is stopped, and taking the stop back restores the version that was
   const restored = await methodAction(services, doctor, created.id, "restore", { expectedRevision: change.undo.expectedRevision });
   assert.equal(restored.payload.status, "approved");
   const detail = await methodDetail(services, doctor, created.id);
-  assert.deepEqual(detail.versions.map((version) => version.status), ["approved", "retired", "approved"]);
+  assert.equal(detail.status, "approved");
+  assert.deepEqual(detail.versions.map((version) => [version.version, version.current, version.wasTrue]), [[1, true, false]],
+    "a stop and its undo are not versions: the method has held one body");
 });
 
 test("a note an outside agent proposed waits in the same list, and is confirmed there", options, async () => {

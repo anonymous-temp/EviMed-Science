@@ -30,6 +30,7 @@
 
 import { cleanMethodDisplay } from "@evimed/domain";
 
+import { bodyVersionOf, effectiveStatusReason, methodStepsOf } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** How long a learned method wears 「新」 (build spec §8.4). */
@@ -145,7 +146,11 @@ function habitRow(document, nowMs, basis) {
     title: display?.title ?? String(payload.frontmatter?.name ?? document.id),
     summary: display?.summary ?? String(payload.frontmatter?.description ?? ""),
     status: payload.status ?? "candidate",
-    statusReason: payload.statusReason ?? null,
+    // A stopped habit keeps the reason it was stopped with; any other reads
+    // its standing from the record (`effectiveStatusReason`).
+    statusReason: payload.status === "retired" ? payload.statusReason ?? null : effectiveStatusReason(payload),
+    // Which body this is (「第 N 版」), never a count of writes.
+    version: bodyVersionOf(payload),
     since,
     isNew: payload.status === "approved" && Number.isFinite(instantMs(since)) && nowMs - instantMs(since) <= BOARD_NEW_DAYS * DAY_MS,
     source,
@@ -319,14 +324,19 @@ export async function recordAction({ researchMemory, feedbackEvents = null }, us
 }
 
 /**
- * One act on one learned method: `retire` (停用), `restore` (take the
- * retirement back: the latest effective revision, saved forward) or `rollback`
- * to a named revision (回到上一版).
+ * One act on one learned method: `retire` (停用), `restore` (take the stop
+ * back) or `rollback` (回到上一版).
  *
- * @param {{ learning: any, documents: any }} services
+ * `LearningService.rollback` decides what 「上一版」 means from the record — for
+ * a stopped method the last state that was in use, body included; for one in
+ * use the previous body, never a counter write — so `restore` is that rollback
+ * from where the method stands now, and `rollback` passes the number the page
+ * read and lets the service resolve it.
+ *
+ * @param {{ learning: any }} services
  * @param {{ id: string }} user @param {string} methodId @param {string} action @param {any} body
  */
-export async function methodAction({ learning, documents }, user, methodId, action, body) {
+export async function methodAction({ learning }, user, methodId, action, body) {
   if (!learning) throw new HttpError(503, "product_state_unavailable", "Learned methods are unavailable.");
   if (action === "retire") {
     const input = bodyOf(body, ["expectedRevision"]);
@@ -336,10 +346,7 @@ export async function methodAction({ learning, documents }, user, methodId, acti
     const input = bodyOf(body, ["expectedRevision"]);
     const current = await learning.getMethod(user.id, methodId);
     if (current.payload?.status !== "retired") throw new HttpError(409, "method_not_retired", "Only a retired method can be restored.");
-    const history = await documents.history(user.id, "method", methodId, { limit: 100 });
-    const target = (history.items ?? history ?? []).find((/** @type {any} */ entry) => entry.revision < current.revision && entry.payload?.status === "approved");
-    if (!target) throw new HttpError(409, "method_never_effective", "This method was never in effect; there is nothing to restore.");
-    return learning.rollback(user.id, methodId, { expectedRevision: positive(input.expectedRevision, "expectedRevision"), targetRevision: target.revision });
+    return learning.rollback(user.id, methodId, { expectedRevision: positive(input.expectedRevision, "expectedRevision"), targetRevision: current.revision });
   }
   if (action === "rollback") {
     const input = bodyOf(body, ["expectedRevision", "targetRevision"]);
@@ -351,35 +358,23 @@ export async function methodAction({ learning, documents }, user, methodId, acti
 }
 
 /**
- * One learned method with its history: each revision whose text or line
- * differs from the one before it, so a counter write is not a version — and
- * the earlier ones are 「曾经如此」.
- * @param {{ learning: any, documents: any }} services @param {{ id: string }} user @param {string} methodId
+ * One learned method with its versions: the bodies it has held, newest first
+ * (`LearningService.history` — a counter write or a status change of the same
+ * text is not a version), each earlier one marked `wasTrue` (「曾经如此」).
+ * @param {{ learning: any }} services @param {{ id: string }} user @param {string} methodId
  */
-export async function methodDetail({ learning, documents }, user, methodId) {
+export async function methodDetail({ learning }, user, methodId) {
   if (!learning) throw new HttpError(503, "product_state_unavailable", "Learned methods are unavailable.");
   const document = await learning.getMethod(user.id, methodId);
-  const history = await documents.history(user.id, "method", methodId, { limit: 100 });
-  /** @type {any[]} */
-  const versions = [];
-  for (const entry of [...(history.items ?? history ?? [])].sort((left, right) => left.revision - right.revision)) {
-    const payload = entry.payload ?? {};
-    const title = cleanMethodDisplay(payload.display)?.title ?? String(payload.frontmatter?.name ?? "");
-    const last = versions.at(-1);
-    if (last && last.digest === payload.contentDigest && last.title === title && last.status === payload.status) continue;
-    versions.push({ revision: entry.revision, digest: payload.contentDigest ?? "", title, status: payload.status ?? "candidate",
-      summary: cleanMethodDisplay(payload.display)?.summary ?? null, at: payload.statusChangedAt ?? payload.updatedAt ?? entry.recordedAt ?? null });
-  }
-  const current = versions.at(-1);
+  const versions = await learning.history(user.id, methodId);
   return {
     id: document.id,
     revision: document.revision,
+    version: bodyVersionOf(document.payload),
     status: document.payload?.status ?? "candidate",
     body: String(document.payload?.body ?? ""),
-    versions: versions.reverse().map((version) => ({
-      ...version,
-      wasTrue: Boolean(current) && version !== current && version.digest !== current.digest,
-    })),
+    steps: methodStepsOf(document.payload),
+    versions: versions.map((/** @type {any} */ version) => ({ ...version, wasTrue: version.current !== true })),
   };
 }
 

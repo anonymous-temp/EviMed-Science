@@ -156,29 +156,31 @@ test("confirming makes a proposal the person's own, forgetting archives it, and 
     (error) => error.code === "agent_memory_payload_invalid", "no field says whose it is");
 });
 
-test("a stopped habit is restored to the last version in force, and a history counts texts, not counter writes", async () => {
-  const history = [
-    { revision: 5, payload: { status: "retired", contentDigest: "d2", display: { title: "B", summary: "b" } } },
-    { revision: 4, payload: { status: "approved", contentDigest: "d2", display: { title: "B", summary: "b" }, learning: { counts: { loaded: 2 } } } },
-    { revision: 3, payload: { status: "approved", contentDigest: "d2", display: { title: "B", summary: "b" }, learning: { counts: { loaded: 1 } } } },
-    { revision: 2, payload: { status: "approved", contentDigest: "d1", display: { title: "A", summary: "a" } } },
-    { revision: 1, payload: { status: "candidate", contentDigest: "d1", display: { title: "A", summary: "a" } } },
-  ];
+test("taking a stop back is the ledger's rollback from where the method stands, and its versions are its bodies", async () => {
   const calls = [];
+  let status = "retired";
   const learning = {
-    async getMethod(_userId, id) { return { id, revision: 5, payload: { status: "retired", body: "## Purpose" } }; },
+    async getMethod(_userId, id) { return { id, revision: 5, payload: { status, body: "## Purpose", bodyVersion: 2 } }; },
     async rollback(userId, id, input) { calls.push(["rollback", id, input]); return { id, revision: 6, payload: { status: "approved" } }; },
     async retire(userId, id, input) { calls.push(["retire", id, input]); return { id, revision: 6, payload: { status: "retired" } }; },
+    async history() {
+      return [
+        { version: 2, revision: 3, contentDigest: "d2", at: "2026-09-25T00:00:00.000Z", title: "B", current: true },
+        { version: 1, revision: 1, contentDigest: "d1", at: "2026-09-20T00:00:00.000Z", title: "A", current: false },
+      ];
+    },
   };
-  const documents = { async history() { return history; } };
-  await methodAction({ learning, documents }, { id: "u1" }, "m", "restore", { expectedRevision: 5 });
-  assert.deepEqual(calls[0], ["rollback", "m", { expectedRevision: 5, targetRevision: 4 }], "the latest revision in force, not revision − 1 blindly");
-  await methodAction({ learning, documents }, { id: "u1" }, "m", "retire", { expectedRevision: 5 });
+  await methodAction({ learning }, { id: "u1" }, "m", "restore", { expectedRevision: 5 });
+  assert.deepEqual(calls[0], ["rollback", "m", { expectedRevision: 5, targetRevision: 5 }],
+    "the ledger walks back past the stop to the last state in use; the dashboard does not guess a revision");
+  await methodAction({ learning }, { id: "u1" }, "m", "retire", { expectedRevision: 5 });
   assert.equal(calls[1][2].reason, "你在看板上停用了它");
-  const detail = await methodDetail({ learning, documents }, { id: "u1" }, "m");
-  assert.deepEqual(detail.versions.map((version) => [version.revision, version.title, version.status, version.wasTrue]), [
-    [5, "B", "retired", false], [3, "B", "approved", false], [2, "A", "approved", true], [1, "A", "candidate", true],
-  ], "revision 4 was a counter write and is not a version; the text before B is 曾经如此");
+  const detail = await methodDetail({ learning }, { id: "u1" }, "m");
+  assert.equal(detail.version, 2);
+  assert.deepEqual(detail.versions.map((version) => [version.version, version.title, version.wasTrue]), [[2, "B", false], [1, "A", true]],
+    "the earlier body is 曾经如此");
+  status = "approved";
+  await assert.rejects(() => methodAction({ learning }, { id: "u1" }, "m", "restore", { expectedRevision: 5 }), (error) => error.code === "method_not_retired");
 });
 
 test("a proposed note is confirmed or rejected as the capsule entry it is, and nothing else is", async () => {

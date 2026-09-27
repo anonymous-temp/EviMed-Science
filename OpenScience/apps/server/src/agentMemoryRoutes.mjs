@@ -94,7 +94,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, documents?: any, feedbackEvents?: any, observations?: any,
+ *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, feedbackEvents?: any, observations?: any,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -102,7 +102,7 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null,
-  documents = null, feedbackEvents = null, observations = null, deleteSubject = null, audit = null,
+  feedbackEvents = null, observations = null, deleteSubject = null, audit = null,
 }) {
   const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
@@ -411,14 +411,14 @@ export function createAgentMemoryRoutes({
       requireScope("memory.read");
       const user = await accountFor({ create: false });
       if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
-      sendJson(res, 200, { data: await methodDetail({ learning, documents }, user, habit.id) });
+      sendJson(res, 200, { data: await methodDetail({ learning }, user, habit.id) });
       return true;
     }
     if (habit && method === "POST" && ["retire", "restore", "rollback"].includes(habit.act)) {
       requireScope("memory.manage");
       const user = await accountFor({ create: false });
       if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
-      const changed = await methodAction({ learning, documents }, user, habit.id, habit.act, body);
+      const changed = await methodAction({ learning }, user, habit.id, habit.act, body);
       await trail(`method.${habit.act}`, user, { target: habit.id });
       sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null } });
       return true;

@@ -1654,9 +1654,8 @@ export function createWebApiApp(overrides = {}) {
     config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence, memorySubstrate,
     // The methods recall returns: the account's own learned library.
     learning: learningService,
-    // The dashboard: a method's revisions, the rejections the extractor must
-    // respect, forgetting one person, and the audit line each act leaves.
-    documents: productDocuments,
+    // The dashboard: the rejections the extractor must respect, forgetting
+    // one person, and the audit line each act leaves.
     feedbackEvents,
     deleteSubject: (ownerId, subjectAccountId) => deleteAgentSubjects(ownerId, subjectAccountId),
     // Prescription edits counted into habits, worded once through the model
