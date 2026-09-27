@@ -22,7 +22,7 @@ from core.new_analysis_engine import AnalysisEngine
 from core.new_report_generator import ReportGenerator
 from services.llm_service import llm_service
 from services.pubmed_service import PubMedSearchResult, PubMedSearchService
-from services.internal_db_service import search_internal_db
+from services.internal_db_service import search_internal_db_with_status
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ class TaskService:
 
             # Step 3: 多源检索（优先内部数据库，无结果时再生成子查询走 PubMed）
             task.current_phase = "多源并行检索"
-            evidence_records, sub_queries, pubmed = await self._multi_source_search(
+            evidence_records, sub_queries, pubmed, internal_unavailable = await self._multi_source_search(
                 task.input_text, query_structure
             )
 
@@ -172,6 +172,7 @@ class TaskService:
                 evidence_records, sub_queries, query_structure,
                 retrieved_count=retrieved_count,
                 pubmed=pubmed,
+                internal_unavailable=internal_unavailable,
             )
             logger.info(f"检索诊断: {search_diagnostics.status}, 共{search_diagnostics.retrieved_count}篇")
 
@@ -251,11 +252,13 @@ class TaskService:
         优先使用内部数据库检索，无结果或异常时降级到 PubMed。
 
         Returns:
-            (records, sub_queries, pubmed) — ``pubmed`` is the PubMedSearchResult
-            whose outcomes say which sub-queries PubMed throttled or failed
+            (records, sub_queries, pubmed, internal_unavailable) — ``pubmed`` is
+            the PubMedSearchResult whose outcomes say which sub-queries PubMed
+            throttled or failed; ``internal_unavailable`` is why the internal
+            index could not be asked, or None when it answered
         """
         logger.info(f"[检索] 优先调用内部数据库，查询词: {input_text!r}")
-        internal_records = await search_internal_db(input_text)
+        internal_records, internal_unavailable = await search_internal_db_with_status(input_text)
 
         # Internal search improves recall, while PubMed supplies authoritative
         # identifiers, publication types, and traceable metadata.  Use both;
@@ -290,7 +293,7 @@ class TaskService:
             len(internal_records), len(pubmed.records),
             len(pubmed.unfinished), len(pubmed.outcomes),
         )
-        return [*internal_records, *pubmed.records], sub_queries, pubmed
+        return [*internal_records, *pubmed.records], sub_queries, pubmed, internal_unavailable
 
     @staticmethod
     def _normalized_evidence_text(value: Any) -> str:
@@ -426,6 +429,7 @@ class TaskService:
         query_structure: Dict,
         retrieved_count: Optional[int] = None,
         pubmed: Optional[PubMedSearchResult] = None,
+        internal_unavailable: Optional[str] = None,
     ) -> SearchDiagnostics:
         """The count-based diagnosis, plus what PubMed did not answer.
 
@@ -436,6 +440,11 @@ class TaskService:
         diagnostics = self._diagnose_by_count(
             records, sub_queries, query_structure, retrieved_count=retrieved_count
         )
+        if internal_unavailable:
+            # Supplementary: the job goes on with PubMed, and says so.
+            diagnostics = diagnostics.model_copy(update={
+                "diagnosis": f"{internal_unavailable}，本次只用 PubMed 检索。" + diagnostics.diagnosis,
+            })
         if pubmed is None or not pubmed.unfinished:
             return diagnostics
         throttled = len(pubmed.throttled)

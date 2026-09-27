@@ -29,6 +29,14 @@ from services.pubmed_service import (
 from services.task_service import TaskService
 
 
+def _answered(stub):
+    """The internal index answered: its records, and no outage reason."""
+    async def search(query):
+        return await stub(query), None
+    return search
+
+
+
 def _article(pmid: str) -> str:
     return (
         "<PubmedArticle><MedlineCitation>"
@@ -276,7 +284,7 @@ def _stubbed(monkeypatch, pubmed_result):
                               generated_at=datetime.now(), content=cover)
 
     monkeypatch.setattr(llm_service, "analyze_query_structure", understand)
-    monkeypatch.setattr("services.task_service.search_internal_db", internal)
+    monkeypatch.setattr("services.task_service.search_internal_db_with_status", _answered(internal))
     monkeypatch.setattr(service.pubmed_service, "search_with_subqueries", pubmed)
     monkeypatch.setattr(service.analysis_engine, "execute_module", module)
     monkeypatch.setattr(service.report_generator, "generate", report)
@@ -329,3 +337,38 @@ def test_the_cover_is_silent_about_retrieval_when_nothing_was_throttled():
     diagnostics = SearchDiagnostics(status="success", pubmed_subqueries=6)
     assert ReportGenerator._incomplete_retrieval_notice(diagnostics) == ""
     assert ReportGenerator._incomplete_retrieval_notice(None) == ""
+
+
+def test_an_unreachable_internal_index_is_named_in_the_diagnosis_not_read_as_no_hits(monkeypatch):
+    """The internal index is supplementary: its outage never fails the job,
+    but the diagnosis says it could not be asked (2026-09-27)."""
+    import asyncio as _asyncio
+    import aiohttp as _aiohttp
+    from services import internal_db_service
+
+    class _Session:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *exc):
+            return False
+        def post(self, *args, **kwargs):
+            raise _aiohttp.ClientConnectionError("refused")
+
+    monkeypatch.setattr(internal_db_service.aiohttp, "ClientSession", _Session)
+    records, unavailable = _asyncio.run(internal_db_service.search_internal_db_with_status("missed dialysis"))
+    assert records == []
+    assert unavailable == "内部库接口网络错误"
+    assert _asyncio.run(internal_db_service.search_internal_db("missed dialysis")) == []
+
+
+def test_the_diagnosis_names_the_internal_index_outage_and_goes_on():
+    from services.task_service import TaskService
+    service = TaskService()
+    records = []
+    diagnostics = service._diagnose_search_results(
+        records, ["q"], {"pico_entities": {}}, retrieved_count=0, pubmed=None,
+        internal_unavailable="内部库接口超时（>30 秒）",
+    )
+    assert diagnostics.diagnosis.startswith("内部库接口超时（>30 秒），本次只用 PubMed 检索。")

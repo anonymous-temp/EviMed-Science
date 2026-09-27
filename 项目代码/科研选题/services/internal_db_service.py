@@ -261,6 +261,21 @@ def _map_record(item: dict, idx: int) -> Optional[LiteratureRecord]:
 
 
 async def search_internal_db(query: str) -> List[LiteratureRecord]:
+    """The records only; see ``search_internal_db_with_status`` for why none came back."""
+    records, _ = await search_internal_db_with_status(query)
+    return records
+
+
+async def search_internal_db_with_status(query: str) -> tuple:
+    """Search the internal index and say why it returned nothing, when it did.
+
+    Returns ``(records, unavailable)``: ``unavailable`` is ``None`` when the
+    index answered (even with no hits) and a short Chinese reason when it
+    could not be asked — a timeout, a network error, a non-200 answer, an
+    unreadable body. The index is supplementary to PubMed, so its outage never
+    fails a job; it is named in the job's diagnosis instead of reading as
+    "found nothing" (2026-09-27, the same class as PubMed throttling).
+    """
     """
     调用内部数据库接口检索文献。
 
@@ -280,7 +295,7 @@ async def search_internal_db(query: str) -> List[LiteratureRecord]:
             ) as resp:
                 if resp.status != 200:
                     logger.warning(f"内部数据库接口返回非200状态: {resp.status}")
-                    return []
+                    return [], f"内部库接口返回 HTTP {resp.status}"
                 data = await resp.json(content_type=None)
 
         # 兼容多种响应结构
@@ -298,7 +313,7 @@ async def search_internal_db(query: str) -> List[LiteratureRecord]:
                 logger.warning(f"内部数据库响应dict但未找到有效列表，顶层keys: {list(data.keys())}")
         else:
             logger.warning(f"内部数据库接口返回未知格式: {type(data)}")
-            return []
+            return [], "内部库返回了无法识别的格式"
 
         logger.info(f"内部数据库原始返回条数: {len(items)}")
         records = []
@@ -308,14 +323,14 @@ async def search_internal_db(query: str) -> List[LiteratureRecord]:
                 records.append(record)
 
         logger.info(f"内部数据库检索成功，映射后有效文献: {len(records)}/{len(items)} 篇")
-        return records
+        return records, None
 
     except asyncio.TimeoutError:
         logger.warning(f"内部数据库接口超时（>{REQUEST_TIMEOUT}s）")
-        return []
+        return [], f"内部库接口超时（>{REQUEST_TIMEOUT} 秒）"
     except aiohttp.ClientError as e:
         logger.warning(f"内部数据库接口网络错误: {e}")
-        return []
+        return [], "内部库接口网络错误"
     except Exception as e:
         logger.warning(f"内部数据库检索异常: {e}")
-        return []
+        return [], "内部库检索异常"

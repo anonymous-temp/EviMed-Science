@@ -37,6 +37,14 @@ from services.llm_service import LLMService, llm_service
 from services.pubmed_service import PubMedSearchResult, SubQueryOutcome
 from services.task_service import TaskService
 
+
+def _answered(stub):
+    """The internal index answered: its records, and no outage reason."""
+    async def search(query):
+        return await stub(query), None
+    return search
+
+
 DATA = Path(__file__).parent / "data"
 RECORDED = json.loads(
     (DATA / "missed_dialysis_retrieval_2026_09_27.json").read_text(encoding="utf-8")
@@ -128,13 +136,13 @@ def test_multi_source_search_runs_the_groups_query_beside_the_model_queries(monk
         seen["sub_queries"] = list(sub_queries)
         return PubMedSearchResult(records=[], outcomes=[])
 
-    monkeypatch.setattr("services.task_service.search_internal_db", no_internal)
+    monkeypatch.setattr("services.task_service.search_internal_db_with_status", _answered(no_internal))
     monkeypatch.setattr(service.pubmed_service, "search_with_subqueries", capture)
     structure = {
         "sub_queries": ["(hemodialysis[Title/Abstract])"],
         "concept_groups": RECORDED["concept_groups"],
     }
-    _, sub_queries, _ = asyncio.run(service._multi_source_search(RECORDED["direction"], structure))
+    _, sub_queries, _, _ = asyncio.run(service._multi_source_search(RECORDED["direction"], structure))
 
     groups_query = LLMService.concept_groups_query(RECORDED["concept_groups"])
     assert seen["sub_queries"] == ["(hemodialysis[Title/Abstract])", groups_query]
@@ -196,7 +204,7 @@ def _stubbed_service(monkeypatch, records):
         )
 
     monkeypatch.setattr(llm_service, "analyze_query_structure", understand)
-    monkeypatch.setattr("services.task_service.search_internal_db", internal)
+    monkeypatch.setattr("services.task_service.search_internal_db_with_status", _answered(internal))
     monkeypatch.setattr(service.pubmed_service, "search_with_subqueries", pubmed)
     monkeypatch.setattr(service.analysis_engine, "execute_module", module)
     monkeypatch.setattr(service.report_generator, "generate", report)
