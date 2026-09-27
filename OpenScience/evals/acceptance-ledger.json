@@ -164,7 +164,7 @@
       "id": "geo-insight",
       "visibility": "public",
       "evalHarness": "evals/geo-insight",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "failed",
         "evidence": "evals/geo-insight/results/2026-09-25-production-conversation",
@@ -192,7 +192,7 @@
       "id": "geo-strategy",
       "visibility": "public",
       "evalHarness": "evals/geo-strategy",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
