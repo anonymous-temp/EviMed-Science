@@ -29,9 +29,13 @@
 #     passed once on an image whose bundle could not be imported at all.
 #
 # NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
-# pin move, or anything under `runtime/` other than the curated skills' prose,
-# the research MCP server's own Python sources and the private GEO method pack
-# (see those steps).
+# pin move, or anything under `runtime/` other than the curated and office
+# skills' prose, the general (`core`) and community skill trees short of a
+# moved bundle pin, the research MCP server's own Python sources and the
+# private GEO method pack (see those steps). The release switch reads every
+# skill tree back out of the built image and compares it with the release
+# manifest (scripts/ops/check-runtime-skill-digests.mjs), so a tree this file
+# forgets to copy fails the switch instead of shipping the base's copy.
 # Those change what the base installed, and the base is what this trusts.
 #
 # The lockfile rule is about what the base installed, not about the file: the
@@ -132,6 +136,50 @@ RUN set -eux; \
     | while read -r file; do install -m 0644 "${source}/${file}" "${live}/${file}"; done; \
   diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}"; \
   rm -rf "${source}"
+
+# The office skills: the same rule as the curated ones, because the full build
+# smoke-tests their generators (`office-smoke`) and a delta cannot. Their prose
+# — each SKILL.md and the tree's inventory — moves; a changed script is a
+# change the base never ran, and the build stops.
+COPY runtime/skills/office /tmp/evimed-office-source
+RUN set -eux; \
+  live=/usr/local/share/evimed/skills/office; \
+  source=/tmp/evimed-office-source; \
+  moved="$(diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}" | grep -Ev '/SKILL\.md differ$|/inventory\.json differ$' || true)"; \
+  if [ -n "${moved}" ]; then echo "office skills changed beyond their prose; build the full Dockerfile:" >&2; echo "${moved}" >&2; exit 1; fi; \
+  chmod -R u+w "${live}"; \
+  (cd "${source}" && find . -name __pycache__ -prune -o \( -name SKILL.md -o -name inventory.json \) -type f -print) \
+    | while read -r file; do install -m 0644 "${source}/${file}" "${live}/${file}"; done; \
+  chmod -R a-w "${live}"; \
+  diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}"; \
+  rm -rf "${source}"
+
+# The general skills (runtime/skills/core) and the vendored community skills
+# (runtime/skills/community): nothing in the full build installs from them or
+# smoke-tests them — they are copied whole, as text and the standard-library
+# scripts their SKILL.md tells a run to call — so a delta replaces each tree
+# whole from the source it is built from. Until 2026-09-27 it did not copy them
+# at all: the preset below re-copied the base's trees, and on 2026-09-26
+# production ran core's pre-token `openscience.mplstyle` under a release
+# manifest that recorded the new one (platform audit I2-4). The one thing in
+# these trees a delta cannot move is the community record of the bundle pins
+# the profile seed was installed at (`plugin-support.json`: kernel, tool and
+# client bundles) — the seed is not rebuilt here, so a moved pin stops the
+# build. The final `diff` is the guard: what ships is the source, byte for byte.
+COPY runtime/skills/core /tmp/evimed-core-source
+COPY runtime/skills/community /tmp/evimed-community-source
+RUN set -eux; \
+  node -e 'const fs = require("fs"); const pins = (file) => { const record = JSON.parse(fs.readFileSync(file, "utf8")); const bundles = [...(record.communityToolBundles ?? []), ...(record.communityClientBundles ?? [])]; return JSON.stringify([record.kernel, bundles.map((b) => [b.name, b.npmPackage ?? null, b.version, b.status, b.peerPins ?? null])]); }; if (pins(process.argv[1]) !== pins(process.argv[2])) { console.error("community plugin-support.json moved the kernel or a bundle pin the profile seed was installed at; build the full Dockerfile"); process.exit(1); }' \
+    /opt/evimed/skills/community/plugin-support.json /tmp/evimed-community-source/plugin-support.json; \
+  for tree in core community; do \
+    live="/opt/evimed/skills/${tree}"; \
+    source="/tmp/evimed-${tree}-source"; \
+    rm -rf "${live}"; \
+    cp -a "${source}" "${live}"; \
+    chmod -R a-w "${live}"; \
+    diff -rq "${live}" "${source}"; \
+    rm -rf "${source}"; \
+  done
 
 # The private GEO method pack (runtime/skills/geo-private): instruction text and
 # standard-library Python the skills call, never installed by the base, so a
