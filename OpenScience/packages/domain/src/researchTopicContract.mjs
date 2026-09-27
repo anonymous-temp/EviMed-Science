@@ -76,6 +76,29 @@ function sameContext(left, right) {
     && JSON.stringify(leftContext) === JSON.stringify(rightContext)
 }
 
+/**
+ * What a candidate lacks, by field name: the notice a run repairs against.
+ * "missing its candidate identity, opportunity lineage, …" named no field,
+ * and runs wrote sourceOpportunityIds / evidenceIds beside the names this
+ * contract reads (production, 2026-09-27).
+ * @param {unknown} candidate @returns {string[]}
+ */
+function candidateFieldProblems(candidate) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return ['to be an object']
+  const c = /** @type {Record<string, unknown>} */ (candidate)
+  /** @param {unknown} value */
+  const trimmed = (value) => typeof value === 'string' && value.trim() !== '' && value === value.trim()
+  const problems = []
+  if (!trimmed(c.candidateId)) problems.push('"candidateId" (a trimmed string)')
+  if (!trimmed(c.title)) problems.push('"title"')
+  if (!trimmed(c.sourceOpportunityId)) problems.push('"sourceOpportunityId" (one trimmed string, not an array)')
+  if (!['direct', 'indirect', 'speculative'].includes(/** @type {string} */ (c.supportLevel))) problems.push('"supportLevel" of direct, indirect or speculative')
+  if (!Array.isArray(c.sourceEvidenceIds) || c.sourceEvidenceIds.length === 0 || c.sourceEvidenceIds.some((id) => !trimmed(id))) problems.push('"sourceEvidenceIds" (a non-empty array of evidence-record ids)')
+  if (!Array.isArray(c.sourceEvidencePmids) || c.sourceEvidencePmids.some((id) => !trimmed(id))) problems.push('"sourceEvidencePmids" (an array of PMID strings, may be empty)')
+  if (!Array.isArray(c.gaps) || c.gaps.some((gap) => typeof gap !== 'string')) problems.push('"gaps" (an array of strings)')
+  return problems.length ? problems : ['a valid shape']
+}
+
 /** @param {GateIssue[]} issues @param {string} check @param {string} message @param {string} [path] */
 function notice(issues, check, message, path = PORTFOLIO_FILE) {
   issues.push({
@@ -133,7 +156,10 @@ export function researchTopicPortfolioFindings(input) {
   const evidenceById = new Map()
   let evidenceFilesConsistent = Array.isArray(evidenceValue)
   if (!Array.isArray(evidenceValue)) {
-    notice(issues, 'topic-evidence-lineage', `${EVIDENCE_FILE} is missing or invalid, so candidate source lineage cannot be reconciled.`, EVIDENCE_FILE)
+    // Name the shape: runs wrote {records: [...]} and could not tell from
+    // "missing or invalid" what to change (production, 2026-09-27).
+    const found = evidenceValue === undefined ? 'is missing' : `is ${Array.isArray(evidenceValue) ? 'an array' : typeof evidenceValue === 'object' && evidenceValue !== null ? `an object (keys: ${Object.keys(evidenceValue).slice(0, 6).join(', ')})` : typeof evidenceValue}`
+    notice(issues, 'topic-evidence-lineage', `${EVIDENCE_FILE} ${found}; it must be a top-level JSON array of evidence records, each with a trimmed string "id" (the ids candidates cite in sourceEvidenceIds), so candidate source lineage cannot be reconciled.`, EVIDENCE_FILE)
   } else {
     for (const [index, item] of evidenceValue.entries()) {
       if (!record(item) || !nonEmpty(item.id) || item.id !== item.id.trim()) {
@@ -165,7 +191,7 @@ export function researchTopicPortfolioFindings(input) {
       || !Array.isArray(candidate.sourceEvidencePmids)
       || candidate.sourceEvidencePmids.some((id) => !nonEmpty(id) || id !== id.trim())
       || !Array.isArray(candidate.gaps) || candidate.gaps.some((gap) => typeof gap !== 'string')) {
-      notice(issues, 'topic-portfolio-schema', `${label} is missing its candidate identity, opportunity lineage, support level, evidence ids, or gaps array.`)
+      notice(issues, 'topic-portfolio-schema', `${label} needs ${candidateFieldProblems(candidate).join('; ')}.`)
       evidenceFilesConsistent = false
       continue
     }

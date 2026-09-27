@@ -1863,7 +1863,9 @@ test("a capability's two skill copies never drift apart by more than their known
     "meta-analysis": 28,
     "off-label-analysis": 24,
     "peer-review": 18,
-    "research-topic-selection": 44,
+    // 2026-09-27: the fallback files' field-for-field shapes (six lines) are
+    // DSH-only; the retained kernel copy is not edited.
+    "research-topic-selection": 50,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

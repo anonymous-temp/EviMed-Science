@@ -134,6 +134,32 @@ test("constraints cannot disappear between the engine receipt and portfolio unno
   assert.ok(result.issues.some((item) => item.check === "topic-research-context"));
 });
 
+test("a notice names the fields a candidate lacks and the shape the evidence file needs", () => {
+  // Production, 2026-09-27: runs wrote sourceOpportunityIds / evidenceIds and
+  // an evidence object {records: [...]} and could not repair against notices
+  // that named no field.
+  const nearMiss = packageFiles();
+  changePortfolio(nearMiss, (value) => {
+    const candidate = value.candidates[0];
+    candidate.sourceOpportunityIds = [candidate.sourceOpportunityId];
+    delete candidate.sourceOpportunityId;
+    candidate.evidenceIds = candidate.sourceEvidenceIds;
+    delete candidate.sourceEvidenceIds;
+  });
+  let result = run(nearMiss);
+  const schema = result.issues.find((item) => item.check === "topic-portfolio-schema");
+  assert.ok(schema, "the near-miss candidate is reported");
+  assert.match(schema.message, /"sourceOpportunityId" \(one trimmed string, not an array\)/);
+  assert.match(schema.message, /"sourceEvidenceIds"/);
+  assert.doesNotMatch(schema.message, /"candidateId"|"gaps"/, "only what is actually wrong is named");
+
+  const wrapped = packageFiles();
+  wrapped.set("evidence-records.json", JSON.stringify({ records: JSON.parse(wrapped.get("evidence-records.json")) }));
+  result = run(wrapped);
+  const lineage = result.issues.find((item) => item.check === "topic-evidence-lineage");
+  assert.match(lineage.message, /is an object \(keys: records\); it must be a top-level JSON array/);
+});
+
 test("candidate identifiers must be strings and duplicate candidate ids stay visible", () => {
   const malformed = packageFiles();
   changePortfolio(malformed, (value) => { value.candidates[0].candidateId = {}; });

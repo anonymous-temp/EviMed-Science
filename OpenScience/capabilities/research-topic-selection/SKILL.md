@@ -163,6 +163,12 @@ artifacts. `research-portfolio.json` and `evidence-records.json` are required:
 preserve the specialist job's actual files and IDs. If the managed job fails,
 build fallback records only from identifiers returned by evidence tools, record
 the failed job in the run receipt, and never recreate IDs from report prose.
+A fallback uses the job's own shapes, field for field: `evidence-records.json`
+is a top-level JSON array of records, each with a string `id`; each entry of
+`research-portfolio.json` → `candidates` carries `candidateId`, `title`, one
+`sourceOpportunityId` (a string, not a list), `supportLevel` (`direct`,
+`indirect` or `speculative`), `sourceEvidenceIds` (the record ids it rests on,
+at least one), `sourceEvidencePmids` (may be empty) and `gaps` (strings).
 Keep each candidate linked to its source
 opportunity and evidence IDs, with the supplied researcher context, hypothesis,
 study design/estimand, data requirements, falsification, feasibility and novelty
