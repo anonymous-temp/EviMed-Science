@@ -268,7 +268,11 @@ export function guardedBashTarget(command) {
   // the pattern and must not become part of the path.
   const candidates = [...text.matchAll(guardedBashCandidatePattern())].map((match) => match[1])
   if (!candidates.length) return null
-  const mutating = /(?:^|[|;&]\s*)(?:rm|mv|cp|sed\s+-i|tee|truncate|install|chmod|chown|dd|ln)\b/.test(text) || /(?<![<>])>{1,2}(?!&)/.test(text)
+  // A redirect into /dev/null writes nothing. Counted as a write, it turned
+  // `ls .evimed-brief/ 2>/dev/null` into a refusal: 47 of the 71 bash
+  // refusals in production's retained sessions on 2026-09-27 carried one.
+  const redirects = text.replace(/[0-9&]?>{1,2}\s*\/dev\/null\b/g, '')
+  const mutating = /(?:^|[|;&]\s*)(?:rm|mv|cp|sed\s+-i|tee|truncate|install|chmod|chown|dd|ln)\b/.test(text) || /(?<![<>])>{1,2}(?!&)/.test(redirects)
   if (!mutating) return null
   for (const candidate of candidates) {
     const cleaned = candidate.trim().replace(/^\.\//, '')

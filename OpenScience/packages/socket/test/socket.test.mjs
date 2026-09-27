@@ -293,6 +293,11 @@ test("the path guard reaches through bash without refusing ordinary reads", () =
   assert.equal(guardedBashTarget("cat .evimed-brief/research-brief.md"), null);
   assert.equal(guardedBashTarget("grep -r foo deliverables/"), null);
   assert.equal(guardedBashTarget("python3 analyze.py > deliverables/d1/out.txt"), null);
+  // A redirect into /dev/null is not a write (production, 2026-09-27).
+  assert.equal(guardedBashTarget("ls -la /workspace/.evimed-brief/ 2>/dev/null; find /workspace/.evimed-run -type f | head"), null);
+  assert.equal(guardedBashTarget("cat .evimed-run/state.json &>/dev/null"), null);
+  assert.equal(guardedBashTarget("ls .evimed-brief/ 2>/dev/null > .evimed-brief/list.txt"), ".evimed-brief/");
+  assert.equal(guardedBashTarget("ls .evimed-brief/ 2>/dev/null && rm .evimed-run/state.json"), ".evimed-brief/");
 });
 
 test("the budget refuses a step and the refusal names what to do next", () => {
