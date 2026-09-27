@@ -44,17 +44,17 @@ export function EvidenceMatrixTable({
 }) {
   const rows = [...claims.values()];
   if (rows.length === 0) {
-    return <p className="p-4 text-ui text-muted">这个证据矩阵里没有可读的主张。</p>;
+    return <p className="p-4 text-ui text-muted">这个证据矩阵里没有可读的结论。</p>;
   }
   return (
     // Its own scroll box, so the header row and the claim column both stay
     // put (appendix D §4.2: freeze the header and the first column).
     <div className={cn("max-h-[calc(100vh-12rem)] overflow-auto rounded-card border border-border bg-surface", className)}>
       <table className="min-w-[64rem] border-collapse text-left text-ui tabular-nums">
-        <caption className="sr-only">证据矩阵：{rows.length} 条主张</caption>
+        <caption className="sr-only">证据矩阵：{rows.length} 条结论</caption>
         <thead>
           <tr className="text-caption text-muted">
-            <th scope="col" className="sticky left-0 top-0 z-30 w-24 border-b border-strong bg-surface-2 px-3 py-2 font-semibold">主张</th>
+            <th scope="col" className="sticky left-0 top-0 z-30 w-24 border-b border-strong bg-surface-2 px-3 py-2 font-semibold">结论</th>
             <th scope="col" className={cn(HEAD, "w-14 text-right")}>文献号</th>
             <th scope="col" className={cn(HEAD, "min-w-[16rem]")}>内容</th>
             <th scope="col" className={cn(HEAD, "w-20")}>类型</th>
@@ -81,7 +81,7 @@ export function EvidenceMatrixTable({
                   {appraisal && <ClaimAppraisalSummary display={appraisal} sourceCount={sources.length} />}
                 </td>
                 <td className="px-3 py-2 text-muted">
-                  {TYPE_LABEL[claim.claimType] ?? "主张"}
+                  {TYPE_LABEL[claim.claimType] ?? "结论"}
                   {claim.confidence && <p className="text-caption">把握度{({ high: "高", moderate: "中", low: "低" } as Record<string, string>)[claim.confidence] ?? "未注明"}</p>}
                 </td>
                 <td className="px-3 py-2">

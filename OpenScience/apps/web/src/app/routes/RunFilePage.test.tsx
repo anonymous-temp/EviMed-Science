@@ -71,7 +71,7 @@ describe("RunFilePage", () => {
 
   it("shows a matrix as its table", async () => {
     renderAt(`/app/runs/run_1/files/${MATRIX}`);
-    expect(await screen.findByRole("table", { name: "证据矩阵：1 条主张" })).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "证据矩阵：1 条结论" })).toBeInTheDocument();
   });
 
   it("refuses a path that leaves the workspace, and says what to do", async () => {

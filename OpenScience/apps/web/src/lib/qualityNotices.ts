@@ -101,12 +101,12 @@ function legacyNotice(sentence: string): { severity: NoticeSeverity; label: stri
  * `gateIssueText` table instead.
  */
 const LEGACY_NOTICE_GROUPS: ReadonlyArray<{ label: string; match: RegExp }> = Object.freeze([
-  { label: "数字未标注其来源主张", match: /^Report line \d+ numeric facts .+ have no evidence-matrix claim reference/ },
-  { label: "数字与所引主张不符", match: /^Report line \d+ numeric facts .+ are not present in the cited claim evidence/ },
+  { label: "数字未标注其来源结论", match: /^Report line \d+ numeric facts .+ have no evidence-matrix claim reference/ },
+  { label: "数字与所引结论不符", match: /^Report line \d+ numeric facts .+ are not present in the cited claim evidence/ },
   { label: "推导结论未标注为推导", match: /states derived result .+ without marking it as derived/ },
   { label: "推导结论进入了处置建议", match: /practical advice must rest on measured evidence/ },
   { label: "引文地址", match: /^The citation /i },
-  { label: "证据矩阵主张", match: /^claims\[\d+\]/ },
+  { label: "证据矩阵结论", match: /^claims\[\d+\]/ },
   { label: "引文台账与参考文献", match: /^(?:citation-ledger\.csv|references\.bib|citation-audit\.md)/ },
   { label: "检索日志与过程记录", match: /search log|clinical-evidence-(?:search|run)\.json/i },
   { label: "检索到的原文由子任务转述", match: /^Reading retrieved evidence was delegated/ },

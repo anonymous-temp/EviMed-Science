@@ -62,7 +62,7 @@ describe("FilePreviewInspector — markdown", () => {
       : null);
     render(<FilePreviewInspector data={{ ...md, path: "deliverables/d1/clinical-evidence-report.md", filename: "clinical-evidence-report.md",
       content: "MIMIC-IV 为单一机构数据库 [1]<!-- claim:CLM-001 -->。" }} onClose={() => {}} />);
-    await userEvent.click(await screen.findByRole("button", { name: "查看这句话的依据（1 条主张）" }));
+    await userEvent.click(await screen.findByRole("button", { name: "查看这句话的依据（1 条结论）" }));
     // Scoped to the popover: the source cards under the report quote the same
     // passage, from the other end of the same citation system.
     const claim = await screen.findByText("MIMIC-IV 是单一机构数据库。");
@@ -87,9 +87,9 @@ describe("FilePreviewInspector — markdown", () => {
     render(<FilePreviewInspector data={{ ...md, path: "deliverables/d1/clinical-evidence-report.md", filename: "clinical-evidence-report.md",
       content: "单一机构数据库 [1]<!-- claim:CLM-001 -->。队列 50,920 人 [1]<!-- claim:CLM-002 -->。" }} onClose={() => {}} />);
     expect(await screen.findByRole("note")).toHaveTextContent("⚠ 1 条待核对");
-    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张，其中有未核对上的引文）" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条结论，其中有未核对上的引文）" })).toBeInTheDocument();
     // Every quotation of this sentence was found: the mark says so, in words.
-    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张，引文均已核对）" })).toHaveTextContent("依据 ✓");
+    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条结论，引文均已核对）" })).toHaveTextContent("依据 ✓");
     expect(vi.mocked(readClaimVerification)).toHaveBeenCalledWith("deliverables/d1/clinical-evidence-matrix.json", undefined);
   });
 

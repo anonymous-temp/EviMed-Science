@@ -25,7 +25,7 @@ describe("EvidenceMatrixTable", () => {
   // figures, each quotation a way to where it should be.
   it("freezes the claim column, right-aligns the numbers and links each quotation", () => {
     render(<MemoryRouter><EvidenceMatrixTable claims={claims} verified={verified} runId="run_1" /></MemoryRouter>);
-    const table = screen.getByRole("table", { name: "证据矩阵：2 条主张" });
+    const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
     expect(table).toHaveClass("tabular-nums");
     const first = within(table).getByRole("rowheader", { name: "CLM-001" });
     expect(first).toHaveClass("sticky", "left-0");

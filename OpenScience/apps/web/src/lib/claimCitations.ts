@@ -100,8 +100,8 @@ export const CLAIM_STATUS_TEXT: Record<string, { label: string; tone: "ok" | "wa
   verified: { label: "引文已在保存的原文中核对", tone: "ok" },
   quote_not_found: { label: "引文未在保存的原文中找到，请对照来源核实", tone: "warn" },
   source_unavailable: { label: "来源原文没有保存，引文无法核对", tone: "warn" },
-  no_quote: { label: "这条主张没有给出可核对的引文", tone: "warn" },
-  derived: { label: "推导结果：由其他主张计算或推断，本身没有引文", tone: "muted" },
+  no_quote: { label: "这条结论没有给出可核对的引文", tone: "warn" },
+  derived: { label: "推导结果：由其他结论计算或推断，本身没有引文", tone: "muted" },
 };
 
 /** Status by claim id, for the citation popover. */
@@ -251,7 +251,7 @@ export function claimGuidance(
     })
     .filter((line): line is string => Boolean(line));
   if (lines.length > 0) return lines.join("");
-  return claim && claimSources(claim).length === 0 ? "这条主张没有给出可核对的引文：引用前请自行查证。" : null;
+  return claim && claimSources(claim).length === 0 ? "这条结论没有给出可核对的引文：引用前请自行查证。" : null;
 }
 
 // A fenced block (closed, or open to the end) or an inline code span: a claim

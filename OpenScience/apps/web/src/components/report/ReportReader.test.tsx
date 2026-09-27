@@ -126,7 +126,7 @@ describe("ReportReader", () => {
   it("shows the evidence matrix as a table on its own tab", async () => {
     renderReader();
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
-    const table = screen.getByRole("table", { name: "证据矩阵：2 条主张" });
+    const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
     expect(within(table).getByRole("rowheader", { name: "CLM-002" })).toBeInTheDocument();
     expect(within(table).getByText("⚠ 原文中未找到")).toBeInTheDocument();
   });

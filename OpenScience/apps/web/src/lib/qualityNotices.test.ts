@@ -51,7 +51,7 @@ describe("findings on records written before the gate emitted codes", () => {
     expect(summary.counts).toEqual({ safety: 0, mustFix: 1, advice: 3, total: 4 });
     expect(summary.mustFix[0]).toMatchObject({ label: "检索到的原文由子任务转述", lines: [] });
     expect(summary.mustFix[0].technical[0]).toMatch(/^MUST FIX/);
-    expect(summary.advice.map((group) => group.label)).toEqual(expect.arrayContaining(["证据矩阵主张", "引文台账与参考文献"]));
+    expect(summary.advice.map((group) => group.label)).toEqual(expect.arrayContaining(["证据矩阵结论", "引文台账与参考文献"]));
     // The one the frozen table does not know is not given an invented heading.
     expect(summary.technicalCount).toBe(1);
     expect(summary.advice.find((group) => group.unlabelled)?.technical).toEqual(["Something the table does not know about."]);
@@ -65,7 +65,7 @@ describe("findings on records written before the gate emitted codes", () => {
       "MUST FIX — claims[2].supportQuote was not found in its preserved source artifact.",
     ]);
     expect(summary.safety[0].lines[0].text).toBe("临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。");
-    expect(summary.mustFix[0]).toMatchObject({ label: "证据矩阵主张", count: 1, lines: [] });
+    expect(summary.mustFix[0]).toMatchObject({ label: "证据矩阵结论", count: 1, lines: [] });
   });
 });
 
