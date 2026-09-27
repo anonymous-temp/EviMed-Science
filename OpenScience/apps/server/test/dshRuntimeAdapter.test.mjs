@@ -467,6 +467,19 @@ test("each turn-end kind lands on its own code, and an unknown kind is counted",
   assert.equal(unknown.turnEnd.code, "runtime_turn_end_unknown");
 });
 
+test("a turn the spending limit refused says so, and any other model error stays a session error", () => {
+  // As the kernel recorded it on production (2026-09-27): our gateway's 402.
+  const ended = (error) => normalizeTranscript("s", [{ type: "event", event: {
+    type: "turn/end", seq: 1, data: { turn: 1, reason: { kind: "error", error } } } }]).turnEnd;
+  assert.equal(ended({ message: "The model gateway is temporarily unavailable.", code: "HTTP_402", status: 402 }).code, "runtime_spend_limit_reached");
+  assert.equal(ended({ message: "The model gateway is temporarily unavailable.", code: "HTTP_502", status: 502 }).code, "runtime_session_error");
+  const decoded = decodeSessionFrame("s", { type: "event", event: {
+    type: "turn/end", seq: 1, data: { turn: 1, reason: { kind: "error", error: { code: "HTTP_402", status: 402 } } } } });
+  assert.ok(decoded);
+  assert.equal(decoded.event.type, "turn/end");
+  assert.equal(/** @type {any} */ (decoded.event).errorCode, "runtime_spend_limit_reached");
+});
+
 /* ------------------------------------------- decoding one session's own stream */
 
 test("every live session/follow frame decodes, and an unrecognized event is visible rather than dropped", async () => {

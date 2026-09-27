@@ -169,6 +169,9 @@ test("an unknown turn-end kind lands on a counted unknown code, never on success
   assert.deepEqual(turnEndErrorCode("blocked"), { errorCode: "runtime_tool_error", subCode: "turn_blocked" });
   assert.deepEqual(turnEndErrorCode("max-tokens"), { errorCode: "runtime_session_error", subCode: "model_max_tokens" });
   assert.deepEqual(turnEndErrorCode("interrupted"), { errorCode: "runtime_stopped" });
+  assert.deepEqual(turnEndErrorCode("error", "HTTP_402"), { errorCode: "runtime_spend_limit_reached" });
+  assert.deepEqual(turnEndErrorCode("error", "HTTP_502"), { errorCode: "runtime_session_error" });
+  assert.deepEqual(turnEndErrorCode("blocked", "HTTP_402"), { errorCode: "runtime_tool_error", subCode: "turn_blocked" });
   const unknown = turnEndErrorCode("teleported");
   assert.equal(unknown.errorCode, "runtime_turn_end_unknown");
   assert.equal(unknown.unknownKind, "teleported");

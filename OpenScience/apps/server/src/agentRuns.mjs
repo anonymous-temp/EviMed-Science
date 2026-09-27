@@ -1586,6 +1586,11 @@ function terminalFromMessages(messages) {
     // is exactly the measurement the compaction decision needs.
     if (error) {
       const subCode = typeof error.subCode === "string" && error.subCode ? error.subCode : null;
+      // A model call the spending limit refused is its own outcome: retrying,
+      // which is what a session error tells the reader, changes nothing.
+      if (error.code === "runtime_spend_limit_reached") {
+        return { status: "failed", errorCode: "runtime_spend_limit_reached", errorSubCode: null };
+      }
       return { status: "failed", errorCode: "runtime_session_error", errorSubCode: subCode };
     }
   }

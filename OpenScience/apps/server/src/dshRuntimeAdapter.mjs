@@ -867,7 +867,7 @@ export function normalizeTranscript(sessionId, entries) {
       }
       case "turn/end": {
         const end = toTurnEnd(event);
-        const mapped = turnEndErrorCode(end.kind === "unknown" ? String(end.rawKind ?? "") : end.kind);
+        const mapped = turnEndErrorCode(end.kind === "unknown" ? String(end.rawKind ?? "") : end.kind, end.code);
         turnEnd = {
           kind: normalizeTurnEndKind(end.kind),
           ...(mapped.errorCode ? { code: mapped.errorCode } : {}),
@@ -994,7 +994,7 @@ export function decodeMuxFrame(frame) {
       return { sessionId, event: { type: "turn/start", seq, turn: Number(data.turn ?? 0) } };
     case "turn/end": {
       const end = toTurnEnd(event);
-      const mapped = turnEndErrorCode(end.kind === "unknown" ? String(end.rawKind ?? "") : end.kind);
+      const mapped = turnEndErrorCode(end.kind === "unknown" ? String(end.rawKind ?? "") : end.kind, end.code);
       return {
         sessionId,
         event: {

@@ -122,6 +122,7 @@ export {
   SOCKET_TOOL_ERROR_CODES,
   TURN_END_ERROR_CODES,
   TURN_END_SUB_CODES,
+  TURN_END_WIRE_ERROR_CODES,
   classifyEvidenceSourceError,
   errorCodeMessage,
   errorCodeOutcome,

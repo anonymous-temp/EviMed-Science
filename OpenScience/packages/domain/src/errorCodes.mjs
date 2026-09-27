@@ -531,6 +531,20 @@ export const TURN_END_ERROR_CODES = Object.freeze({
   unknown: 'runtime_turn_end_unknown',
 })
 
+/**
+ * A turn that ended in `error` because the model call itself was refused, keyed
+ * by the kernel's code for that refusal. Our model gateway answers 402 for one
+ * reason only — the account's or the run's spending limit refused the call
+ * (usageLedger `usage_budget_exceeded`); a provider's own 402 is answered as 502.
+ * Read as `runtime_session_error`, a run stopped by its budget told the reader
+ * to retry, which spends nothing and changes nothing (2026-09-27: three
+ * autopilot verifications with a ¥0.42 budget each, refused on their first
+ * ¥1.03 reservation).
+ */
+export const TURN_END_WIRE_ERROR_CODES = Object.freeze({
+  HTTP_402: 'runtime_spend_limit_reached',
+})
+
 /** Sub-codes that qualify a kernel-boundary code without multiplying the codes. */
 export const TURN_END_SUB_CODES = Object.freeze({
   blocked: 'turn_blocked',
@@ -546,6 +560,7 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
   'runtime_canceled',
   'runtime_stopped',
   'runtime_session_error',
+  'runtime_spend_limit_reached',
   'runtime_session_not_found',
   'runtime_tool_error',
   'runtime_turn_end_unknown',
@@ -898,10 +913,15 @@ export function classifyEvidenceSourceError(code) {
  * `runtime_turn_end_unknown` with the raw kind preserved, so a DSH release that
  * adds a variant shows up as a counted unknown instead of a silent success.
  * @param {string} kind
+ * @param {string} [wireCode] the kernel's code for the error that ended the turn
  * @returns {{ errorCode: string | null, subCode?: string, unknownKind?: string }}
  */
-export function turnEndErrorCode(kind) {
+export function turnEndErrorCode(kind, wireCode) {
   const text = String(kind ?? '')
+  const wire = String(wireCode ?? '')
+  if (text === 'error' && Object.prototype.hasOwnProperty.call(TURN_END_WIRE_ERROR_CODES, wire)) {
+    return { errorCode: TURN_END_WIRE_ERROR_CODES[/** @type {keyof typeof TURN_END_WIRE_ERROR_CODES} */ (wire)] }
+  }
   if (Object.prototype.hasOwnProperty.call(TURN_END_ERROR_CODES, text)) {
     const errorCode = TURN_END_ERROR_CODES[/** @type {keyof typeof TURN_END_ERROR_CODES} */ (text)]
     const subCode = TURN_END_SUB_CODES[/** @type {keyof typeof TURN_END_SUB_CODES} */ (text)]
@@ -924,6 +944,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '运行已经写出交付文件，但没有提交校验就结束了，因此没有通过质量门、也没有可交付的成果。'
     + '文件仍在工作区里，可以重新发起让它提交；未经校验的文件不会被当作交付物。',
   runtime_session_error: '模型调用失败。稍后重试；若反复出现请缩小题面范围。',
+  runtime_spend_limit_reached: '模型调用被用量上限拒绝：这次运行或账户的花费已到上限，已经写出的文件仍在工作区里。可在“设置 → 用量”查看已用与上限，上限恢复或调高后再继续。',
   runtime_session_not_found: '运行时还没有这个会话，因此它还没有产生任何记录。',
   // Was 「查看运行树中标红的节点」. The run tree is not on the router — it lives
   // under an unreachable page — so the sentence sent the reader to a screen
@@ -1322,6 +1343,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   project_limit_reached: 'capped',
   default_project_protected: 'capped',
   usage_budget_exceeded: 'capped',
+  runtime_spend_limit_reached: 'capped',
   // The gate's own named defects, which carry no recognizable prefix.
   'declared-appraisal-must-execute': 'gated',
   practical_emergency_trigger_conditioned_on_medication_response: 'gated',
