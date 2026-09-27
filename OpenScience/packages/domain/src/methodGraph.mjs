@@ -360,7 +360,7 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
 }
 
 /**
- * Whether the runs that mounted a method show it making results worse.
+ * Whether the runs that used a method show it making results worse.
  *
  * Wald's sequential probability-ratio test, capped: the runs are read in the
  * order they happened, each bad when its deliverable was rejected, and the
@@ -369,6 +369,17 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  * upper one, `clear` when it crosses the lower one or reaches the cap without
  * crossing, `watching` before either. Only runs of the text the method holds
  * now count (`learning.digest`); an amendment starts a new test.
+ *
+ * Only observations where the method was *used* are read — `invoked`, which
+ * `runMethodObservations` sets when the session called the method through the
+ * `skill` tool or read its mounted file. A deliverable whose run merely had the
+ * method in the directory and never opened it says nothing about the method:
+ * on 2026-09-25 the only two observations production held were GEO writing
+ * runs that carried a research method nobody read, and counting them would let
+ * work the method never touched retire it, or clear it (audit 2026-09-26, L-G2).
+ * Contribution still reads every mount, because it asks a different question —
+ * whether carrying the text costs anything — and the build spec states it on
+ * mounts.
  *
  * This is the production detector of the 2026-09-21 ruling
  * (`METHOD_HARM_TEST`), and it is the only statistic here that retires an
@@ -386,7 +397,7 @@ export function methodHarmTest(learning, options = {}) {
   const badStep = Math.log(harmRate / baseRate)
   const goodStep = Math.log((1 - harmRate) / (1 - baseRate))
   const observations = [...(learning?.observations ?? [])]
-    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome))
+    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome) && observation?.invoked === true)
     .sort((left, right) => String(left.at ?? '').localeCompare(String(right.at ?? '')))
   let llr = 0
   let runs = 0
@@ -445,8 +456,13 @@ export function methodContribution(learning) {
  * a cap that evicts the untried would guarantee the library only ever holds
  * what it already had.
  *
- * Safety-related methods are never proposed, for the same reason they are never
- * proposed by decay: rarely invoked is what a working safety check looks like.
+ * A safety-related method is judged like any other here. It used to be left
+ * out, and the flag is one the distillation run raises about its own output
+ * (`risk.touchesSafety`), so a single self-declared word exempted a method from
+ * every outcome rule the library has (audit 2026-09-26, L-G2). The build spec
+ * exempts safety methods from one clause only — being proposed for disuse
+ * (§8.7) — and this is a clause about outcomes: its ranking is contribution,
+ * which an unused method does not have.
  *
  * @param {readonly MethodRecord[]} methods  the effective ones
  * @param {{cap?: number}} [options]
@@ -458,7 +474,6 @@ export function libraryEvictions(methods, options = {}) {
   const excess = active.length - cap
   if (excess <= 0) return []
   const judged = active
-    .filter((method) => !method?.provenance?.safetyRelated)
     .map((method) => ({ id: method.id, contribution: methodContribution(method.learning) }))
     .filter((entry) => entry.contribution !== null)
     .sort((left, right) => Number(left.contribution) - Number(right.contribution)
@@ -616,6 +631,13 @@ export function promotionVerdict(method, options = {}) {
  *
  *  - A safety-related method is never proposed for retirement on grounds of
  *    disuse. Rarely needed is what a safety check looks like when it is working.
+ *    That is the whole exemption (build spec §8.7: 「标了安全相关 — 永不因闲置
+ *    提议」). It used to be checked first and returned early, which also
+ *    exempted the method from a measured `worse`, from the harm test and from
+ *    contribution — and `safetyRelated` is raised by the distillation run about
+ *    its own output, so one self-declared word bought immunity from every
+ *    outcome the library can observe (audit 2026-09-26, L-G2). Outcome clauses
+ *    now read a safety method like any other; only the idle clause skips it.
  *  - A method implicated in a confirmed incident is retired immediately and
  *    does not wait for the nightly job or for a replacement.
  *
@@ -634,9 +656,6 @@ export function retirementProposal(method, options) {
     return { propose: true, immediate: true, code: 'incident', reason: 'implicated in a confirmed incident', strength }
   }
   if (method?.status === 'retired') return { propose: false, immediate: false, code: 'already_retired', reason: 'already retired', strength }
-  if (method?.provenance?.safetyRelated) {
-    return { propose: false, immediate: false, code: 'safety_related', reason: 'safety-related: rarely invoked is what a working safety check looks like', strength }
-  }
   // The measurement, now that it no longer gates effect (see `promotionVerdict`).
   //
   // A distilled method takes effect the night it is learned; the paired
@@ -736,6 +755,11 @@ export function retirementProposal(method, options) {
   }
   if (!replacement) {
     return { propose: false, immediate: false, code: 'no_replacement', reason: 'unused, but nothing validated replaces it; retiring it would remove a capability rather than a duplicate', strength }
+  }
+  // The one clause a safety method is exempt from: this is the disuse proposal,
+  // and rarely invoked is what a working safety check looks like.
+  if (method?.provenance?.safetyRelated) {
+    return { propose: false, immediate: false, code: 'safety_related', reason: 'safety-related: rarely invoked is what a working safety check looks like, so it is never proposed for disuse', strength }
   }
   return { propose: true, immediate: false, code: 'superseded', replacement: replacement.target, reason: `unused (strength ${strength.toFixed(2)}) and superseded by ${replacement.target}`, strength }
 }

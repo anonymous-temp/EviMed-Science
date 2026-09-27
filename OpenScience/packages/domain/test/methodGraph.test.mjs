@@ -267,12 +267,14 @@ test("a measured-worse revision is retired at once, and only on the text it meas
   }), { nowMs: now });
   assert.equal(unclear.propose, false);
 
-  // And a safety method is never retired by a measurement either.
+  // A safety method is retired by a measurement like any other: its flag is
+  // raised by the run that wrote it, and buys no exemption from outcomes
+  // (audit 2026-09-26, L-G2; build spec §8.7 exempts disuse only).
   const safety = retirementProposal(
     method({ status: "approved", learning: worse(DIGEST_A), provenance: { origin: "inferred", safetyRelated: true } }),
     { nowMs: now },
   );
-  assert.equal(safety.propose, false);
+  assert.deepEqual([safety.propose, safety.immediate, safety.code], [true, true, "evaluated_worse"]);
 });
 
 test("an unresolved conflict blocks promotion from either origin", () => {
@@ -423,13 +425,15 @@ const record = (loaded, succeeded, ageDays = 1) => {
 };
 
 /** Runs in the order given, a day apart: "r" rejected, anything else accepted.
- * @param {string} pattern @param {string} [digest] */
-const runs = (pattern, digest = DIGEST_A) => {
+ * Every run used the method (`invoked`) unless told otherwise, which is what
+ * the harm test reads.
+ * @param {string} pattern @param {string} [digest] @param {{invoked?: boolean}} [options] */
+const runs = (pattern, digest = DIGEST_A, { invoked = true } = {}) => {
   let learning = emptyLearning(digest);
   [...pattern].forEach((mark, index) => {
     learning = foldObservation(learning, {
       runId: `run_${index}`, family: `fam_${index}`, outcome: mark === "r" ? "rejected" : "accepted",
-      at: daysAgo(pattern.length - index),
+      at: daysAgo(pattern.length - index), invoked,
     });
   });
   return learning;
@@ -466,9 +470,28 @@ test("a harmful revision is retired now; a stated one is only proposed; another 
   // Observations recorded against a revision this method no longer holds.
   const amended = retirementProposal(method({ status: "approved", digest: DIGEST_B, learning: runs("rrrr", DIGEST_A) }), { nowMs: now });
   assert.equal(amended.immediate, false);
-  // Safety methods keep their own rule: never retired on outcomes.
+  // A safety method is read by the harm test like any other: the flag is the
+  // generator's own claim, and it exempts a method from disuse only.
   const safety = retirementProposal(method({ status: "approved", learning: runs("rrrr"), provenance: { origin: "inferred", safetyRelated: true } }), { nowMs: now });
-  assert.equal(safety.propose, false);
+  assert.deepEqual([safety.propose, safety.immediate, safety.code], [true, true, "harm"]);
+});
+
+test("the harm test reads only the runs that used the method, never the ones that merely carried it", () => {
+  // 2026-09-25: the only observations production held were GEO writing runs
+  // that had a research method in their directory and never opened it.
+  const carried = runs("rrrrrr", DIGEST_A, { invoked: false });
+  assert.equal(carried.counts.loaded, 6, "every one of them was mounted");
+  assert.deepEqual({ ...methodHarmTest(carried), llr: undefined }, { state: "watching", runs: 0, bad: 0, llr: undefined },
+    "a run that never read the method is no evidence about it");
+  assert.notEqual(retirementProposal(method({ status: "approved", learning: carried }), { nowMs: NOW }).code, "harm");
+
+  // Mixed: only the two runs that read it are counted, and two cannot decide.
+  let mixed = runs("rrrr", DIGEST_A, { invoked: false });
+  for (const index of [10, 11]) {
+    mixed = foldObservation(mixed, { runId: `run_${index}`, family: `fam_${index}`, outcome: "rejected", at: daysAgo(0), invoked: true });
+  }
+  assert.equal(methodHarmTest(mixed).runs, 2);
+  assert.equal(methodHarmTest(mixed).state, "watching");
 });
 
 test("contribution is outcomes over trials, and silence is not neutrality", () => {
@@ -547,7 +570,7 @@ test("a method that is used constantly and hurts is proposed, which decay alone 
   assert.ok(!/superseded/.test(proposal.reason));
 });
 
-test("the contribution clause waits for enough trials, and never fires on a safety method", () => {
+test("the contribution clause waits for enough trials, and fires on a safety method too", () => {
   // A bad ratio, but too few trajectories for this clause to say anything.
   // Four good runs first, so the harm test has already read this revision as
   // clear and it is the contribution clause alone that is being asked (a run
@@ -557,13 +580,14 @@ test("the contribution clause waits for enough trials, and never fires on a safe
   assert.equal(retirementProposal(early, { nowMs: NOW }).propose, false);
   assert.equal(retirementProposal(early, { nowMs: NOW, minTrials: 5 }).propose, true, "the floor is a parameter, and it bites");
 
+  // A self-declared safety flag is not an exemption from outcomes.
   const safety = method({
     status: "approved",
     learning: record(24, 10),
     provenance: { origin: "inferred", safetyRelated: true },
   });
-  assert.equal(retirementProposal(safety, { nowMs: NOW }).propose, false);
-  assert.match(retirementProposal(safety, { nowMs: NOW }).reason, /safety-related/);
+  assert.equal(retirementProposal(safety, { nowMs: NOW }).propose, true);
+  assert.equal(retirementProposal(safety, { nowMs: NOW }).code, "contribution");
 
   // A good method with many trials is left alone.
   const good = method({ status: "approved", learning: record(24, 20) });
@@ -588,13 +612,14 @@ test("a library over its cap gives up its worst first, and never the untried", (
   assert.ok(!over.some((entry) => entry.id === "m_candidate"), "only effective methods count against the cap");
 });
 
-test("the cap never proposes a safety method, however badly it scores", () => {
+test("the cap ranks a safety method by its contribution like any other", () => {
+  // The cap is an outcome rule, not a disuse rule: the one exemption a safety
+  // method has (build spec §8.7) does not reach it.
   const methods = [
     method({ id: "m_safety", status: "approved", learning: record(20, 1), provenance: { origin: "inferred", safetyRelated: true } }),
     method({ id: "m_a", status: "approved", learning: record(20, 18) }),
     method({ id: "m_b", status: "approved", learning: record(20, 19) }),
   ];
   const over = libraryEvictions(methods, { cap: 1 });
-  assert.ok(!over.some((entry) => entry.id === "m_safety"));
-  assert.deepEqual(over.map((entry) => entry.id), ["m_a", "m_b"]);
+  assert.deepEqual(over.map((entry) => entry.id), ["m_safety", "m_a"]);
 });

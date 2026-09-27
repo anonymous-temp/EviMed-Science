@@ -304,11 +304,13 @@ test("a fresh method takes effect with nothing queued, and its own rejected runs
   assert.deepEqual(queued, [], "nothing is queued to measure a fresh method");
   assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved", "it takes effect the night it is learned");
 
-  // Three of its runs rejected in a row: the harm boundary, and it is retired
-  // by the next pass with a reason the researcher can read.
+  // Three of its runs used it and were rejected in a row: the harm boundary,
+  // and it is retired by the next pass with a reason the researcher can read.
+  // `invoked` because the harm test reads only runs that used the method
+  // (audit 2026-09-26, L-G2): one that merely carried it says nothing.
   for (let i = 0; i < 3; i += 1) {
     await learning.recordObservation(USER, created.id, { runId: `trial-${i}`, family: `trial-${i}:d1`, outcome: "rejected",
-      at: `2026-09-2${i}T00:00:00.000Z`, contentDigest: created.payload.contentDigest });
+      at: `2026-09-2${i}T00:00:00.000Z`, contentDigest: created.payload.contentDigest, invoked: true });
   }
   await consolidation.sleep({ job: { userId: USER, projectId: PROJECT, payload: { action: "sleep" } } });
   assert.deepEqual(queued, [], "and still nothing queued: the runs decided");
