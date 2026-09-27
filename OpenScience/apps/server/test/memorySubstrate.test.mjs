@@ -415,6 +415,99 @@ test("a term-matcher deployment has no index jobs to reconcile and does not ask"
   assert.equal(await substrate.reconcileRecords(), 0);
 });
 
+/**
+ * An index laid out as directories, the way `ls` answers: kind directories
+ * under `user/`, peer or session directories and then kinds under the other
+ * two, and leaves at the bottom. `remove` takes the leaf out.
+ * @param {string[]} leaves
+ */
+function directoryIndex(leaves) {
+  const files = new Set(leaves);
+  const calls = { remove: [], list: [] };
+  return {
+    calls,
+    configured: true,
+    async status() { return { configured: true, connected: true, code: null }; },
+    async listAll(_userId, uri) {
+      calls.list.push(uri);
+      const prefix = `${uri}/`;
+      const children = new Map();
+      for (const file of files) {
+        if (!file.startsWith(prefix)) continue;
+        const [head, ...rest] = file.slice(prefix.length).split("/");
+        children.set(`${prefix}${head}`, rest.length > 0);
+      }
+      if (children.size === 0) throw Object.assign(new Error("no such directory"), { code: "memory_index_not_found" });
+      return [...children].map(([child, isDir]) => ({ uri: child, isDir }));
+    },
+    async remove(_userId, uri) {
+      calls.remove.push(uri);
+      return files.delete(uri);
+    },
+  };
+}
+
+// 2026-09-26 audit (M-7, I3 §6): sixteen leaves of the acceptance account's
+// default project outlived their records — removed by an operator's SQL that
+// enqueued nothing — and re-arming failed jobs could never reach them.
+test("the sweep removes a copy whose record is gone or not publishable, and enqueues a record the index lacks", async () => {
+  const kept = record({ id: "kept", scope: "project", scopeId: PROJECT, kind: "project_fact" });
+  const missing = record({ id: "missing-leaf", kind: "preference" });
+  const summary = record({ id: "summary", scope: "project", scopeId: PROJECT, kind: "run_summary", value: "{}" });
+  const archived = record({ id: "archived", status: "archived" });
+  const index = directoryIndex([
+    memoryUri(USER, { scope: "project", scopeId: PROJECT, kind: "project_fact", recordId: "kept" }),
+    memoryUri(USER, { scope: "project", scopeId: "default", kind: "analysis", recordId: "deleted-by-sql" }),
+    memoryUri(USER, { scope: "project", scopeId: PROJECT, kind: "run_summary", recordId: "summary" }),
+    memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "archived" }),
+    memoryUri(USER, { scope: "session", scopeId: SESSION, kind: "follow_up", recordId: "gone-too" }),
+    // A file this layout never writes is left where it is.
+    `viking://user/${openVikingUserId(USER)}/memories/evimed/user/preference/.abstract.md`,
+  ]);
+  const enqueued = [];
+  const jobs = {
+    async rearm() { return 0; },
+    async enqueue(userId, kind, payload, options) { enqueued.push({ userId, kind, payload, key: options.idempotencyKey }); return {}; },
+  };
+  const store = { ...fakeStore([kept, missing, summary, archived]), async accountsAfter({ after }) { return after ? [] : [USER]; } };
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index, jobs });
+
+  assert.equal(await substrate.reconcileRecords(), 0);
+  assert.deepEqual(substrate.lastSweep, { accounts: 1, removed: 4, enqueued: 1 });
+  assert.deepEqual(index.calls.remove.map((uri) => parseMemoryUri(uri)?.recordId).sort(), ["archived", "deleted-by-sql", "gone-too", "summary"]);
+  assert.deepEqual(enqueued.map((job) => [job.kind, job.payload.recordId, job.payload.scope, job.payload.memoryKind]),
+    [["memory-record-index", "missing-leaf", "user", "preference"]]);
+  assert.match(enqueued[0].key, /^memory-record-index:sweep:missing-leaf:/);
+
+  // A second sweep over the converged index changes nothing but the hour's key.
+  index.calls.remove.length = 0;
+  await substrate.sweepRecordLeaves();
+  assert.deepEqual(index.calls.remove, []);
+});
+
+test("the sweep walks accounts in turns, and one it cannot read costs the re-arm nothing", async () => {
+  const visited = [];
+  const store = {
+    ...fakeStore([]),
+    async accountsAfter({ after, limit }) {
+      const all = ["a", "b", "c"];
+      const next = all.filter((id) => id > after).slice(0, limit);
+      visited.push(...next);
+      return next;
+    },
+  };
+  const index = directoryIndex([]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index, jobs: { async rearm() { return 3; }, async enqueue() { return {}; } } });
+  await substrate.sweepRecordLeaves({ accounts: 2 });
+  await substrate.sweepRecordLeaves({ accounts: 2 });
+  await substrate.sweepRecordLeaves({ accounts: 2 });
+  assert.deepEqual(visited, ["a", "b", "c", "a", "b"], "the cursor wraps once every account was visited");
+
+  index.listAll = async () => { throw Object.assign(new Error("index down"), { code: "memory_index_unavailable" }); };
+  assert.equal(await substrate.reconcileRecords(), 3);
+  assert.equal(substrate.lastSweep.code, "memory_index_unavailable");
+});
+
 /** The job queue as the worker sees it: one `finish` and what it was told. */
 function fakeJobs() {
   const finished = [];

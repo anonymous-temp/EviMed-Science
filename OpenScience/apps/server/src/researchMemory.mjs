@@ -52,6 +52,12 @@ export const MEMORY_SOURCE_REF_LIMIT = 500;
 /** One statement answers a whole export. Past this a caller is not exporting,
  *  it is asking the process to hold a database in memory. */
 export const MEMORY_EXPORT_LIMIT = 100_000;
+/** How many removed records one bulk delete tells the index about row by row,
+ *  in its own transaction. Past it, the caller's subtree forget and the
+ *  index sweep (`MemorySubstrate.sweepRecordLeaves`) converge the rest: one
+ *  transaction inserting a job per row of a very large account is a lock held
+ *  for as long as it takes, for work the sweep does anyway. */
+export const MEMORY_BULK_OUTBOX_LIMIT = 2_000;
 
 export { MEMORY_EVIDENCE_LIMIT, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_REVISION_LIMIT, MEMORY_SCOPES, MEMORY_STATUSES };
 
@@ -693,6 +699,25 @@ export class ResearchMemoryStore {
     }, { idempotencyKey: `memory-record-index:${randomUUID()}`, maxAttempts: 10, transactionClient: client });
   }
 
+  /**
+   * What removing these rows owes the rest of the store, inside the removing
+   * transaction: one index job per row (bounded, see MEMORY_BULK_OUTBOX_LIMIT)
+   * and their usage counters. Every delete path goes through here since
+   * 2026-09-27 — `purgeRecords` and `deleteProjectMemory` used to run a bare
+   * DELETE, leaving index copies to whichever caller remembered a subtree
+   * forget and usage rows to nobody (84 orphans on production, audit M-7).
+   * @param {any} client @param {string} owner @param {readonly { id: string, scope: string, scope_id: string, kind: string }[]} rows
+   */
+  async #forgetRows(client, owner, rows) {
+    for (const row of rows.slice(0, MEMORY_BULK_OUTBOX_LIMIT)) {
+      await this.#enqueueRecordIndex(client, owner, { id: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind });
+    }
+    if (rows.length > 0) {
+      await client.query("DELETE FROM evimed_memory.record_usage WHERE user_id=$1 AND record_id=ANY($2::text[])",
+        [owner, rows.map((row) => row.id)]);
+    }
+  }
+
   async status() {
     if (!this.database) {
       return { configured: false, connected: false, code: "memory_unconfigured", structured: false };
@@ -985,7 +1010,7 @@ export class ResearchMemoryStore {
         const replaced = await client.query(`SELECT * FROM evimed_memory.records
           WHERE user_id=$1 AND superseded_by=$2 FOR UPDATE`, [owner, current.id]);
         await client.query("DELETE FROM evimed_memory.records WHERE user_id=$1 AND id=$2", [owner, current.id]);
-        await this.#enqueueRecordIndex(client, owner, current);
+        await this.#forgetRows(client, owner, [{ id: current.id, scope: current.scope, scope_id: current.scopeId, kind: current.kind }]);
         const restored = [];
         for (const row of replaced.rows) {
           const earlier = publicRecord(row);
@@ -1129,24 +1154,26 @@ export class ResearchMemoryStore {
       const result = await client.query(`DELETE FROM evimed_memory.records
         WHERE user_id=$1 AND id=$2 RETURNING id,scope,scope_id,kind`, [owner, recordId]);
       if (result.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
-      const row = result.rows[0];
       // Enqueued from the delete's own transaction: a forget that commits must
       // not be able to leave the derived copy behind, and a forget that rolls
-      // back must not remove a copy of a memory that still exists.
-      await this.#enqueueRecordIndex(client, owner, {
-        id: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind,
-      });
-      // The usage counter has no foreign key — a recall must never be able to
-      // fail on a row being deleted underneath it — so it is cleared here.
-      await client.query("DELETE FROM evimed_memory.record_usage WHERE user_id=$1 AND record_id=$2", [owner, recordId]);
+      // back must not remove a copy of a memory that still exists. The usage
+      // counter has no foreign key — a recall must never be able to fail on a
+      // row being deleted underneath it — so it is cleared here too.
+      await this.#forgetRows(client, owner, result.rows);
       return true;
     });
   }
 
-  /** @param {string} userId */
+  /** Every record of one account, with what their removal owes the index
+   *  and the usage counters (`#forgetRows`). @param {string} userId */
   async purgeRecords(userId) {
-    const result = await this.#query("DELETE FROM evimed_memory.records WHERE user_id=$1", [assertUserId(userId)]);
-    return Number(result.rowCount ?? 0);
+    const owner = assertUserId(userId);
+    return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
+      const result = await client.query("DELETE FROM evimed_memory.records WHERE user_id=$1 RETURNING id,scope,scope_id,kind", [owner]);
+      await this.#forgetRows(client, owner, result.rows);
+      return Number(result.rowCount ?? 0);
+    });
   }
 
   // --------------------------------------------------------------- settings
@@ -1342,11 +1369,15 @@ export class ResearchMemoryStore {
     const owner = assertUserId(userId);
     const scopeId = String(projectId ?? "").trim();
     if (!scopeId) throw new HttpError(400, "memory_payload_invalid", "projectId is required.");
-    const records = await this.#query(
-      "DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='project' AND scope_id=$2", [owner, scopeId]);
-    // The project's conversations' own state goes with it.
-    await this.#query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2", [owner, scopeId]);
-    return { structured: Number(records.rowCount ?? 0) };
+    return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
+      const records = await client.query(`DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='project' AND scope_id=$2
+        RETURNING id,scope,scope_id,kind`, [owner, scopeId]);
+      await this.#forgetRows(client, owner, records.rows);
+      // The project's conversations' own state goes with it.
+      await client.query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2", [owner, scopeId]);
+      return { structured: Number(records.rowCount ?? 0) };
+    });
   }
 
   /** @param {string} userId */
@@ -1381,9 +1412,42 @@ export class ResearchMemoryStore {
     const owner = assertUserId(userId);
     const structured = await this.purgeRecords(owner);
     // The counters go with the records they count: a usage row for a record
-    // that no longer exists is a copy of deleted data, however small.
+    // that no longer exists is a copy of deleted data, however small. Any the
+    // records did not name (orphans from before 2026-09-27) go as well.
     await this.#query("DELETE FROM evimed_memory.record_usage WHERE user_id=$1", [owner]);
     return { structured };
+  }
+
+  /**
+   * The next accounts after `after`, in id order: the index sweep's cursor
+   * (`MemorySubstrate.sweepRecordLeaves`). Every account, not only those that
+   * hold records — an account whose last record was deleted by a path that
+   * bypassed the outbox is exactly the one whose index still holds copies.
+   * @param {{ after?: string, limit?: number }} [options] @returns {Promise<string[]>}
+   */
+  async accountsAfter({ after = "", limit = 5 } = {}) {
+    const result = await this.#query("SELECT id FROM evimed_control.users WHERE id > $1 ORDER BY id LIMIT $2",
+      [String(after ?? ""), Math.max(1, Math.min(100, Number(limit) || 5))]);
+    return result.rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Usage counters whose record no longer exists — what a delete that did not
+   * clear them left behind — counted by account, and removed with `apply`.
+   * Idempotent: a second pass finds none (audit 2026-09-26, M-7: 84 rows).
+   * @param {{ userId?: string | null, apply?: boolean }} [options]
+   * @returns {Promise<{ applied: boolean, orphans: { userId: string, rows: number }[] }>}
+   */
+  async orphanUsage({ userId = null, apply = false } = {}) {
+    const owner = userId == null ? null : assertUserId(userId);
+    const where = `NOT EXISTS (SELECT 1 FROM evimed_memory.records r WHERE r.user_id=u.user_id AND r.id=u.record_id)
+      AND ($1::text IS NULL OR u.user_id=$1)`;
+    const result = apply
+      ? await this.#query(`WITH removed AS (DELETE FROM evimed_memory.record_usage u WHERE ${where} RETURNING u.user_id)
+          SELECT user_id, count(*)::integer AS rows FROM removed GROUP BY user_id ORDER BY user_id`, [owner])
+      : await this.#query(`SELECT u.user_id, count(*)::integer AS rows FROM evimed_memory.record_usage u WHERE ${where}
+          GROUP BY u.user_id ORDER BY u.user_id`, [owner]);
+    return { applied: apply, orphans: result.rows.map((row) => ({ userId: String(row.user_id), rows: Number(row.rows) })) };
   }
 
   // ------------------------------------------------------------------ usage

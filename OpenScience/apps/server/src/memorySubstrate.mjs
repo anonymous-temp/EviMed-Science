@@ -6,7 +6,7 @@ import {
   recallTargets,
 } from "./openVikingClient.mjs";
 import { recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
-import { memoryPausedFor } from "./researchMemory.mjs";
+import { MEMORY_KINDS, memoryPausedFor } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { TERMINAL_INDEX_FAILURES } from "./memoryIndexWorker.mjs";
 
@@ -74,6 +74,14 @@ export function memoryIndexSelection(config) {
  *  drop a hit whose record has been deleted, is sensitive, or has expired,
  *  without the recall coming back short. */
 const CANDIDATE_OVERFETCH = 3;
+
+/** How many accounts one sweep of the index visits (`sweepRecordLeaves`). The
+ *  reconcile timer calls it every five minutes, so a deployment of a few
+ *  accounts is swept whole each time and a large one in turns. */
+const SWEEP_ACCOUNTS = 5;
+
+/** A record id as the store mints them; a leaf named otherwise is not ours. */
+const RECORD_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 /** How long one rebuild write may wait for the index to finish embedding it.
  *  The same bound the capsule index uses, for the same reason: an upstream that
@@ -169,6 +177,10 @@ export class MemorySubstrate {
     // the failure sets this.
     this.strict = Boolean(config.memoryIndexStrict);
     this.lastError = null;
+    /** Where the index sweep resumes: the last account it visited. */
+    this.sweepCursor = "";
+    /** What the last sweep did, for status and tests. @type {{ accounts: number, removed: number, enqueued: number, code?: string } | null} */
+    this.lastSweep = null;
   }
 
   /** True when the selected provider can actually be asked. */
@@ -462,7 +474,129 @@ export class MemorySubstrate {
    */
   async reconcileRecords(limit = 25) {
     if (!this.active || !this.jobs) return 0;
-    return this.jobs.rearm("memory-record-index", { limit, terminalCodes: TERMINAL_INDEX_FAILURES });
+    const rearmed = await this.jobs.rearm("memory-record-index", { limit, terminalCodes: TERMINAL_INDEX_FAILURES });
+    // The other direction, which re-arming cannot reach: a copy whose record
+    // was removed by a path that enqueued nothing. A sweep that fails is
+    // recorded and does not cost the re-arm its result.
+    await this.sweepRecordLeaves().catch((error) => {
+      this.lastSweep = { accounts: 0, removed: 0, enqueued: 0, code: typeof error?.code === "string" ? error.code : "memory_index_sweep_failed" };
+    });
+    return rearmed;
+  }
+
+  /**
+   * Make the index agree with the store in both directions, a few accounts at
+   * a time.
+   *
+   * Re-arming failed jobs converges only what an outbox job was written for.
+   * On production (2026-09-26 audit, M-7; I3 §6) sixteen leaves of the
+   * acceptance account's `default` project outlived their records by days:
+   * the rows were removed by an operator's SQL during the 09-23 history
+   * cleanup (`delete from evimed_memory.records … scope_id in ('default', …)`),
+   * which enqueued nothing, and the default project cannot be deleted, so no
+   * subtree forget followed. Every store path now enqueues; this is what
+   * makes a path that does not — a hand-written statement, a restore, an
+   * index that missed an event — converge anyway, instead of waiting for
+   * someone to run the rebuild.
+   *
+   * The leaves are listed before the records are read, so a record written
+   * in between is never mistaken for a stale copy: its leaf is not in the
+   * listing, and at worst it is enqueued once more. A leaf is removed when its
+   * record is gone, is not publishable (archived, superseded, sensitive,
+   * expired, a run summary), or lives at a path its record does not; a
+   * publishable record with no leaf is enqueued. Only leaves this layout
+   * writes are touched — `<kind>/<record id>.md` under our three roots.
+   *
+   * @param {{ accounts?: number }} [options]
+   */
+  async sweepRecordLeaves({ accounts = SWEEP_ACCOUNTS } = {}) {
+    if (!this.active || !this.jobs || typeof this.store?.accountsAfter !== "function") return null;
+    const batch = await this.store.accountsAfter({ after: this.sweepCursor, limit: accounts });
+    this.sweepCursor = batch.length < accounts ? "" : String(batch.at(-1));
+    const total = { accounts: batch.length, removed: 0, enqueued: 0 };
+    for (const userId of batch) {
+      const swept = await this.sweepAccount(userId);
+      total.removed += swept.removed;
+      total.enqueued += swept.enqueued;
+    }
+    this.lastSweep = total;
+    return total;
+  }
+
+  /** One account's half of the sweep. @param {string} userId */
+  async sweepAccount(userId) {
+    const leaves = await this.#researchLeaves(userId);
+    const records = await this.store.listAllRecords(userId);
+    const now = Date.now();
+    /** @type {Map<string, string>} the path each publishable record's copy belongs at */
+    const expected = new Map();
+    for (const record of records) {
+      if (publishableContent(record, now)) expected.set(record.id, recordUri(userId, record));
+    }
+    let removed = 0;
+    const present = new Set();
+    for (const leaf of leaves) {
+      if (expected.get(leaf.recordId) === leaf.uri) {
+        present.add(leaf.uri);
+        continue;
+      }
+      if (await this.openViking.remove(userId, leaf.uri, { recursive: false })) removed += 1;
+    }
+    let enqueued = 0;
+    const byId = new Map(records.map((record) => [record.id, record]));
+    // One event per record per hour at most: a job still queued, or one the
+    // index acknowledged and then lost, is asked again an hour later rather
+    // than on every sweep.
+    const hour = new Date(Math.floor(now / 3_600_000) * 3_600_000).toISOString();
+    for (const [recordId, uri] of expected) {
+      if (present.has(uri)) continue;
+      const record = byId.get(recordId);
+      await this.jobs.enqueue(userId, "memory-record-index", {
+        recordId, scope: record.scope, scopeId: record.scopeId, memoryKind: record.kind,
+      }, { idempotencyKey: `memory-record-index:sweep:${recordId}:${record.version}:${hour}`, maxAttempts: 10 });
+      enqueued += 1;
+    }
+    return { removed, enqueued };
+  }
+
+  /**
+   * Every leaf of one account's research subtrees that this layout wrote.
+   * `ls` is not recursive (OpenViking v0.4.19), so it walks: kind directories
+   * under `user/`, project or session directories and then kinds under the
+   * other two. A root that is not there is an empty index.
+   * @param {string} userId @returns {Promise<{ uri: string, recordId: string }[]>}
+   */
+  async #researchLeaves(userId) {
+    /** @type {{ uri: string, recordId: string }[]} */
+    const found = [];
+    /** @param {string} uri @param {number} depth */
+    const walk = async (uri, depth) => {
+      /** @type {any[]} */
+      let entries;
+      try {
+        entries = await this.openViking.listAll(userId, uri);
+      } catch (error) {
+        if (error?.code === "memory_index_not_found") return;
+        throw error;
+      }
+      for (const entry of entries) {
+        const child = String(entry?.uri ?? "");
+        if (!child) continue;
+        if (entry?.isDir) {
+          if (depth > 0) await walk(child, depth - 1);
+          continue;
+        }
+        const parsed = parseMemoryUri(child);
+        if (parsed && RECORD_ID.test(parsed.recordId) && MEMORY_KINDS.includes(parsed.kind)) {
+          found.push({ uri: child, recordId: parsed.recordId });
+        }
+      }
+    };
+    const [user, project, session] = researchRoots(userId);
+    await walk(user, 1);
+    await walk(project, 2);
+    await walk(session, 2);
+    return found;
   }
 
   /**
