@@ -959,8 +959,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_duplicate: '这份资料已经存在。',
   source_missing: '原始库里找不到这份资料了，派生内容已保留。',
   credits_exhausted: '额度已用尽，充值后即可继续。',
-  credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「设置 → 用量」调高上限。',
-  credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在「设置 → 用量」调高上限。',
+  credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在“设置 → 用量”调高上限。',
+  credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在“设置 → 用量”调高上限。',
   // 灵豆 settlement (fusion plan §9.6). A deployment that has not joined
   // EviMed's billing shows no balance at all, so the first of these is normally
   // read by a client that asked anyway rather than by a person.
@@ -977,7 +977,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // answered 「运行未通过核验。」 for a stall timer, a cancel and a supersede
   // alike — and the rule is what these entries exist to carry.
   runtime_monitor_stalled:
-    '运行连续很长时间没有产生新的消息或工具调用，已按「无进展」中断收尾。'
+    '运行连续很长时间没有产生新的消息或工具调用，已按“无进展”中断收尾。'
     + '这不是质量问题；已经写出的文件仍在工作区里，可以回到这个会话让它从中断处继续。',
   runtime_monitor_timeout:
     '运行超过了本次任务的总时长上限，已中止。'
@@ -1042,7 +1042,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '保存下来的原始来源与检索时写下的内容已经不一致，从中摘出的引文不能算作原文。'
     + '不要改动、截断或重排已保存的来源；确需更新时重新检索一次。',
   specialist_delegated_evidence_read:
-    '这份成果里有一部分证据是分工子任务读取的，主运行没有亲自核对，因此标注为「未完成核验」。'
+    '这份成果里有一部分证据是分工子任务读取的，主运行没有亲自核对，因此标注为“未完成核验”。'
     + '成果可以正常查看，引用前请自行复核这部分。',
   specialist_evidence_repair_failed:
     '按退回意见做的修复没能完成，成果保持未通过状态。已经写好的文件仍在工作区里，可以自行取用或重新发起。',
@@ -1058,7 +1058,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   specialist_screening_ledger_mismatch:
     '检索筛选流程里的数字与最终纳入的来源对不上（或参考文献条目数与正文引用不一致），这份台账不能自证。',
   practical_emergency_trigger_conditioned_on_medication_response:
-    '临床实践要点把「就医／急救」的触发条件写成了取决于用药后的反应，这在安全上不成立：就医指征必须是无条件的。'
+    '临床实践要点把“就医／急救”的触发条件写成了取决于用药后的反应，这在安全上不成立：就医指征必须是无条件的。'
     + '这是必须改的一处，其余成果都在。',
   regulatory_article_without_official_source:
     '报告以条款级方式引用了法规，却没有给出官方出处，不能这样发布。补上官方文件的出处，或把表述降为概述即可。',
@@ -1066,16 +1066,16 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '报告声明做了证据分级，但 GRADE 等级与降级理由不自洽，等于分级没有真正执行。补齐或订正分级理由即可。',
 
   // ——— Refusals a person meets before anything runs ———
-  usage_budget_exceeded: '这次请求会超出账户设定的用量上限，因此没有开始，也没有产生费用。可在「设置 → 用量」查看已用与上限。',
+  usage_budget_exceeded: '这次请求会超出账户设定的用量上限，因此没有开始，也没有产生费用。可在“设置 → 用量”查看已用与上限。',
   runtime_reserved_for_autopilot:
     '这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。'
-    + '等这一轮结束后即可继续，或在「主动研究」里先暂停它。',
+    + '等这一轮结束后即可继续，或在“主动研究”里先暂停它。',
   runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
   runtime_limit_exceeded: '运行时的并发或用量上限已到，这次请求没有被受理。稍后重试。',
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
-  default_project_protected: '「我的研究」是账户的默认项目，不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
+  default_project_protected: '“我的研究”是账户的默认项目，不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
 
   // ——— The autopilot's independent-check episode ———
   //
@@ -1119,7 +1119,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
-  library_understanding_missing: '这份资料还没有资料理解结果。分析深度为「结构化」或「深度」的资料理解完成后，才能发布到记忆胶囊。',
+  library_understanding_missing: '这份资料还没有资料理解结果。分析深度为“结构化”或“深度”的资料理解完成后，才能发布到记忆胶囊。',
   library_capsule_unavailable: '账户的主要胶囊是别人分享来的，资料只会写进你自己的胶囊。先把自己的胶囊设为主要胶囊，再发布。',
   library_publish_busy: '资料库正有一次发布到记忆胶囊的操作在进行，等它完成后再试。',
 

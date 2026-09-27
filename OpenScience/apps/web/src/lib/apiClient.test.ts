@@ -1186,7 +1186,7 @@ describe("apiClient budget refusals", () => {
     // the moment the oldest charge in the rolling window ages out, which frees
     // that one charge's worth and no more.
     expect(client.webErrorMessage(error)).toBe(
-      "今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「设置 → 用量」调高上限。"
+      "今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在“设置 → 用量”调高上限。"
       + "约 3 小时 12 分钟后额度开始释放（按滚动窗口逐笔释放，不是整点清零）。",
     );
   });
@@ -1336,7 +1336,7 @@ describe("productClient budget refusals", () => {
       423, { "Retry-After": "600" },
     )).resolves.toBe(
       "这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。"
-      + "等这一轮结束后即可继续，或在「主动研究」里先暂停它。请在约 10 分钟后重试。",
+      + "等这一轮结束后即可继续，或在“主动研究”里先暂停它。请在约 10 分钟后重试。",
     );
   });
 
