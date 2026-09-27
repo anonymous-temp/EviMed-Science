@@ -509,6 +509,16 @@ class RealRepositoryTests(unittest.TestCase):
         _, _, issues, _ = audit()
         self.assertEqual(issues, [])
 
+    def test_every_pack_names_the_capability_it_evaluates(self):
+        # A pack that names no capability is counted for none: the release
+        # audit's brief counter and `scripts/ops/capability-acceptance.mjs`
+        # both read the pack-level `capability`. research-topic-quality named
+        # none until 2026-09-27, so research-topic-selection read as having no
+        # briefs at all.
+        _, _, _, notices = audit()
+        unnamed = [notice for notice in notices if "names no capability" in notice]
+        self.assertEqual(unnamed, [])
+
     def test_notices_are_advisory_and_never_block(self):
         _, _, issues, notices = audit()
         self.assertEqual(issues, [])

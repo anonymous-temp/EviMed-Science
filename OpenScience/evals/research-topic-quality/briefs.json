@@ -1,5 +1,6 @@
 {
   "schemaVersion": "1.0.0",
+  "capability": "research-topic-selection",
   "briefs": [
     {
       "id": "ordinary-constrained-cohort",
