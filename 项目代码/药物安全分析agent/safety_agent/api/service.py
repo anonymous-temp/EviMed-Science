@@ -368,7 +368,9 @@ class ServiceContext:
             raise NormalizationError(f"药品名无法归一化: {drug}")
         normalized: list[str] = []
         for query in reactions:
-            result = await normalize_adr_async(query, llm_fallback=self.name_translator)
+            result = await normalize_adr_async(
+                query, llm_fallback=self.name_translator, client=self.openfda
+            )
             if result.normalized is None:
                 raise NormalizationError(
                     f"ADR 词无法归一化: {query}",

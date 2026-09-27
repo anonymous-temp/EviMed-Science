@@ -176,6 +176,12 @@ def _section_normalization(add, result: AnalysisResult) -> None:
             f"| ADR | {reaction.query} | {reaction.normalized or '未命中'} "
             f"| {reaction.method} | {reaction.confidence:.2f} |"
         )
+    for item in result.unresolved_reactions:
+        candidates = "、".join(item.candidates) or "无"
+        add(
+            f"| ADR | {item.query} | 未归一(未纳入统计;候选:{candidates}) "
+            f"| {item.method} | 0.00 |"
+        )
     add("")
 
 

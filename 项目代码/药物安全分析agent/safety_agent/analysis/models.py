@@ -43,6 +43,14 @@ class NormalizedReaction(BaseModel):
     confidence: float
 
 
+class UnresolvedReaction(BaseModel):
+    """A requested ADR term no rule, vocabulary or confirmation could map."""
+
+    query: str
+    method: str
+    candidates: list[str] = Field(default_factory=list)
+
+
 class SignalRow(BaseModel):
     """One drug-ADR pair: 2x2 cells plus the full metrics panel."""
 
@@ -104,6 +112,9 @@ class AnalysisResult(BaseModel):
     #: Reaction terms with zero FAERS reports. Named here rather than turned
     #: into a zero-cell-corrected row whose ROR is d/b.
     unmatched_reactions: list[str] = Field(default_factory=list)
+    #: Requested terms that were not normalized to a MedDRA PT; each was left
+    #: out of the target-ADR statistics, named here with its candidates.
+    unresolved_reactions: list[UnresolvedReaction] = Field(default_factory=list)
     query_urls: dict[str, str] = Field(default_factory=dict)
     # Query conventions actually applied (transparency for the report):
     drug_field: str = "openfda_generic"

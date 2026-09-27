@@ -55,7 +55,8 @@ def test_english_alias_resolves():
         ("anemia", "anaemia"),
         ("hematuria", "haematuria"),
         ("dyspnea", "dyspnoea"),
-        ("peripheral edema", "peripheral oedema"),
+        # MedDRA's own word order: FAERS carries "Oedema peripheral".
+        ("peripheral edema", "oedema peripheral"),
         ("hypoglycemia", "hypoglycaemia"),
         ("hyperkalemia", "hyperkalaemia"),
     ],
@@ -72,7 +73,9 @@ def test_whitespace_is_tolerated():
 
 
 def test_unresolved_returns_candidates_not_a_guess():
-    result = normalize_adr("rhabdomyolysi")  # typo: close to a known PT
+    # A misspelling no rule can decide ("i" for "y"). A dropped plural "s"
+    # is a rule (see test_reaction_vocabulary.py); a wrong letter is not.
+    result = normalize_adr("rhabdomyolisis")
     assert result.normalized is None
     assert result.confidence == 0.0
     assert result.method == "unresolved"

@@ -4,8 +4,11 @@ Implements the预留 seams:
 - ``suggest_generic_name`` — the ``DrugNameLLMFallback`` protocol from
   ``safety_agent.normalize.drugs``: Chinese (or other non-English) drug
   names -> English generic (INN/USAN) name;
-- ``suggest_adr_pt`` — same idea for ADR terms not covered by the built-in
-  Chinese->MedDRA-PT map.
+- ``suggest_adr_pt`` — an ADR term the rules cannot map (Chinese, a lay
+  English phrase, a synonym) -> the MedDRA PT it most likely means. The
+  answer is only a proposal: ``normalize_adr_async`` uses it when the FAERS
+  vocabulary or an openFDA count confirms it, and otherwise offers it as a
+  candidate.
 
 Both use the flash tier with a tiny prompt and a plain-text answer. The
 output is sanitized aggressively (first line, no quotes/punctuation, must
@@ -33,9 +36,10 @@ _DRUG_PROMPT = (
 )
 
 _ADR_PROMPT = (
-    "把给定的不良反应名称翻译成对应的 MedDRA 首选词(PT,英文小写)。"
+    "把给定的不良反应名称(中文、英文俗称或非标准写法)对应到 MedDRA 首选词(PT,英文小写)。"
     "只输出 PT 本身,不要任何解释、引号或标点。若无法确定,输出空行。"
-    "示例:肌痛 → myalgia;乳酸性酸中毒 → lactic acidosis;肺炎 → pneumonia。"
+    "示例:肌痛 → myalgia;乳酸性酸中毒 → lactic acidosis;心慌 → palpitations;"
+    "heart racing → palpitations;low heart rate → bradycardia。"
 )
 
 
@@ -74,7 +78,7 @@ class DeepSeekNameTranslator:
 
 
 def _sanitize(content: str) -> str | None:
-    """First line, lower-case, alnum/space/hyphen only; reject CJK/empty/long."""
+    """First line, lower-case, alnum/space/hyphen/apostrophe/comma; reject CJK/empty/long."""
     line = content.strip().splitlines()[0] if content.strip() else ""
     line = line.strip(" \t\"'`.,;:!?()[]{}<>")
     line = " ".join(line.lower().split())
@@ -82,6 +86,7 @@ def _sanitize(content: str) -> str | None:
         return None
     if contains_cjk(line):
         return None
-    if not re.fullmatch(r"[a-z0-9][a-z0-9 \-/+]*", line):
+    # Apostrophes and commas occur inside real PTs ("crohn's disease").
+    if not re.fullmatch(r"[a-z0-9][a-z0-9 \-/+',]*", line):
         return None
     return line

@@ -202,14 +202,18 @@ def test_adr_cjk_unmapped_uses_llm_translation():
     assert result.confidence == pytest.approx(0.6)
 
 
-def test_adr_llm_translation_to_unknown_pt_accepted_low_confidence():
+def test_adr_llm_translation_nobody_confirms_stays_a_candidate():
+    """The model's answer is a proposal: without the vocabulary or an openFDA
+    count behind it, it is offered for a person to confirm and never analysed."""
     result = _run(
         normalize_adr_async(
             "乳酸性酸中毒", llm_fallback=_FakeAdrFallback("some rare syndrome")
         )
     )
-    assert result.normalized == "some rare syndrome"
-    assert result.confidence == pytest.approx(0.4)
+    assert result.normalized is None
+    assert result.method == "unresolved"
+    assert result.candidates[0].term == "some rare syndrome"
+    assert result.candidates[0].source == "llm-unconfirmed"
 
 
 def test_adr_llm_failure_stays_unresolved():

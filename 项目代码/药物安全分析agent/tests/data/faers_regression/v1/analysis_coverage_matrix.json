@@ -13,11 +13,13 @@
         "reactions.query",
         "reactions.normalized",
         "reactions.method",
-        "reactions.confidence"
+        "reactions.confidence",
+        "unresolved_reactions"
       ],
       "tests": [
         "tests/test_normalize_drugs.py",
         "tests/test_normalize_adr.py",
+        "tests/test_reaction_vocabulary.py",
         "tests/test_pipeline.py"
       ]
     },

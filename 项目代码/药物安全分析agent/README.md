@@ -18,7 +18,7 @@ P6(OpenScience 开放域技能路由)**。
 │   ├── openfda/               # openFDA live 数据层(httpx 异步;退避;双级缓存;label 查询)
 │   ├── faers/                 # 冻结逐报告快照(同一 drug 对象绑定药名+ROLE_COD)
 │   ├── drug_classes/          # 版本化类药定义 + 互斥比较/分层/起病时间引擎
-│   ├── normalize/             # 药品名/ADR 归一(规则优先,LLM 兜底仅留接口)
+│   ├── normalize/             # 药品名/ADR 归一(规则 + FAERS 词表优先,LLM 读法须经确认)
 │   ├── signals/               # 信号统计层(纯 numpy/pandas;ROR/PRR/χ²/IC/EBGM)
 │   ├── llm/                   # DeepSeek 异步客户端(flash/pro 双层;JSON 校验+修复重试)
 │   ├── evidence/              # FDA label 对照(防编造校验)+ EviMed 指南检索客户端
@@ -81,7 +81,7 @@ clientType=`drug-safety-analysis`,协议与其余 Python agent 一致:
 无后缀的「药的某反应」仅在该反应能确定性命中 MedDRA PT 时才拆分)。**CJK 处理链**:
 提取的药名/ADR 词含中文时,经 `llm/fallbacks.py` 的 DeepSeek flash 翻译器
 (极短 prompt、输出消毒、拒绝仍为中文的答案)译为英文通用名/MedDRA PT;
-药名译文需经 openFDA 计数确认才提升为归一结果(ADR 译文回走确定性归一),
+药名译文需经 openFDA 计数确认才提升为归一结果(ADR 译文见下节「ADR 术语归一」),
 确认不了就保留原文、由管线给出明确"未检索到"——不静默、不猜词。
 `finish.data.md` 为 OSS URL(OSS 未配置/失败时降级 base64 data URL)。
 `MAX_CONCURRENT_SESSIONS` 控制会话上限。
@@ -157,6 +157,33 @@ drug 对象上同时匹配规范药名、`ROLE_COD` 与可选给药途径;目标
 统一为调用本引擎是平台侧的待办(积压 R055)。
 年龄分桶使用 ICH `patientonsetageunit`(800–805)将年/月/周/日/小时统一到年龄区间,
 并显式输出未报告性别、年龄和国家的桶。
+
+### ADR 术语归一(2026-09-27)
+
+2026-09-15 生产上一次 adr-analysis 运行 27 个作业失败 21 个:内置表只认 119 个 PT,
+英文词没有兜底,一个词认不出整个作业就失败。现在的顺序(`normalize/adr.py`):
+
+1. 中文内置表 `ZH_TO_PT`、英文临床同义词表 `EN_ALIAS_TO_PT`(每个值都必须是下述词表里的
+   FAERS 词,`tests/test_reaction_vocabulary.py` 把关;此前有 7 个值是 FAERS 从不使用的写法,
+   如 "peripheral neuropathy"——正确 PT 是 "neuropathy peripheral");
+2. FAERS 反应词表 `safety_agent/data/faers_reaction_terms.json`(11,703 个 PT 字符串,取自
+   openFDA 的 `patient.reaction.reactionmeddrapt.exact`):原词,或只差标点、美式/英式拼写、
+   单复数的变体——每个变体都必须是词表里的词才算数,同一步命中两个不同的词则判为歧义、不选;
+3. 词表之外的英文词:openFDA 按该词 `.exact` 计数 > 0 才采用(`openfda-confirmed`);
+4. 同义词、俗称(中英文均可,如「心慌」「heart racing」)交给 DeepSeek flash 读成 PT,
+   其答案须经第 1–2 步或 openFDA 计数确认才采用,否则只作为候选(`llm-unconfirmed`)。
+
+一个目标 ADR 归一不了,只把它从目标 ADR 统计中拿掉并在报告「输入归一」表、
+`degradation_notes` 和模块台账 `reactionMatching` 里列出候选;请求的 ADR 全部归一不了
+才以 `NormalizationError`(附候选)失败。
+
+词表再生成(匿名配额约 1000 次/天/IP;`OPENFDA_API_KEY` 或 `--api-key-file` 可提额):
+
+```bash
+.venv/bin/python -m safety_agent.normalize.build_vocabulary --budget 430
+```
+
+只收录 FAERS 报告里出现的 PT 字符串,不含 MedDRA 编码与层级。
 
 ### P3 信号统计
 ROR/PRR 及 95%CI、χ²(Yates 可选)、crude IC + BCPNN IC025、GPS

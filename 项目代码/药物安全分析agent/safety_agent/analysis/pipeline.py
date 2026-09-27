@@ -28,6 +28,7 @@ from safety_agent.analysis.models import (
     AnalysisResult,
     NormalizedReaction,
     SignalRow,
+    UnresolvedReaction,
 )
 from safety_agent.analysis.overview import OverviewBuilder
 from safety_agent.core.exceptions import (
@@ -166,13 +167,20 @@ class AnalysisPipeline:
                 detail=f"candidates: {[c.term for c in drug_norm.candidates]}",
             )
         normalized_reactions: list[NormalizedReaction] = []
+        unresolved: list[UnresolvedReaction] = []
         for query in reaction_queries:
-            result = await normalize_adr_async(query, llm_fallback=self._adr_fallback)
+            result = await normalize_adr_async(
+                query, llm_fallback=self._adr_fallback, client=self._openfda
+            )
             if result.normalized is None:
-                raise NormalizationError(
-                    f"ADR 词无法归一化: {query}",
-                    detail=f"candidates: {[c.term for c in result.candidates]}",
+                unresolved.append(
+                    UnresolvedReaction(
+                        query=query,
+                        method=result.method,
+                        candidates=[c.term for c in result.candidates[:5]],
+                    )
                 )
+                continue
             normalized_reactions.append(
                 NormalizedReaction(
                     query=query,
@@ -180,6 +188,28 @@ class AnalysisPipeline:
                     method=result.method,
                     confidence=result.confidence,
                 )
+            )
+        if unresolved:
+            described = "; ".join(
+                f"{item.query}(候选: {', '.join(item.candidates) or '无'})"
+                for item in unresolved
+            )
+            if not normalized_reactions:
+                # Nothing the request named can be computed: a report on other
+                # reactions would answer a different question.
+                raise NormalizationError(
+                    "ADR 词无法归一化: " + "、".join(item.query for item in unresolved),
+                    detail=f"candidates: {described}",
+                )
+            # One term that is not a MedDRA PT refuses that term's computation,
+            # not the whole analysis of the terms that are.
+            notes.append(
+                "以下 ADR 词未能确定性归一为 MedDRA PT,未纳入目标 ADR 统计: " + described
+            )
+            await self._emit(
+                "normalize", "degraded",
+                reason="unresolved_reaction_terms",
+                terms=[item.query for item in unresolved],
             )
         normalized_reactions, duplicate_reaction_groups = _deduplicate_reactions(
             normalized_reactions
@@ -347,6 +377,7 @@ class AnalysisPipeline:
             llm_status=llm_status,  # type: ignore[arg-type]
             degradation_notes=notes,
             unmatched_reactions=list(self._unmatched_reactions),
+            unresolved_reactions=unresolved,
             query_urls=query_urls,
             drug_field=self._drug_field,
             # Deprecated compatibility flag: True only when the target drug

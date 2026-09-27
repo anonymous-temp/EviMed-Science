@@ -111,13 +111,22 @@ def module_ledger(result: AnalysisResult) -> dict[str, dict]:
         ),
     }
 
-    if result.unmatched_reactions:
-        modules["reactionMatching"] = entry(
-            "degraded",
-            "no FAERS report matched: " + ", ".join(result.unmatched_reactions),
+    matching_issues = []
+    if result.unresolved_reactions:
+        matching_issues.append(
+            "not normalized to a MedDRA PT: "
+            + "; ".join(
+                f"{item.query} (candidates: {', '.join(item.candidates) or 'none'})"
+                for item in result.unresolved_reactions
+            )
         )
-    else:
-        modules["reactionMatching"] = entry("ok")
+    if result.unmatched_reactions:
+        matching_issues.append(
+            "no FAERS report matched: " + ", ".join(result.unmatched_reactions)
+        )
+    modules["reactionMatching"] = (
+        entry("degraded", " | ".join(matching_issues)) if matching_issues else entry("ok")
+    )
 
     if result.llm_status == "ok":
         modules["llmInterpretation"] = entry("ok")

@@ -5,8 +5,14 @@ Values are lower-case MedDRA Preferred Terms as used by FAERS
 case-insensitive tokenization, so lower-case values query fine; the table
 keeps MedDRA's own spelling (British forms such as "diarrhoea").
 
-The table is deliberately curated, not exhaustive: unmapped terms fall
-back to fuzzy candidates, and an LLM fallback seam exists for P4.
+The table is deliberately curated, not exhaustive: an English term is looked
+up in the harvested FAERS vocabulary (``vocabulary.py``), and anything the
+rules cannot map goes to the confirmed model path in ``adr.py``. Every value
+here must be a term of that vocabulary -- ``tests/test_reaction_vocabulary.py``
+fails otherwise. Seven values used to be MedDRA-looking strings FAERS never
+carries ("peripheral neuropathy" for the PT "Neuropathy peripheral",
+"acute pancreatitis" for "Pancreatitis acute"), so an exact openFDA query on
+them matched no report at all.
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ ZH_TO_PT: dict[str, str] = {
     "肌酸激酶升高": "blood creatine phosphokinase increased",
     "肌酸磷酸激酶升高": "blood creatine phosphokinase increased",
     "肌无力": "muscular weakness",
-    "肌腱炎": "tendinitis",
+    "肌腱炎": "tendonitis",
     "肌腱断裂": "tendon rupture",
     "关节痛": "arthralgia",
     "背痛": "back pain",
@@ -38,11 +44,14 @@ ZH_TO_PT: dict[str, str] = {
     "转氨酶升高": "transaminases increased",
     # renal
     "急性肾损伤": "acute kidney injury",
-    "急性肾衰竭": "acute renal failure",
+    "急性肾衰竭": "renal failure acute",
     "肾衰竭": "renal failure",
     "肾功能不全": "renal impairment",
     "血尿": "haematuria",
     "蛋白尿": "proteinuria",
+    "膀胱炎": "cystitis",
+    "间质性膀胱炎": "cystitis interstitial",
+    "排尿困难": "dysuria",
     # respiratory
     "肺炎": "pneumonia",
     "间质性肺病": "interstitial lung disease",
@@ -64,6 +73,27 @@ ZH_TO_PT: dict[str, str] = {
     "心肌梗塞": "myocardial infarction",
     "心力衰竭": "cardiac failure",
     "心衰": "cardiac failure",
+    "充血性心力衰竭": "cardiac failure congestive",
+    "射血分数下降": "ejection fraction decreased",
+    "射血分数降低": "ejection fraction decreased",
+    "左室射血分数下降": "ejection fraction decreased",
+    "左室射血分数降低": "ejection fraction decreased",
+    "左心室射血分数下降": "ejection fraction decreased",
+    "心动过缓": "bradycardia",
+    "心动过速": "tachycardia",
+    "心悸": "palpitations",
+    "心室颤动": "ventricular fibrillation",
+    "室颤": "ventricular fibrillation",
+    "心肌炎": "myocarditis",
+    "心肌病": "cardiomyopathy",
+    "心包积液": "pericardial effusion",
+    "房室传导阻滞": "atrioventricular block",
+    "心脏骤停": "cardiac arrest",
+    "心搏骤停": "cardiac arrest",
+    "猝死": "sudden death",
+    "心源性猝死": "sudden cardiac death",
+    "晕厥": "syncope",
+    "胸痛": "chest pain",
     "高血压": "hypertension",
     "低血压": "hypotension",
     "深静脉血栓": "deep vein thrombosis",
@@ -81,6 +111,8 @@ ZH_TO_PT: dict[str, str] = {
     "出血": "haemorrhage",
     "消化道出血": "gastrointestinal haemorrhage",
     "胃肠道出血": "gastrointestinal haemorrhage",
+    "上消化道出血": "upper gastrointestinal haemorrhage",
+    "下消化道出血": "lower gastrointestinal haemorrhage",
     "黑便": "melaena",
     "鼻衄": "epistaxis",
     "鼻出血": "epistaxis",
@@ -113,13 +145,13 @@ ZH_TO_PT: dict[str, str] = {
     "食欲下降": "decreased appetite",
     "食欲减退": "decreased appetite",
     "胰腺炎": "pancreatitis",
-    "急性胰腺炎": "acute pancreatitis",
+    "急性胰腺炎": "pancreatitis acute",
     "口干": "dry mouth",
     # metabolic / endocrine
     "低血糖": "hypoglycaemia",
     "高血糖": "hyperglycaemia",
     "糖尿病": "diabetes mellitus",
-    "新发糖尿病": "new onset diabetes mellitus",
+    "新发糖尿病": "diabetes mellitus",
     "高钾血症": "hyperkalaemia",
     "低钾血症": "hypokalaemia",
     "低钠血症": "hyponatraemia",
@@ -141,10 +173,10 @@ ZH_TO_PT: dict[str, str] = {
     "抑郁": "depression",
     "自杀意念": "suicidal ideation",
     "焦虑": "anxiety",
-    "周围神经病变": "peripheral neuropathy",
-    "周围神经病": "peripheral neuropathy",
+    "周围神经病变": "neuropathy peripheral",
+    "周围神经病": "neuropathy peripheral",
     "记忆障碍": "memory impairment",
-    "认知障碍": "cognitive impairment",
+    "认知障碍": "cognitive disorder",
     "5-羟色胺综合征": "serotonin syndrome",
     "五羟色胺综合征": "serotonin syndrome",
     "恶性综合征": "neuroleptic malignant syndrome",
@@ -157,7 +189,7 @@ ZH_TO_PT: dict[str, str] = {
     "乏力": "asthenia",
     "疲劳": "fatigue",
     "水肿": "oedema",
-    "外周水肿": "peripheral oedema",
+    "外周水肿": "oedema peripheral",
     "视力模糊": "vision blurred",
     "干眼": "dry eye",
     "输液反应": "infusion related reaction",
@@ -184,7 +216,7 @@ EN_ALIAS_TO_PT: dict[str, str] = {
     "dyspnea": "dyspnoea",
     "diarrhea": "diarrhoea",
     "edema": "oedema",
-    "peripheral edema": "peripheral oedema",
+    "peripheral edema": "oedema peripheral",
     "hypoglycemia": "hypoglycaemia",
     "hyperglycemia": "hyperglycaemia",
     "hyperkalemia": "hyperkalaemia",
@@ -216,6 +248,31 @@ EN_ALIAS_TO_PT: dict[str, str] = {
     "hives": "urticaria",
     "itching": "pruritus",
     "stroke": "cerebrovascular accident",
+    # Clinical names whose MedDRA PT reorders or renames them. Each value is a
+    # FAERS term; the English words a clinician or a model writes are not.
+    "heart failure": "cardiac failure",
+    "congestive heart failure": "cardiac failure congestive",
+    "chf": "cardiac failure congestive",
+    "qt prolonged": "electrocardiogram qt prolonged",
+    "prolonged qt": "electrocardiogram qt prolonged",
+    "qtc prolongation": "electrocardiogram qt prolonged",
+    "qt interval prolongation": "electrocardiogram qt prolonged",
+    "decreased ejection fraction": "ejection fraction decreased",
+    "reduced ejection fraction": "ejection fraction decreased",
+    "lvef decreased": "ejection fraction decreased",
+    "lvef decrease": "ejection fraction decreased",
+    "acute pancreatitis": "pancreatitis acute",
+    "acute renal failure": "renal failure acute",
+    "peripheral neuropathy": "neuropathy peripheral",
+    "peripheral oedema": "oedema peripheral",
+    "tendinitis": "tendonitis",
+    "cognitive impairment": "cognitive disorder",
+    "upper gi bleeding": "upper gastrointestinal haemorrhage",
+    "upper gastrointestinal bleeding": "upper gastrointestinal haemorrhage",
+    "lower gastrointestinal bleeding": "lower gastrointestinal haemorrhage",
+    "ild": "interstitial lung disease",
+    "vf": "ventricular fibrillation",
+    "vt": "ventricular tachycardia",
 }
 
 
