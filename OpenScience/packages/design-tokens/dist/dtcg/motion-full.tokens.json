@@ -1,5 +1,5 @@
 {
-  "$description": "EviMed 2.1.0 — motion, as designed.",
+  "$description": "EviMed 2.1.1 — motion, as designed.",
   "duration": {
     "fast": {
       "$type": "duration",

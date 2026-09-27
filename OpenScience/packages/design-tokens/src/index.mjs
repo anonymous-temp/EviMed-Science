@@ -50,7 +50,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '2.1.0'
+export const DESIGN_TOKENS_VERSION = '2.1.1'
 
 /* ------------------------------------------------------------------ ramps -- */
 

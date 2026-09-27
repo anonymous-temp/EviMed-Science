@@ -235,6 +235,23 @@ export function elementPlusCss() {
   lines.push(`  --el-transition-duration-fast: ${MOTION.fast};`)
   lines.push('}')
   lines.push('')
+  // There are no outlined buttons (spec §17.1): a list of six rows with an
+  // outlined button on each reads as a form. Element Plus's default type is
+  // an outlined button, so it becomes the secondary button — a surface-2 fill
+  // with body text, the surface-3 step on hover and press. The border takes
+  // the fill's colour rather than none, so the button keeps its box, and
+  // forced colours still draw it (the system colours replace both).
+  const fill = colorRole('surface-2', 'light')
+  const pressed = colorRole('surface-3', 'light')
+  const ink = colorRole('text', 'light')
+  lines.push(".el-button:not([class*='el-button--']):not(.is-text):not(.is-link) {")
+  for (const [state, bg] of /** @type {const} */ ([['', fill], ['hover-', pressed], ['active-', pressed]])) {
+    lines.push(`  --el-button-${state}bg-color: ${bg};`)
+    lines.push(`  --el-button-${state}border-color: ${bg};`)
+    lines.push(`  --el-button-${state}text-color: ${ink};`)
+  }
+  lines.push('}')
+  lines.push('')
   // Element Plus's own transitions follow reduced motion like ours do.
   lines.push('@media (prefers-reduced-motion: reduce) {')
   lines.push('  :root {')
