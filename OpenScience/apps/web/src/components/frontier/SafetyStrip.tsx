@@ -22,7 +22,7 @@ export function recentAlerts(items: readonly FrontierItem[], now = Date.now()): 
 function AlertLink({ item, onOpened }: { item: FrontierItem; onOpened: (item: FrontierItem) => void }) {
   const when = ago(item.timelineAt);
   return (
-    <a href={item.url} {...EXTERNAL} onClick={() => onOpened(item)} className="flex h-10 min-w-0 flex-1 items-center text-ui text-text hover:underline">
+    <a href={item.url} {...EXTERNAL} onClick={() => onOpened(item)} className="flex h-control min-w-0 flex-1 items-center rounded text-ui text-text hover:underline">
       <span className="truncate">
         {item.title}
         <span className="text-text-3"> · {item.source.name}{when && ` · ${when}`}</span>
@@ -52,7 +52,7 @@ export function SafetyStrip({ alerts, onRetry, onOpened }: {
   if (alerts === "loading") return null;
   if (alerts === "failed") {
     return (
-      <div role="alert" className="flex h-10 items-center gap-3 rounded bg-danger-soft px-3 text-ui text-danger-strong">
+      <div role="alert" className="flex h-control items-center gap-3 rounded bg-danger-soft px-3 text-ui text-danger-strong">
         <ShieldAlert size={16} className="shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1">无法读取安全警示</span>
         <button type="button" onClick={onRetry} className={cn(INLINE_ACTION, "px-1.5")}>重试</button>

@@ -42,7 +42,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
           const change = rankChangeLabel(event.rankChange);
           return (
             <li key={event.id}>
-              <Link to={eventPath(event.id)} className="group flex h-10 items-center gap-3 text-ui">
+              <Link to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
                 <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
                 {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
@@ -112,17 +112,18 @@ export function HotBoard({ state, window, windows, onWindow, onRetry }: {
 }
 
 /**
- * One row of 热榜. The title line is one 40 px link — the rank beside it, a
- * badge before it — and the whole title is its tooltip where it is cut. The
+ * One row of 热榜. The title line is one 36 px link (the control height; 40
+ * is a tab's) — the rank beside it, a badge before it — and the whole title
+ * is its tooltip where it is cut. The
  * heat and its trend are shown only where the server sends a heat: a week's
  * or a month's ranking is by institutions, and says so in its line instead.
  */
 function HotRow({ event }: { event: FrontierHotEvent }) {
   return (
     <li className="flex gap-3 border-b border-border py-4">
-      <span className={cn("w-10 shrink-0 text-body font-semibold leading-10 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
+      <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
-        <Link to={eventPath(event.id)} title={event.title} data-row-title className="group flex h-10 min-w-0 items-center gap-1.5 text-ui">
+        <Link to={eventPath(event.id)} title={event.title} data-row-title className="group flex h-control min-w-0 items-center gap-1.5 rounded text-ui">
           {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
           <span className="min-w-0 truncate text-body font-semibold text-text group-hover:text-accent">{event.title}</span>
         </Link>
@@ -130,7 +131,7 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
       </div>
       {event.heat !== null && (
         <div className="w-28 shrink-0">
-          <p className="flex h-10 items-center justify-end gap-0.5">
+          <p className="flex h-control items-center justify-end gap-0.5">
             <span className="text-title font-semibold tabular-nums text-text">{event.heat}</span>
             <span className="text-caption text-text-3">热度</span>
           </p>
