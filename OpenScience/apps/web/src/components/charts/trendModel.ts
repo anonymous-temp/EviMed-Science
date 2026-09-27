@@ -4,9 +4,9 @@
  * Two reasons this is a pure function and not part of the component:
  *
  *  - **Sparse data must not render an empty frame.** A single reading is not
- *    「nothing to draw」: it is a baseline point, the target line and the date
+ *    “nothing to draw”: it is a baseline point, the target line and the date
  *    of the next measurement. The old board left a 330 px blank canvas there,
- *    which is the clearest way a dashboard can say 「this product is broken」.
+ *    which is the clearest way a dashboard can say “this product is broken”.
  *  - **A rival is never drawn in the brand colour.** Ours is the brand and
  *    every rival is a grey, darkest for the highest rank (DESIGN.md). Deciding
  *    that here means it can be tested without a canvas.
@@ -34,7 +34,7 @@ export interface TrendLineInput {
 export interface TrendMarker {
   /** Which reading it sits on. */
   index: number;
-  /** 「首批稿件上线」「投放生效」 — what happened, in the reader's words. */
+  /** “首批稿件上线”“投放生效” — what happened, in the reader's words. */
   label: string;
 }
 
@@ -49,7 +49,7 @@ export interface TrendInput {
   /** The measured fluctuation band, drawn as a ribbon around our line. */
   band?: number | null;
   markers?: ReadonlyArray<TrendMarker>;
-  /** 「10月23日 复测」 — an extra slot after the last reading. */
+  /** “10月23日 复测” — an extra slot after the last reading. */
   nextLabel?: string | null;
 }
 
@@ -73,8 +73,13 @@ export interface TrendModel {
   markers: TrendMarker[];
   /** The slot the next measurement will fill, when the date is known. */
   nextIndex: number | null;
-  /** The first stated reading: it is labelled 「基线」. */
+  /** The first stated reading. */
   baselineIndex: number | null;
+  /**
+   * The one reading of a chart that has only one, drawn as a reference line
+   * labelled “基线” at the plot's right end; null once there are two.
+   */
+  baseline: { index: number; value: number } | null;
   /** The latest stated reading: the hollow dot. */
   lastIndex: number | null;
 }
@@ -120,6 +125,7 @@ export function trendModel(input: TrendInput): TrendModel {
     markers: (input.markers ?? []).filter((marker) => marker.index >= 0 && marker.index < width && marker.label),
     nextIndex: nextLabel ? labels.length - 1 : null,
     baselineIndex: stated.length > 0 ? stated[0] : null,
+    baseline: stated.length === 1 ? { index: stated[0], value: ownValues[stated[0]] as number } : null,
     lastIndex: stated.length > 0 ? stated[stated.length - 1] : null,
   };
 }

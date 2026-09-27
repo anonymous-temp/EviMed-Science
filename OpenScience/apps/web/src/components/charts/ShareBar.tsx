@@ -2,7 +2,7 @@ import { cn } from "@/lib/cn";
 
 /**
  * A composition of one whole, as a single 100 % horizontal bar (appendix E
- * §4.1: share is a stacked bar, never a pie — 「不用饼图拼贴」).
+ * §4.1: share is a stacked bar, never a pie — “不用饼图拼贴”).
  *
  * It is drawn in the document rather than on a canvas, because a bar with no
  * axis is two rectangles and a legend, and a canvas would cost a chart
@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
  *
  * The tones are the data palette's closed set: ours is the brand, rivals are
  * greys in rank order, and the severity steps are the only red. A segment
- * worth less than a readable sliver still shows, so 「1 次」 does not vanish.
+ * worth less than a readable sliver still shows, so “1 次” does not vanish.
  */
 
 export type ShareTone = "own" | "rival-1" | "rival-2" | "rival-3" | "quiet" | "s3" | "s2" | "s1";
@@ -75,7 +75,7 @@ export function ShareBar({
             <li key={segment.key} className="inline-flex items-center gap-1.5 text-caption text-text-2">
               <span aria-hidden="true" className={cn("h-2 w-2 shrink-0 rounded-tag", TONE_CLASSES[segment.tone])} />
               {segment.label}
-              <span className="font-medium tabular-nums text-text">{format(segment.value)}</span>
+              <span className="tabular-nums text-text">{format(segment.value)}</span>
             </li>
           ))}
         </ul>

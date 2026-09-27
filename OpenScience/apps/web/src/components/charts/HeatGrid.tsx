@@ -18,13 +18,13 @@ const STEPS = ["bg-heat-0", "bg-heat-1", "bg-heat-2", "bg-heat-3", "bg-heat-4", 
 /** White reads on the top two steps; the rest carry the body colour. */
 const STEP_TEXT = ["text-text", "text-text", "text-text", "text-text", "text-accent-fg", "text-accent-fg"] as const;
 
-/** A hatched ground for 「未测」, built from the surface tokens rather than a colour. */
+/** A hatched ground for “未测”, built from the surface tokens rather than a colour. */
 const HATCH = "repeating-linear-gradient(135deg, var(--surface-1) 0 6px, var(--surface-2) 6px 12px)";
 
 export interface HeatCell {
-  /** The value that decides the colour; null is 「not measurable here」. */
+  /** The value that decides the colour; null is “not measurable here”. */
   value: number | null;
-  /** What the cell prints: 「31」「样本不足」「—」. */
+  /** What the cell prints: “31”“样本不足”“—”. */
   text: string;
   /** The sample behind it, as a tooltip — never printed in the cell. */
   hint?: string;
@@ -56,7 +56,7 @@ export function HeatGrid({
   label: string;
   columns: ReadonlyArray<{ key: string; header: string }>;
   rows: readonly HeatRow[];
-  /** The ramp's ends in words: 「低」 and 「高」. */
+  /** The ramp's ends in words: “低” and “高”. */
   legend?: { low: string; high: string };
   className?: string;
 }) {
@@ -90,7 +90,7 @@ export function HeatGrid({
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} data-heat-row={row.key}>
-                <th scope="row" className="w-28 text-left text-compact font-medium text-text">{row.header}</th>
+                <th scope="row" className="w-28 text-left text-compact text-text">{row.header}</th>
                 {row.unmeasured ? (
                   <td colSpan={columns.length} data-heat-unmeasured="" className="rounded px-3 text-center text-caption text-text-3" style={{ background: HATCH }}>
                     {row.unmeasured}
@@ -103,8 +103,8 @@ export function HeatGrid({
                       title={cell.hint}
                       data-heat-step={step ?? undefined}
                       className={cn(
-                        "h-8 rounded text-center text-compact font-semibold tabular-nums",
-                        step === null ? "bg-surface-1 font-normal text-text-3" : `${STEPS[step]} ${STEP_TEXT[step]}`,
+                        "h-8 rounded text-center text-compact tabular-nums",
+                        step === null ? "bg-surface-1 text-text-3" : `${STEPS[step]} ${STEP_TEXT[step]}`,
                       )}
                     >
                       {cell.text}

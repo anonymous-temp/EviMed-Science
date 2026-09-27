@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsCoreOption } from "echarts/core";
@@ -20,6 +20,11 @@ import { useColorScheme } from "@/lib/colorScheme";
  *     Tailwind preset, so a chart's grid, axes, fonts and tooltip cannot
  *     disagree with the page around them. Both schemes are registered once;
  *     the chart re-initialises when `data-theme` flips.
+ *
+ * Motion follows the reader's setting: under `prefers-reduced-motion: reduce`
+ * every chart is drawn without animation, at the root and on every series
+ * (spec §32.13 — ECharts reads both), and a chart already on screen is
+ * redrawn when the setting changes.
  *
  * In a test environment there is no 2D context, and a chart that cannot be
  * painted simply is not: the component's own DOM — its heading, its legend
@@ -50,21 +55,60 @@ export function canPaintChart(): boolean {
   return paintable;
 }
 
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+/** Whether the reader asked for less motion, right now. */
+export function readReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(REDUCED_MOTION).matches;
+}
+
+/** The reader's motion setting, kept current as it changes. */
+export function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(readReducedMotion);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const query = window.matchMedia(REDUCED_MOTION);
+    const update = () => setReduced(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
+/**
+ * An option as it is drawn for a reader who asked for less motion: no
+ * animation at the root and none on any series — a series that sets its own
+ * `animation` would otherwise keep it.
+ */
+export function motionOption(option: EChartsCoreOption, reduced: boolean): EChartsCoreOption {
+  if (!reduced) return option;
+  const series = option.series;
+  const still = (entry: unknown) => (entry && typeof entry === "object" ? { ...entry, animation: false } : entry);
+  return {
+    ...option,
+    animation: false,
+    ...(series === undefined ? {} : { series: Array.isArray(series) ? series.map(still) : still(series) }),
+  } as EChartsCoreOption;
+}
+
 /**
  * Mounts one chart into the returned element and keeps it in step with the
- * container's width and the page's scheme. `option` of `null` paints nothing,
- * which is how a caller says 「there is no reading to draw」 without
+ * container's width, the page's scheme and the reader's motion setting. `option` of `null` paints nothing,
+ * which is how a caller says “there is no reading to draw” without
  * unmounting its card.
  */
 export function useEChart(option: EChartsCoreOption | null): React.RefObject<HTMLDivElement | null> {
   const host = useRef<HTMLDivElement | null>(null);
   const scheme = useColorScheme();
+  const reduced = useReducedMotion();
   useEffect(() => {
     const node = host.current;
     if (!node || !option || !canPaintChart()) return undefined;
     registerOnce();
     const chart = echarts.init(node, scheme === "dark" ? CHART_THEMES.dark : CHART_THEMES.light, { renderer: "canvas" });
-    chart.setOption(option);
+    chart.setOption(motionOption(option, reduced));
     const resize = () => chart.resize();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
     observer?.observe(node);
@@ -74,7 +118,7 @@ export function useEChart(option: EChartsCoreOption | null): React.RefObject<HTM
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [option, scheme]);
+  }, [option, scheme, reduced]);
   return host;
 }
 

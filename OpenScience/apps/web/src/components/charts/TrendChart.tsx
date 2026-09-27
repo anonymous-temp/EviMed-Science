@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { LineChart } from "echarts/charts";
 import { GridComponent, MarkLineComponent, TooltipComponent } from "echarts/components";
 import type { EChartsCoreOption } from "echarts/core";
+import { CHART_STROKES } from "@evimed/design-tokens";
 import { useColorScheme } from "@/lib/colorScheme";
 import { canPaintChart, echarts, resolvedColor, useEChart } from "./echartsBase";
 import { BAND_COLOR, TARGET_COLOR, trendModel, type TrendInput, type TrendModel } from "./trendModel";
@@ -11,7 +12,7 @@ import { BAND_COLOR, TARGET_COLOR, trendModel, type TrendInput, type TrendModel 
 echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent]);
 
 /**
- * 「投了有没有用」 — the one chart that answers it (fusion plan §4.8).
+ * “投了有没有用” — the one chart that answers it (fusion plan §4.8).
  *
  * Ours is a thick brand line, every rival a grey, the target a dark dashed
  * rule, the measured fluctuation a pale ribbon around our line, and what we
@@ -20,9 +21,14 @@ echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent]);
  * date of the next measurement is a slot of its own at the right, which is how
  * a chart with two readings still looks like a plan rather than a stub.
  *
- * With one reading it draws that reading, labelled 「基线」, against the target
- * and the next date. There is no state in which this component paints an empty
+ * With one reading it draws that reading against the target and the next
+ * date, and the reading's level as a reference line labelled “基线 44” at its
+ * right end (spec §32.7): a label on the point itself sat on the y axis, over
+ * the tick numbers. There is no state in which this component paints an empty
  * frame.
+ *
+ * Line weights are the token table's (`CHART_STROKES`): ours 2.5, every other
+ * line 1.5; a reference rule is a 1 px dash.
  */
 export function TrendChart({
   input,
@@ -31,7 +37,7 @@ export function TrendChart({
   label,
 }: {
   input: TrendInput;
-  /** The value as a reader says it: 「61」「15%」. */
+  /** The value as a reader says it: “61”“15%”. */
   format?: (value: number) => string;
   height?: number;
   /** The chart's accessible name; its numbers are stated in the page around it. */
@@ -53,6 +59,7 @@ export function TrendChart({
       data-chart="trend"
       data-chart-mode={model.mode}
       data-chart-readings={model.readings}
+      data-chart-rivals={model.rivals.length}
       className="m-0 min-w-0"
     >
       <div ref={host} role="img" aria-label={label} style={{ height: plot }} className="w-full" />
@@ -67,28 +74,63 @@ export function TrendChart({
   );
 }
 
+/** A rule's label, inside the plot and clear of the axis numbers (spec §32.7: at least 8 px). */
+const RULE_LABEL_GAP = 8;
+/** The latest reading is the hollow dot, drawn larger than a plain point so its ring reads. */
+const LAST_MARKER = CHART_STROKES.marker + 4;
+
+/**
+ * Where each horizontal rule writes its label. The right end is the default
+ * (spec §32.7); the target moves to the left end when the right is taken —
+ * by the rivals' own names at their line ends, or by the baseline's label —
+ * and when both rules are drawn, the lower one writes under its line so the
+ * two labels can never meet however close the values are.
+ */
+export function ruleLabelPlaces(model: TrendModel): { target: string; baseline: string } {
+  const rightTaken = model.rivals.length > 0 || model.baseline !== null;
+  const end = rightTaken ? "insideStart" : "insideEnd";
+  if (model.baseline === null || model.target === null) return { target: `${end}Top`, baseline: "insideEndTop" };
+  const targetHigher = model.target >= model.baseline.value;
+  return { target: `${end}${targetHigher ? "Top" : "Bottom"}`, baseline: `insideEnd${targetHigher ? "Bottom" : "Top"}` };
+}
+
 /** The ECharts option, built from the model so the drawing has no decisions left. */
-function chartOption(model: TrendModel, format: (value: number) => string): EChartsCoreOption {
+export function chartOption(model: TrendModel, format: (value: number) => string): EChartsCoreOption {
   const own = resolvedColor(model.own.color);
   const target = resolvedColor(TARGET_COLOR);
   const band = model.band;
   const lower = band === null ? null : model.own.values.map((value) => (value === null ? null : value - band));
   const width = band === null ? null : model.own.values.map((value) => (value === null ? null : band * 2));
+  const places = ruleLabelPlaces(model);
   const markLines = [
     ...(model.target === null ? [] : [{
       yAxis: model.target,
       label: {
         show: true,
-        position: "insideEndTop" as const,
+        position: places.target,
+        distance: RULE_LABEL_GAP,
         formatter: model.targetLabel ?? `目标 ${format(model.target)}`,
       },
-      lineStyle: { color: target, width: 1.2, type: "dashed" as const },
+      lineStyle: { color: target, width: 1, type: "dashed" as const },
+    }]),
+    ...(model.baseline === null ? [] : [{
+      yAxis: model.baseline.value,
+      label: {
+        show: true,
+        position: places.baseline,
+        distance: RULE_LABEL_GAP,
+        formatter: `基线 ${format(model.baseline.value)}`,
+        color: own,
+        fontWeight: 600,
+      },
+      lineStyle: { color: own, width: 1, type: "dotted" as const },
     }]),
     ...model.markers.map((marker) => ({
       xAxis: marker.index,
       // A vertical rule's label is drawn along it unless it is told not to.
       label: { show: true, position: "start" as const, rotate: 0, formatter: marker.label, color: target, padding: [0, 0, 2, 0] },
-      lineStyle: { color: own, width: 1, type: "dotted" as const },
+      // An action is a 1 px dashed rule in the graphics grey (spec §32.7).
+      lineStyle: { color: resolvedColor("var(--text-graphic)"), width: 1, type: "dashed" as const },
     })),
     ...(model.nextIndex === null ? [] : [{
       xAxis: model.nextIndex,
@@ -115,7 +157,7 @@ function chartOption(model: TrendModel, format: (value: number) => string): ECha
         name: line.name,
         symbol: "none" as const,
         connectNulls: false,
-        lineStyle: { color: resolvedColor(line.color), width: 1.8 },
+        lineStyle: { color: resolvedColor(line.color), width: CHART_STROKES.other },
         itemStyle: { color: resolvedColor(line.color) },
         // Directly labelled at the line's end: a legend a reader has to look
         // up is what makes a five-line chart unreadable.
@@ -127,29 +169,23 @@ function chartOption(model: TrendModel, format: (value: number) => string): ECha
         type: "line",
         name: model.own.name,
         symbol: "circle",
-        symbolSize: 7,
+        symbolSize: CHART_STROKES.marker,
         connectNulls: false,
-        lineStyle: { color: own, width: 3, cap: "round" },
+        lineStyle: { color: own, width: CHART_STROKES.own, cap: "round" },
         itemStyle: { color: own },
         data: model.own.values.map((value, index) => {
           if (value === null) return null;
-          // 「基线」 names the first reading only while it is the only one; in a
-          // series the axis already says which end is the start, and the label
-          // sat on top of the first date.
-          const baseline = model.mode === "baseline" && index === model.baselineIndex;
           const last = index === model.lastIndex;
+          // A single reading is labelled by its reference line, not on the
+          // point: the point sits on the y axis, and a label there covers the
+          // axis numbers (G12). In a series the latest value is labelled.
+          const labelled = last && model.baseline === null;
           return {
             value,
-            symbolSize: last ? 9 : 7,
-            itemStyle: last ? { color: resolvedColor("var(--bg)"), borderColor: own, borderWidth: 2.5 } : undefined,
-            label: baseline || last
-              ? {
-                show: true,
-                position: "top" as const,
-                formatter: baseline ? `基线 ${format(value)}` : format(value),
-                color: own,
-                fontWeight: 600,
-              }
+            symbolSize: last ? LAST_MARKER : CHART_STROKES.marker,
+            itemStyle: last ? { color: resolvedColor("var(--bg)"), borderColor: own, borderWidth: CHART_STROKES.own } : undefined,
+            label: labelled
+              ? { show: true, position: "top" as const, formatter: format(value), color: own, fontWeight: 600 }
               : undefined,
           };
         }),
