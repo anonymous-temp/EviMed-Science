@@ -892,7 +892,11 @@ export function createModelGatewayHandler(config, runtimeManager, {
       }
       if (abortReason?.name === "TimeoutError") {
         sendError(res, gatewayError(504, "model_gateway_timeout", "The model gateway request timed out."), onFailure);
-      } else if (clientDisconnected && !res.headersSent) {
+      } else if (clientDisconnected) {
+        // Before or after the 200: the caller hung up, the provider did not
+        // fail. Reported as unavailable, a runtime that dropped its own stream
+        // (a session ended by a refused sibling request, a stopped container)
+        // read on the error ledger as a provider outage (2026-09-27).
         sendError(res, gatewayError(499, "model_gateway_client_closed", "The model gateway client disconnected."), onFailure);
       } else {
         sendError(res, error, onFailure);

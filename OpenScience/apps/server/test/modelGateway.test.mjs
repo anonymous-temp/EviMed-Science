@@ -547,6 +547,26 @@ test("a gateway failure is reported to the caller's ledger, including one that a
   assert.equal(failures.length, 1);
   assert.equal(failures[0].code, "model_gateway_timeout");
   assert.equal(failures[0].truncated, true, "a stream cut after its 200 must say so");
+
+  // The caller hanging up mid-stream is not the provider failing: it is
+  // reported as client_closed, still marked truncated.
+  failures.length = 0;
+  const patient = createServer((req, res) =>
+    createModelGatewayHandler(config(stallingBase, { modelGatewayTimeoutMs: 60_000 }), runtimeManager())(req, res, onFailure));
+  const patientBase = await listen(patient);
+  t.after(() => close(patient));
+  const caller = new AbortController();
+  const hungUp = await fetch(`${patientBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }], stream: true }),
+    signal: caller.signal,
+  });
+  assert.equal(hungUp.status, 200);
+  caller.abort();
+  const deadline = Date.now() + 5_000;
+  while (failures.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(failures, [{ code: "model_gateway_client_closed", status: 499, truncated: true }]);
 });
 
 test("a forwarded answer is counted against the account that asked for it", async (t) => {
