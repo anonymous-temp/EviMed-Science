@@ -74,6 +74,9 @@ describe("设置", () => {
     expect(links.map((link) => link.textContent)).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
     expect(within(nav()).getByRole("link", { name: "账户" })).toHaveAttribute("aria-current", "page");
     expect(within(nav()).getByRole("link", { name: "用量" })).toHaveAttribute("href", "/app/account?tab=usage");
+    // The sidebar's navigation item (spec §20.6), not a 32 px look of its own.
+    expect(within(nav()).getByRole("link", { name: "账户" })).toHaveClass("h-control", "bg-accent-soft", "font-medium");
+    expect(within(nav()).getByRole("link", { name: "用量" })).toHaveClass("h-control", "hover:bg-surface-2");
   });
 
   it.each([

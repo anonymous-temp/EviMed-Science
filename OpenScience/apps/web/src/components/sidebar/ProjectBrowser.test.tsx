@@ -278,6 +278,23 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(screen.getByRole("link", { name: /另一个任务/ })).not.toHaveAttribute("aria-current");
   });
 
+  // Spec §20.6: a project and a conversation are rows of the sidebar's one
+  // navigation item (36, the open conversation highlighted as a current
+  // destination is); a row's actions are 28 px icon buttons (§8.3). They were
+  // 32 px rows and 24 px buttons, kinds of control the walk counted on every
+  // page.
+  it("draws projects and conversations as the sidebar's navigation items, with 28 px actions", async () => {
+    mocks.runs.default = [run({ id: "a", question: "打开着的任务" }), run({ id: "b", question: "另一个任务" })];
+    renderBrowser("/app/chat/ses-a");
+    const open = await screen.findByRole("link", { name: /打开着的任务/ });
+    expect(open).toHaveClass("h-control", "rounded", "bg-accent-soft", "font-medium");
+    expect(screen.getByRole("link", { name: /另一个任务/ })).toHaveClass("h-control", "hover:bg-surface-2");
+    expect(screen.getByRole("button", { name: /^我的研究/ })).toHaveClass("h-control", "rounded");
+    for (const name of ["在“我的研究”新建对话", "重命名项目“我的研究”"]) {
+      expect(screen.getByRole("button", { name })).toHaveClass("h-sm", "w-7");
+    }
+  });
+
   // Hovering is the cheapest moment to start a cold runtime: by the click it
   // may already be up. Never for the project the shell is already in, and
   // only as a guess — free room only, nothing stopped for it (2026-09-24).

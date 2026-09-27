@@ -22,6 +22,7 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { navItemClasses } from "@/components/ui/NavItem";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -291,10 +292,7 @@ function NavRow({
         navigate(to, { state: freshState() });
       }}
       aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex h-8 items-center gap-2 rounded px-2 text-ui hover:bg-surface-2",
-        active ? "bg-surface-2 font-medium text-text" : "text-text",
-      )}
+      className={navItemClasses({ current: active })}
     >
       <span className="text-text-3">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>

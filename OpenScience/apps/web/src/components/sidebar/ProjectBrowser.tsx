@@ -15,6 +15,8 @@ import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
 import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
 import { inputClasses } from "@/components/ui/Input";
 import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
+import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
 
@@ -375,7 +377,7 @@ export function ProjectBrowser({ geo = false }: {
                 event.preventDefault();
                 closeSearch(true);
               }}
-              className={inputClasses({ className: "h-8 bg-bg pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden" })}
+              className={inputClasses({ className: "bg-bg pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden" })}
             />
             <IconButton icon={X} label="清除搜索" size="sm" onClick={() => closeSearch(true)} className="absolute right-1" />
           </div>
@@ -420,7 +422,7 @@ export function ProjectBrowser({ geo = false }: {
               setDraftName("");
               setCreateError(null);
             }}
-            className={inputClasses({ className: "h-8" })}
+            className={inputClasses()}
           />
           {createError && <p role="alert" className="mt-1 px-2 text-caption text-error">{createError}</p>}
         </form>
@@ -624,7 +626,7 @@ function ProjectGroup({
     <li onPointerEnter={current ? undefined : onWarm} onFocus={current ? undefined : onWarm}>
       {renaming ? (
         <form
-          className="flex h-8 items-center gap-1 pl-1"
+          className="flex h-control items-center gap-1 pl-1"
           onSubmit={(event) => { event.preventDefault(); void submitRename(); }}
         >
           <label className="sr-only" htmlFor={renameId}>新的项目名</label>
@@ -640,15 +642,11 @@ function ProjectGroup({
               event.preventDefault();
               endRename();
             }}
-            className={inputClasses({ className: "h-7 min-w-0 flex-1 px-2" })}
+            className={inputClasses({ size: "sm", className: "min-w-0 flex-1 px-2" })}
           />
-          <button
-            type="submit"
-            disabled={renameBusy}
-            className="h-7 shrink-0 rounded-input px-2 text-ui text-accent hover:bg-surface-2 disabled:opacity-50"
-          >
+          <Button type="submit" variant="text" size="sm" disabled={renameBusy}>
             保存
-          </button>
+          </Button>
         </form>
       ) : (
         <div className="group/project relative">
@@ -660,10 +658,9 @@ function ProjectGroup({
             aria-busy={switching || undefined}
             onClick={onToggle}
             title={project.name}
-            className={cn(
-              "flex h-8 w-full items-center gap-1.5 rounded-input pl-1 pr-2 text-left text-ui text-text hover:bg-surface-2",
-              "group-hover/project:pr-14 group-focus-within/project:pr-14 max-lg:pr-14",
-            )}
+            className={navItemClasses({
+              className: "gap-1.5 pl-1 group-hover/project:pr-16 group-focus-within/project:pr-16 max-lg:pr-16",
+            })}
           >
             <ChevronRight
               size={16}
@@ -680,27 +677,18 @@ function ProjectGroup({
             {status && <span className="sr-only">（{status}）</span>}
           </button>
           <span className="absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 max-lg:opacity-100">
-            <button
-              type="button"
-              aria-label={`在“${project.name}”新建对话`}
-              title="在此项目新建对话"
-              onClick={onNewTask}
-              className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
-            >
-              {/* A plus, as the kernel's list has it: the pen-in-a-square of
-                * 「新对话」 sat beside the rename pencil as its near twin. */}
-              <Plus size={16} aria-hidden="true" />
-            </button>
+            {/* A plus, as the kernel's list has it: the pen-in-a-square of
+              * 「新对话」 sat beside the rename pencil as its near twin. The
+              * row's two actions are a list row's icon buttons (28). */}
+            <IconButton icon={Plus} size="sm" label={`在“${project.name}”新建对话`} title="在此项目新建对话" onClick={onNewTask} />
             {!standIn && (
-              <button
-                type="button"
-                aria-label={`重命名项目“${project.name}”`}
+              <IconButton
+                icon={Pencil}
+                size="sm"
+                label={`重命名项目“${project.name}”`}
                 title="重命名"
                 onClick={() => { setDraft(project.name); setRenameError(null); setRenaming(true); }}
-                className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
-              >
-                <Pencil size={16} aria-hidden="true" />
-              </button>
+              />
             )}
           </span>
         </div>
@@ -739,7 +727,7 @@ function ProjectGroup({
                 type="button"
                 aria-expanded={showAll}
                 onClick={onShowAll}
-                className="flex h-7 w-full items-center gap-2 rounded-input pl-7 pr-2 text-left text-caption text-muted hover:text-text"
+                className={navItemClasses({ className: "pl-7 text-text-3 hover:text-text" })}
               >
                 <span className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
                 {showAll ? "收起" : `展开其余 ${hidden} 条对话`}
@@ -796,7 +784,7 @@ function TaskRow({
   if (!target) return null;
   const running = conversation.runs.some(isRunning);
   const unseen = !active && isRunUnseen(run);
-  const className = "flex h-8 w-full items-center gap-2 rounded pl-7 pr-2 text-left hover:bg-surface-2 aria-[current=page]:bg-surface-2";
+  const className = navItemClasses({ current: active, className: "pl-7" });
   const content = (
     <>
       <span className={cn("min-w-0 flex-1 truncate text-ui", unseen ? "font-medium text-text" : "text-text")}>{runTitle(conversation.titleRun)}</span>

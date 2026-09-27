@@ -3,8 +3,8 @@ import { Link, useSearchParams } from "react-router";
 import { BellRing, Folder, Gauge, Palette, Plug, UserRound, Wrench, type LucideIcon } from "lucide-react";
 import { fetchWebMe } from "@/lib/apiClient";
 import { fetchImStatus } from "@/lib/imClient";
-import { cn } from "@/lib/cn";
 import { PageShell } from "@/components/layout/PageShell";
+import { navItemClasses } from "@/components/ui/NavItem";
 import { AccountSection } from "@/components/settings/AccountSection";
 import { AppearanceSection } from "@/components/settings/AppearanceSection";
 import { ConnectorsSection } from "@/components/settings/ConnectorsSection";
@@ -77,12 +77,11 @@ export function AccountPage() {
                     to={section.key === "account" ? "/app/account" : `/app/account?tab=${section.key}`}
                     replace
                     aria-current={selected ? "page" : undefined}
-                    className={cn(
-                      "flex h-8 items-center gap-2.5 whitespace-nowrap rounded px-2 text-ui transition-colors duration-fast",
-                      selected ? "bg-surface-2 font-medium text-text" : "text-text-2 hover:bg-surface-2 hover:text-text",
-                    )}
+                    // The sidebar's navigation item (spec §20.6): one look for
+                    // a column of places, where this was a 32 px one of its own.
+                    className={navItemClasses({ current: selected, className: "whitespace-nowrap" })}
                   >
-                    <Icon size={16} aria-hidden="true" className={selected ? "text-text" : "text-text-3"} />
+                    <Icon size={16} aria-hidden="true" className="text-text-3" />
                     {section.label}
                   </Link>
                 </li>

@@ -24,6 +24,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { navItemClasses } from "@/components/ui/NavItem";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Switch } from "@/components/ui/Switch";
 import { Tag } from "@/components/ui/Tag";
@@ -352,12 +353,9 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
                       <button
                         type="button"
                         aria-current={item.id === projectId ? "true" : undefined}
-                        className={cn(
-                          "block w-full truncate rounded px-2 py-1 text-left text-ui",
-                          item.id === projectId ? "bg-accent-soft text-accent-strong" : "text-text-2 hover:bg-surface-2 hover:text-text",
-                        )}
+                        className={navItemClasses({ current: item.id === projectId })}
                         onClick={() => { if (item.id !== projectId) void select(item.id); }}
-                      >{item.name}</button>
+                      ><span className="min-w-0 truncate">{item.name}</span></button>
                     </li>
                   ))}
                 </ul>
@@ -372,10 +370,7 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
                         <button
                           type="button"
                           aria-pressed={kind === value}
-                          className={cn(
-                            "flex w-full items-center justify-between rounded px-2 py-1 text-left text-ui",
-                            kind === value ? "bg-accent-soft text-accent-strong" : "text-text-2 hover:bg-surface-2 hover:text-text",
-                          )}
+                          className={navItemClasses({ current: kind === value, className: "justify-between" })}
                           onClick={() => setKind(value)}
                         >
                           <span className="truncate">{label}</span>
