@@ -1069,16 +1069,36 @@ test("monitoring compose pins components, keeps consoles local, and shares file-
   assert.match(compose, /--storage\.tsdb\.retention\.size=\$\{OPEN_SCIENCE_PROMETHEUS_RETENTION_SIZE:-10GB\}/);
 });
 
+test("every Grafana provisioning file is one Grafana reads: .yaml or .yml", async () => {
+  // Grafana reads provisioning files by extension, .yaml and .yml only. Both
+  // of ours were .json from the day they were written, so production's Grafana
+  // provisioned nothing — no data source, no dashboard — while the container
+  // was healthy (found and hot-fixed on the host 2026-09-27).
+  const provisioning = path.join(repoRoot, "deploy/web/monitoring/grafana/provisioning");
+  const kinds = await readdir(provisioning, { withFileTypes: true });
+  let seen = 0;
+  for (const kind of kinds) {
+    assert.ok(kind.isDirectory(), `${kind.name} is not a provisioning directory`);
+    for (const file of await readdir(path.join(provisioning, kind.name))) {
+      seen += 1;
+      assert.match(file, /\.ya?ml$/, `grafana/provisioning/${kind.name}/${file} is not read by Grafana`);
+    }
+  }
+  assert.ok(seen >= 2, `walked ${seen} provisioning files`);
+});
+
 test("monitoring configs scrape protected metrics, probe health/readiness, alert, and provision a dashboard", async () => {
   const monitoringDir = path.join(repoRoot, "deploy/web/monitoring");
   const prometheus = JSON.parse(await readFile(path.join(monitoringDir, "prometheus.json"), "utf8"));
   const blackbox = JSON.parse(await readFile(path.join(monitoringDir, "blackbox.json"), "utf8"));
   const rules = JSON.parse(await readFile(path.join(monitoringDir, "open-science.rules.json"), "utf8"));
+  // YAML files written as JSON, which YAML accepts: Grafana reads nothing
+  // else from provisioning (the extension test above).
   const datasource = JSON.parse(
-    await readFile(path.join(monitoringDir, "grafana/provisioning/datasources/prometheus.json"), "utf8"),
+    await readFile(path.join(monitoringDir, "grafana/provisioning/datasources/prometheus.yaml"), "utf8"),
   );
   const provider = JSON.parse(
-    await readFile(path.join(monitoringDir, "grafana/provisioning/dashboards/open-science.json"), "utf8"),
+    await readFile(path.join(monitoringDir, "grafana/provisioning/dashboards/open-science.yaml"), "utf8"),
   );
   const dashboard = JSON.parse(
     await readFile(path.join(monitoringDir, "grafana/dashboards/open-science-operations.json"), "utf8"),
