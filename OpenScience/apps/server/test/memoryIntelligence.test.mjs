@@ -1237,6 +1237,34 @@ test("a prefix matches by prefix and an unrelated project keeps its memory", asy
   }
 });
 
+test("an automated run writes no memory: its user message is a script's, not the researcher's", async () => {
+  // Probes, audits and acceptance harnesses dispatch with `automated: true` (or
+  // the `x-evimed-automated` header). The learning loop already refused them;
+  // extraction did not, so a harness's brief was read back as the researcher
+  // stating a fact about themselves, and its run summary became an episode of
+  // work they never did.
+  const client = new MemoryStoreDouble();
+  let called = false;
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: async () => { called = true; return Response.json({ choices: [] }); },
+  });
+
+  const automated = await intelligence.recordRun(
+    project(), { ...run("run_probe"), automated: true }, [message("m1", "我是临床药师，请记住我只看中文文献。")],
+  );
+  assert.equal(called, false, "no model call for an automated run");
+  assert.equal(automated.source, "automated", "the skip names its reason");
+  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(automated.source), "and the run-finished notice reads it as a setting");
+  assert.equal(automated.runSummary, null, "no episode of work the researcher never did");
+  assert.equal(automated.extracted, 0);
+  assert.equal(client.records.size, 0, "not one row was written");
+
+  // The same project's own runs keep their memory: the skip is per run.
+  const ordinary = await intelligence.recordRun(project(), { ...run("run_person"), automated: false }, [message("m1", "你好。")]);
+  assert.notEqual(ordinary.source, "automated");
+  assert.ok(ordinary.runSummary, "a run the researcher dispatched still records what it was about");
+});
+
 test("every source that means a write was skipped by setting is one the run-finished notice honours", async () => {
   // The notice "记忆抽取未产出记录" marks a run `verification: "unchecked"`. It
   // is right for a run whose extraction ran and found nothing, and wrong for a

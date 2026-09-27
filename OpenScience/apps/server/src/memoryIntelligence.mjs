@@ -741,8 +741,9 @@ function skippedResult(source, excluded, runSummary = null) {
  * here, or it will do the same. `unconfigured` is a deployment with no model to
  * extract with — a setting, and one that would otherwise put the notice on
  * every run it makes. `trial` is a conversation trying someone else's capsule.
+ * `automated` is a run a script dispatched (see `recordRun`).
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "paused", "unconfigured", "trial"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "automated", "paused", "unconfigured", "trial"]));
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
@@ -822,6 +823,16 @@ export class MemoryIntelligence {
     if (!this.enabled || this.#excludedProject(project)) {
       return skippedResult(this.enabled ? "project_excluded" : "disabled", excluded);
     }
+    // An automated run — a probe, an audit, an acceptance or evaluation
+    // harness, marked at dispatch by `automated: true` in the body or the
+    // `x-evimed-automated` header — carries a user message a script wrote, not
+    // the person. Extracting from it stores platform-written text as the
+    // researcher's own statement, and its run summary is an episode of work
+    // they never did. The learning loop has refused these runs from the start
+    // (`learningTriggers.mjs`); memory now refuses them the same way, with a
+    // source of its own so the skip reads as a setting and not as "extraction
+    // found nothing".
+    if (run?.automated === true) return skippedResult("automated", excluded);
     // The researcher's own switch, for the account or for this project. Read
     // per run rather than cached: "pause" has to hold from the next run on.
     const pause = await memoryPausedFor(this.memoryStore, project.userId, project.id, run.sessionId ?? null);

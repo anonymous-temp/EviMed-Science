@@ -2390,7 +2390,7 @@ export function createWebApiApp(overrides = {}) {
       // A skipped write is not "extracted nothing": the deployment asked for no
       // memory writes here and got none, which is a setting rather than an
       // outcome worth a notice on every single run — and the notice marks the
-      // run unchecked. `MEMORY_WRITE_SKIPPED_SOURCES` names both skip sources;
+      // run unchecked. `MEMORY_WRITE_SKIPPED_SOURCES` names every skip source;
       // testing for one of them is how every run of an excluded evaluation
       // project came to be stamped with it.
       if (memoryResult.extracted === 0 && !MEMORY_WRITE_SKIPPED_SOURCES.has(memoryResult.source)) {
