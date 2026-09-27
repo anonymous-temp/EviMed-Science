@@ -83,6 +83,15 @@ jobs:
           pnpm test:release-audit
           pnpm test:phi-masking
 
+      # The host scripts under `scripts/ops/` (the Postgres backup, the recovery
+      # volume, the image archive inventory, the usememos retirement) carry
+      # their own Python suites, and until this step nothing ran them: a
+      # regression in the backup script would first be seen on the host.
+      # `deploy.test.mjs` fails if a `test_*.py` lands there that `test:ops`
+      # does not collect.
+      - name: Test the ops scripts
+        run: pnpm test:ops
+
       # The design language has one table and six generated artifacts, read by
       # this repository AND by the Vue shell in another one. A generated file
       # nobody checks is exactly how the two tables drifted before there was a

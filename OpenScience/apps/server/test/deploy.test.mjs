@@ -340,6 +340,44 @@ test("every capability-audit test file is named by a script the PR gate runs", a
   assert.deepEqual(unrun, [], "these capability-audit tests are tracked but no script in test:web collects them");
 });
 
+test("every ops-script test file is collected by a script the PR gate runs", async () => {
+  // `scripts/ops/test/` held four suites (the Postgres backup, the recovery
+  // volume, the image archive inventory, the usememos retirement) that no
+  // script and no workflow step ran, so a broken backup script would first
+  // show on the host. `test:ops` discovers the directory, `test:web` chains
+  // it, and the `ci:web` step test above holds the workflow to `test:web`'s
+  // leaves; this holds `test:ops` to every file in the directory.
+  const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const opsTestDir = path.join(repoRoot, "scripts/ops/test");
+  const files = (await readdir(opsTestDir)).filter((name) => name.startsWith("test_") && name.endsWith(".py")).sort();
+  assert.ok(files.length >= 4, `the ops scripts should ship several test files, found ${JSON.stringify(files)}`);
+
+  const expand = (name, seen = new Set()) => {
+    if (seen.has(name)) return [];
+    seen.add(name);
+    const body = pkg.scripts?.[name];
+    if (!body) return [];
+    const called = [...body.matchAll(/pnpm (?:run )?([\w:-]+)/g)]
+      .map((match) => match[1])
+      .filter((child) => Object.hasOwn(pkg.scripts ?? {}, child));
+    return [body, ...called.flatMap((child) => expand(child, seen))];
+  };
+  const discovered = new Set();
+  for (const body of expand("test:web")) {
+    const match = body.match(/unittest discover -s scripts\/ops\/test -p '([^']+)'/);
+    if (match) discovered.add(match[1]);
+  }
+  assert.ok(discovered.size > 0, "no script in test:web discovers scripts/ops/test at all");
+
+  const globToRegExp = (pattern) =>
+    new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
+  const unrun = files.filter((file) => ![...discovered].some((pattern) => globToRegExp(pattern).test(file)));
+  assert.deepEqual(unrun, [], "these ops-script tests are tracked but no script in test:web collects them");
+
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  assert.match(workflow, /pnpm test:ops(?![\w:-])/, "the pull-request workflow does not run the ops-script tests");
+});
+
 test("the shipped plugin availability record is a placeholder, never a recorded observation", async () => {
   // `deploy/web/Dockerfile` copies this file into the image and
   // `pluginService.mjs` reads it at that path, so whatever is committed here is
