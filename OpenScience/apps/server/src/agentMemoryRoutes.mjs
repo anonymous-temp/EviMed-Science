@@ -1,5 +1,5 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
-import { recallAcrossMemory } from "./memoryRecall.mjs";
+import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, recallForAgent } from "./agentMemoryRecall.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
@@ -50,6 +50,14 @@ export const AGENT_MEMORY_PATH = "/api/agent-memory/v1";
 const RATE_LIMIT_PER_MINUTE = 120;
 const MAX_TRACKED_KEYS = 10_000;
 
+/** The fields each request body may carry, by operation. A contract test holds
+ *  the OpenAPI description's request schemas to exactly these lists. */
+export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
+  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods"]),
+  note: Object.freeze(["factKind", "content", "projectId"]),
+  episodes: Object.freeze(["projectId", "sessionId", "messages"]),
+});
+
 /** @param {any} value @param {string} label @param {number} max */
 function boundedString(value, label, max) {
   const text = String(value ?? "").trim();
@@ -57,7 +65,7 @@ function boundedString(value, label, max) {
   return text;
 }
 
-/** @param {any} body @param {string[]} allowed */
+/** @param {any} body @param {readonly string[]} allowed */
 function fields(body, allowed) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpError(400, "agent_memory_payload_invalid", "The request body must be an object.");
@@ -72,11 +80,11 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, memorySubstrate?: any, audit?: ((event: any) => void) | null,
+ *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, audit?: ((event: any) => void) | null,
  * }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null }) {
+export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null }) {
   const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
@@ -155,7 +163,8 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
           throw new HttpError(400, "agent_subject_project_unsupported", "A subject's memory has one project, \"default\"; name it or name none.");
         }
         if (requested == null) return null;
-        await store.requireProject(user, "default");
+        // A subject with no memory yet has no project to make on a read.
+        if (user) await store.requireProject(user, "default");
         return "default";
       }
       const wanted = requested == null ? identity.projectId : String(requested);
@@ -173,7 +182,7 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
 
     if (action === "recall" && method === "POST") {
       requireScope("memory.read");
-      const input = fields(body, ["query", "projectId", "limit", "factKinds", "since", "scope"]);
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.recall);
       if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       if (input.factKinds !== undefined && (!Array.isArray(input.factKinds)
         || input.factKinds.length > CAPSULE_FACT_KINDS.length
@@ -186,27 +195,39 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
       if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
         throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
       }
+      // The capsules to read instead of the ones in force: at most eight,
+      // each named once.
+      if (input.capsuleIds !== undefined && (!Array.isArray(input.capsuleIds) || input.capsuleIds.length < 1
+        || input.capsuleIds.length > AGENT_RECALL_MAX_CAPSULES || new Set(input.capsuleIds).size !== input.capsuleIds.length
+        || input.capsuleIds.some((/** @type {any} */ id) => typeof id !== "string" || !id.trim() || id.length > 200
+          || [...id].some((character) => character.charCodeAt(0) < 32)))) {
+        throw new HttpError(400, "agent_memory_payload_invalid", `capsuleIds must name 1–${AGENT_RECALL_MAX_CAPSULES} distinct capsules.`);
+      }
+      if (input.methods !== undefined && !AGENT_RECALL_METHOD_MODES.includes(input.methods)) {
+        throw new HttpError(400, "agent_memory_payload_invalid", `methods must be one of ${AGENT_RECALL_METHOD_MODES.join(", ")}.`);
+      }
       const query = boundedString(input.query, "query", 2_000);
       const user = await accountFor({ create: false });
-      if (!user) {
-        sendJson(res, 200, { data: { items: [], mode: "none", contextOnly: true, sources: { memory: 0, capsule: 0 } } });
-        return true;
-      }
-      const result = await recallAcrossMemory({ capsules, memorySubstrate }, user, {
-        query,
-        projectId: await projectOf(user, input.projectId),
-        limit: Math.max(1, Math.min(50, Number(input.limit ?? 10))),
-        factKinds: input.factKinds ?? [],
-        since: input.since ?? null,
-        scope: input.scope ?? "all",
-      });
+      // A subject never seen has no memory and no methods of its own; it may
+      // still read its institution's named capsules.
+      const result = await recallForAgent({ capsules, memorySubstrate, learning },
+        { user, institution: subject ? keyAccount : null }, {
+          query,
+          projectId: await projectOf(user, input.projectId),
+          limit: input.limit ?? 10,
+          factKinds: input.factKinds ?? [],
+          since: input.since ?? null,
+          scope: input.scope ?? "all",
+          ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
+          methods: input.methods ?? "all",
+        });
       sendJson(res, 200, { data: result });
       return true;
     }
 
     if (action === "note" && method === "POST") {
       requireScope("memory.write");
-      const input = fields(body, ["factKind", "content", "projectId"]);
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.note);
       if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       const content = boundedString(input.content, "content", 8_000);
       const user = /** @type {any} */ (await accountFor({ create: true }));
@@ -233,7 +254,7 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         .map((value) => value.trim())
         .filter((value) => allowed.has(value));
       const user = await accountFor({ create: false });
-      const scopeId = user ? (await projectOf(user, url.searchParams.get("scopeId"))) ?? "" : "";
+      const scopeId = (await projectOf(user, url.searchParams.get("scopeId"))) ?? "";
       const records = !user ? [] : await researchMemory.listRecords(user.id, {
         scopes: filters("scope", allowedScopes),
         kinds: filters("kind", allowedKinds),
@@ -251,7 +272,7 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
 
     if (action === "episodes" && method === "POST") {
       requireScope("memory.write");
-      const input = fields(body, ["projectId", "sessionId", "messages"]);
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.episodes);
       if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
       if (!Array.isArray(input.messages) || input.messages.length === 0 || input.messages.length > 200) {
         throw new HttpError(400, "agent_memory_payload_invalid", "messages must be a list of 1–200 turns.");

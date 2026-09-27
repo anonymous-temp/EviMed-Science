@@ -1647,6 +1647,8 @@ export function createWebApiApp(overrides = {}) {
   // goes through. There is no route that writes a record directly.
   const agentMemoryRoutes = createAgentMemoryRoutes({
     config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence, memorySubstrate,
+    // The methods recall returns: the account's own learned library.
+    learning: learningService,
   });
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,

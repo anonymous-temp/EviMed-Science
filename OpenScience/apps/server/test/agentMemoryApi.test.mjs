@@ -62,6 +62,15 @@ function fixture(overrides = {}) {
   };
   const capsules = {
     async recall(userId, input) { calls.push(["recall", userId, input]); return { items: [] }; },
+    // What recall's methods are chosen from: the capsules in force, and one
+    // capsule's entries.
+    async active() { return { record: null, items: [] }; },
+    async entries() { return { items: [], nextCursor: null }; },
+    async get(userId, id) {
+      const found = (overrides.capsules ?? []).find((capsule) => capsule.userId === userId && capsule.id === id);
+      if (!found) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
+      return { id, payload: { title: found.title } };
+    },
     async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", ...input }; },
   };
   const researchMemory = {
@@ -306,6 +315,48 @@ test("only an integration key may name a subject, a subject is a plain identifie
   await integration.routes(request(`${AGENT_MEMORY_PATH}/`, undefined, "evk_good", "GET", { "x-subject": "doc-7" }), root);
   assert.equal(root.captured.body.data.subjects, true);
   assert.equal(root.captured.body.data.speaksFor, "subject");
+});
+
+test("recall names at most eight capsules, each once, and returns methods unless asked not to", async () => {
+  const { routes, calls } = fixture({ capsules: [{ userId: "u1", id: "cap_school", title: "经方思路" }] });
+  for (const capsuleIds of [[], "cap_school", ["a", "a"], Array.from({ length: 9 }, (_, index) => `c${index}`), [""]]) {
+    await assert.rejects(
+      () => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", capsuleIds }), response()),
+      (error) => error.status === 400 && error.code === "agent_memory_payload_invalid",
+      JSON.stringify(capsuleIds),
+    );
+  }
+  await assert.rejects(
+    () => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", methods: "some" }), response()),
+    (error) => error.status === 400 && error.code === "agent_memory_payload_invalid",
+  );
+  const res = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", capsuleIds: ["cap_school"] }), res);
+  assert.deepEqual(res.captured.body.data.capsules, [{ id: "cap_school", title: "经方思路", owner: "self" }]);
+  assert.deepEqual(res.captured.body.data.methods, []);
+  const recalled = calls.find((entry) => entry[0] === "recall");
+  assert.deepEqual(recalled[2].selection, [{ capsuleId: "cap_school", mode: "named" }], "the named capsule, not the ones in force");
+  await assert.rejects(
+    () => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", capsuleIds: ["cap_elsewhere"] }), response()),
+    (error) => error.status === 404 && error.code === "capsule_not_found",
+  );
+});
+
+test("a limit the capsule half cannot serve is served, not refused", async () => {
+  const { routes, calls } = fixture();
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", limit: 45 }), response());
+  assert.equal(calls.find((entry) => entry[0] === "recall")[2].limit, 30, "the capsule store's own ceiling");
+});
+
+test("each request schema in the description is exactly the fields its route accepts", async () => {
+  const { AGENT_MEMORY_REQUEST_FIELDS } = await import("../src/agentMemoryRoutes.mjs");
+  const schemas = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 }).components.schemas;
+  const described = { recall: "RecallRequest", note: "NoteRequest", episodes: "EpisodeRequest" };
+  assert.deepEqual(Object.keys(described).sort(), Object.keys(AGENT_MEMORY_REQUEST_FIELDS).sort(), "every body the routes read is described");
+  for (const [operation, schema] of Object.entries(described)) {
+    assert.deepEqual(Object.keys(schemas[schema].properties).sort(), [...AGENT_MEMORY_REQUEST_FIELDS[operation]].sort(), operation);
+    assert.equal(schemas[schema].additionalProperties, false, `${operation}: an unknown field is refused, and the description says so`);
+  }
 });
 
 test("the description names the subject header on every operation, with the pattern the route enforces", async () => {

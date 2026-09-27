@@ -1,5 +1,7 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_KEY_SCOPES, AGENT_SUBJECT_PATTERN } from "./agentApiKeys.mjs";
+import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES } from "./agentMemoryRecall.mjs";
+import { MAX_MOUNTED_CAPSULE_METHODS, MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 
 /**
  * The agent-memory API, described.
@@ -92,7 +94,53 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             since: { type: "string", format: "date-time" },
             scope: {
               type: "string", enum: ["all", "capsule", "conversation", "agenda"], default: "all",
-              description: "`conversation`: the structured records and notes the platform keeps for this account; `capsule`: the facts of its active capsules; `all`: both. `agenda` is reserved and currently refused.",
+              description: "`conversation`: the structured records and notes the platform keeps for this account; `capsule`: the facts of its active capsules (or of `capsuleIds`); `all`: both. `agenda` is reserved and currently refused.",
+            },
+            capsuleIds: {
+              type: "array", minItems: 1, maxItems: AGENT_RECALL_MAX_CAPSULES, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 200 },
+              description: "Read these capsules instead of the ones in force — one school at a time, for a side-by-side comparison. Each must be this account's own, or, for a request naming a subject, its institution's. One that is neither is `404 capsule_not_found`, the same answer as one that does not exist.",
+            },
+            methods: {
+              type: "string", enum: [...AGENT_RECALL_METHOD_MODES], default: "all",
+              description: "Which methods (做法) to return: `own` — this account's own learned methods; `capsules` — the work-style methods of the capsules read; `all` — both, the account's own first; `none`.",
+            },
+          },
+        },
+        Method: {
+          type: "object",
+          description: "One method, as context: how this person or school works, never a permission or a rule.",
+          properties: {
+            source: { type: "string", enum: ["learned", "capsule"] },
+            id: { type: "string" },
+            capsuleId: { type: "string", description: "`capsule` methods only." },
+            title: { type: ["string", "null"], description: "The line a person reads: the method's own Chinese title, or the capsule's title." },
+            summary: { type: ["string", "null"] },
+            whenToUse: { type: ["string", "null"] },
+            content: { type: "string", description: "The method's text." },
+            digest: { type: "string", description: "`sha256:<hex>` of the text that was handed over." },
+            since: { type: ["string", "null"], description: "When a learned method took effect; fourteen days or less is 「新」." },
+            contextOnly: { type: "boolean", const: true },
+          },
+        },
+        RecallResponse: {
+          type: "object",
+          properties: {
+            data: {
+              type: "object",
+              properties: {
+                items: { type: "array", items: { type: "object", additionalProperties: true } },
+                sources: { type: "object", properties: { memory: { type: "integer" }, capsule: { type: "integer" } } },
+                mode: { type: "string" },
+                contextOnly: { type: "boolean", const: true },
+                methods: {
+                  type: "array", items: { $ref: "#/components/schemas/Method" },
+                  description: `At most ${MAX_MOUNTED_CAPSULE_METHODS} methods and ${MAX_MOUNTED_CAPSULE_METHOD_BYTES} bytes, the account's own first — the budget and the selection a run of ours would mount.`,
+                },
+                capsules: {
+                  type: "array", description: "When `capsuleIds` was given: each named capsule, its title and whose it is (`self` or `institution`).",
+                  items: { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, owner: { type: "string", enum: ["self", "institution"] } } },
+                },
+              },
             },
           },
         },
@@ -153,10 +201,15 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/recall": {
         post: {
           summary: "Search this account's memory",
-          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes) and the facts of its active capsules — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone. A fact read out of a knowledge-base document is returned only to a recall in that document's project.",
+          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes) and the facts of its active capsules, or of the capsules named in `capsuleIds` — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone. A fact read out of a knowledge-base document is returned only to a recall in that document's project. It also returns `methods`: how this account works (its learned methods) and how the capsules read work (their work-style entries), the account's own first. Reading a method counts nothing.",
           security: [{ agentApiKey: ["memory.read"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/RecallRequest" }),
-          responses: { 200: { description: "Matching memory, hydrated from the record store." }, 400: errorResponse("Malformed request."), ...common },
+          responses: {
+            200: { description: "Matching memory, hydrated from the record store, and the methods that apply.", content: { "application/json": { schema: { $ref: "#/components/schemas/RecallResponse" } } } },
+            400: errorResponse("Malformed request."),
+            404: errorResponse("A capsule named in `capsuleIds` is unavailable (`capsule_not_found`)."),
+            ...common,
+          },
         },
       },
       "/note": {

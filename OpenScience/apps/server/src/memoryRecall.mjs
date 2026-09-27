@@ -34,6 +34,11 @@ export const MEMORY_RECALL_SCOPES = Object.freeze(["all", "capsule", "conversati
 /** The most items one recall returns, whatever the caller asked for. */
 export const MEMORY_RECALL_MAX_LIMIT = 50;
 
+/** The most the capsule half is asked for: `CapsuleService.recall` refuses more
+ *  than thirty, and a limit of forty on the union used to be a 400 from the
+ *  half that was asked for too many rather than an answer. */
+const CAPSULE_RECALL_MAX_LIMIT = 30;
+
 /**
  * @param {{ capsules?: { recall: Function } | null, memorySubstrate?: { recall: Function, recallEnabled?: boolean } | null }} services
  * @param {{ id: string, accountCreatedAt?: string }} user
@@ -54,7 +59,7 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
   if (memorySubstrate && memorySubstrate.recallEnabled === false) {
     return { items: [], mode: "disabled", contextOnly: true, sources: { memory: 0, capsule: 0 } };
   }
-  const limit = Math.max(1, Math.min(MEMORY_RECALL_MAX_LIMIT, Number(input.limit ?? 10) || 10));
+  const limit = Math.max(1, Math.min(MEMORY_RECALL_MAX_LIMIT, Math.trunc(Number(input.limit ?? 10)) || 10));
   const factKinds = Array.isArray(input.factKinds) ? input.factKinds : [];
   const since = input.since ?? null;
   const sinceMs = since ? Date.parse(since) : Number.NaN;
@@ -62,7 +67,7 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
 
   const [capsule, memory] = await Promise.all([
     scope !== "conversation" && capsules
-      ? capsules.recall(user.id, { query: input.query, projectId, limit, factKinds, since, scope: "capsule", accountCreatedAt: user.accountCreatedAt })
+      ? capsules.recall(user.id, { query: input.query, projectId, limit: Math.min(CAPSULE_RECALL_MAX_LIMIT, limit), factKinds, since, scope: "capsule", accountCreatedAt: user.accountCreatedAt })
       : { items: [], mode: "none" },
     scope !== "capsule" && memorySubstrate
       ? memorySubstrate.recall(user.id, input.query, { projectId, sessionId: input.sessionId ?? null, countUsage: input.countUsage !== false })

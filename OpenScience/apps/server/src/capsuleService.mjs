@@ -587,15 +587,21 @@ export class CapsuleService {
     return facts;
   }
 
-  /** @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string, accountCreatedAt?:string }} input */
-  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined }) {
+  /**
+   * `selection` names the capsules to search instead of the ones in force —
+   * the agent-memory API's `capsuleIds`, which is how 同病异治对照 asks one
+   * named school at a time. The caller has checked that each is this account's
+   * own; the eight-capsule bound applies to it as to the active list.
+   * @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string, accountCreatedAt?:string,
+   *   selection?: { capsuleId: string, mode: string }[] | null }} input */
+  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined, selection: named = null }) {
     const needle = text(query, "query", 2000);
     if (!["all", "capsule"].includes(scope)) throw new HttpError(400, "capsule_scope_unavailable", "This memory scope is unavailable.");
     if (!Array.isArray(factKinds) || factKinds.length > CAPSULE_FACT_KINDS.length) throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
     for (const kind of factKinds) member(kind, CAPSULE_FACT_KINDS, "fact kind");
     productInteger(limit, 1, 30);
-    const local = await this.active(userId, projectId);
-    const global = projectId ? await this.active(userId, null) : { items: [] };
+    const local = Array.isArray(named) ? { items: named } : await this.active(userId, projectId);
+    const global = projectId && !Array.isArray(named) ? await this.active(userId, null) : { items: [] };
     const active = [...local.items, ...global.items].filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, 8);
     if (this.indexing && active.length) {
       try {
