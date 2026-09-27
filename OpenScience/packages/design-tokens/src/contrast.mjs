@@ -10,7 +10,7 @@
  *
  * @module @evimed/design-tokens/contrast
  */
-import { COLOR_ROLES, colorRole, resolveColor } from './index.mjs'
+import { CHART_COLORS, COLOR_ROLES, COLOR_ROLES_MORE_CONTRAST, colorRole, resolveColor } from './index.mjs'
 
 /**
  * sRGB hex → relative luminance (WCAG 2.1 §relative luminance).
@@ -111,23 +111,69 @@ export const CONTRAST_RULES = Object.freeze([
 ])
 
 /**
- * One measured result.
- * @typedef {{ rule: ContrastRule, scheme: 'light' | 'dark', ratio: number, ok: boolean }} ContrastResult
+ * One data colour on one ground: a literal from `CHART_COLORS` against a role.
+ * @typedef {{ name: string, color: string, bg: string, scheme: 'light' | 'dark', min: number, what: string }} DataContrastRule
  */
 
 /**
- * Measure every rule in both schemes.
+ * The data colours that make a promise: each rival grey is a line or a mark a
+ * reader has to find, so it is a graphic at 3:1 (WCAG 1.4.11) on the page and
+ * on a card, and on the dark canvas. 2.0's third rival was 1.92:1 on white and
+ * nothing measured it (spec §32.4, appendix E #22). The categorical series are
+ * not listed: slots 2, 6 and 8 sit under 3:1 on white by design and carry
+ * direct labels instead (§32.4).
+ *
+ * @type {readonly DataContrastRule[]}
+ */
+export const DATA_CONTRAST_RULES = Object.freeze(
+  CHART_COLORS.rivals.flatMap((color, index) =>
+    /** @type {const} */ ([
+      ['bg', 'light'],
+      ['surface', 'light'],
+      ['bg', 'dark'],
+    ]).map(([bg, scheme]) => ({
+      name: `chart-rival-${index + 1}`,
+      color,
+      bg,
+      scheme,
+      min: 3,
+      what: `rival ${index + 1} as a line or mark`,
+    })),
+  ),
+)
+
+/**
+ * One measured result.
+ * @typedef {{ rule: ContrastRule, scheme: 'light' | 'dark', variant: 'standard' | 'more', ratio: number, ok: boolean }} ContrastResult
+ */
+
+/**
+ * A role's colour under a contrast variant: the table, or the table with the
+ * more-contrast overrides applied.
+ * @param {string} role
+ * @param {'light' | 'dark'} scheme
+ * @param {'standard' | 'more'} variant
+ * @returns {string}
+ */
+export function roleColor(role, scheme, variant = 'standard') {
+  const override = variant === 'more' ? COLOR_ROLES_MORE_CONTRAST[role] : undefined
+  return resolveColor(override ? override[scheme] : colorRole(role, scheme))
+}
+
+/**
+ * Measure every rule in both schemes, under the standard table and under the
+ * more-contrast layer — every combination a reader can be shown.
  * @returns {ContrastResult[]}
  */
 export function measureContrast() {
   /** @type {ContrastResult[]} */
   const results = []
-  for (const scheme of /** @type {const} */ (['light', 'dark'])) {
-    for (const rule of CONTRAST_RULES) {
-      const fg = resolveColor(colorRole(rule.fg, scheme))
-      const bg = resolveColor(colorRole(rule.bg, scheme))
-      const ratio = contrastRatio(fg, bg)
-      results.push({ rule, scheme, ratio, ok: ratio >= rule.min })
+  for (const variant of /** @type {const} */ (['standard', 'more'])) {
+    for (const scheme of /** @type {const} */ (['light', 'dark'])) {
+      for (const rule of CONTRAST_RULES) {
+        const ratio = contrastRatio(roleColor(rule.fg, scheme, variant), roleColor(rule.bg, scheme, variant))
+        results.push({ rule, scheme, variant, ratio, ok: ratio >= rule.min })
+      }
     }
   }
   return results
@@ -135,16 +181,24 @@ export function measureContrast() {
 
 /**
  * Every failure, as a line a build log can print. Empty means the table keeps
- * its promises.
+ * its promises — the roles in both schemes and both contrast variants, and the
+ * data colours that promise to be seen. Compared unrounded.
  * @returns {string[]}
  */
 export function contrastFailures() {
-  return measureContrast()
+  const roles = measureContrast()
     .filter((result) => !result.ok)
     .map(
-      ({ rule, scheme, ratio }) =>
-        `${scheme}: ${rule.what} — --${rule.fg} on --${rule.bg} is ${ratio.toFixed(2)}:1, needs ${rule.min}:1`,
+      ({ rule, scheme, variant, ratio }) =>
+        `${scheme}${variant === 'more' ? ' (more contrast)' : ''}: ${rule.what} — --${rule.fg} on --${rule.bg} is ${ratio.toFixed(2)}:1, needs ${rule.min}:1`,
     )
+  const data = DATA_CONTRAST_RULES.map((rule) => ({ rule, ratio: contrastRatio(rule.color, colorRole(rule.bg, rule.scheme)) }))
+    .filter(({ rule, ratio }) => ratio < rule.min)
+    .map(
+      ({ rule, ratio }) =>
+        `${rule.scheme}: ${rule.what} — --${rule.name} (${rule.color}) on --${rule.bg} is ${ratio.toFixed(2)}:1, needs ${rule.min}:1`,
+    )
+  return [...roles, ...data]
 }
 
 /**

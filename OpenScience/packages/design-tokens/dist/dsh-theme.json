@@ -204,8 +204,8 @@
     "dark": "#233c2c"
   },
   "--dsw-font-family": {
-    "light": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
-    "dark": "Inter, system-ui, \"PingFang SC\", \"HarmonyOS Sans SC\", MiSans, \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif"
+    "light": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif",
+    "dark": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
   },
   "--dsw-font-markdown-base": {
     "light": "var(--dsh-content-font-size, 14px) / calc(var(--dsh-content-font-size, 14px) * 1.75) var(--dsw-font-family)",

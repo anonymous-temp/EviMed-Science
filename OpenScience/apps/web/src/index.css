@@ -4,9 +4,11 @@
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 /* Latin only, and only two cuts: the serif is confined to the wordmark, the
-   home headline and a document title. The CJK serif is deliberately NOT a
-   webfont — a Source Han Serif subset is megabytes, and Songti SC / Noto
-   Serif CJK are already on the systems that matter. */
+   home headline and a document title — the `text-wordmark`, `text-hero` and
+   `text-doc-title` rungs, which carry the family themselves (the rule is in
+   the generated block below). The CJK serif is deliberately NOT a webfont — a
+   Source Han Serif subset is megabytes, and Songti SC / Noto Serif CJK are
+   already on the systems that matter. */
 @import "@fontsource/source-serif-4/400.css";
 @import "@fontsource/source-serif-4/600.css";
 
@@ -14,14 +16,43 @@
 @tailwind components;
 @tailwind utilities;
 
-/* The token table is one file — `packages/domain/src/designTokens.mjs` — and
-   this block is written from it by `pnpm tokens:css`. Do not edit between the
-   markers: `designTokens.test.ts` regenerates it and fails on a difference.
-   `tailwind.config.js` imports the same module, and the kernel frame's theme
-   override (`packages/harness-port/src/runtimeUiTheme.mjs`) takes its
-   `kernelThemeTokens()`, so the shell and the conversation cannot disagree. */
+/* The token table is one package — `packages/design-tokens/src/index.mjs` —
+   and this block is written from it by `pnpm tokens:css`. Do not edit between
+   the markers: `designTokens.test.ts` regenerates it and fails on a
+   difference. `tailwind.config.js` extends the same package's preset, and the
+   kernel frame's theme override takes its `kernelThemeTokens()`, so the shell
+   and the conversation cannot disagree. Since 2.1 the block also carries the
+   punctuation face, the serif rung rule, reduced-motion values and the
+   forced-colours / more-contrast layer (spec §10.9, appendix E #2). */
 
 /* >>> generated from @evimed/design-tokens — run `pnpm tokens:css` <<< */
+/* The punctuation face: “quotes” and …… in the reader's own Chinese face,
+   ahead of Inter in the stack (spec §5.1). Local fonts only. */
+@font-face {
+  font-family: "EviMed CJK Punct";
+  font-weight: 400;
+  src: local("PingFangSC-Regular"), local("PingFang SC Regular"), local("Microsoft YaHei"), local("MicrosoftYaHei"), local("NotoSansSC-Regular"), local("Noto Sans SC Regular"), local("NotoSansCJKsc-Regular"), local("Noto Sans CJK SC Regular"), local("SourceHanSansSC-Regular");
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+@font-face {
+  font-family: "EviMed CJK Punct";
+  font-weight: 600;
+  src: local("PingFangSC-Semibold"), local("PingFang SC Semibold"), local("Microsoft YaHei Bold"), local("MicrosoftYaHei-Bold"), local("NotoSansSC-SemiBold"), local("NotoSansSC-Bold"), local("NotoSansCJKsc-Bold"), local("Noto Sans CJK SC Bold"), local("SourceHanSansSC-Bold");
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+@font-face {
+  font-family: "EviMed CJK Punct Serif";
+  font-weight: 400;
+  src: local("STSongti-SC-Regular"), local("Songti SC Regular"), local("NotoSerifSC-Regular"), local("Noto Serif SC Regular"), local("NotoSerifCJKsc-Regular"), local("Noto Serif CJK SC Regular"), local("SourceHanSerifSC-Regular"), local("SimSun");
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+@font-face {
+  font-family: "EviMed CJK Punct Serif";
+  font-weight: 600;
+  src: local("STSongti-SC-Bold"), local("Songti SC Bold"), local("NotoSerifSC-SemiBold"), local("NotoSerifCJKsc-SemiBold"), local("Noto Serif CJK SC SemiBold"), local("SourceHanSerifSC-SemiBold"), local("Microsoft YaHei Bold"), local("MicrosoftYaHei-Bold");
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+
 /* Primitive ramps. Theme-independent: a role below points at a step, and
    the dark theme points the same role at a different step rather than
    inverting a colour. See packages/design-tokens/src/index.mjs. */
@@ -223,44 +254,46 @@
   --series-8: #c8cfd6;
 }
 
-/* Type, geometry, motion and data colour: theme-independent, and readable
-   from a stylesheet Tailwind does not compile (the kernel frame's own). */
+/* Type, geometry, layers, motion and data colour: theme-independent, and
+   readable from a stylesheet Tailwind does not compile (the kernel frame's own). */
 :root {
-  --font-sans: Inter, system-ui, "PingFang SC", "HarmonyOS Sans SC", MiSans, "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --font-serif: "Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  --font-sans: "EviMed CJK Punct", Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-serif: "EviMed CJK Punct Serif", "Source Serif 4", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "PingFang SC", "Microsoft YaHei", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", monospace;
-  --text-badge: 12px;
+  --font-sans-en: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-serif-en: "Source Serif 4", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "PingFang SC", "Microsoft YaHei", Georgia, serif;
+  --text-badge: 0.75rem;
   --leading-badge: 1;
-  --text-meta: 12px;
+  --text-meta: 0.75rem;
   --leading-meta: 1.5;
-  --text-caption: 12px;
-  --leading-caption: 20px;
-  --text-compact: 13px;
-  --leading-compact: 20px;
-  --text-ui: 14px;
-  --leading-ui: 22px;
-  --text-ui-sm: 14px;
-  --leading-ui-sm: 22px;
-  --text-body: 16px;
+  --text-caption: 0.75rem;
+  --leading-caption: 1.25rem;
+  --text-compact: 0.8125rem;
+  --leading-compact: 1.25rem;
+  --text-ui: 0.875rem;
+  --leading-ui: 1.375rem;
+  --text-ui-sm: 0.875rem;
+  --leading-ui-sm: 1.375rem;
+  --text-body: 1rem;
   --leading-body: 1.75;
-  --text-wordmark: 16px;
+  --text-wordmark: 1rem;
   --leading-wordmark: 1.3;
-  --text-section: 18px;
-  --leading-section: 26px;
-  --text-heading: 20px;
-  --leading-heading: 28px;
-  --text-title: 24px;
-  --leading-title: 32px;
-  --text-doc-title: 24px;
-  --leading-doc-title: 34px;
-  --text-display: 24px;
+  --text-section: 1.125rem;
+  --leading-section: 1.625rem;
+  --text-heading: 1.25rem;
+  --leading-heading: 1.75rem;
+  --text-title: 1.5rem;
+  --leading-title: 2rem;
+  --text-doc-title: 1.5rem;
+  --leading-doc-title: 2.125rem;
+  --text-display: 1.5rem;
   --leading-display: 1.3;
-  --text-metric: 32px;
-  --leading-metric: 40px;
-  --text-metric-lg: 40px;
-  --leading-metric-lg: 48px;
-  --text-hero: 40px;
-  --leading-hero: 50px;
+  --text-metric: 2rem;
+  --leading-metric: 2.5rem;
+  --text-metric-lg: 2.5rem;
+  --leading-metric-lg: 3rem;
+  --text-hero: 2.5rem;
+  --leading-hero: 3.125rem;
   --space-4: 4px;
   --space-8: 8px;
   --space-12: 12px;
@@ -281,19 +314,40 @@
   --height-sm: 28px;
   --height-inline: 28px;
   --height-control: 36px;
-  --height-formPrimary: 44px;
+  --height-form-primary: 44px;
+  --height-formPrimary: var(--height-form-primary); /* retired name of --height-form-primary */
   --width-narrow: 560px;
   --width-read: 720px;
   --width-content: 720px;
   --width-page: 1040px;
   --width-wide: 1200px;
-  --width-wideMax: 1280px;
+  --width-wide-max: 1280px;
+  --width-wideMax: var(--width-wide-max); /* retired name of --width-wide-max */
   --width-full: 1040px;
   --width-measure: 560px;
-  --width-measureBody: 640px;
+  --width-measure-body: 640px;
+  --width-measureBody: var(--width-measure-body); /* retired name of --width-measure-body */
   --width-sidebar: 280px;
-  --width-sidebarCollapsed: 56px;
+  --width-sidebar-collapsed: 56px;
+  --width-sidebarCollapsed: var(--width-sidebar-collapsed); /* retired name of --width-sidebar-collapsed */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
   --icon-stroke: 1.5;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --z-page: 0;
+  --z-sticky: 10;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+  --z-skip: 90;
+  --opacity-disabled: 0.4;
+  --opacity-drag: 0.8;
   --shadow-e1: 0 1px 2px rgba(20, 32, 48, 0.04), 0 0 0 1px rgba(20, 32, 48, 0.06);
   --shadow-e2: 0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05);
   --shadow-e3: 0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06);
@@ -303,16 +357,36 @@
   --dur-base: 200ms;
   --dur-slow: 320ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --motion-drawer: 24px;
+  --motion-toast: 8px;
+  --motion-menu: 4px;
+  --tooltip-show-delay: 300ms;
+  --tooltip-hide-delay: 100ms;
+  --toast-success: 5000ms;
+  --toast-action: 10000ms;
   --chart-own: #0a5dc1;
   --chart-rival-1: #5a626b;
-  --chart-rival-2: #8a939c;
-  --chart-rival-3: #b4bcc5;
+  --chart-rival-2: #737c85;
+  --chart-rival-3: #8a939c;
+  --chart-line: 2px;
+  --chart-line-own: 2.5px;
+  --chart-line-other: 1.5px;
+  --chart-marker: 5px;
   --heat-0: #f3f6fa;
   --heat-1: #dce8f7;
   --heat-2: #b3cdef;
   --heat-3: #7fa9e3;
   --heat-4: #3e7ed4;
   --heat-5: #0a5dc1;
+  --diverging-0: #0a5dc1;
+  --diverging-1: #5f97e0;
+  --diverging-2: #bcd3f3;
+  --diverging-3: #edf0f3;
+  --diverging-4: #f9c7ab;
+  --diverging-5: #dd7b3c;
+  --diverging-6: #9f4600;
+  --chart-missing: #bac2ca;
   --severity-s3: #c0362c;
   --severity-s2: #e0877f;
   --severity-s1: #939ca6;
@@ -327,6 +401,104 @@
   --study-other-fg: #3e454d;
   --study-other-bg: #edf0f3;
 }
+
+/* The serif belongs to three rungs and nothing else (spec §3.4): the rung
+   carries its family, so a page never names the serif itself. */
+.text-wordmark,
+.text-doc-title,
+.text-hero {
+  font-family: var(--font-serif);
+}
+
+/* Text marked English keeps its Latin quotes and dashes: the stacks without
+   the punctuation face. Zero specificity, so a mono class still wins. */
+:where([lang|="en"]) {
+  font-family: var(--font-sans-en);
+}
+:where([lang|="en"]):where(.text-wordmark, .text-doc-title, .text-hero) {
+  font-family: var(--font-serif-en);
+}
+
+/* Reduced motion (spec §9.5): no layer travels, and no fade is longer than
+   the fast step. Opacity and colour still change, so a change is still seen. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-base: var(--dur-fast);
+    --dur-slow: var(--dur-fast);
+    --motion-drawer: 0px;
+    --motion-toast: 0px;
+    --motion-menu: 0px;
+  }
+}
+
+/* Forced colours (Windows contrast themes): shadows and fills are removed, so
+   everything that was drawn with one gets a line (spec §10.9). */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: var(--focus-ring-width) solid Highlight;
+    outline-offset: var(--focus-ring-offset);
+  }
+  /* Element Plus draws an input's and a select's edge and focus as shadows. */
+  .el-input__wrapper,
+  .el-textarea__inner,
+  .el-select__wrapper {
+    border: 1px solid ButtonBorder;
+  }
+  .el-input__wrapper.is-focus,
+  .el-textarea__inner:focus,
+  .el-select__wrapper.is-focused {
+    outline: var(--focus-ring-width) solid Highlight;
+  }
+  /* A floating layer lost its shadow, which was half its edge. */
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="menu"],
+  [role="listbox"],
+  [role="tooltip"],
+  .el-popper,
+  .el-dialog,
+  .el-drawer,
+  .el-message,
+  .el-message-box {
+    border: 1px solid CanvasText;
+  }
+  /* Selected, current and pressed lost their fill: say it with a line. */
+  [aria-current="page"],
+  [aria-current="true"],
+  [aria-pressed="true"],
+  [role="radio"][aria-checked="true"],
+  [role="option"][aria-selected="true"],
+  .el-menu-item.is-active,
+  .el-radio-button.is-active .el-radio-button__inner {
+    text-decoration: underline 2px;
+    text-underline-offset: 4px;
+  }
+  /* Colour that is the data (a legend swatch, a palette) keeps its colour. */
+  [data-forced-colors="preserve"] {
+    forced-color-adjust: none;
+  }
+}
+
+/* More contrast: secondary text and every rule one step towards the text
+   colour (COLOR_ROLES_MORE_CONTRAST, measured like the rest). */
+@media (prefers-contrast: more) {
+  html:not([data-theme="dark"]) {
+    --text-2: var(--n-800);
+    --text-3: var(--n-700);
+    --text-graphic: var(--n-500);
+    --border-hairline: var(--n-300);
+    --border-light: var(--n-control);
+    --border-control: var(--n-600);
+  }
+  html[data-theme="dark"] {
+    --text-2: #eef1f4;
+    --text-3: #c3cad2;
+    --text-graphic: var(--n-400);
+    --border-hairline: var(--dark-border-strong);
+    --border-light: var(--dark-border-strong);
+    --border-control: var(--n-300);
+  }
+}
 /* >>> end generated <<< */
 
 html,
@@ -336,15 +508,15 @@ body,
 }
 
 /* The UI baseline language is Simplified Chinese. One sans stack for the shell
-   and the frame: Latin faces first so numbers, DOIs and identifiers keep the
-   metrics the scale was measured against, then every Chinese face a reader's
-   OS might carry. Without named CJK faces Windows fell to the bitmap-hinted
-   SimSun (2026-09-16 walk, V1). There is no serif family: page titles used to
-   be Source Serif 4 / 宋体 beside a sans conversation, and that was half the
-   visible seam between the shell and the kernel.
+   and the frame: the punctuation face first (“” and …… in a Chinese face),
+   then Latin faces so numbers, DOIs and identifiers keep the metrics the scale
+   was measured against, then every Chinese face a reader's OS might carry.
+   Without named CJK faces Windows fell to the bitmap-hinted SimSun (2026-09-16
+   walk, V1). The serif is three rungs and nothing else (spec §3.4).
 
    Interface text is 14/22 (the `ui` rung); report prose is the 16/1.75 `body`
-   rung inside a 748 px column. */
+   rung inside the 720 px reading column. Sizes are rem, so the browser's
+   default font size is honoured (spec §10.6). */
 body {
   margin: 0;
   background: var(--bg);
@@ -368,13 +540,16 @@ body {
 }
 
 /* Identifiers and code are compared character by character; nothing may be
-   inserted between their characters, not even for display. */
+   inserted between their characters, not even for display — and no
+   full-width punctuation is trimmed either, or the monospace grid breaks
+   (appendix E #31). */
 code,
 kbd,
 pre,
 samp,
 .font-mono {
   text-autospace: no-autospace;
+  text-spacing-trim: space-all;
 }
 
 /* Numbers in tables line up by digit: effect sizes, sample sizes, costs. */
@@ -383,11 +558,12 @@ table,
   font-variant-numeric: tabular-nums;
 }
 
-/* One stroke for every icon (ICON_STROKE in the token module). A CSS
-   declaration outranks the `stroke-width` attribute lucide writes, so a call
-   site cannot choose its own: 2, 1.75 and 1.5 used to sit in one column. */
+/* One stroke for every icon, read from the token (`--icon-stroke`, 1.5 —
+   appendix E #12). A CSS declaration outranks the `stroke-width` attribute
+   lucide writes, so a call site cannot choose its own: 2, 1.75 and 1.5 used to
+   sit in one column. */
 svg.lucide {
-  stroke-width: 1.75;
+  stroke-width: var(--icon-stroke);
 }
 
 /* Thin, calm scrollbars to match the flat surfaces. */
@@ -406,36 +582,50 @@ svg.lucide {
   background-clip: content-box;
 }
 
-/* Global keyboard-focus indicator (P1-7, spec §11.2). Placed after the
-   Tailwind utilities so it also wins over `outline-none` on buttons/links.
-   Text fields opt out: they already signal focus with `focus:border-accent`,
-   and an accent outline on top of the accent border reads as a double ring. */
+/* Global keyboard-focus indicator (spec §10.3). Placed after the Tailwind
+   utilities so it also wins over `outline-none` on buttons and links. Always
+   an outline, never a box-shadow: forced-colours mode removes every shadow,
+   and a ring drawn with one — Tailwind's `ring-*` — vanished with it
+   (appendix E #1). Width and offset are tokens (`FOCUS_RING`); the colour is
+   its own role (--focus) so the ring can be tuned without moving the brand. */
 :focus-visible {
-  /* Its own token (--focus) so the ring can be tuned without moving the brand;
-     2 px at 3:1 or better against the page is WCAG 2.4.13's two measurable
-     conditions (5.59:1 light, 8.69:1 dark). */
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: var(--focus-ring-offset);
 }
+/* Text fields signal focus with their border (and the `Input` primitive's
+   1 px inner line), so their outline is transparent — invisible here, and
+   painted in the system highlight colour when forced colours take over. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [contenteditable]:focus-visible {
-  outline: none;
+  outline: var(--focus-ring-width) solid transparent;
+  outline-offset: 0;
 }
 
-/* Honor reduced-motion (spec §11.5): collapse transitions and decorative
-   animations to an instant. Loading indicators keep their meaning — the
-   spinner/pulse icon still renders, it just does not move. */
+/* Reduced motion (spec §9.5, appendix E #6). Nothing travels, zooms or grows:
+   only colour and opacity may still change, and never for longer than the
+   fast step — a fade is not movement, and it is how a reader notices that
+   something changed. The token block sets every travel distance to 0 and caps
+   the durations, so the drawer, toast and menu keyframes become fades. A loop
+   plays once and rests (the running dot, a skeleton), and a spinner stands
+   still: the state stays visible, it only stops moving. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity !important;
+    transition-duration: var(--dur-fast) !important;
     transition-delay: 0ms !important;
-    animation-duration: 0.01ms !important;
+    animation-duration: var(--dur-fast) !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
+  }
+  .animate-spin,
+  .animate-ping,
+  .animate-pulse {
+    animation: none !important;
   }
 }
 

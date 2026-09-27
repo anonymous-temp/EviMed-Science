@@ -1,0 +1,60 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/resolver.json",
+  "name": "EviMed",
+  "version": "2025.10",
+  "description": "EviMed 设计语言 2.1.0: two themes and two motion settings over one base.",
+  "sets": {
+    "base": {
+      "sources": [
+        {
+          "$ref": "base.tokens.json"
+        }
+      ]
+    }
+  },
+  "modifiers": {
+    "theme": {
+      "description": "The colour scheme; each context is one Figma mode.",
+      "default": "light",
+      "contexts": {
+        "light": [
+          {
+            "$ref": "light.tokens.json"
+          }
+        ],
+        "dark": [
+          {
+            "$ref": "dark.tokens.json"
+          }
+        ]
+      }
+    },
+    "motion": {
+      "description": "prefers-reduced-motion",
+      "default": "full",
+      "contexts": {
+        "full": [
+          {
+            "$ref": "motion-full.tokens.json"
+          }
+        ],
+        "reduced": [
+          {
+            "$ref": "motion-reduced.tokens.json"
+          }
+        ]
+      }
+    }
+  },
+  "resolutionOrder": [
+    {
+      "$ref": "#/sets/base"
+    },
+    {
+      "$ref": "#/modifiers/theme"
+    },
+    {
+      "$ref": "#/modifiers/motion"
+    }
+  ]
+}

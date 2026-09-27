@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "artifacts": {
+    "dsh-theme.json": "sha256:2beb7f3f91abe7ee27dbffb2447f5bc9def6c5cc64ec8c2ea376455ab24fff37",
+    "dtcg/base.tokens.json": "sha256:b6e9c86ead09803d39b20c51d49ac4e4975a18e8a9b6e179be84e4ea9465fdfd",
+    "dtcg/dark.tokens.json": "sha256:3eed1a49175eae2d8e8f4c1d693575343d62fa8bfa2a63a9dc4046124b3446c6",
+    "dtcg/evimed.resolver.json": "sha256:aa6f70956fd49c0902e6e97cbed0d40943e4afa1d19496c081e62dcc72c74583",
+    "dtcg/light.tokens.json": "sha256:5caabb42c9711e0323594072783626cdb78b134dbbf0dd62369ef4bbff8e3db0",
+    "dtcg/motion-full.tokens.json": "sha256:3f7272d51a21342c8293d0d6589361ceccbe602c0c6c623d0ab2473c3c83e0a3",
+    "dtcg/motion-reduced.tokens.json": "sha256:126b765f5e5c68b0351e8bc4c5ed1a7283a4a2f776dadcbf3a4220bc22acc33a",
+    "echarts-theme.json": "sha256:6dca44fdb195628e55546990a9e3c612c49075f4af6453eab8e0675a44bf4fe6",
+    "element-plus.css": "sha256:110c5691e6aad8ea0e92829dfcb0e71273911e44317514c330c4c072f7aa3256",
+    "figma-tokens.json": "sha256:6ce2ece21df2e1f232c83fa9d683f71d62e8255e2a2023616ddb6fd2e0a3a122",
+    "tailwind-preset.js": "sha256:c64680f9d2c60c88e2a3aa22a9ed548b4cc46bfd85eec232b634267e9324635f",
+    "tokens.css": "sha256:7edbeda581438bb2030160c144e75de81d1769cabfb9bb52b16b717c1b352b77"
+  }
+}

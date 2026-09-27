@@ -1,5 +1,5 @@
 /**
- * The design tokens — one table, six generated consumers.
+ * The design tokens — one table, seven generated artifacts.
  *
  * Hidden knowledge: EviMed and EviMed Science are one product to a reader and
  * two codebases to us — a Vue shell, a React surface, and a third-party
@@ -20,6 +20,10 @@
  *  - `dist/dsh-theme.json`     `ctx.theme.overrideTokens` for the kernel frame
  *  - `dist/figma-tokens.json`  Tokens Studio, so a design file cannot invent a
  *                              colour the code does not have
+ *  - `dist/dtcg/`              the DTCG 2025.10 export (2.1): a base file, one
+ *                              file per theme and motion setting, and a
+ *                              resolver — the subset Figma's native variable
+ *                              import accepts, one file per mode
  *
  * `scripts/build/generate-design-tokens.mjs --check` and
  * `apps/web/src/app/designTokens.test.ts` both regenerate and compare, so a
@@ -37,8 +41,16 @@
  * @module @evimed/design-tokens
  */
 
-/** Bumped when a consumer must be regenerated, not when a value is tuned. */
-export const DESIGN_TOKENS_VERSION = '2.0.0'
+/**
+ * The table's version, semantic: a removed or re-meant token is a major, a
+ * new token a minor, a tuned value a patch. It moves whenever an artifact's
+ * bytes do — `src/release.json` records the digest of the artifacts this
+ * version shipped, and `generate.mjs --check` fails when the artifacts change
+ * under an unchanged version (fusion audit F-G3: 646d165d5 moved six ramp
+ * steps and the version still read 2.0.0, so "both sides pin one version"
+ * could not see the drift).
+ */
+export const DESIGN_TOKENS_VERSION = '2.1.0'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -311,6 +323,26 @@ export const COLOR_ROLE_ALIASES = Object.freeze({
   muted: 'text-3',
 })
 
+/**
+ * What changes when the reader asks the system for more contrast
+ * (`prefers-contrast: more`, spec §10.9): secondary text and every rule step
+ * one shade towards the text colour, in both schemes. Only these roles move;
+ * the rest of the table already clears its floor. `contrast.mjs` measures the
+ * whole rule list again with these in place, so "more" can never mean less.
+ *
+ * @type {Readonly<Record<string, ColorRole>>}
+ */
+export const COLOR_ROLES_MORE_CONTRAST = Object.freeze(
+  /** @type {Record<string, ColorRole>} */ ({
+    'text-2': { light: 'n-800', dark: '#eef1f4' },
+    'text-3': { light: 'n-700', dark: '#c3cad2' },
+    'text-graphic': { light: 'n-500', dark: 'n-400' },
+    'border-hairline': { light: 'n-300', dark: 'dark-border-strong' },
+    'border-light': { light: 'n-control', dark: 'dark-border-strong' },
+    'border-control': { light: 'n-600', dark: 'n-300' },
+  }),
+)
+
 /* ------------------------------------------------------------------- data -- */
 
 /**
@@ -335,11 +367,32 @@ export const COLOR_ROLE_ALIASES = Object.freeze({
  */
 export const CHART_COLORS = Object.freeze({
   own: '#0a5dc1',
-  rivals: Object.freeze(['#5a626b', '#8a939c', '#b4bcc5']),
+  // Darkest for the highest rank, and every step a graphic a reader can see:
+  // ≥ 3:1 on the page and on a card (WCAG 1.4.11), measured by `contrast.mjs`.
+  // 2.0's third step, #b4bcc5, was 1.92:1 on white and could only colour a bar
+  // that carried its own number (spec §32.4, appendix E #22); 2.1 moves the
+  // second and third one step darker and keeps the first. All three also clear
+  // 3:1 on the dark canvas.
+  rivals: Object.freeze(['#5a626b', '#737c85', '#8a939c']),
   series: Object.freeze(['#0a5dc1', '#e07b39', '#1d9a87', '#7b5cd6', '#c94f7c', '#c7a12b', '#5a626b', '#b4bcc5']),
   heat: Object.freeze(['#f3f6fa', '#dce8f7', '#b3cdef', '#7fa9e3', '#3e7ed4', '#0a5dc1']),
   /** Only for defects and safety: S3 severe, S2 moderate, S1 minor. */
   severity: Object.freeze({ s3: '#c0362c', s2: '#e0877f', s1: '#939ca6' }),
+  /**
+   * Data with a midpoint — an effect size, a change against a baseline: blue
+   * at one end, a light grey middle, orange at the other (spec §32.4). The two
+   * arms are matched step for step in CIE lightness (L* 41 / 62 / 84 either
+   * side of a 95 middle), so neither end reads as the louder one; the orange
+   * is the categorical slot-2 hue, the blue the brand. Seven steps, index 3 is
+   * the midpoint. Never red to green, for the reason the heat ramp is not.
+   */
+  diverging: Object.freeze(['#0a5dc1', '#5f97e0', '#bcd3f3', '#edf0f3', '#f9c7ab', '#dd7b3c', '#9f4600']),
+  /**
+   * A cell with no reading. A grey darker than the midpoint and without a hue,
+   * so "not measured" never passes for "no change"; a chart still names it in
+   * its legend.
+   */
+  missing: '#bac2ca',
 })
 
 /**
@@ -380,26 +433,150 @@ export function colorRole(role, scheme) {
 /* ------------------------------------------------------------------- type -- */
 
 /**
- * Latin faces lead so numbers, DOIs, doses and identifiers keep the metrics
- * the scale was measured against; then every Chinese face a reader's OS might
- * carry — without named CJK faces Windows falls to the bitmap-hinted SimSun.
+ * The typefaces, 2.1 (spec §5.1). Latin faces lead so numbers, DOIs, doses and
+ * identifiers keep the metrics the scale was measured against; then every
+ * Chinese face a reader's OS might carry — without named CJK faces Windows
+ * falls to the bitmap-hinted SimSun. Three things changed from 2.0:
  *
- * The serif is back, and confined: the wordmark, the home headline, and the
- * title of a document. An evidence platform borrows its authority from the
- * journals, and every one of them is set in a serif — but a serif on a button
- * reads as an old intranet, so three places and no fourth.
+ *  - **A punctuation face comes first.** Inter's Latin subset covers the
+ *    general-punctuation block, so a Chinese “quotation” and a …… were drawn
+ *    in Inter's Latin shapes: narrow quotes, an ellipsis sitting on the
+ *    baseline. "EviMed CJK Punct" is those few code points only
+ *    (`CJK_PUNCT_RANGE`), taken from the reader's own Chinese system face
+ *    (`CJK_PUNCT_FACES`, `local()` sources — nothing new travels over the wire
+ *    and no font package enters the lockfile). Text marked English
+ *    (`[lang|="en"]`) takes `FONT_STACKS_EN`, which leaves it out.
+ *  - **`system-ui` moved to the end.** On a Simplified Chinese Windows it *is*
+ *    Microsoft YaHei UI, and in second place it shadowed every Chinese face
+ *    after it. HarmonyOS Sans SC and MiSans are gone: on a desktop they only
+ *    ever matched a font the reader installed, and on the phones that ship
+ *    them they are the system face anyway.
+ *  - **The serif ends in a sans.** Windows has no bold 宋体, so a 600 serif
+ *    title fell to a regular-only SimSun and looked thin. The serif stack's
+ *    Chinese part now ends in PingFang / YaHei: on Windows a document title is
+ *    a bold 黑体.
  *
- * @type {Readonly<Record<string, string>>}
+ * The serif is confined to the wordmark, the home headline and the title of a
+ * document (§3.4) — the three rungs below with `family: 'serif'` — and the
+ * generated stylesheet binds the family to those rung classes, so a page never
+ * names the serif itself.
+ *
+ * @type {Readonly<Record<'sans' | 'serif' | 'mono', string>>}
  */
 export const FONT_STACKS = Object.freeze({
-  sans: 'Inter, system-ui, "PingFang SC", "HarmonyOS Sans SC", MiSans, "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
-  serif: '"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif',
+  sans: '"EviMed CJK Punct", Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", system-ui, sans-serif',
+  serif:
+    '"EviMed CJK Punct Serif", "Source Serif 4", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "PingFang SC", "Microsoft YaHei", Georgia, serif',
   mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", monospace',
 })
 
 /**
+ * The same stacks without the punctuation face, for text marked English: an
+ * English quotation keeps its own Latin quotes and dashes.
+ *
+ * @type {Readonly<Record<'sans' | 'serif', string>>}
+ */
+export const FONT_STACKS_EN = Object.freeze({
+  sans: FONT_STACKS.sans.replace('"EviMed CJK Punct", ', ''),
+  serif: FONT_STACKS.serif.replace('"EviMed CJK Punct Serif", ', ''),
+})
+
+/**
+ * The code points the punctuation face covers: the em dash (a Chinese ——),
+ * the single and double quotation marks, and the ellipsis. Every other
+ * character falls through to the next face in the stack.
+ */
+export const CJK_PUNCT_RANGE = 'U+2014, U+2018-2019, U+201C-201D, U+2026'
+
+/**
+ * One `@font-face` of the punctuation face.
+ * @typedef {{ family: string, weight: number, local: readonly string[] }} PunctFace
+ */
+
+/**
+ * Where the punctuation face comes from: the reader's own Chinese system face,
+ * by the full and PostScript names each platform publishes (macOS, Windows,
+ * Android and most Linux, Source Han installs). Two weights, because Chinese
+ * hierarchy is 400 and 600 only (§5.3). The serif's 600 ends in YaHei Bold for
+ * the reason its stack does: Windows has no bold 宋体.
+ *
+ * The spec's first design was a 1.5 KB subset of Noto Sans SC inlined per
+ * weight; `local()` gives the same glyphs from the font already on the
+ * machine, without a binary in the repository or a package in the lockfile.
+ * Where none of these faces exists the face does not load, and the stack falls
+ * through to Inter as it did before.
+ *
+ * @type {readonly PunctFace[]}
+ */
+export const CJK_PUNCT_FACES = Object.freeze([
+  Object.freeze({
+    family: 'EviMed CJK Punct',
+    weight: 400,
+    local: Object.freeze([
+      'PingFangSC-Regular',
+      'PingFang SC Regular',
+      'Microsoft YaHei',
+      'MicrosoftYaHei',
+      'NotoSansSC-Regular',
+      'Noto Sans SC Regular',
+      'NotoSansCJKsc-Regular',
+      'Noto Sans CJK SC Regular',
+      'SourceHanSansSC-Regular',
+    ]),
+  }),
+  Object.freeze({
+    family: 'EviMed CJK Punct',
+    weight: 600,
+    local: Object.freeze([
+      'PingFangSC-Semibold',
+      'PingFang SC Semibold',
+      'Microsoft YaHei Bold',
+      'MicrosoftYaHei-Bold',
+      'NotoSansSC-SemiBold',
+      'NotoSansSC-Bold',
+      'NotoSansCJKsc-Bold',
+      'Noto Sans CJK SC Bold',
+      'SourceHanSansSC-Bold',
+    ]),
+  }),
+  Object.freeze({
+    family: 'EviMed CJK Punct Serif',
+    weight: 400,
+    local: Object.freeze([
+      'STSongti-SC-Regular',
+      'Songti SC Regular',
+      'NotoSerifSC-Regular',
+      'Noto Serif SC Regular',
+      'NotoSerifCJKsc-Regular',
+      'Noto Serif CJK SC Regular',
+      'SourceHanSerifSC-Regular',
+      'SimSun',
+    ]),
+  }),
+  Object.freeze({
+    family: 'EviMed CJK Punct Serif',
+    weight: 600,
+    local: Object.freeze([
+      'STSongti-SC-Bold',
+      'Songti SC Bold',
+      'NotoSerifSC-SemiBold',
+      'NotoSerifCJKsc-SemiBold',
+      'Noto Serif CJK SC SemiBold',
+      'SourceHanSerifSC-SemiBold',
+      'Microsoft YaHei Bold',
+      'MicrosoftYaHei-Bold',
+    ]),
+  }),
+])
+
+/**
  * The closed size scale, in px. A size outside it is a defect: the generated
  * preset carries exactly these and ESLint rejects `text-[Npx]`.
+ *
+ * The table speaks px because the design does; every artifact a browser reads
+ * emits rem (1 rem = 16 px, `rem()` below), so a reader who raised the
+ * browser's default font size gets a larger interface (spec §5.2, §10.6). A px
+ * size ignores that setting entirely.
  *
  * Nine, up from five. The five-rung scale of 2026-09-23 was the right cure for
  * a page carrying eleven size × weight pairs, and the wrong medicine for a
@@ -545,10 +722,107 @@ export const ELEVATION = Object.freeze({
   modal: '0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06)',
 })
 
-/** A state change, a container, a page — and one easing. */
+/**
+ * A state change, a container, a page — one easing in and one out (spec
+ * §9.2). The exit curve accelerates away: a layer that leaves should not
+ * linger at the end of its path the way an arriving one settles into place.
+ */
 export const MOTION = Object.freeze({
   fast: '120ms',
   base: '200ms',
   slow: '320ms',
   easeStandard: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+  easeExit: 'cubic-bezier(0.3, 0, 1, 1)',
 })
+
+/**
+ * How far a layer travels as it arrives, in px: a drawer 24, a toast 8, a menu
+ * 4 (spec §9.2). Custom properties rather than literals in a keyframe, so
+ * `prefers-reduced-motion` sets every distance to 0 in one place and keeps the
+ * fade (§9.5: remove the movement, keep a fade of 120 ms at most).
+ */
+export const MOTION_DISTANCE = Object.freeze({ drawer: 24, toast: 8, menu: 4 })
+
+/* ------------------------------------------------------------ tokens 2.1 -- */
+
+/**
+ * Stacking layers (spec §7.4). A covering problem is solved by putting the
+ * layer in the right tier, never by a larger number: a menu and a dialog were
+ * both 50 and a drawer 40, so what covered what was render order.
+ *
+ * Page 0; sticky headers, tabs and a bottom composer 10; drawers 40; modal
+ * dialogs 50; popovers — menus, dropdowns, the citation card — 60, so one
+ * opened inside a dialog is still visible; toasts 70; tooltips 80; the skip
+ * link 90, above everything.
+ */
+export const Z_INDEX = Object.freeze({
+  page: 0,
+  sticky: 10,
+  drawer: 40,
+  modal: 50,
+  popover: 60,
+  toast: 70,
+  tooltip: 80,
+  skip: 90,
+})
+
+/**
+ * Breakpoints, in px: Tailwind's defaults, stated here so the Vue shell and a
+ * chart's own layout read the same numbers (spec §6.5).
+ */
+export const BREAKPOINTS = Object.freeze({ sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536 })
+
+/**
+ * Opacity is spent in three places, and a colour's pale version is never one
+ * of them (spec §7.5): a disabled control, the scrim (a colour role), and an
+ * item being dragged.
+ */
+export const OPACITY = Object.freeze({ disabled: 0.4, drag: 0.8 })
+
+/**
+ * The focus ring: a 2 px outline 2 px outside the control (spec §10.3). An
+ * outline, not a box-shadow — forced-colours mode removes every shadow, and a
+ * ring drawn with one vanishes with it.
+ */
+export const FOCUS_RING = Object.freeze({ width: 2, offset: 2 })
+
+/**
+ * A tooltip shows after 300 ms of hover (at once on focus) and hides 100 ms
+ * after the pointer leaves (spec §9.3, §22.8). In ms.
+ */
+export const TOOLTIP_DELAYS = Object.freeze({ show: 300, hide: 100 })
+
+/**
+ * How long a toast stays, in ms (spec §22.1): a success 5 s, one that carries
+ * an action (撤销, 查看) 10 s, and an error until it is closed — an error that
+ * leaves by itself is an error the reader may never have seen. `0` means "no
+ * timer", which is also how Element Plus's `ElMessage` reads it.
+ */
+export const TOAST_DURATIONS = Object.freeze({ success: 5000, action: 10000, error: 0 })
+
+/**
+ * Chart strokes, in px (spec §32.4): a series line 2 and a marker 5 by
+ * default; in a comparison our line is 2.5 and every other one 1.5, so ours is
+ * found by weight as well as by colour.
+ */
+export const CHART_STROKES = Object.freeze({ line: 2, own: 2.5, other: 1.5, marker: 5 })
+
+/**
+ * px → rem, the unit every browser-facing type size is written in.
+ * @param {number} px
+ * @returns {string}
+ */
+export function rem(px) {
+  return `${px / 16}rem`
+}
+
+/**
+ * A rung's line height in the unit a browser reads: a px value becomes rem so
+ * it grows with the size it belongs to; a unitless ratio stays as it is.
+ * @param {string} lineHeight
+ * @returns {string}
+ */
+export function remLineHeight(lineHeight) {
+  const px = /^(\d+(?:\.\d+)?)px$/.exec(lineHeight)
+  return px ? rem(Number(px[1])) : lineHeight
+}

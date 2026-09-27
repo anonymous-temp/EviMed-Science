@@ -3,7 +3,17 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { COLOR_ROLES, CONTAINERS, FONT_STACKS, RADII, TYPE_SCALE, TYPE_SIZES } from "@evimed/design-tokens";
+import {
+  COLOR_ROLES,
+  CONTAINERS,
+  FONT_STACKS,
+  RADII,
+  TYPE_SCALE,
+  TYPE_SIZES,
+  Z_INDEX,
+  rem,
+  remLineHeight,
+} from "@evimed/design-tokens";
 import { contrastFailures } from "@evimed/design-tokens/contrast";
 import { DESIGN_TOKENS_CSS_BEGIN, DESIGN_TOKENS_CSS_END, designTokensCss } from "@evimed/design-tokens/css";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
@@ -96,8 +106,9 @@ describe("the token table has one source", () => {
     const outside = css.split(generated).join("");
     for (const role of Object.keys(COLOR_ROLES)) {
       expect(generated).toContain(`--${role}:`);
-      // Two declarations, one per theme.
-      expect(generated.split(`  --${role}:`).length - 1, `--${role} must be set in light and dark`).toBe(2);
+      // Two top-level declarations, one per theme (the more-contrast layer's
+      // overrides sit one level deeper, inside its media query).
+      expect(generated.match(new RegExp(`^  --${role}:`, "gm"))?.length, `--${role} must be set in light and dark`).toBe(2);
       expect(outside, `--${role} is redefined outside the generated block`).not.toContain(`--${role}:`);
     }
   });
@@ -116,8 +127,9 @@ describe("the token table has one source", () => {
     // A blanket map of CONTAINERS would define `max-w-full` as a pixel width
     // and silently break every `max-w-full` in both code bases.
     expect(theme.maxWidth?.full).toBeUndefined();
+    // rem since 2.1, so a reader's browser font size is honoured (spec §10.6).
     for (const [rung, { size, lineHeight }] of Object.entries(TYPE_SCALE)) {
-      expect(theme.fontSize?.[rung], `the ${rung} rung`).toEqual([`${size}px`, lineHeight]);
+      expect(theme.fontSize?.[rung], `the ${rung} rung`).toEqual([rem(size), remLineHeight(lineHeight)]);
     }
     // Every colour role is reachable as a class, and every colour Tailwind
     // knows is a `var()` — never a literal a theme switch cannot move.
@@ -191,6 +203,47 @@ describe("the type scale is closed, and the serif is confined", () => {
     // Two cuts, no more, and nothing that pulls a CJK serif over the wire.
     expect(css.match(/@import "@fontsource\/source-serif-4\/\d+\.css";/g)).toHaveLength(2);
     expect(css).not.toMatch(/@import .*(han-serif|noto-serif|songti)/i);
+  });
+});
+
+describe("the hand-written rules read the tokens (appendix E #1, #6, #12, #31)", () => {
+  const css = readFileSync(INDEX_CSS, "utf8");
+  const handWritten = css.split(designTokensCss()).join("");
+
+  it("draws the icon stroke from the token, not a literal", () => {
+    expect(handWritten).toMatch(/svg\.lucide \{\n {2}stroke-width: var\(--icon-stroke\);/);
+  });
+
+  it("draws focus as an outline, and gives a text field a transparent one forced colours can paint", () => {
+    expect(handWritten).toMatch(/:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid var\(--focus\);\n {2}outline-offset: var\(--focus-ring-offset\);/);
+    expect(handWritten).toMatch(/\[contenteditable\]:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid transparent;/);
+    expect(handWritten).not.toMatch(/outline: none/);
+  });
+
+  it("keeps a short fade under reduced motion instead of collapsing every change to an instant", () => {
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/.exec(handWritten)?.[0] ?? "";
+    expect(reduced).toContain("transition-duration: var(--dur-fast) !important;");
+    expect(reduced).toMatch(/transition-property: [^;]*opacity/);
+    expect(reduced).not.toMatch(/transition-property: [^;]*transform/);
+    expect(reduced).not.toContain("0.01ms");
+  });
+
+  it("keeps the monospace grid: no autospace and no punctuation trimming in code", () => {
+    expect(handWritten).toMatch(/\.font-mono \{\n {2}text-autospace: no-autospace;\n {2}text-spacing-trim: space-all;/);
+  });
+
+  it("names the stacking tiers instead of numbering them", () => {
+    const zIndex = (preset.theme?.extend as { zIndex?: Record<string, string> } | undefined)?.zIndex ?? {};
+    for (const [tier, value] of Object.entries(Z_INDEX)) expect(zIndex[tier], tier).toBe(String(value));
+  });
+});
+
+describe("the primitives draw focus with an outline, never a ring (appendix E #1)", () => {
+  it("has no focus ring made of box-shadow in components/ui", () => {
+    const files = sourceFiles(join(SRC, "components/ui"));
+    expect(files.length).toBeGreaterThan(20);
+    const offenders = files.filter((file) => /focus(-visible)?:ring-/.test(readFileSync(file, "utf8"))).map((file) => relative(SRC, file));
+    expect(offenders).toEqual([]);
   });
 });
 

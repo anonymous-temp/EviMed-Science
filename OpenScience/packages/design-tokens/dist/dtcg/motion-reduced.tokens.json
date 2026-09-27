@@ -1,0 +1,49 @@
+{
+  "$description": "EviMed 2.1.0 — motion, for prefers-reduced-motion.",
+  "duration": {
+    "fast": {
+      "$type": "duration",
+      "$value": {
+        "value": 0.12,
+        "unit": "s"
+      }
+    },
+    "base": {
+      "$type": "duration",
+      "$value": {
+        "value": 0.12,
+        "unit": "s"
+      }
+    },
+    "slow": {
+      "$type": "duration",
+      "$value": {
+        "value": 0.12,
+        "unit": "s"
+      }
+    }
+  },
+  "distance": {
+    "drawer": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      }
+    },
+    "toast": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      }
+    },
+    "menu": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      }
+    }
+  }
+}
