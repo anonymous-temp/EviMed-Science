@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, symlink, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { plan, releaseImageTags, releasesNamedBy } from "../../../scripts/ops/release-retention.mjs";
+import { plan, releaseImageTags, releasesHeldThroughCurrent, releasesNamedBy } from "../../../scripts/ops/release-retention.mjs";
 
 /**
  * A releases directory holding the given ids, newest last.
@@ -141,6 +141,83 @@ test("a release is held by the compose directory a container was created from, n
     "",
   ]);
   assert.deepEqual([...held].sort(), ["39111b6b4821", "a48c91c265af"]);
+});
+
+test("a container that binds through `current` and started before it moved holds the releases built before it started", () => {
+  // 2026-09-26 (platform audit I3-1): Prometheus started on 09-24 while
+  // `a48c…` was current, was not recreated by the next two switches (its
+  // configuration hash had not changed), and by `.Mounts.Source` — which reads
+  // `/srv/evimed-science/current/...` — held nothing, so retention deleted the
+  // directory it was reading. Its rules, targets and Grafana's dashboards sat
+  // at link count 0 for days.
+  const at = (iso) => Date.parse(iso);
+  const releases = [
+    { name: "a48c91c265af", builtAt: at("2026-09-24T05:00:00.000Z") },
+    { name: "e5e78fc830c9", builtAt: at("2026-09-25T09:00:00.000Z") },
+    { name: "1cf308956b6e", builtAt: at("2026-09-26T12:53:18.000Z") },
+  ];
+  const switchedAt = at("2026-09-26T13:39:00.000Z");
+  const prometheus = { name: "web-prometheus-1", startedAt: at("2026-09-24T07:05:00.000Z") };
+  assert.deepEqual([...releasesHeldThroughCurrent([prometheus], switchedAt, releases)], ["a48c91c265af"]);
+  // Restarted after the switch, it holds the current release and nothing else.
+  assert.deepEqual([...releasesHeldThroughCurrent([{ ...prometheus, startedAt: at("2026-09-26T13:40:00.000Z") }], switchedAt, releases)], []);
+  // What cannot be read keeps directories rather than deleting them.
+  assert.deepEqual([...releasesHeldThroughCurrent([{ ...prometheus, startedAt: Number.NaN }], switchedAt, releases)].sort(),
+    ["1cf308956b6e", "a48c91c265af", "e5e78fc830c9"]);
+  assert.deepEqual([...releasesHeldThroughCurrent([prometheus], switchedAt, [...releases, { name: "0ld", builtAt: Number.NaN }])].sort(),
+    ["0ld", "a48c91c265af"]);
+});
+
+test("docker's own answers are read into the releases held through `current`, by bind mounts only", { skip: process.platform === "win32" }, async () => {
+  const { chmod, lutimes, rm, writeFile } = await import("node:fs/promises");
+  const { mountedReleases } = await import("../../../scripts/ops/release-retention.mjs");
+  const releases = await releasesDir([]);
+  const root = path.dirname(releases);
+  const built = { a48c91c265af: "2026-09-24T05:00:00.000Z", e5e78fc830c9: "2026-09-25T09:00:00.000Z", "1cf308956b6e": "2026-09-26T12:53:18.000Z" };
+  for (const [id, createdAt] of Object.entries(built)) {
+    await mkdir(path.join(releases, id, "OpenScience/deploy/web"), { recursive: true });
+    await writeFile(path.join(releases, id, "OpenScience/deploy/web/release-manifest.json"), JSON.stringify({ source: { createdAt } }));
+  }
+  await symlink(path.join(releases, "1cf308956b6e"), path.join(root, "current"));
+  const switched = new Date("2026-09-26T13:39:00.000Z");
+  await lutimes(path.join(root, "current"), switched, switched);
+  const bin = path.join(root, "bin");
+  await mkdir(bin);
+  const web = `${root}/current/OpenScience/deploy/web`;
+  // Prometheus binds its rules through `current` and started before the
+  // switch; PostgreSQL was created from the compose directory under `current`
+  // but binds nothing from it; a stopped one-shot holds nothing open.
+  await writeFile(path.join(bin, "docker"), `#!/bin/sh
+case "$1" in
+  ps) printf 'prom\\npg\\ninit\\n' ;;
+  inspect) case "$4" in
+    prom) printf '/web-prometheus-1\\ttrue\\t2026-09-24T07:05:00.123456789Z\\n${web}/monitoring/open-science.rules.json\\n\\n${web}/monitoring/open-science.rules.json\\n/var/lib/docker/volumes/web_prometheus-data/_data\\n${web}\\n${web}/docker-compose.yml\\n' ;;
+    pg) printf '/web-evimed-postgres-1\\ttrue\\t2026-09-14T11:24:00Z\\n/srv/shared/secrets/postgres-password.txt\\n\\n/srv/shared/secrets/postgres-password.txt\\n${web}\\n${web}/docker-compose.yml\\n' ;;
+    init) printf '/web-evimed-openviking-init-1\\tfalse\\t2026-09-01T00:00:00Z\\n${web}/openviking-init.sh\\n\\n${web}/openviking-init.sh\\n${web}\\n\\n' ;;
+  esac ;;
+esac
+`);
+  await chmod(path.join(bin, "docker"), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${saved}`;
+  try {
+    assert.deepEqual([...await mountedReleases(releases)], ["a48c91c265af"]);
+  } finally {
+    process.env.PATH = saved;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a release held through `current` is kept by the plan even past the keep count", async () => {
+  const dir = await releasesDir(IDS);
+  const held = releasesHeldThroughCurrent(
+    [{ name: "web-grafana-1", startedAt: Date.parse("2026-09-01T12:00:00.000Z") }],
+    Date.parse("2026-09-04T12:00:00.000Z"),
+    IDS.map((name) => ({ name, builtAt: Date.parse(`${name.slice(7, 11)}-${name.slice(11, 13)}-${name.slice(13, 15)}T00:00:00.000Z`) })),
+  );
+  const result = await plan(dir, 1, async () => held);
+  assert.equal(result.keep.get("evimed-20260901-aaaaaaa"), "mounted");
+  assert.deepEqual(result.remove, ["evimed-20260902-bbbbbbb", "evimed-20260903-ccccccc"]);
 });
 
 test("a release's images are found under the names this deployment actually tags them with", () => {

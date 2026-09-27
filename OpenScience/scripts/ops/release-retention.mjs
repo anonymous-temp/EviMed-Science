@@ -115,23 +115,102 @@ async function assertReleasesDir(dir) {
  * as unused — and once it was gone they could be restarted but not recreated
  * as they were.
  *
+ * And a running container that binds through `current` holds whatever release
+ * `current` named when it started (2026-09-26, platform audit I3-1). Docker
+ * resolves the link once, at start, and records the path it was given: by
+ * `.Mounts.Source` such a container names no release at all, so Prometheus,
+ * Grafana, the blackbox exporter and the search proxy — started before two
+ * later switches, never recreated because their configuration hash had not
+ * changed — read as holding nothing, and retention deleted the directory each
+ * of them was still reading. Seven mounts sat at link count 0 for days, and
+ * the dashboards and the certificate probes were empty while every target
+ * reported up. Which release that is cannot be read back from outside the
+ * container, so every release built before it started is held
+ * (`releasesHeldThroughCurrent`); the release switch restarts such containers,
+ * so after a switch there are none and nothing extra is kept.
+ *
  * @param {string} releasesDir @returns {Promise<Set<string>>}
  */
 export async function mountedReleases(releasesDir) {
   const { stdout: ids } = await run("docker", ["ps", "-aq"]);
   const containers = ids.split("\n").map((line) => line.trim()).filter(Boolean);
   const held = new Set();
+  const throughCurrent = [];
+  const currentPrefix = path.join(path.dirname(path.resolve(releasesDir)), "current") + path.sep;
   for (const container of containers) {
     const { stdout } = await run("docker", [
       "inspect", "-f",
-      "{{range .Mounts}}{{.Source}}\n{{end}}"
+      "{{.Name}}\t{{.State.Running}}\t{{.State.StartedAt}}\n"
+        + "{{range .Mounts}}{{if eq .Type \"bind\"}}{{.Source}}\n{{end}}{{end}}"
+        + "\n{{range .Mounts}}{{.Source}}\n{{end}}"
         + "{{index .Config.Labels \"com.docker.compose.project.working_dir\"}}\n"
         + "{{index .Config.Labels \"com.docker.compose.project.config_files\"}}\n",
       container,
     ]);
-    for (const name of releasesNamedBy(releasesDir, stdout.split(/[\n,]/))) held.add(name);
+    const [head, ...rest] = stdout.split("\n");
+    const [name, running, startedAt] = head.split("\t");
+    // Bind sources first, up to the empty line; then every mount and the
+    // compose labels, which name releases but hold no file open.
+    const blank = rest.indexOf("");
+    const binds = blank >= 0 ? rest.slice(0, blank) : rest;
+    for (const release of releasesNamedBy(releasesDir, rest.join("\n").split(/[\n,]/))) held.add(release);
+    if (running === "true" && binds.some((source) => source.trim().startsWith(currentPrefix))) {
+      throughCurrent.push({ name: name.replace(/^\//, ""), startedAt: Date.parse(startedAt) });
+    }
+  }
+  if (throughCurrent.length) {
+    const switchedAt = (await fsp.lstat(currentPrefix.slice(0, -1))).mtimeMs;
+    const releases = (await buildTimes(releasesDir)).filter((entry) => isRelease(entry.name));
+    for (const release of releasesHeldThroughCurrent(throughCurrent, switchedAt, releases)) held.add(release);
+    for (const container of throughCurrent) {
+      if (!(container.startedAt >= switchedAt)) {
+        console.error(`note    ${container.name} started before \`current\` last moved and binds through it: the releases built before it started are kept until it is restarted`);
+      }
+    }
   }
   return held;
+}
+
+/**
+ * The releases running containers may still hold through `current`: for each
+ * container started before `current` last moved, every release built before
+ * the container started — the one it holds is among them, and which one is
+ * not visible from outside. A start time docker could not report counts as
+ * "before", and a release without a readable build time counts as "built
+ * before": both are the answer that keeps a directory rather than deleting
+ * one a container reads.
+ *
+ * @param {ReadonlyArray<{name: string, startedAt: number}>} containers
+ * @param {number} switchedAt when `current` last moved (the link's own mtime), in ms
+ * @param {ReadonlyArray<{name: string, builtAt: number}>} releases
+ * @returns {Set<string>}
+ */
+export function releasesHeldThroughCurrent(containers, switchedAt, releases) {
+  const held = new Set();
+  for (const container of containers) {
+    const started = Number.isFinite(container.startedAt) ? container.startedAt : -Infinity;
+    if (Number.isFinite(container.startedAt) && started >= switchedAt) continue;
+    for (const release of releases) {
+      if (!Number.isFinite(release.builtAt) || !Number.isFinite(container.startedAt) || release.builtAt <= started) held.add(release.name);
+    }
+  }
+  return held;
+}
+
+/**
+ * Every release directory with the build time its manifest records.
+ * @param {string} releasesDir @returns {Promise<Array<{name: string, builtAt: number}>>}
+ */
+async function buildTimes(releasesDir) {
+  const entries = await fsp.readdir(releasesDir, { withFileTypes: true });
+  return Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
+    try {
+      const manifest = JSON.parse(await fsp.readFile(path.join(releasesDir, entry.name, "OpenScience/deploy/web/release-manifest.json"), "utf8"));
+      return { name: entry.name, builtAt: Date.parse(manifest?.source?.createdAt ?? "") };
+    } catch {
+      return { name: entry.name, builtAt: Number.NaN };
+    }
+  }));
 }
 
 /**
