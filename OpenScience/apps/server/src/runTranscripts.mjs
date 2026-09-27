@@ -283,9 +283,39 @@ export class PreStopTranscripts {
     return sessions;
   }
 
+  /** @param {string} runId @returns {boolean} */
+  has(runId) {
+    return this.byRun.has(runId);
+  }
+
   get size() {
     return this.byRun.size;
   }
+}
+
+/**
+ * The runs whose conversations must be read before a runtime is stopped.
+ *
+ * Every run still going, as before — and the one run a bounded runtime was
+ * reserved for, finished or not, while its transcript has not been written.
+ * That second one is the case the first rule missed: a bounded run (a GEO
+ * step, a document being understood, a lesson) finishes, and its own finish
+ * hook lets the runtime go *before* it writes the transcript down
+ * (`endBoundedRuntime` in `onRunFinished`), so the stop found no running run
+ * to read, the later read found no container, and the run recorded
+ * `history_unavailable` — 5 of 7 successful GEO runs and every source
+ * understanding run, each of which the learning loop then skipped as
+ * incomplete (audit 2026-09-26, L-G6).
+ * @param {readonly any[]} runs the project's ledger
+ * @param {{ boundedRunId?: string | null, captured?: (runId: string) => boolean }} [options]
+ * @returns {any[]}
+ */
+export function runsToReadBeforeStop(runs, { boundedRunId = null, captured = () => false } = {}) {
+  return (runs ?? []).filter((run) => {
+    if (!run?.id) return false;
+    if (run.status === "running") return true;
+    return Boolean(boundedRunId) && run.dispatchId === boundedRunId && !run.transcript && !captured(String(run.id));
+  });
 }
 
 /**

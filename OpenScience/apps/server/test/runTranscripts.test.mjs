@@ -13,12 +13,14 @@ import {
   persistRunTranscript,
   pruneRunTranscripts,
   readRunTranscript,
+  runsToReadBeforeStop,
   serializeRunTranscript,
   TRANSCRIPT_DIR_NAME,
   TRANSCRIPT_SCHEMA_VERSION,
   transcriptExcerpt,
   transcriptPath,
 } from "../src/runTranscripts.mjs";
+import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 
 const CAPTURED_AT = "2026-09-07T04:00:00.000Z";
@@ -703,6 +705,49 @@ test("an empty capture is not a snapshot, so the finish still reads for itself",
   held.put("", [{ sessionId: "s1" }]);
   assert.equal(held.size, 0);
   assert.equal(held.take("run_1"), null);
+});
+
+test("a stop reads every running run, and the finished bounded run it was reserved for while its transcript is unwritten", () => {
+  // 2026-09-26 audit (L-G6): a bounded run's own finish hook lets its runtime
+  // go before it writes the transcript down, so the stop found no running run
+  // to read and the later read found no container — 5 of 7 GEO runs and every
+  // source understanding recorded `history_unavailable` and were never learnt.
+  const runs = [
+    { id: "run_live", status: "running", dispatchId: null },
+    { id: "run_geo", status: "succeeded", dispatchId: "geo-step-1" },
+    { id: "run_old", status: "succeeded", dispatchId: "geo-step-0", transcript: { completeness: "complete" } },
+    { id: "run_other", status: "failed", dispatchId: "other" },
+  ];
+  assert.deepEqual(runsToReadBeforeStop(runs).map((run) => run.id), ["run_live"], "an interactive stop reads what is still going");
+  assert.deepEqual(runsToReadBeforeStop(runs, { boundedRunId: "geo-step-1" }).map((run) => run.id), ["run_live", "run_geo"]);
+  assert.deepEqual(runsToReadBeforeStop(runs, { boundedRunId: "geo-step-0" }).map((run) => run.id), ["run_live"],
+    "a run whose transcript is already written is not read again");
+  assert.deepEqual(runsToReadBeforeStop(runs, { boundedRunId: "geo-step-1", captured: (id) => id === "run_geo" }).map((run) => run.id),
+    ["run_live"], "nor one a stop already read");
+  const held = new PreStopTranscripts();
+  held.put("run_geo", [{ sessionId: "s1", parentSessionId: null, label: "root", capability: null, transcript: null, error: null }]);
+  assert.equal(held.has("run_geo"), true);
+  assert.equal(held.has("run_live"), false);
+});
+
+test("while a bounded runtime is being let go, the stop can still see which run it was reserved for", async (t) => {
+  // The property the read above depends on: `endBoundedRuntime` clears the
+  // pending scope before it stops, and the runtime record still carries it
+  // when the pre-stop hook runs.
+  const rootDir = await mkdtemp(path.join(tmpdir(), "os-bounded-prestop-"));
+  t.after(async () => { await rm(rootDir, { recursive: true, force: true }); });
+  const project = { id: "brand-x", userId: "alice", rootDir, metaDir: path.join(rootDir, ".openscience"),
+    workspaceDir: path.join(rootDir, "workspace"), runtimeDir: path.join(rootDir, "runtime") };
+  await mkdir(project.workspaceDir, { recursive: true, mode: 0o700 });
+  /** @type {(string | null)[]} */
+  const seen = [];
+  const manager = new RuntimeManager({ runtimeMode: "mock", allowMockRuntime: true, production: false }, {
+    onRuntimeStopping: async (stopping) => { seen.push(manager.boundedRuntimeScope(stopping)?.runId ?? null); },
+  });
+  await manager.start(project);
+  manager.runtimes.get(manager.key(project)).modelGatewayScope = { runId: "geo-step-1", dailyLimit: 1, weeklyLimit: 1, runLimit: 1 };
+  assert.equal(await manager.endBoundedRuntime(project, "geo-step-1"), true);
+  assert.deepEqual(seen, ["geo-step-1"]);
 });
 
 test("a snapshot nobody drains is evicted rather than held for the life of the process", () => {
