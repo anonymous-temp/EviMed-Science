@@ -14,7 +14,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { Drawer } from "@/components/ui/Drawer";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { FilterChips, FilterSelect } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { CapsuleEntryRow } from "@/components/capsule/CapsuleEntryRow";
@@ -72,6 +72,8 @@ export function MemoryHubPage() {
   const highlightId = params.get("record");
   const projects = useProjectStore((state) => state.projects);
   const [filter, setFilter] = useState<MemoryFilter>("all");
+  // Which project 「项目」 narrows to; null is every project.
+  const [projectChoice, setProjectChoice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<WebStructuredMemory[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -121,14 +123,28 @@ export function MemoryHubPage() {
   const records: WebStructuredMemory[] = useMemo(() => data?.profile.records ?? [], [data]);
 
   const text = query.trim();
-  const rows = useMemo(() => {
+  // A run summary names a conversation and is not a memory, searched or not.
+  const recordSource = useMemo(() => (found ?? records).filter((record) => record.kind !== "run_summary"), [found, records]);
+  // 「曾经如此」 (2026-09-26 audit, M-11): a fact another replaced is shown
+  // under what replaced it, never as a memory in force. One whose replacement
+  // is not on the page keeps its own row, marked as what it was.
+  const formerlyOf = useMemo(() => {
+    const present = new Set(recordSource.map((record) => record.id));
+    const byReplacement = new Map<string, WebStructuredMemory[]>();
+    for (const record of recordSource) {
+      if (record.status !== "superseded" || !record.supersededBy || !present.has(record.supersededBy)) continue;
+      byReplacement.set(record.supersededBy, [...(byReplacement.get(record.supersededBy) ?? []), record]);
+    }
+    return byReplacement;
+  }, [recordSource]);
+  const allRows = useMemo(() => {
     // A search is the server's over records, and the page's own over the
     // methods and entries it already holds. Forgotten rows are not in the
     // list, searched or not: they are under 已忘记的内容.
-    const recordSource = found ?? records.filter((record) => record.kind !== "run_summary");
+    const shownUnderReplacement = new Set([...formerlyOf.values()].flat().map((record) => record.id));
     const all: Row[] = [
       ...recordSource
-        .filter((record) => record.status !== "archived")
+        .filter((record) => record.status !== "archived" && !shownUnderReplacement.has(record.id))
         .map((record): Row => ({ kind: "record", group: recordGroup(record), projectId: recordProjectId(record), record })),
       ...methods
         .filter((method) => method.status !== "retired" && (!text || matches(methodLine(method), text)))
@@ -141,9 +157,19 @@ export function MemoryHubPage() {
       // A sensitive memory is shown where the researcher looks for what is
       // about them, and nowhere else.
       .filter((row) => !(row.kind === "record" && row.record.sensitive && filter !== "self"))
-      .filter((row) => filter === "all" || row.group === filter)
       .sort((left, right) => MEMORY_GROUP_ORDER.indexOf(left.group) - MEMORY_GROUP_ORDER.indexOf(right.group));
-  }, [found, records, methods, entries, text, filter]);
+  }, [recordSource, formerlyOf, methods, entries, text, filter]);
+  const rows = allRows
+    .filter((row) => filter === "all" || row.group === filter)
+    .filter((row) => filter !== "project" || projectChoice === null || row.projectId === projectChoice);
+  // Every project's memory is on the page (M-4), so 「项目」 lists them by
+  // name once there is more than one to choose between.
+  const projectOptions = [...new Set(allRows.filter((row) => row.group === "project" && row.projectId).map((row) => row.projectId as string))]
+    .map((id) => ({ value: id, label: projectName(id) ?? "项目" }));
+  const chooseFilter = (next: MemoryFilter) => {
+    setFilter(next);
+    if (next !== "project") setProjectChoice(null);
+  };
 
   const forgottenRows: Row[] = [
     ...records.filter((record) => record.status === "archived")
@@ -155,7 +181,8 @@ export function MemoryHubPage() {
   ];
 
   const renderRow = (row: Row) => row.kind === "record"
-    ? <MemoryRecordRow key={rowKey(row)} record={row.record} origin={label(row)} highlighted={row.record.id === highlightId} onChanged={reload} />
+    ? <MemoryRecordRow key={rowKey(row)} record={row.record} origin={label(row)} highlighted={row.record.id === highlightId}
+        formerly={formerlyOf.get(row.record.id) ?? []} onChanged={reload} />
     : row.kind === "method"
       ? <MethodRow key={rowKey(row)} method={row.method} onChanged={reload} />
       : <CapsuleEntryRow key={rowKey(row)} entry={row.entry} origin={label(row)} onChanged={reload} />;
@@ -170,7 +197,15 @@ export function MemoryHubPage() {
       {/* One row; on a phone the search box takes its own line rather than
           squeezing the filters out of sight. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <FilterChips label="筛选记忆" options={FILTERS} value={filter} onChange={setFilter} />
+        <FilterChips
+          label="筛选记忆"
+          options={FILTERS}
+          value={filter}
+          onChange={chooseFilter}
+          trailing={filter === "project" && projectOptions.length > 1 ? (
+            <FilterSelect label="全部项目" allLabel="全部项目" options={projectOptions} value={projectChoice} onChange={setProjectChoice} />
+          ) : undefined}
+        />
         <SearchInput label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} className="w-full sm:w-60" />
       </div>
       {failed && (

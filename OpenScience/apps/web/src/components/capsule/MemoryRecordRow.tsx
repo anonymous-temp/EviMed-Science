@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDay } from "@/lib/format";
 import { announceMemoryChanged, archiveMemoryRecord, undoMemoryRecord } from "@/lib/memoryClient";
 import { isInference, memoryExcerpt } from "@/lib/memoryText";
 import { chatPath } from "@/lib/runLocation";
@@ -32,6 +32,13 @@ function when(value: string | null | undefined) {
 
 function failed(error: unknown) {
   return webErrorMessage(error, { fallback: "操作未完成，请重试。" });
+}
+
+/** When a replaced fact held, as a compact range (「3月2日～9月1日」); empty when neither end is known. */
+function heldFrom(record: WebStructuredMemory) {
+  const from = formatDay(record.createdAt);
+  const to = formatDay(record.invalidSince ?? null);
+  return from || to ? `（${from}～${to}）` : "";
 }
 
 /**
@@ -69,6 +76,7 @@ export function MemoryRecordRow({
   record,
   origin,
   highlighted = false,
+  formerly = [],
   onChanged,
 }: {
   record: WebStructuredMemory;
@@ -76,6 +84,8 @@ export function MemoryRecordRow({
   origin: string;
   /** Named by an inbox notice (`?record=`): scrolled to, opened and marked. */
   highlighted?: boolean;
+  /** The facts this one replaced: its 「曾经如此」 (build spec §10.2). */
+  formerly?: readonly WebStructuredMemory[];
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -147,9 +157,12 @@ export function MemoryRecordRow({
 
   const forgotten = record.status === "archived";
   const pending = record.status === "pending";
+  // A fact something else replaced, shown on its own only when what replaced
+  // it is not on the page: never presented as one in force (M-11).
+  const former = record.status === "superseded";
   const inferred = isInference(record);
   const source = memorySource(record);
-  const hasHistory = record.evidence.length > 0 || record.revisions.length > 0 || source != null;
+  const hasHistory = record.evidence.length > 0 || record.revisions.length > 0 || source != null || formerly.length > 0;
   const opens = hasHistory && !forgotten;
 
   const dialogs = (
@@ -208,12 +221,16 @@ export function MemoryRecordRow({
         leading={<RowOrigin label={origin} />}
         title={(
           <span ref={anchor} data-record-id={record.id}>
-            <RowSentence text={memoryExcerpt(record.summary || record.value)} inferred={inferred} clamp={opens && !open} />
+            <RowSentence
+              text={former ? `曾经如此：${memoryExcerpt(record.summary || record.value)}${heldFrom(record)}` : memoryExcerpt(record.summary || record.value)}
+              inferred={inferred}
+              clamp={opens && !open}
+            />
           </span>
         )}
         onOpen={opens ? () => setOpen((current) => !current) : undefined}
         expanded={opens ? open : undefined}
-        muted={forgotten}
+        muted={forgotten || former}
         meta={pending || (opens && open) ? (
           <>
             {/* The hold is said under the sentence, where it can never squeeze
@@ -231,6 +248,9 @@ export function MemoryRecordRow({
                     <p className="text-ui text-text-2">“{evidence.quote}”</p>
                     {evidence.observedAt && <p>{when(evidence.observedAt)}</p>}
                   </div>
+                ))}
+                {formerly.map((earlier) => (
+                  <p key={`formerly-${earlier.id}`}>曾经如此：{memoryExcerpt(earlier.summary || earlier.value, 120)}{heldFrom(earlier)}</p>
                 ))}
                 {[...record.revisions].reverse().slice(0, 5).map((revision) => (
                   <p key={revision.version}>

@@ -243,20 +243,80 @@ describe("记忆胶囊", () => {
     expect(within(row).getByRole("button", { name: "确认" })).toBeInTheDocument();
   });
 
-  it("searches on the server, over more than the rows on screen", async () => {
+  it("searches on the server, over more than the rows on screen, and never lists a run summary", async () => {
     const user = userEvent.setup();
     searchMemories.mockResolvedValue({
-      items: [record({ id: "rec_far", kind: "run_summary", scope: "project", scopeId: "prj_1",
-        key: "run.session.ses_far", value: "{}", summary: "阿司匹林一级预防还值得做吗" })],
+      items: [
+        record({ id: "rec_far", kind: "project_fact", scope: "project", scopeId: "prj_1",
+          key: "project.fact.aspirin", value: "研究阿司匹林一级预防的净获益", summary: "研究阿司匹林一级预防的净获益" }),
+        // A task brief is how a memory is found, never a row (audit 2026-09-26, M-4).
+        record({ id: "rec_brief", kind: "run_summary", scope: "project", scopeId: "prj_1",
+          key: "run.session.ses_far", value: "{}", summary: "「循证 GEO」自动运行 · 第 6 步（内容）" }),
+      ],
       query: "阿司匹林", semantic: 1, conversations: {}, usage: {},
     });
     open();
     await screen.findByText(/药学背景/);
     await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "阿司匹林");
     await waitFor(() => expect(searchMemories).toHaveBeenCalledWith("阿司匹林"));
-    expect(await screen.findByText("阿司匹林一级预防还值得做吗")).toBeInTheDocument();
+    expect(await screen.findByText("研究阿司匹林一级预防的净获益")).toBeInTheDocument();
+    expect(screen.queryByText(/循证 GEO」自动运行/)).toBeNull();
     expect(screen.queryByText(/药学背景/)).toBeNull();
     expect(screen.queryByText(/搜索结果按相关度排序/)).toBeNull();
+  });
+
+  // 2026-09-26 audit (M-4): the page listed only the current project, and
+  // another project's 45 memories were reachable only by search.
+  it("lists every project's memory, and 项目 narrows to one of them by name", async () => {
+    const user = userEvent.setup();
+    useProjectStore.setState({ projects: [{ id: "prj_1", name: "疳证 Meta 文献检索" }, { id: "prj_2", name: "信尔美" }] });
+    fetchMemoryProfile.mockResolvedValue({
+      records: [
+        record(),
+        record({ id: "rec_meta", kind: "project_fact", scope: "project", scopeId: "prj_1", key: "project.fact.population",
+          value: "研究人群为儿童疳证。", summary: "研究人群为儿童疳证。" }),
+        record({ id: "rec_geo", kind: "project_fact", scope: "project", scopeId: "prj_2", key: "project.fact.product",
+          value: "信尔美为处方药，需冷链。", summary: "信尔美为处方药，需冷链。" }),
+      ],
+      groups: {}, activeCount: 3, pendingCount: 0, conversations: {}, usage: {},
+    });
+    open();
+    expect(await screen.findByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
+    expect(within(rowOf("信尔美为处方药，需冷链。")).getByText("信尔美")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "全部项目" })).toBeNull();
+    await user.click(within(screen.getByRole("group", { name: "筛选记忆" })).getByRole("button", { name: "项目" }));
+    expect(screen.getByText("研究人群为儿童疳证。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "全部项目" }));
+    const menu = await screen.findByRole("menu", { name: "全部项目" });
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["全部项目", "疳证 Meta 文献检索", "信尔美"]);
+    await user.click(within(menu).getByRole("menuitemradio", { name: "信尔美" }));
+    expect(screen.getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
+    expect(screen.queryByText("研究人群为儿童疳证。")).toBeNull();
+    await user.click(within(screen.getByRole("group", { name: "筛选记忆" })).getByRole("button", { name: "全部" }));
+    expect(screen.getByText("研究人群为儿童疳证。")).toBeInTheDocument();
+  });
+
+  // 2026-09-26 audit (M-11): a superseded record was listed as a current one.
+  it("shows a replaced fact as 「曾经如此」 under what replaced it, never as a memory in force", async () => {
+    const user = userEvent.setup();
+    fetchMemoryProfile.mockResolvedValue({
+      records: [
+        record({ id: "rec_new", kind: "preference", key: "preference.designs", value: "接受高质量队列研究。", summary: "接受高质量队列研究。",
+          createdAt: "2026-09-01T00:00:00Z" }),
+        record({ id: "rec_old", kind: "preference", key: "preference.rct_only", value: "只看 RCT。", summary: "只看 RCT。",
+          status: "superseded", supersededBy: "rec_new", createdAt: "2026-03-02T00:00:00Z", invalidSince: "2026-09-01T00:00:00Z" }),
+        record({ id: "rec_orphan", kind: "preference", key: "preference.language", value: "回答用英文。", summary: "回答用英文。",
+          status: "superseded", supersededBy: "rec_deleted", createdAt: "2026-02-01T00:00:00Z", invalidSince: "2026-04-01T00:00:00Z" }),
+      ],
+      groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {},
+    });
+    open();
+    const title = await screen.findByRole("button", { name: /接受高质量队列研究/ });
+    expect(screen.queryByText("只看 RCT。")).toBeNull();
+    await user.click(title);
+    expect(within(title.closest("li")!).getByText(/曾经如此：只看 RCT。（3月2日～9月1日）/)).toBeInTheDocument();
+    // One whose replacement is not on the page keeps a row, marked as what it was.
+    expect(screen.getByText(/曾经如此：回答用英文。（2月1日～4月1日）/)).toBeInTheDocument();
   });
 
   it("keeps forgotten memories out of the list, under 已忘记的内容, each with 恢复", async () => {
