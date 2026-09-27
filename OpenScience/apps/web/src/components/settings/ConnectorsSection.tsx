@@ -11,7 +11,7 @@ import {
 import { announceConnectorsChanged } from "@/lib/connectorAttention";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
@@ -152,7 +152,7 @@ export function ConnectorsSection() {
               target="_blank"
               rel="noreferrer"
               aria-label={`获取 ${connector.title} 凭据`}
-              className="inline-flex min-h-6 items-center gap-1 text-caption text-accent hover:underline"
+              className={buttonClasses({ variant: "text", className: "text-accent hover:text-accent" })}
             >
               获取<ExternalLink size={16} aria-hidden="true" />
             </a>
