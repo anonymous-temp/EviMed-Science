@@ -1460,6 +1460,18 @@ unset OPEN_SCIENCE_OPERATOR_METRICS_TOKEN \
 )
 ```
 
+The same run writes `monitoring/targets/tls.json`, the certificate-expiry
+probe list, from `OPEN_SCIENCE_PUBLIC_HEALTH_URL` (the public origin's
+`/api/health`, https) and `OPEN_SCIENCE_EDGE_PROXY_URL`, which `--env-file=.env`
+supplies. Rewrite the list alone, without the three secrets, with
+`--targets`; `--check` fails with `tls_targets_stale` when the list does not
+probe a URL the environment names, and the release switch rewrites it from the
+release's `.env` every time:
+
+```bash
+(cd deploy/web && sudo "$(command -v node)" --env-file=.env ../../scripts/ops/configure-monitoring.mjs --targets)
+```
+
 The generator creates only owner-readable files under
 `OPEN_SCIENCE_MONITORING_SECRETS_DIR` (default
 `deploy/web/secrets`, ignored by version control). It refuses symbolic-link

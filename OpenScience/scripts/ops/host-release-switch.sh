@@ -34,6 +34,25 @@
 #   5. Old releases and their images go through release-retention.mjs, which
 #      refuses anything a container still names. Never `rm -rf`: that is how
 #      item 1 happened.
+#   6. Item 1 had a second half (2026-09-26 audit, I3-1). Docker resolves
+#      `current` once, when a container starts, so a container item 2 leaves
+#      alone keeps reading the release that was current when it started —
+#      and retention, which saw only `current/...` in its mounts, deleted that
+#      release two switches later. Prometheus's rules and targets, Grafana's
+#      dashboards and the blackbox and search configs sat at link count 0 for
+#      days while every target reported up. So every running container that
+#      binds through `current` and started before the move is restarted, and
+#      then every bind of every running container is stat'ed from inside:
+#      link count 0 means it still reads a deleted file, and the switch stops.
+#   7. The probe targets follow `.env` (configure-monitoring.mjs --targets):
+#      the public certificate probe was empty for as long as nobody re-ran the
+#      generator with OPEN_SCIENCE_PUBLIC_HEALTH_URL set.
+#   8. The runtime image carries the skill trees the manifest records
+#      (check-runtime-skill-digests.mjs): a delta that forgot a tree shipped
+#      the base's copy under a manifest that said otherwise.
+#   9. The pages are walked after the switch (ui-walk.mjs), when the operator
+#      has configured the walk; a failure says the release is live and which
+#      pages regressed.
 set -euo pipefail
 NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan]}"
 PRUNE=1; [ "${2:-}" = "--no-prune" ] && PRUNE=0
@@ -53,9 +72,35 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:-backup,monitoring,receipt,web-searc
 [ -f "${REL}/OpenScience/deploy/web/release-manifest.json" ] || { echo "no release manifest under ${REL}; generate it first"; exit 1; }
 [ -f "$OVERRIDE" ] || { echo "no compose override at ${OVERRIDE}"; exit 1; }
 
+echo "=== probe targets follow .env ==="
+# In the new release's own tree and before anything moves: an invalid URL in
+# `.env` stops the switch while the old release is still in front.
+node --env-file="${REL}/OpenScience/deploy/web/.env" "${REL}/OpenScience/scripts/ops/configure-monitoring.mjs" --targets
+
 echo "=== current -> ${NEW} ==="
 ln -sfn "$REL" "${ROOT}/current.next" && mv -T "${ROOT}/current.next" "${ROOT}/current"
 readlink -f "${ROOT}/current"
+# Whole seconds, floored: a container started in the same second as the move
+# counts as started after it, and it did resolve the new link.
+SWITCHED_AT=$(date -u +%s)
+
+# The running containers that bind a path through `current` and started before
+# it moved: each still reads the release that was current when it started.
+# The receipt container is left to the mint below, which restarts it anyway
+# and must not race web's start (item 3).
+stale_binders() {
+  local container started
+  for container in $(docker ps --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Names}}'); do
+    [ "$container" = "$RECEIPT_CONTAINER" ] && continue
+    docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{println}}{{end}}{{end}}' "$container" \
+      | grep -q "^${ROOT}/current/" || continue
+    # A start time that does not parse reads as "before": restarting is the
+    # safe answer, reading a deleted file is not.
+    started=$(date -u -d "$(docker inspect -f '{{.State.StartedAt}}' "$container")" +%s 2>/dev/null || echo 0)
+    [ "$started" -lt "$SWITCHED_AT" ] && echo "$container"
+  done
+  return 0
+}
 
 cd "${ROOT}/current/OpenScience/deploy/web"
 COMPOSE=(docker compose -p "$PROJECT"
@@ -82,21 +127,37 @@ while read -r service hash; do
   if [ "$have" != "$hash" ]; then changed+=("$service"); echo "  changed: ${service}"; fi
 done <<< "$hashes"
 echo "  ${#changed[@]} service(s) to recreate"
-[ "$PLAN" -eq 0 ] || { echo "=== plan only: nothing recreated; current now names ${NEW} ==="; exit 0; }
+if [ "$PLAN" -eq 1 ]; then
+  echo "=== running containers that bind through current (restarted unless recreated above) ==="
+  stale_binders | sed 's/^/  /'
+  echo "=== plan only: nothing recreated; current now names ${NEW} ==="
+  exit 0
+fi
 
 if [ "${#changed[@]}" -gt 0 ]; then
   echo "=== recreate them ==="
   "${COMPOSE[@]}" up -d --no-deps "${changed[@]}"
 fi
 
+echo "=== restart what still reads the previous release through current ==="
+restarted=()
+while read -r container; do
+  [ -n "$container" ] || continue
+  docker restart "$container" >/dev/null
+  restarted+=("$container")
+  echo "  restarted: ${container}"
+done < <(stale_binders)
+echo "  ${#restarted[@]} container(s) restarted"
+
 echo "=== mint the release receipt once web serves evimed-${NEW}-1 ==="
 for _ in $(seq 1 60); do
   docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/health').then(r=>r.json()).then(j=>process.exit(j.data&&j.data.releaseId==='evimed-${NEW}-1'?0:1)).catch(()=>process.exit(1))" && break
   sleep 5
 done
-# The backup's start-up cycle, if that container was recreated: wait for it to
-# say how it ended, so the mint below does not change the tree under it.
-if printf '%s\n' "${changed[@]:-}" | grep -qx "open-science-backup"; then
+# The backup's start-up cycle, if that container was recreated or restarted:
+# wait for it to say how it ended, so the mint below does not change the tree
+# under it.
+if printf '%s\n' "${changed[@]:-}" "${restarted[@]:-}" | grep -qxE "open-science-backup|${BACKUP_CONTAINER}"; then
   since=$(docker inspect -f '{{.State.StartedAt}}' "$BACKUP_CONTAINER")
   for _ in $(seq 1 60); do
     docker logs --since "$since" "$BACKUP_CONTAINER" 2>&1 | grep -qE '"event":"backup\.(completed|failed)"' && break
@@ -142,7 +203,30 @@ done
 [ "$missing" -eq 0 ] || { echo "${missing} bind source(s) do not exist; fix before pruning anything"; exit 1; }
 echo "  every bind source and compose directory exists"
 
+echo "=== no running container reads a deleted file ==="
+# The path existing on the host is not the question (item 6): a container
+# holds the file it resolved at start, and a deleted one still reads — as the
+# old bytes, or as an empty directory. Link count 0, asked inside, is that.
+deleted=0; verified=0; unverified=0
+for container in $(docker ps --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Names}}'); do
+  while IFS= read -r destination; do
+    [ -n "$destination" ] || continue
+    links=$(docker exec "$container" stat -c %h "$destination" 2>/dev/null || true)
+    case "$links" in
+      0) echo "  DELETED ${container}: ${destination} (link count 0 — it still reads a release that is gone; restart it)"; deleted=$((deleted + 1)) ;;
+      ''|*[!0-9]*) echo "  unverified ${container}: ${destination} (no stat in the container)"; unverified=$((unverified + 1)) ;;
+      *) verified=$((verified + 1)) ;;
+    esac
+  done < <(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Destination}}{{println}}{{end}}{{end}}' "$container")
+done
+[ "$deleted" -eq 0 ] || { echo "${deleted} bind(s) read a deleted file; the switch is not done until those containers are restarted"; exit 1; }
+echo "  ${verified} bind(s) verified live inside their containers, ${unverified} unverified"
+
 case "$ready" in ok*) ;; *) echo "readiness is not ok; leaving old releases in place"; exit 1 ;; esac
+
+echo "=== the runtime image carries the skill trees the manifest records ==="
+(cd "${ROOT}/current/OpenScience" && node scripts/ops/check-runtime-skill-digests.mjs deploy/web/release-manifest.json) \
+  || { echo "the runtime image does not match this release's manifest; leaving old releases in place"; exit 1; }
 
 if [ "$PRUNE" -eq 1 ]; then
   echo "=== retention ==="
@@ -155,3 +239,38 @@ if [ "$PRUNE" -eq 1 ]; then
   done
 fi
 echo "=== switched to evimed-${NEW}-1 ==="
+
+# The post-release walk of the live pages (item 9), as the account
+# `shared/ui-walk.env` names, in a throwaway container of the release's own
+# runtime image: it has the Node, Chromium and the Playwright driver the walk
+# needs, and the host has none of them. The walk aborts every
+# `start_runtime`, logs out, and writes its report and screenshots to
+# `shared/ui-walk/<release>/`. After retention on purpose: the walk judges the
+# pages, not whether the switch may finish, and its failure leaves the release
+# in front — it says so, and exits non-zero.
+WALK_ENV="${ROOT}/shared/ui-walk.env"
+if [ ! -f "$WALK_ENV" ]; then
+  echo "=== UI WALK NOT RUN: ${WALK_ENV} is missing (docs/WEB_OPERATIONS_RUNBOOK.md, \"Post-release UI walk\") ==="
+  exit 0
+fi
+echo "=== walk the live pages ==="
+walk_password=$(sed -n 's/^OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=//p' "$WALK_ENV")
+[ -f "$walk_password" ] || { echo "UI WALK NOT RUN: OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE in ${WALK_ENV} names no file; evimed-${NEW}-1 is live"; exit 1; }
+walk_image=$(docker exec "$WEB_CONTAINER" printenv OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE)
+walk_out="${ROOT}/shared/ui-walk/${NEW}"
+mkdir -p "$walk_out"
+set +e
+docker run --rm --network host --env-file "$WALK_ENV" \
+  -e OPEN_SCIENCE_WALK_PASSWORD_FILE=/run/walk/password -e OPEN_SCIENCE_WALK_OUT=/walk-out \
+  -e OPEN_SCIENCE_WALK_CHROMIUM=/usr/bin/chromium \
+  -v "${walk_password}:/run/walk/password:ro" -v "${walk_out}:/walk-out" \
+  -v "${ROOT}/current/OpenScience/scripts/ops/ui-walk.mjs:/walk/ui-walk.mjs:ro" \
+  --entrypoint sh "$walk_image" -c \
+  'OPEN_SCIENCE_PLAYWRIGHT_CORE="$(python -c "import os, playwright; print(os.path.join(os.path.dirname(playwright.__file__), \"driver\", \"package\"))")" exec node /walk/ui-walk.mjs'
+walked=$?
+set -e
+case "$walked" in
+  0) echo "=== UI walk passed; report in ${walk_out} ===" ;;
+  1) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK FAILED: the FAIL lines above name each page; report and screenshots in ${walk_out} ==="; exit 1 ;;
+  *) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK COULD NOT RUN (exit ${walked}); nothing was judged ==="; exit 1 ;;
+esac

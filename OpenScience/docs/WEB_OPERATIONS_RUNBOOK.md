@@ -383,6 +383,74 @@ smoke on the target host: CI still cannot prove that host's controller access to
 the Docker socket, storage quotas, TLS route, outbound network controls,
 backups, or external webhook delivery.
 
+## Release switch on the serving host
+
+`scripts/ops/host-release-switch.sh <NEW_SHORT>` puts a built release in front
+(`--plan` moves `current` and prints what it would recreate and restart). Past
+recreating the services whose configuration changed and minting the release
+receipt, it now also:
+
+1. **Writes the probe targets from the release's `.env`** before anything moves
+   (`configure-monitoring.mjs --targets`): the public certificate probe follows
+   `OPEN_SCIENCE_PUBLIC_HEALTH_URL`, the Tokyo proxy probe
+   `OPEN_SCIENCE_EDGE_PROXY_URL`. By hand, from a release directory:
+   `(cd deploy/web && sudo "$(command -v node)" --env-file=.env ../../scripts/ops/configure-monitoring.mjs --targets)`.
+   `--check` fails with `tls_targets_stale` when the list does not probe a URL
+   the environment names.
+2. **Restarts every running container that bind-mounts a path through
+   `current` and started before the move.** Docker resolves `current` once, at
+   start; a container the switch does not recreate keeps reading the release it
+   started under, and retention used to delete that release from under it
+   (2026-09-26: Prometheus rules and targets, Grafana dashboards, the blackbox
+   and search configs at link count 0 for days while every target was up).
+   The receipt container is left to the mint, which restarts it anyway.
+3. **Stats every bind of every running container from inside it**
+   (`stat -c %h`): link count 0 means it still reads a deleted file, and the
+   switch stops before retention with `DELETED <container>: <path>`. Restart the
+   named container and run the switch again.
+4. **Reads the skill trees back out of the runtime image**
+   (`check-runtime-skill-digests.mjs`) and compares them with the release
+   manifest's digests; a difference stops the switch before retention.
+5. **Walks the live pages** (below). A failed walk leaves the release in front
+   and exits non-zero with `RELEASE … IS LIVE, BUT THE UI WALK FAILED`.
+
+Retention (`release-retention.mjs`) keeps, beyond the newest two and anything a
+container names, every release built before a running container that binds
+through `current` started, if that container started before `current` last
+moved — the release it reads is among them. It names such a container on
+stderr; restarting it releases them.
+
+### Post-release UI walk
+
+The switch runs `scripts/ops/ui-walk.mjs` in a throwaway container of the
+release's runtime image (it carries Node, Chromium and the Playwright driver;
+the host has none of them) with host networking, as the account
+`/srv/evimed-science/shared/ui-walk.env` names. Without that file the switch
+prints `UI WALK NOT RUN` and exits 0. Set it up once:
+
+```bash
+read -rsp "acceptance account password: " walk_password; echo
+printf '%s\n' "$walk_password" | sudo sh -c 'umask 077; cat > /srv/evimed-science/shared/secrets/ui-walk-password'
+unset walk_password
+sudo tee /srv/evimed-science/shared/ui-walk.env >/dev/null <<'EOF'
+OPEN_SCIENCE_WALK_BASE_URL=https://<the public origin, as a browser reaches it from this host>
+OPEN_SCIENCE_WALK_USER=cdss-access
+OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=/srv/evimed-science/shared/secrets/ui-walk-password
+OPEN_SCIENCE_WALK_CHAT=1
+EOF
+sudo chmod 0600 /srv/evimed-science/shared/ui-walk.env
+```
+
+The password file is mounted read-only into the walk and never passed as a
+value. The walk refuses every `start_runtime` a page makes (the shell warms
+the account's default runtime from every page) and counts them in its report;
+only the chat page, walked when `OPEN_SCIENCE_WALK_CHAT=1`, may start the
+runtime it needs. Report and screenshots go to
+`/srv/evimed-science/shared/ui-walk/<release>/`; `NOTICE` lines (more than four
+font-size × weight pairs on a page) are recorded, never failed on. The base URL
+must be the public origin — logout is checked against it — so if this host
+cannot reach its own public address, add that name to the host's `/etc/hosts`.
+
 ## Alert Response
 
 | Alert | First checks | Immediate action |
