@@ -77,7 +77,7 @@ test("three edits make a habit that takes effect, the dashboard counts it and re
   const board = await memoryBoard(services, doctor);
   assert.deepEqual(board.habits.map((habit) => [habit.title, habit.status, habit.isNew, habit.source, habit.basis?.observed, habit.basis?.related]),
     [["脾胃气虚证多用太子参", "approved", true, "observed", 3, 3]]);
-  assert.deepEqual(board.neverLearned, [{ herb: "制附子", count: 1 }], "「不学习」: seen, and never learned from");
+  assert.deepEqual(board.neverLearned, [{ herb: "附子", count: 1 }], "「不学习」: seen, never learned from, and named as the herb it is");
 
   const recalled = await recallForAgent({ capsules: null, memorySubstrate: null, learning: services.learning }, { user: doctor }, { query: "脾胃气虚", methods: "own" });
   assert.deepEqual(recalled.methods.map((method) => method.title), ["脾胃气虚证多用太子参"]);

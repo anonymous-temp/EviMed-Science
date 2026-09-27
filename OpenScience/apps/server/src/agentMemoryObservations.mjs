@@ -13,8 +13,8 @@
  *     name. Nothing else is accepted: no patient field, and no dose — a herb
  *     name cannot carry a digit, and an unknown field is refused, so a dose has
  *     nowhere to go (「涉及剂量的模式一律不沉淀为习惯」). A change naming a toxic
- *     herb is kept aside, counted for the dashboard's 「不学习」 line, and never
- *     learned from.
+ *     herb (clinical-safety-rules.json `tcmToxicHerbs`) is kept aside, counted
+ *     for the dashboard's 「不学习」 line, and never learned from.
  *  2. **Count, in code.** For the syndrome just observed, each change is
  *     counted across that doctor's most recent related edits. A change seen at
  *     least three times and in at least half of them is a habit. The counts are
@@ -39,7 +39,7 @@
 
 import { createHash } from "node:crypto";
 
-import { METHOD_SKILL_SCHEMA, cleanMethodDisplay, hasSensitiveText } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, TCM_TOXIC_HERBS, cleanMethodDisplay, hasSensitiveText, matchedTcmToxicHerbs } from "@evimed/domain";
 
 import { learnedMethodId } from "./learningService.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
@@ -55,22 +55,15 @@ export const HABIT_WINDOW = 30;
 export const OBSERVATION_RETENTION = 500;
 
 /**
- * Herbs a habit is never learned about.
- *
- * The twenty-eight toxic TCM items of 《医疗用毒性药品管理办法》, and the
- * toxic herbs the build spec and the memory audit name (附子、川乌、草乌、马钱子、
- * 细辛、朱砂、雄黄、雷公藤). Matched as whole names within a herb's name, so
- * 制附子 and 白附子 are both caught by 附子. A closed vocabulary, not a reading:
- * it belongs with the pharmacist-maintained rows of
- * `packages/domain/src/clinical-safety-rules.json`, and is here only until that
- * file carries a TCM never-learn list the extraction checkpoint and the import
- * scan can read too (audit M §3 gap 13).
+ * Herbs a habit is never learned about: the toxic Chinese herbs of
+ * `packages/domain/src/clinical-safety-rules.json` (`tcmToxicHerbs`), the same
+ * pharmacist-maintained rows the extraction checkpoint and the capsule import
+ * scan read (`matchedTcmToxicHerbs`). One list, so a herb a pharmacist adds is
+ * never learned about, held for its owner and flagged on import alike. Each
+ * row carries every name the herb is written under (制附子 is 附子; 白附子 is its
+ * own row).
  */
-export const NEVER_LEARNED_HERBS = Object.freeze([
-  "砒石", "红砒", "白砒", "砒霜", "水银", "马钱子", "川乌", "草乌", "附子", "生半夏", "生南星", "巴豆",
-  "斑蝥", "青娘虫", "红娘虫", "甘遂", "狼毒", "藤黄", "千金子", "天仙子", "闹羊花", "闹阳花", "雪上一枝蒿",
-  "红升丹", "白降丹", "蟾酥", "洋金花", "红粉", "轻粉", "雄黄", "细辛", "朱砂", "雷公藤",
-]);
+export const NEVER_LEARNED_HERBS = Object.freeze(TCM_TOXIC_HERBS.map((row) => row.nameZh));
 
 /** A herb's name: letters of any script, and no digit — a dose cannot ride in one. */
 const HERB_PATTERN = /^[\p{Script=Han}A-Za-z·（）()]{1,24}$/u;
@@ -133,9 +126,9 @@ function herb(value, field) {
   return text;
 }
 
-/** @param {string} name */
+/** Whether a herb name is one of the toxic herbs. @param {string} name */
 export function neverLearned(name) {
-  return NEVER_LEARNED_HERBS.some((toxic) => name.includes(toxic));
+  return matchedTcmToxicHerbs(name).length > 0;
 }
 
 /**
@@ -488,7 +481,8 @@ export class AgentObservations {
     const counts = new Map();
     for (const row of rows) {
       for (const change of row.never_learned ?? []) {
-        for (const name of herbsOf(change).filter(neverLearned)) counts.set(name, (counts.get(name) ?? 0) + 1);
+        // By the herb's own name, so 制附子 and 附子 are one line.
+        for (const name of new Set(herbsOf(change).flatMap((named) => matchedTcmToxicHerbs(named)))) counts.set(name, (counts.get(name) ?? 0) + 1);
       }
     }
     return [...counts.entries()].map(([name, count]) => ({ herb: name, count })).sort((left, right) => right.count - left.count || left.herb.localeCompare(right.herb));

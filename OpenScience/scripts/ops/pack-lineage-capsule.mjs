@@ -19,7 +19,9 @@
  *    stage it is for;
  *  - `standards.jsonl`: the card's safety deference and its cautions;
  *  - `profile.md`: the card itself — lineage, physicians, works, aliases and its
- *    governance (version, status, author, reviewers, dates).
+ *    governance (version, status, author, reviewers, dates);
+ *  - the pack's card in the signed manifest: the lineage's name as its title,
+ *    the governance group as its author, its core theory as the summary.
  *
  * Why `methods/<id>` and not `methods/<stage>`: the importer
  * (`CapsuleTransferService.inspect`) accepts exactly the layout the platform's
@@ -58,6 +60,7 @@ import { hasSensitiveText } from "@evimed/domain";
 import { generateCapsuleIdentity, packCapsule } from "../../apps/server/src/capsuleContainer.mjs";
 import {
   CAPSULE_TRANSFER_MAX_BYTES,
+  capsuleCard,
   capsuleTransferLocation,
   renderCapsuleTransferFiles,
 } from "../../apps/server/src/capsuleTransferService.mjs";
@@ -280,6 +283,14 @@ export async function packLineageCard(input, { identity, password, packVersion =
     scope: ["workstyle", "+profile"],
     layers: [...new Set([...entries.map((item) => item.layer), "methods"])],
     attribution: `${card.governance.author}：${card.label}（卡片 ${card.governance.cardVersion}）`,
+    // The pack's card, in the signed manifest: what a recipient reads before
+    // any entry, and the title an import takes (`capsuleCard`).
+    card: capsuleCard({
+      title: card.label,
+      author: card.governance.author,
+      summary: [...card.coreTheory].slice(0, 500).join(""),
+      changelog: `卡片版本 ${card.governance.cardVersion}，${STATUS_LABELS[/** @type {keyof typeof STATUS_LABELS} */ (card.governance.status)]}，生效日期 ${card.governance.effectiveAt}`,
+    }),
     password,
     entries: Object.entries(files).map(([file, content]) => ({
       path: file,

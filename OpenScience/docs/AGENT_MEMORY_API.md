@@ -112,9 +112,10 @@ once through the model gateway (metered as `learning`; a line that states a
 number or does not name the herbs is replaced by a fixed sentence), written to
 the method ledger, in effect at once and returned by `recall`. A habit whose
 share falls below a quarter over enough later edits is retired with the reason
-said. Changes naming a toxic herb (附子, 川乌, 草乌, 马钱子, 细辛, 朱砂, 雄黄,
-雷公藤 and the regulated toxic items) are never learned from and are counted
-for the dashboard's `neverLearned` line. No runtime is involved, and a doctor
+said. Changes naming a toxic herb (the `tcmToxicHerbs` rows of
+`packages/domain/src/clinical-safety-rules.json`, the list the memory
+checkpoint and the capsule import scan read) are never learned from and are
+counted for the dashboard's `neverLearned` line. No runtime is involved, and a doctor
 who paused learning is not observed.
 
 Every act leaves an audit line naming the key and the account (never the
@@ -144,7 +145,9 @@ node scripts/ops/pack-lineage-capsule.mjs --card card.json --identity governance
 The pack holds one method per stage the card speaks to (M02 追问 from the
 question strategy, M03 辨病辨证, M04 候选方药与加减), the card's safety deference
 and cautions as standards, and the card itself with its governance, signed and
-encrypted exactly as an export is. It is laid out as the platform's own importer
+encrypted exactly as an export is; the pack's own card (title, author, summary,
+changelog) names the lineage and the governance group, and is the title an
+import takes. It is laid out as the platform's own importer
 requires, so the institution imports it like any shared capsule (记忆胶囊 ›
 导入) and a recall names it in `capsuleIds`. `--new-identity` writes the
 governance signing key once (0600) and never overwrites it; until an importing

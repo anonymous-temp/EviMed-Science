@@ -68,9 +68,11 @@ test("a packed card imports through the platform's own importer, and a doctor na
   assert.equal(preview.canImport, true);
   assert.equal(preview.issuerTrust, "unverified", "a governance key this deployment has not been told about says so");
   assert.equal(preview.entries.length, packed.entries);
+  assert.deepEqual([preview.card?.title, preview.card?.author], ["经方思路", "中医 CDSS 内容治理组"], "the pack says what it is and who wrote it");
   const imported = await transfers.import(hospital, {
-    archive: packed.archive, password, confirmed: true, expectedDigest: preview.archiveSha256, title: "经方思路",
+    archive: packed.archive, password, confirmed: true, expectedDigest: preview.archiveSha256,
   });
+  assert.equal(imported.payload.title, "经方思路", "named by its card, not by whoever imported it");
 
   const result = await recallForAgent({ capsules, memorySubstrate: null, learning: null },
     { user: { id: doctorId }, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [imported.id] });
