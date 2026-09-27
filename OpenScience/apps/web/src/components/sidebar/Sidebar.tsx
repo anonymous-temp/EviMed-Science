@@ -21,6 +21,7 @@ import { useGeoFeature } from "@/lib/geoClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -183,15 +184,16 @@ export function Sidebar() {
             {(accountName.trim()[0] ?? "").toUpperCase()}
           </span>
           <span className="min-w-0 flex-1 truncate text-ui text-text">{accountName}</span>
-          <Link
-            to="/app/account"
-            aria-label="设置"
-            title="设置"
-            aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
-            className={iconButtonClasses({ active: location.pathname.startsWith("/app/account") })}
-          >
-            <Settings size={16} aria-hidden="true" />
-          </Link>
+          <Tooltip content="设置" kind="label">
+            <Link
+              to="/app/account"
+              aria-label="设置"
+              aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
+              className={iconButtonClasses({ active: location.pathname.startsWith("/app/account") })}
+            >
+              <Settings size={16} aria-hidden="true" />
+            </Link>
+          </Tooltip>
         </div>
       </aside>
 

@@ -1,6 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * A button that is only an icon: 28 inside a row, a table or the composer's
@@ -8,6 +9,13 @@ import { cn } from "@/lib/cn";
  * (`md`) — spec §17.2, appendix E #9; the icon is 16 either way. The label is
  * required, because it is the button's whole name — it becomes the accessible
  * name and the tooltip.
+ *
+ * The tooltip is the `Tooltip` primitive (spec §22.8), not the browser's
+ * `title`: the delays are the token's, it opens on keyboard focus, Escape
+ * closes it, and it looks the same in every browser. It repeats the name the
+ * button already has, so it is shown, not announced again; a `title` that
+ * says more than the label (a shortcut) is shown instead and describes the
+ * button.
  *
  * There were three hand-written recipes (32, 28 and 24 px, two different
  * hover grounds, `rounded` and `rounded-input` mixed) across a dozen files.
@@ -43,16 +51,18 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   { icon: Icon, label, size = "md", destructive = false, active = false, type = "button", className, title, ...rest },
   ref,
 ) {
+  const says = title && title !== label ? title : label;
   return (
-    <button
-      ref={ref}
-      type={type}
-      aria-label={label}
-      title={title ?? label}
-      className={iconButtonClasses({ size, destructive, active, className })}
-      {...rest}
-    >
-      <Icon size={16} aria-hidden="true" />
-    </button>
+    <Tooltip content={says} kind={says === label ? "label" : "description"}>
+      <button
+        ref={ref}
+        type={type}
+        aria-label={label}
+        className={iconButtonClasses({ size, destructive, active, className })}
+        {...rest}
+      >
+        <Icon size={16} aria-hidden="true" />
+      </button>
+    </Tooltip>
   );
 });

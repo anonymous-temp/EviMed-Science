@@ -9,7 +9,7 @@ import { Delta } from "@/components/ui/Delta";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { FilterChip, FilterChips } from "@/components/ui/FilterChips";
-import { IconButton } from "@/components/ui/IconButton";
+import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Tabs } from "@/components/ui/Tabs";
 import { Tag } from "@/components/ui/Tag";
 import { Toaster } from "@/components/ui/Toaster";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton, MemorySkeleton } from "@/components/cards/Skeletons";
@@ -145,6 +146,18 @@ export function GalleryPage() {
         <IconButton icon={RefreshCw} label="刷新" />
         <IconButton icon={Pencil} label="编辑" active />
         <IconButton icon={FileText} label="不可用" disabled />
+      </Row>
+
+      <Row name="Tooltip" note="悬停 300 ms 或键盘聚焦时出现，离开 100 ms 后消失，Esc 关闭；反色小浮层，只放纯文字。">
+        {/* Open from the first render, so the photograph has it; the room
+            above the button is the tooltip's. */}
+        <div className="pt-10">
+          <Tooltip content="复制 DOI" kind="label" defaultOpen>
+            <button type="button" aria-label="复制 DOI" className={iconButtonClasses({ size: "sm" })}>
+              <Copy size={16} aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </div>
       </Row>
 
       <Row name="Input / SearchInput" note="输入框 36；表格与工具条里 28。焦点是边框加 1 px 内线，一条轮廓。">

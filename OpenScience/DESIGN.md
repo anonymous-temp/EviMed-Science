@@ -301,7 +301,8 @@ Stacking is by named tier (`z-*`), never by a larger number: page 0 · sticky 10
 modal 50 · popover 60 (a menu opened in a dialog is still above it) · toast 70 · tooltip 80 ·
 skip link 90. Opacity is spent on a disabled control (`opacity-disabled`, 0.4), the scrim (a
 colour role) and a dragged item (0.8), never on a colour's pale version. Tooltips show after
-300 ms and hide 100 ms after the pointer leaves. Toasts stay 5 s, 10 s when they carry an action,
+300 ms (at once on keyboard focus) and hide 100 ms after the pointer leaves — `Tooltip` reads
+`TOOLTIP_DELAYS`; nothing uses the browser's `title` for an icon's name. Toasts stay 5 s, 10 s when they carry an action,
 and an error stays until it is closed (`TOAST_DURATIONS`).
 
 ### The component set (2026-09-23)
@@ -316,7 +317,8 @@ bordered pill or bordered `<button>` outside it:
 | `FilterChips` / `FilterChip` / `FilterSelect` | one row of quiet chips, 28 high and 13 px (no border; selected sits on grey), the rest in “更多 ▾” |
 | `Tag` | the metadata label: 22 px, 12 px text, 6 px corner, grey, no border; `safety` red |
 | `Button` | `primary` (solid accent, one per view) · `secondary` (grey ground, no border) · `text`; `danger` only confirms a destruction |
-| `IconButton` | 28 in a row, 36 in a header; the label is its name and tooltip |
+| `IconButton` | 28 in a row, 36 in a header; the label is its name and its `Tooltip` |
+| `Tooltip` | an inverse 12 px layer on `z-tooltip`: an icon's name or a truncated line's whole text; hoverable, Escape closes it, never the only place something is said |
 | `List` / `ListRow` | like things as rows, no box; the title is the row's target (600 when unread), at most two quiet actions and “⋯”, always visible |
 | `Panel` / `PanelRow` | a settings group: name outside, one box, label left and control right |
 | `EmptyState` | an icon and one sentence; no button the header already has |

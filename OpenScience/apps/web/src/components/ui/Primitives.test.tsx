@@ -38,7 +38,9 @@ describe("IconButton", () => {
     const onClick = vi.fn();
     render(<IconButton icon={Pencil} label="编辑" onClick={onClick} size="sm" />);
     const button = screen.getByRole("button", { name: "编辑" });
-    expect(button).toHaveAttribute("title", "编辑");
+    // The tooltip is the Tooltip primitive (Tooltip.test.tsx), not the
+    // browser's title, which would draw a second one.
+    expect(button).not.toHaveAttribute("title");
     // 28 in a row, 36 in a header (appendix E #9).
     expect(button).toHaveClass("h-sm", "w-7");
     await userEvent.click(button);

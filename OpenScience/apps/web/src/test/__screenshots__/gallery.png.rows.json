@@ -1,6 +1,7 @@
 [
   "Button",
   "IconButton",
+  "Tooltip",
   "Input / SearchInput",
   "Tag / StudyType",
   "Tabs / Segmented / FilterChips",

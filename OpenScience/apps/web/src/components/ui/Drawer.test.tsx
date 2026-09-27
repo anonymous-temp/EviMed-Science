@@ -42,6 +42,14 @@ describe("Drawer", () => {
     await userEvent.tab();
     expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
 
+    // Keyboard focus on the close button shows its tooltip, and the tooltip
+    // is the top layer: the first Escape dismisses it (WCAG 1.4.13) without
+    // moving focus, the next one closes the drawer.
+    expect(document.querySelector("[role='tooltip']")).toHaveTextContent("关闭");
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.querySelector("[role='tooltip']")).toBeNull();
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

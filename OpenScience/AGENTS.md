@@ -34,7 +34,7 @@ per-project workspace + JSONL provenance.
 - `apps/web/` — the React single-page frontend (`@ai4s/web`), served by `apps/server`.
   Layout: `src/app/` (router — every page under `/app`, layout, providers),
   `src/components/` (feature components + `components/ui/` primitives: Button,
-  IconButton, Tag, FilterChips, Tabs, ListRow, Panel, Menu, Switch, SearchInput,
+  IconButton, Tooltip, Tag, FilterChips, Tabs, ListRow, Panel, Menu, Switch, SearchInput,
   Input/Textarea, Card, ConfirmDialog, Toaster, ShortcutHelp; `EmptyState` and
   `Skeletons` in `components/cards/`), `src/lib/` (api client, project store, run stream).
   There is no desktop packaging: the Tauri shell, its Rust command layer,
