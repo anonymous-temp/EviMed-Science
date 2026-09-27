@@ -1,0 +1,24 @@
+{
+  "capability": "geo-insight",
+  "brief": null,
+  "recordedFrom": "Platform audit of 2026-09-26: report I2 section 2.2 (capability delivery table) and report G (GEO run ledger), both read-only queries of the production run ledger on release evimed-1cf308956b6e-1. The audit reports live outside the repository (outputs/audit/reports/2026-09-26-platform-audit/); this file transcribes what they established about this capability so the acceptance ledger can cite it.",
+  "surface": "A project conversation in the product, bound to geo-insight (research session bound 2026-09-25 09:39:17Z), on the acceptance project for 信尔美 (玛仕度肽注射液). Not an acceptance-script dispatch.",
+  "attempts": [
+    {
+      "status": "failed",
+      "errorCode": "runtime_stopped",
+      "durationMinutes": 13.9,
+      "modelCostCny": 0.90,
+      "cause": "The release switch of that day restarted the project runtime mid-run."
+    },
+    {
+      "status": "failed",
+      "errorCode": "specialist_receipt_digest_mismatch",
+      "durationMinutes": 30.2,
+      "modelCostCny": 3.81,
+      "ledgerTime": "2026-09-25T10:00:37.421Z"
+    }
+  ],
+  "succeeded": 0,
+  "note": "The GEO module's first three steps (evidence, journey, questions) show data in production, but that data was written mid-run through geo_write by these failing runs; no geo-insight run delivered its pack. The G report attributes the two failures to a release that killed a running run and to a delivery-receipt mismatch, both on 2026-09-25."
+}

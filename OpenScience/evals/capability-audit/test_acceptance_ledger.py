@@ -321,10 +321,13 @@ class RealLedgerTests(unittest.TestCase):
         # On 2026-09-10 evidence-appraisal was accepted again on the release
         # carrying the gate fix, read rather than trusted: seven accepted.
         # On 2026-09-25 the 「循证 GEO」 module added geo-insight, geo-strategy
-        # and geo-proposal, none of them run yet: eleven never run.
-        self.assertEqual(statuses.count("not-run"), 11)
+        # and geo-proposal, none of them run yet: eleven never run. The
+        # 2026-09-26 platform audit read the production run ledger: geo-insight
+        # had two failed attempts that day, so it moved to failed — ten never
+        # run, four failed.
+        self.assertEqual(statuses.count("not-run"), 10)
         self.assertEqual(statuses.count("accepted"), 7)
-        self.assertEqual(statuses.count("failed"), 3)
+        self.assertEqual(statuses.count("failed"), 4)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
