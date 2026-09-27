@@ -13,8 +13,11 @@
  *   `red_flag_hits`, `safety_terms_hit` (M-11, M-12), `metrics.variant`,
  *   `rival`, `reason` (a cell's variant, competitor and not-measurable reason),
  *   `snapshots.probe_job_id` (which job — so which repeat — asked),
- *   `probe_jobs.external_ref` (the inclusion channel's request id) and
- *   `errors.notified_at` (an urgent error is notified exactly once).
+ *   `probe_jobs.external_ref` (the inclusion channel's request id),
+ *   `errors.notified_at` (an urgent error is notified exactly once), and
+ *   `facts.registry_key`, `reparsed_at` and `judge_extract` (which names and
+ *   owned sources a row was counted under, when it was counted again, and the
+ *   judge's recommendation sentences and entity names it was counted with).
  * - **One prober at a time, across processes.** The probe host serves one
  *   request at a time; `withProbeLock` holds the session advisory lock
  *   `hashtext('evimed_geo_probe')` on a dedicated connection for the length of
@@ -49,6 +52,9 @@ ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
 ALTER TABLE evimed_geo.snapshots ADD COLUMN IF NOT EXISTS probe_job_id text;
 ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS external_ref text;
 ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS notified_at timestamptz;
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS registry_key text;
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS reparsed_at timestamptz;
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS judge_extract jsonb;
 CREATE INDEX IF NOT EXISTS geo_snapshots_parse_idx ON evimed_geo.snapshots (asked_at) WHERE status IN ('valid', 'refusal');
 CREATE INDEX IF NOT EXISTS geo_snapshots_job_idx ON evimed_geo.snapshots (probe_job_id);
 CREATE INDEX IF NOT EXISTS geo_probe_jobs_round_idx ON evimed_geo.probe_jobs (round_id, status);
@@ -589,15 +595,16 @@ export class GeoMeasureStore {
     return this.transaction(async (client) => {
       const result = await client.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours,
           recommended_ours, position_ours, brands_mentioned, retrieval_triggered, cites_ours, cites_ours_in_body, care_hint, statements,
-          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at)
+          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract)
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
-          coalesce($21::timestamptz, now()))
+          coalesce($21::timestamptz, now()), $22, $23::jsonb)
         ON CONFLICT (snapshot_id) DO NOTHING RETURNING snapshot_id`,
       [snapshot.id, snapshot.userId, snapshot.geoProjectId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null,
         facts.recommendedOurs ?? null, facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null,
         facts.citesOurs ?? null, facts.citesOursInBody ?? null, facts.careHint ?? null, JSON.stringify(facts.statements ?? []),
         facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null, JSON.stringify(facts.redFlagExpected ?? []),
-        JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null]);
+        JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null,
+        facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
       return true;
@@ -617,6 +624,56 @@ export class GeoMeasureStore {
         WHEN status IN ('reserved', 'uncertain') THEN reserved_cost ELSE 0 END), 0) AS spent
       FROM evimed_usage.model_requests WHERE purpose = 'geo' AND created_at >= $1`, [since.toISOString()]);
     return Math.round(Number(result.rows[0]?.spent ?? 0) * 10_000) / 10_000;
+  }
+
+  // ───────────────────────── counting again ─────────────────────────
+
+  /** Projects with facts to keep counted under their current registry. */
+  async projectsWithFacts() {
+    const result = await this.query(`SELECT p.id FROM evimed_geo.projects p WHERE p.deleted_at IS NULL
+      AND EXISTS (SELECT 1 FROM evimed_geo.facts f WHERE f.geo_project_id = p.id) ORDER BY p.updated_at DESC, p.id LIMIT 500`);
+    return result.rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Facts of a project counted under another registry than `key`, with the
+   * answer they were counted from: the snapshot's text, citations, status and
+   * surface, and the row's own statements and brands.
+   * @param {string} geoProjectId @param {string} key @param {number} limit
+   */
+  async factsCountedUnder(geoProjectId, key, limit) {
+    const result = await this.query(`SELECT f.snapshot_id, f.brands, f.statements, f.judge_extract, f.judged_at, s.status, s.answer_text,
+        s.citations, s.surface
+      FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+      WHERE f.geo_project_id = $1 AND f.registry_key IS DISTINCT FROM $2
+      ORDER BY s.asked_at, s.id LIMIT $3`, [geoProjectId, key, limit]);
+    return result.rows.map((row) => ({
+      snapshotId: String(row.snapshot_id), brands: list(row.brands), statements: list(row.statements),
+      judgeExtract: row.judge_extract && typeof row.judge_extract === "object" ? row.judge_extract : null, judged: row.judged_at != null,
+      status: String(row.status), answerText: row.answer_text ?? null, citations: list(row.citations),
+      surface: row.surface && typeof row.surface === "object" ? row.surface : null,
+    }));
+  }
+
+  /**
+   * Rewrite a facts row's brand and citation segment, counted under `key`.
+   * The judge's part — statements, red flags, safety terms, the care hint —
+   * is never touched: counting again asks no model.
+   * @param {string} snapshotId @param {Record<string, any> | null} facts  null only stamps the key
+   * @param {{ key: string, at: Date }} stamp
+   */
+  async recountFacts(snapshotId, facts, { key, at }) {
+    if (!facts) {
+      await this.query(`UPDATE evimed_geo.facts SET registry_key = $2 WHERE snapshot_id = $1`, [snapshotId, key]);
+      return;
+    }
+    await this.query(`UPDATE evimed_geo.facts SET brands = $2::jsonb, mentions_ours = $3, first_ours = $4, recommended_ours = $5, position_ours = $6,
+        brands_mentioned = $7, retrieval_triggered = $8, cites_ours = $9, cites_ours_in_body = $10, failure_mode = $11,
+        registry_key = $12, reparsed_at = $13
+      WHERE snapshot_id = $1`,
+    [snapshotId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null, facts.recommendedOurs ?? null,
+      facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null, facts.citesOurs ?? null,
+      facts.citesOursInBody ?? null, facts.failureMode ?? null, key, at.toISOString()]);
   }
 
   // ───────────────────────── errors ─────────────────────────
@@ -722,6 +779,28 @@ export class GeoMeasureStore {
     }));
   }
 
+  /**
+   * Open errors whose confirmation round skipped their engine (paused, or no
+   * channel), with tries left: they are asked again once the engine is back.
+   * @param {number} limit @param {number} maxTries
+   */
+  async errorsConfirmSkipped(limit, maxTries) {
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status <> 'closed' AND confirm ->> 'status' = 'skipped'
+      AND coalesce((confirm ->> 'tries')::integer, 1) < $2 ORDER BY updated_at LIMIT $1`, [limit, maxTries]);
+    return result.rows.map(errorRow);
+  }
+
+  /**
+   * Whether an engine gave an answer that counts, through the probe, after
+   * `since` — the durable sign that it is back, whichever process asked.
+   * @param {string} engine @param {Date} since
+   */
+  async engineAnsweredSince(engine, since) {
+    const result = await this.query(`SELECT 1 FROM evimed_geo.snapshots WHERE engine = $1 AND asked_at > $2 AND status IN ('valid', 'refusal')
+      AND coalesce(surface ->> 'mode', 'web') <> 'inclusion' LIMIT 1`, [engine, since.toISOString()]);
+    return result.rows.length > 0;
+  }
+
   /** Open errors that have been acted on. @param {number} limit */
   async errorsToClose(limit) {
     const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status IN ('acting', 'awaiting_remeasure') ORDER BY updated_at LIMIT $1`, [limit]);
@@ -747,6 +826,13 @@ export class GeoMeasureStore {
     return result.rows.map(errorRow);
   }
 
+  /** Open errors no single cited source could be pinned on, and with no disposition yet. @param {number} limit */
+  async errorsWithoutDisposition(limit) {
+    const result = await this.query(`SELECT * FROM evimed_geo.errors WHERE status <> 'closed' AND action IS NULL
+      AND cited_source ->> 'basis' = 'not_attributable' ORDER BY updated_at LIMIT $1`, [limit]);
+    return result.rows.map(errorRow);
+  }
+
   /** @param {string} geoProjectId @param {string} domain */
   async sourceForDomain(geoProjectId, domain) {
     const result = await this.query(`SELECT domain, kind, layer, impostor, blacklist_reason FROM evimed_geo.sources WHERE geo_project_id = $1
@@ -767,7 +853,8 @@ export class GeoMeasureStore {
 
   /**
    * Finished rounds whose metrics are missing or older than their newest
-   * facts, and whose answers are all parsed.
+   * facts — written, or counted again under a changed registry — and whose
+   * answers are all parsed.
    * @param {string[]} kinds @param {number} limit
    */
   async roundsToMeasure(kinds, limit) {
@@ -777,7 +864,8 @@ export class GeoMeasureStore {
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal')
           AND NOT EXISTS (SELECT 1 FROM evimed_geo.facts f WHERE f.snapshot_id = s.id))
         AND (NOT EXISTS (SELECT 1 FROM evimed_geo.metrics m WHERE m.round_id = r.id)
-          OR (SELECT max(f.created_at) FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id WHERE s.round_id = r.id)
+          OR (SELECT max(greatest(f.created_at, coalesce(f.reparsed_at, f.created_at))) FROM evimed_geo.facts f
+                JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id WHERE s.round_id = r.id)
              > (SELECT max(m.computed_at) FROM evimed_geo.metrics m WHERE m.round_id = r.id))
       ORDER BY r.finished_at NULLS LAST, r.created_at LIMIT $2`, [kinds, limit]);
     return result.rows.map((row) => String(row.id));

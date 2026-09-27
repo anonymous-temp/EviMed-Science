@@ -411,6 +411,7 @@ function emptyCell(metricId, where, status, reason) {
  * @property {boolean} recommended
  * @property {boolean} retrieval
  * @property {Array<{ domain: string, ours: boolean, inBody: boolean|null }>} citations
+ * @property {boolean} traceable  some citation carries a link
  * @property {Set<string>} ownedDomains
  * @property {string[]} verdicts
  * @property {string[]} wrongTexts
@@ -519,6 +520,10 @@ function prepare(row, ctx) {
     recommended: Boolean(facts.recommendedOurs),
     retrieval: Boolean(facts.retrievalTriggered),
     citations,
+    // A retrieval whose sources came back as titles without a single link
+    // cannot say whether we were cited (千问, 1,021 of 1,021 on 2026-09-25):
+    // it is left out of the citation family, never read as a miss (G8).
+    traceable: citations.some((citation) => citation.domain !== ''),
     ownedDomains: new Set(citations.filter((citation) => citation.ours && citation.domain).map((citation) => citation.domain)),
     verdicts: judged.map((statement) => /** @type {string} */ (statement.verdict)),
     wrongTexts: judged.filter((statement) => statement.verdict === 'wrong').map((statement) => String(statement.text ?? '')),
@@ -568,7 +573,11 @@ function scopeMetrics(items, ctx) {
   const expectedFlags = valid.reduce((sum, item) => sum + item.redFlagExpected, 0)
   const hitFlags = valid.reduce((sum, item) => sum + item.redFlagHits, 0)
   const safetyExtracted = valid.some((item) => item.safetyHit !== null)
-  const inline = retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker')
+  const inline = retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker' && item.traceable)
+  // The citation family counts only what can be traced; retrieval with no
+  // link at all is 「引用不可测」, not 0 %.
+  const traced = retrieval.filter((item) => item.traceable)
+  const untraceable = retrieval.length > 0 && traced.length === 0
   const suspects = items.filter((item) => item.status === 'suspect').length
 
   /** @type {Record<string, CoreCell>} */
@@ -585,14 +594,18 @@ function scopeMetrics(items, ctx) {
       : unmeasurable('not_mentioned'),
     'M-06': rate(right, adjudicated, 'not_adjudicated'),
     'M-07': adjudicated ? measured(wrongTexts.size, { numerator: wrongTexts.size }) : unmeasurable('not_adjudicated'),
-    'M-08': ctx.owned.registered
-      ? rate(retrieval.filter((item) => item.ownedDomains.size > 0).length, retrieval.length, 'no_retrieval')
-      : unmeasurable('owned_not_registered'),
+    'M-08': !ctx.owned.registered
+      ? unmeasurable('owned_not_registered')
+      : untraceable
+        ? unmeasurable('citations_without_links')
+        : rate(traced.filter((item) => item.ownedDomains.size > 0).length, traced.length, 'no_retrieval'),
     'M-09': !ctx.owned.registered
       ? unmeasurable('owned_not_registered')
-      : retrieval.length
-        ? measured(new Set(valid.flatMap((item) => [...item.ownedDomains])).size)
-        : unmeasurable('no_retrieval'),
+      : untraceable
+        ? unmeasurable('citations_without_links')
+        : retrieval.length
+          ? measured(new Set(valid.flatMap((item) => [...item.ownedDomains])).size)
+          : unmeasurable('no_retrieval'),
     'M-10': rate(retrieval.length, nValid, 'no_valid_answers'),
     'M-08B': !ctx.owned.registered
       ? unmeasurable('owned_not_registered')
@@ -960,8 +973,12 @@ export function computeGeoMetrics(rows, options = {}) {
     cells.push(finish('M-01S', rate(category.filter((item) => item.selfMentions > 0).length, category.length, 'no_valid_answers'), project, categoryCount))
     cells.push(finish('M-01S', rate(category.filter((item) => item.selfFirst).length, category.length, 'no_valid_answers'), { ...project, variant: 'top1' }, categoryCount))
     cells.push(finish('M-01S', rate(category.filter((item) => item.selfTop3).length, category.length, 'no_valid_answers'), { ...project, variant: 'top3' }, categoryCount))
-    const sourced = baseline.filter((item) => standardPools('M-08S').includes(/** @type {string} */ (item.pool)))
+    // An answer whose retrieval came back without links is left out of the
+    // denominator, and a citation without a link out of the citations: neither
+    // can say whether it was ours (G8).
+    const sourced = baseline.filter((item) => standardPools('M-08S').includes(/** @type {string} */ (item.pool)) && (!item.retrieval || item.traceable))
     const citations = baseline.filter((item) => standardPools('M-09S').includes(/** @type {string} */ (item.pool))).flatMap((item) => item.citations)
+      .filter((citation) => citation.domain !== '')
     cells.push(finish('M-08S', owned.registered
       ? rate(sourced.filter((item) => item.ownedDomains.size > 0).length, sourced.length, 'no_valid_answers')
       : unmeasurable('owned_not_registered'), project, baselineCount(inPools(standardPools('M-08S')))))

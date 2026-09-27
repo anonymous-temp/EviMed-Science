@@ -49,7 +49,7 @@
 
 import { createHash } from "node:crypto";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, parseAnswer } from "./geoParse.mjs";
+import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, foldText, parseAnswer, registryKey } from "./geoParse.mjs";
 import { stripPageChrome } from "./geoSanity.mjs";
 import { recordErrorsFromFacts } from "./geoErrors.mjs";
 import { geoMeasureState, zonedDayStart } from "./geoProbeQueue.mjs";
@@ -471,11 +471,14 @@ export async function tickParse(deps) {
   const { store, config } = deps;
   const now = deps.now ?? (() => new Date());
   const state = deps.state ?? geoMeasureState(store);
-  const counts = { parsed: 0, refusals: 0, unjudged: 0, dropped: 0, failures: 0, errorsCreated: 0, notified: 0, skipped: /** @type {string | null} */ (null) };
+  const counts = { parsed: 0, refusals: 0, unjudged: 0, dropped: 0, failures: 0, errorsCreated: 0, notified: 0, recounted: 0,
+    skipped: /** @type {string | null} */ (null) };
   await store.ready();
   const judge = deps.judge ?? (state.judge ??= new GeoJudge(config, { usageLedger: deps.usageLedger, callModel: deps.callModel, fetchImpl: deps.fetchImpl }));
   if (!judge.available) {
     counts.skipped = "judge_unavailable";
+    // Counting again asks no model.
+    counts.recounted = (await recountRegistryFacts(deps)).facts;
     return counts;
   }
   // A wider window than one tick handles, least-failed first: an answer that
@@ -548,13 +551,13 @@ export async function tickParse(deps) {
     state.judgeStops.delete(snapshot.id);
     if (judged) state.lastJudgedTick = state.parseTicks;
 
+    const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [] };
     const code = parseAnswer({
       answer: snapshot.answerText,
       citations: snapshot.citations,
       registry,
       owned: context.owned,
-      recommendations: judged?.recommendations ?? [],
-      entities: judged?.entities ?? [],
+      ...extract,
     });
     const status = snapshot.status === "valid" && judged?.refusal ? "refusal" : snapshot.status;
     const statements = judged?.statements ?? [];
@@ -568,6 +571,10 @@ export async function tickParse(deps) {
       redFlagExpected: judged?.redFlagExpected ?? [],
       redFlagHits: judged?.redFlagHits ?? [],
       safetyTermsHit: judged?.safetyTermsHit ?? [],
+      // What it was counted under, and the judge's two lists it was counted
+      // with: a later registry change counts it again from these, asking no model.
+      registryKey: registryKey(registry, context.owned),
+      judgeExtract: judged ? extract : null,
     };
     const written = await store.writeFacts(snapshot, facts, { status: status !== snapshot.status ? status : null, at: now() });
     if (!written) continue;
@@ -584,5 +591,91 @@ export async function tickParse(deps) {
     counts.errorsCreated += recorded.created;
     counts.notified += recorded.notified;
   }
+  const recounted = await recountRegistryFacts(deps);
+  counts.recounted = recounted.facts;
   return counts;
+}
+
+/** How often the parse loop looks for facts counted under an older registry. */
+export const GEO_RECOUNT_EVERY_MS = 60_000;
+/** Facts one pass counts again at most (a baseline is a few hundred). */
+export const GEO_RECOUNT_PER_PASS = 2_000;
+
+/**
+ * Count again, in code, the answers a project's registry no longer matches
+ * (G2, 2026-09-26: our owned domains and the rivals' names were registered
+ * after the baseline was parsed and measured, and the baseline stayed on the
+ * old count — a GVI of 43.89 against 38.93 under the current one, and no
+ * rival in it at all, so the first weekly re-measure would read as a fall).
+ *
+ * A row counted under another `registry_key` has its brand and citation
+ * segment recomputed from the stored answer — names, positions, list items,
+ * which citations are ours — and its failure mode from its own judged
+ * statements; nothing is asked of the judge. `reparsed_at` is stamped, and
+ * the metrics loop measures every round whose facts are newer than its
+ * numbers, so the round's cells follow on the next tick. History is not
+ * rewritten otherwise: the snapshots, the judge's verdicts and the errors
+ * stay as they are.
+ *
+ * A row parsed before the judge's lists were kept has only its stored brands
+ * to go by: the judge's unregistered entities are the stored names that were
+ * neither ours nor a rival, and a brand stored as in a recommendation keeps
+ * that — the recommendation sentences themselves were not kept, so a name
+ * newly counted is in a recommendation only when it sits in a list item.
+ * @param {GeoParseDeps & { force?: boolean, geoProjectIds?: string[] | null }} deps
+ * @returns {Promise<{ projects: number, facts: number, skipped: string | null }>}
+ */
+export async function recountRegistryFacts(deps) {
+  const { store } = deps;
+  const now = deps.now ?? (() => new Date());
+  const state = deps.state ?? geoMeasureState(store);
+  const at = now();
+  if (!deps.force && state.recountAt && at.getTime() - state.recountAt < GEO_RECOUNT_EVERY_MS) return { projects: 0, facts: 0, skipped: "not_due" };
+  state.recountAt = at.getTime();
+  let facts = 0;
+  let projects = 0;
+  for (const geoProjectId of deps.geoProjectIds ?? await store.projectsWithFacts()) {
+    const context = await store.projectContext(geoProjectId);
+    if (!context) continue;
+    const registry = brandRegistry(context.project.product, context.project.competitors);
+    const key = registryKey(registry, context.owned);
+    const rows = await store.factsCountedUnder(geoProjectId, key, GEO_RECOUNT_PER_PASS);
+    if (!rows.length) continue;
+    projects += 1;
+    for (const row of rows) {
+      // The inclusion channel said only whether the brand words were found,
+      // under the keywords it was sent; there is no text to count again.
+      if (row.surface?.mode === "inclusion" || !row.answerText) {
+        await store.recountFacts(row.snapshotId, null, { key, at });
+        continue;
+      }
+      await store.recountFacts(row.snapshotId, recountedFacts(row, registry, context.owned), { key, at });
+      facts += 1;
+    }
+  }
+  return { projects, facts, skipped: null };
+}
+
+/**
+ * One stored answer counted under a registry, with its own judged statements.
+ * @param {{ brands: any[], statements: any[], judgeExtract: { recommendations?: string[], entities?: string[] } | null, status: string,
+ *   answerText: string | null, citations: any[] }} row
+ * @param {ReturnType<typeof brandRegistry>} registry @param {{ domains?: string[], urls?: string[] }} owned
+ */
+export function recountedFacts(row, registry, owned) {
+  const stored = Array.isArray(row.brands) ? row.brands : [];
+  const extract = row.judgeExtract;
+  const entities = Array.isArray(extract?.entities) ? extract.entities
+    : stored.filter((brand) => brand && !brand.ours).map((brand) => String(brand.name ?? "")).filter(Boolean);
+  const code = parseAnswer({
+    answer: row.answerText, citations: row.citations, registry, owned,
+    recommendations: Array.isArray(extract?.recommendations) ? extract.recommendations : [], entities,
+  });
+  if (!extract) {
+    const recommended = new Set(stored.filter((brand) => brand?.inRecommendation === true).map((brand) => foldText(brand.name)));
+    for (const brand of code.brands) if (recommended.has(foldText(brand.name))) brand.inRecommendation = true;
+    code.recommendedOurs = code.brands.some((brand) => brand.ours && brand.inRecommendation);
+  }
+  const statements = Array.isArray(row.statements) ? row.statements : [];
+  return { ...code, failureMode: failureMode({ status: row.status, mentionsOurs: code.mentionsOurs, statements }) };
 }

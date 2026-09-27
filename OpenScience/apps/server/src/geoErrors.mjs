@@ -120,6 +120,27 @@ async function attributeOf(store, geoProjectId, citation, owned) {
 }
 
 /**
+ * What to do about a wrong statement no single source can be pinned on (the
+ * answer cites several and marks none beside the sentence): the route the
+ * candidates call for, by what we can reach first — our own page among them
+ * (the client edits it), else an encyclopedia entry (the platform files a
+ * fix), else the coverage layer is supplied with the right content. G7,
+ * 2026-09-26: 37 of 66 errors had no action at all, so nothing ever moved
+ * them. The error stays unattributed; only its disposition is a default.
+ * @param {import("./geoMeasureStore.mjs").GeoMeasureStore} store @param {string} geoProjectId
+ * @param {string[]} candidates @param {{ domains?: string[], urls?: string[] }} owned
+ * @returns {Promise<{ action: string, responsible: string }>}
+ */
+async function candidateRoute(store, geoProjectId, candidates, owned) {
+  const attributes = new Set();
+  for (const domain of candidates) attributes.add(await attributeOf(store, geoProjectId, { domain }, owned));
+  for (const attribute of /** @type {const} */ (["owned", "encyclopedia"])) {
+    if (attributes.has(attribute)) return ROUTES[attribute];
+  }
+  return ROUTES.none;
+}
+
+/**
  * The trace columns 2–5 for one wrong statement in one snapshot.
  * @param {import("./geoMeasureStore.mjs").GeoMeasureStore} store
  * @param {{ geoProjectId: string, answerText: string | null, citations: any[] }} snapshot @param {string} sentence
@@ -133,8 +154,9 @@ export async function traceError(store, snapshot, sentence, owned, now) {
   const cited = citedFor(String(snapshot.answerText ?? ""), sentence, citations);
   if (!cited) {
     const candidates = [...new Set(citations.map((citation) => String(citation?.domain ?? "")).filter(Boolean))].slice(0, 5);
+    const fallback = await candidateRoute(store, snapshot.geoProjectId, candidates, owned);
     return { citedSource: { url: null, domain: null, attribute: null, basis: "not_attributable", candidates, checkedAt: now.toISOString() },
-      action: null, responsible: "platform" };
+      ...fallback };
   }
   const attribute = await attributeOf(store, snapshot.geoProjectId, cited, owned);
   const route = attribute ? ROUTES[attribute] : { action: null, responsible: "platform" };
@@ -292,18 +314,38 @@ export async function noteErrorAction(deps, { geoProjectId, errorId, materials =
   return { id: errorId, status: next };
 }
 
+/** How many confirmation rounds one error is given, the first included: a skipped one is asked again, never without bound. */
+export const GEO_CONFIRM_TRIES = 3;
+
+/**
+ * Whether an engine is back after `since`: this deployment can ask it, the
+ * breaker does not hold it paused, and either the breaker saw it answer a
+ * re-check since, or it gave a counted answer since (the durable sign, for a
+ * process that restarted).
+ * @param {{ store: import("./geoMeasureStore.mjs").GeoMeasureStore, inclusion?: any, state?: { breaker?: any } }} deps
+ * @param {string} engine @param {Date} since
+ */
+async function engineBack(deps, engine, since) {
+  if (!measurableEngines(deps).includes(engine)) return false;
+  const breaker = deps.state?.breaker ?? null;
+  if (breaker?.paused?.().includes(engine)) return false;
+  if (breaker?.resumedAfter?.(engine, since.getTime())) return true;
+  return deps.store.engineAnsweredSince(engine, since);
+}
+
 /**
  * The errors' housekeeping: notifications that did not go out, confirmation
- * rounds to queue and to read, errors a later answer shows gone, and traces
- * whose source the sources table now knows.
+ * rounds to queue, to read and — when their engine was not asked — to queue
+ * again once it is back, errors a later answer shows gone, and traces whose
+ * source the sources table now knows.
  * @param {{ store: import("./geoMeasureStore.mjs").GeoMeasureStore, config?: Record<string, any>, now?: () => Date,
- *   notify?: (event: Record<string, any>) => unknown, inclusion?: any }} deps
+ *   notify?: (event: Record<string, any>) => unknown, inclusion?: any, state?: { breaker?: any } }} deps
  */
 export async function tickErrors(deps) {
   const { store } = deps;
   await store.ready();
   const now = (deps.now ?? (() => new Date()))();
-  const counts = { notified: 0, confirmsQueued: 0, confirmsRead: 0, closed: 0, traced: 0 };
+  const counts = { notified: 0, confirmsQueued: 0, confirmsRead: 0, confirmsRequeued: 0, closed: 0, traced: 0, disposed: 0 };
   /** @type {Map<string, any>} */
   const contexts = new Map();
   const context = async (/** @type {string} */ geoProjectId) => {
@@ -341,6 +383,19 @@ export async function tickErrors(deps) {
     // Wait until every answer the round got has been read.
     if (answers.some((answer) => (answer.status === "valid" || answer.status === "refusal") && !answer.parsed)) continue;
     const valid = answers.filter((answer) => (answer.status === "valid" && answer.judged) || answer.status === "refusal");
+    // A round that never asked the engine (paused, or no channel) confirmed
+    // nothing: the confirmation is skipped, not read as 「未确认」, and it is
+    // asked again once the engine is back (G1). The round itself stays as it
+    // was — a new round is queued, and no count of this one is rewritten.
+    if (!valid.length && (await store.roundSkippedEngines(roundId)).includes(error.engine)) {
+      const skippedRounds = [...new Set([...(Array.isArray(error.confirm?.skippedRounds) ? error.confirm.skippedRounds : []), roundId])];
+      await store.updateError(error.id, {
+        confirm: { ...error.confirm, status: "skipped", stability: "unconfirmed", tries: Number(error.confirm?.tries ?? 1), skippedRounds,
+          skippedAt: now.toISOString() },
+      });
+      counts.confirmsRead += 1;
+      continue;
+    }
     const seen = valid.filter((answer) => repeatsError(answer.statements, error.fingerprint)).length;
     const share = valid.length ? seen / valid.length : null;
     const stability = share === null || seen === 0 ? "unconfirmed" : share >= STABLE_SHARE ? "stable" : "sporadic";
@@ -350,6 +405,17 @@ export async function tickErrors(deps) {
     counts.confirmsRead += 1;
   }
 
+  for (const error of await store.errorsConfirmSkipped(20, GEO_CONFIRM_TRIES)) {
+    const since = new Date(String(error.confirm?.skippedAt ?? error.updatedAt ?? now.toISOString()));
+    if (!(await engineBack(deps, error.engine, since))) continue;
+    const confirm = await confirmationFor(deps, error);
+    if (!confirm || confirm.status !== "pending") continue;
+    await store.updateError(error.id, {
+      confirm: { ...confirm, tries: Number(error.confirm?.tries ?? 1) + 1, skippedRounds: error.confirm?.skippedRounds ?? [] },
+    });
+    counts.confirmsRequeued += 1;
+  }
+
   for (const error of await store.errorsToClose(20)) {
     if (!error.questionId || !error.updatedAt) continue;
     const later = await store.laterJudgedAnswers(error.geoProjectId, error.questionId, error.engine, new Date(error.updatedAt));
@@ -357,6 +423,16 @@ export async function tickErrors(deps) {
     if (!latest || repeatsError(latest.statements, error.fingerprint)) continue;
     await store.updateError(error.id, { status: "closed", closed_snapshot_id: latest.id, updated_at: now });
     counts.closed += 1;
+  }
+
+  // An unattributable error recorded before it got a default disposition gets one now.
+  for (const error of await store.errorsWithoutDisposition(20)) {
+    const ctx = await context(error.geoProjectId);
+    if (!ctx) continue;
+    const candidates = Array.isArray(error.citedSource?.candidates) ? error.citedSource.candidates.map(String) : [];
+    const route = await candidateRoute(store, error.geoProjectId, candidates, ctx.owned);
+    await store.updateError(error.id, { action: route.action, responsible: route.responsible });
+    counts.disposed += 1;
   }
 
   for (const error of await store.errorsToTrace(20)) {

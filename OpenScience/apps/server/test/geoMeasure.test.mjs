@@ -8,8 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { classifyProbeAnswer, isRetriableRawStatus, stripPageChrome } from "../src/geoSanity.mjs";
-import { brandRegistry, citationRows, countMentions, failureMode, foldText, parseAnswer } from "../src/geoParse.mjs";
-import { buildJudgeInput, quantityTokens, verifyJudgement } from "../src/geoJudge.mjs";
+import { brandRegistry, citationRows, countMentions, countedNames, failureMode, foldText, parseAnswer, registryKey } from "../src/geoParse.mjs";
+import { buildJudgeInput, quantityTokens, recountedFacts, verifyJudgement } from "../src/geoJudge.mjs";
 import { errorFingerprint, citedFor } from "../src/geoErrors.mjs";
 import { GeoProbeBreaker, nightWindowOpen, parseNightWindow, zonedDay, zonedDayStart, zonedWeekStart } from "../src/geoProbeQueue.mjs";
 import { geoScreenshotFile, readGeoScreenshot, storeGeoScreenshot } from "../src/geoScreenshots.mjs";
@@ -62,6 +62,47 @@ test("registered names are matched case- and width-folded, without double counti
   const { count, first } = countMentions(foldText("推荐ＡＢＣ口服液，abc 也可以"), registry[0].aliases);
   assert.equal(count, 2, "「ABC口服液」 is one mention, not two");
   assert.equal(first, 2);
+});
+
+test("one counting rule on both sides: a single-source generic is a mention of its product, a multi-source one of nobody's (ruling 2026-09-26)", () => {
+  const ours = { brandName: "信尔美", genericName: "玛仕度肽注射液", aliases: ["玛仕度肽"], genericAliases: ["mazdutide"] };
+  const rival = { brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] };
+  // Nobody said the generic is one holder's: brands only, on both sides — the alias 「玛仕度肽」 is a form of the generic.
+  assert.deepEqual(countedNames(ours), ["信尔美"]);
+  assert.deepEqual(countedNames(rival), ["穆峰达", "mounjaro"]);
+  assert.deepEqual(countedNames({ ...ours, singleSource: true }), ["信尔美", "玛仕度肽", "玛仕度肽注射液", "mazdutide"]);
+  assert.deepEqual(countedNames({ ...rival, singleSource: true }), ["穆峰达", "替尔泊肽", "mounjaro", "替尔泊肽注射液"]);
+  assert.deepEqual(countedNames({ genericName: "替尔泊肽" }), ["替尔泊肽"], "an entry with no brand has only its generic to be counted by");
+  // 84 production answers named only 玛仕度肽 and were read as 漏提我方.
+  const answer = "玛仕度肽是一种每周一次的注射剂，替尔泊肽也可以考虑。";
+  const multi = parseAnswer({ answer, registry: brandRegistry(ours, [rival]), citations: [], owned: {} });
+  assert.deepEqual([multi.mentionsOurs, multi.brands.map((brand) => brand.name)], [false, []]);
+  const single = parseAnswer({ answer, registry: brandRegistry({ ...ours, singleSource: true }, [{ ...rival, singleSource: true }]), citations: [], owned: {} });
+  assert.deepEqual([single.mentionsOurs, single.brands.map((brand) => [brand.name, brand.ours])], [true, [["信尔美", true], ["穆峰达", false]]]);
+  // The registry's key names what a row was counted under.
+  assert.notEqual(registryKey(brandRegistry(ours, [rival]), {}), registryKey(brandRegistry({ ...ours, singleSource: true }, [rival]), {}));
+  assert.notEqual(registryKey(brandRegistry(ours, []), {}), registryKey(brandRegistry(ours, []), { domains: ["innoventbio.com"] }));
+  assert.equal(registryKey(brandRegistry(ours, []), { domains: ["b.com", "a.com"] }), registryKey(brandRegistry(ours, []), { domains: ["A.com", "b.com"] }));
+});
+
+test("counting a stored answer again keeps the judge's part and, for a row parsed before its lists were kept, its recommendation marks", () => {
+  const registry = brandRegistry({ brandName: "信尔美", genericName: "玛仕度肽", singleSource: true }, [{ brandName: "诺和泰", genericName: "司美格鲁肽" }]);
+  const row = {
+    status: "valid", answerText: "医生通常推荐信尔美。玛仕度肽每周一次。诺和泰也常用。", citations: [],
+    statements: [{ text: "玛仕度肽每周一次", verdict: "correct" }], judgeExtract: null,
+    // Parsed under the old registry, brand only: 信尔美 marked in a recommendation by the judge's sentence.
+    brands: [{ name: "信尔美", ours: true, competitor: false, position: 1, inRecommendation: true, count: 1 },
+      { name: "二甲双胍", ours: false, competitor: false, count: 1 }],
+  };
+  const facts = recountedFacts(row, registry, {});
+  assert.equal(facts.mentionsOurs, true);
+  assert.equal(facts.recommendedOurs, true, "the stored mark is kept where the sentence itself was not");
+  assert.deepEqual(facts.brands.find((brand) => brand.ours), { name: "信尔美", ours: true, competitor: false, position: 1, inRecommendation: true, count: 2 });
+  assert.equal(facts.failureMode, "correct");
+  const kept = recountedFacts({ ...row, judgeExtract: { recommendations: [], entities: [] } }, registry, {});
+  assert.equal(kept.recommendedOurs, false, "with the judge's lists kept, they decide, exactly");
+  assert.equal(recountedFacts({ ...row, answerText: "诺和泰每周一次。" }, registry, {}).failureMode, "omitted",
+    "only the brand segment is counted again: an answer that no longer names us is 漏提, its judged statements unchanged");
 });
 
 test("brands are ranked by first appearance and a list item is a recommendation", () => {

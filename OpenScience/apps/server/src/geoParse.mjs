@@ -5,10 +5,11 @@
  *
  * Hidden knowledge:
  *
- * - **Only registered names are counted here.** The product's brand name,
- *   aliases and known misspellings, and each registered competitor's brand
- *   (or generic name when it has no brand), matched after case and width
- *   folding (NFKC + lower case, so 「ＡＢＣ」 and 「abc」 are one name).
+ * - **Only registered names are counted here, by one rule for every
+ *   product** (`countedNames`): the brand, its other names and known
+ *   misspellings, and the generic's forms only when a single holder markets
+ *   the generic (`singleSource`), matched after case and width folding
+ *   (NFKC + lower case, so 「ＡＢＣ」 and 「abc」 are one name).
  *   Unregistered drug products in the answer (M-04C's denominator) are named
  *   by the model judge; code re-checks each one is really in the text and
  *   counts it. Nothing here guesses a drug name from its shape — the owner's
@@ -38,6 +39,7 @@
  * @module geoParse
  */
 
+import { createHash } from "node:crypto";
 import { GEO_METRICS, isOurCitation } from "@evimed/domain";
 import { stripPageChrome } from "./geoSanity.mjs";
 
@@ -89,6 +91,46 @@ function uniqueFolded(values) {
  */
 
 /**
+ * The names of one product's generic — its registered `genericName` and the
+ * other forms written for it (`genericAliases`: the molecule's short name, the
+ * INN in English, a code name) — folded. Any registered alias that is a part
+ * of the generic name (「替尔泊肽」 of 「替尔泊肽注射液」) is a form of it too:
+ * a check against the product's own registered field, not a guess at what
+ * a drug name looks like.
+ * @param {Record<string, any> | null | undefined} entry
+ */
+function genericForms(entry) {
+  const generic = uniqueFolded([...strings(entry?.genericName), ...strings(entry?.genericAliases)]);
+  const full = generic[0] ?? "";
+  const aliasForms = uniqueFolded(strings(entry?.aliases)).filter((alias) => full && (full.includes(alias) || alias.includes(full)));
+  return uniqueFolded([...generic, ...aliasForms]);
+}
+
+/**
+ * The names an answer is counted by for one product: its brand and the other
+ * names of that product, and — only when one approved holder markets the
+ * generic (`singleSource: true`) — the generic's forms as well.
+ *
+ * The rule is the same on both sides (owner's ruling 2026-09-26): a
+ * single-source drug's generic name names that product and nobody else's, so
+ * saying it is a mention of that product; a multi-source generic names every
+ * holder's product, so only brand names count. Before the ruling our product
+ * was counted by its brand alone while a rival counted by its generic too —
+ * 84 answers that named only 玛仕度肽 were read as 「漏提我方」 while every
+ * 替尔泊肽 was a mention of 穆峰达. An entry registered with no brand at all has
+ * only its generic to be counted by, and keeps it.
+ * @param {Record<string, any> | null | undefined} entry
+ */
+export function countedNames(entry) {
+  const brand = strings(entry?.brandName);
+  const generic = genericForms(entry);
+  const single = entry?.singleSource === true || brand.length === 0;
+  const names = uniqueFolded([...brand, ...strings(entry?.aliases), ...strings(entry?.misspellings)])
+    .filter((name) => single || !generic.includes(name));
+  return single ? uniqueFolded([...names, ...generic]) : names;
+}
+
+/**
  * The registered names: ours first, then each competitor.
  * @param {Record<string, any> | null | undefined} product  `projects.product`
  * @param {Array<Record<string, any>> | null | undefined} competitors  `projects.competitors`
@@ -98,18 +140,37 @@ export function brandRegistry(product, competitors) {
   /** @type {GeoRegisteredBrand[]} */
   const registry = [];
   const ourName = String(product?.brandName ?? "").trim();
-  const ourAliases = uniqueFolded([...strings(product?.brandName), ...strings(product?.aliases), ...strings(product?.misspellings)]);
+  // Our product is always entered by its brand; a product with none yet is
+  // not counted by its generic until the identity step says it is ours alone.
+  const ourAliases = strings(product?.brandName).length ? countedNames(product)
+    : uniqueFolded([...strings(product?.aliases), ...strings(product?.misspellings), ...(product?.singleSource === true ? genericForms(product) : [])]);
   if (ourAliases.length) registry.push({ name: ourName || ourAliases[0], ours: true, competitor: false, aliases: ourAliases });
   const ours = new Set(ourAliases);
   for (const competitor of Array.isArray(competitors) ? competitors : []) {
     const brand = String(competitor?.brandName ?? "").trim();
     const name = brand || String(competitor?.genericName ?? "").trim();
     if (!name) continue;
-    const aliases = uniqueFolded([name, ...strings(competitor?.aliases)]).filter((alias) => !ours.has(alias));
+    const aliases = countedNames(competitor).filter((alias) => !ours.has(alias));
     if (!aliases.length || registry.some((entry) => entry.name === name)) continue;
     registry.push({ name, ours: false, competitor: true, aliases });
   }
   return registry;
+}
+
+/**
+ * What the registry, the owned sources and the parser make of an answer, as
+ * one short key: a facts row counted under another key was counted by other
+ * names or other owned domains, and is counted again (`reparseRegistryFacts`).
+ * @param {GeoRegisteredBrand[]} registry @param {{ domains?: string[], urls?: string[] }} owned
+ */
+export function registryKey(registry, owned) {
+  const canonical = {
+    parser: GEO_PARSER_VERSION,
+    brands: registry.map((entry) => [entry.ours ? 1 : 0, entry.name, [...entry.aliases].sort()]),
+    domains: [...new Set((owned?.domains ?? []).map((domain) => String(domain).toLowerCase()))].sort(),
+    urls: [...new Set((owned?.urls ?? []).map(String))].sort(),
+  };
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex").slice(0, 24);
 }
 
 /**

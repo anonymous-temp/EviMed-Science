@@ -271,6 +271,32 @@ test("M-08 is over retrieval-triggered answers only; an engine that never retrie
   assert.equal(cellOf(unregistered.cells, { metricId: "M-09S", scope: "project" }).reason, "owned_not_registered");
 });
 
+test("sources returned as titles without a link cannot tell whether we were cited: 引用不可测, never a 0 % (G8)", () => {
+  const cited = { retrievalTriggered: true };
+  const linkless = [{ url: "", domain: "", title: "某百科" }, { title: "某问答" }];
+  const rows = [
+    row({ citations: [{ url: "https://www.example-pharma.com/a", domain: "www.example-pharma.com" }] }, cited),
+    row({ citations: [{ url: "https://other.org/a", domain: "other.org" }] }, cited),
+    // 千问: every source a title only.
+    row({ engine: "qianwen", citations: linkless }, cited),
+    row({ engine: "qianwen", citations: linkless }, cited),
+    row({ engine: "qianwen" }, {}),
+  ];
+  const { cells } = computeGeoMetrics(rows, { owned: OWNED });
+  for (const metricId of ["M-08", "M-09"]) {
+    const qianwen = cellOf(cells, { metricId, scope: "engine", engine: "qianwen" });
+    assert.deepEqual([qianwen.status, qianwen.reason, qianwen.value], ["not_measurable", "citations_without_links", null], metricId);
+  }
+  assert.equal(cellOf(cells, { metricId: "M-10", scope: "engine", engine: "qianwen" }).value, 66.67, "it did retrieve: two of three answers");
+  // Across engines the untraceable answers leave the denominators instead of reading as misses.
+  const pool = cellOf(cells, { metricId: "M-08", scope: "pool", pool: "P2" });
+  assert.deepEqual([pool.numerator, pool.denominator], [1, 2]);
+  const standard = cellOf(cells, { metricId: "M-08S", scope: "project" });
+  assert.deepEqual([standard.numerator, standard.denominator], [1, 3], "the untriggered answer stays in, the linkless ones leave");
+  const share = cellOf(cells, { metricId: "M-09S", scope: "project" });
+  assert.deepEqual([share.numerator, share.denominator], [1, 2], "a citation without a link is not a citation that could be ours");
+});
+
 test("M-06 counts only adjudicated answers; M-07 counts distinct wrong statements", () => {
   const wrong = { text: "示例牌每次服用五粒", verdict: "wrong" };
   const right = { text: "示例牌每日一次", verdict: "correct" };

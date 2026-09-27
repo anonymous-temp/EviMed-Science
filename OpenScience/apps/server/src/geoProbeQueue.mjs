@@ -192,15 +192,26 @@ export class GeoProbeBreaker {
     this.threshold = threshold;
     this.recheckMs = recheckMs;
     this.skipAfterMs = skipAfterMs;
-    /** @type {Map<string, { consecutive: number, pausedAt: number | null, lastCheckAt: number | null, failedCheckAt: number | null }>} */
+    /** @type {Map<string, { consecutive: number, pausedAt: number | null, lastCheckAt: number | null, failedCheckAt: number | null, resumedAt: number | null }>} */
     this.engines = new Map();
   }
 
   /** @param {string} engine */
   #entry(engine) {
     let entry = this.engines.get(engine);
-    if (!entry) this.engines.set(engine, entry = { consecutive: 0, pausedAt: null, lastCheckAt: null, failedCheckAt: null });
+    if (!entry) this.engines.set(engine, entry = { consecutive: 0, pausedAt: null, lastCheckAt: null, failedCheckAt: null, resumedAt: null });
     return entry;
+  }
+
+  /**
+   * Whether the engine came back after `since` (epoch ms): a re-check found
+   * it answering again, and it is not paused now. What the skipped
+   * confirmation rounds wait for before they are asked again.
+   * @param {string} engine @param {number} since
+   */
+  resumedAfter(engine, since) {
+    const entry = this.engines.get(engine);
+    return Boolean(entry && entry.pausedAt === null && entry.resumedAt !== null && entry.resumedAt > since);
   }
 
   /**
@@ -282,6 +293,7 @@ export class GeoProbeBreaker {
     entry.consecutive = 0;
     entry.pausedAt = null;
     entry.failedCheckAt = null;
+    entry.resumedAt = now;
     return true;
   }
 }
@@ -298,6 +310,7 @@ export class GeoProbeBreaker {
  * @property {Map<string, { count: number, firstTick: number }>} judgeStops   snapshot id → provider-side failures it met, and the parse tick of the first
  * @property {number} parseTicks     parse ticks run by this worker
  * @property {number} lastJudgedTick the parse tick of the latest successful judgement
+ * @property {number} recountAt when the parse loop last looked for facts counted under an older registry (epoch ms, 0 = never)
  * @property {any} judge
  * @property {any} upstream
  * @property {Set<string>} alerted
@@ -327,6 +340,7 @@ export function geoMeasureState(key) {
     judgeStops: new Map(),
     parseTicks: 0,
     lastJudgedTick: -1,
+    recountAt: 0,
     judge: null,
     upstream: null,
     alerted: new Set(),
@@ -835,7 +849,10 @@ async function inclusionPass(deps, state, engines, counts) {
       continue;
     }
     const product = project.product ?? {};
-    const keywords = [product.brandName, ...(Array.isArray(product.aliases) ? product.aliases : [])]
+    // The names an answer is counted by (`countedNames`): a single-source
+    // product's generic too, the same rule the parser applies.
+    const keywords = [product.brandName, ...(Array.isArray(product.aliases) ? product.aliases : []),
+      ...(product.singleSource === true ? [product.genericName, ...(Array.isArray(product.genericAliases) ? product.genericAliases : [])] : [])]
       .map((value) => String(value ?? "").trim()).filter(Boolean).slice(0, 5);
     try {
       const { requestId } = await inclusion.submit({ engine: job.engine, keywords, question: question.text, thirdId: job.id });

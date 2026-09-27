@@ -846,3 +846,158 @@ test("the judge stops when the module's daily budget is spent: answers wait unpa
     await h.probe.close();
   }
 });
+
+// ---------------------------------------------------------------- counting again (G2)
+
+test("a changed registry counts the stored answers again in code: no judge call, the facts' brands and citations move, and the round's numbers follow", options, async () => {
+  await reset();
+  await seed("geo_r");
+  const h = await harness();
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_r", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    await tickMetrics(h.deps);
+    const judged = h.model.calls.length;
+    const [before] = await rows(`SELECT max(computed_at) AS at FROM evimed_geo.metrics`);
+    const q2 = async () => (await rows(`SELECT f.brands, f.statements, f.failure_mode, f.cites_ours, f.registry_key, f.reparsed_at FROM evimed_geo.facts f
+      JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id JOIN evimed_geo.questions q ON q.id = s.question_id
+      WHERE q.text = $1 AND s.engine = 'deepseek' AND s.status = 'valid'`, [Q2]))[0];
+    const q1Doubao = async () => (await rows(`SELECT f.cites_ours, f.reparsed_at FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+      JOIN evimed_geo.questions q ON q.id = s.question_id WHERE q.text = $1 AND s.engine = 'doubao'`, [Q1]))[0];
+    const counted = await q2();
+    assert.deepEqual(counted.brands.filter((/** @type {any} */ brand) => brand.competitor).map((/** @type {any} */ brand) => [brand.name, brand.count]),
+      [["诺和泰", 1]], "司美格鲁肽 is a multi-source generic: only the brand counts");
+    assert.ok(counted.registry_key, "each row keeps the registry it was counted under");
+    assert.equal(counted.reparsed_at, null);
+    assert.equal((await q1Doubao()).cites_ours, false);
+
+    // Nothing changed: counting again finds nothing to do.
+    assert.equal((await tickParse({ ...h.deps, maxParse: 20 })).recounted, 0);
+
+    // Registered after the round was measured: the rival is single-source, and a news site is ours.
+    await database.query(`UPDATE evimed_geo.projects SET competitors = $1::jsonb WHERE id = 'geo_r'`,
+      [JSON.stringify([{ brandName: "诺和泰", genericName: "司美格鲁肽", singleSource: true }])]);
+    // The measured round already recorded the site as cited; the strategy now says it is ours.
+    await database.query(`UPDATE evimed_geo.sources SET layer = 'owned' WHERE geo_project_id = 'geo_r' AND domain = 'news.example.org'`);
+    h.clock.advance(60_000);
+    const recount = await tickParse({ ...h.deps, maxParse: 20 });
+    assert.ok(recount.recounted >= 4, `every stored answer with text is counted again (${recount.recounted})`);
+    assert.equal(h.model.calls.length, judged, "counting again asks no model");
+    const after = await q2();
+    assert.deepEqual(after.brands.filter((/** @type {any} */ brand) => brand.competitor).map((/** @type {any} */ brand) => [brand.name, brand.count]),
+      [["诺和泰", 2]], "a single-source generic is a mention of its product");
+    assert.deepEqual(after.statements, counted.statements, "the judge's verdicts are not touched");
+    assert.notEqual(after.registry_key, counted.registry_key);
+    assert.ok(after.reparsed_at);
+    assert.equal((await q1Doubao()).cites_ours, true, "a site registered as ours afterwards is ours in the old answers too");
+
+    // The metrics loop measures the round again, on the new count.
+    const measured = await tickMetrics(h.deps);
+    assert.equal(measured.rounds, 1);
+    const [rerun] = await rows(`SELECT max(computed_at) AS at FROM evimed_geo.metrics`);
+    assert.ok(new Date(rerun.at).getTime() > new Date(before.at).getTime());
+    assert.equal((await tickMetrics(h.deps)).rounds, 0, "and once");
+    h.clock.advance(60_000);
+    assert.equal((await tickParse({ ...h.deps, maxParse: 20 })).recounted, 0, "a second pass has nothing left to count");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- skipped confirmations (G1)
+
+test("a confirmation that never asked its paused engine is skipped, asked again by its error once the engine is back, and the old round keeps its counts", options, async () => {
+  await reset();
+  await seed("geo_s");
+  const h = await harness();
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_s", kind: "baseline" });
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    h.clock.advance(3 * 60_000);
+    await tickProbe({ ...h.deps, maxAsks: 10 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    const [error] = await rows(`SELECT id, confirm FROM evimed_geo.errors`);
+    const first = String(error.confirm.roundId);
+    // The probe loop closes the confirmation with DeepSeek paused: every ask skipped.
+    await store.finishRound(first, { now: h.clock.now(), skip: [{ engines: ["deepseek"], code: "engine_paused" }] });
+    const [closed] = await rows(`SELECT status, done, failed FROM evimed_geo.rounds WHERE id = $1`, [first]);
+    assert.deepEqual({ ...closed }, { status: "partial", done: 0, failed: 10 });
+    const read = await tickErrors(h.deps);
+    assert.equal(read.confirmsRead, 1);
+    const [skipped] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id = $1`, [error.id]);
+    assert.deepEqual([skipped.confirm.status, skipped.confirm.stability, skipped.confirm.skippedRounds, skipped.confirm.tries],
+      ["skipped", "unconfirmed", [first], 1], "never read as 「未确认」 from ten asks that were not made");
+
+    // Still paused: nothing is queued.
+    for (let index = 0; index < 5; index += 1) h.state.breaker.record("deepseek", "suspect", h.clock.now().getTime());
+    h.clock.advance(60_000);
+    assert.equal((await tickErrors(h.deps)).confirmsRequeued, 0);
+
+    // A re-check finds it answering: asked again, by its error.
+    h.clock.advance(10 * 60_000);
+    h.state.breaker.checked("deepseek", h.clock.now().getTime(), true);
+    const again = await tickErrors(h.deps);
+    assert.equal(again.confirmsRequeued, 1);
+    const [pending] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id = $1`, [error.id]);
+    assert.equal(pending.confirm.status, "pending");
+    assert.equal(pending.confirm.tries, 2);
+    assert.notEqual(pending.confirm.roundId, first);
+    const [second] = await rows(`SELECT kind, engines, ref FROM evimed_geo.rounds WHERE id = $1`, [pending.confirm.roundId]);
+    assert.deepEqual([second.kind, second.engines, second.ref.errorId], ["confirm", ["deepseek"], error.id]);
+    const [untouched] = await rows(`SELECT status, done, failed FROM evimed_geo.rounds WHERE id = $1`, [first]);
+    assert.deepEqual({ ...untouched }, { ...closed }, "history is not rewritten");
+    assert.equal((await tickErrors(h.deps)).confirmsRequeued, 0, "queued once");
+
+    // Skipped again, and back again with only the durable sign (a fresh
+    // process's breaker): asked a third time — and not a fourth.
+    await store.finishRound(pending.confirm.roundId, { now: h.clock.now(), skip: [{ engines: ["deepseek"], code: "engine_paused" }] });
+    await tickErrors(h.deps);
+    h.clock.advance(60_000);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface)
+      VALUES ('gs_back', 'user_geo_s', 'geo_s', 'deepseek', $1, 'valid', '{"mode":"web"}'::jsonb)`, [h.clock.now().toISOString()]);
+    const fresh = { ...h.deps, state: geoMeasureState() };
+    assert.equal((await tickErrors(fresh)).confirmsRequeued, 1);
+    const [third] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id = $1`, [error.id]);
+    assert.equal(third.confirm.tries, 3);
+    await store.finishRound(third.confirm.roundId, { now: h.clock.now(), skip: [{ engines: ["deepseek"], code: "engine_paused" }] });
+    await tickErrors(fresh);
+    h.clock.advance(60_000);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface)
+      VALUES ('gs_back2', 'user_geo_s', 'geo_s', 'deepseek', $1, 'valid', '{"mode":"web"}'::jsonb)`, [h.clock.now().toISOString()]);
+    assert.equal((await tickErrors(fresh)).confirmsRequeued, 0, "three rounds an error, never without bound");
+  } finally {
+    await h.probe.close();
+  }
+});
+
+// ---------------------------------------------------------------- dispositions (G7)
+
+test("a wrong statement no single source can be pinned on gets its default disposition from the candidates", options, async () => {
+  await reset();
+  await seed("geo_t", { engines: ["deepseek"] });
+  const h = await harness();
+  try {
+    await database.query(`INSERT INTO evimed_geo.sources (id, user_id, geo_project_id, domain, kind) VALUES ('src_baike', 'user_geo_t', 'geo_t', 'baike.baidu.com', 'encyclopedia')`);
+    const unattributed = (/** @type {string} */ id, /** @type {string[]} */ candidates) => database.query(`INSERT INTO evimed_geo.errors (id, user_id,
+        geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status, cited_source, confirm)
+      VALUES ($1, 'user_geo_t', 'geo_t', $1, 'deepseek', 'geo_t_q1', $2, 'number', 'S2', 'open', $3::jsonb, '{"status":"done"}'::jsonb)`,
+    [id, WRONG, JSON.stringify({ url: null, domain: null, attribute: null, basis: "not_attributable", candidates })]);
+    await unattributed("ge_ency", ["baike.baidu.com", "news.example.org"]);
+    await unattributed("ge_owned", ["www.mazdutide.example.com", "baike.baidu.com"]);
+    await unattributed("ge_none", ["news.example.org"]);
+    const counts = await tickErrors(h.deps);
+    assert.equal(counts.disposed, 3);
+    const errors = await rows(`SELECT id, action, responsible, cited_source FROM evimed_geo.errors ORDER BY id`);
+    assert.deepEqual(errors.map((row) => [row.id, row.action, row.responsible, row.cited_source.attribute]), [
+      ["ge_ency", "encyclopedia_fix", "platform", null],
+      ["ge_none", "continuous_supply", "platform", null],
+      ["ge_owned", "own_edit", "client", null],
+    ], "our own page first, then an encyclopedia, else the right content is supplied; still unattributed");
+    assert.equal((await tickErrors(h.deps)).disposed, 0, "once");
+  } finally {
+    await h.probe.close();
+  }
+});
