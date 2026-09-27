@@ -64,6 +64,7 @@ import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
 import { AgentObservations, HabitWriter } from "./agentMemoryObservations.mjs";
+import { createResearchHandoffRoutes } from "./researchHandoff.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -1617,6 +1618,8 @@ export function createWebApiApp(overrides = {}) {
     return capsuleCleanupRun;
   };
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
+  // 「转为深度研究」: a quick answer handed to a new research conversation.
+  const researchHandoffRoutes = createResearchHandoffRoutes({ config, store, researchSessions, agentRegistry, context, audit });
   const oidcService = new OidcService(config, store);
   const evimedAuth = new EvimedAuthService(config, store, { fetchImpl: overrides.evimedIntrospectFetch });
   const evimedAuthRoutes = createEvimedAuthRoutes({
@@ -3565,6 +3568,7 @@ export function createWebApiApp(overrides = {}) {
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
+      if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
       if (await creditsRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;

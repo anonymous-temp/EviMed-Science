@@ -33,6 +33,7 @@ const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
+const HandoffRoute = lazy(() => import("./routes/HandoffRoute").then((m) => ({ default: m.HandoffRoute })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -66,6 +67,9 @@ export const routes: RouteObject[] = [
         // the last conversation on arrival, so every plain visit paid for one
         // (2026-09-20 review B §C item 3).
         { path: "chat/:sessionId?", element: <SessionRoute /> },
+        // 「转为深度研究」 from EviMed's AI search: the payload is the fragment,
+        // and the page ends on the conversation it opens.
+        { path: "handoff", element: <HandoffRoute /> },
         // 「前沿动态」: the feed, and one event of it. Both answer for themselves
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },

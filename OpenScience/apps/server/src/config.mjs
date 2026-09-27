@@ -2096,6 +2096,11 @@ export function loadConfig(overrides = {}) {
     // holds an API key. A deployment decides that, never a default.
     agentMemoryApiEnabled:
       overrides.agentMemoryApiEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED", false),
+    // 「转为深度研究」 (fusion plan §9.5, researchHandoff.mjs): EviMed's shell
+    // hands a quick answer's question and sources to a new research
+    // conversation. Off until a deployment is fused with the shell.
+    researchHandoffEnabled:
+      overrides.researchHandoffEnabled ?? boolEnv("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED", false),
     memoryExtractionEnabled:
       overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
     // Projects extraction never writes for, by id prefix. Empty by default.

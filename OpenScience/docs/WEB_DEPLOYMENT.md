@@ -674,6 +674,49 @@ production; they are prerequisites for this switch, not follow-ups to it.
 The platform's own hostname is the only public name needed: the Science host does not
 have to be reachable from the internet under a name of its own.
 
+### Handing a question to deep research (「转为深度研究」)
+
+Fusion plan §9.5: from a quick answer, the shell hands the question, the
+sources already found and the premises assumed to a new research conversation
+whose first message carries a 「来自 AI 搜索」 card. Off unless
+`OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED=true` (it answers
+`503 research_handoff_disabled` otherwise).
+
+```text
+POST /api/research/handoffs          session cookie + X-Open-Science-CSRF, like every write
+{
+  "question": "…",                   1–4000 characters
+  "sources": [                       0–20
+    { "title": "…",                  1–300
+      "url": "https://…",            optional, http(s), no credentials
+      "doi": "10.…/…",               optional
+      "pmid": "12345678",            optional
+      "quote": "…" }                 optional, 1–500: the sentence that supported the answer
+  ],
+  "premises": ["成人", "非妊娠"],     0–10, each 1–100
+  "projectId": "…",                  optional: the person's chosen project (default: the request's)
+  "capabilityId": "…"                optional: bind the conversation to this capability (e.g. the
+}                                    one POST /api/routing/decision named); absent, the router decides
+201 { "data": { "projectId", "sessionId", "draft", "binding", "card": { "title", "premises", "sources" } } }
+400 research_handoff_invalid · research_handoff_capability_invalid   404 project_not_found
+```
+
+`draft` is the first message: the question, then the card as a Markdown
+quote block — 「来自 AI 搜索」, the premises, and each source with its
+identifiers and quoted sentence. The route binds the conversation
+(`sessionId`, in `projectId`) and writes nothing else; nothing is dispatched.
+The conversation opens the way every new one does, and the person's send starts
+it through the one prompt path (`POST /api/agent-runs/dispatch`, with its
+routing, spend limits and 灵豆 checks):
+
+- **The Vue shell's own frame** (`useRuntimeFrame`): select `projectId`, then
+  open a `create` intent with `sessionId` and `draft`.
+- **The Science app**: navigate to `/app/handoff#<payload>`, where the fragment
+  is the request body's JSON in base64url (`handoffFragment` in
+  `apps/web/src/lib/researchHandoff.ts`). The page calls the endpoint, moves the
+  shell to the project and opens the conversation with the card in its
+  composer. The fragment never reaches a server log.
+
 ## Production OIDC
 
 Register this exact redirect URI with the identity provider:
