@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -127,6 +128,44 @@ test("hosted compliance audit is part of the Web CI script", async () => {
   assert.match(pkg.scripts["audit:saas-alignment"], /audit-saas-alignment\.mjs/);
   assert.match(pkg.scripts["ci:web"], /pnpm audit:hosted-compliance/);
   assert.match(pkg.scripts["ci:web"], /pnpm audit:saas-alignment/);
+});
+
+test("the specialist credential audit reads a pydantic env= binding as well as a getenv call", async () => {
+  // research-topic reads NCBI_API_KEY through `Field(..., env="NCBI_API_KEY")`.
+  // The audit read only getenv/environ calls, so it never saw that name and
+  // passed while compose handed the engine no key (2026-09-27).
+  const { credentialNamesInTree } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
+  const tree = await mkdtemp(path.join(os.tmpdir(), "credential-reader-"));
+  try {
+    await mkdir(path.join(tree, "config"));
+    await writeFile(
+      path.join(tree, "config", "settings.py"),
+      [
+        "class Settings(BaseSettings):",
+        '    NCBI_API_KEY: Optional[str] = Field(default=None, env="NCBI_API_KEY")',
+        '    DEEPSEEK_API_KEY: Optional[str] = Field(default=None, env="DEEPSEEK_API_KEY")',
+        '    LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")',
+        "",
+      ].join("\n"),
+    );
+    await writeFile(path.join(tree, "client.py"), 'import os\nkey = os.getenv("OPENALEX_API_KEY", "")\n');
+    // DEEPSEEK_ is supplied by the adapter and LOG_LEVEL is not a credential.
+    assert.deepEqual(await credentialNamesInTree(tree), ["NCBI_API_KEY", "OPENALEX_API_KEY"]);
+  } finally {
+    await rm(tree, { recursive: true, force: true });
+  }
+});
+
+test("compose hands research-topic the NCBI key its settings read", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const topic = compose.match(/\n  evimed-research-topic-agent:\n(?<body>[\s\S]*?)(?=\n  [a-z][\w-]+:\n|\nvolumes:)/)?.groups?.body;
+  const bibliometric = compose.match(/\n  evimed-bibliometric-agent:\n(?<body>[\s\S]*?)(?=\n  [a-z][\w-]+:\n|\nvolumes:)/)?.groups?.body;
+  assert.ok(topic && bibliometric, "specialist services are absent from the production compose file");
+  const binding = /^ {6}NCBI_API_KEY: \$\{OPEN_SCIENCE_NCBI_API_KEY:-\}$/m;
+  assert.match(topic, binding, "research-topic must read the same host variable as the other PubMed agents");
+  assert.match(bibliometric, binding);
+  const settings = await readFile(path.join(repoRoot, "../项目代码/科研选题/config/settings.py"), "utf8");
+  assert.match(settings, /env="NCBI_API_KEY"/, "the engine no longer reads NCBI_API_KEY under that name");
 });
 
 test("the controller audit accepts only validated internal endpoints in a reconstructed launch plan", async () => {

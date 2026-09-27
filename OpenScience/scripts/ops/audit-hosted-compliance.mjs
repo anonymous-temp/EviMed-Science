@@ -1804,7 +1804,7 @@ async function checkSpecialistAgentCredentialsWired() {
  *  are excluded: they are not credentials this deployment owns, and counting
  *  them made the first run of this check report 37 failures of which 5 were
  *  real. @param {string} dir @returns {Promise<string[]>} */
-async function credentialNamesInTree(dir) {
+export async function credentialNamesInTree(dir) {
   const found = new Set();
   const skip = new Set([".venv", "node_modules", "__pycache__", ".git", "output", "outputs"]);
   const walk = async (current) => {
@@ -1814,7 +1814,14 @@ async function credentialNamesInTree(dir) {
       if (entry.isDirectory()) { await walk(full); continue; }
       if (!entry.name.endsWith(".py")) continue;
       const text = await fs.readFile(full, "utf8").catch(() => "");
-      for (const [, name] of text.matchAll(/(?:getenv|environ(?:\.get)?)\s*\(?\s*\[?\s*["']([A-Z][A-Z0-9_]{3,})["']/g)) {
+      // Two ways a tree reads its environment: a direct `getenv`/`environ`
+      // call, and a pydantic settings field bound by `env="NAME"`. Reading only
+      // the first missed research-topic's `NCBI_API_KEY` (config/settings.py),
+      // so compose never passed it and every job ran PubMed at the anonymous
+      // rate, throttled (2026-09-27).
+      const reads = /(?:getenv|environ(?:\.get)?)\s*\(?\s*\[?\s*["']([A-Z][A-Z0-9_]{3,})["']|\benv\s*=\s*["']([A-Z][A-Z0-9_]{3,})["']/g;
+      for (const [, called, declared] of text.matchAll(reads)) {
+        const name = called ?? declared;
         if (!/API_KEY$|_JWT$|_TOKEN$|_SECRET$|_EMAIL$/.test(name)) continue;
         if (/^(JAVA_|OSS_|METAAGENT_|MINERU_|HUNYUAN_|DASHSCOPE_)/.test(name)) continue;
         if (/^LLM_|^DEEPSEEK_/.test(name)) continue; // supplied by the adapter, not compose

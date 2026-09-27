@@ -1191,6 +1191,11 @@ services:
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
         CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
+      # Read by the engine's settings (config/settings.py, `env="NCBI_API_KEY"`),
+      # the same host variable the bibliometric and MR agents read. Without it
+      # every job searched PubMed at the anonymous rate and its sub-queries were
+      # throttled. Empty means anonymous, as before.
+      NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
       EVIMED_SPECIALIST_KIND: research-topic-selection
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
