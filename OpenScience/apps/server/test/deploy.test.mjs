@@ -219,7 +219,9 @@ test("every skill root the runtime image ships is a root the release manifest bi
   // ship is not required to be bound, and a bound root that is not shipped is
   // not an error — only the shipped-and-unbound direction is.
   assert.equal(bound.has("runtime/skills/does-not-exist"), false);
-  assert.ok(bound.has("runtime/skills/external/ai4s-skills"), "the OpenCode delivery path's root stays bound while that kernel is selectable");
+  // The OpenCode delivery path that carried this tree was deleted on
+  // 2026-09-01 and no DSH image ships it, so a release no longer records it.
+  assert.equal(bound.has("runtime/skills/external/ai4s-skills"), false, "a tree no runtime reads is not a release's instruction text");
 
   // Delivery and binding are different questions and must stay different lists.
   // `config.runtimeSkillDirs` says which directories the OpenCode path COPIES
@@ -660,7 +662,7 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
     compose,
     /OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:\s+\$\{OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:-30000\}/,
   );
-  assert.match(compose, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS:\s+\$\{OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific,runtime\/skills\/office\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS:\s+\$\{OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime\/skills\/core,runtime\/skills\/curated-scientific,runtime\/skills\/office\}/);
   assert.match(compose, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:\s+\$\{OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:-false\}/);
   assert.match(compose, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL:\s+\$\{OPEN_SCIENCE_ALLOW_DIRECT_SHELL:-false\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_JSON_BYTES:\s+\$\{OPEN_SCIENCE_MAX_JSON_BYTES:-12582912\}/);
@@ -1031,7 +1033,7 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT=true/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TMPFS=\/tmp:rw,nosuid,nodev,size=64m/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS=30000/);
-  assert.match(env, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS=runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific/);
+  assert.match(env, /^OPEN_SCIENCE_RUNTIME_SKILL_DIRS=runtime\/skills\/core,runtime\/skills\/curated-scientific,runtime\/skills\/office$/m);
   assert.match(env, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL=false/);
   assert.match(env, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE=73408512/);
   assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=10000/);

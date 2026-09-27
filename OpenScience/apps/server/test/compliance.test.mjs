@@ -77,9 +77,11 @@ test("hosted compliance audit passes the default Web redistribution boundary", (
   ]) {
     assert.ok(passed.has(code), `${code} must pass, got ${JSON.stringify(report.findings.find((finding) => finding.code.startsWith(code)) ?? null)}`);
   }
+  // core, curated-scientific and office; `external/ai4s-skills` left the
+  // default list with the OpenCode delivery path it served (2026-09-27).
   assert.equal(
     report.findings.filter((finding) => finding.code === "runtime_skill_dir_reviewed").length,
-    4,
+    3,
   );
   // A floor on the whole gate. Re-pointing a check at a new subject is
   // ordinary work; quietly dropping twenty of them and staying green is what

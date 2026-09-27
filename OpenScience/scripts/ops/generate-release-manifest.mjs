@@ -165,18 +165,16 @@ async function currentInputs() {
 
 async function currentSkills() {
   const configured = process.env.OPEN_SCIENCE_RUNTIME_SKILL_DIRS;
-  // Everything this release ships as model-facing instruction text, whichever
-  // kernel loads it. Binding a tree the running kernel ignores costs nothing;
-  // shipping one it reads with no digest is the defect — and that is exactly
-  // how these two lines were inverted. `runtime/skills/community` is COPYed
-  // into the DSH image and mounted as the fourth preset root, and
-  // `capability-skills` holds the bodies delegation pre-injects into every
-  // child's prompt, and neither was bound by anything; meanwhile
-  // `runtime/skills/external/ai4s-skills` was digest-bound and is not in the
-  // DSH image at all, reaching runs only through the OpenCode delivery path.
+  // Everything this release ships as model-facing instruction text. Shipping
+  // a tree the kernel reads with no digest is the defect — and that is exactly
+  // how this list was once inverted: `runtime/skills/community` is COPYed into
+  // the DSH image and mounted as a preset root, and `capability-skills` holds
+  // the bodies delegation pre-injects into every child's prompt, and neither
+  // was bound, while `runtime/skills/external/ai4s-skills` was. That tree
+  // reached runs only through the OpenCode delivery path, deleted on
+  // 2026-09-01, and is in no DSH image, so it is no longer recorded.
   const defaults = [
     "runtime/skills/core",
-    "runtime/skills/external/ai4s-skills",
     "runtime/skills/curated-scientific",
     "runtime/skills/office",
     "runtime/skills/community",

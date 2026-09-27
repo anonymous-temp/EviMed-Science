@@ -535,7 +535,7 @@ services:
       OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT: ${OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT:-true}
       OPEN_SCIENCE_RUNTIME_TMPFS: ${OPEN_SCIENCE_RUNTIME_TMPFS:-/tmp:rw,nosuid,nodev,size=64m}
       OPEN_SCIENCE_RUNTIME_CONTAINER_USER: ${OPEN_SCIENCE_RUNTIME_CONTAINER_USER:-}
-      OPEN_SCIENCE_RUNTIME_SKILL_DIRS: ${OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime/skills/core,runtime/skills/external/ai4s-skills,runtime/skills/curated-scientific,runtime/skills/office}
+      OPEN_SCIENCE_RUNTIME_SKILL_DIRS: ${OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime/skills/core,runtime/skills/curated-scientific,runtime/skills/office}
       OPEN_SCIENCE_EVIMED_MCP_SOURCE_DIR: ${OPEN_SCIENCE_EVIMED_MCP_SOURCE_DIR:-runtime/mcp/evimed-research}
       OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET:-}
       OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key

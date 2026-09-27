@@ -93,7 +93,6 @@ function resolveRepoPath(value) {
 function configuredRuntimeSkillDirs() {
   const raw = process.env.OPEN_SCIENCE_RUNTIME_SKILL_DIRS ?? [
     "runtime/skills/core",
-    "runtime/skills/external/ai4s-skills",
     "runtime/skills/curated-scientific",
     "runtime/skills/office",
   ].join(",");
@@ -330,7 +329,7 @@ async function checkHostedPackaging() {
   }
 
   const compose = await read("deploy/web/docker-compose.yml");
-  if (/OPEN_SCIENCE_RUNTIME_SKILL_DIRS:\s+\$\{OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific,runtime\/skills\/office\}/.test(compose)) {
+  if (/OPEN_SCIENCE_RUNTIME_SKILL_DIRS:\s+\$\{OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime\/skills\/core,runtime\/skills\/curated-scientific,runtime\/skills\/office\}/.test(compose)) {
     pass("compose_default_skill_allowlist", "Compose defaults to reviewed scientific packs and first-party Office exporters.");
   } else {
     fail("compose_default_skill_allowlist_missing", "Compose must default to the reviewed scientific skill allowlists.");

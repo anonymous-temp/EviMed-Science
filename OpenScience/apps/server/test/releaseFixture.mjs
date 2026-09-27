@@ -55,12 +55,6 @@ export const releaseManifestFixture = Object.freeze({
       digest: `sha256:${"d".repeat(64)}`,
     },
     {
-      name: "runtime-skills-external-ai4s-skills",
-      source: "runtime/skills/external/ai4s-skills",
-      files: 1,
-      digest: `sha256:${"f".repeat(64)}`,
-    },
-    {
       name: "runtime-skills-curated-scientific",
       source: "runtime/skills/curated-scientific",
       files: 1,

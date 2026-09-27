@@ -98,12 +98,12 @@ test("release manifest generator records exact images, tools, skills, and source
       assert.match(skill.digest, /^sha256:[a-f0-9]{64}$/, `${skill.source} has no content digest`);
     }
     // Everything shipped as model-facing instruction text, sorted by source.
-    // `runtime/skills/community` is the fourth preset root the DSH image mounts
-    // and `capability-skills` holds the bodies delegation pre-injects into every
-    // child's prompt; both shipped bound by nothing, while
-    // `runtime/skills/external/ai4s-skills` carried a digest and is not in the
-    // DSH image at all. Binding a tree the running kernel ignores costs nothing;
-    // shipping one it reads with no digest is the defect.
+    // `runtime/skills/community` is a preset root the DSH image mounts and
+    // `capability-skills` holds the bodies delegation pre-injects into every
+    // child's prompt; both once shipped bound by nothing, while
+    // `runtime/skills/external/ai4s-skills` carried a digest. That tree served
+    // only the OpenCode delivery path (deleted 2026-09-01) and is in no DSH
+    // image, so it is not recorded.
     assert.deepEqual(
       manifest.skills.map((skill) => skill.source),
       [
@@ -111,7 +111,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "runtime/skills/community",
         "runtime/skills/core",
         "runtime/skills/curated-scientific",
-        "runtime/skills/external/ai4s-skills",
         "runtime/skills/geo-private",
         "runtime/skills/office",
       ],
@@ -141,6 +140,7 @@ test("release manifest generator records exact images, tools, skills, and source
         // never ran: the manifest could not say which code the image held.
         "packages/socket",
         "packages/domain",
+        "packages/design-tokens",
         "packages/harness-port",
         "deploy/runtime-dsh",
         "runtime/mcp/evimed-research",

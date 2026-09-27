@@ -740,7 +740,6 @@ export function loadConfig(overrides = {}) {
       ? listEnv("OPEN_SCIENCE_RUNTIME_SKILL_DIRS")
       : [
           path.join(rootDir, "runtime/skills/core"),
-          path.join(rootDir, "runtime/skills/external/ai4s-skills"),
           path.join(rootDir, "runtime/skills/curated-scientific"),
           path.join(rootDir, "runtime/skills/office"),
         ]);
