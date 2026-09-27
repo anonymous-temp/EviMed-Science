@@ -144,7 +144,7 @@ export function readableSourceRef(ref: string | null | undefined): string | null
   return value;
 }
 
-/** 「说明书 · 国家药监局 2025 · 证据等级 A · 成人 · 9月22日核验」 */
+/** “说明书 · 国家药监局 2025 · 证据等级 A · 成人 · 9月22日核验” */
 function ClaimMeta({ claim }: { claim: GeoClaim }) {
   const verified = monthDay(claim.verifiedAt);
   const parts = [

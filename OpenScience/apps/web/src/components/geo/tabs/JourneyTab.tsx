@@ -81,14 +81,14 @@ function DownloadFile({ projectId, path, title }: { projectId: string; path: str
       .finally(() => setBusy(false));
   };
   return (
-    <Button variant="text" onClick={download} loading={busy}>
+    <Button variant="text" size="sm" onClick={download} loading={busy}>
       {!busy && <Download size={16} aria-hidden="true" />}
       {title}
     </Button>
   );
 }
 
-/** 「3/10」 or 「3」 in the emotion text, as a number on a 10-point scale. */
+/** “3/10” or “3” in the emotion text, as a number on a 10-point scale. */
 function emotionScore(emotion: string | null | undefined): number | null {
   if (!emotion) return null;
   const match = /(\d+(?:\.\d+)?)\s*(?:\/\s*10)?/.exec(emotion);
@@ -156,7 +156,7 @@ function CareNodes({ nodes }: { nodes: GeoJourney["careNodes"] }) {
     <ul className="flex flex-col divide-y divide-faint">
       {nodes.map((node, index) => (
         <li key={`${node.node}-${index}`} className="flex flex-col gap-2 py-4 sm:flex-row sm:gap-6">
-          <span className="w-32 shrink-0 text-ui font-medium text-text">{node.node}</span>
+          <span className="w-32 shrink-0 text-ui text-text">{node.node}</span>
           {node.redFlags.length > 0 ? (
             <ul className="flex min-w-0 max-w-measure flex-col gap-1">
               {node.redFlags.map((flag, flagIndex) => (
@@ -175,7 +175,7 @@ function People({ subtypes, personas }: { subtypes: string[]; personas: string[]
     <div className="flex flex-col gap-8">
       {subtypes.length > 0 && (
         <section aria-label="人群分型">
-          <h2 className="mb-3 text-ui font-medium text-text">人群分型</h2>
+          <h2 className="mb-3 text-ui font-semibold text-text">人群分型</h2>
           <ul className="flex flex-col gap-2">
             {subtypes.map((subtype, index) => <li key={index} className="max-w-measure text-ui text-text-2">{subtype}</li>)}
           </ul>
@@ -183,7 +183,7 @@ function People({ subtypes, personas }: { subtypes: string[]; personas: string[]
       )}
       {personas.length > 0 && (
         <section aria-label="典型人物">
-          <h2 className="mb-3 text-ui font-medium text-text">典型人物</h2>
+          <h2 className="mb-3 text-ui font-semibold text-text">典型人物</h2>
           <ul className="flex flex-col gap-2">
             {personas.map((persona, index) => <li key={index} className="max-w-measure text-ui text-text-2">{persona}</li>)}
           </ul>

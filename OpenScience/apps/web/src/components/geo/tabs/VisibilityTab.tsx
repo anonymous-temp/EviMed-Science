@@ -33,7 +33,7 @@ import { CellLink, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 /**
  * 可见度 — where we stand in the answers, over time.
  *
- * 「监测」 used to be a tab of its own, which meant the trend of a number was
+ * “监测” used to be a tab of its own, which meant the trend of a number was
  * somewhere other than the number. It is the horizontal axis here: pick a
  * metric and the same card shows its history, its target, what we did, and
  * when it will be measured next. Under it, the same question asked of each
@@ -94,6 +94,9 @@ function MetricTrend({
   const input = useMemo(() => ({
     labels: points.map((point) => monthDay(point.date) ?? ""),
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
+    // Rivals are measured on our mention rate's own questions (M-16 beside
+    // M-01S), so they are drawn on that chart and on no other.
+    rivals: line?.key === "mention" ? rivalLines(watch?.rivals, points.map((point) => point.date)) : [],
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
     markers: actionMarkers(points.map((point) => point.date), watch),
@@ -123,6 +126,32 @@ function MetricTrend({
   );
 }
 
+/**
+ * Each rival's readings placed on our series' dates, a missing one a gap, the
+ * highest latest reading first — so the darkest grey is the strongest rival.
+ */
+export function rivalLines(
+  rivals: GeoMonitoring["rivals"] | null | undefined,
+  dates: readonly string[],
+): Array<{ name: string; values: Array<number | null> }> {
+  return (Array.isArray(rivals) ? rivals : [])
+    .filter((rival) => rival && rival.name && Array.isArray(rival.points))
+    .map((rival) => ({
+      name: rival.name,
+      values: dates.map((date) => {
+        const point = rival.points.find((entry) => entry && entry.date === date);
+        return point ? statedValue(point) : null;
+      }),
+    }))
+    .filter((rival) => rival.values.some((value) => value !== null))
+    .sort((left, right) => (latest(right.values) ?? -1) - (latest(left.values) ?? -1));
+}
+
+function latest(values: ReadonlyArray<number | null>): number | null {
+  for (let index = values.length - 1; index >= 0; index -= 1) if (values[index] !== null) return values[index];
+  return null;
+}
+
 /* ----------------------------------------------------------- per engine */
 
 function ByEngine({ rows }: { rows: GeoMonitoring["byEngine"] | null | undefined }) {
@@ -149,14 +178,37 @@ function ByEngine({ rows }: { rows: GeoMonitoring["byEngine"] | null | undefined
 
 /* -------------------------------------------------------------- per pool */
 
+/**
+ * Mention by question pool. The risk-monitoring pool is not a row: being named
+ * there is not the aim (G19), so its line is the rate at which a risk question
+ * is answered with a recommendation of us (M-15), under the table. A 主要问题
+ * that is the same on every row is said once, under it, rather than repeated
+ * in a column.
+ */
 function ByPool({ geoId, diagnosis, loading }: { geoId: string; diagnosis: GeoDiagnosis | null; loading: boolean }) {
-  const rows = (Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []).filter((row) => row && row.pool);
+  const rows = (Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []).filter((row) => row && row.pool && row.pool !== "P4");
   const top = rows.reduce((max, row) => Math.max(max, readGeoCell(row.mention).value ?? 0), 0);
+  const issues = rows.map((row) => row.mainIssue || null);
+  const sameIssue = rows.length > 1 && issues[0] !== null && issues.every((issue) => issue === issues[0]) ? issues[0] : null;
+  const risk = (Array.isArray(diagnosis?.more) ? diagnosis.more : []).find((row) => row && row.metricId === "M-15" && !row.rival && !row.variant) ?? null;
+  const footnote = risk || sameIssue ? (
+    <span className="flex flex-col gap-1">
+      {risk && (
+        <span data-geo-risk-line="" className="inline-flex flex-wrap items-baseline gap-x-1.5">
+          {`${GEO_POOL_KINDS.P4}问题里，${metricName("M-15") ?? risk.name}`}
+          <CellLink geoId={geoId} cell={readGeoCell(risk.cell)} layout="inline" label={metricName("M-15") ?? risk.name} />
+          （越低越好）
+        </span>
+      )}
+      {sameIssue && <span>{`各类问题的主要问题都是“${sameIssue}”`}</span>}
+    </span>
+  ) : null;
   return (
     <ChartCard
       title="哪一类问题里最容易被提到"
       state={loading ? "loading" : rows.length === 0 ? "empty" : "content"}
       emptyText="还没有按问句池测过提及率。"
+      footnote={footnote}
       height={200}
     >
       <DataTable
@@ -189,7 +241,7 @@ function ByPool({ geoId, diagnosis, loading }: { geoId: string; diagnosis: GeoDi
             key: "issue",
             header: "主要问题",
             cell: (row) => <span className="block max-w-measure">{row.mainIssue || "—"}</span>,
-            isEmpty: (row) => !row.mainIssue,
+            isEmpty: (row) => !row.mainIssue || sameIssue !== null,
           },
         ]}
       />
@@ -203,11 +255,14 @@ function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking
   const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
   const ours = ranking.find((row) => row.ours) ?? null;
   const place = ours ? ranking.indexOf(ours) + 1 : 0;
+  // Every rate over the same questions: the range is said once, not per row.
+  const scope = ranking.length > 0 && ranking.every((row) => row.scope === ranking[0].scope) ? ranking[0].scope : null;
   return (
     <ChartCard
-      title={ours && place > 0 ? `在 ${ranking.length} 个同类药里排第 ${place}` : "同类药提及率"}
+      title={ours && place > 0 ? `提及率在 ${ranking.length} 个同类药里排第 ${place}` : "同类药提及率"}
       state={loading ? "loading" : ranking.length === 0 ? "empty" : "content"}
       emptyText="这一轮还没有测到同类药的提及率。"
+      footnote={scope ? `都按${scope}计算` : undefined}
       height={180}
     >
       <DataTable
@@ -217,8 +272,8 @@ function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking
         highlight={(row) => row.ours}
         rowAttrs={(row) => ({ "data-rank-row": row.key })}
         columns={[
-          { key: "name", header: "同类药", rowHeader: true, cell: (row) => <>{row.name}{row.ours && <span className="ml-1.5 text-caption text-accent-strong">本品</span>}</> },
-          { key: "scope", header: "读数范围", cell: (row) => <span className="text-text-3">{row.scope}</span> },
+          { key: "name", header: "同类药", rowHeader: true, cell: (row) => <>{row.name}{row.ours && <span className="ml-1.5 text-caption font-normal text-accent-strong">本品</span>}</> },
+          { key: "scope", header: "读数范围", cell: (row) => <span className="text-text-3">{row.scope}</span>, isEmpty: () => scope !== null },
           { key: "bar", header: "", width: "w-40", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
           { key: "value", header: "提及率", align: "right", width: "w-20", cell: (row) => (row.value === null ? geoCellWord(null) : `${Math.round(row.value)}%`) },
         ]}
@@ -235,7 +290,9 @@ function Ranking({ ranking, loading }: { ranking: ReturnType<typeof rivalRanking
  * because a reader needs it to check a judgement, not to make one.
  */
 function MoreMetrics({ geoId, diagnosis }: { geoId: string; diagnosis: GeoDiagnosis | null }) {
-  const rows = (Array.isArray(diagnosis?.more) ? diagnosis.more : []).filter((row) => row && row.name);
+  // A rival's row is in the ranking and a variant's is its metric again: one
+  // name, one line.
+  const rows = (Array.isArray(diagnosis?.more) ? diagnosis.more : []).filter((row) => row && row.name && !row.rival && !row.variant);
   const noise = diagnosis?.noise && typeof diagnosis.noise.band === "number" ? diagnosis.noise : null;
   if (rows.length === 0 && !noise) return null;
   return (

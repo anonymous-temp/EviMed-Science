@@ -20,7 +20,8 @@ import { FilterSelect } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { AskAi } from "@/components/geo/AskAi";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
-import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay } from "@/components/geo/geoText";
+import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
+import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
 import { answerPath, CITED_ATTRIBUTE_WORDS, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
 
@@ -39,7 +40,7 @@ const GEO_OFF_SENTENCE = "循证 GEO 还没有在这个工作空间开放。";
 export function GeoAnswerPage() {
   const { geoId = "", snapshotId = "" } = useParams();
   const answer = useGeoLoad(`answer:${geoId}:${snapshotId}`, () => getGeoAnswer(geoId, snapshotId));
-  // Both only enrich the page: the project names the conversation 「问 AI」
+  // Both only enrich the page: the project names the conversation “问 AI”
   // opens and our product's names; the claims say what is right and where.
   const project = useGeoLoad(`project:${geoId}`, () => getGeoProject(geoId));
   const evidence = useGeoLoad(`evidence:${geoId}`, () => getGeoEvidence(geoId));
@@ -157,8 +158,8 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
               <AskAi
                 project={target}
                 draft={wrongSentences.length
-                  ? `${engineName(snapshot.engine)}回答「${question}」时说「${wrongSentences[0]}」${date ? `（${date}）` : ""}，和说明书不一致。它为什么这么说，怎么纠正？`
-                  : `${engineName(snapshot.engine)}对「${question}」的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`}
+                  ? zh`${engineName(snapshot.engine)}回答“${question}”时说“${wrongSentences[0]}”${date ? `（${date}）` : ""}，和说明书不一致。它为什么这么说，怎么纠正？`
+                  : zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`}
               />
             </div>
           )}
@@ -178,7 +179,7 @@ function dedupeHistory(history: GeoAnswer["history"] | null | undefined, current
     .filter((entry) => (seen.has(entry.snapshotId) ? false : (seen.add(entry.snapshotId), true)));
 }
 
-/** What an engine's answer did for us, in a word: 「讲错 1 处」「提及 · 引用你」「未提及」「未测」. */
+/** What an engine's answer did for us, in a word: “讲错 1 处”“提及 · 引用你”“未提及”“未测”. */
 function engineWord(sibling: GeoAnswer["siblings"][number]): { text: string; wrong: boolean } {
   if (sibling.status === "absent" || !sibling.snapshotId) return { text: SNAPSHOT_STATUS_WORDS.absent, wrong: false };
   if (sibling.status !== "valid" && sibling.status !== "refusal") return { text: SNAPSHOT_STATUS_WORDS[sibling.status] ?? "—", wrong: false };
@@ -210,7 +211,7 @@ function Engines({ geoId, data, errors, statements }: { geoId: string; data: Geo
           const word = engineWord(facts);
           const label = (
             <>
-              <span className={cn("min-w-0 truncate", selected ? "font-medium text-text" : "text-text-2")}>{engineName(sibling.engine)}</span>
+              <span className={cn("min-w-0 truncate", selected ? "text-text" : "text-text-2")}>{engineName(sibling.engine)}</span>
               {word.text && <span className={cn("shrink-0 text-caption", word.wrong ? "text-danger" : "text-text-3")}>{word.text}</span>}
             </>
           );
@@ -337,6 +338,9 @@ function Correction({
     : cited?.attribute === "none" ? CITED_ATTRIBUTE_WORDS.none : null;
   const action = error?.action ? GEO_ERROR_ACTION_WORDS[error.action] : null;
   const status = error?.status ? GEO_ERROR_STATUS_WORDS[error.status] : null;
+  // The reader's name for the source, never its internal address (G14:
+  // “web-page:e1edc04a…” was printed here).
+  const basis = claim ? claim.sourceLabel || readableSourceRef(claim.sourceRef) : null;
 
   return (
     <div data-geo-correction="" className="flex max-w-measure-body flex-col gap-1 border-l-2 border-danger pl-4 text-ui text-text-2">
@@ -344,14 +348,14 @@ function Correction({
         <span className="text-danger">讲错我方</span>
         {right ? <>：对的是{right.endsWith("。") ? right : `${right}。`}</> : kind ? `：${GEO_ERROR_TYPE_WORDS[kind]}。` : null}
       </p>
-      {claim?.sourceRef && <p>{`依据：${claim.sourceRef}`}</p>}
+      {basis && <p>{`依据：${basis}`}</p>}
       {source && <p>{`出处：${source}`}</p>}
       {(action || status) && <p>{`处置：${[action, status].filter(Boolean).join(" · ")}`}</p>}
     </div>
   );
 }
 
-/** 「提到的药：司美格鲁肽（第 1 个，推荐）、玛仕度肽（第 2 个）」 */
+/** “提到的药：司美格鲁肽（第 1 个，推荐）、玛仕度肽（第 2 个）” */
 function Mentioned({ brands }: { brands: NonNullable<GeoAnswer["facts"]>["brands"] }) {
   const named = brands
     .filter((brand) => brand && brand.name)
@@ -363,7 +367,7 @@ function Mentioned({ brands }: { brands: NonNullable<GeoAnswer["facts"]>["brands
       {named.map((brand, index) => (
         <Fragment key={`${brand.name}-${index}`}>
           {index > 0 && "、"}
-          <span className={brand.ours ? "font-medium text-text-2" : undefined}>{brand.name}</span>
+          <span className={brand.ours ? "font-semibold text-text-2" : undefined}>{brand.name}</span>
           {(brand.position || brand.inRecommendation) && `（${[brand.position ? `第 ${brand.position} 个` : null, brand.inRecommendation ? "推荐" : null].filter(Boolean).join("，")}）`}
         </Fragment>
       ))}
@@ -371,12 +375,18 @@ function Mentioned({ brands }: { brands: NonNullable<GeoAnswer["facts"]>["brands
   );
 }
 
+/**
+ * What the answer cited. A citation that came back as a title without a link
+ * (千问 on 2026-09-25, every one of them) is listed as what it is, not
+ * dropped: the reader sees the engine did cite, and that whether it cited us
+ * cannot be told (G8).
+ */
 function Citations({ citations }: { citations: GeoAnswer["snapshot"]["citations"] | null | undefined }) {
-  const list = (Array.isArray(citations) ? citations : []).filter((citation) => citation && citation.url);
+  const list = (Array.isArray(citations) ? citations : []).filter((citation) => citation && (citation.url || citation.title));
   if (list.length === 0) return null;
   return (
     <section aria-label="引用的信源" className="mt-10">
-      <h2 className="mb-3 text-ui font-medium text-text">引用的信源</h2>
+      <h2 className="mb-3 text-ui font-semibold text-text">引用的信源</h2>
       <ol className="flex flex-col divide-y divide-faint">
         {list.map((citation, index) => {
           const href = safeWebHref(citation.url);
@@ -385,7 +395,8 @@ function Citations({ citations }: { citations: GeoAnswer["snapshot"]["citations"
               <span className="w-5 shrink-0 text-caption tabular-nums text-text-3">{index + 1}</span>
               <span className="w-24 shrink-0 truncate text-text-2 sm:w-32">{citation.domain || "—"}</span>
               <span className="min-w-0 flex-1 truncate text-text">{citation.title || citation.url}</span>
-              {!citation.inBody && <span className="shrink-0 text-caption text-text-3">只列在参考资料</span>}
+              {!citation.url && <span data-geo-linkless="" className="shrink-0 text-caption text-text-3">没有链接</span>}
+              {citation.url && !citation.inBody && <span className="shrink-0 text-caption text-text-3">只列在参考资料</span>}
               {href && (
                 <a href={href} target="_blank" rel="noreferrer" aria-label={`打开${citation.title || citation.domain || "信源"}`} className="inline-grid h-6 w-6 shrink-0 place-items-center rounded text-text-3 hover:bg-surface-2 hover:text-text">
                   <ExternalLink size={16} aria-hidden="true" />

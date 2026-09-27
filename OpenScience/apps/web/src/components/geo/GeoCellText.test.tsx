@@ -13,7 +13,7 @@ describe("a GEO number", () => {
     expect(geoCellPhrase(cell(18, 56, 310))).toBe("18%，310 次里 56 次");
   });
 
-  it("never shows a rate under 30 answers: 「样本不足」 and how few there were", () => {
+  it("never shows a rate under 30 answers: “样本不足” and how few there were", () => {
     const thin = cell(44, 12, 27, "insufficient");
     render(<GeoCellText cell={thin} />);
     expect(screen.getByText("样本不足")).toBeInTheDocument();
@@ -21,7 +21,14 @@ describe("a GEO number", () => {
     expect(screen.queryByText(/44/)).not.toBeInTheDocument();
   });
 
-  it("says 「未测」 for an engine that was not measured and 「—」 for what cannot be measured — never zero", () => {
+  it("says “引用不可测” when the engine's citations had no link, which is not the same as “—” (G8)", () => {
+    const linkless = { ...cell(null, null, null, "not_measurable"), reason: "citations_without_links" };
+    expect(geoCellWord(linkless)).toBe("引用不可测");
+    expect(geoCellWord({ ...cell(null, null, null, "not_measurable"), reason: "no_retrieval" })).toBe("—");
+    expect(readGeoCell({ status: "not_measurable", reason: "citations_without_links" }).reason).toBe("citations_without_links");
+  });
+
+  it("says “未测” for an engine that was not measured and “—” for what cannot be measured — never zero", () => {
     expect(geoCellWord(cell(null, null, null, "absent"))).toBe("未测");
     expect(geoCellWord(cell(0, 0, 0, "absent"))).toBe("未测");
     expect(geoCellWord(cell(null, null, null, "not_measurable"))).toBe("—");

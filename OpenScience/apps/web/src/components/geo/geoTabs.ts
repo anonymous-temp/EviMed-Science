@@ -5,13 +5,13 @@
  * navigation).
  *
  * The eight steps are still there. They are the rail in the page header, with
- * what each one produced and which one is waiting for the reader; and 「监测」
+ * what each one produced and which one is waiting for the reader; and “监测”
  * is no longer a place at all — it is the time dimension of every number on
  * every page, which is why the trend chart is on 可见度 and the pilot-against-
  * control chart is on 行动, beside the placements they measure.
  *
  * Old addresses keep working. A bookmark, a link in a delivered report and
- * the conversation frame's own 「打开诊断」 all name a step, and each resolves
+ * the conversation frame's own “打开诊断” all name a step, and each resolves
  * to the tab that now holds it.
  */
 import { GEO_STEP_KEYS, type GeoStepKey } from "@/lib/geoClient";
@@ -29,7 +29,7 @@ export const GEO_TABS: ReadonlyArray<{ key: GeoTabKey; label: string }> = Object
 ]);
 
 /**
- * Where each of the nine old tabs went. 「问题」 and 「信源」 kept their
+ * Where each of the nine old tabs went. “问题” and “信源” kept their
  * addresses because they kept their subject; the rest moved, and the two
  * process pages — 诊断 and 监测 — stopped being pages.
  */

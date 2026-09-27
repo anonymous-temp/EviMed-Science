@@ -114,7 +114,7 @@ export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
 /**
  * What a tab shows while it has nothing to show. A step being worked on says
  * so in one quiet line; any other step with nothing yet — finished without a
- * result, or stopped — says what the step produces and offers 「让 AI 做」,
+ * result, or stopped — says what the step produces and offers “让 AI 做”,
  * which starts it in the project's conversation, as the shell does for a step
  * nobody has touched.
  */
@@ -136,7 +136,7 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
     setBusy(true);
     void runGeoStep(geoId, step)
       .then((result) => open({ projectId: project.projectId, sessionId: result?.sessionId ?? project.sessionId }))
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "没有开始，请稍后重试。" })))
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一步无法开始，请稍后重试。" })))
       .finally(() => setBusy(false));
   };
   return (
@@ -149,23 +149,31 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
 
 /* ------------------------------------------------------------------ layout */
 
-/** A section inside a tab: a 14/500 heading, then its content. */
+/**
+ * A section inside a tab: a heading, then its content. The heading takes the
+ * title level the page already has — the card titles' 18/600 by default, the
+ * panel title's 14/600 on a page whose titles are panels (方案) — so a
+ * section never adds a type size of its own (spec §5.2: at most four size ×
+ * weight pairs a page).
+ */
 export function TabSection({
   title,
   meta,
+  level = "section",
   children,
   className,
 }: {
   title: string;
   /** A grey count at the heading's end. */
   meta?: ReactNode;
+  level?: "section" | "ui";
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={cn("mt-10 first:mt-0", className)}>
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-ui font-medium text-text">{title}</h2>
+        <h2 className={cn(level === "section" ? "text-section" : "text-ui", "font-semibold text-text")}>{title}</h2>
         {meta && <span className="text-caption tabular-nums text-text-3">{meta}</span>}
       </div>
       {children}
@@ -173,7 +181,7 @@ export function TabSection({
   );
 }
 
-/** The grey summary at the right end of a tab's filter row: 「38 条主张」. */
+/** The grey summary at the right end of a tab's filter row: “38 条主张”. */
 export function RowSummary({ children }: { children: ReactNode }) {
   return <span className="text-caption tabular-nums text-text-3">{children}</span>;
 }
@@ -223,7 +231,7 @@ export function CellLink({
   layout?: "inline" | "stack";
   /** An answer to open when the cell names none (an error's answer, say). */
   fallbackSnapshotId?: string | null;
-  /** The link's accessible name: 「DeepSeek 的品牌提及率」. */
+  /** The link's accessible name: “DeepSeek 的品牌提及率”. */
   label?: string;
   className?: string;
 }) {

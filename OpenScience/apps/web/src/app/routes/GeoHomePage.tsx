@@ -8,6 +8,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { GeoCellText } from "@/components/geo/GeoCellText";
 import { GeoSparkline } from "@/components/geo/GeoSparkline";
 import { GeoListSkeleton, GeoOffPage } from "@/components/geo/GeoStates";
@@ -21,15 +22,15 @@ type Listing =
   | { kind: "ready"; projects: GeoProjectSummary[] };
 
 /**
- * 「循证 GEO」's home (plan §5.1, mockup g01): one row per product — its name,
+ * “循证 GEO”'s home (plan §5.1, mockup g01): one row per product — its name,
  * a line under it (the coverage window, or the one red sentence when an AI
  * engine says something wrong about it), and on the right the 综合可见度指数
  * with its trend against the target and the 品牌提及率 over P2 + P3. A number
- * that does not exist yet is 「—」; a project that has only done one step is
+ * that does not exist yet is “—”; a project that has only done one step is
  * in the list all the same.
  *
- * 「新建项目」 creates the project and lands in its conversation, where the
- * composer already carries the 「循证 GEO」 chip: no form.
+ * “新建项目” creates the project and lands in its conversation, where the
+ * composer already carries the “循证 GEO” chip: no form.
  */
 export function GeoHomePage() {
   const feature = useGeoFeature();
@@ -63,7 +64,7 @@ export function GeoHomePage() {
       .then((created) => openConversation({ projectId: created.projectId, sessionId: created.sessionId }))
       .catch((error: unknown) => {
         if (isGeoOff(error)) setListing({ kind: "off" });
-        else toast.error(webErrorMessage(error, { fallback: "项目没有建成，请稍后重试。" }));
+        else toast.error(webErrorMessage(error, { fallback: "无法新建项目，请稍后重试。" }));
       })
       .finally(() => setCreating(false));
   };
@@ -115,14 +116,16 @@ function ProjectRow({ project }: { project: GeoProjectSummary }) {
   return (
     <ListRow
       to={`/app/geo/${encodeURIComponent(project.id)}`}
-      title={<span className="font-medium">{project.name}</span>}
+      title={project.name}
       meta={(
         <span data-geo-subline="">
           {line}
           {alert && (
             <>
               {line && " · "}
-              <span className="text-danger">{alert}</span>
+              {/* The badge carries the red; the sentence is body text (F-G10). */}
+              {project.alert.severity && <SeverityBadge level={project.alert.severity} className="mr-1.5 align-middle" />}
+              <span data-geo-alert="" className="text-text-2">{alert}</span>
             </>
           )}
         </span>
@@ -155,12 +158,12 @@ function alertText(project: GeoProjectSummary): string | null {
   if (project.alert.text) return project.alert.text;
   const parts = [
     ...(project.alert.safety > 0 ? [`${project.alert.safety} 个安全问题待处理`] : []),
-    ...(project.alert.wrongOurs > 0 ? [`${project.alert.wrongOurs} 条讲错我方待纠正`] : []),
+    ...(project.alert.wrongOurs > 0 ? [`${project.alert.wrongOurs} 条讲错我方待处理`] : []),
   ];
   return parts.length ? parts.join(" · ") : null;
 }
 
-/** 「10月1日 – 12月31日 · 第 3 周」, or what a single-step project did. */
+/** “10月1日 – 12月31日 · 第 3 周”, or what a single-step project did. */
 function subline(project: GeoProjectSummary): string {
   const steps = GEO_STEP_KEYS.filter((key) => project.steps[key]?.requested);
   const touched = GEO_STEP_KEYS.filter((key) => project.steps[key] && project.steps[key]!.status !== "none");

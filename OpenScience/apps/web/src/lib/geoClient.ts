@@ -1,5 +1,5 @@
 /**
- * 「循证 GEO」 — the browser's side of `/api/geo/*` (build spec 2026-09-25 §3).
+ * “循证 GEO” — the browser's side of `/api/geo/*` (build spec 2026-09-25 §3).
  *
  * Hidden knowledge:
  *
@@ -17,10 +17,10 @@
  *  - A number is never a bare number. Every rate and index arrives as a cell
  *    (`GeoCell`) carrying its numerator, denominator and status; `readGeoCell`
  *    normalises whatever the server sent into that shape, so a missing or
- *    malformed cell reads as 「—」 and never as zero. Values are on the
+ *    malformed cell reads as “—” and never as zero. Values are on the
  *    metric's own scale: percent 0–100, index 0–100.
  *  - `insufficient` keeps its value for the record; the UI must show
- *    「样本不足」, never the number (`GeoCellText` enforces it).
+ *    “样本不足”, never the number (`GeoCellText` enforces it).
  */
 import { useEffect, useState } from "react";
 import { fetchWebMe, WebApiError, webApiBase, type WebMe } from "./apiClient";
@@ -67,6 +67,12 @@ export interface GeoCell {
   status: GeoCellStatus;
   dataType: GeoDataType;
   /**
+   * Why a number is not there, as the measurement's own code
+   * (`citations_without_links`: the engine cited titles with no link, so
+   * whether it cited us cannot be told). Absent when the value is.
+   */
+  reason?: string | null;
+  /**
    * The answers the number rests on (build spec §0 ruling 8), when the server
    * sends them: the first is where a click on the number lands.
    */
@@ -99,10 +105,17 @@ export interface GeoProductIdentity {
   labelRef?: string | null;
   variants?: string[];
   identityStatus?: "confirmed" | "ambiguous" | "unknown";
+  /** Whether exactly one approved holder markets the generic: then naming the generic names us. */
+  singleSource?: boolean | null;
+  /** The generic's other forms (the molecule's short name, the INN in English). */
+  genericAliases?: string[];
 }
 export interface GeoCompetitor {
   brandName?: string | null;
   genericName?: string | null;
+  aliases?: string[];
+  genericAliases?: string[];
+  singleSource?: boolean | null;
   holder?: string | null;
   indication?: string | null;
   reason?: string | null;
@@ -123,10 +136,11 @@ export interface GeoProjectSummary {
     /** 品牌提及率 over P2 + P3 only. */
     mention: GeoCell;
   };
-  alert: { wrongOurs: number; safety: number; text: string | null };
+  /** `severity` is the grade of the error `text` names; the row sets the sentence in body text beside its badge. */
+  alert: { wrongOurs: number; safety: number; text: string | null; severity?: GeoSeverity | null };
   /** Engines the probe host can measure beyond the default five (e.g. `baidu`), when the server lists them. */
   availableEngines?: GeoEngine[];
-  /** When the coverage window started, if the server says (for 「10月1日 – 12月31日」). */
+  /** When the coverage window started, if the server says (for “10月1日 – 12月31日”). */
   startedAt?: string | null;
   createdAt?: string | null;
   updatedAt: string;
@@ -140,7 +154,7 @@ export interface GeoOverviewMetric {
   target: number | null;
   trend: Array<{ date: string; value: number | null }>;
 }
-/** Which tab a 「本周」 line jumps to, and what inside it. */
+/** Which tab a “本周” line jumps to, and what inside it. */
 export interface GeoWeekItem {
   kind: string;
   text: string;
@@ -171,6 +185,8 @@ export interface GeoProject {
   /** The latest conversation in the project; null before there is one. */
   sessionId: string | null;
   overview: GeoOverview;
+  /** Whether this deployment can place orders at all; without a market no page asks for a budget. */
+  market?: { configured: boolean };
   startedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -257,19 +273,38 @@ export interface GeoRoundRef {
   kind: string;
   sampleDate: string | null;
 }
+/**
+ * Why an engine of a round has no answers: `login` — its answers were login
+ * pages; `paused` — its questions were skipped while it was failing;
+ * `unavailable` — this deployment has no channel for it; `no_answer` — asked,
+ * and nothing that counts came back.
+ */
+export type GeoAbsentReason = "login" | "paused" | "unavailable" | "no_answer";
 export interface GeoDiagnosis {
-  round: (GeoRoundRef & { surface: Record<string, unknown> | null; planned: number | null; done: number | null; engines: GeoEngine[] }) | null;
+  round: (GeoRoundRef & {
+    surface: Record<string, unknown> | null;
+    planned: number | null;
+    done: number | null;
+    engines: GeoEngine[];
+    /** The engines that answered at all; the rest are in `absent`, with the reason. */
+    measuredEngines?: GeoEngine[];
+    absent?: Array<{ engine: GeoEngine; reason: GeoAbsentReason | (string & {}) }>;
+    /** Engines whose citations came back as titles without a link: whether they cited us cannot be told. */
+    linklessEngines?: GeoEngine[];
+  }) | null;
   rounds: GeoRoundRef[];
   byEngine: Array<{ engine: GeoEngine; mention: GeoCell; accuracy: GeoCell; citation: GeoCell; retrieval: GeoCell }>;
   byPool: Array<{ pool: GeoPool; mention: GeoCell; topCompetitor: string | null; mainIssue: string | null }>;
   failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell };
   errors: GeoErrorRow[];
   noise: { band: number; measuredAt: string | null } | null;
-  more: Array<{ metricId: string; name: string; cell: GeoCell }>;
+  /** Every other metric of the round; `rival` names the competitor a row is about (M-16, M-17). */
+  more: Array<{ metricId: string; name: string; cell: GeoCell; variant?: string | null; rival?: string | null }>;
 }
 
 export interface GeoCitation {
-  url: string;
+  /** Empty when the engine gave a title without a link. */
+  url: string | null;
   domain: string | null;
   title: string | null;
   inBody: boolean;
@@ -309,7 +344,7 @@ export interface GeoAnswer {
     engine: GeoEngine;
     snapshotId: string | null;
     status: GeoSnapshotStatus | "absent";
-    /** What that engine's answer did for us, when the server says: 「提及」「讲错 1 处」「引用你」. */
+    /** What that engine's answer did for us, when the server says: “提及”“讲错 1 处”“引用你”. */
     mentionsOurs?: boolean | null;
     wrongOurs?: number | null;
     citesOurs?: boolean | null;
@@ -340,6 +375,8 @@ export interface GeoTier {
   budgetCny: number | null;
 }
 export interface GeoSources {
+  /** Engines whose citations of the latest full measurement had no links at all. */
+  linklessEngines?: GeoEngine[];
   sources: GeoSourceRow[];
   expectations: Array<{ engine: GeoEngine; retrieval: GeoCell; promise: string | null; layers: string[] }>;
   battlefield: { groups: string[]; reason: string | null } | null;
@@ -409,6 +446,8 @@ export interface GeoMonitoring {
     netEffect: GeoCell & { noiseBand: number | null };
   };
   byEngine: Array<{ engine: GeoEngine; points: GeoSeriesPoint[] }>;
+  /** Each registered rival's mention rate over the same questions as ours (M-16 beside M-01S), per full measurement. */
+  rivals?: Array<{ name: string; points: GeoSeriesPoint[] }>;
   cited: Array<{ articleId: string; title: string; engine: GeoEngine; firstSeen: string }>;
   newErrors: GeoErrorRow[];
   next: { date: string; kind: string } | null;
@@ -418,6 +457,7 @@ export interface GeoMonitoring {
 
 const CELL_STATUSES: ReadonlySet<string> = new Set(["ok", "insufficient", "not_measurable", "absent"]);
 const DATA_TYPES: ReadonlySet<string> = new Set(["measured", "client_provided", "derived", "forecast", "commercial"]);
+const SEVERITIES: ReadonlySet<string> = new Set(["S0", "S1", "S2", "S3", "S4"]);
 
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -425,7 +465,7 @@ function finite(value: unknown): number | null {
 
 /**
  * Any value as a cell. Nothing the server did not send becomes a number: a
- * missing cell is `not_measurable` with no value, which the UI shows as 「—」.
+ * missing cell is `not_measurable` with no value, which the UI shows as “—”.
  */
 export function readGeoCell(raw: unknown): GeoCell {
   const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
@@ -438,6 +478,7 @@ export function readGeoCell(raw: unknown): GeoCell {
     ciHigh: finite(value.ciHigh),
     status,
     dataType: typeof value.dataType === "string" && DATA_TYPES.has(value.dataType) ? value.dataType as GeoDataType : "measured",
+    ...(typeof value.reason === "string" && value.reason ? { reason: value.reason } : {}),
     ...(Array.isArray(value.snapshotIds)
       ? { snapshotIds: value.snapshotIds.filter((snapshot): snapshot is string => typeof snapshot === "string" && snapshot.length > 0) }
       : {}),
@@ -463,6 +504,7 @@ function readSummary(raw: GeoProjectSummary): GeoProjectSummary {
       wrongOurs: finite(raw?.alert?.wrongOurs) ?? 0,
       safety: finite(raw?.alert?.safety) ?? 0,
       text: typeof raw?.alert?.text === "string" && raw.alert.text ? raw.alert.text : null,
+      severity: SEVERITIES.has(String(raw?.alert?.severity)) ? raw.alert.severity as GeoSeverity : null,
     },
   };
 }
@@ -479,6 +521,9 @@ function readProject(raw: GeoProject): GeoProject {
     budget: raw?.budget ?? null,
     steps,
     sessionId: typeof raw?.sessionId === "string" && raw.sessionId ? raw.sessionId : null,
+    // A server that does not say is one from before the market switch: it
+    // offered the budget, and so does this page.
+    market: { configured: raw?.market?.configured !== false },
     overview: {
       metrics: (Array.isArray(overview.metrics) ? overview.metrics : []).map((metric) => ({
         key: metric.key,
@@ -537,7 +582,7 @@ export function getGeoQuestions(geoId: string, version?: number | null) {
   return productRequest<GeoQuestions>(`${project(geoId)}/questions${version == null ? "" : `?version=${id(String(version))}`}`);
 }
 
-/** 「移出测量问句」: the server writes a new question-set version without it. */
+/** “移出测量问句”: the server writes a new question-set version without it. */
 export function unmeasureGeoQuestion(geoId: string, questionId: string) {
   return productRequest<unknown>(`${project(geoId)}/questions/${id(questionId)}/unmeasure`, "POST", {});
 }
@@ -575,7 +620,7 @@ export function withdrawGeoArticle(geoId: string, articleId: string) {
   return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/withdraw`, "POST", {});
 }
 
-/** 「放行」: the safety stop, after a person has looked at the article. */
+/** “放行”: the safety stop, after a person has looked at the article. */
 export function releaseGeoArticle(geoId: string, articleId: string) {
   return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/release`, "POST", {});
 }
@@ -588,7 +633,7 @@ export function setGeoBudget(geoId: string, budget: { totalCny: number; dailyCny
   return productRequest<unknown>(`${project(geoId)}/budget`, "PUT", budget);
 }
 
-/** 「撤单」: only before the outlet accepted it. */
+/** “撤单”: only before the outlet accepted it. */
 export function cancelGeoOrder(geoId: string, orderId: string) {
   return productRequest<unknown>(`${project(geoId)}/orders/${id(orderId)}/cancel`, "POST", {});
 }
@@ -597,7 +642,7 @@ export function getGeoMonitoring(geoId: string) {
   return productRequest<GeoMonitoring>(`${project(geoId)}/monitoring`);
 }
 
-/** 「让 AI 做」: dispatches one step now, in the project's own conversation. */
+/** “让 AI 做”: dispatches one step now, in the project's own conversation. */
 export function runGeoStep(geoId: string, step: GeoStepKey) {
   return productRequest<{ sessionId: string; runId?: string | null }>(`${project(geoId)}/run`, "POST", { step });
 }

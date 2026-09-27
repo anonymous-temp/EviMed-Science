@@ -7,11 +7,11 @@ import type { GeoUnit } from "./geoText";
 import { useOpenGeoConversation, type GeoConversationTarget } from "./useOpenGeoConversation";
 
 /**
- * The draft 「问 AI」 puts in the composer for a number: what it is, its
+ * The draft “问 AI” puts in the composer for a number: what it is, its
  * value with the sample it rests on, and when it was measured — so the
  * conversation starts from the same fact the reader was looking at.
  *
- * 「玛仕度肽注射液 · 豆包 · 品牌提及率：18%，310 次里 56 次（9月22日测量）。这个数说明了什么，接下来该做什么？」
+ * “玛仕度肽注射液 · 豆包 · 品牌提及率：18%，310 次里 56 次（9月22日测量）。这个数说明了什么，接下来该做什么？”
  */
 export function geoNumberDraft({
   product,
@@ -22,13 +22,13 @@ export function geoNumberDraft({
   date,
 }: {
   product?: string | null;
-  /** Where the number is from, in the reader's words: 「豆包」「通用名与品类类」. */
+  /** Where the number is from, in the reader's words: “豆包”“通用名与品类类”. */
   scope?: string | null;
-  /** The metric's name: 「品牌提及率」. */
+  /** The metric's name: “品牌提及率”. */
   name: string;
   cell: GeoCell | null | undefined;
   unit?: GeoUnit;
-  /** When it was measured, already in the reader's words: 「9月22日」. */
+  /** When it was measured, already in the reader's words: “9月22日”. */
   date?: string | null;
 }): string {
   const subject = [product, scope, name].filter((part): part is string => !!part).join(" · ");
@@ -37,7 +37,7 @@ export function geoNumberDraft({
 }
 
 /**
- * 「问 AI」 beside a number or an answer: opens the project's conversation with
+ * “问 AI” beside a number or an answer: opens the project's conversation with
  * a draft that carries the fact — never sends it.
  *
  * Pass `draft` for a finished sentence (an answer, an error), or the number's

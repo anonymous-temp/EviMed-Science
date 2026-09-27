@@ -10,13 +10,13 @@ import { signed } from "./geoTabText";
 import { useGeoLoad } from "./geoTabKit";
 
 /**
- * 「投了有没有用」, measured rather than asserted: the question groups we
+ * “投了有没有用”, measured rather than asserted: the question groups we
  * placed articles for against the control groups we only watched, and the
  * difference between their movements.
  *
  * The control line is a grey, like every line that is not ours — the same rule
  * that keeps a rival out of the brand colour. A net effect inside the measured
- * fluctuation band is 「持平」 and carries no arrow: a programme that reports
+ * fluctuation band is “持平” and carries no arrow: a programme that reports
  * two points of daily wobble as a win is worse than one that reports nothing.
  */
 export function EffectSection({ project }: { project: GeoProject }) {
@@ -72,7 +72,7 @@ export function EffectSection({ project }: { project: GeoProject }) {
           <TrendChart input={input} label="投放与对照" height={220} />
           <p className="mt-2 text-ui text-text-2">
             净效应
-            <span data-geo-net-effect={flat ? "flat" : cell.status} className="ml-2 font-medium tabular-nums text-text">
+            <span data-geo-net-effect={flat ? "flat" : cell.status} className="ml-2 tabular-nums text-text">
               {net ?? <GeoCellText cell={cell} unit="index" />}
             </span>
           </p>

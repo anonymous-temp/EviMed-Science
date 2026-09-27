@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoProject } from "@/lib/geoClient";
 import {
   articlesFilled,
+  cell,
   diagnosisFilled,
   distributionFilled,
   evidenceFilled,
@@ -177,6 +178,29 @@ describe("旅程", () => {
 });
 
 describe("问题", () => {
+  it("names a platform in words, strips a group's internal number, and counts every real phrasing (G18)", async () => {
+    const group = questionsFilled.groups[0];
+    client.getGeoQuestions.mockResolvedValue({
+      ...questionsFilled,
+      groups: [{
+        ...group,
+        name: "P2-03 恶心呕吐与胃肠反应",
+        questions: [
+          ...group.questions.map((question) => (question.id === "q_2" ? { ...question, platform: "xhs" } : question)),
+          { id: "q_9", text: "打针后恶心能吃止吐药吗", kind: "real" as const, platform: "douyin", sourceUrl: null, isMeasured: true },
+        ],
+      }],
+    });
+    renderTab(<QuestionsTab {...props()} />);
+    const row = (await screen.findByRole("button", { name: "恶心呕吐与胃肠反应" })).closest("[data-geo-group]") as HTMLElement;
+    expect(row).not.toHaveTextContent("P2-03");
+    expect(row).toHaveTextContent("3 条原话");
+    await userEvent.click(within(row).getByRole("button", { name: "恶心呕吐与胃肠反应" }));
+    expect(screen.getByRole("link", { name: "小红书" })).toBeInTheDocument();
+    expect(screen.getByText(/真实问法 · 抖音/)).toBeInTheDocument();
+    expect(screen.queryByText(/xhs|douyin/)).not.toBeInTheDocument();
+  });
+
   it("files groups under pools, marks control groups and opens a group to its phrasings", async () => {
     client.getGeoQuestions.mockResolvedValue(questionsFilled);
     renderTab(<QuestionsTab {...props()} />);
@@ -224,6 +248,12 @@ describe("信源", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "豆包" }));
     expect(within(screen.getAllByRole("table")[0]).queryByText("百度百科")).not.toBeInTheDocument();
+  });
+
+  it("says which engines' citations had no link instead of leaving them out silently (G8)", async () => {
+    client.getGeoSources.mockResolvedValue({ ...sourcesFilled, linklessEngines: ["qianwen"] });
+    renderTab(<SourcesTab {...props()} />);
+    expect(await screen.findByText("千问的引用只有标题、没有链接，引用了哪些信源测不出")).toBeInTheDocument();
   });
 
   it("shows each engine's expectation, the battlefield and the tiers, and switches the tier", async () => {
@@ -274,12 +304,20 @@ describe("内容", () => {
 });
 
 describe("投放", () => {
-  it("asks for the budget when unset, with the suggestion prefilled, and saves it", async () => {
+  it("without a media market, asks for nothing and says what placing waits for (G20)", async () => {
     client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], market: { configured: false } });
+    renderTab(<DistributionTab {...props()} />);
+    expect(await screen.findByText(/投放要等媒介集市接通/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "设置投放预算" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/等你/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+  });
+
+  it("asks for the budget when unset, with the suggestion prefilled, and saves it", async () => {
+    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], market: { configured: true } });
     client.setGeoBudget.mockResolvedValue({});
     renderTab(<DistributionTab {...props()} />);
-    expect(await screen.findByText("投放渠道未接通")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "设置投放预算" }));
+    await userEvent.click(await screen.findByRole("button", { name: "设置投放预算" }));
     const dialog = screen.getByRole("dialog", { name: "设置投放预算" });
     expect(within(dialog).getByLabelText("总预算（元）")).toHaveValue("8000");
     expect(within(dialog).getByLabelText("每天最多（元）")).toHaveValue("800");
@@ -307,7 +345,7 @@ describe("投放", () => {
     expect(within(accepted).queryByRole("button", { name: "撤单" })).not.toBeInTheDocument();
     expect(within(accepted).getByText("媒体已接单")).toBeInTheDocument();
     expect(within(verified).getByRole("link", { name: /查看/ })).toHaveAttribute("href", "https://39.net/a");
-    expect(screen.queryByText("投放渠道未接通")).not.toBeInTheDocument();
+    expect(screen.queryByText(/媒介集市/)).not.toBeInTheDocument();
     expect(screen.getByText("¥2,460")).toBeInTheDocument();
     await userEvent.click(within(submitted).getByRole("button", { name: "撤单" }));
     await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "撤单" }));
@@ -361,7 +399,44 @@ describe("可见度", () => {
     expect(headers).toContain("主要问题");
   });
 
-  it("hides a column that would be 「—」 in every row", async () => {
+  it("gives the risk pool its own line, and says a main issue shared by every pool once (G19)", async () => {
+    client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
+    client.getGeoDiagnosis.mockResolvedValue({
+      ...diagnosisFilled,
+      byPool: [
+        ...diagnosisFilled.byPool.map((row) => ({ ...row, mainIssue: "漏提我方" })),
+        { pool: "P4" as const, mention: cell(null, null, null, { status: "absent" }), topCompetitor: null, mainIssue: "漏提我方" },
+      ],
+      more: [...diagnosisFilled.more, { metricId: "M-15", name: "风险问句被推荐率", cell: cell(3, 2, 62) }],
+    });
+    renderTab(<VisibilityTab {...props()} />);
+    const pools = await screen.findByRole("table", { name: "按问句池的品牌提及率" });
+    expect(document.querySelector("[data-geo-pool='P4']")).toBeNull();
+    expect(within(pools).getAllByRole("columnheader").map((header) => header.textContent)).not.toContain("主要问题");
+    expect(screen.getByText("各类问题的主要问题都是“漏提我方”")).toBeInTheDocument();
+    const risk = document.querySelector("[data-geo-risk-line]") as HTMLElement;
+    expect(risk).toHaveTextContent("风险监测问题里，风险问句被推荐率");
+    expect(risk).toHaveTextContent("3%");
+    expect(risk).toHaveTextContent("越低越好");
+  });
+
+  it("draws the rivals as grey lines on the mention trend, which is over their questions too (G15)", async () => {
+    client.getGeoMonitoring.mockResolvedValue({
+      ...monitoringFilled,
+      series: [{ key: "mention", points: [{ date: "2026-09-22", value: 15, n: 310, k: 47 }, { date: "2026-10-13", value: 21, n: 310, k: 65 }] }],
+      rivals: [
+        { name: "穆峰达", points: [{ date: "2026-09-22", value: 12, n: 310, k: 37 }] },
+        { name: "诺和盈", points: [{ date: "2026-09-22", value: 30, n: 310, k: 93 }, { date: "2026-10-13", value: 31, n: 310, k: 96 }] },
+        { name: "谊生泰", points: [] },
+      ],
+    });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    await screen.findByRole("heading", { name: /品牌提及率 21%/ });
+    expect(document.querySelector("[data-chart='trend']")).toHaveAttribute("data-chart-rivals", "2");
+  });
+
+  it("hides a column that would be “—” in every row", async () => {
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     client.getGeoDiagnosis.mockResolvedValue({
       ...diagnosisFilled,

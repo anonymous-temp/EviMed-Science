@@ -6,8 +6,8 @@
  * is a judgement over numbers that may not exist yet. Keeping the judgement
  * here means the rules a reader relies on can be tested without a browser:
  *
- *  - a rate under thirty answers is 「样本不足」 and never a number;
- *  - a change inside the measured fluctuation band is 「持平」;
+ *  - a rate under thirty answers is “样本不足” and never a number;
+ *  - a change inside the measured fluctuation band is “持平”;
  *  - a denominator is stated once for the band, not in every tile;
  *  - an engine that dropped out is named, and never counted as zero;
  *  - nothing is said that was not measured. Where the platform has no rival
@@ -28,10 +28,10 @@ import {
 } from "@/lib/geoClient";
 import type { RailState, RailStep } from "@/components/ui/ProgressRail";
 import type { DeltaPolarity } from "@/components/ui/Delta";
-import { formatGeoValue, geoCellPhrase, geoCellWord } from "./GeoCellText";
-import { engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, GEO_STEP_NAMES, monthDay, parseGeoDate, type GeoUnit } from "./geoText";
+import { formatGeoValue, geoCellPhrase, geoCellWord, GEO_LINKLESS_WORD } from "./GeoCellText";
+import { absentWord, engineName, GEO_METRIC_NAMES, GEO_METRIC_UNITS, GEO_STEP_NAMES, monthDay, parseGeoDate, zh, type GeoUnit } from "./geoText";
 import { GEO_TAB_REDIRECTS, geoTabPath } from "./geoTabs";
-import { metricName, metricUnit } from "./tabs/geoTabText";
+import { MENTION_ONLY_WORD, mentionOnly, metricName, metricUnit } from "./tabs/geoTabText";
 
 /* ------------------------------------------------------------------- tiles */
 
@@ -49,7 +49,7 @@ export interface OverviewTile {
   /** The metric's measured fluctuation band, where one applies to it. */
   noise: number | null;
   polarity: DeltaPolarity;
-  /** 「较上次 · 目标 65」. */
+  /** “较上次 · 目标 65”. */
   note: string | null;
   target: number | null;
   /** The readings behind it, for the sparkline. */
@@ -58,6 +58,10 @@ export interface OverviewTile {
   hint?: string;
   lead: boolean;
   tone: "default" | "safety";
+  /** “提及率第 2 / 3” — where we stand among the same-class drugs, on the lead tile. */
+  rank: string | null;
+  /** “司美格鲁肽 提及率 48%” — the leading rival, under the lead tile's bar. */
+  rival: string | null;
 }
 
 const TILE_ORDER: readonly GeoOverviewMetricKey[] = ["gvi", "mention", "accuracy", "citation"];
@@ -71,7 +75,7 @@ export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { va
     : { value: word, placeholder: true };
 }
 
-/** 「+5」 between the last two stated readings, or null when there is only one. */
+/** “+5” between the last two stated readings, or null when there is only one. */
 export function readingDelta(trend: ReadonlyArray<number | null>): number | null {
   const stated = trend.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   if (stated.length < 2) return null;
@@ -96,8 +100,28 @@ export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {
     .length;
 }
 
+/**
+ * Our place in the same-class ranking, and the rival ahead of the field: the
+ * two things that answer “61 算好还是不好” beside the index (fusion plan
+ * §4.8). The ranking is by mention rate — the one reading every rival has —
+ * and says so.
+ */
+export function standing(project: GeoProject, diagnosis: GeoDiagnosis | null): { rank: string | null; rival: string | null; place: number | null; count: number } {
+  const ranking = rivalRanking(project, diagnosis);
+  const ours = ranking.find((row) => row.ours && row.value !== null) ?? null;
+  const place = ours ? ranking.indexOf(ours) + 1 : null;
+  const leader = ranking.find((row) => !row.ours && row.value !== null) ?? null;
+  return {
+    rank: place === null ? null : `提及率第 ${place} / ${ranking.length}`,
+    rival: leader ? `${leader.name} 提及率 ${formatGeoValue(leader.value ?? 0, "percent")}` : null,
+    place,
+    count: ranking.length,
+  };
+}
+
 export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | null): OverviewTile[] {
   const noise = typeof diagnosis?.noise?.band === "number" ? diagnosis.noise.band : null;
+  const where = standing(project, diagnosis);
   const tiles: OverviewTile[] = [];
   for (const key of TILE_ORDER) {
     const metric = project.overview.metrics.find((item) => item.key === key) ?? null;
@@ -118,6 +142,8 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
       hint: cell ? `${GEO_METRIC_NAMES[key]}：${geoCellPhrase(cell, unit)}` : undefined,
       lead: key === "gvi",
       tone: "default",
+      rank: key === "gvi" ? where.rank : null,
+      rival: key === "gvi" ? where.rival : null,
     });
   }
   // 声量份额 sits between 提及率 and 准确率 when the round measured it.
@@ -136,6 +162,8 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
       hint: `${share.name}：${geoCellPhrase(share.cell, share.unit)}`,
       lead: false,
       tone: "default",
+      rank: null,
+      rival: null,
     });
   }
   // 用药安全 is the last cell and the only red one on the band.
@@ -155,6 +183,8 @@ export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | nul
     trend: [],
     lead: false,
     tone: severe > 0 ? "safety" : "default",
+    rank: null,
+    rival: null,
   });
   return tiles;
 }
@@ -176,7 +206,9 @@ export function headlineSentence(project: GeoProject, diagnosis: GeoDiagnosis | 
       : flat || Math.round(delta) === 0 ? "与上次持平"
         : `比上次${delta > 0 ? "高" : "低"} ${Math.abs(Math.round(delta))}`;
     const target = gvi.target != null ? `，目标 ${formatGeoValue(gvi.target, "index")}` : "";
-    parts.push(`综合可见度 ${formatGeoValue(gvi.cell.value, "index")}，${move}${target}`);
+    const where = standing(project, diagnosis);
+    const rank = where.place !== null && where.count > 1 ? `，提及率在 ${where.count} 个同类药里排第 ${where.place}` : "";
+    parts.push(`综合可见度 ${formatGeoValue(gvi.cell.value, "index")}，${move}${target}${rank}`);
   } else if (gvi?.cell.status === "insufficient") {
     parts.push("这一轮的有效回答还不够，综合可见度先不下结论");
   } else {
@@ -190,25 +222,47 @@ export function headlineSentence(project: GeoProject, diagnosis: GeoDiagnosis | 
 /* ------------------------------------------------------------ denominator */
 
 /**
- * The band's one denominator, and the engines it does not cover: 「按 4 个
- * 引擎、264 次有效回答计算 · 豆包本周未测」. Null when nothing was measured —
- * there is no denominator to declare.
+ * The engines a round actually has answers from, and why each other engine of
+ * the project has none. A round that names its measured engines is read by
+ * them (G13: “按 5 个引擎” of a baseline 豆包 never answered); an older one
+ * by the engines it planned.
+ */
+export function roundCoverage(project: GeoProject, diagnosis: GeoDiagnosis | null): {
+  measured: string[];
+  absent: Array<{ engine: string; reason: string | null }>;
+} {
+  const round = diagnosis?.round ?? null;
+  if (!round) return { measured: [], absent: [] };
+  const planned = Array.isArray(round.engines) ? round.engines : [];
+  const measured = Array.isArray(round.measuredEngines) ? round.measuredEngines : planned;
+  const reasons = new Map((Array.isArray(round.absent) ? round.absent : []).filter((row) => row && row.engine).map((row) => [row.engine, absentWord(row.reason)]));
+  const absent = [...new Set([...planned, ...(project.engines ?? [])])]
+    .filter((engine) => !measured.includes(engine))
+    .map((engine) => ({ engine, reason: reasons.get(engine) ?? null }));
+  return { measured, absent };
+}
+
+/**
+ * The band's one denominator, and the engines it does not cover, each with
+ * its reason: “按 4 个引擎、264 次有效回答计算 · 豆包本轮未测：探测账号需要重新
+ * 登录”. Null when nothing was measured — there is no denominator to declare.
  */
 export function denominatorLine(project: GeoProject, diagnosis: GeoDiagnosis | null): string | null {
   const round = diagnosis?.round ?? null;
   if (!round) return null;
-  const engines = Array.isArray(round.engines) ? round.engines : [];
+  const { measured, absent } = roundCoverage(project, diagnosis);
   const parts: string[] = [];
-  if (engines.length) parts.push(`按 ${engines.length} 个引擎`);
+  if (measured.length) parts.push(`按 ${measured.length} 个引擎`);
   if (typeof round.done === "number" && round.done > 0) {
     parts.push(`${round.done.toLocaleString("zh-CN")} 次有效回答计算`);
   } else if (parts.length) {
     parts[0] = `${parts[0]}计算`;
   }
-  const missing = (project.engines ?? []).filter((engine) => !engines.includes(engine));
-  const line = parts.join("、");
-  const absent = missing.length ? `${missing.map(engineName).join("、")}本轮未测` : null;
-  return [line || null, absent].filter(Boolean).join(" · ") || null;
+  // Engines that share a reason are named together, once.
+  const byReason = new Map<string, string[]>();
+  for (const { engine, reason } of absent) byReason.set(reason ?? "", [...(byReason.get(reason ?? "") ?? []), engineName(engine)]);
+  const missing = [...byReason].map(([reason, names]) => (reason ? zh`${names.join("、")}本轮未测：${reason}` : zh`${names.join("、")}本轮未测`));
+  return [parts.join("、") || null, ...missing].filter(Boolean).join(" · ") || null;
 }
 
 /* ------------------------------------------------------------------- rail */
@@ -229,25 +283,38 @@ function railNote(note: string | null | undefined): string | null {
   return text && text.length <= 12 ? text : null;
 }
 
+/** Whether this deployment can place orders; a project from a server that does not say can. */
+export function marketConnected(project: GeoProject): boolean {
+  return project.market?.configured !== false;
+}
+
+/** What the rail and 下一步 say about placing while no media market is connected (G20). */
+export const GEO_MARKET_OFF_NOTE = "等媒介集市接通";
+
 /**
  * The eight steps as the header rail. One of them may be `waiting`: the
  * program's single money stop — a placement budget only a person may set —
- * and it is drawn as the thing the reader owes.
+ * and it is drawn as the thing the reader owes. Without a market there is
+ * nothing to owe: the step says it waits for the market, and nothing on the
+ * page asks for a budget.
  */
 export function railSteps(project: GeoProject, geoTabPathOf: (step: GeoStepKey) => string): RailStep[] {
   const steps = projectSteps(project);
   const needsBudget = project.budget === null || !(project.budget.totalCny > 0);
+  const market = marketConnected(project);
   return GEO_STEP_KEYS.map((key) => {
     const step = steps[key];
     const status = step?.status ?? "none";
     const done = status === "done" || status === "minimal";
     const working = status === "running" || status === "queued" || status === "failed";
-    const waiting = key === "distribution" && needsBudget && !done && (step?.requested === true || working);
-    const state: RailState = waiting ? "waiting" : done ? "done" : working ? "active" : "todo";
+    const asked = key === "distribution" && !done && (step?.requested === true || working);
+    const held = asked && !market;
+    const waiting = asked && market && needsBudget;
+    const state: RailState = waiting ? "waiting" : done ? "done" : held ? "todo" : working ? "active" : "todo";
     return {
       key,
       name: GEO_STEP_NAMES[key],
-      note: waiting ? "待你确认预算" : railNote(step?.note),
+      note: waiting ? "待你确认预算" : held ? GEO_MARKET_OFF_NOTE : railNote(step?.note),
       state,
       to: geoTabPathOf(key),
     };
@@ -259,21 +326,28 @@ export function railSteps(project: GeoProject, geoTabPathOf: (step: GeoStepKey) 
 export interface NextStep {
   key: string;
   text: string;
-  state: "waiting" | "active" | "done";
+  /** `held`: it cannot start until something outside the project is in place (the media market). */
+  state: "waiting" | "active" | "done" | "held";
   when: string | null;
 }
 
-/** 「下一步」: what is waiting on the reader first, then what is under way, then what is finished. */
+/** “下一步”: what is waiting on the reader first, then what is under way, then what is finished. */
 export function nextSteps(project: GeoProject): NextStep[] {
   const steps = projectSteps(project);
   const needsBudget = project.budget === null || !(project.budget.totalCny > 0);
+  const market = marketConnected(project);
   const rows: NextStep[] = [];
-  if (needsBudget && steps.distribution && steps.distribution.status !== "done") {
+  const placing = steps.distribution && steps.distribution.status !== "done";
+  if (placing && !market) {
+    rows.push({ key: "market", text: "投放要等媒介集市接通", state: "held", when: null });
+  } else if (placing && needsBudget) {
     rows.push({ key: "budget", text: "确认投放预算", state: "waiting", when: null });
   }
   for (const key of GEO_STEP_KEYS) {
     const step = steps[key];
     if (!step) continue;
+    // Without a market, placing is not under way whatever its status says.
+    if (key === "distribution" && !market) continue;
     const note = railNote(step.note);
     const name = GEO_STEP_NAMES[key];
     if (step.status === "running" || step.status === "queued") {
@@ -300,6 +374,8 @@ export interface EngineMatrix {
     cells: Array<{ value: number | null; text: string; hint?: string }>;
     unmeasured: string | null;
   }>;
+  /** What a column left out is, when one was: a whole column of “—” says nothing a sentence cannot. */
+  note: string | null;
 }
 
 const ENGINE_COLUMNS: ReadonlyArray<{ key: "mention" | "accuracy" | "citation" | "retrieval"; header: string; deep: boolean }> = [
@@ -309,42 +385,63 @@ const ENGINE_COLUMNS: ReadonlyArray<{ key: "mention" | "accuracy" | "citation" |
   { key: "retrieval", header: "检索触发率", deep: true },
 ];
 
-/** Engines whose channel only sees whether we were mentioned at all. */
-const MENTION_ONLY: ReadonlySet<string> = new Set(["baidu", "wenxin"]);
-
 /**
  * Each engine against each measured rate, as a heat grid. An engine listed on
- * the project but missing from the round is a hatched row with its reason —
- * a zero would be a lie and a silent omission would be worse.
+ * the project but without answers this round is a hatched row with its reason
+ * (“本轮未测：探测账号需要重新登录”) — a zero would be a lie and a silent
+ * omission would be worse. An engine whose citations had no links reads
+ * “引用不可测” in the citation column. A rate no engine has a reading for is
+ * left out, and the note under the grid says which and why (F-G10: a whole
+ * column of “—”).
  */
 export function engineMatrix(project: GeoProject, diagnosis: GeoDiagnosis | null): EngineMatrix {
-  const measured = (Array.isArray(diagnosis?.byEngine) ? diagnosis.byEngine : []).filter((row) => row && row.engine);
+  // An engine the round says had no answers is a hatched row whatever else
+  // was computed for it; one it says nothing about is read by its metrics.
+  const gone = new Map((Array.isArray(diagnosis?.round?.absent) ? diagnosis.round.absent : [])
+    .filter((row) => row && row.engine).map((row) => [row.engine, absentWord(row.reason)]));
+  const linkless = new Set(Array.isArray(diagnosis?.round?.linklessEngines) ? diagnosis.round.linklessEngines : []);
+  const measured = (Array.isArray(diagnosis?.byEngine) ? diagnosis.byEngine : []).filter((row) => row && row.engine && !gone.has(row.engine));
   const listed = [
     ...measured.map((row) => row.engine),
-    ...(project.engines ?? []).filter((engine) => !measured.some((row) => row.engine === engine)),
+    ...[...gone.keys(), ...(project.engines ?? [])].filter((engine, index, all) => all.indexOf(engine) === index && !measured.some((row) => row.engine === engine)),
   ];
+  const rows = listed.map((engine) => {
+    const row = measured.find((item) => item.engine === engine) ?? null;
+    if (!row) {
+      const reason = gone.get(engine) ?? null;
+      return { key: engine, header: engineName(engine), cells: [] as EngineMatrix["rows"][number]["cells"], unmeasured: reason ? `本轮未测：${reason}` : "本轮未测" };
+    }
+    return {
+      key: engine,
+      header: engineName(engine),
+      unmeasured: null,
+      cells: ENGINE_COLUMNS.map((column) => {
+        if (column.deep && mentionOnly(engine)) return { value: null, text: MENTION_ONLY_WORD };
+        const cell = readGeoCell(row[column.key]);
+        if (column.key === "citation" && linkless.has(engine) && cell.status !== "ok") return { value: null, text: GEO_LINKLESS_WORD };
+        return {
+          value: cell.status === "ok" ? cell.value : null,
+          text: geoCellWord(cell, "percent"),
+          hint: geoCellPhrase(cell, "percent"),
+        };
+      }),
+    };
+  });
+  // A deep column with no reading on any engine that could have one is left out.
+  const readable = rows.filter((row) => row.unmeasured === null && !mentionOnly(row.key));
+  const empty = ENGINE_COLUMNS.map((column, index) => column.deep && readable.length > 0
+    && readable.every((row) => row.cells[index]?.value === null));
+  const kept = ENGINE_COLUMNS.filter((_, index) => !empty[index]);
+  const dropped = ENGINE_COLUMNS.filter((_, index) => empty[index]);
+  const allLinkless = readable.length > 0 && readable.every((row) => linkless.has(row.key));
+  const note = dropped.length === 0 ? null
+    : dropped.length === 1 && dropped[0].key === "citation" && allLinkless
+      ? zh`${readable.map((row) => engineName(row.key)).join("、")}的引用只有标题、没有链接，引用命中率测不出`
+      : `${dropped.map((column) => column.header).join("、")}这一轮没有读数`;
   return {
-    columns: ENGINE_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
-    rows: listed.map((engine) => {
-      const row = measured.find((item) => item.engine === engine) ?? null;
-      if (!row) {
-        return { key: engine, header: engineName(engine), cells: [], unmeasured: "本轮未测" };
-      }
-      return {
-        key: engine,
-        header: engineName(engine),
-        unmeasured: null,
-        cells: ENGINE_COLUMNS.map((column) => {
-          if (column.deep && MENTION_ONLY.has(engine)) return { value: null, text: "只测提及" };
-          const cell = readGeoCell(row[column.key]);
-          return {
-            value: cell.status === "ok" ? cell.value : null,
-            text: geoCellWord(cell, "percent"),
-            hint: geoCellPhrase(cell, "percent"),
-          };
-        }),
-      };
-    }),
+    columns: kept.map((column) => ({ key: column.key, header: column.header })),
+    rows: rows.map((row) => (row.unmeasured === null ? { ...row, cells: row.cells.filter((_, index) => !empty[index]) } : row)),
+    note,
   };
 }
 
@@ -359,19 +456,35 @@ export interface RankingRow {
   scope: string;
 }
 
-/** 「司美格鲁肽 48%」 — the one shape the strategy run writes a rival reading in. */
+/** “司美格鲁肽 48%” — the one shape the strategy run writes a rival reading in. */
 const RIVAL_READING = /^(.+?)\s+(\d+(?:\.\d+)?)\s*%$/;
+/** A rival's mention rate, over the same questions as our headline rate (G15). */
+const RIVAL_METRIC = "M-16";
+/** What M-16 and M-01S are both over: the generic-name and symptom questions (P2 + P3). */
+export const SHARED_SCOPE = "品类与泛症状问题";
 
 /**
- * The same-class ranking: our brand against the rivals the round actually saw,
- * per question pool. Nothing is invented — a registered competitor with no
- * reading is simply not in the table, and where no reading parses the caller
- * says so in a sentence instead of drawing an empty chart.
+ * The same-class ranking: our brand against the rivals the round actually
+ * measured — each registered rival's mention rate (M-16) beside ours over the
+ * same questions (M-01S). A round from before the rivals were measured falls
+ * back to the leading rival each question pool named. Nothing is invented — a
+ * registered competitor with no reading is simply not in the table, and where
+ * there is no reading the caller says so in a sentence instead of drawing an
+ * empty chart.
  */
 export function rivalRanking(project: GeoProject, diagnosis: GeoDiagnosis | null): RankingRow[] {
   const ours = project.product?.brandName || project.product?.genericName || project.name;
   const rows: RankingRow[] = [];
-  for (const pool of Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []) {
+  for (const row of Array.isArray(diagnosis?.more) ? diagnosis.more : []) {
+    if (!row || row.metricId !== RIVAL_METRIC || !row.rival || row.variant) continue;
+    const cell = readGeoCell(row.cell);
+    if (cell.status !== "ok" || cell.value === null || rows.some((entry) => entry.name === row.rival)) continue;
+    rows.push({ key: `rival:${row.rival}`, name: row.rival, value: cell.value, ours: false, scope: SHARED_SCOPE });
+  }
+  // Measured over the same questions as ours, a rival's rate is comparable
+  // as it stands; a pool's leading rival is not, and the column says so.
+  const shared = rows.length > 0;
+  for (const pool of rows.length ? [] : Array.isArray(diagnosis?.byPool) ? diagnosis.byPool : []) {
     const match = RIVAL_READING.exec((pool?.topCompetitor ?? "").trim());
     if (!match) continue;
     const value = Number(match[2]);
@@ -388,18 +501,18 @@ export function rivalRanking(project: GeoProject, diagnosis: GeoDiagnosis | null
     value: mention?.cell.status === "ok" ? mention.cell.value : null,
     ours: true,
     // What the reading is OVER, not who it belongs to: the row already says
-    // it is ours, in the accent ground and in its own label. Saying 「本品」 in
+    // it is ours, in the accent ground and in its own label. Saying “本品” in
     // both places put the word on one row twice and told the reader nothing
     // about where the number came from — which is the column's only job, and
     // the reason a rival's number is not comparable to ours without it.
-    scope: "本品问句池",
+    scope: shared ? SHARED_SCOPE : "本品问句池",
   });
   return rows.sort((left, right) => (right.value ?? -1) - (left.value ?? -1));
 }
 
 /* ------------------------------------------------------------------ trend */
 
-/** A reading worth stating: under thirty answers a rate is 「样本不足」, not a point. */
+/** A reading worth stating: under thirty answers a rate is “样本不足”, not a point. */
 export const MIN_SAMPLE = 30;
 
 export function statedValue(point: GeoSeriesPoint): number | null {
@@ -408,7 +521,7 @@ export function statedValue(point: GeoSeriesPoint): number | null {
   return point.value;
 }
 
-/** The latest point as a cell, so it reads 「38，310 次回答」 like every other number. */
+/** The latest point as a cell, so it reads “38，310 次回答” like every other number. */
 export function pointCell(point: GeoSeriesPoint | undefined): GeoCell {
   if (!point) return readGeoCell(null);
   const thin = typeof point.n === "number" && point.n < MIN_SAMPLE;
@@ -442,8 +555,8 @@ export function actionMarkers(
 /* ------------------------------------------------------------ conclusions */
 
 /**
- * A chart's heading is the sentence it proves (fusion plan §5.9). Never 「图
- * 1」 and never a bare metric name: a reader who only reads headings should
+ * A chart's heading is the sentence it proves (fusion plan §5.9). Never “图
+ * 1” and never a bare metric name: a reader who only reads headings should
  * still learn what happened.
  */
 export function trendConclusion(name: string, cell: GeoCell | null, delta: number | null, noise: number | null, unit: GeoUnit): string {
@@ -457,7 +570,7 @@ export function trendConclusion(name: string, cell: GeoCell | null, delta: numbe
   return `${name} ${value}，比上次${delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : ""}`;
 }
 
-/** 「元宝对信尔美提及最多」 — the matrix's own conclusion, or why there is none. */
+/** “元宝对信尔美提及最多” — the matrix's own conclusion, or why there is none. */
 export function engineConclusion(project: GeoProject, diagnosis: GeoDiagnosis | null): string {
   const product = project.product?.brandName || project.product?.genericName || project.name;
   const measured = (Array.isArray(diagnosis?.byEngine) ? diagnosis.byEngine : [])
@@ -465,14 +578,14 @@ export function engineConclusion(project: GeoProject, diagnosis: GeoDiagnosis | 
     .filter((row): row is { engine: string; cell: GeoCell } => !!row.engine && row.cell.status === "ok" && row.cell.value !== null);
   if (measured.length === 0) return "这一轮还没有可以比较的引擎读数";
   const best = measured.reduce((top, row) => ((row.cell.value ?? 0) > (top.cell.value ?? 0) ? row : top));
-  return `${engineName(best.engine)}提到${product}最多`;
+  return zh`${engineName(best.engine)}提到${product}最多`;
 }
 
 /**
  * The per-engine trend card's own conclusion: which engine mentions us most and
  * which least, from the latest stated reading of each.
  *
- * Its heading used to be 「各引擎的走势」, which is the chart's name — something
+ * Its heading used to be “各引擎的走势”, which is the chart's name — something
  * the reader can already see. Every chart states what it shows in a sentence
  * (§5.9), and the best and worst engine are what a reader would work out by
  * reading this one.
@@ -490,20 +603,20 @@ export function engineTrendConclusion(
       !!row.engine && row.cell.status === "ok" && row.cell.value !== null);
   if (stated.length === 0) return "各引擎的最新读数";
   const best = stated.reduce((top, row) => ((row.cell.value ?? 0) > (top.cell.value ?? 0) ? row : top));
-  if (stated.length === 1) return `本轮只有${engineName(best.engine)}测到读数`;
+  if (stated.length === 1) return zh`本轮只有${engineName(best.engine)}测到读数`;
   const worst = stated.reduce((low, row) => ((row.cell.value ?? 0) < (low.cell.value ?? 0) ? row : low));
   if (best.engine === worst.engine) return `各引擎读数相同，都是 ${best.cell.value}`;
-  return `${engineName(best.engine)}提及最多，${engineName(worst.engine)}最少`;
+  return zh`${engineName(best.engine)}提及最多，${engineName(worst.engine)}最少`;
 }
 
 /* ------------------------------------------------------------------- week */
 
-/** The two kinds of 「本周」 line said in red: a wrong statement, and a safety finding. */
+/** The two kinds of “本周” line said in red: a wrong statement, and a safety finding. */
 export const GEO_ALERT_KINDS: ReadonlySet<string> = new Set(["wrong_ours", "safety"]);
 
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-/** 「今天」「昨天」「周一」「上周五」, else 「9月12日」. */
+/** “今天”“昨天”“周一”“上周五”, else “9月12日”. */
 export function dayWord(value: string | null | undefined, now: Date = new Date()): string | null {
   const date = parseGeoDate(value);
   if (!date) return null;
@@ -519,7 +632,7 @@ export function dayWord(value: string | null | undefined, now: Date = new Date()
 }
 
 /**
- * Where a 「本周」 line jumps. The old tabs are gone, so a line that named a
+ * Where a “本周” line jumps. The old tabs are gone, so a line that named a
  * step resolves to the tab that now holds it — the same map an address uses.
  */
 export function weekTarget(geoId: string, item: GeoWeekItem): string | null {

@@ -106,9 +106,9 @@ export const GEO_PROJECT: GeoProject = {
       { key: "citation", cell: cell(6, 2, 24, "insufficient"), target: 20, trend: [{ date: "2026-10-06", value: 2 }, { date: "2026-10-13", value: 6 }] },
     ],
     week: [
-      { kind: "first_cited", text: "豆包在「打了减重针恶心要不要停药」一类问题里开始引用你在 39 健康网发布的科普稿。", tab: "answers", ref: { snapshotId: "snap_1" }, at: "2026-10-20T02:00:00Z" },
-      { kind: "wrong_ours", text: "DeepSeek 仍把用法说成「每天注射一次」，出处是一条百科词条，纠错已提交。", tab: "answers", ref: { snapshotId: "snap_2" }, at: "2026-10-20T01:00:00Z" },
-      { kind: "competitor", text: "「和司美格鲁肽怎么选」一类问题，头部竞品提及率上升 9 个点。", tab: "sources", ref: null, at: "2026-10-19T01:00:00Z" },
+      { kind: "first_cited", text: "豆包在“打了减重针恶心要不要停药”一类问题里开始引用你在 39 健康网发布的科普稿。", tab: "answers", ref: { snapshotId: "snap_1" }, at: "2026-10-20T02:00:00Z" },
+      { kind: "wrong_ours", text: "DeepSeek 仍把用法说成“每天注射一次”，出处是一条百科词条，纠错已提交。", tab: "answers", ref: { snapshotId: "snap_2" }, at: "2026-10-20T01:00:00Z" },
+      { kind: "competitor", text: "“和司美格鲁肽怎么选”一类问题，头部竞品提及率上升 9 个点。", tab: "sources", ref: null, at: "2026-10-19T01:00:00Z" },
       { kind: "indexed", text: "6 篇证据卡片已被百度收录。", tab: "distribution", ref: null, at: "2026-10-17T01:00:00Z" },
     ],
   },

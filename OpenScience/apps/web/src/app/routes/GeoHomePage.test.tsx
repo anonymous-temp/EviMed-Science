@@ -51,22 +51,36 @@ describe("循证 GEO home", () => {
     expect(masi).toHaveTextContent("310 次里 56 次");
     // The trend is drawn against a dashed target.
     expect(masi.querySelector("[data-geo-sparkline] [data-geo-target]")).not.toBeNull();
-    // The one red sentence: what an engine says wrong about the product.
-    const alert = within(masi).getByText("2 条讲错我方待纠正");
-    expect(alert).toHaveClass("text-danger");
-    expect(masi.querySelector("[data-geo-subline]")).toHaveTextContent(/^10月1日 – 12月31日/);
+    // What is still open is said in body text: red is the badge's, never a
+    // whole sentence (F-G10).
+    const alert = within(masi).getByText("2 条讲错我方待处理");
+    expect(alert).not.toHaveClass("text-danger");
+    expect(masi.querySelector(".text-danger")).toBeNull();
+    expect(masi.querySelector("[data-geo-subline]")).toHaveTextContent(/^10月1日～12月31日/);
 
-    // Under 30 answers the rate is not shown: 「样本不足」, with how few there were.
+    // Under 30 answers the rate is not shown: “样本不足”, with how few there were.
     const mitiao = rows[1];
     expect(mitiao).toHaveTextContent("样本不足");
     expect(mitiao).toHaveTextContent("12 次回答");
     expect(mitiao).not.toHaveTextContent("44%");
     expect(mitiao.querySelector(".text-danger")).toBeNull();
 
-    // A project that did one step is in the list all the same, with 「—」.
+    // A project that did one step is in the list all the same, with “—”.
     const xinli = rows[2];
     expect(xinli).toHaveTextContent("只做了信源分析");
     expect(within(xinli).getAllByText("—")).toHaveLength(2);
+  });
+
+  it("sets the server's sentence about the worst error in body text, beside its severity badge", async () => {
+    client.listGeoProjects.mockResolvedValue([
+      { ...GEO_SUMMARIES[0], alert: { wrongOurs: 2, safety: 0, text: "Kimi：甲状腺结节患者禁用信尔美", severity: "S3" } },
+    ]);
+    renderHome();
+    const list = await screen.findByRole("list", { name: "GEO 项目" });
+    const sentence = within(list).getByText("Kimi：甲状腺结节患者禁用信尔美");
+    expect(sentence).toHaveClass("text-text-2");
+    expect(sentence).not.toHaveClass("text-danger");
+    expect(list.querySelector("[data-severity='S3']")).not.toBeNull();
   });
 
   it("creates a project and lands in its conversation — no form", async () => {

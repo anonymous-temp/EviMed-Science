@@ -31,6 +31,20 @@ describe("the denominator", () => {
       .toBe("按 3 个引擎、310 次有效回答计算 · 元宝、Kimi、千问本轮未测");
   });
 
+  it("counts only the engines that answered, and says why each other one did not (G13)", () => {
+    const round = {
+      ...diagnosisFilled.round!,
+      engines: ["doubao", "deepseek", "yuanbao", "kimi", "qianwen"],
+      measuredEngines: ["deepseek", "yuanbao", "kimi", "qianwen"],
+      absent: [{ engine: "doubao", reason: "login" }],
+    };
+    expect(denominatorLine(project(), { ...diagnosisFilled, round }))
+      .toBe("按 4 个引擎、310 次有效回答计算 · 豆包本轮未测：探测账号需要重新登录");
+    const two = { ...round, measuredEngines: ["deepseek", "qianwen"], absent: [{ engine: "doubao", reason: "login" }, { engine: "yuanbao", reason: "paused" }, { engine: "kimi", reason: "paused" }] };
+    expect(denominatorLine(project(), { ...diagnosisFilled, round: two }))
+      .toBe("按 2 个引擎、310 次有效回答计算 · 豆包本轮未测：探测账号需要重新登录 · 元宝、Kimi 本轮未测：探测暂停，没有拿到有效回答");
+  });
+
   it("is not stated at all before anything was measured", () => {
     expect(denominatorLine(project(), null)).toBeNull();
     expect(denominatorLine(project(), { ...diagnosisFilled, round: null } as GeoDiagnosis)).toBeNull();
@@ -96,8 +110,8 @@ describe("the tiles", () => {
   it("keep the sample in the tooltip, never in the tile", () => {
     const mention = overviewTiles(project(), diagnosisFilled).find((tile) => tile.key === "mention");
     expect(mention?.hint).toContain("310 次里 65 次");
-    // The number and its unit are separate: `StatTile` sets 「%」 small beside
-    // the figure, once, so a tile reads 「21 %」 at two sizes rather than 「21%」
+    // The number and its unit are separate: `StatTile` sets “%” small beside
+    // the figure, once, so a tile reads “21 %” at two sizes rather than “21%”
     // at one. `tileValue` is where that split happens.
     expect(mention?.value).toBe("21");
     expect(mention?.unit).toBe("%");
@@ -106,12 +120,13 @@ describe("the tiles", () => {
 
 describe("the engine matrix", () => {
   it("states the best and worst engine instead of naming the chart", () => {
-    // 「各引擎的走势」 is the chart's name, which a reader can already see.
+    // “各引擎的走势” is the chart's name, which a reader can already see.
     const rows = [
       { engine: "doubao", points: [{ cell: cell(44, 27, 62) }] },
       { engine: "deepseek", points: [{ cell: cell(12, 7, 60) }] },
     ];
-    expect(engineTrendConclusion(rows as never)).toBe("豆包提及最多，DeepSeek最少");
+    // A Latin name meeting Chinese takes a half-width space (spec §5.5).
+    expect(engineTrendConclusion(rows as never)).toBe("豆包提及最多，DeepSeek 最少");
     expect(engineTrendConclusion([{ engine: "doubao", points: [{ cell: cell(44, 27, 62) }] }] as never))
       .toBe("本轮只有豆包测到读数");
     // Nothing stated is not a zero and not a guess: the chart keeps its name.
@@ -125,6 +140,36 @@ describe("the engine matrix", () => {
     const qianwen = matrix.rows.find((row) => row.key === "qianwen");
     expect(qianwen?.unmeasured).toBe("本轮未测");
     expect(qianwen?.cells).toEqual([]);
+  });
+
+  it("says why an engine the round reports absent has no row of numbers", () => {
+    const round = { ...diagnosisFilled.round!, absent: [{ engine: "doubao", reason: "login" }] };
+    const doubao = engineMatrix(project(), { ...diagnosisFilled, round }).rows.find((row) => row.key === "doubao");
+    expect(doubao?.unmeasured).toBe("本轮未测：探测账号需要重新登录");
+    expect(doubao?.cells).toEqual([]);
+  });
+
+  it("says 引用不可测 for an engine whose citations had no links (G8)", () => {
+    const round = { ...diagnosisFilled.round!, linklessEngines: ["deepseek"] };
+    const byEngine = diagnosisFilled.byEngine.map((row) => (row.engine === "deepseek"
+      ? { ...row, citation: cell(null, null, null, { reason: "citations_without_links" }) } : row));
+    const matrix = engineMatrix(project(), { ...diagnosisFilled, round, byEngine });
+    const index = matrix.columns.findIndex((column) => column.key === "citation");
+    expect(matrix.rows.find((row) => row.key === "deepseek")?.cells[index].text).toBe("引用不可测");
+    expect(matrix.note).toBeNull();
+  });
+
+  it("leaves out a rate no engine has a reading for, and says which and why (F-G10)", () => {
+    const none = cell(null, null, null);
+    const byEngine = diagnosisFilled.byEngine.map((row) => ({ ...row, citation: none }));
+    const matrix = engineMatrix(project(), { ...diagnosisFilled, byEngine });
+    expect(matrix.columns.map((column) => column.key)).toEqual(["mention", "accuracy", "retrieval"]);
+    expect(matrix.rows.filter((row) => !row.unmeasured).every((row) => row.cells.length === 3)).toBe(true);
+    expect(matrix.note).toBe("引用命中率这一轮没有读数");
+
+    const round = { ...diagnosisFilled.round!, linklessEngines: ["doubao", "deepseek", "kimi"] };
+    expect(engineMatrix(project(), { ...diagnosisFilled, round, byEngine }).note)
+      .toBe("豆包、DeepSeek、Kimi 的引用只有标题、没有链接，引用命中率测不出");
   });
 
   it("says 只测提及 where the channel can only see a mention", () => {
@@ -145,6 +190,25 @@ describe("the ranking", () => {
     expect(rivalRanking(project(), { ...diagnosisFilled, byPool: [{ pool: "P2", mention: diagnosisFilled.byPool[1].mention, topCompetitor: null, mainIssue: null }] })).toEqual([]);
   });
 
+  it("reads each registered rival's own mention rate when the round measured it (G15)", () => {
+    const more = [
+      ...diagnosisFilled.more,
+      { metricId: "M-16", name: "竞品提及率", rival: "诺和盈", cell: cell(31, 96, 310) },
+      { metricId: "M-16", name: "竞品提及率", rival: "穆峰达", cell: cell(12, 37, 310) },
+      { metricId: "M-16", name: "竞品提及率", rival: "谊生泰", cell: cell(null, null, 310, { status: "not_measurable" }) },
+    ];
+    const rows = rivalRanking(project(), { ...diagnosisFilled, more });
+    expect(rows.map((row) => [row.name, row.value, row.ours])).toEqual([
+      ["诺和盈", 31, false],
+      ["信尔美", 21, true],
+      ["穆峰达", 12, false],
+    ]);
+    // Over the same questions, so one range for every row.
+    expect(new Set(rows.map((row) => row.scope)).size).toBe(1);
+    const lead = overviewTiles(project(), { ...diagnosisFilled, more })[0];
+    expect([lead.rank, lead.rival]).toEqual(["提及率第 2 / 3", "诺和盈 提及率 31%"]);
+  });
+
   it("puts us in it once, marked, beside the rivals actually measured", () => {
     const rows = rivalRanking(project(), diagnosisFilled);
     expect(rows.map((row) => [row.name, row.value, row.ours])).toEqual([
@@ -161,6 +225,14 @@ describe("the rail and the next step", () => {
     const rail = railSteps(waiting, () => "/x");
     expect(rail.find((step) => step.key === "distribution")).toMatchObject({ state: "waiting", note: "待你确认预算" });
     expect(nextSteps(waiting)[0]).toMatchObject({ key: "budget", state: "waiting" });
+  });
+
+  it("never asks for a budget while no media market is connected (G20)", () => {
+    const off = geoProject({ sources: "done", distribution: "running" }, { budget: null, market: { configured: false } });
+    expect(railSteps(off, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "todo", note: "等媒介集市接通" });
+    const next = nextSteps(off);
+    expect(next[0]).toMatchObject({ key: "market", state: "held", text: "投放要等媒介集市接通" });
+    expect(next.some((step) => step.key === "budget" || step.state === "waiting")).toBe(false);
   });
 
   it("stops calling it a wait once the budget is set", () => {

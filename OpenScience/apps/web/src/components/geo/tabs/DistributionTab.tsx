@@ -15,9 +15,10 @@ import { yuan } from "./geoTabText";
  * 投放 (plan §3.7, mockup g10). The budget is the program's one money stop:
  * until it is set the tab asks for it, with the tier's suggestion prefilled;
  * after that the control plane places orders within it. The orders list says
- * where each article went and where it stands; 「撤单」 is offered only while
+ * where each article went and where it stands; “撤单” is offered only while
  * the outlet has not accepted it yet. While the marketplace is not connected
- * the tab says so once, and everything else still shows.
+ * nothing can be placed: the tab says so in a sentence and asks for nothing —
+ * no budget button, no “等你” (G20).
  */
 export function DistributionTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoLoad(`distribution:${geoId}`, () => getGeoDistribution(geoId));
@@ -34,11 +35,15 @@ function Distribution({ geoId, project, data, onChanged }: { geoId: string; proj
 
   return (
     <div data-geo-tab="distribution">
-      {!configured && <p data-geo-market-off="" className="mb-4 text-ui text-text-3">投放渠道未接通</p>}
-      <BudgetLine data={data} budget={budget} onEdit={() => setEditing(true)} />
+      {!configured && (
+        <p data-geo-market-off="" className="mb-4 max-w-measure text-ui text-text-2">
+          投放要等媒介集市接通：接通之前不会下单，写好的稿件先留在这里。
+        </p>
+      )}
+      {(configured || budget) && <BudgetLine data={data} budget={budget} onEdit={configured ? () => setEditing(true) : null} />}
       {orders.length > 0
         ? <Orders geoId={geoId} orders={orders} onChanged={onChanged} />
-        : budget && <StepPending geoId={geoId} project={project} step="distribution" />}
+        : budget && configured && <StepPending geoId={geoId} project={project} step="distribution" />}
       {editing && (
         <BudgetDialog
           geoId={geoId}
@@ -63,9 +68,11 @@ function BudgetLine({
 }: {
   data: GeoDistribution;
   budget: { totalCny: number; dailyCny: number } | null;
-  onEdit: () => void;
+  /** Null while there is no market to place with: the budget is shown, not asked for. */
+  onEdit: (() => void) | null;
 }) {
   if (!budget) {
+    if (!onEdit) return null;
     return (
       <div data-geo-budget="unset" className="flex flex-wrap items-center gap-3 rounded-card bg-surface-1 px-5 py-4">
         <span className="min-w-0 flex-1 text-ui text-text">
@@ -93,7 +100,7 @@ function BudgetLine({
           <span className="absolute inset-y-0 left-0 bg-accent" style={{ width: share(spent) }} />
           <span className="absolute inset-y-0 bg-border-control" style={{ left: share(spent), width: share(reserved) }} />
         </div>
-        <Button variant="text" size="sm" onClick={onEdit}>修改</Button>
+        {onEdit && <Button variant="text" size="sm" onClick={onEdit}>修改</Button>}
       </div>
     </div>
   );
@@ -103,7 +110,7 @@ function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-caption text-text-3">{label}</span>
-      <span className="text-ui font-semibold tabular-nums text-text">{value}</span>
+      <span className="text-ui tabular-nums text-text">{value}</span>
     </div>
   );
 }
@@ -121,7 +128,7 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
         toast.success("已撤单，预留的钱会退回预算。");
         onChanged();
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "没有撤单，请稍后重试。" })))
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一单无法撤下，请稍后重试。" })))
       .finally(() => setBusy(null));
   };
   const sorted = [...orders].sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || "") || 0);
@@ -176,7 +183,7 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
       </div>
       {pending && (
         <ConfirmDialog
-          title={`撤下「${pending.articleTitle || "这一单"}」？`}
+          title={`撤下“${pending.articleTitle || "这一单"}”？`}
           body={`这一单还没有被${pending.media || "媒体"}接单，撤单后不会发布，预留的钱退回预算。`}
           confirmLabel="撤单"
           onConfirm={cancel}

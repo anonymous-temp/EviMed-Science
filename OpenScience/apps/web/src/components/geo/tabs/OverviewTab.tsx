@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Sparkles } from "lucide-react";
+import { Radar } from "lucide-react";
 import { getGeoDiagnosis, getGeoMonitoring, type GeoDiagnosis, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
@@ -63,15 +63,23 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
     .sort((left, right) => (right.severity ?? "").localeCompare(left.severity ?? ""));
   const steps = nextSteps(project);
   const gvi = project.overview.metrics.find((metric) => metric.key === "gvi") ?? null;
+  // The index takes two cells (fusion plan §4.8), so the band is one column
+  // wider than it has tiles; past six the widest layout gets a seventh.
+  const cells = tiles.length + 1;
 
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-4">
-      <p className="flex items-start gap-2 text-heading font-medium text-text">
-        <Sparkles size={20} aria-hidden="true" className="mt-1 shrink-0 text-accent" />
+      <p className="flex items-start gap-2 text-section font-semibold text-text">
+        <Radar size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-accent" />
         <span className="min-w-0">{headlineSentence(project, diag)}</span>
       </p>
 
-      <StatBand label="本轮指标" footnote={denominator} columns={tiles.length >= 6 ? 6 : 5}>
+      <StatBand
+        label="本轮指标"
+        footnote={denominator}
+        columns={cells >= 6 ? 6 : cells === 5 ? 5 : 4}
+        className={cells > 6 ? "xl:[&>div]:grid-cols-7" : undefined}
+      >
         {tiles.map((tile) => (
           <StatTile
             key={tile.key}
@@ -80,13 +88,25 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
             unit={tile.unit}
             hint={tile.hint}
             lead={tile.lead}
+            rank={tile.rank ?? undefined}
             tone={tile.tone}
             placeholder={tile.placeholder}
             loading={diagnosis.state.kind === "loading" && tile.key === "safety"}
             delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} noise={tile.noise} polarity={tile.polarity} />}
             note={tile.note}
+            className={tile.lead ? "sm:col-span-2" : undefined}
             chart={tile.lead
-              ? <BulletBar label={tile.label} value={Number(tile.value) || null} target={tile.target} targetLabel={tile.target === null ? undefined : `目标 ${formatGeoValue(tile.target, "index")}`} />
+              ? (
+                <BulletBar
+                  label={tile.label}
+                  value={Number(tile.value) || null}
+                  target={tile.target}
+                  targetLabel={tile.target === null ? undefined : `目标 ${formatGeoValue(tile.target, "index")}`}
+                  // The rival's reading is a mention rate, not an index: it is
+                  // named under the bar, never placed on its scale.
+                  rivalLabel={tile.rival ?? undefined}
+                />
+              )
               : tile.trend.length > 0
                 ? <GeoSparkline values={tile.trend} target={tile.target} width={140} height={28} className="w-full" />
                 : undefined}
@@ -148,6 +168,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
         emptyText="还没有问过各家 AI。"
         errorMessage={diagnosis.state.kind === "error" ? diagnosis.state.message : undefined}
         onRetry={diagnosis.reload}
+        footnote={matrix.note}
         height={220}
       >
         <HeatGrid label="各引擎的提及、准确与引用" columns={matrix.columns} rows={matrix.rows} legend={{ low: "低", high: "高" }} />
@@ -166,7 +187,7 @@ function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
   if (items.length === 0) return null;
   return (
     <section aria-labelledby="geo-week">
-      <h2 id="geo-week" className="mb-1 text-ui font-semibold text-text">本周</h2>
+      <h2 id="geo-week" className="mb-1 text-section font-semibold text-text">本周</h2>
       <List divided label="本周">
         {items.slice(0, 5).map((item, index) => {
           const to = weekTarget(geoId, item);
@@ -245,7 +266,7 @@ function RankCard({ ranking, loading }: { ranking: ReturnType<typeof rivalRankin
   const place = ours ? ranking.indexOf(ours) + 1 : 0;
   return (
     <ChartCard
-      title={ours && place > 0 ? `在 ${ranking.length} 个同类药里排第 ${place}` : "同类药提及率"}
+      title={ours && place > 0 ? `提及率在 ${ranking.length} 个同类药里排第 ${place}` : "同类药提及率"}
       state={loading ? "loading" : ranking.length === 0 ? "empty" : "content"}
       emptyText="这一轮还没有测到同类药的提及率。"
       height={200}
@@ -258,7 +279,7 @@ function RankCard({ ranking, loading }: { ranking: ReturnType<typeof rivalRankin
         highlight={(row) => row.ours}
         rowAttrs={(row) => ({ "data-rank-row": row.key })}
         columns={[
-          { key: "name", header: "同类药", rowHeader: true, cell: (row) => <span className="truncate">{row.name}{row.ours && <span className="ml-1 text-caption text-accent-strong">本品</span>}</span> },
+          { key: "name", header: "同类药", rowHeader: true, cell: (row) => <span className="truncate">{row.name}{row.ours && <span className="ml-1 text-caption font-normal text-accent-strong">本品</span>}</span> },
           { key: "bar", header: "", width: "w-24", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
           {
             key: "value",
@@ -275,7 +296,7 @@ function RankCard({ ranking, loading }: { ranking: ReturnType<typeof rivalRankin
 
 /* -------------------------------------------------------------- next step */
 
-const NEXT_WORDS: Record<NextStep["state"], string> = { waiting: "等你", active: "进行中", done: "已完成" };
+const NEXT_WORDS: Record<NextStep["state"], string> = { waiting: "等你", active: "进行中", done: "已完成", held: "未接通" };
 
 function NextRow({ step }: { step: NextStep }) {
   return (
@@ -290,10 +311,11 @@ function NextRow({ step }: { step: NextStep }) {
         aria-hidden="true"
         className={step.state === "done" ? "h-2 w-2 shrink-0 rounded-full bg-accent"
           : step.state === "active" ? "h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running"
-            : "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent"}
+            : step.state === "held" ? "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-border-control"
+              : "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent"}
       />
       <span className="min-w-0 flex-1 truncate">{step.text}</span>
-      <span className={step.state === "waiting" ? "shrink-0 text-caption font-medium text-accent-strong" : "shrink-0 text-caption text-text-3"}>
+      <span className={step.state === "waiting" ? "shrink-0 text-caption text-accent-strong" : "shrink-0 text-caption text-text-3"}>
         {step.when ?? NEXT_WORDS[step.state]}
       </span>
     </li>

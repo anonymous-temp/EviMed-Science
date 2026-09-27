@@ -62,8 +62,8 @@ export function metricUnit(metricId: string | null | undefined): GeoUnit {
 
 /**
  * Engines measured through the inclusion channel (百度 today): only whether
- * the answer mentions us is known, so accuracy and citation read 「只测提及」
- * rather than 「—」 — the reader should know it is a choice, not a gap.
+ * the answer mentions us is known, so accuracy and citation read “只测提及”
+ * rather than “—” — the reader should know it is a choice, not a gap.
  */
 const MENTION_ONLY: ReadonlySet<string> = new Set(["baidu", "wenxin"]);
 
@@ -93,7 +93,7 @@ export function claimSourceKindWord(kind: string | null | undefined): string | n
 
 /**
  * A source's kind as the reader says it. The strategy run may write the kind
- * in Chinese already (「健康媒体」) — then it is shown as written; a code this
+ * in Chinese already (“健康媒体”) — then it is shown as written; a code this
  * table knows is translated; any other code is not shown.
  */
 const SOURCE_KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
@@ -175,14 +175,14 @@ export function roundKindWord(kind: string | null | undefined): string | null {
   return kind && kind in ROUND_KIND_WORDS ? ROUND_KIND_WORDS[kind] : null;
 }
 
-/** A round as a chip: 「基线 · 9月22日」, 「每周复测 · 10月13日」. */
+/** A round as a chip: “基线 · 9月22日”, “每周复测 · 10月13日”. */
 export function roundLabel(round: { kind: string; sampleDate: string | null }): string {
   return [roundKindWord(round.kind) ?? "测量", monthDay(round.sampleDate)].filter(Boolean).join(" · ");
 }
 
 /**
  * The probe surface in one line (plan §4.3: every board says what was
- * measured): 「网页端、非深度思考、每题新对话」.
+ * measured): “网页端、非深度思考、每题新对话”.
  */
 export function surfaceText(surface: Record<string, unknown> | null | undefined): string | null {
   if (!surface) return null;
@@ -220,14 +220,14 @@ export function tabPath(geoId: string, tab: string): string {
 
 /* ---------------------------------------------------------------- numbers */
 
-/** 「¥8,000」; null reads 「—」. */
+/** “¥8,000”; null reads “—”. */
 export function yuan(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   const rounded = Math.round(value * 100) / 100;
   return `¥${rounded.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
 }
 
-/** 「+12」「-3」「0」 — a change on the metric's own scale. */
+/** “+12”“-3”“0” — a change on the metric's own scale. */
 export function signed(value: number, unit: GeoUnit = "index"): string {
   const rounded = Math.abs(value) >= 1 || value === 0 ? Math.round(value) : Math.round(value * 10) / 10;
   const body = unit === "percent" ? `${Math.abs(rounded)} 个百分点` : String(Math.abs(rounded));
@@ -235,9 +235,9 @@ export function signed(value: number, unit: GeoUnit = "index"): string {
 }
 
 /**
- * A draft for 「问 AI」 about several numbers of one row: 「豆包：品牌提及率
+ * A draft for “问 AI” about several numbers of one row: “豆包：品牌提及率
  * 22%，310 次里 68 次；事实准确率 94%，…（10月13日测量）。这些数说明了什么，
- * 接下来该做什么？」
+ * 接下来该做什么？”
  */
 export function rowDraft({
   product,
@@ -256,7 +256,7 @@ export function rowDraft({
   return `${subject}：${numbers}${when}。这些数说明了什么，接下来该做什么？`;
 }
 
-/** 「DeepSeek：它需要每天注射一次」 — a wrong sentence with the engine that said it. */
+/** “DeepSeek：它需要每天注射一次” — a wrong sentence with the engine that said it. */
 export function errorLine(error: { engine: GeoEngine; statement: string }): string {
   return `${engineName(error.engine)}：${error.statement}`;
 }

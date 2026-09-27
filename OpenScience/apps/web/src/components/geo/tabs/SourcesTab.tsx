@@ -18,7 +18,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { formatGeoValue } from "../GeoCellText";
-import { engineName, GEO_POOL_KINDS, GEO_SOURCE_LAYER_WORDS } from "../geoText";
+import { engineName, GEO_POOL_KINDS, GEO_SOURCE_LAYER_WORDS, zh } from "../geoText";
 import { MENTION_ONLY_WORD, mentionOnly, metricName, metricUnit, sourceKindWord, yuan } from "./geoTabText";
 import { CellLink, FilterRow, StepPending, TabError, TabSection, TabSkeleton, TD, TH, useGeoLoad } from "./geoTabKit";
 
@@ -43,9 +43,17 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (sources.length === 0 && expectations.length === 0 && tiers.length === 0) {
     return <StepPending geoId={geoId} project={project} step="sources" />;
   }
+  const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   return (
     <div data-geo-tab="sources">
       {sources.length > 0 && <SourceTable sources={sources} engines={project.engines} />}
+      {/* An engine whose citations had no link is not missing from the table
+          by accident: it is said, not dropped (G8). */}
+      {linkless.length > 0 && (
+        <p data-geo-linkless="" className="mt-3 text-caption text-text-3">
+          {zh`${linkless.map(engineName).join("、")}的引用只有标题、没有链接，引用了哪些信源测不出`}
+        </p>
+      )}
       {expectations.length > 0 && <Expectations geoId={geoId} rows={expectations} />}
       {data.battlefield && (data.battlefield.groups?.length || data.battlefield.reason) && <Battlefield battlefield={data.battlefield} />}
       {tiers.length > 0 && <Tiers geoId={geoId} tiers={tiers} chosen={data.chosenTier ?? project.tier ?? null} onChanged={reload} />}
@@ -174,7 +182,7 @@ const CONDITION_WORDS: Array<{ key: keyof GeoSourceRow["conditions"]; label: str
   { key: "medical", label: "医疗" },
 ];
 
-/** The three conditions, each said with a shape and a word: 「备案 ✓ 新闻源 ✓ 医疗 ✗」. */
+/** The three conditions, each said with a shape and a word: “备案 ✓ 新闻源 ✓ 医疗 ✗”. */
 function Conditions({ conditions }: { conditions: GeoSourceRow["conditions"] | null | undefined }) {
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -302,7 +310,7 @@ function Tiers({ geoId, tiers, chosen, onChanged }: { geoId: string; tiers: GeoT
         toast.success(`已选${TIER_WORDS[tier]}，之后按这一档写稿和投放。`);
         onChanged();
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "没有改成功，请稍后重试。" })))
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "目标档位无法修改，请稍后重试。" })))
       .finally(() => setBusy(false));
   };
   const header = (tier: GeoTierId) => (tier === chosen ? `${TIER_WORDS[tier]}（已选）` : TIER_WORDS[tier]);
@@ -322,7 +330,7 @@ function Tiers({ geoId, tiers, chosen, onChanged }: { geoId: string; tiers: GeoT
               <th scope="col" className={`${TH} sticky left-0 bg-bg`}>指标</th>
               <th scope="col" className={`${TH} text-right`}>现状</th>
               {present.map((tier) => (
-                <th key={tier} scope="col" className={cn(TH, "text-right", tier === chosen && "font-medium text-text")}>{header(tier)}</th>
+                <th key={tier} scope="col" className={cn(TH, "text-right", tier === chosen && "text-text")}>{header(tier)}</th>
               ))}
             </tr>
           </thead>
@@ -332,7 +340,7 @@ function Tiers({ geoId, tiers, chosen, onChanged }: { geoId: string; tiers: GeoT
                 <th scope="row" className={`${TD} sticky left-0 bg-bg text-left font-normal`}>{row.name}</th>
                 <td className={`${TD} text-right tabular-nums`}>{value(row.baseline, row.unit)}</td>
                 {present.map((tier) => (
-                  <td key={tier} className={cn(TD, "text-right tabular-nums", tier === chosen && "font-medium")}>{value(row.byTier[tier], row.unit)}</td>
+                  <td key={tier} className={cn(TD, "text-right tabular-nums", tier !== chosen && "text-text-2")}>{value(row.byTier[tier], row.unit)}</td>
                 ))}
               </tr>
             ))}
@@ -341,14 +349,14 @@ function Tiers({ geoId, tiers, chosen, onChanged }: { geoId: string; tiers: GeoT
               <td className={`${TD} text-right`}>—</td>
               {present.map((tier) => {
                 const placements = byId.get(tier)?.placements;
-                return <td key={tier} className={cn(TD, "text-right tabular-nums", tier === chosen && "font-medium")}>{typeof placements === "number" ? `${placements} 篇` : "—"}</td>;
+                return <td key={tier} className={cn(TD, "text-right tabular-nums", tier !== chosen && "text-text-2")}>{typeof placements === "number" ? `${placements} 篇` : "—"}</td>;
               })}
             </tr>
             <tr className="border-b border-faint">
               <th scope="row" className={`${TD} sticky left-0 bg-bg text-left font-normal`}>预算</th>
               <td className={`${TD} text-right`}>—</td>
               {present.map((tier) => (
-                <td key={tier} className={cn(TD, "text-right tabular-nums", tier === chosen && "font-medium")}>{yuan(byId.get(tier)?.budgetCny)}</td>
+                <td key={tier} className={cn(TD, "text-right tabular-nums", tier !== chosen && "text-text-2")}>{yuan(byId.get(tier)?.budgetCny)}</td>
               ))}
             </tr>
           </tbody>

@@ -1,13 +1,15 @@
 /**
- * The reader's words for 「循证 GEO」's closed vocabularies.
+ * The reader's words for “循证 GEO”'s closed vocabularies.
  *
  * Every id the server sends — an engine, a pool, a step, a layer, an order
  * state — is mapped here before it reaches the screen; a page never prints a
- * raw id. An id this table does not know is dropped to 「—」 by the helpers
+ * raw id. An id this table does not know is dropped to “—” by the helpers
  * rather than printed (a code on screen is a code the reader has to learn),
  * except an engine, whose id is the only name there is.
  */
+import { GEO_SOCIAL_PLATFORM_LABELS_ZH } from "@evimed/domain";
 import type {
+  GeoAbsentReason,
   GeoArticleLayer,
   GeoArticleStatus,
   GeoErrorAction,
@@ -24,7 +26,7 @@ import type {
 
 /**
  * The capabilities a GEO conversation can be bound to. A conversation bound to
- * any of them carries the 「循证 GEO」 chip. The frame holds the same list in
+ * any of them carries the “循证 GEO” chip. The frame holds the same list in
  * its vocabulary (`packages/harness-port/src/runtimeUiFrame.mjs`, `geo`); both
  * belong in the domain's GEO vocabulary once it exists.
  */
@@ -53,6 +55,51 @@ export function engineName(engine: string | null | undefined): string {
   return GEO_ENGINE_NAMES[engine] ?? engine;
 }
 
+/**
+ * Why an engine has no answers this round, in the reader's words (G13): the
+ * matrix row, the band's footnote and the answer page say it instead of a
+ * bare 「未测」.
+ */
+export const GEO_ABSENT_WORDS: Readonly<Record<GeoAbsentReason, string>> = Object.freeze({
+  login: "探测账号需要重新登录",
+  paused: "探测暂停，没有拿到有效回答",
+  unavailable: "这个部署还没有接入",
+  no_answer: "没有拿到有效回答",
+});
+
+export function absentWord(reason: string | null | undefined): string | null {
+  return reason && reason in GEO_ABSENT_WORDS ? GEO_ABSENT_WORDS[reason as GeoAbsentReason] : null;
+}
+
+/* ------------------------------------------------------------- copy seams */
+
+const HAN = /\p{Script=Han}/u;
+const LATIN = /[A-Za-z0-9]/;
+
+function seam(left: string, right: string): string {
+  if (!left || !right) return left + right;
+  const before = left[left.length - 1];
+  const after = right[0];
+  const spaced = (HAN.test(before) && LATIN.test(after)) || (LATIN.test(before) && HAN.test(after));
+  return spaced ? `${left} ${right}` : left + right;
+}
+
+/**
+ * A sentence assembled from our words and values, with the half-width space
+ * the writing rules put between Chinese and a Latin letter or a digit (spec
+ * §5.5) at each seam where the two meet: zh`${engine}讲错最多` reads
+ * 「DeepSeek 讲错最多」 and 「豆包讲错最多」. Only the seams are touched —
+ * the literal parts carry their own spaces already, and a value's own text
+ * (a date, a quotation) is never changed.
+ */
+export function zh(strings: TemplateStringsArray, ...values: unknown[]): string {
+  let text = strings[0];
+  values.forEach((value, index) => {
+    text = seam(seam(text, value == null ? "" : String(value)), strings[index + 1]);
+  });
+  return text;
+}
+
 /* -------------------------------------------------------------------- pools */
 
 export const GEO_POOLS: readonly GeoPool[] = Object.freeze(["P1", "P2", "P3", "P4"]);
@@ -77,6 +124,36 @@ export function poolName(pool: string | null | undefined): string {
   return pool && pool in GEO_POOL_NAMES ? GEO_POOL_NAMES[pool as GeoPool] : "—";
 }
 
+/**
+ * A question group's name without the method's internal number (「P1-01
+ * 品牌身份」 → 「品牌身份」): the pool id and a counter, a closed format that
+ * means nothing to a reader (F-G10). The server strips it on write; this
+ * reads the groups written before it did.
+ */
+const GROUP_NUMBER = /^\s*P[1-4]\s*[-_.]\s*\d{1,3}\s*[·:：、.\-—]?\s*/u;
+
+export function groupName(name: string | null | undefined): string {
+  const text = (name ?? "").trim();
+  return text.replace(GROUP_NUMBER, "").trim() || text;
+}
+
+/* ---------------------------------------------------------------- platforms */
+
+/** Where a real phrasing was collected, as the reader calls the place. */
+const PLATFORM_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  ...GEO_SOCIAL_PLATFORM_LABELS_ZH,
+  web: "网页",
+  client: "客户提供",
+});
+
+/** A platform's name; one already written in Chinese is kept, an unknown code is not printed. */
+export function platformName(platform: string | null | undefined): string | null {
+  const value = (platform ?? "").trim();
+  if (!value) return null;
+  if (HAN.test(value)) return value;
+  return PLATFORM_NAMES[value.toLowerCase()] ?? null;
+}
+
 /* -------------------------------------------------------------- steps, tabs */
 
 export const GEO_STEP_NAMES: Readonly<Record<GeoStepKey, string>> = Object.freeze({
@@ -90,7 +167,7 @@ export const GEO_STEP_NAMES: Readonly<Record<GeoStepKey, string>> = Object.freez
   monitoring: "监测",
 });
 
-/** A step as a piece of work, for 「只做了信源分析」. */
+/** A step as a piece of work, for “只做了信源分析”. */
 export const GEO_STEP_WORK: Readonly<Record<GeoStepKey, string>> = Object.freeze({
   evidence: "证据整理",
   journey: "旅程分析",
@@ -103,7 +180,7 @@ export const GEO_STEP_WORK: Readonly<Record<GeoStepKey, string>> = Object.freeze
 });
 
 /**
- * What an untouched step's tab says above 「让 AI 做」 — one sentence, what
+ * What an untouched step's tab says above “让 AI 做” — one sentence, what
  * the step will produce, never how the system works.
  */
 export const GEO_STEP_EMPTY: Readonly<Record<GeoStepKey, string>> = Object.freeze({
@@ -171,7 +248,7 @@ export function layerName(layer: string | null | undefined): string {
 }
 
 export const GEO_ARTICLE_STATUS_WORDS: Readonly<Record<GeoArticleStatus, string>> = Object.freeze({
-  draft: "起草中",
+  draft: "草稿",
   publishable: "可发布",
   placed: "已投放 · 待发布",
   published: "已发布",
@@ -183,13 +260,13 @@ export const GEO_ARTICLE_SAFETY_OPEN = "安全待复核";
 
 export const GEO_ORDER_STATE_WORDS: Readonly<Record<GeoOrderState, string>> = Object.freeze({
   planned: "待下单",
-  reserved: "下单中",
+  reserved: "正在下单",
   submitted: "已下单",
   accepted: "媒体已接单",
   published: "已发布",
   verified: "已发布",
   settled: "已完成",
-  unknown: "处理中",
+  unknown: "正在确认",
   rejected: "退稿",
   cancelled: "已撤单",
   refunded: "退稿 · 已退款",
@@ -201,7 +278,7 @@ export function orderStateWord(state: string | null | undefined): string {
   return state && state in GEO_ORDER_STATE_WORDS ? GEO_ORDER_STATE_WORDS[state as GeoOrderState] : "—";
 }
 
-/** Order states in which 「撤单」 is still possible (before the outlet accepted). */
+/** Order states in which “撤单” is still possible (before the outlet accepted). */
 export const GEO_ORDER_CANCELLABLE: ReadonlySet<GeoOrderState> = new Set<GeoOrderState>(["planned", "reserved", "submitted"]);
 
 /* ------------------------------------------------------------------- errors */
@@ -215,10 +292,10 @@ export const GEO_ERROR_TYPE_WORDS: Readonly<Record<GeoErrorType, string>> = Obje
 });
 
 export const GEO_ERROR_STATUS_WORDS: Readonly<Record<GeoErrorStatus, string>> = Object.freeze({
-  open: "待纠正",
-  acting: "纠正中",
-  awaiting_remeasure: "等复测",
-  closed: "已消失",
+  open: "待处理",
+  acting: "处置中",
+  awaiting_remeasure: "待复测",
+  closed: "已关闭",
 });
 
 export const GEO_ERROR_ACTION_WORDS: Readonly<Record<GeoErrorAction, string>> = Object.freeze({
@@ -276,27 +353,27 @@ export function parseGeoDate(value: string | Date | null | undefined): Date | nu
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/** 「10月1日」 for a date, in the reader's calendar. */
+/** “10月1日” for a date, in the reader's calendar. */
 export function monthDay(value: string | Date | null | undefined): string | null {
   const date = parseGeoDate(value);
   return date ? `${date.getMonth() + 1}月${date.getDate()}日` : null;
 }
 
 /**
- * A project's coverage window as the reader sees it: 「10月1日 – 12月31日」
- * when the start is known, 「覆盖 90 天」 otherwise.
+ * A project's coverage window as the reader sees it: “10月1日～12月31日”
+ * when the start is known, “覆盖 90 天” otherwise.
  */
 export function coverageText(coverageDays: number | null | undefined, startedAt?: string | null): string {
   const days = typeof coverageDays === "number" && coverageDays > 0 ? coverageDays : GEO_DEFAULT_COVERAGE_DAYS;
   const start = parseGeoDate(startedAt);
   if (start) {
     const end = new Date(start.getTime() + (days - 1) * 86_400_000);
-    return `${monthDay(start)} – ${monthDay(end)}`;
+    return `${monthDay(start)}～${monthDay(end)}`;
   }
   return `覆盖 ${days} 天`;
 }
 
-/** 「第 3 周」 since the window started, or null before it has. */
+/** “第 3 周” since the window started, or null before it has. */
 export function weekOf(startedAt: string | null | undefined, now: Date = new Date()): number | null {
   const start = parseGeoDate(startedAt);
   if (!start || now < start) return null;

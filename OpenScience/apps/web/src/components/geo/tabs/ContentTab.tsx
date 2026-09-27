@@ -29,9 +29,9 @@ type Pending = { kind: "withdraw" | "release"; article: GeoArticle } | null;
 
 /**
  * 内容 (plan §3.6, mockup g09): the articles, by layer, with where each one
- * stands. 「打开」 opens it in the report reader, in the run that wrote it;
- * 「撤回」 takes it out of distribution. An article held for an open safety
- * question is the one stop here: 「放行」, after a person has looked at it.
+ * stands. “打开” opens it in the report reader, in the run that wrote it;
+ * “撤回” takes it out of distribution. An article held for an open safety
+ * question is the one stop here: “放行”, after a person has looked at it.
  */
 export function ContentTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoLoad(`articles:${geoId}`, () => getGeoArticles(geoId));
@@ -75,7 +75,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
         toast.success(kind === "withdraw" ? "已撤回，这篇不再投放。" : "已放行，这篇可以投放了。");
         onChanged();
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: kind === "withdraw" ? "没有撤回，请稍后重试。" : "没有放行，请稍后重试。" })))
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: kind === "withdraw" ? "这篇稿件无法撤回，请稍后重试。" : "这篇稿件无法放行，请稍后重试。" })))
       .finally(() => setBusy(null));
   };
 
@@ -117,7 +117,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
       </div>
       {pending?.kind === "withdraw" && (
         <ConfirmDialog
-          title={`撤回「${pending.article.title || "这篇稿件"}」？`}
+          title={`撤回“${pending.article.title || "这篇稿件"}”？`}
           body="撤回后这篇稿件不再投放。已经发布出去的不会被撤下。"
           confirmLabel="撤回"
           onConfirm={act}
@@ -127,7 +127,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
       {pending?.kind === "release" && (
         <ConfirmDialog
           tone="primary"
-          title={`放行「${pending.article.title || "这篇稿件"}」？`}
+          title={`放行“${pending.article.title || "这篇稿件"}”？`}
           body="确认这篇稿件的安全问题已经看过、可以对外发布。放行后它会进入投放。"
           confirmLabel="放行"
           onConfirm={act}
@@ -138,7 +138,7 @@ function Articles({ geoId, project, articles, onChanged }: { geoId: string; proj
   );
 }
 
-/** 「科普稿件 · 投放 2 家」 */
+/** “科普稿件 · 投放 2 家” */
 function articleMeta(article: GeoArticle): string {
   return [
     layerName(article.layer) === "—" ? null : layerName(article.layer),
@@ -147,7 +147,7 @@ function articleMeta(article: GeoArticle): string {
   ].filter(Boolean).join(" · ");
 }
 
-/** 「已发布 · 已被 AI 引用」 */
+/** “已发布 · 已被 AI 引用” */
 function statusLine(article: GeoArticle): string {
   const word = GEO_ARTICLE_STATUS_WORDS[article.status] ?? "—";
   return article.cited ? `${word} · 已被 AI 引用` : word;

@@ -5,7 +5,7 @@ import type { GeoErrorRow, GeoProject } from "@/lib/geoClient";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { SeverityBadge, isSeverityLevel } from "@/components/ui/SeverityBadge";
-import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS } from "./geoText";
+import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, zh } from "./geoText";
 import { answerPath, CITED_ATTRIBUTE_WORDS } from "./tabs/geoTabText";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
 
@@ -44,7 +44,7 @@ export function GeoErrorCard({
     : cited?.attribute === "none" ? CITED_ATTRIBUTE_WORDS.none : null;
   const closed = error.status === "closed";
   const product = project.product?.brandName || project.product?.genericName || project.name;
-  const draft = `${engineName(error.engine)}在回答里说「${error.statement}」，和${product}的说明书不一致${error.evidenceQuote ? `（说明书：${error.evidenceQuote}）` : ""}。写一篇纠错稿，把正确的说法讲清楚。`;
+  const draft = zh`${engineName(error.engine)}在回答里说“${error.statement}”，和${product}的说明书不一致${error.evidenceQuote ? `（说明书：${error.evidenceQuote}）` : ""}。写一篇纠错稿，把正确的说法讲清楚。`;
   const correct = () => {
     setBusy(true);
     void open({ projectId: project.projectId, sessionId: project.sessionId }, draft)
@@ -56,7 +56,7 @@ export function GeoErrorCard({
     <article data-geo-error={error.id} className={cn("border-b border-faint py-3 last:border-b-0", className)}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         {severity && <SeverityBadge level={severity} />}
-        <span className="text-caption font-medium text-text">{GEO_ERROR_TYPE_WORDS[error.errorType] ?? "讲错我方"}</span>
+        <span className="text-caption font-semibold text-text">{GEO_ERROR_TYPE_WORDS[error.errorType] ?? "讲错我方"}</span>
         <span className="text-caption text-text-2">{engineName(error.engine)}</span>
         <span className="flex-1" />
         <Button variant="secondary" size="sm" loading={busy} onClick={correct}>
@@ -71,7 +71,7 @@ export function GeoErrorCard({
       </div>
       <p className="mt-2 flex items-start gap-1.5 text-ui text-text">
         <X size={16} aria-hidden="true" className="mt-1 shrink-0 text-danger" />
-        <span className="min-w-0 max-w-measure">「{error.statement}」</span>
+        <span className="min-w-0 max-w-measure">“{error.statement}”</span>
       </p>
       {error.evidenceQuote && (
         <p className="mt-1 flex items-start gap-1.5 text-ui text-text-2">

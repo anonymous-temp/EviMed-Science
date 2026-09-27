@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
  * against a target, which is exactly what a reader wants to see in the first
  * week of a programme; leaving the box blank is what made the old board look
  * broken (appendix E §4.5). Only a metric with nothing measured at all draws
- * nothing, and then the number beside it already says 「—」.
+ * nothing, and then the number beside it already says “—”.
  *
  * A picture of numbers the page states in words, so it is hidden from
  * assistive technology. Action markers belong on the main trend chart and

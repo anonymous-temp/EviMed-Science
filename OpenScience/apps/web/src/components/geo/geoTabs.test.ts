@@ -4,7 +4,7 @@ import { GEO_TABS, geoTabPath, isGeoTab, resolveGeoTab } from "./geoTabs";
 
 /**
  * The rebuild moved every tab. What must not move is an address: a bookmark, a
- * link inside a delivered report and the conversation frame's own 「打开诊断」
+ * link inside a delivered report and the conversation frame's own “打开诊断”
  * all name one of the nine old tabs, and each of them still has to land
  * somewhere a reader recognises.
  */

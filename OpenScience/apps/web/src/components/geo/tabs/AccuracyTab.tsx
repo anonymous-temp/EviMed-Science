@@ -19,14 +19,14 @@ import { ShareBar, type ShareSegment } from "@/components/charts/ShareBar";
 import { GeoErrorCard } from "../GeoErrorCard";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
 import { denominatorLine, readingDelta, tileValue } from "../geoOverviewModel";
-import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS } from "../geoText";
+import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, zh } from "../geoText";
 import { metricName, metricUnit } from "./geoTabText";
 import { TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
 /**
  * 准确与安全 — the part of this product no general AI-visibility tool has
- * (appendix E §0.6): not 「are we mentioned」 but 「is what it says about the
- * medicine true, and would a wrong answer hurt someone」.
+ * (appendix E §0.6): not “are we mentioned” but “is what it says about the
+ * medicine true, and would a wrong answer hurt someone”.
  *
  * The accuracy rate is the headline, drawn as what it is — how many statements
  * were right against how many were wrong — and the wrong ones are graded by
@@ -147,13 +147,16 @@ function Accuracy({
         ))}
       </StatBand>
 
+      {/* Counted by answer, beside a rate counted by statement: the heading
+          says which, so “讲错 44 次” is not read against “准确率 68%” as a
+          share of the same thing (G17). */}
       <ChartCard
         title={correct.numerator != null && wrongOurs.numerator != null
-          ? `讲到我方的 ${(correct.numerator + wrongOurs.numerator).toLocaleString("zh-CN")} 次里，讲错 ${wrongOurs.numerator} 次`
+          ? `按回答计，讲错我方 ${wrongOurs.numerator.toLocaleString("zh-CN")} 次、讲对 ${correct.numerator.toLocaleString("zh-CN")} 次`
           : "这一轮的回答里我方出现在哪些位置"}
         state={composition.every((segment) => segment.value === 0) ? "empty" : "content"}
         emptyText="这一轮还没有统计出回答的构成。"
-        footnote={denominator}
+        footnote={[denominator, "事实准确率按每条陈述计算，和这里按回答计的次数不能互相换算"].filter(Boolean).join(" · ")}
         height={120}
       >
         <ShareBar label="回答的构成" segments={composition} format={(value) => `${Math.round(value)} 次`} />
@@ -189,7 +192,7 @@ function BySeverity({ errors }: { errors: GeoErrorRow[] }) {
   const worst = rows[0] ?? null;
   return (
     <ChartCard
-      title={worst ? `${engineName(worst.engine)}讲错最多，${worst.total} 条` : "没有测到讲错"}
+      title={worst ? zh`${engineName(worst.engine)}讲错最多，${worst.total} 条` : "没有测到讲错"}
       legend={(
         <>
           <SeverityBadge level="S3" label />
@@ -206,7 +209,7 @@ function BySeverity({ errors }: { errors: GeoErrorRow[] }) {
           <li key={row.engine} data-severity-engine={row.engine} className="flex items-center gap-4">
             <span className="w-20 shrink-0 truncate text-compact text-text-2">{engineName(row.engine)}</span>
             <span className="min-w-0 flex-1"><ShareBar label={`${engineName(row.engine)} 的讲错`} segments={row.segments} legend={false} /></span>
-            <span className="w-8 shrink-0 text-right text-ui font-medium tabular-nums text-text">{row.total}</span>
+            <span className="w-8 shrink-0 text-right text-ui tabular-nums text-text">{row.total}</span>
           </li>
         ))}
       </ul>
@@ -228,7 +231,7 @@ function ByType({ errors }: { errors: GeoErrorRow[] }) {
   const top = rows.reduce((max, row) => Math.max(max, row.count), 0);
   if (rows.length === 0) return null;
   return (
-    <ChartCard title={`讲错最多的是「${rows[0].name}」`}>
+    <ChartCard title={`讲错最多的是“${rows[0].name}”`}>
       <DataTable
         label="讲错的类型"
         rows={rows}

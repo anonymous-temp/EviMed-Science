@@ -24,7 +24,7 @@ export function readYuan(text: string): number | null {
 }
 
 /**
- * 「设置投放预算」 — the first of the program's two human stops (build spec §0
+ * “设置投放预算” — the first of the program's two human stops (build spec §0
  * ruling 4). Two numbers in 元: the total for the coverage window and the most
  * a single day may spend, the total prefilled with the tier's suggestion. The
  * control plane enforces both (and the per-order cap); this only asks.
@@ -87,7 +87,7 @@ export function BudgetDialog({
       .then(() => onSaved())
       .catch((caught: unknown) => {
         setSaving(false);
-        setError({ field: "form", message: webErrorMessage(caught, { fallback: "预算没有保存，请稍后重试。" }) });
+        setError({ field: "form", message: webErrorMessage(caught, { fallback: "预算无法保存，请稍后重试。" }) });
       });
   };
 

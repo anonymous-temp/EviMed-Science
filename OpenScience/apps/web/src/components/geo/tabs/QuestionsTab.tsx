@@ -16,7 +16,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
-import { GEO_POOL_KINDS, GEO_POOL_NAMES, GEO_POOLS, monthDay } from "../geoText";
+import { GEO_POOL_KINDS, GEO_POOL_NAMES, GEO_POOLS, groupName, monthDay, platformName } from "../geoText";
 import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
 type PoolFilter = "all" | GeoPool;
@@ -34,13 +34,13 @@ const SIGNAL_WORDS: Readonly<Record<string, string>> = Object.freeze({
   client: "客户提供",
 });
 
-/** Real phrasings shown before 「还有 N 条」. */
+/** Real phrasings shown before “还有 N 条”. */
 const PHRASINGS_SHOWN = 6;
 
 /**
  * 问题 (plan §3.3, mockup g05): the four-pool question map. Pools are filter
  * chips; within a pool, each semantic group opens to its typical question,
- * the questions being measured (each with 「移出测量问句」) and the real
+ * the questions being measured (each with “移出测量问句”) and the real
  * phrasings collected from social platforms, with the platform named.
  * Control groups are marked. A locked set is versioned: an older version can
  * be looked at, and removing a question writes a new one.
@@ -129,11 +129,11 @@ function QuestionMap({
       </FilterRow>
       {(pool === "all" || !pools.includes(pool as GeoPool) ? pools : [pool as GeoPool]).map((key) => (
         <section key={key} aria-label={GEO_POOL_KINDS[key]} className="mt-8">
-          <h2 className="flex items-baseline gap-2 text-ui font-medium text-text">
-            {GEO_POOL_KINDS[key]}
-            {!GEO_POOL_NAMES[key].startsWith(GEO_POOL_KINDS[key]) && (
-              <span className="text-caption font-normal text-text-3">{GEO_POOL_NAMES[key]}</span>
-            )}
+          {/* A pool is a group heading over its rows, in the list's meta
+              level: the groups under it are what a reader opens. */}
+          <h2 className="flex items-baseline gap-2 text-caption text-text-3">
+            <span className="text-text-2">{GEO_POOL_KINDS[key]}</span>
+            {!GEO_POOL_NAMES[key].startsWith(GEO_POOL_KINDS[key]) && <span>{GEO_POOL_NAMES[key]}</span>}
           </h2>
           <ul className="mt-2 flex flex-col divide-y divide-faint">
             {groups.filter((group) => group.pool === key).map((group) => (
@@ -177,10 +177,12 @@ function GroupRow({
   const questions = list(group.questions);
   const measured = questions.filter((question) => question.isMeasured);
   const phrasings = questions.filter((question) => !question.isMeasured && question.kind === "real");
+  // Every real phrasing counts, measured ones too: the header's total does (G18).
+  const real = questions.filter((question) => question.kind === "real").length;
   const meta = [
     group.journeyStage || null,
     `${measured.length} 问`,
-    `${phrasings.length} 条原话`,
+    `${real} 条原话`,
     group.signal ? SIGNAL_WORDS[group.signal] ?? null : null,
   ].filter(Boolean).join(" · ");
   const panelId = `geo-group-${group.id}`;
@@ -193,10 +195,10 @@ function GroupRow({
           onClick={onToggle}
           aria-expanded={expanded}
           aria-controls={expanded ? panelId : undefined}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded text-left text-ui font-medium text-text hover:text-accent"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded text-left text-ui text-text hover:text-accent"
         >
           <ChevronRight size={16} aria-hidden="true" className={cn("shrink-0 text-text-3 transition-transform duration-fast", expanded && "rotate-90")} />
-          <span className="min-w-0 truncate">{group.name}</span>
+          <span className="min-w-0 truncate">{groupName(group.name)}</span>
         </button>
         {group.isControl && <Tag>对照组</Tag>}
         <span className="shrink-0 text-caption tabular-nums text-text-3">{meta}</span>
@@ -233,7 +235,7 @@ function MeasuredRow({ geoId, question, editable, onChanged }: { geoId: string; 
         toast.success("已移出，之后的测量不再问这一句。");
         onChanged();
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "没有移出，请稍后重试。" })))
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一句无法移出，请稍后重试。" })))
       .finally(() => setBusy(false));
   };
   return (
@@ -241,7 +243,7 @@ function MeasuredRow({ geoId, question, editable, onChanged }: { geoId: string; 
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="max-w-measure text-ui text-text">{question.text}</span>
         <span className="text-caption text-text-3">
-          {[KIND_WORDS[question.kind] ?? null, question.platform || null].filter(Boolean).join(" · ")}
+          {[KIND_WORDS[question.kind] ?? null, platformName(question.platform)].filter(Boolean).join(" · ")}
         </span>
       </div>
       {editable && (
@@ -260,13 +262,14 @@ function Phrasings({ phrasings }: { phrasings: GeoQuestion[] }) {
       <ul aria-label="真实问法" className="flex flex-wrap gap-2">
         {shown.map((question) => {
           const href = safeWebHref(question.sourceUrl);
+          const platform = platformName(question.platform);
           return (
             <li key={question.id} className="inline-flex max-w-full items-baseline gap-1 rounded bg-surface-1 px-2 py-1 text-ui text-text-2">
               <span className="min-w-0">{question.text}</span>
-              {question.platform && (
+              {platform && (
                 href
-                  ? <a href={href} target="_blank" rel="noreferrer" className="shrink-0 text-caption text-text-3 underline decoration-border underline-offset-2 hover:text-text">{question.platform}</a>
-                  : <span className="shrink-0 text-caption text-text-3">{question.platform}</span>
+                  ? <a href={href} target="_blank" rel="noreferrer" className="shrink-0 text-caption text-text-3 underline decoration-border underline-offset-2 hover:text-text">{platform}</a>
+                  : <span className="shrink-0 text-caption text-text-3">{platform}</span>
               )}
             </li>
           );

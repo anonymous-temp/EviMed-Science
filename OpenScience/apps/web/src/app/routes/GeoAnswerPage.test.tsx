@@ -72,7 +72,34 @@ describe("one answer", () => {
     await waitFor(() => expect(correction).toHaveTextContent("讲错我方：对的是每周一次皮下注射，从低剂量起始，按说明书逐步增加剂量。"));
     expect(correction).toHaveTextContent("依据：玛仕度肽注射液说明书（国家药监局 2025）");
     expect(correction).toHaveTextContent("出处：[3] 玛仕度肽（百科词条）");
-    expect(correction).toHaveTextContent("处置：修改百科词条 · 纠正中");
+    expect(correction).toHaveTextContent("处置：修改百科词条 · 处置中");
+  });
+
+  it("names a claim's source in the reader's words, never by its internal address (G14)", async () => {
+    client.getGeoEvidence.mockResolvedValue({
+      ...evidenceFilled,
+      claims: evidenceFilled.claims.map((claim) => (claim.id === "clm_1" ? { ...claim, sourceRef: "web-page:e1edc04a1ac28750", sourceLabel: null } : claim)),
+    });
+    renderAnswer();
+    const correction = await waitFor(() => {
+      const found = document.querySelector("[data-geo-correction]") as HTMLElement | null;
+      if (!found || !found.textContent?.includes("对的是每周一次")) throw new Error("not yet");
+      return found;
+    });
+    expect(correction).not.toHaveTextContent("web-page:");
+    expect(correction).not.toHaveTextContent("依据：");
+  });
+
+  it("lists a citation that came back without a link, and says it has none (G8)", async () => {
+    client.getGeoAnswer.mockResolvedValue({
+      ...answerFilled,
+      snapshot: { ...answerFilled.snapshot, citations: [...answerFilled.snapshot.citations, { url: null, domain: null, title: "减重针的常见副作用", inBody: true }] },
+    });
+    renderAnswer();
+    const cited = await screen.findByRole("region", { name: "引用的信源" });
+    const row = within(cited).getByText("减重针的常见副作用").closest("li") as HTMLElement;
+    expect(within(row).getByText("没有链接")).toBeInTheDocument();
+    expect(within(row).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("lists the cited sources, with those not used in the body said so", async () => {

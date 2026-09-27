@@ -67,9 +67,9 @@ type Loaded =
  * The nine tabs this replaces were the platform's workflow, which meant a
  * reader had to know how the platform works before they could find out how
  * their medicine is being described. Every old address still resolves: a link
- * to 「诊断」 lands on 准确与安全 and the browser's bar says so.
+ * to “诊断” lands on 准确与安全 and the browser's bar says so.
  *
- * There is one AI entry on the page — 「对话」 in the header — where there used
+ * There is one AI entry on the page — “对话” in the header — where there used
  * to be one beside every number.
  */
 export function GeoProjectPage() {
@@ -138,13 +138,13 @@ export function GeoProjectPage() {
 
   const paused = project.status === "paused";
   const menu: MenuEntry[] = [
-    { label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包没有开始导出，请稍后重试。") },
+    { label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包无法导出，请稍后重试。") },
     {
       label: paused ? "继续" : "暂停",
       onSelect: () => {
         void patchGeoProject(geoId, { status: paused ? "active" : "paused" })
           .then(() => { toast.success(paused ? "已继续。" : "已暂停，测量和投放都停下了。"); reload(); })
-          .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "没有改成功，请稍后重试。" })));
+          .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目状态无法修改，请稍后重试。" })));
       },
     },
     "separator",
@@ -159,7 +159,7 @@ export function GeoProjectPage() {
         void useProjectStore.getState().load();
         navigate("/app/geo", { replace: true });
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目没有删除，请稍后重试。" })));
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目无法删除，请稍后重试。" })));
   };
 
   const week = weekOf(project.startedAt ?? project.createdAt ?? null);
@@ -171,7 +171,7 @@ export function GeoProjectPage() {
       meta={<Tag>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
       actions={(
         <>
-          <Button variant="secondary" loading={busy === "weekly"} onClick={() => act("weekly", () => exportGeo(geoId, "weekly"), "周报没有开始导出，请稍后重试。")}>
+          <Button variant="secondary" loading={busy === "weekly"} onClick={() => act("weekly", () => exportGeo(geoId, "weekly"), "周报无法导出，请稍后重试。")}>
             <FileDown size={16} aria-hidden="true" />
             周报
           </Button>
@@ -197,7 +197,7 @@ export function GeoProjectPage() {
       </div>
       {confirmDelete && (
         <ConfirmDialog
-          title={`删除「${project.name}」？`}
+          title={`删除“${project.name}”？`}
           body="这个项目的对话、文件、测量记录和稿件会一起删除，不能恢复。已经发出的稿件不会被撤下。"
           confirmLabel="删除"
           onConfirm={remove}

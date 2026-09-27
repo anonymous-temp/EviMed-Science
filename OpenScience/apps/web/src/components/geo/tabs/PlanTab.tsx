@@ -3,6 +3,7 @@ import { Panel, PanelRow } from "@/components/ui/Panel";
 import { EvidenceTab } from "./EvidenceTab";
 import { JourneyTab } from "./JourneyTab";
 import { TabSection } from "./geoTabKit";
+import { marketConnected } from "../geoOverviewModel";
 import { coverageText, engineName } from "../geoText";
 import { yuan } from "./geoTabText";
 
@@ -14,7 +15,7 @@ const TIER_WORDS: Readonly<Record<string, string>> = Object.freeze({ "1": "档�
  * journey the questions were drawn from, and the settings a reader may need to
  * check (which engines, how long, which target tier, how much budget).
  *
- * It is the page a reader opens to answer 「按什么口径算的」, which is why the
+ * It is the page a reader opens to answer “按什么口径算的”, which is why the
  * settings sit here and not under a chart.
  */
 export function PlanTab({ geoId, project }: { geoId: string; project: GeoProject }) {
@@ -29,13 +30,13 @@ export function PlanTab({ geoId, project }: { geoId: string; project: GeoProject
           label="投放预算"
           control={project.budget && project.budget.totalCny > 0
             ? `${yuan(project.budget.totalCny)} · 每天最多 ${yuan(project.budget.dailyCny)}`
-            : "还没有设"}
+            : marketConnected(project) ? "还没有设" : "等媒介集市接通"}
         />
       </Panel>
-      <TabSection title="产品与依据">
+      <TabSection title="产品与依据" level="ui">
         <EvidenceTab geoId={geoId} project={project} />
       </TabSection>
-      <TabSection title="患者与医生的旅程">
+      <TabSection title="患者与医生的旅程" level="ui">
         <JourneyTab geoId={geoId} project={project} />
       </TabSection>
     </div>

@@ -116,15 +116,34 @@ describe("a GEO project's page", () => {
     expect(within(distribution).getByText("待你确认预算")).toBeInTheDocument();
   });
 
+  it("without a media market, asks for no budget and says what placing waits for", async () => {
+    client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, budget: null, market: { configured: false } });
+    renderProject();
+    const rail = await screen.findByRole("list", { name: "进度" });
+    const distribution = rail.querySelector("[data-rail-step='distribution']") as HTMLElement;
+    expect(distribution).not.toHaveAttribute("data-rail-state", "waiting");
+    expect(within(distribution).getByText("等媒介集市接通")).toBeInTheDocument();
+    expect(screen.queryByText("待你确认预算")).not.toBeInTheDocument();
+    const next = await screen.findByText("投放要等媒介集市接通");
+    expect(next.closest("[data-next-step]")).toHaveAttribute("data-next-state", "held");
+    expect(screen.queryByText("等你")).not.toBeInTheDocument();
+    expect(screen.queryByText("确认投放预算")).not.toBeInTheDocument();
+  });
+
   it("opens with one sentence, six numbers with their targets, and the denominator said once", async () => {
     renderProject();
     // One sentence, and the whole of it: the measurement it needs has to have
     // arrived before any of it is asserted.
-    expect(await screen.findByText(/综合可见度 38，比上次高 5，目标 55；还有 1 条严重讲错待处理。/)).toBeInTheDocument();
+    expect(await screen.findByText(/综合可见度 38，比上次高 5，目标 55，提及率在 2 个同类药里排第 2；还有 1 条严重讲错待处理。/)).toBeInTheDocument();
 
+    // The index takes two cells, with where we stand, the target, and the
+    // rival ahead of us (fusion plan §4.8).
     const gvi = screen.getByRole("region", { name: "综合可见度指数" });
     expect(gvi).toHaveTextContent("38");
     expect(gvi).toHaveTextContent("目标 55");
+    expect(gvi).toHaveTextContent("提及率第 2 / 2");
+    expect(gvi).toHaveTextContent("司美格鲁肽 提及率 48%");
+    expect(gvi).toHaveClass("sm:col-span-2");
     const mention = screen.getByRole("region", { name: "品牌提及率" });
     expect(mention).toHaveTextContent("18");
     expect(mention).toHaveTextContent("目标 35%");
@@ -182,7 +201,7 @@ describe("a GEO project's page", () => {
     expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi$/);
   });
 
-  it("「对话」 opens the project's latest conversation, 「周报」 exports it", async () => {
+  it("“对话” opens the project's latest conversation, “周报” exports it", async () => {
     client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "对话" }));
@@ -192,7 +211,7 @@ describe("a GEO project's page", () => {
     await waitFor(() => expect(client.exportGeo).toHaveBeenCalledWith("geo_masi", "weekly"));
   });
 
-  it("「⋯」 exports the pack, pauses and deletes — deleting only after a confirmation", async () => {
+  it("“⋯” exports the pack, pauses and deletes — deleting only after a confirmation", async () => {
     client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
@@ -213,7 +232,7 @@ describe("a GEO project's page", () => {
     await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo$/));
   });
 
-  it("reads as a new project before anything was measured: 「—」 and a sentence, never a zero", async () => {
+  it("reads as a new project before anything was measured: “—” and a sentence, never a zero", async () => {
     client.getGeoProject.mockResolvedValue({
       ...GEO_PROJECT, name: "新 GEO 项目", steps: {}, budget: null, sessionId: "ses_new",
       overview: { metrics: [], week: [], steps: {} },
