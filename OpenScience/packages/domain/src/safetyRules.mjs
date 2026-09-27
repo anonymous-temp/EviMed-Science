@@ -117,6 +117,149 @@ export function matchedHighRiskEntities(text) {
 }
 
 /**
+ * Toxic Chinese materia medica: `tcmToxicHerbs` in clinical-safety-rules.json.
+ *
+ * Hidden knowledge: the high-alert list above is western medicines, so a TCM
+ * clinician's lasting preference for 附子 at 60 g — or a shared capsule whose
+ * method says so — met no checkpoint anywhere (2026-09-26 audit, M-13; the
+ * CDSS's item 8). Each row is one herb with every name it is written under
+ * and the source of its toxicity and dose; nothing here is a pattern over
+ * prose (principle 5). Two decidable questions are asked of a text:
+ *
+ * - which of these herbs it names — longest name first, each found name
+ *   blanked before shorter ones are looked for, so 白附子 is never 附子 and
+ *   制川乌 is one mention of 川乌, not two;
+ * - which stated doses exceed the row's `doseRangeG` — a format check like a
+ *   DOI: a name, at most six characters that are neither digits nor clause
+ *   separators, then a number (or a range, read at its top) and a gram or
+ *   milligram unit.
+ *
+ * @typedef {{ id: string, nameZh: string, names: readonly string[], toxicity: string,
+ *   doseRangeG: readonly [number, number] | null, doseNote: string, evidence: readonly CautionEvidence[] }} TcmToxicHerb
+ */
+
+/**
+ * Compiles and checks the herb rows; a malformed row stops the process at load,
+ * as a malformed caution does. Exported so the refusal is testable.
+ * @param {unknown} data the rules document
+ * @returns {readonly TcmToxicHerb[]}
+ */
+export function compileTcmToxicHerbs(data) {
+  const rows = Array.isArray(/** @type {any} */ (data)?.tcmToxicHerbs) ? /** @type {any} */ (data).tcmToxicHerbs : []
+  const ids = new Set()
+  const names = new Set()
+  return Object.freeze(rows.map((/** @type {any} */ row, /** @type {number} */ index) => {
+    const where = `tcmToxicHerbs[${index}]${row?.id ? ` (${row.id})` : ''}`
+    for (const field of ['id', 'nameZh', 'toxicity']) {
+      if (typeof row?.[field] !== 'string' || !row[field].trim()) throw new Error(`clinical-safety-rules.json: ${where} is missing ${field}.`)
+    }
+    if (ids.has(row.id)) throw new Error(`clinical-safety-rules.json: ${where} repeats an id.`)
+    ids.add(row.id)
+    if (!Array.isArray(row.names) || row.names.length === 0 || row.names.some((/** @type {unknown} */ name) => typeof name !== 'string' || !name.trim())) {
+      throw new Error(`clinical-safety-rules.json: ${where}.names must list the herb's names.`)
+    }
+    for (const name of row.names) {
+      // One name, one herb: a name two rows share would make a mention of it
+      // two findings, or the wrong one.
+      if (names.has(name)) throw new Error(`clinical-safety-rules.json: ${where} repeats the name ${name}, which another row already holds.`)
+      names.add(name)
+    }
+    const range = row.doseRangeG
+    if (range !== undefined && !(Array.isArray(range) && range.length === 2
+      && range.every((/** @type {unknown} */ value) => typeof value === 'number' && value > 0) && range[0] <= range[1])) {
+      throw new Error(`clinical-safety-rules.json: ${where}.doseRangeG must be [lowest, highest] grams.`)
+    }
+    const evidence = Array.isArray(row.evidence) ? row.evidence : []
+    if (evidence.length === 0 || evidence.some((/** @type {any} */ entry) => typeof entry?.authority !== 'string' || !/^https:\/\/\S+$/.test(String(entry?.url ?? '')))) {
+      throw new Error(`clinical-safety-rules.json: ${where} needs evidence entries with an authority and an https url.`)
+    }
+    return Object.freeze({
+      id: row.id, nameZh: row.nameZh.trim(), names: Object.freeze(row.names.map((/** @type {string} */ name) => name.trim())),
+      toxicity: row.toxicity, doseRangeG: range ? Object.freeze([range[0], range[1]]) : null,
+      doseNote: typeof row.doseNote === 'string' ? row.doseNote : '',
+      evidence: Object.freeze(evidence.map((/** @type {any} */ entry) => Object.freeze({ ...entry }))),
+    })
+  }))
+}
+
+/** The build's own herb rows, compiled once. */
+export const TCM_TOXIC_HERBS = compileTcmToxicHerbs(clinicalSafetyRulesData)
+
+/** Every herb name with its row, longest first. */
+const TCM_HERB_NAMES = Object.freeze(TCM_TOXIC_HERBS
+  .flatMap((row) => row.names.map((name) => ({ row, name })))
+  .sort((left, right) => right.name.length - left.name.length))
+
+/** Grams per unit a stated dose may be written in. */
+const DOSE_UNITS = Object.freeze({ g: 1, '克': 1, mg: 0.001, '毫克': 0.001 })
+
+/** @param {string} text @param {string} name */
+function blankName(text, name) {
+  return text.split(name).join(' '.repeat(name.length))
+}
+
+/**
+ * The toxic herbs a text names, by their row's name, in the file's order.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function matchedTcmToxicHerbs(text) {
+  let value = String(text ?? '')
+  if (!value.trim()) return []
+  /** @type {Set<string>} */
+  const found = new Set()
+  for (const { row, name } of TCM_HERB_NAMES) {
+    if (!value.includes(name)) continue
+    found.add(row.id)
+    value = blankName(value, name)
+  }
+  return TCM_TOXIC_HERBS.filter((row) => found.has(row.id)).map((row) => row.nameZh)
+}
+
+/**
+ * The stated doses of a toxic herb above its source's upper bound.
+ * @param {string} text
+ * @returns {{ herb: string, statedG: number, maxG: number, text: string }[]}
+ */
+export function tcmDoseFindings(text) {
+  let value = String(text ?? '')
+  if (!value.trim()) return []
+  const findings = []
+  for (const { row, name } of TCM_HERB_NAMES) {
+    if (!value.includes(name)) continue
+    if (row.doseRangeG) {
+      const pattern = new RegExp(`${escapeRegExp(name)}[^\\d，、；。;,\\n]{0,6}?(\\d+(?:\\.\\d+)?)(?:\\s*[～~\\-－—至到]\\s*(\\d+(?:\\.\\d+)?))?\\s*(mg|毫克|g|克)(?![a-z])`, 'gi')
+      for (const match of value.matchAll(pattern)) {
+        const grams = Number(match[2] ?? match[1]) * DOSE_UNITS[/** @type {keyof typeof DOSE_UNITS} */ (match[3].toLowerCase())]
+        const maxG = row.doseRangeG[1]
+        if (Number.isFinite(grams) && grams > maxG + 1e-9) {
+          findings.push({ herb: row.nameZh, statedG: Math.round(grams * 1000) / 1000, maxG, text: match[0] })
+        }
+      }
+    }
+    value = blankName(value, name)
+  }
+  return findings
+}
+
+/**
+ * What a text says that the clinical-safety checkpoint is about: the medicines
+ * it names — a trigger or high-alert medicine, or a toxic herb — and any toxic
+ * herb dose above its source's bound. The one reading memory extraction and
+ * the capsule import scan share, so a name is a checkpoint in both or in
+ * neither.
+ * @param {string} text
+ * @returns {{ medicines: string[], overDose: { herb: string, statedG: number, maxG: number, text: string }[] }}
+ */
+export function medicationSafetyIn(text) {
+  const value = String(text ?? '')
+  return {
+    medicines: [...new Set([...matchedClinicalTriggers(value), ...matchedHighRiskEntities(value), ...matchedTcmToxicHerbs(value)])],
+    overDose: tcmDoseFindings(value),
+  }
+}
+
+/**
  * Pharmacist-authored cautions: `cautionRules` in clinical-safety-rules.json.
  *
  * Hidden knowledge: a caution is the opposite of the four `rules` above it.

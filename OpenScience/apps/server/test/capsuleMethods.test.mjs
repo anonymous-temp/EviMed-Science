@@ -242,6 +242,25 @@ test("an assistant's note and a received entry no model verdict covered are cont
   }
 });
 
+test("a received entry the scan held for a toxic herb's dose above its bound is context, never mounted", async () => {
+  const { project, directory } = await scratchProject();
+  try {
+    const capsules = fakeCapsules({
+      accountItems: [{ capsuleId: "capsule-a", mode: "guest" }],
+      byCapsule: {
+        "capsule-a": [
+          entry("over-dose", { origin: "system", safetyHold: true, content: "阳虚重证附子用至 60 g，先煎两小时。" }),
+          entry("in-range", { origin: "system", content: "附子 10 g，先煎久煎。" }),
+        ],
+      },
+    });
+    const selected = await selectCapsuleMethods(capsules, { userId: "alice", projectId: "paper1" });
+    assert.deepEqual(selected.map((method) => method.id), ["in-range"]);
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
 test("approved methods are found past the first page of a capsule's entries", async () => {
   const { project, directory } = await scratchProject();
   try {

@@ -301,6 +301,8 @@ export class CapsuleTransferService {
     // short of "ok" leaves every kept entry unjudged.
     const unchecked = new Set(Array.isArray(preview.scan.unchecked) ? preview.scan.unchecked
       : preview.scan.model === "ok" ? [] : preview.scan.kept);
+    // A toxic herb's dose above its bound stays context (`capsuleScan.mjs`).
+    const held = new Set(Array.isArray(preview.scan.held) ? preview.scan.held : []);
     let records;
     try { records = await this.documents.createBatch(userId, [
       { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
@@ -313,6 +315,7 @@ export class CapsuleTransferService {
         // travelled could hold only entries its sharer had approved by hand.
         capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: entry.origin === "inferred" ? "inferred" : "system",
         status: "approved", contextOnly: true, ...(unchecked.has(entry.id) ? { unscanned: true } : {}),
+        ...(held.has(entry.id) ? { safetyHold: true } : {}),
         provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }],
         transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
       } })),

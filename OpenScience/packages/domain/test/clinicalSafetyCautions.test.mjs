@@ -103,9 +103,12 @@ function validate(node, value, root, at = "$") {
   if (typeof value === "number") {
     if (node.minimum != null && value < node.minimum) errors.push(`${at}: below ${node.minimum}`);
     if (node.maximum != null && value > node.maximum) errors.push(`${at}: above ${node.maximum}`);
+    if (node.exclusiveMinimum != null && value <= node.exclusiveMinimum) errors.push(`${at}: not above ${node.exclusiveMinimum}`);
   }
   if (Array.isArray(value)) {
     if (node.minItems != null && value.length < node.minItems) errors.push(`${at}: fewer than ${node.minItems} items`);
+    if (node.maxItems != null && value.length > node.maxItems) errors.push(`${at}: more than ${node.maxItems} items`);
+    if (node.uniqueItems && new Set(value.map((/** @type {unknown} */ item) => JSON.stringify(item))).size !== value.length) errors.push(`${at}: repeats an item`);
     if (node.items) value.forEach((item, index) => errors.push(...validate(node.items, item, root, `${at}[${index}]`)));
   }
   if (kind === "object") {

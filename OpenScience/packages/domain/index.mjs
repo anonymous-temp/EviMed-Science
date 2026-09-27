@@ -264,19 +264,24 @@ export {
   skillRootGuidance,
 } from './src/skillRoots.mjs'
 
-// safetyRules — 11 exports
+// safetyRules — 16 exports
 export {
   CLINICAL_CONTENT_TRIGGER_ENTITIES,
   CLINICAL_HIGH_RISK_ENTITIES,
   CLINICAL_SAFETY_CAUTION_CHECK,
   CLINICAL_SAFETY_CAUTION_RULES,
+  TCM_TOXIC_HERBS,
   clinicalContentTriggerPattern,
   clinicalSafetyCautionHits,
   clinicalSafetyRules,
   compileCautionRules,
+  compileTcmToxicHerbs,
   matchedClinicalTriggers,
   matchedHighRiskEntities,
+  matchedTcmToxicHerbs,
+  medicationSafetyIn,
   mentionedMedicines,
+  tcmDoseFindings,
 } from './src/safetyRules.mjs'
 
 // reviewFindings — 21 exports

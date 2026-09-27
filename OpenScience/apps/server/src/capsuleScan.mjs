@@ -22,7 +22,16 @@
  *     tools, data, accounts or honesty.
  *
  * Flagged entries are dropped and listed to the researcher; everything else
- * takes effect. A model that cannot be reached leaves the first two checks
+ * takes effect.
+ *
+ * Beside the three, the medication-safety reading memory extraction uses
+ * (`medicationSafetyIn`, the pharmacist's rows in `clinical-safety-rules.json`):
+ * every entry that names a high-alert medicine or a toxic Chinese herb is
+ * listed under `safety`, so the preview the researcher confirms says so; and
+ * an entry that states a toxic herb's dose above its Pharmacopoeia bound is
+ * `held` — kept as context, never mounted as a method (`capsuleMethods.mjs`).
+ * Nothing is dropped for naming a medicine: a TCM school's capsule is about
+ * 附子, and whole-pack trust means the recipient reads the list and decides. A model that cannot be reached leaves the first two checks
  * standing and says so — the pack is not held for it. What it could not judge
  * is listed as `unchecked`: context the pack still brings, never a method
  * mounted into a run until a later scan has judged it (`capsuleMethods.mjs`).
@@ -32,7 +41,7 @@
  * @module capsuleScan
  */
 
-import { platformIdentifiersIn } from "@evimed/domain";
+import { medicationSafetyIn, platformIdentifiersIn } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 
 /** How many entries one model call judges: a pack is at most a hundred. */
@@ -118,7 +127,9 @@ export class CapsuleScanner {
    * @param {readonly { id: string, factKind: string, content: string }[]} entries
    * @param {{ useModel?: boolean }} [options] false when there is no project to meter it to
    * @returns {Promise<{ kept: string[], unchecked: string[], dropped: { id: string, factKind: string, excerpt: string, source: "closed_set" | "model", code: string, reason: string }[],
-   *   model: "ok" | "unavailable" | "partial", checkedAt: string }>} `unchecked` is the part of `kept` no model verdict covers
+   *   safety: { id: string, factKind: string, excerpt: string, medicines: string[], overDose: { herb: string, statedG: number, maxG: number, text: string }[] }[],
+   *   held: string[], model: "ok" | "unavailable" | "partial", checkedAt: string }>} `unchecked` is the part of `kept` no model verdict covers;
+   *   `held` the part of `kept` that states a toxic herb's dose above its bound
    */
   async scan(owner, entries, { useModel = true } = {}) {
     /** @type {Map<string, { source: "closed_set" | "model", code: string, reason: string }>} */
@@ -151,9 +162,20 @@ export class CapsuleScanner {
     }
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const kept = entries.filter((entry) => !flagged.has(entry.id)).map((entry) => entry.id);
+    const safety = kept.map((id) => ({ id, ...medicationSafetyIn(String(byId.get(id)?.content ?? "")) }))
+      .filter((finding) => finding.medicines.length > 0 || finding.overDose.length > 0)
+      .map((finding) => ({
+        id: finding.id,
+        factKind: String(byId.get(finding.id)?.factKind ?? ""),
+        excerpt: squashed(byId.get(finding.id)?.content).slice(0, 160),
+        medicines: finding.medicines,
+        overDose: finding.overDose,
+      }));
     return {
       kept,
       unchecked: kept.filter((id) => unchecked.has(id)),
+      safety,
+      held: safety.filter((finding) => finding.overDose.length > 0).map((finding) => finding.id),
       dropped: [...flagged.entries()].map(([id, flag]) => ({
         id,
         factKind: String(byId.get(id)?.factKind ?? ""),

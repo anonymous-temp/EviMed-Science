@@ -293,7 +293,8 @@ export class CapsuleService {
         // A pack imported before whole-pack trust still holds candidates; the
         // first enable or trial scans it and settles them.
         scanned: Boolean(capsule.payload.scan), waiting,
-        scan: capsule.payload.scan ? { model: capsule.payload.scan.model, checkedAt: capsule.payload.scan.checkedAt, dropped: capsule.payload.scan.dropped ?? [] } : null,
+        scan: capsule.payload.scan ? { model: capsule.payload.scan.model, checkedAt: capsule.payload.scan.checkedAt, dropped: capsule.payload.scan.dropped ?? [],
+          safety: capsule.payload.scan.safety ?? [] } : null,
       });
     }
     return result;
@@ -323,13 +324,17 @@ export class CapsuleService {
       { useModel: Boolean(projectId) });
     const kept = new Set(result.kept);
     const unchecked = new Set(result.unchecked ?? (result.model === "ok" ? [] : result.kept));
+    const held = new Set(Array.isArray(result.held) ? result.held : []);
     for (const entry of live) {
       const status = kept.has(entry.id) ? "approved" : "retired";
       const unscanned = status === "approved" && unchecked.has(entry.id);
-      if (entry.payload.status === status && (entry.payload.unscanned === true) === unscanned) continue;
-      const { unscanned: _mark, ...payload } = entry.payload;
-      await this.documents.put(userId, "fact", entry.id, { ...payload, status, ...(unscanned ? { unscanned: true } : {}) },
-        { expectedRevision: entry.revision });
+      const safetyHold = status === "approved" && held.has(entry.id);
+      if (entry.payload.status === status && (entry.payload.unscanned === true) === unscanned
+        && (entry.payload.safetyHold === true) === safetyHold) continue;
+      const { unscanned: _mark, safetyHold: _hold, ...payload } = entry.payload;
+      await this.documents.put(userId, "fact", entry.id, { ...payload, status, ...(unscanned ? { unscanned: true } : {}),
+        ...(safetyHold ? { safetyHold: true } : {}) },
+      { expectedRevision: entry.revision });
     }
     // What an earlier scan dropped at import was never written, so it stays
     // on the pack's list beside what this one retired.

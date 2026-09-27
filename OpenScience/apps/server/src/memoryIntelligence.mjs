@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   carriesPlatformContext,
-  matchedClinicalTriggers,
-  matchedHighRiskEntities,
   mcpToolBaseName,
+  medicationSafetyIn,
   platformIdentifiersIn,
   runBookkeepingIn,
   unwrapUserWrappers,
@@ -95,12 +94,17 @@ const ORIGIN_RANK = Object.freeze({ manual: 4, explicit: 3, inferred: 2, system:
  */
 function checkpointReason(kind, text) {
   if (!DURABLE_PERSON_KINDS.has(kind)) return null;
-  return matchedClinicalTriggers(text).length || matchedHighRiskEntities(text).length ? "clinical_safety" : null;
+  // One reading with the capsule import scan (`medicationSafetyIn`): the
+  // high-alert medicines, the toxic Chinese herbs, and a herb dose above its
+  // Pharmacopoeia bound. The herbs joined on 2026-09-27: a TCM clinician's
+  // standing 「附子常用 60 g」 met no checkpoint before (audit M-13).
+  const safety = medicationSafetyIn(text);
+  return safety.medicines.length || safety.overDose.length ? "clinical_safety" : null;
 }
 
 /** What the checkpoint means, for the person reading the run. */
 const checkpointReasonText = Object.freeze({
-  clinical_safety: "涉及高警示药品或临床安全规则中的药物，这类长期偏好在你看过之前不会用于回答",
+  clinical_safety: "涉及高警示药品、毒性中药或临床安全规则中的药物，这类长期偏好在你看过之前不会用于回答",
 });
 
 /** The audit ledger reads English, like every other revision reason here. */

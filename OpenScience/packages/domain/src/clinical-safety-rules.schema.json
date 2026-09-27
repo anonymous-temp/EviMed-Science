@@ -72,6 +72,16 @@
       "items": {
         "$ref": "#/$defs/cautionRule"
       }
+    },
+    "tcmToxicHerbsNote": {
+      "type": "string"
+    },
+    "tcmToxicHerbs": {
+      "description": "Toxic Chinese materia medica, one row per herb with the source of its toxicity and dose. Read by memory extraction's clinical-safety checkpoint and by the shared-capsule import scan (packages/domain/src/safetyRules.mjs).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tcmToxicHerb"
+      }
     }
   },
   "additionalProperties": false,
@@ -296,6 +306,64 @@
         "message": {
           "type": "string",
           "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "tcmToxicHerb": {
+      "type": "object",
+      "required": [
+        "id",
+        "nameZh",
+        "names",
+        "toxicity",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "nameZh": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "names": {
+          "description": "Every name the herb is written under, its processed forms included; the first need not be nameZh.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "toxicity": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the source says of its toxicity, in its own terms (有大毒 / 有毒 / 有小毒, or why its standard was withdrawn)."
+        },
+        "doseRangeG": {
+          "description": "The source's 用法与用量 in grams, [lowest, highest]. A stated dose above the highest is a dose finding; a row without a range is never dose-checked.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "doseNote": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
         }
       },
       "additionalProperties": false

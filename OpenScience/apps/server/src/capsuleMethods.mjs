@@ -193,7 +193,9 @@ export function renderCapsuleMethod(method) {
  * And an entry of a received pack that no model verdict has covered
  * (`unscanned`: the scan's model call failed or never ran) is context until a
  * later scan judges it: the pack is still in force, it just cannot put an
- * unjudged SKILL.md into runs (security review 2026-09-20).
+ * unjudged SKILL.md into runs (security review 2026-09-20). Nor can one the
+ * scan `held` for stating a toxic herb's dose above its Pharmacopoeia bound
+ * (`safetyHold`, `capsuleScan.mjs`): a method is an instruction in every run.
  *
  * @param {any} entry
  * @returns {boolean}
@@ -203,6 +205,7 @@ function isMountableEntry(entry) {
   return payload?.status === MOUNTABLE_STATUS
     && payload.origin !== "inferred"
     && payload.unscanned !== true
+    && payload.safetyHold !== true
     && CAPSULE_WORK_STYLE_FACT_KINDS.includes(String(payload.factKind))
     && !UNMOUNTABLE_LAYERS.includes(String(payload.layer ?? ""))
     && typeof payload.content === "string"

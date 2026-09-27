@@ -571,6 +571,40 @@ test("the one checkpoint: a lasting preference naming a high-alert medicine wait
   assert.match(client.reasons.find((entry) => entry.key === "preference.warfarin_dosing").reason, /held for its owner/);
 });
 
+// 2026-09-26 audit (M-13): the checkpoint's vocabulary was western high-alert
+// medicines only, so a TCM clinician's standing habit about a toxic herb — the
+// CDSS's whole subject — took effect unseen.
+test("a lasting preference naming a toxic Chinese herb, or its dose above the Pharmacopoeia bound, waits for its owner", async () => {
+  const client = new MemoryStoreDouble();
+  const statement = "我开附子一般用 30 g，先煎两小时。细辛我习惯不超过 3 g。";
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: modelFetch((sources) => [
+      {
+        scope: "user", kind: "preference", key: "preference.fuzi_dose",
+        value: "附子一般用 30 g，先煎两小时", summary: "附子常用 30 g，先煎", origin: "explicit",
+        importance: 0.8, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "我开附子一般用 30 g，先煎两小时",
+      },
+      {
+        scope: "user", kind: "behavior", key: "behavior.xixin_limit",
+        value: "细辛用量不超过 3 g", summary: "细辛不超过 3 g", origin: "explicit",
+        importance: 0.7, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "细辛我习惯不超过 3 g",
+      },
+      {
+        scope: "user", kind: "preference", key: "preference.report_order",
+        value: "报告先写结论再写证据", summary: "先结论后证据", origin: "inferred",
+        importance: 0.6, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: "我开附子一般用 30 g",
+      },
+    ]),
+  });
+  const result = await intelligence.recordRun(project(), run("run_tcm_safety"), [message("u1", statement)]);
+  const byKey = (key) => [...client.records.values()].find((record) => record.key === key);
+  assert.equal(byKey("preference.fuzi_dose").status, "pending", "a toxic herb above its 15 g bound is held");
+  assert.equal(byKey("behavior.xixin_limit").status, "pending", "a toxic herb named in a lasting habit is held, whatever the dose");
+  assert.equal(byKey("preference.report_order").status, "active", "a preference that names no medicine takes effect");
+  assert.equal(result.pending, 2);
+  assert.match(result.pendingReasons[0].text, /毒性中药/);
+});
+
 /**
  * The inbox, with the one behaviour a recorder would have hidden.
  *
@@ -875,7 +909,10 @@ test("an inbox that refuses the notice costs the run neither its memory nor its 
 test("the checkpoint and the platform vocabulary are the domain's closed lists, not patterns of this module", async () => {
   const source = await readFile(new URL("../src/memoryIntelligence.mjs", import.meta.url), "utf8");
   assert.ok(source.length > 1_000, "the module source must actually have been read");
-  assert.match(source, /import \{[^}]*matchedClinicalTriggers[^}]*matchedHighRiskEntities[^}]*\} from "@evimed\/domain"/s);
+  // One reading shared with the capsule import scan: the high-alert medicines,
+  // the toxic Chinese herbs and their dose bounds, all rows of the rules file.
+  assert.match(source, /import \{[^}]*medicationSafetyIn[^}]*\} from "@evimed\/domain"/s);
+  assert.match(source, /const safety = medicationSafetyIn\(text\)/);
   assert.match(source, /import \{[^}]*platformIdentifiersIn[^}]*\} from "@evimed\/domain"/s);
   assert.match(source, /carriesPlatformContext\(unwrapUserWrappers\(messageText\(message\)\)\)/);
   // The four-tag framing pattern it replaced must be gone, not kept beside it.

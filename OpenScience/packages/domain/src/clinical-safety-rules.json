@@ -2855,5 +2855,247 @@
         }
       ]
     }
+  ],
+  "tcmToxicHerbsNote": "Toxic Chinese materia medica, one row per herb, each citing where its toxicity and dose come from (the 2020 Chinese Pharmacopoeia, or the regulator's notice that withdrew an aristolochic-acid herb from the standards). Read by memory extraction, where a lasting preference naming one waits for its owner as a high-alert medicine does, and by the import scan of a shared capsule, which lists every entry naming one and holds as context only an entry stating a dose above doseRangeG's upper bound. names are matched longest first, so 白附子 is never read as 附子; a stated dose is a name followed, within a few characters, by a number and a gram or milligram unit. doseRangeG is the monograph's 用法与用量 in grams; a row without one is never dose-checked. To add a herb, a pharmacist adds a row here and a case to packages/domain/test/tcmToxicHerbs.test.mjs.",
+  "tcmToxicHerbs": [
+    {
+      "id": "fuzi",
+      "nameZh": "附子",
+      "names": [
+        "附子",
+        "制附子",
+        "附片",
+        "黑顺片",
+        "白附片",
+        "淡附片",
+        "炮附片",
+        "盐附子"
+      ],
+      "toxicity": "有毒",
+      "doseRangeG": [
+        3,
+        15
+      ],
+      "doseNote": "3～15 g，先煎，久煎",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 附子",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "【性味与归经】辛、甘，大热；有毒。【用法与用量】3～15 g，先煎，久煎。【注意】孕妇慎用；不宜与半夏、瓜蒌类、贝母类、白蔹、白及同用。Read from the monograph for the pharmacist to re-check against the printed edition."
+        }
+      ]
+    },
+    {
+      "id": "baifuzi",
+      "nameZh": "白附子",
+      "names": [
+        "白附子",
+        "禹白附",
+        "制白附子"
+      ],
+      "toxicity": "有毒",
+      "doseRangeG": [
+        3,
+        6
+      ],
+      "doseNote": "3～6 g，一般炮制后用",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 白附子",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "【性味与归经】辛，温；有毒。【用法与用量】3～6 g，一般炮制后用；外用生品适量。【注意】孕妇慎用；生品内服宜慎。Listed so that 白附子 is never read as 附子: the longer name is matched first."
+        }
+      ]
+    },
+    {
+      "id": "chuanwu",
+      "nameZh": "川乌",
+      "names": [
+        "川乌",
+        "生川乌",
+        "制川乌",
+        "川乌头"
+      ],
+      "toxicity": "生川乌有大毒；制川乌有毒",
+      "doseRangeG": [
+        1.5,
+        3
+      ],
+      "doseNote": "制川乌 1.5～3 g，先煎、久煎；生川乌一般炮制后用",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 川乌、制川乌",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "川乌：辛、苦，热；有大毒；一般炮制后用；生品内服宜慎，孕妇禁用。制川乌：有毒；【用法与用量】1.5～3 g，先煎、久煎。A stated 川乌 dose is checked against the 制川乌 range, the only oral range the monograph gives."
+        }
+      ]
+    },
+    {
+      "id": "caowu",
+      "nameZh": "草乌",
+      "names": [
+        "草乌",
+        "生草乌",
+        "制草乌",
+        "草乌头"
+      ],
+      "toxicity": "生草乌有大毒；制草乌有毒",
+      "doseRangeG": [
+        1.5,
+        3
+      ],
+      "doseNote": "制草乌 1.5～3 g，宜先煎、久煎；生草乌一般炮制后用",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 草乌、制草乌",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "草乌：辛、苦，热；有大毒；一般炮制后用；生品内服宜慎，孕妇禁用。制草乌：有毒；【用法与用量】1.5～3 g，宜先煎、久煎。"
+        }
+      ]
+    },
+    {
+      "id": "maqianzi",
+      "nameZh": "马钱子",
+      "names": [
+        "马钱子",
+        "制马钱子",
+        "马钱子粉",
+        "番木鳖"
+      ],
+      "toxicity": "有大毒",
+      "doseRangeG": [
+        0.3,
+        0.6
+      ],
+      "doseNote": "0.3～0.6 g，炮制后入丸散用",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 马钱子",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "【性味与归经】苦，温；有大毒。【用法与用量】0.3～0.6 g，炮制后入丸散用。【注意】孕妇禁用；不宜多服久服及生用；运动员慎用；有毒成分能经皮肤吸收，外用不宜大面积涂敷。"
+        }
+      ]
+    },
+    {
+      "id": "xixin",
+      "nameZh": "细辛",
+      "names": [
+        "细辛"
+      ],
+      "toxicity": "有小毒",
+      "doseRangeG": [
+        1,
+        3
+      ],
+      "doseNote": "1～3 g；散剂每次服 0.5～1 g",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 细辛",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "【性味与归经】辛，温；有小毒。【用法与用量】1～3 g。散剂每次服 0.5～1 g。外用适量。【注意】不宜与藜芦同用。"
+        }
+      ]
+    },
+    {
+      "id": "zhusha",
+      "nameZh": "朱砂",
+      "names": [
+        "朱砂",
+        "辰砂",
+        "丹砂",
+        "朱砂粉"
+      ],
+      "toxicity": "有毒",
+      "doseRangeG": [
+        0.1,
+        0.5
+      ],
+      "doseNote": "0.1～0.5 g，多入丸散服，不宜入煎剂",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 朱砂",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "【性味与归经】甘，微寒；有毒。【用法与用量】0.1～0.5 g，多入丸散服，不宜入煎剂。【注意】本品有毒，不宜大量服用，也不宜少量久服；孕妇及肝肾功能不全者禁用。"
+        }
+      ]
+    },
+    {
+      "id": "xionghuang",
+      "nameZh": "雄黄",
+      "names": [
+        "雄黄",
+        "明雄黄",
+        "雄黄粉"
+      ],
+      "toxicity": "有毒",
+      "doseRangeG": [
+        0.05,
+        0.1
+      ],
+      "doseNote": "0.05～0.1 g，入丸散用",
+      "evidence": [
+        {
+          "authority": "《中国药典》2020 年版一部 雄黄",
+          "year": 2020,
+          "url": "https://ydz.chp.org.cn/",
+          "note": "【性味与归经】辛，温；有毒。【用法与用量】0.05～0.1 g，入丸散用；外用适量，熏涂患处。【注意】内服宜慎；不可久用；孕妇禁用。"
+        }
+      ]
+    },
+    {
+      "id": "guanmutong",
+      "nameZh": "关木通",
+      "names": [
+        "关木通"
+      ],
+      "toxicity": "含马兜铃酸，可致肾损害；药用标准已取消",
+      "evidence": [
+        {
+          "authority": "国家药品监督管理局 2003 年取消关木通药用标准的通知",
+          "year": 2003,
+          "url": "https://www.nmpa.gov.cn/",
+          "note": "关木通 (Aristolochia manshuriensis) was removed from the national drug standards in 2003 for aristolochic acid nephropathy, and is not a monograph of the 2020 Chinese Pharmacopoeia; 木通 (Akebia) is the herb the Pharmacopoeia keeps. The url is the regulator's site; a pharmacist re-checks the notice there."
+        }
+      ]
+    },
+    {
+      "id": "guangfangji",
+      "nameZh": "广防己",
+      "names": [
+        "广防己"
+      ],
+      "toxicity": "含马兜铃酸，可致肾损害；药用标准已取消",
+      "evidence": [
+        {
+          "authority": "国家食品药品监督管理局 2004 年取消广防己、青木香药用标准的通知",
+          "year": 2004,
+          "url": "https://www.nmpa.gov.cn/",
+          "note": "广防己 (Aristolochia fangchi) was removed from the national drug standards in 2004 for aristolochic acid, and is not a monograph of the 2020 Chinese Pharmacopoeia; 防己 (Stephania tetrandra) is the herb the Pharmacopoeia keeps. The url is the regulator's site; a pharmacist re-checks the notice there."
+        }
+      ]
+    },
+    {
+      "id": "qingmuxiang",
+      "nameZh": "青木香",
+      "names": [
+        "青木香"
+      ],
+      "toxicity": "含马兜铃酸，可致肾损害；药用标准已取消",
+      "evidence": [
+        {
+          "authority": "国家食品药品监督管理局 2004 年取消广防己、青木香药用标准的通知",
+          "year": 2004,
+          "url": "https://www.nmpa.gov.cn/",
+          "note": "青木香 (Aristolochia debilis root) was removed from the national drug standards in 2004 for aristolochic acid, and is not a monograph of the 2020 Chinese Pharmacopoeia. The url is the regulator's site; a pharmacist re-checks the notice there."
+        }
+      ]
+    }
   ]
 }
