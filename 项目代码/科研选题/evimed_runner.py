@@ -7,6 +7,8 @@ import asyncio
 import json
 import os
 import re
+import secrets
+import sys
 import traceback
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +32,49 @@ def _write_result(output_dir: Path, value: dict) -> None:
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+#: Where the managed adapter reads this job's stage while it runs.
+PROGRESS_ENV = "EVIMED_JOB_PROGRESS_FILE"
+PROGRESS_INTERVAL_SECONDS = 5.0
+
+
+def _write_progress(path: Path, stage: str, percent: int) -> None:
+    payload = json.dumps(
+        {"stage": " ".join(stage.split())[:200], "percent": max(0, min(100, int(percent)))},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    # A fresh name, never followed: the directory is inside the workspace.
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        os.write(descriptor, payload)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, path)
+
+
+async def _report_progress(task) -> None:
+    """Publish the task's phase for the adapter polling this job from outside.
+
+    The phase lives only in this process: without it a poller sees nothing
+    between a job's start and its end, and a 21-minute retrieval under PubMed
+    throttling looks the same as a dead job.
+    """
+    target = os.environ.get(PROGRESS_ENV, "").strip()
+    if not target:
+        return
+    last = None
+    while True:
+        current = (str(task.current_phase or "").strip(), int(task.progress_percentage or 0))
+        if current[0] and current != last:
+            try:
+                _write_progress(Path(target), *current)
+            except OSError as error:
+                print(f"progress not published: {error}", file=sys.stderr, flush=True)
+                return
+            last = current
+        await asyncio.sleep(PROGRESS_INTERVAL_SECONDS)
 
 
 def _dump_model(value):
@@ -438,7 +483,12 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
 
     from models.schemas import TaskStatus
     task = await service.create_task(direction, context)
-    completed = await service.process_task(task.task_id)
+    reporter = asyncio.create_task(_report_progress(task))
+    try:
+        completed = await service.process_task(task.task_id)
+    finally:
+        reporter.cancel()
+        await asyncio.gather(reporter, return_exceptions=True)
     if completed.status != TaskStatus.COMPLETED or completed.report is None:
         # Say which condition failed. Raising error_message alone surfaced the
         # service's own degradation notice as the cause: a caller was told
