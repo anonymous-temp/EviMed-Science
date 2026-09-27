@@ -127,7 +127,7 @@ function EventFrame({ title, actions, children }: { title: string; actions?: Rea
     <div className="h-full min-h-0 overflow-y-auto bg-bg">
       <div className="mx-auto w-full max-w-page px-6 py-6">
         <nav aria-label="返回">
-          <Link to="/app/frontier" className="inline-flex h-6 items-center gap-1 text-ui text-text-3 hover:text-text">
+          <Link to="/app/frontier" className={cn(INLINE_ACTION, "-ml-1.5 gap-1 px-1.5 text-text-3 hover:text-text")}>
             <ChevronLeft size={16} aria-hidden="true" />前沿动态
           </Link>
         </nav>

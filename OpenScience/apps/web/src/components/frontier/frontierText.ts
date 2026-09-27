@@ -27,14 +27,16 @@ import { relativeTime } from "@/lib/runPresentation";
 
 /**
  * The feed's one small action — 「另有 3 家报道 ›」, a #tag, 「完整热榜 ›」,
- * 「全部 ›」, 「原文 ↗」: 24 px high, the minimum target (WCAG 2.5.8), 8 px
- * round, no ground until hovered. The control is set in the interface size;
- * words that read at the metadata size sit in a `text-caption` span inside it,
- * so every small action on the page is one control look and not one per
- * font size (the release walk counts them; the page may spend eight).
+ * 「全部 ›」, 「原文 ↗」: 28 px high (`h-sm`), the small control height a row's
+ * icon buttons have (spec §8.3, §17.2) — it stood at 24 beside the card's
+ * 28 px ☆ and ⋯, a height of its own — 8 px round, no ground until hovered.
+ * The control is set in the interface size; words that read at the metadata
+ * size sit in a `text-caption` span inside it, so every small action on the
+ * page is one control look and not one per font size (the release walk counts
+ * them; the page may spend nine).
  */
 export const INLINE_ACTION =
-  "inline-flex h-6 shrink-0 items-center gap-0.5 rounded text-ui outline-none transition-colors duration-fast hover:bg-surface-2";
+  "inline-flex h-sm shrink-0 items-center gap-0.5 rounded text-ui outline-none transition-colors duration-fast hover:bg-surface-2";
 
 /** A new tab, and nothing of this page's context handed to the site. */
 export const EXTERNAL = { target: "_blank", rel: "noopener noreferrer" } as const;
