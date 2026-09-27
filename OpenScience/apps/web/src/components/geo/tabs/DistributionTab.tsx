@@ -4,7 +4,7 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { cancelGeoOrder, getGeoDistribution, type GeoDistribution, type GeoOrder, type GeoProject } from "@/lib/geoClient";
 import { safeWebHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { GEO_ORDER_CANCELLABLE, layerName, monthDay, orderStateWord } from "../geoText";
 import { BudgetDialog } from "./BudgetDialog";
@@ -166,7 +166,7 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
                   <td className={`${TD} text-right tabular-nums text-text-2`}>{monthDay(order.updatedAt) ?? "—"}</td>
                   <td className={`${TD} w-24 whitespace-nowrap text-right`}>
                     {href && (
-                      <a href={href} target="_blank" rel="noreferrer" className="inline-flex h-6 items-center gap-1 rounded px-2 text-ui text-accent hover:bg-surface-2">
+                      <a href={href} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
                         查看
                         <ExternalLink size={16} aria-hidden="true" />
                       </a>

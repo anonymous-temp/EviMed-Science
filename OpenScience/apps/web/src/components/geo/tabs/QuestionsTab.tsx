@@ -195,7 +195,7 @@ function GroupRow({
           onClick={onToggle}
           aria-expanded={expanded}
           aria-controls={expanded ? panelId : undefined}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded text-left text-ui text-text hover:text-accent"
+          className="flex h-sm min-w-0 flex-1 items-center gap-2 rounded text-left text-ui text-text hover:text-accent"
         >
           <ChevronRight size={16} aria-hidden="true" className={cn("shrink-0 text-text-3 transition-transform duration-fast", expanded && "rotate-90")} />
           <span className="min-w-0 truncate">{groupName(group.name)}</span>

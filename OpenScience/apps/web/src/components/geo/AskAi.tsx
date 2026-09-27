@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MessageSquare } from "lucide-react";
 import type { GeoCell } from "@/lib/geoClient";
-import { cn } from "@/lib/cn";
+import { buttonClasses } from "@/components/ui/Button";
 import { geoCellPhrase } from "./GeoCellText";
 import type { GeoUnit } from "./geoText";
 import { useOpenGeoConversation, type GeoConversationTarget } from "./useOpenGeoConversation";
@@ -83,12 +83,9 @@ export function AskAi({
         setBusy(true);
         void open({ projectId: project.projectId, sessionId: project.sessionId ?? null }, text).catch(() => undefined).finally(() => setBusy(false));
       }}
-      className={cn(
-        "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-caption text-accent outline-none transition-colors duration-fast hover:bg-surface-2 disabled:opacity-40",
-        className,
-      )}
+      className={buttonClasses({ variant: "text", size: "sm", className: `text-accent hover:text-accent ${className ?? ""}` })}
     >
-      <MessageSquare aria-hidden="true" className="h-4 w-4" />
+      <MessageSquare size={16} aria-hidden="true" />
       {label}
     </button>
   );

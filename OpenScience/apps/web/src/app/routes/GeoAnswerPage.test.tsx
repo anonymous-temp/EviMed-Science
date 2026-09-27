@@ -40,6 +40,10 @@ describe("one answer", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回诊断" })).toHaveAttribute("href", "/app/geo/geo_1/diagnosis");
     expect(screen.getByRole("link", { name: /截图/ })).toHaveAttribute("href", expect.stringContaining(`/geo/projects/geo_1/screenshots/${"a".repeat(64)}`));
+    // The header's controls are the primitives' sizes: the way back is the
+    // 36 px icon button, 截图 the 28 px text button beside the 28 px chip.
+    expect(screen.getByRole("link", { name: "返回诊断" })).toHaveClass("h-control", "w-9");
+    expect(screen.getByRole("link", { name: /截图/ })).toHaveClass("h-sm");
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");
@@ -108,6 +112,7 @@ describe("one answer", () => {
     expect(within(cited).getAllByRole("listitem")).toHaveLength(3);
     expect(within(cited).getByText("只列在参考资料")).toBeInTheDocument();
     expect(within(cited).getByRole("link", { name: "打开玛仕度肽" })).toHaveAttribute("href", "https://baike.baidu.com/item/x");
+    expect(within(cited).getByRole("link", { name: "打开玛仕度肽" })).toHaveClass("h-sm", "w-7");
   });
 
   it("says a 百度 answer is mention-only", async () => {

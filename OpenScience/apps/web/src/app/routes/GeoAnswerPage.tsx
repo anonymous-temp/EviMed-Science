@@ -16,7 +16,10 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
+import { buttonClasses } from "@/components/ui/Button";
 import { FilterSelect } from "@/components/ui/FilterChips";
+import { iconButtonClasses } from "@/components/ui/IconButton";
+import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
 import { AskAi } from "@/components/geo/AskAi";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
@@ -88,8 +91,8 @@ function Shell({ title, back, header, children }: { title: string; back?: string
 
 function BackLink({ to }: { to: string }) {
   return (
-    <Link to={to} aria-label="返回诊断" title="返回诊断" className="inline-grid h-8 w-8 shrink-0 place-items-center rounded text-text-3 hover:bg-surface-2 hover:text-text">
-      <ArrowLeft size={20} aria-hidden="true" />
+    <Link to={to} aria-label="返回诊断" title="返回诊断" className={iconButtonClasses()}>
+      <ArrowLeft size={16} aria-hidden="true" />
     </Link>
   );
 }
@@ -131,7 +134,7 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
           />
         ) : date && <span className="text-caption tabular-nums text-text-3">{date}</span>}
         {screenshot && (
-          <a href={screenshot} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded px-2 text-ui text-text-2 hover:bg-surface-2 hover:text-text">
+          <a href={screenshot} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm" })}>
             <ImageIcon size={16} aria-hidden="true" />
             截图
           </a>
@@ -215,7 +218,7 @@ function Engines({ geoId, data, errors, statements }: { geoId: string; data: Geo
               {word.text && <span className={cn("shrink-0 text-caption", word.wrong ? "text-danger" : "text-text-3")}>{word.text}</span>}
             </>
           );
-          const rowClass = cn("flex h-9 items-center justify-between gap-2 whitespace-nowrap rounded px-3 text-ui", selected ? "bg-surface-2" : "hover:bg-surface-1");
+          const rowClass = navItemClasses({ current: selected, className: "justify-between whitespace-nowrap" });
           return (
             <li key={sibling.engine} data-geo-sibling={sibling.engine}>
               {sibling.snapshotId && !selected ? (
@@ -398,7 +401,7 @@ function Citations({ citations }: { citations: GeoAnswer["snapshot"]["citations"
               {!citation.url && <span data-geo-linkless="" className="shrink-0 text-caption text-text-3">没有链接</span>}
               {citation.url && !citation.inBody && <span className="shrink-0 text-caption text-text-3">只列在参考资料</span>}
               {href && (
-                <a href={href} target="_blank" rel="noreferrer" aria-label={`打开${citation.title || citation.domain || "信源"}`} className="inline-grid h-6 w-6 shrink-0 place-items-center rounded text-text-3 hover:bg-surface-2 hover:text-text">
+                <a href={href} target="_blank" rel="noreferrer" aria-label={`打开${citation.title || citation.domain || "信源"}`} className={iconButtonClasses({ size: "sm" })}>
                   <ExternalLink size={16} aria-hidden="true" />
                 </a>
               )}

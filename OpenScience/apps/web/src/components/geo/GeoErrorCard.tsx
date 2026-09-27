@@ -3,7 +3,7 @@ import { Check, PenLine, X } from "lucide-react";
 import { Link } from "react-router";
 import type { GeoErrorRow, GeoProject } from "@/lib/geoClient";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { SeverityBadge, isSeverityLevel } from "@/components/ui/SeverityBadge";
 import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, zh } from "./geoText";
 import { answerPath, CITED_ATTRIBUTE_WORDS } from "./tabs/geoTabText";
@@ -64,7 +64,7 @@ export function GeoErrorCard({
           写纠错稿
         </Button>
         {error.snapshotId && (
-          <Link to={answerPath(geoId, error.snapshotId)} className="inline-flex h-6 items-center rounded px-2 text-ui text-accent hover:bg-surface-2">
+          <Link to={answerPath(geoId, error.snapshotId)} className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
             看回答
           </Link>
         )}
