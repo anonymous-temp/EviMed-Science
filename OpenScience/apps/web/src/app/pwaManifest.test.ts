@@ -33,6 +33,7 @@ const manifest = JSON.parse(read("public/manifest.json")) as {
   id: string;
   name: string;
   short_name: string;
+  description: string;
   start_url: string;
   scope: string;
   display: string;
