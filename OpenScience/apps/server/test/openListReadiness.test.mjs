@@ -38,6 +38,7 @@ test("an OpenList that answers but has nothing mounted is degraded, not connecte
   const check = (await app.ready()).checks.openList;
   assert.equal(check.ok, true, "nothing mounted is the operator's provisioning; red would fail the web healthcheck");
   assert.equal(check.state, "degraded");
+  assert.equal(check.connected, undefined, "`connected` is what the old ping said over an empty drive");
   assert.equal(check.storage, "missing");
   assert.equal(check.namespaces, 0);
   assert.equal(check.warning, "openlist_storage_missing");
@@ -58,8 +59,8 @@ test("a mounted tenant storage is connected and offered", async (t) => {
   const openList = await startFakeOpenList(t, { mounts: { "/tenants/alice": ["paper.pdf"], "/tenants/bob": [] } });
   const app = await startApp(t, requiredOpenList(openList));
   const check = (await app.ready()).checks.openList;
-  assert.deepEqual({ ok: check.ok, state: check.state, storage: check.storage, namespaces: check.namespaces, warning: check.warning },
-    { ok: true, state: "connected", storage: "mounted", namespaces: 2, warning: undefined });
+  assert.deepEqual({ ok: check.ok, state: check.state, connected: check.connected, storage: check.storage, namespaces: check.namespaces, warning: check.warning },
+    { ok: true, state: "connected", connected: true, storage: "mounted", namespaces: 2, warning: undefined });
   assert.equal((await app.features()).openList, true);
   assert.match(await app.metrics(), /^open_science_openlist_storage_mounted 1$/m);
 });

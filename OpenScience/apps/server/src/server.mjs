@@ -6605,8 +6605,11 @@ async function readinessOpenList(config, connector) {
   if (config.openListTokenError) throw readinessFailure(config.openListTokenError);
   if (!config.openListUrl || !config.openListToken || !connector) throw readinessFailure("openlist_unconfigured");
   const { storage, namespaces } = await connector.storageStatus();
+  // `connected: true` only over a mounted storage: it is the field readers of
+  // this check (the integration audit's among them) took to mean "the import
+  // works", which is what it now says.
   return storage === "mounted"
-    ? { required: true, state: "connected", storage, namespaces }
+    ? { required: true, state: "connected", connected: true, storage, namespaces }
     : { required: true, state: "degraded", storage, namespaces, warning: "openlist_storage_missing" };
 }
 
