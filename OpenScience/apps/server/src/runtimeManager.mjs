@@ -2234,6 +2234,34 @@ export function provenPluginSettings(entry) {
 }
 
 /**
+ * Which part of a kernel proof disagrees with the configuration it was meant to
+ * prove, or null when none does.
+ *
+ * A verdict that only says "invalid" is one nobody can act on: the first
+ * production apply of a project configuration (2026-09-27) ended with no
+ * record of which comparison failed, or whether one had. The comparisons are
+ * the ones the probe always made, in the same order; this names the first that
+ * fails, with both values, so the failure line says whether the container ran
+ * another build, another revision, another setting or another tool set.
+ * @param {any} proof @param {{revision:number,enabled:boolean,settings:Record<string,any>}} expected
+ * @param {string} version @param {string[]} settings @param {string[]} tools
+ * @returns {string|null}
+ */
+export function pluginProofMismatch(proof, expected, version, settings, tools) {
+  if (!proof || typeof proof !== "object") return "the kernel returned no proof";
+  if (proof.binaryVersion !== version) return `binaryVersion ${JSON.stringify(proof.binaryVersion)}, expected ${JSON.stringify(version)}`;
+  if (proof.revision !== expected.revision) return `revision ${JSON.stringify(proof.revision)}, expected ${expected.revision}`;
+  if (proof.enabled !== expected.enabled) return `enabled ${JSON.stringify(proof.enabled)}, expected ${expected.enabled}`;
+  for (const name of settings) {
+    if (proof[name] !== expected.settings[name]) return `${name} ${JSON.stringify(proof[name])}, expected ${JSON.stringify(expected.settings[name])}`;
+  }
+  if (!Array.isArray(proof.tools)) return "the proof lists no tools";
+  const proved = JSON.stringify([...proof.tools].sort());
+  const wanted = JSON.stringify(expected.enabled ? [...tools].sort() : []);
+  return proved === wanted ? null : `tools ${proved}, expected ${wanted}`;
+}
+
+/**
  * One plugin's configuration per launch plan, deliberately.
  *
  * Not generalised to every enabled plugin, because nothing downstream of this
@@ -5035,11 +5063,11 @@ export class RuntimeManager {
     const tools = expectedPluginTools(entry);
     const settings = provenPluginSettings(entry);
     const proof = await this.callKernel(runtime, project, "evimedPlugins/verify", {}, AbortSignal.timeout(45000));
-    if (this.runtimeGeneration(project) !== generation || proof?.binaryVersion !== entry.version
-      || proof.revision !== expected.revision || proof.enabled !== expected.enabled
-      || settings.some((name) => proof[name] !== expected.settings[name])
-      || !Array.isArray(proof.tools) || JSON.stringify([...proof.tools].sort()) !== JSON.stringify(expected.enabled ? tools.sort() : [])) {
-      throw new HttpError(502, "plugin_probe_invalid", "The runtime did not prove the expected plugin configuration.");
+    const mismatch = this.runtimeGeneration(project) !== generation
+      ? "the runtime was replaced while it was being probed"
+      : pluginProofMismatch(proof, expected, entry.version, settings, tools);
+    if (mismatch) {
+      throw new HttpError(502, "plugin_probe_invalid", `The runtime did not prove the expected plugin configuration: ${mismatch}.`);
     }
     return { generation };
   }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PLUGIN_ID, PLUGIN_SUPPORT_SNAPSHOT, pluginRegistryFrom } from '../src/pluginService.mjs';
 import { HttpError } from '../src/security.mjs';
-import { PluginApplyWorker, applyPluginCandidate, jobPluginId } from '../src/pluginApplyWorker.mjs';
+import { PluginApplyWorker, applyPluginCandidate, jobPluginId, pluginFailure } from '../src/pluginApplyWorker.mjs';
 const candidate={revision:2,enabled:false,settings:{timeoutMs:5000}};
 const previous={revision:1,enabled:true,settings:{timeoutMs:4000}};
 test('candidate failure restores and independently verifies the previous configuration',async()=>{
@@ -25,6 +25,67 @@ test('lost authority does not start rollback or publish a result',async()=>{
   let checks=0;const guard=async()=>{if(++checks>1)throw Object.assign(new Error('lost'),{code:'product_job_lease_lost'});};
   await assert.rejects(applyPluginCandidate(runtime,{},candidate,previous,guard),{code:'product_job_lease_lost'});
   assert.equal(starts,1);
+});
+
+// --- why an apply ended where it did (production, 2026-09-27) --------------
+// The first production apply of a project configuration ended `unavailable` /
+// `plugin_rollback_failed` with every error discarded, and with no rollback
+// attempted: a first configuration has nothing proven to roll back to, and the
+// runtime was simply stopped.
+const defaults={revision:0,enabled:true,settings:{timeoutMs:15000}};
+const kernelRefusal=()=>new HttpError(502,'runtime_session_error','citation_probe_gateway_failed: cite_health: Crossref API HTTP 429');
+
+test('a failed rollback records both failures and is the only outcome called plugin_rollback_failed',async()=>{
+  const runtime={replacePluginRuntime:async()=>{},stop:async()=>{},
+    probePlugin:async(_p,config)=>{throw config.revision===2?kernelRefusal():new HttpError(502,'plugin_probe_invalid','revision 0, expected 1');}};
+  const result=await applyPluginCandidate(runtime,{},candidate,previous,async()=>{},PLUGIN_ID,defaults);
+  assert.equal(result.phase,'unavailable');assert.equal(result.error,'plugin_rollback_failed');
+  assert.deepEqual(result.detail,{
+    apply:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API HTTP 429'},
+    restored:'previous',
+    rollback:{code:'plugin_probe_invalid',message:'revision 0, expected 1'},
+  });
+});
+
+test('a first configuration that fails is not a failed rollback: the runtime restarts on the defaults, which are probed',async()=>{
+  /** @type {any[]} */ const calls=[];
+  const runtime={replacePluginRuntime:async(_p,config)=>{calls.push(['start',config.revision]);},
+    probePlugin:async(_p,config)=>{calls.push(['probe',config.revision]);if(config.revision===2)throw kernelRefusal();return {generation:'defaults'};},
+    stop:async()=>calls.push(['stop'])};
+  const result=await applyPluginCandidate(runtime,{},candidate,null,async()=>{},PLUGIN_ID,defaults);
+  assert.deepEqual(calls,[['start',2],['probe',2],['start',0],['probe',0]],'restarted on the defaults, never stopped');
+  assert.equal(result.phase,'rolled_back');assert.equal(result.error,'plugin_apply_failed');
+  assert.deepEqual(result.effective,defaults);assert.equal(result.generation,'defaults');
+  assert.deepEqual(result.detail,{apply:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API HTTP 429'},restored:'default'});
+});
+
+test('defaults that start but do not prove are left running and reported failed, with both reasons',async()=>{
+  /** @type {any[]} */ const calls=[];
+  const runtime={replacePluginRuntime:async(_p,config)=>{calls.push(['start',config.revision]);},
+    probePlugin:async()=>{throw kernelRefusal();},stop:async()=>calls.push(['stop'])};
+  const result=await applyPluginCandidate(runtime,{},candidate,null,async()=>{},PLUGIN_ID,defaults);
+  assert.equal(result.phase,'failed');assert.equal(result.error,'plugin_apply_failed');assert.equal(result.effective,null);
+  assert.equal(calls.some(([step])=>step==='stop'),false,'the runtime every unconfigured project runs is not stopped for failing a probe');
+  assert.deepEqual(Object.keys(result.detail),['apply','restored','restore']);
+  assert.equal(result.detail.restore.code,'runtime_session_error');
+});
+
+test('defaults that cannot start leave the runtime stopped and say so',async()=>{
+  /** @type {any[]} */ const calls=[];
+  const runtime={replacePluginRuntime:async(_p,config)=>{calls.push(['start',config.revision]);if(config.revision===0)throw new HttpError(429,'runtime_limit_exceeded','Too many running runtimes.');},
+    probePlugin:async()=>{throw kernelRefusal();},stop:async()=>calls.push(['stop'])};
+  const result=await applyPluginCandidate(runtime,{},candidate,null,async()=>{},PLUGIN_ID,defaults);
+  assert.equal(result.phase,'unavailable');assert.equal(result.error,'plugin_apply_failed');
+  assert.deepEqual(result.detail.restore,{code:'runtime_limit_exceeded',message:'Too many running runtimes.'});
+  assert.deepEqual(calls.at(-1),['stop']);
+});
+
+test('a step failure keeps its code and a bounded one-line message, whatever was thrown',()=>{
+  assert.deepEqual(pluginFailure(new HttpError(502,'plugin_probe_invalid','tools [], expected\n["cite_health"]')),{code:'plugin_probe_invalid',message:'tools [], expected ["cite_health"]'});
+  assert.deepEqual(pluginFailure(new TypeError('x is undefined')),{code:'plugin_step_failed',message:'x is undefined'});
+  assert.deepEqual(pluginFailure(Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'})),{code:'ECONNREFUSED',message:'connect ECONNREFUSED'});
+  assert.equal(pluginFailure(new Error('m'.repeat(1000))).message.length,300);
+  assert.deepEqual(pluginFailure('plain'),{code:'plugin_step_failed',message:'plain'});
 });
 
 // --- the plugin a job is about -------------------------------------------
@@ -82,9 +143,10 @@ test('the plugin being applied is named to every probe, including the rollback p
  * assertions read out of that transcript is the document id, because that is
  * the value the worker used to derive from the project alone.
  *
- * @param {{pluginId?:string,registry?:Map<string,any>,busy?:boolean,runtimeThrows?:boolean}} options
+ * @param {{pluginId?:string,registry?:Map<string,any>,busy?:boolean,runtimeThrows?:boolean,
+ *   baseline?:any, probe?:(config:any)=>Promise<any>}} options
  */
-function workerHarness({ pluginId, registry, busy = false, runtimeThrows = false } = {}) {
+function workerHarness({ pluginId, registry, busy = false, runtimeThrows = false, baseline = null, probe = null } = {}) {
   const project = { id: 'one', userId: 'owner' };
   const scope = { userId: 'owner', accountCreatedAt: '2026-01-01T00:00:00Z', projectCreatedAt: '2026-01-02T00:00:00Z' };
   const payload = { revision: 3, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt, ...(pluginId ? { pluginId } : {}) };
@@ -96,6 +158,9 @@ function workerHarness({ pluginId, registry, busy = false, runtimeThrows = false
   /** @type {{text:string,values:any[]}[]} */ const statements = [];
   /** @type {any[]} */ const probed = [];
   /** @type {any[]} */ const finished = [];
+  /** @type {any[]} */ const failures = [];
+  /** @type {any[]} */ const audits = [];
+  /** @type {any[]} */ const starts = [];
   const client = {
     /** @param {string} text @param {any[]} values */
     query: async (text, values = []) => {
@@ -118,7 +183,7 @@ function workerHarness({ pluginId, registry, busy = false, runtimeThrows = false
     /** @param {any} _u @param {any} _i @param {any} _t @param {any} result */
     finish: async (_u, _i, _t, result) => { finished.push(result); return result; },
     /** @param {any} _u @param {any} _i @param {any} _t @param {any} error @param {any} options */
-    fail: async (_u, _i, _t, error, options) => { finished.push({ failed: error.code, ...options }); },
+    fail: async (_u, _i, _t, error, options) => { finished.push({ failed: error.code, ...options }); failures.push(error); },
   };
   const service = {
     jobs, database, registry,
@@ -127,17 +192,21 @@ function workerHarness({ pluginId, registry, busy = false, runtimeThrows = false
   };
   const runtime = {
     runtimeGeneration: () => 'gen-1',
-    runtimePluginConfig: () => null,
+    runtimePluginConfig: () => baseline,
     pluginRuntimeBusy: async () => { if (runtimeThrows) throw new HttpError(500, 'runtime_unreachable', 'no'); return false; },
-    replacePluginRuntime: async () => {},
-    /** @param {any} _p @param {any} _config @param {any} named */
-    probePlugin: async (_p, _config, named) => { probed.push(named); return { generation: 'gen-1' }; },
-    stop: async () => {},
+    /** @param {any} _p @param {any} config */
+    replacePluginRuntime: async (_p, config) => { starts.push(config); },
+    /** @param {any} _p @param {any} config @param {any} named */
+    probePlugin: async (_p, config, named) => { probed.push(named); return probe ? probe(config) : { generation: 'gen-1' }; },
+    stop: async () => { starts.push('stop'); },
   };
-  const worker = new PluginApplyWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false });
+  const worker = new PluginApplyWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false,
+    audit: (/** @type {string} */ event, /** @type {string} */ status, /** @type {any} */ details) => { audits.push({ event, status, ...details }); } });
   /** Every document id any statement carried, in order, deduplicated. */
   const documentIds = () => [...new Set(statements.flatMap(({ values }) => values.filter(value => typeof value === 'string' && value.startsWith('project:'))))];
-  return { worker, statements, documentIds, probed, finished };
+  /** The parameters of the statement that recorded the outcome. */
+  const outcome = () => statements.find(({ text }) => text.includes('SET phase=$3,effective=$4::jsonb'))?.values ?? null;
+  return { worker, statements, documentIds, probed, finished, failures, audits, starts, outcome };
 }
 
 test('an apply job addresses the document of the plugin it names, and dsh-cite is addressed exactly as before', async () => {
@@ -145,7 +214,7 @@ test('an apply job addresses the document of the plugin it names, and dsh-cite i
   await cite.worker.run();
   assert.deepEqual(cite.documentIds(), [citeDocument], 'a job with no plugin id must still apply dsh-cite');
   assert.deepEqual(cite.probed, [PLUGIN_ID]);
-  assert.deepEqual(cite.finished, [{ phase: 'effective' }]);
+  assert.deepEqual(cite.finished, [{ phase: 'effective', error: null, detail: null }]);
 
   const notes = workerHarness({ pluginId: 'dsh-notes', registry: notesRegistry });
   await notes.worker.run();
@@ -153,7 +222,7 @@ test('an apply job addresses the document of the plugin it names, and dsh-cite i
     'a second bundle\'s job must not be applied out of dsh-cite\'s document');
   assert.equal(notes.documentIds().includes(citeDocument), false);
   assert.deepEqual(notes.probed, ['dsh-notes']);
-  assert.deepEqual(notes.finished, [{ phase: 'effective' }]);
+  assert.deepEqual(notes.finished, [{ phase: 'effective', error: null, detail: null }]);
 });
 
 test('deferral and failure record against the same document the apply would have written', async () => {
@@ -200,4 +269,61 @@ test('a job naming a plugin this image no longer registers is failed once, not r
   assert.deepEqual(corrupt.finished, [{ failed: 'plugin_apply_failed', retry: false }]);
   assert.equal(corrupt.statements.some(({ text }) => text.includes("phase='failed'")), false,
     'no row can be marked failed honestly for a job that names no plugin');
+  // ...but it is not silent: the row that could not be written says so in the ledger.
+  assert.deepEqual(corrupt.audits.map(({ status, code }) => [status, code]),
+    [['failed', 'plugin_apply_state_unwritten'], ['failed', 'plugin_apply_failed']]);
+});
+
+test('the production incident: a first configuration whose probes all fail says why, and keeps a runtime', async () => {
+  // Reproduced shape of 2026-09-27: no last-known-good, the running
+  // configuration's own probe fails, the candidate's fails, and so does the
+  // defaults'. Every one of those used to be a bare `catch {}`; the runtime was
+  // then stopped and the row said `plugin_rollback_failed`.
+  const running = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } };
+  const harness = workerHarness({
+    baseline: running,
+    probe: async (config) => { throw new HttpError(502, 'runtime_session_error', `citation_probe_runtime_busy: revision ${config.revision}`); },
+  });
+  await harness.worker.run();
+  assert.deepEqual(harness.starts, [
+    { revision: 3, enabled: true, settings: { timeoutMs: 4000 } },
+    { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
+  ], 'the candidate, then the defaults; the runtime is not stopped');
+  const [, , phase, effective, generation, error, detail] = harness.outcome() ?? [];
+  assert.equal(phase, 'failed');
+  assert.equal(error, 'plugin_apply_failed', 'no rollback was attempted, so none is reported as failed');
+  assert.equal(effective, null, 'SQL NULL, not the JSON null that overwrote last_good');
+  assert.equal(generation, null);
+  assert.deepEqual(JSON.parse(detail), {
+    apply: { code: 'runtime_session_error', message: 'citation_probe_runtime_busy: revision 3' },
+    restored: 'default',
+    restore: { code: 'runtime_session_error', message: 'citation_probe_runtime_busy: revision 0' },
+    baseline: { code: 'runtime_session_error', message: 'citation_probe_runtime_busy: revision 0' },
+  });
+  assert.deepEqual(harness.finished, [{ phase: 'failed', error: 'plugin_apply_failed', detail: JSON.parse(detail) }]);
+  assert.equal(harness.audits.length, 1);
+  const [line] = harness.audits;
+  assert.deepEqual([line.event, line.status, line.userId, line.code], ['plugin.apply', 'failed', 'owner', 'plugin_apply_failed']);
+  assert.match(line.detail, /^project=one plugin=dsh-cite revision=3 restored=default apply=runtime_session_error: citation_probe_runtime_busy: revision 3 restore=runtime_session_error/);
+});
+
+test('an effective apply is a ledger line too, and records no error', async () => {
+  const harness = workerHarness();
+  await harness.worker.run();
+  const [, , phase, effective, , error, detail] = harness.outcome() ?? [];
+  assert.equal(phase, 'effective');
+  assert.deepEqual(JSON.parse(effective), { revision: 3, enabled: true, settings: { timeoutMs: 4000 } });
+  assert.equal(error, null);
+  assert.equal(detail, null);
+  assert.deepEqual(harness.audits.map(({ event, status, code }) => [event, status, code]), [['plugin.apply', 'effective', null]]);
+});
+
+test('an apply that throws past its own handling records the cause on the row, the job and the ledger', async () => {
+  const harness = workerHarness({ runtimeThrows: true });
+  await assert.rejects(harness.worker.run(), { code: 'runtime_unreachable' });
+  const failed = harness.statements.find(({ text }) => text.includes("phase='failed'"));
+  assert.deepEqual(JSON.parse(failed?.values.at(-1)), { apply: { code: 'runtime_unreachable', message: 'no' } });
+  assert.deepEqual(harness.failures, [{ code: 'plugin_apply_failed', message: 'runtime_unreachable: no' }]);
+  assert.deepEqual(harness.audits.map(({ status, code, detail }) => [status, code, detail]),
+    [['failed', 'plugin_apply_failed', 'project=one plugin=dsh-cite revision=3 apply=runtime_unreachable: no']]);
 });

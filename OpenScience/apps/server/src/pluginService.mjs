@@ -409,7 +409,7 @@ export class PluginService {
         { schemaVersion: 1, pluginId: entry.id, binaryVersion: entry.version, ...value },
         { expectedRevision: input.expectedRevision, projectId: project.id, transactionClient: client });
       await client.query(`INSERT INTO evimed_product.plugin_application_state(user_id,id,desired_revision,phase)
-        VALUES ($1,$2,$3,'pending') ON CONFLICT(user_id,id) DO UPDATE SET desired_revision=$3,phase='pending',error=NULL,updated_at=clock_timestamp()`,
+        VALUES ($1,$2,$3,'pending') ON CONFLICT(user_id,id) DO UPDATE SET desired_revision=$3,phase='pending',error=NULL,error_detail=NULL,updated_at=clock_timestamp()`,
       [scope.userId, id, doc.revision]);
       await this.enqueue(client, scope, project, doc.revision, entry);
     });
@@ -487,7 +487,7 @@ export class PluginService {
       // Rearm an explicitly requested attempt, including a verified rollback.
       await client.query(`UPDATE evimed_product.jobs SET status='queued',attempts=0,finished_at=NULL,error=NULL,run_after=clock_timestamp()
         WHERE id=$1 AND status IN ('succeeded','failed','canceled')`, [job.id]);
-      await client.query("UPDATE evimed_product.plugin_application_state SET phase='pending',error=NULL WHERE user_id=$1 AND id=$2 AND phase<>'applying'", [scope.userId, id]);
+      await client.query("UPDATE evimed_product.plugin_application_state SET phase='pending',error=NULL,error_detail=NULL WHERE user_id=$1 AND id=$2 AND phase<>'applying'", [scope.userId, id]);
     });
     return this.get(owner, project, entry.id);
   }

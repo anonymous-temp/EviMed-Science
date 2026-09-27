@@ -29,7 +29,7 @@ import {
   runtimeTmpDir,
   syncRuntimeDshProfile,
 } from "../src/runtimeManager.mjs";
-import { expectedPluginTools, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
+import { expectedPluginTools, pluginProofMismatch, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
 import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
@@ -3260,16 +3260,23 @@ test("dsh-cite's probe verdict is the verdict it always was", async () => {
   assert.deepEqual(await manager.probePlugin(project, citeExpected, PLUGIN_ID), { generation: "gen-1" },
     "naming the default plugin must be the same call as naming nothing");
   assert.deepEqual(asked, ["evimedPlugins/verify", "evimedPlugins/verify"]);
-  for (const broken of [
-    { ...citeProof, binaryVersion: "0.3.3" },
-    { ...citeProof, revision: 6 },
-    { ...citeProof, timeoutMs: 5000 },
-    { ...citeProof, tools: recordedCite.tools.slice(1) },
-    { ...citeProof, tools: [...recordedCite.tools, "cite_extra"] },
-    { ...citeProof, enabled: false, tools: [] },
+  // Each refusal names the comparison that failed, with both values: the first
+  // production apply (2026-09-27) could not tell whether a comparison had
+  // failed at all.
+  for (const [broken, reason] of [
+    [{ ...citeProof, binaryVersion: "0.3.3" }, 'binaryVersion "0.3.3", expected "0.3.2"'],
+    [{ ...citeProof, revision: 6 }, "revision 6, expected 7"],
+    [{ ...citeProof, timeoutMs: 5000 }, "timeoutMs 5000, expected 4000"],
+    [{ ...citeProof, tools: recordedCite.tools.slice(1) }, "tools ["],
+    [{ ...citeProof, tools: [...recordedCite.tools, "cite_extra"] }, '"cite_extra"'],
+    [{ ...citeProof, enabled: false, tools: [] }, "enabled false, expected true"],
+    [{ ...citeProof, tools: undefined }, "the proof lists no tools"],
+    [null, "the kernel returned no proof"],
   ]) {
-    await assert.rejects(probeManager(broken).manager.probePlugin(project, citeExpected), { status: 502, code: "plugin_probe_invalid" });
+    await assert.rejects(probeManager(broken).manager.probePlugin(project, citeExpected),
+      (/** @type {any} */ error) => error.status === 502 && error.code === "plugin_probe_invalid" && error.message.includes(reason));
   }
+  assert.equal(pluginProofMismatch(citeProof, citeExpected, "0.3.2", ["timeoutMs"], [...recordedCite.tools]), null);
   // Disabled is proved by an empty registration, not by a smaller one.
   const disabled = { revision: 7, enabled: false, settings: { timeoutMs: 4000 } };
   assert.deepEqual(await probeManager({ ...citeProof, enabled: false, tools: [] }).manager.probePlugin(project, disabled), { generation: "gen-1" });

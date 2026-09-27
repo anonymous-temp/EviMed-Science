@@ -1931,6 +1931,9 @@ export function createWebApiApp(overrides = {}) {
     service: pluginService, runtime: runtimeManager,
     resolveProject: sourceProject,
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
+    // One `plugin.apply` line per finished apply: it restarts a project's
+    // runtime, and the first production one left no trace of why it failed.
+    audit: (event, status, details) => securityAudit(config, event, status, details),
   }) : null;
   // The independent reviewer (reviewService.mjs): composed when switched on and
   // a product database exists; otherwise the gateway answers `review_disabled`,

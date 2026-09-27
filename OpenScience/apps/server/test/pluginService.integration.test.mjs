@@ -88,6 +88,63 @@ test('leased worker defers busy work, applies, verifies rollback and recovers la
   await worker.close();await restarted.close();
 });
 
+test('the 2026-09-27 incident: a first configuration whose probes fail records why, keeps a runtime, and says apply failed, not rollback', options, async()=>{
+  const {PluginApplyWorker}=await import('../src/pluginApplyWorker.mjs');
+  const {HttpError}=await import('../src/security.mjs');
+  await db.query("UPDATE evimed_product.jobs SET status='canceled',lease_token=NULL,lease_expires_at=NULL WHERE kind='plugin-apply'");
+  const p={id:'audit-worker-probe',userId:owner};
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Probe',1000000)",[owner,p.id]);
+  const scoped=new PluginService(db);
+  // The runtime was running the defaults; every probe of it fails the way a
+  // kernel refusal arrives (`mapWireError`), so there is nothing proven.
+  let generation='running';let current={revision:0,enabled:true,settings:{timeoutMs:15000}};let stops=0;let provable=()=>false;
+  const runtime={runtimeGeneration:()=>generation,runtimePluginConfig:()=>current,pluginRuntimeBusy:async()=>false,
+    replacePluginRuntime:async(_p,config)=>{current=config;generation=`started-${config.revision}`;},
+    probePlugin:async(_p,config)=>{if(provable(config))return{generation};throw new HttpError(502,'runtime_session_error',`citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r${config.revision}`);},
+    stop:async()=>{stops++;generation=null;}};
+  /** @type {any[]} */ const audits=[];
+  const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false,audit:(event,status,details)=>{audits.push({event,status,...details});}});
+  const row=async()=>(await db.query(`SELECT phase,error,error_detail,effective,last_good FROM evimed_product.plugin_application_state WHERE user_id=$1 AND id=$2`,[owner,projectPluginId(p.id)])).rows[0];
+  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:10000}});await worker.tick();
+  let state=await row();
+  assert.deepEqual([state.phase,state.error],['failed','plugin_apply_failed']);
+  assert.equal(stops,0,'the runtime is restarted on the defaults, not left stopped');
+  assert.deepEqual(current,{revision:0,enabled:true,settings:{timeoutMs:15000}});
+  assert.equal(generation,'started-0');
+  assert.deepEqual(state.error_detail,{
+    apply:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r1'},
+    restored:'default',
+    restore:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r0'},
+    baseline:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r0'},
+  });
+  assert.equal(state.effective,null);assert.equal(state.last_good,null);
+  assert.deepEqual(audits.map(({event,status,code})=>[event,status,code]),[['plugin.apply','failed','plugin_apply_failed']]);
+  assert.equal((await scoped.get(owner,p)).error,'plugin_apply_failed','the browser still reads one outcome code');
+  assert.equal(Object.hasOwn(await scoped.get(owner,p),'errorDetail'),false,'and never the detail');
+
+  // Retry once the defaults prove: a restore to what an unconfigured project
+  // runs is a proven state, and becomes the last known good.
+  provable=(config)=>config.revision===0;
+  await scoped.retry(owner,p);assert.equal((await row()).error_detail,null,'a new attempt starts without the last one\'s reasons');
+  await db.query("UPDATE evimed_product.jobs SET run_after=now()-interval '1 second' WHERE user_id=$1 AND project_id=$2",[owner,p.id]);
+  await worker.tick();state=await row();
+  assert.deepEqual([state.phase,state.error,state.effective?.revision,state.last_good?.revision],['rolled_back','plugin_apply_failed',0,0]);
+  assert.deepEqual(Object.keys(state.error_detail),['apply','restored']);
+
+  // With a last known good, a rollback that fails is `plugin_rollback_failed`,
+  // and it does not erase the last known good it failed to reach.
+  provable=()=>false;
+  await scoped.retry(owner,p);
+  await db.query("UPDATE evimed_product.jobs SET run_after=now()-interval '1 second' WHERE user_id=$1 AND project_id=$2",[owner,p.id]);
+  await worker.tick();state=await row();
+  assert.deepEqual([state.phase,state.error],['unavailable','plugin_rollback_failed']);
+  assert.equal(stops,1);
+  assert.deepEqual(Object.keys(state.error_detail),['apply','restored','rollback']);
+  assert.equal(state.effective,null);
+  assert.deepEqual(state.last_good,{revision:0,enabled:true,settings:{timeoutMs:15000}},'last_good survives an outcome with nothing effective');
+  await worker.close();
+});
+
 test('an unacknowledged native prompt survives API restart and fences configuration apply', options, async()=>{
   await assert.rejects(service.withAdmission(project,async()=>{throw Error('connection dropped after send');},{prompt:true}),/connection dropped/);
   assert.equal(await new PluginService(db).hasPendingPrompts(project),true);

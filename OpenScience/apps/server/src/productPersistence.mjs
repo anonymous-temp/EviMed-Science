@@ -229,6 +229,12 @@ CREATE TABLE IF NOT EXISTS evimed_product.plugin_application_state (
   PRIMARY KEY (user_id,id),
   FOREIGN KEY (user_id,kind,id) REFERENCES evimed_product.documents(user_id,kind,id) ON DELETE CASCADE
 );
+-- Why an apply ended where it did: the failure of each step that failed (the
+-- candidate, the rollback or the restore to defaults, the probe of what was
+-- running before), as {code,message}. The error column stays the one outcome code the
+-- browser reads; this is for whoever has to find out what happened, which the
+-- first production apply (2026-09-27) left nobody able to do.
+ALTER TABLE evimed_product.plugin_application_state ADD COLUMN IF NOT EXISTS error_detail jsonb;
 CREATE TABLE IF NOT EXISTS evimed_product.memory_index_state (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   capsule_id text NOT NULL,
