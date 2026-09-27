@@ -711,8 +711,11 @@ test("ops backup skips the runtime scratch, and still refuses a symlink anywhere
   assert.match(listed.stdout, /workspace\/kept\.txt/, "real project files must still be archived");
   assert.doesNotMatch(listed.stdout, /container-runtime/, "the runtime scratch must not be in the archive");
 
-  // And the guard is intact for everything that IS archived.
-  await symlink(outside, path.join(project, "workspace", "leak"));
+  // And the guard is intact for everything that IS archived. A link a run
+  // makes inside its own workspace is recorded instead of refused (see
+  // backupWorkspaceLinks.test.mjs); one in the project's own tree is not the
+  // run's to make, and still stops the backup.
+  await symlink(outside, path.join(project, "leak"));
   await assert.rejects(
     () => run(backupScript, [dataDir, backupDir]),
     (err) => {

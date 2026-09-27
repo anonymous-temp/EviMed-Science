@@ -70,7 +70,15 @@ function collect(relative) {
   const full = path.join(root, relative);
   const metadata = fs.lstatSync(full, { bigint: true });
   if (metadata.isSymbolicLink()) {
-    throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
+    // The same rule as `backup-archive.mjs`: a link a run made below its own
+    // workspace is recorded (path and target text), never followed; a link
+    // anywhere else still refuses the backup.
+    const workspaceLink = parts.length > 5 && parts[0] === 'users' && parts[2] === 'projects' && parts[4] === 'workspace';
+    if (!workspaceLink) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
+    entries.push({ path: relative, type: 'link', target: fs.readlinkSync(full, { encoding: 'buffer' }).toString('utf8'),
+      dev: String(metadata.dev), ino: String(metadata.ino), size: String(metadata.size), mtimeNs: String(metadata.mtimeNs),
+      mode: String(metadata.mode), uid: String(metadata.uid), gid: String(metadata.gid) });
+    return true;
   }
   if (metadata.isSocket()) return false;
   if (metadata.isDirectory()) {
@@ -117,7 +125,7 @@ node "$SCRIPT_DIR/backup-archive.mjs" "$DATA_DIR" "$manifest" "$tmp" "$strict_ba
 archive_status=$?
 set -e
 if [ "$archive_status" -ne 0 ]; then
-  unexpected="$(grep -v '^backup archive: file changed as we read it$' < "$archive_stderr" || true)"
+  unexpected="$(grep -v -e '^backup archive: file changed as we read it$' -e '^backup note: ' < "$archive_stderr" || true)"
   changed="$(grep -c '^backup archive: file changed as we read it$' < "$archive_stderr" || true)"
   if [ "$archive_status" -ne 1 ] || [ -n "$unexpected" ]; then
     if [ "$strict_backup" = true ]; then
@@ -135,6 +143,9 @@ if [ "$archive_status" -ne 0 ]; then
   fi
   echo "backup note: ${changed} file(s) changed while being read; the archive is a point-in-time copy of a running system" >&2
 fi
+# The writer's notes (the workspace links it recorded) are the backup's report,
+# so they reach the caller; the scheduler reads them into its state.
+grep '^backup note: ' < "$archive_stderr" >&2 || true
 rm -f "$archive_stderr"
 mv "$tmp" "$archive"
 

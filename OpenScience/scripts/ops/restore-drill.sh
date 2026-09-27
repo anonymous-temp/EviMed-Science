@@ -55,6 +55,8 @@ fi
 # Complete verification compares every restored path and byte with the embedded
 # inventory, not with a deployment-specific file-count guess. A legacy restore
 # is still available, but its shape cannot certify completeness for the scheduler.
+# Workspace links the backup recorded are verified as records and restored as
+# nothing: the check above still fails on any link the restore produced.
 node - "$receipt" "$ARCHIVE" <<'NODE'
 const fs = require('node:fs');
 const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
@@ -63,6 +65,7 @@ if (report.verification !== 'inventory-v1') {
   console.error(`restore drill limited: legacy-shape-only (${shape}); content completeness unverified`);
   process.exitCode = 1;
 } else {
-  console.log(`restore drill ok: ${process.argv[3]} (users/ present, ${report.files} files, inventory-v1)`);
+  const links = report.links ? `, ${report.links} workspace link(s) recorded, not restored` : '';
+  console.log(`restore drill ok: ${process.argv[3]} (users/ present, ${report.files} files, inventory-v1${links})`);
 }
 NODE

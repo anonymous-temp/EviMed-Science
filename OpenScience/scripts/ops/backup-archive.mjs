@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Stream the inventoried customer files through verified open descriptors.
 import { createHash } from "node:crypto";
-import { lstat, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, open, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -21,7 +21,31 @@ const integrityManifestName = ".open-science-backup-manifest.json";
 const integrityManifestPrefix = '{"format":"open-science-backup-inventory","version":1,"entries":[';
 const maximumManifestBytes = 64 * 1024 * 1024;
 const maximumManifestEntries = 1_000_000;
+// Linux caps a link's target at PATH_MAX; anything longer is not a link record.
+const maximumLinkTargetBytes = 4096;
+// backup-scheduler.mjs reads this one line into its state; keep them in step.
+const linkNotePrefix = "backup note: workspace symbolic links recorded, not followed: ";
 let outputCreated = false;
+
+// A run may `ln -s` inside its own workspace, and twice one did (2026-09-26: a
+// deliverable alias; 09-27: seventeen `.evimed-sources/<id>/fulltext.md`
+// aliases). Refusing the whole data directory over them stopped every
+// tenant's backup, and the next release switch left the site down behind the
+// unhealthy backup container. So a link strictly below
+// `users/*/projects/*/workspace` is recorded — its path and target text, in
+// the archive's integrity manifest — and is never followed, never archived as
+// a member and never restored as a link; whatever it names inside the tree is
+// archived under its own name. Anywhere else (the data root, a user or project
+// root, the workspace directory itself, the native session journals) a link
+// is still refused: those are the paths a link could use to point the backup
+// out of the tenant's tree.
+function isWorkspaceLinkPath(parts) {
+  return parts.length > 5 && parts[0] === "users" && parts[2] === "projects" && parts[4] === "workspace";
+}
+
+async function linkTarget(full) {
+  return (await readlink(full, { encoding: "buffer" })).toString("utf8");
+}
 
 const managedRuntimePrefix = ["users", null, "projects", null, "runtime", "container-runtime"];
 const managedRuntimeIncludedTree = ["dsh-home", "sessions"];
@@ -86,7 +110,11 @@ async function createInventory() {
     if (name === ".runtime-sockets" || name.endsWith(".sock")) return false;
     const full = path.join(root, relative);
     const pathMetadata = await lstat(full, { bigint: true });
-    if (pathMetadata.isSymbolicLink()) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
+    if (pathMetadata.isSymbolicLink()) {
+      if (!isWorkspaceLinkPath(parts)) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
+      entries.push({ path: relative, type: "link", ...metadataFields(pathMetadata), target: await linkTarget(full) });
+      return true;
+    }
     if (pathMetadata.isSocket()) return false;
     if (pathMetadata.isDirectory()) {
       const opened = await openScopedDirectoryNoFollow(root, full);
@@ -132,18 +160,34 @@ async function createInventory() {
 
 function validateEntry(entry) {
   const parts = String(entry?.path ?? "").split("/");
-  if (!entry || !["file", "directory"].includes(entry.type) || !entry.path || entry.path.includes("\0")
+  if (!entry || !["file", "directory", "link"].includes(entry.type) || !entry.path || entry.path.includes("\0")
     || path.isAbsolute(entry.path) || (entry.path !== "." && parts.some(part => !part || part === "." || part === ".."))
     || ![entry.dev, entry.ino, entry.size, entry.mtimeNs, entry.mode, entry.uid, entry.gid]
       .every(value => typeof value === "string" && /^\d+$/.test(value))) {
     throw new Error("Invalid backup inventory entry.");
   }
   if (parts[0] === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
+  if (entry.type === "link" && (!isWorkspaceLinkPath(parts) || typeof entry.target !== "string" || !entry.target
+    || entry.target.includes("\0") || Buffer.byteLength(entry.target) > maximumLinkTargetBytes)) {
+    throw new Error("Invalid backup inventory link entry.");
+  }
   if (strict && (!(typeof entry.ctimeNs === "string" && /^\d+$/.test(entry.ctimeNs))
     || !(typeof entry.nlink === "string" && /^\d+$/.test(entry.nlink))
     || (entry.type === "file" && !(typeof entry.sha256 === "string" && /^[a-f0-9]{64}$/.test(entry.sha256))))) {
     throw new Error("Invalid strict backup inventory entry.");
   }
+}
+
+/** Whether a recorded link is still the link the inventory read. It is never
+ *  opened: lstat and readlink describe the link itself, not what it names. */
+async function linkUnchanged(entry) {
+  const full = path.join(root, entry.path);
+  const metadata = await lstat(full, { bigint: true }).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!metadata?.isSymbolicLink() || String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino) return false;
+  return (await linkTarget(full)) === entry.target;
 }
 
 async function openEntry(entry) {
@@ -248,9 +292,20 @@ async function createArchive() {
     if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
     archivedEntries.push(serialized);
   };
+  const recordedLinks = [];
+  const recordLink = (entry) => {
+    const serialized = JSON.stringify({ path: entry.path, target: entry.target });
+    manifestBytes += Buffer.byteLength(serialized) + (recordedLinks.length ? 1 : Buffer.byteLength(',"links":[]'));
+    if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
+    recordedLinks.push({ path: entry.path, serialized });
+  };
   const directories = entries.filter(entry => entry.type === "directory");
   const verifyEntries = async (items) => {
     for (const entry of items) {
+      if (entry.type === "link") {
+        if (!(await linkUnchanged(entry))) throw new Error("Backup source identity changed after inventory.");
+        continue;
+      }
       const opened = await openEntry(entry);
       await opened.handle.close();
     }
@@ -259,6 +314,13 @@ async function createArchive() {
   async function* chunks() {
     await verifyEntries(directories);
     for (const [index, entry] of entries.entries()) {
+      // Recorded in the manifest, never a tar member: the archive carries no
+      // link for a restore to create, and nothing here reads what it names.
+      if (entry.type === "link") {
+        if (!(await linkUnchanged(entry))) changed++;
+        recordLink(entry);
+        continue;
+      }
       const { handle, metadata } = await openEntry(entry);
       try {
         yield* headers(entry, metadata, index);
@@ -292,7 +354,10 @@ async function createArchive() {
     // No archive is accepted after a directory substitution, even if a file
     // descriptor safely retained the original bytes while its name moved.
     await verifyEntries(strict ? entries : directories);
-    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]}`, "utf8");
+    // Only when there are links, so an archive without any is byte-for-byte
+    // the format every earlier reader already verifies.
+    const links = recordedLinks.length ? `,"links":[${recordedLinks.map(link => link.serialized).join(",")}]` : "";
+    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]${links}}`, "utf8");
     yield* headers({ path: integrityManifestName, type: "file" }, {
       size: BigInt(integrityManifest.length), mode: 0o600n, mtimeNs: 0n,
       uid: BigInt(rootEntry.uid), gid: BigInt(rootEntry.gid),
@@ -309,6 +374,11 @@ async function createArchive() {
     await output.close();
   }
   for (let index = 0; index < changed; index++) process.stderr.write("backup archive: file changed as we read it\n");
+  // One bounded line, however many links: how many, and the first few by name.
+  if (recordedLinks.length) {
+    const note = { count: recordedLinks.length, paths: recordedLinks.slice(0, 5).map(link => link.path) };
+    process.stderr.write(`${linkNotePrefix}${JSON.stringify(note)}\n`);
+  }
   process.exitCode = changed ? 1 : 0;
 }
 

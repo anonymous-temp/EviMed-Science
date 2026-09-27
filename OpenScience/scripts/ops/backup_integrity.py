@@ -16,11 +16,24 @@ import uuid
 MANIFEST_NAME = ".open-science-backup-manifest.json"
 MAX_MANIFEST_BYTES = 64 * 1024 * 1024
 MAX_MANIFEST_ENTRIES = 1_000_000
+MAX_LINK_TARGET_BYTES = 4096
 IDENTITY_FIELDS = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink")
 
 
 class IntegrityError(Exception):
     """A malformed inventory or a restored tree that differs from it."""
+
+
+def valid_member_name(name):
+    return (isinstance(name, str) and bool(name) and "\x00" not in name and not name.startswith("/")
+            and posixpath.normpath(name) == name and name != ".." and not name.startswith("../")
+            and name.split("/")[0] != MANIFEST_NAME)
+
+
+def is_workspace_link_path(name):
+    """Where the writer records a run's link instead of refusing the backup."""
+    parts = name.split("/")
+    return len(parts) > 5 and parts[0] == "users" and parts[2] == "projects" and parts[4] == "workspace"
 
 
 def identity(metadata):
@@ -67,7 +80,7 @@ def read_manifest(root_fd):
     try:
         descriptor = os.open(MANIFEST_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
     except FileNotFoundError:
-        return None
+        return None, 0
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > MAX_MANIFEST_BYTES:
@@ -95,9 +108,7 @@ def read_manifest(root_fd):
         name = entry.get("path")
         kind = entry.get("type")
         size = entry.get("size")
-        if (not isinstance(name, str) or not name or "\x00" in name or name.startswith("/")
-                or posixpath.normpath(name) != name or name == ".." or name.startswith("../")
-                or name.split("/")[0] == MANIFEST_NAME or name in expected
+        if (not valid_member_name(name) or name in expected
                 or kind not in ("file", "directory") or type(size) is not int or not 0 <= size <= 2**53 - 1):
             raise IntegrityError("backup_inventory_invalid")
         if kind == "directory":
@@ -112,12 +123,31 @@ def read_manifest(root_fd):
     for name in expected:
         if name != "." and expected.get(posixpath.dirname(name) or ".", {}).get("type") != "directory":
             raise IntegrityError("backup_inventory_invalid")
-    return expected
+    # Links a run made inside its own workspace: recorded by path and target
+    # text, never archived as members and never restored, so the restored tree
+    # must not contain them (an extra entry fails the walk below). Absent in
+    # every archive that recorded none.
+    links = manifest.get("links", [])
+    if not isinstance(links, list) or len(entries) + len(links) > MAX_MANIFEST_ENTRIES:
+        raise IntegrityError("backup_inventory_invalid")
+    recorded = set()
+    for link in links:
+        if not isinstance(link, dict) or set(link) != {"path", "target"}:
+            raise IntegrityError("backup_inventory_invalid")
+        name = link["path"]
+        target = link["target"]
+        if (not valid_member_name(name) or not is_workspace_link_path(name) or name in expected or name in recorded
+                or expected.get(posixpath.dirname(name), {}).get("type") != "directory"
+                or not isinstance(target, str) or not target or "\x00" in target
+                or len(target.encode("utf-8", "replace")) > MAX_LINK_TARGET_BYTES):
+            raise IntegrityError("backup_inventory_invalid")
+        recorded.add(name)
+    return expected, len(recorded)
 
 
 def verify_tree(root_fd, *, remove_manifest=True):
     """Walk pinned directories without following links, then compare exact bytes."""
-    expected = read_manifest(root_fd)
+    expected, links = read_manifest(root_fd)
     seen = set()
     files = 0
     directories = 0
@@ -195,8 +225,11 @@ def verify_tree(root_fd, *, remove_manifest=True):
             finally:
                 if not mode & stat.S_IWUSR:
                     os.fchmod(root_fd, mode)
-    return {"verification": "inventory-v1" if expected is not None else "legacy-shape-only",
-            "files": files, "directories": directories}
+    receipt = {"verification": "inventory-v1" if expected is not None else "legacy-shape-only",
+               "files": files, "directories": directories}
+    if links:
+        receipt["links"] = links
+    return receipt
 
 
 def write_receipt(receipt, *, root_fd=None):
@@ -247,7 +280,8 @@ def main(arguments):
         write_receipt(receipt, root_fd=root)
     finally:
         os.close(root)
-    print(f"restore verification: {receipt['verification']} ({receipt['files']} files)", file=sys.stderr)
+    links = f"; {receipt['links']} workspace link(s) recorded in the archive manifest, not restored" if receipt.get("links") else ""
+    print(f"restore verification: {receipt['verification']} ({receipt['files']} files{links})", file=sys.stderr)
 
 
 if __name__ == "__main__":

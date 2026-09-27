@@ -1154,13 +1154,20 @@ The API sees `/backups` read-only and never receives the passphrase. The backup
 service sees `/data` read-only, `/backups` read-write, and the passphrase as a
 mode-`0400` secret. It publishes no port, drops capabilities, uses a read-only
 root filesystem, and records health in
-`/backups/.open-science-backup-state.json`. API startup waits for the first
-encrypted backup and restore drill to become healthy.
+`/backups/.open-science-backup-state.json`. The API waits for the backup
+service to be started, not healthy: a backup problem never keeps the site from
+starting (on 2026-09-26 and 09-27 a failed start-up backup left the recreated
+web container in `Created` and the site answering 502). The API reads the
+scheduler's state instead — readiness check `backup` fails with
+`backup_scheduler_unhealthy`/`backup_scheduler_stale` and raises
+`OpenScienceReadinessCheckFailed` — and `host-release-switch.sh` reports an
+unhealthy backup without holding the release.
 
-The scheduler runs every `OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS`, retries after
-`OPEN_SCIENCE_BACKUP_RETRY_SECONDS`, and exits after
-`OPEN_SCIENCE_BACKUP_MAX_FAILURES` consecutive failures so the container restart
-policy and monitoring can surface the outage. It performs a disposable restore
+The scheduler runs every `OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS` and retries after
+`OPEN_SCIENCE_BACKUP_RETRY_SECONDS`; after `OPEN_SCIENCE_BACKUP_MAX_FAILURES`
+consecutive failures it stays up but waits a full interval before the next
+attempt, with its health still failed so readiness and monitoring surface the
+outage. It performs a disposable restore
 drill every `OPEN_SCIENCE_BACKUP_RESTORE_DRILL_EVERY` successful backups. Size
 `OPEN_SCIENCE_BACKUP_TMPFS_SIZE` above the largest decrypted archive and restore
 working set; drill plaintext exists only in that container tmpfs.
@@ -1180,15 +1187,25 @@ script. In that mode, set an absolute `OPEN_SCIENCE_BACKUP_DIR` outside
 `OPEN_SCIENCE_DATA_DIR`, a positive `OPEN_SCIENCE_BACKUP_RETENTION_DAYS`,
 `OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=true`, and
 `OPEN_SCIENCE_RESTORE_DRILL_ACK=true` after the scheduler and restore drills are
-owned. The backup overlay sets those two acknowledgements because it validates
-the file-backed passphrase and drill before allowing API startup.
+owned. The backup overlay sets those two acknowledgements because the scheduler
+it adds validates the file-backed passphrase and runs the drill, and readiness
+reads the result.
 Use `OPEN_SCIENCE_BACKUP_MODE=external` only when platform/object-store backup
 and restore drills are managed outside the service container; then set
 `OPEN_SCIENCE_BACKUP_EXTERNAL_ACK=true` and
 `OPEN_SCIENCE_RESTORE_DRILL_ACK=true`.
 
-The backup script refuses data directories containing symbolic links and writes
-both a `.tar.gz` archive and a `.sha256` checksum sidecar. When
+The backup script never follows a symbolic link. A link a run made strictly
+inside its own workspace (`users/*/projects/*/workspace/…` — the only tree a
+run can write) is recorded rather than refused: its path and target text go
+into the archive's integrity manifest (`links`), the backup prints one
+`backup note: workspace symbolic links recorded, not followed: {"count":…,"paths":[…]}`
+line, and the scheduler state carries `lastLinksRecorded` and
+`lastLinksSample`. The link is not an archive member and is never restored;
+whatever it names inside the tree is archived under its own name. A link
+anywhere else — the data root, a user or project root, the workspace directory
+itself, the native session journals — still refuses the whole backup. The
+script writes both a `.tar.gz` archive and a `.sha256` checksum sidecar. When
 `OPEN_SCIENCE_BACKUP_RETENTION_DAYS` is set, it also prunes local
 `open-science-data-*.tar.gz` and `open-science-data-*.tar.gz.enc` archives older
 than that many days, plus their checksum sidecars. The pruner refuses
@@ -1285,7 +1302,11 @@ scripts/ops/restore-data.sh BACKUP_ARCHIVE /var/lib/open-science
 
 The restore script verifies the checksum when present, decrypts encrypted
 archives only after checksum verification, and rejects archive entries with
-absolute paths, traversal segments, or symbolic links. These scripts are a
+absolute paths, traversal segments, or symbolic links. It verifies the recorded
+workspace links as records and creates none of them (the restore receipt and
+the drill report how many); to recreate an alias by hand, read them from the
+decrypted archive with
+`tar -xOzf archive.tar.gz .open-science-backup-manifest.json | jq .links`. These scripts are a
 file-volume recovery path for controlled deployments; production operators
 still need to enable the off-host workflow (or an equivalent platform backup),
 passphrase custody, and access controls appropriate to their data policy.

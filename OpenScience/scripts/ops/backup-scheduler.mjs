@@ -165,9 +165,29 @@ function log(event, fields = {}, error = false) {
   (error ? process.stderr : process.stdout).write(`${JSON.stringify(row)}\n`);
 }
 
+// backup-archive.mjs writes this one line when it recorded links a run made
+// inside its own workspace instead of refusing the backup over them.
+const linkNotePrefix = "backup note: workspace symbolic links recorded, not followed: ";
+
+/** The count and first names from the writer's note; none is `{ count: 0 }`.
+ *  A note that does not parse is reported as an unknown count, not as zero. */
+function recordedWorkspaceLinks(stderr) {
+  const line = String(stderr ?? "").split(/\r?\n/).find((row) => row.startsWith(linkNotePrefix));
+  if (!line) return { count: 0, paths: [] };
+  try {
+    const note = JSON.parse(line.slice(linkNotePrefix.length));
+    if (Number.isSafeInteger(note?.count) && note.count > 0 && Array.isArray(note.paths)
+      && note.paths.every((entry) => typeof entry === "string")) {
+      return { count: note.count, paths: note.paths.slice(0, 5).map((entry) => entry.slice(0, 512)) };
+    }
+  } catch {}
+  return { count: null, paths: [] };
+}
+
 async function runCycle(config, previous) {
   const attemptAt = new Date().toISOString();
   const backup = await runProcess("bash", [backupScript, config.dataDir, config.backupDir]);
+  const links = recordedWorkspaceLinks(backup.stderr);
   const archive = path.resolve(backup.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "");
   if (path.dirname(archive) !== config.backupDir || !archivePattern.test(path.basename(archive))) {
     throw new Error("Backup command returned an invalid encrypted archive path.");
@@ -224,6 +244,10 @@ async function runCycle(config, previous) {
     lastOffsiteAt: offsite === "uploaded" ? new Date().toISOString() : (previous?.lastOffsiteAt ?? null),
     successfulBackups,
     consecutiveFailures: 0,
+    // Links a run made inside its workspace: recorded in the archive's
+    // manifest, never followed, never restored. A notice, not a health state.
+    lastLinksRecorded: links.count,
+    lastLinksSample: links.paths,
   };
   await writeState(config.stateFile, state);
   log("backup.completed", {
@@ -231,6 +255,8 @@ async function runCycle(config, previous) {
     successfulBackups,
     restoreDrill,
     offsite,
+    linksRecorded: links.count,
+    ...(links.paths.length ? { linksSample: links.paths } : {}),
   });
   return state;
 }

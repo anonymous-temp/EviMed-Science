@@ -413,6 +413,15 @@ receipt, it now also:
    manifest's digests; a difference stops the switch before retention.
 5. **Walks the live pages** (below). A failed walk leaves the release in front
    and exits non-zero with `RELEASE … IS LIVE, BUT THE UI WALK FAILED`.
+6. **Reports an unhealthy backup without holding anything.** Web depends on
+   the backup service being started, not healthy, so a failed start-up backup
+   no longer leaves web in `Created` (2026-09-26 and 09-27: 502 until web was
+   started by hand). The readiness wait reads the `backup` check apart from
+   the rest: every other check still has to pass before retention, but a
+   failing backup prints `BACKUP IS UNHEALTHY (<code>)`, the switch finishes
+   (retention, digests, walk), and its last line is
+   `RELEASE … IS LIVE, BUT THE BACKUP IS UNHEALTHY (<code>)` with a non-zero
+   exit. Fix the backup under "Evidence and Recovery" below.
 
 Retention (`release-retention.mjs`) keeps, beyond the newest two and anything a
 container names, every release built before a running container that binds
@@ -528,6 +537,20 @@ not sufficient containment for those events.
   `node scripts/ops/backup-scheduler.mjs health`. A failed or stale state means
   backup readiness is not proven even when old archives exist. Keep the API's
   backup mount read-only; only the backup service may create or prune archives.
+  The state's `error` names the cause. A symbolic link a run made inside its
+  own workspace is not one any more: it is recorded (path and target text in
+  the archive manifest; `lastLinksRecorded` and `lastLinksSample` in the
+  state; `linksRecorded` on `backup.completed`), never followed and never
+  restored, and the backup stays healthy. `Refusing to back up data directory
+  containing symbolic links: <path>` now means a link outside every
+  `users/*/projects/*/workspace/` — the data root, a user or project root, the
+  workspace directory itself, the native session journals. Those are paths a
+  link could use to point the backup out of the tenant tree, so find what made
+  it before removing it, then `docker restart` the backup container for an
+  immediate cycle
+  (after `OPEN_SCIENCE_BACKUP_MAX_FAILURES` failures it otherwise waits a full
+  interval). The site keeps serving meanwhile: web does not wait on the
+  backup's health.
 - The production host also has the single `evimed-postgres-backup.timer` unit.
   Its versioned implementation is `scripts/ops/postgres-backup.py`, installed
   as `/usr/local/sbin/evimed-postgres-backup`; the existing unit names and daily
