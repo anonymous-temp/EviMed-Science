@@ -250,3 +250,53 @@ test("a run that delegated nothing still records the methods its runtime carried
   assert.deepEqual(derived.observations, [], "carrying a method is not a verdict about it");
   assert.deepEqual(derived.eligible, ["method:learned:triage", "method:learned:quoting"], "carried and never read is still passed over");
 });
+
+test("a deliverable the root session made itself is attributed to the methods its runtime carried", () => {
+  // 2026-09-26 audit (L-G2): the meta-analysis runs the loop learnt from did
+  // their work without delegating, so they left no receipt and earned their
+  // methods no observation at all. The runtime's own mount report and the
+  // deliverable's verdict are enough to attribute them.
+  const derived = runMethodObservations({
+    run: { id: "run_root", sessionId: "root" },
+    projection: {
+      plan: { items: [
+        { id: "report", status: "accepted", attempts: 2 },
+        { id: "matrix", status: "submitted", attempts: 1 },
+        { id: "later", status: "planned", attempts: 0 },
+        { id: "delegated", status: "accepted", attempts: 1 },
+      ] },
+      subagents: [{ deliverableId: "delegated", childSessionId: "child", methods: [{ name: "quoting", digest: DIGEST_B }] }],
+      mountedMethods: [{ name: "triage", digest: DIGEST_A }, { name: "quoting", digest: DIGEST_B }],
+    },
+    methods: METHODS,
+    sessions: [session("root", [toSkillName("triage", "capsule")]), session("child", [])],
+    at: "2026-09-27T00:00:00.000Z",
+  });
+  const byFamily = (/** @type {string} */ family) => derived.observations.filter((entry) => entry.observation.family === family)
+    .map((entry) => [entry.methodId, entry.observation.outcome, entry.observation.invoked]);
+  assert.deepEqual(byFamily("run_root:report"), [
+    ["method:learned:triage", "repaired", true],
+    ["method:learned:quoting", "repaired", false],
+  ], "each carried method gets the root's verdict, and 'used' is read off the root session");
+  assert.deepEqual(byFamily("run_root:matrix"), [
+    ["method:learned:triage", "rejected", true],
+    ["method:learned:quoting", "rejected", false],
+  ]);
+  assert.deepEqual(byFamily("run_root:later"), [], "no verdict, no evidence");
+  assert.deepEqual(byFamily("run_root:delegated"), [["method:learned:quoting", "accepted", false]],
+    "a delegated deliverable keeps its receipt's methods and is not attributed twice");
+  assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }]);
+  assert.deepEqual(derived.eligible, [], "a method the run's own deliverables carried was not passed over");
+  assert.deepEqual(derived.invokedWithoutMount, [], "a use with a verdict is an observation, not a bare reading");
+
+  // A carried method whose text moved since the mount is reported, never credited.
+  const moved = runMethodObservations({
+    run: { id: "run_moved", sessionId: "root" },
+    projection: { plan: { items: [{ id: "report", status: "accepted", attempts: 1 }] }, subagents: [],
+      mountedMethods: [{ name: "triage", digest: DIGEST_B }] },
+    methods: METHODS,
+    sessions: [session("root", [toSkillName("triage", "capsule")])],
+  });
+  assert.deepEqual(moved.observations, []);
+  assert.deepEqual(moved.mismatched, [{ name: "triage", mounted: DIGEST_B, current: DIGEST_A }]);
+});

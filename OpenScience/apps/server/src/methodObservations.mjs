@@ -157,7 +157,20 @@ export function invokedSkillsBySession(sessions) {
  * returns what should be recorded. The caller does the recording, so the rule
  * is testable without a store, a container or a run.
  *
- * @param {{run: {id: string}, projection: any, methods: readonly KnownMethod[], sessions?: readonly any[], at?: string}} input
+ * Two sources of attribution, one per way a deliverable is made:
+ *
+ *  - **Delegated** — the child's delegation receipt names the methods it was
+ *    handed and their mounted digests; the child's own session says whether it
+ *    used one.
+ *  - **Done in the root session** — no receipt, because nothing was
+ *    delegated, but the capsule plugin reports what the runtime mounted for
+ *    every session (`projection.mountedMethods`), and the deliverable still has
+ *    a verdict. Its methods are those, and "used" is read off the root session.
+ *    Until 2026-09-27 such a deliverable earned nothing: the meta-analysis runs
+ *    the loop learnt from recorded zero observations, and nine successful runs
+ *    that carried a method produced two (audit 2026-09-26, L-G2).
+ *
+ * @param {{run: {id: string, sessionId?: string}, projection: any, methods: readonly KnownMethod[], sessions?: readonly any[], at?: string}} input
  * @returns {RunMethodObservations}
  */
 export function runMethodObservations(input) {
@@ -208,6 +221,43 @@ export function runMethodObservations(input) {
       observations.push({
         methodId: known.id,
         observation: { runId, family, outcome, at, invoked: usedIn(invokedHere, known),
+          ...(known.contentDigest ? { contentDigest: known.contentDigest } : {}) },
+      });
+    }
+  }
+
+  // Deliverables the root session made itself: no receipt, so their methods
+  // are the ones the runtime mounted for every session, and whether one was
+  // used is read off the root session.
+  const delegated = new Set(subagents.map((record) => String(record?.deliverableId ?? "")).filter(Boolean));
+  const rootInvoked = invokedBySession.get(String(input.run?.sessionId ?? "")) ?? new Set();
+  const mountedForRoot = (Array.isArray(input.projection?.mountedMethods) ? input.projection.mountedMethods : [])
+    .map((entry) => ({ name: String(entry?.name ?? ""), digest: String(entry?.digest ?? "") }))
+    .filter((entry) => entry.name && entry.digest);
+  for (const item of items) {
+    const deliverableId = String(item?.id ?? "");
+    if (!deliverableId || delegated.has(deliverableId)) continue;
+    const outcome = deliverableOutcome(item);
+    if (!outcome) continue;
+    for (const entry of mountedForRoot) {
+      const known = byName.get(entry.name);
+      if (!known) continue;
+      if (known.digest !== entry.digest) {
+        if (!mismatched.some((mismatch) => mismatch.name === entry.name)) {
+          mismatched.push({ name: entry.name, mounted: entry.digest, current: known.digest });
+        }
+        continue;
+      }
+      loaded.set(entry.name, entry.digest);
+      const used = usedIn(rootInvoked, known);
+      if (used) invoked.set(entry.name, entry.digest);
+      const family = `${runId}:${deliverableId}`;
+      const key = `${known.id}\u0000${family}`;
+      if (seenFamilies.has(key)) continue;
+      seenFamilies.add(key);
+      observations.push({
+        methodId: known.id,
+        observation: { runId, family, outcome, at, invoked: used,
           ...(known.contentDigest ? { contentDigest: known.contentDigest } : {}) },
       });
     }
