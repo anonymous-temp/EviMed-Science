@@ -31,9 +31,49 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import { METHOD_FILE_PREFIXES, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
+import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+
+/**
+ * Which kind of work a learned method belongs to, from the capability it was
+ * learnt in (`provenance.capabilityId`): `geo` for the four 「循证 GEO」
+ * capabilities, `research` for everything else — the researcher's own
+ * research, the answer line, and every method learnt before the capability
+ * was recorded.
+ *
+ * A closed reading of platform identifiers, never of what the method says:
+ * `applies_when` is prose, and deciding whether prose fits a run is language
+ * (principle 1). Capability ids are ours; the GEO ones share the `geo-` prefix
+ * (`capabilities/geo-*`).
+ * @param {unknown} capabilityId @returns {"geo" | "research"}
+ */
+export function methodFamily(capabilityId) {
+  return /^geo-[a-z0-9-]+$/.test(String(capabilityId ?? "")) ? "geo" : "research";
+}
+
+/**
+ * Which learned methods a runtime may carry, from what it is being started
+ * for: null for none.
+ *
+ *  - The learning, sources and frontier projects run the platform's own
+ *    internal capabilities — a distillation, a relations pass, a document
+ *    being read. A researcher's method has nothing to do there, and on
+ *    2026-09-25 `claim-verdict-audit` was mounted into every source
+ *    understanding run (audit 2026-09-26, L-G7).
+ *  - A runtime reserved for a GEO run (its bounded dispatch id is `geo-…`)
+ *    carries GEO methods only: the same method was in every geo-content
+ *    writing run, where a rule for auditing clinical claim verdicts was noise.
+ *  - Everything else — a conversation, a research run, an autopilot episode,
+ *    an evaluation cell — carries research methods.
+ * @param {{ projectId: string, boundedRunId?: string | null }} scope
+ * @returns {"geo" | "research" | null}
+ */
+export function learnedMethodFamilyForRuntime({ projectId, boundedRunId = null }) {
+  if ([LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID].includes(String(projectId ?? ""))) return null;
+  return String(boundedRunId ?? "").startsWith("geo-") ? "geo" : "research";
+}
 
 /**
  * How many learned methods one runtime may mount when no budget is given.
@@ -135,8 +175,15 @@ function methodFileBytes(payload) {
  * measuring, and nothing else ever passes this argument. A researcher's own run
  * cannot receive an unproven method by any path.
  *
+ * `family`, when given, is the kind of work the runtime is for
+ * (`learnedMethodFamilyForRuntime`): only methods of that family are mounted,
+ * and `null` mounts none. A method under trial is mounted whatever its family —
+ * the evaluation named it, and an arm that silently mounted nothing would
+ * measure the baseline twice.
+ *
  * @param {any} learning `LearningService`
- * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number, trialMethodIds?: readonly string[]}} scope
+ * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number, trialMethodIds?: readonly string[],
+ *   family?: "geo" | "research" | null}} scope
  * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, trial?: boolean}[]>}
  */
 export async function selectLearnedMethods(learning, scope) {
@@ -144,6 +191,8 @@ export async function selectLearnedMethods(learning, scope) {
   const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : MAX_MOUNTED_LEARNED_METHODS;
   const maxBytes = Number.isSafeInteger(scope.maxBytes) ? Number(scope.maxBytes) : Number.POSITIVE_INFINITY;
   if (maxCount <= 0 || maxBytes <= 0) return [];
+  const familyFilter = scope.family === undefined ? null : scope.family;
+  if (scope.family === null && !(scope.trialMethodIds ?? []).length) return [];
 
   /** @type {any[]} */
   const documents = [];
@@ -170,9 +219,16 @@ export async function selectLearnedMethods(learning, scope) {
   // project's methods plus account-wide ones, and nothing ever wrote an
   // account-wide one, so a method learnt in 「我的研究」 never reached a new
   // project at all.
-  for (const document of await learning.approvedMethods(scope.userId) ?? []) {
-    if (documents.some((existing) => existing.id === document.id)) continue;
-    documents.push(document);
+  //
+  // Of the kind of work this runtime is for (`family`): a research method in
+  // a GEO writing run, or in a document being read, is text nobody there can
+  // use (audit 2026-09-26, L-G7).
+  if (scope.family !== null) {
+    for (const document of await learning.approvedMethods(scope.userId) ?? []) {
+      if (documents.some((existing) => existing.id === document.id)) continue;
+      if (familyFilter && methodFamily(document?.payload?.provenance?.capabilityId) !== familyFilter) continue;
+      documents.push(document);
+    }
   }
 
   /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, approvedAt: number, trial?: boolean}[]} */

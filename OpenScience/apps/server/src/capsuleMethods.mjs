@@ -266,6 +266,26 @@ async function mountableCapsuleEntries(capsules, userId, capsuleId) {
 }
 
 /**
+ * Whether an active capsule is one somebody else shared (a received pack)
+ * rather than the account's own.
+ *
+ * The capsule record says so (`imported`, written by the transfer service on
+ * import); the activation's mode is only a fallback for a service that cannot
+ * be asked, and there only `guest` — the mode an enabled pack is put in force
+ * with — reads as received. Anything else is the researcher's own, which is
+ * the reading that never lets a borrowed entry take their place in the budget.
+ * @param {any} capsules @param {string} userId @param {{capsuleId: unknown, mode?: unknown}} selection
+ * @returns {Promise<boolean>}
+ */
+async function receivedCapsule(capsules, userId, selection) {
+  if (typeof capsules?.get === "function") {
+    const capsule = await capsules.get(userId, String(selection.capsuleId)).catch(() => null);
+    if (capsule) return capsule.payload?.imported === true;
+  }
+  return selection.mode === "guest";
+}
+
+/**
  * The methods this project's active capsules contribute, in a stable order.
  *
  * The active set is read the way `CapsuleService.recall` reads it — this
@@ -273,10 +293,12 @@ async function mountableCapsuleEntries(capsules, userId, capsuleId) {
  * at eight — so the memory a run reads and the memory a run recalls cannot come
  * from different capsules.
  *
- * The candidates are ranked most-recently-confirmed first and truncated against
- * both caps, so what survives truncation is what the user most recently said is
- * how they work, and the order is a function of the entries alone: the same
- * entries in a different page order select the same methods.
+ * The candidates are ranked the account's own first, then what received packs
+ * brought, and within each most-recently-confirmed first, and truncated against
+ * both caps: the researcher's own way of working is never the part a borrowed
+ * pack crowds out of the budget (audit 2026-09-26, M-6). The order is a
+ * function of the entries alone: the same entries in a different page order
+ * select the same methods.
  *
  * The highest-ranked method is mounted even when it alone exceeds the byte
  * budget. 20,000 characters of Chinese is 60,000 bytes, and a budget that can
@@ -290,7 +312,7 @@ async function mountableCapsuleEntries(capsules, userId, capsuleId) {
  *
  * @param {any} capsules `CapsuleService`
  * @param {{ userId: string, projectId: string }} scope
- * @returns {Promise<{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number }[]>}
+ * @returns {Promise<{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]>}
  */
 export async function selectCapsuleMethods(capsules, { userId, projectId }) {
   const local = await capsules.active(userId, projectId);
@@ -298,7 +320,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
   const active = [...local.items, ...account.items]
     .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
     .slice(0, ACTIVE_CAPSULE_LIMIT);
-  /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, confirmedAt: number }[]} */
+  /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean, confirmedAt: number }[]} */
   const candidates = [];
   for (const selection of active) {
     /** @type {any[]} */
@@ -309,6 +331,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
       if (/** @type {any} */ (error)?.code === "capsule_not_found") continue;
       throw error;
     }
+    const received = await receivedCapsule(capsules, userId, selection);
     for (const entry of entries) {
       const method = {
         id: String(entry.id),
@@ -322,17 +345,19 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
         ...method,
         document,
         bytes: Buffer.byteLength(document, "utf8"),
+        received,
         confirmedAt: confirmedAtMs(entry),
       });
     }
   }
-  // Newest confirmation first, ties broken by id. Compared as code units rather
-  // than with `localeCompare`, whose result depends on the host's locale data:
-  // "the same entries select the same methods" has to hold across machines, not
-  // only across two runs on one.
-  candidates.sort((left, right) => right.confirmedAt - left.confirmedAt
+  // The account's own first, then newest confirmation first, ties broken by
+  // id. Compared as code units rather than with `localeCompare`, whose result
+  // depends on the host's locale data: "the same entries select the same
+  // methods" has to hold across machines, not only across two runs on one.
+  candidates.sort((left, right) => Number(left.received) - Number(right.received)
+    || right.confirmedAt - left.confirmedAt
     || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
-  /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number }[]} */
+  /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]} */
   const selected = [];
   let bytes = 0;
   for (const { confirmedAt: _confirmedAt, ...candidate } of candidates) {
@@ -353,7 +378,10 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * here, so from the run's point of view they are the same thing, and the caps
  * that matter — how many methods and how many bytes ride along in every
  * child's prompt — are properties of the directory rather than of either
- * source. One budget is therefore spent across both, capsules first.
+ * source. One budget is therefore spent across both, in this order: the
+ * account's own capsule entries, its learned methods, then what received packs
+ * brought (audit 2026-09-26, M-6). A borrowed pack is context the researcher
+ * chose to try; it never takes the place of how they themselves work.
  *
  * Reaching the learned half at all is the point of this parameter. The
  * selector existed and had no caller: approving a learned method changed
@@ -376,13 +404,18 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   trialMethodIds?: readonly string[], frozenMethods?: {capsuleMethods: any[], learnedMethods: any[]} | null,
+ *   learnedFamily?: "geo" | "research" | null,
  *   writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
  *
+ * `learnedFamily` is which learned methods this runtime may carry
+ * (`learnedMethodFamilyForRuntime`); absent, the whole library.
+ *
  * @returns {Promise<{ directory: string, count: number, bytes: number,
  *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+ *   learnedBytes: number,
  *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
  */
 export async function materializeCapsuleMethods({
@@ -392,29 +425,51 @@ export async function materializeCapsuleMethods({
   learning = null,
   trialMethodIds = [],
   frozenMethods = null,
+  learnedFamily = undefined,
   writeFile = writeFileAtomicNoFollow,
 }) {
   await assertNoSymlinkPath(project.rootDir, directory, { allowMissingTail: true });
   const userId = String(project.userId);
   const projectId = String(project.id);
-  const capsuleMethods = frozenMethods ? frozenMethods.capsuleMethods : capsules
+  const capsuleSelection = frozenMethods ? frozenMethods.capsuleMethods : capsules
     ? await selectCapsuleMethods(capsules, { userId, projectId })
     : [];
-  const capsuleBytes = capsuleMethods.reduce((total, method) => total + method.bytes, 0);
-  // What the capsule half left on the table. Both numbers can go to zero or
-  // below, and `selectLearnedMethods` returns nothing for a non-positive
-  // budget, so a project whose capsules already fill the directory mounts no
-  // learned method rather than overflowing the prompt.
+  // The account's own entries are spent first; what received packs brought
+  // waits until the learned methods have had theirs.
+  const ownMethods = capsuleSelection.filter((method) => method.received !== true);
+  const receivedCandidates = capsuleSelection.filter((method) => method.received === true);
+  const ownBytes = ownMethods.reduce((total, method) => total + method.bytes, 0);
+  // What the own capsule entries left on the table. Both numbers can go to
+  // zero or below, and `selectLearnedMethods` returns nothing for a
+  // non-positive budget, so a project whose own entries already fill the
+  // directory mounts no learned method rather than overflowing the prompt.
   const learnedMethods = frozenMethods ? frozenMethods.learnedMethods : learning
     ? await selectLearnedMethods(learning, {
       userId,
       projectId,
-      maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - capsuleMethods.length),
-      maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES - capsuleBytes,
+      maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length),
+      maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES - ownBytes,
       trialMethodIds,
+      ...(learnedFamily === undefined ? {} : { family: learnedFamily }),
     })
     : [];
-  const methods = [...capsuleMethods, ...learnedMethods];
+  const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);
+  // Then the received packs, in what is left of the same two caps. The first
+  // method of the whole directory is the one allowed past the byte budget
+  // (`selectCapsuleMethods`); a received entry is never that one when the
+  // researcher has anything of their own mounted.
+  /** @type {any[]} */
+  const receivedMethods = [];
+  let spentBytes = ownBytes + learnedBytes;
+  for (const method of receivedCandidates) {
+    if (ownMethods.length + learnedMethods.length + receivedMethods.length >= MAX_MOUNTED_CAPSULE_METHODS) break;
+    const first = ownMethods.length + learnedMethods.length + receivedMethods.length === 0;
+    if (!first && spentBytes + method.bytes > MAX_MOUNTED_CAPSULE_METHOD_BYTES) break;
+    spentBytes += method.bytes;
+    receivedMethods.push(method);
+  }
+  const capsuleMethods = [...ownMethods, ...receivedMethods];
+  const methods = [...ownMethods, ...learnedMethods, ...receivedMethods];
   await fs.rm(directory, { recursive: true, force: true });
   const learned = learnedMethods.map((method) => ({
     id: method.id,
@@ -425,7 +480,7 @@ export async function materializeCapsuleMethods({
   // The panel shows at most 160 characters of a method; a prefix is all it keeps.
   const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
-  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned, capsule };
+  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned, learnedBytes: 0, capsule };
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   let bytes = 0;
@@ -452,5 +507,5 @@ export async function materializeCapsuleMethods({
     }
     bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes, learned, capsule };
+  return { directory, count: methods.length, bytes, learned, learnedBytes, capsule };
 }

@@ -13,9 +13,12 @@ import test from "node:test";
 import { METHOD_SKILL_SCHEMA, mountedMethodDigest, normalizeSkillBody } from "@evimed/domain";
 
 import { safeId } from "../src/security.mjs";
+import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
   MAX_MOUNTED_LEARNED_METHODS,
   learnedMethodDirectoryName,
+  learnedMethodFamilyForRuntime,
+  methodFamily,
   renderLearnedMethod,
   selectLearnedMethods,
 } from "../src/learnedMethodMount.mjs";
@@ -136,4 +139,42 @@ test("a method with no name or no body is not mounted, because it could never be
 test("no service at all is an empty mount, not a throw", async () => {
   assert.deepEqual(await selectLearnedMethods(null, { userId: "u1", projectId: "p1" }), []);
   assert.equal(MAX_MOUNTED_LEARNED_METHODS, 16);
+});
+
+test("a runtime carries the learned methods of the work it is for, and the platform's own projects carry none", async () => {
+  // 2026-09-25: `claim-verdict-audit`, learnt from a meta-analysis, was
+  // mounted into every source-understanding run and every geo-content writing
+  // run (audit 2026-09-26, L-G7).
+  assert.equal(methodFamily("meta-analysis"), "research");
+  assert.equal(methodFamily(undefined), "research", "a method learnt before the capability was recorded is research");
+  assert.equal(methodFamily("open-domain-answer"), "research");
+  assert.equal(methodFamily("geo-content"), "geo");
+  assert.equal(methodFamily("geography-like"), "research", "a prefix of our own ids, not a word");
+
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: LEARNING_PROJECT_ID }), null);
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: SOURCES_PROJECT_ID, boundedRunId: "source-understanding-1" }), null);
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: FRONTIER_PROJECT_ID }), null);
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: "brand-x", boundedRunId: "geo-run-abc" }), "geo");
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: "brand-x" }), "research", "a conversation in a GEO project is research");
+  assert.equal(learnedMethodFamilyForRuntime({ projectId: `methodeval-${"ab".repeat(12)}`, boundedRunId: "method-eval-1" }), "research",
+    "an evaluation cell measures research methods");
+
+  const documents = [
+    doc("method:learned:research", "research-method", { payload: { provenance: { origin: "inferred", capabilityId: "meta-analysis" } } }),
+    doc("method:learned:legacy", "legacy-method"),
+    doc("method:learned:geo", "geo-method", { payload: { provenance: { origin: "inferred", capabilityId: "geo-content" } } }),
+  ];
+  const names = async (/** @type {any} */ scope) => (await selectLearnedMethods(fakeLearning(documents), { userId: "u1", projectId: "p1", ...scope }))
+    .map((method) => method.name).sort();
+  assert.deepEqual(await names({ family: "research" }), ["legacy-method", "research-method"]);
+  assert.deepEqual(await names({ family: "geo" }), ["geo-method"]);
+  assert.deepEqual(await names({ family: null }), [], "the platform's own work carries no researcher's method");
+  assert.deepEqual(await names({}), ["geo-method", "legacy-method", "research-method"], "no family named is the whole library, as before");
+
+  // An evaluation names the method it measures, and gets it whatever its family.
+  const trialLearning = { ...fakeLearning(documents), async getMethod(/** @type {string} */ _userId, /** @type {string} */ id) {
+    return documents.find((document) => document.id === id);
+  } };
+  const trial = await selectLearnedMethods(trialLearning, { userId: "u1", projectId: "p1", family: null, trialMethodIds: ["method:learned:geo"] });
+  assert.deepEqual(trial.map((method) => [method.name, method.trial]), [["geo-method", true]]);
 });

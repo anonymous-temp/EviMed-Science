@@ -15,6 +15,7 @@ import {
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
+import { learnedMethodFamilyForRuntime } from "./learnedMethodMount.mjs";
 import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
 import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
@@ -3112,6 +3113,8 @@ export class RuntimeManager {
     this.capsuleService = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
+    /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
+    this.learningMetrics = null;
     /** Frozen methods for private evaluation projects only; never a user-controlled override. */
     this.evaluationMethodSnapshots = new Map();
     this.pluginOverrides = new Map();
@@ -3231,14 +3234,24 @@ export class RuntimeManager {
         trialMethodIds = trial?.methodIds ?? [];
       } catch { trialMethodIds = []; }
     }
-    return materializeCapsuleMethods({
+    const mounted = await materializeCapsuleMethods({
       capsules: this.capsuleService,
       learning: this.learningService ?? null,
       frozenMethods: this.evaluationMethodSnapshots.get(this.key(project)) ?? null,
       trialMethodIds,
+      // Which learned methods this runtime may carry: none in the platform's
+      // own learning, sources and frontier projects, GEO methods in a runtime
+      // reserved for a GEO run, research methods everywhere else (L-G7).
+      learnedFamily: learnedMethodFamilyForRuntime({
+        projectId: String(project.id),
+        boundedRunId: this.boundedRuntimeScope(project)?.runId ?? null,
+      }),
       project,
       directory: capsuleMethodsHostDir(project),
     });
+    // What the learned half put in the room, for the loop's own counters.
+    try { this.learningMetrics?.observeMount?.({ methods: mounted.learned?.length ?? 0, bytes: mounted.learnedBytes ?? 0 }); } catch { /* a counter never fails a launch */ }
+    return mounted;
   }
 
   activateModelGatewayRuntime(project, runtime) {

@@ -595,6 +595,53 @@ test("one method larger than the whole budget is still mounted, and nothing foll
   }
 });
 
+test("the account's own methods take the budget first; what a received pack brought gets what is left", async () => {
+  // 2026-09-26 audit (M-6): a received pack's entries were ranked with the
+  // researcher's own and took the budget ahead of their learned methods, so a
+  // borrowed way of working could crowd out their own.
+  const { project, directory } = await scratchProject();
+  try {
+    const own = entry("own-1", { capsuleId: "capsule-own", curatedAt: "2026-01-01T00:00:00.000Z" });
+    const received = Array.from({ length: MAX_MOUNTED_CAPSULE_METHODS }, (_, index) => entry(`pack-${String(index).padStart(2, "0")}`, {
+      capsuleId: "capsule-pack", origin: "system", curatedAt: new Date(Date.UTC(2026, 5, 1 + index)).toISOString(),
+    }));
+    const capsules = {
+      ...fakeCapsules({
+        accountItems: [{ capsuleId: "capsule-pack", mode: "guest" }, { capsuleId: "capsule-own", mode: "own" }],
+        byCapsule: { "capsule-own": [own], "capsule-pack": received },
+      }),
+      // The capsule record says which is a received pack, whatever order the
+      // activations were written in.
+      async get(/** @type {string} */ _userId, /** @type {string} */ capsuleId) { return { id: capsuleId, payload: { imported: capsuleId === "capsule-pack" } }; },
+    };
+    const learnedPayload = (/** @type {string} */ name) => ({
+      status: "approved", statusChangedAt: "2026-09-01T00:00:00.000Z",
+      frontmatter: { name, description: `Does ${name}.`, whenToUse: "When needed.", metadata: { role: "functional" } },
+      body: "## Purpose\nDo it.\n\n## Workflow\n1. Do it.",
+    });
+    const learning = {
+      async approvedMethods() { return [{ id: "method:learned:alpha", payload: learnedPayload("alpha") }, { id: "method:learned:beta", payload: learnedPayload("beta") }]; },
+      async methodTrial() { return { methodIds: [] }; },
+    };
+    const result = await materializeCapsuleMethods({ capsules, learning, project, directory });
+    assert.equal(result.count, MAX_MOUNTED_CAPSULE_METHODS);
+    assert.deepEqual(result.learned.map((method) => method.name).sort(), ["alpha", "beta"], "the learned methods are the account's own and are mounted");
+    const names = await mounted(directory);
+    assert.ok(names.includes("own-1"), "the researcher's own entry is mounted");
+    const packMounted = result.capsule.filter((method) => method.capsuleId === "capsule-pack").map((method) => method.id);
+    assert.equal(packMounted.length, MAX_MOUNTED_CAPSULE_METHODS - 3, "the pack gets the room that is left");
+    assert.deepEqual(packMounted, received.slice(3).map((item) => item.id).reverse(), "and within it, its newest confirmations");
+
+    // The selection alone ranks the account's own first, whatever the dates.
+    const selected = await selectCapsuleMethods(capsules, { userId: "alice", projectId: "paper1" });
+    assert.equal(selected[0].id, "own-1");
+    assert.equal(selected[0].received, false);
+    assert.ok(selected.slice(1).every((method) => method.received === true));
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
 test("the selection is a function of the entries, not of the order they were served in", async () => {
   const scope = { userId: "alice", projectId: "paper1" };
   const rows = [
