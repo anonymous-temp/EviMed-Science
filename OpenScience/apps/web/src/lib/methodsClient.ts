@@ -25,6 +25,14 @@ export interface WebMethod {
   evaluations: { verdict?: string; report?: string; at?: string }[];
   promotion: { status: string; reasons: string[]; missing: string[]; missingDetails?: MethodPromotionDetail[] };
   body: string;
+  /** Which body this is, counting from 1: what 「第 N 版」 means. `revision`
+   *  moves on every write, counters included, and is never shown. */
+  version?: number;
+  /** When the body last changed. */
+  bodyUpdatedAt?: string | null;
+  /** The steps in the researcher's language, when they render the current
+   *  body; `body` is the SKILL.md written for the model. */
+  steps?: string | null;
   /** When it started being used, which is what 「新」 on its row is read from. */
   statusChangedAt?: string | null;
   /** How many successful deliveries it was distilled from — the 「从你改过的 3
@@ -62,6 +70,20 @@ export function retireMethod(method: WebMethod, reason?: string) {
     expectedRevision: method.revision,
     ...(reason ? { reason } : {}),
   });
+}
+
+/** One body a method has held, as 「历史版本」 lists it. */
+export interface MethodVersion {
+  version: number;
+  revision: number;
+  at: string | null;
+  title: string | null;
+  current: boolean;
+}
+
+/** The bodies a method has held, newest first — never a counter write. */
+export function methodVersions(method: Pick<WebMethod, "id">) {
+  return productRequest<{ items: MethodVersion[] }>(`/methods/${encodeURIComponent(method.id)}/history`);
 }
 
 export function rollbackMethod(method: WebMethod, targetRevision: number) {

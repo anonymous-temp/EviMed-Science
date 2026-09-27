@@ -13,6 +13,7 @@ const updateMemorySettings = vi.fn();
 const resetMemory = vi.fn();
 const fetchMyCapsule = vi.fn();
 const listMethods = vi.fn();
+const methodVersions = vi.fn();
 const archiveMemoryRecord = vi.fn();
 
 vi.mock("@/lib/apiClient", async () => {
@@ -38,7 +39,7 @@ vi.mock("@/lib/memoryClient", async () => {
 });
 vi.mock("@/lib/methodsClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient");
-  return { ...actual, listMethods: (...args: unknown[]) => listMethods(...args) };
+  return { ...actual, listMethods: (...args: unknown[]) => listMethods(...args), methodVersions: (...args: unknown[]) => methodVersions(...args) };
 });
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
 vi.mock("@/components/capsule/ReceivedShelf", () => ({ ReceivedShelf: () => <p>received shelf</p> }));
@@ -59,7 +60,7 @@ const record = (patch: Partial<WebStructuredMemory> = {}): WebStructuredMemory =
 });
 
 const method = {
-  id: "method:learned:freeze", projectId: null, revision: 2, name: "pre-submission-freeze-check",
+  id: "method:learned:freeze", projectId: null, revision: 2, version: 2, name: "pre-submission-freeze-check",
   description: "Runs the last guards.", whenToUse: "", title: "提交前给成品做最后把关",
   summary: "先留改动前的副本，再逐项确认每道检查真的能报错。", status: "approved", statusReason: null, origin: "inferred",
   counts: { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 }, evaluations: [],
@@ -228,8 +229,12 @@ describe("记忆胶囊", () => {
     await user.click(within(rowOf(/提交前给成品做最后把关/)).getByRole("button", { name: "更多" }));
     const items = (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
     expect(items).toEqual(["历史版本", "回到上一版", "停用"]);
+    methodVersions.mockResolvedValue({ items: [
+      { version: 2, revision: 2, at: "2026-09-22T06:00:00Z", title: null, current: true },
+      { version: 1, revision: 1, at: "2026-09-21T06:00:00Z", title: null, current: false },
+    ] });
     await user.click(screen.getByRole("menuitem", { name: "历史版本" }));
-    expect(screen.getByText(/9月21日 学到/)).toBeInTheDocument();
+    expect(await screen.findByText("9月21日 第 1 版")).toBeInTheDocument();
   });
 
   it("keeps a medicine-safety hold visible and confirmable", async () => {

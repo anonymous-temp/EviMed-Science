@@ -3,7 +3,7 @@ import { RotateCcw } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
-import { methodTitle, retireMethod, rollbackMethod, type WebMethod } from "@/lib/methodsClient";
+import { methodTitle, methodVersions, retireMethod, rollbackMethod, type MethodVersion, type WebMethod } from "@/lib/methodsClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
@@ -26,26 +26,16 @@ export function methodLine(method: WebMethod): string {
 }
 
 /**
- * A method's history, newest first: when it was learned (or said), when it
- * was last revised, when it was stopped and why. This is what 「最近变化」
- * used to show for every method at once, above the list; it is now each
- * row's own 「历史版本」 (2026-09-23 plan §5.6). Learning and taking effect are
- * one event since 2026-09-20 — the old block said both, for every method.
+ * A method's 「历史版本」: the bodies it has held, newest first, each as 「第 N
+ * 版」 on the day it was written (`GET /api/methods/:id/history`). Counter
+ * writes and status changes are not versions: on 2026-09-26 one method read
+ * 「更新为第 77 版」 over two bodies (audit, M-5).
  */
-export function methodHistory(method: WebMethod): string[] {
-  const lines: string[] = [];
-  const learned = day(method.createdAt);
-  if (learned) lines.push(`${learned} ${method.origin === "explicit" ? "记下" : "学到"}`);
-  const revised = day(method.updatedAt);
-  if (method.revision > 1 && revised && method.updatedAt !== method.createdAt && method.status !== "retired") {
-    lines.push(`${revised} 更新为第 ${method.revision} 版`);
-  }
-  if (method.status === "retired") {
-    const stopped = day(method.statusChangedAt ?? method.updatedAt);
-    const reason = method.statusReason ? `：${memoryExcerpt(method.statusReason, 80)}` : "";
-    if (stopped) lines.push(`${stopped} 停用${reason}`);
-  }
-  return lines.reverse();
+export function methodHistory(versions: readonly MethodVersion[]): string[] {
+  return versions.map((entry) => {
+    const when = day(entry.at);
+    return `${when ? `${when} ` : ""}第 ${entry.version} 版${entry.current ? "（当前）" : ""}`;
+  });
 }
 
 /**
@@ -61,7 +51,10 @@ export function methodHistory(method: WebMethod): string[] {
 export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<"steps" | "history" | null>(null);
+  /** The bodies it has held, read when 历史版本 is opened; "failed" when it could not be. */
+  const [versions, setVersions] = useState<MethodVersion[] | "failed" | null>(null);
   const retired = method.status === "retired";
+  const version = method.version ?? 1;
 
   const run = async (operation: () => Promise<void>) => {
     setBusy(true);
@@ -90,21 +83,33 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
     toast.success(retired ? `已恢复「${methodTitle(method)}」` : `「${methodTitle(method)}」已回到上一版`);
   });
 
-  const history = methodHistory(method);
-  const firstView = method.body ? "steps" : "history";
+  const openHistory = () => {
+    setDetail("history");
+    setVersions(null);
+    void methodVersions(method).then((page) => setVersions(page.items), () => setVersions("failed"));
+  };
+  // The steps in the researcher's language when there are any; the SKILL.md
+  // written for the model otherwise.
+  const steps = method.steps ?? method.body;
+  const firstView = steps ? "steps" : "history";
 
   return (
     <ListRow
       leading={<RowOrigin label="做法" />}
       title={<RowSentence text={methodLine(method)} inferred={method.origin !== "explicit"} clamp={!retired && detail === null} />}
-      onOpen={retired ? undefined : () => setDetail((current) => (current ? null : firstView))}
+      onOpen={retired ? undefined : () => (detail ? setDetail(null) : firstView === "history" ? openHistory() : setDetail("steps"))}
       expanded={retired ? undefined : detail !== null}
       muted={retired}
       meta={detail ? (
         <RowDetail>
-          {detail === "steps"
-            ? <MarkdownViewer className="text-ui text-text-2">{method.body}</MarkdownViewer>
-            : <ul className="space-y-1">{history.map((line) => <li key={line}>{line}</li>)}</ul>}
+          {detail === "steps" ? (
+            <>
+              <p>第 {version} 版{method.bodyUpdatedAt && day(method.bodyUpdatedAt) ? ` · ${day(method.bodyUpdatedAt)}` : ""}</p>
+              <MarkdownViewer className="text-ui text-text-2">{steps}</MarkdownViewer>
+            </>
+          ) : versions === null ? <p role="status">正在读取历史版本</p>
+            : versions === "failed" ? <p>无法读取历史版本</p>
+              : <ul className="space-y-1">{methodHistory(versions).map((line) => <li key={line}>{line}</li>)}</ul>}
         </RowDetail>
       ) : undefined}
       actions={retired && method.revision > 1
@@ -114,8 +119,10 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
         <Menu
           label="更多"
           items={[
-            { label: "历史版本", onSelect: () => setDetail("history") },
-            ...(method.revision > 1 ? [{ label: "回到上一版", disabled: busy, onSelect: () => void rollback() }] : []),
+            { label: "历史版本", onSelect: openHistory },
+            // Only a method with an earlier body can go back to it; the server
+            // answers any other with 409 `method_no_earlier_version`.
+            ...(version > 1 ? [{ label: "回到上一版", disabled: busy, onSelect: () => void rollback() }] : []),
             { label: "停用", disabled: busy, onSelect: () => void stop() },
           ]}
         />

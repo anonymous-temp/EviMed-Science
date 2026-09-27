@@ -789,6 +789,11 @@ const capsuleTransferErrorCodes = Object.freeze([
   'capsule_export_empty',
   'capsule_recipient_unknown',
   'capsule_password_required',
+  // 「回到上一版」 on a learned method (`learningService.rollback`): a method
+  // with one body has nothing to go back to, which is a fact about the
+  // method, not 「内容已发生变化」 — what a bare 409 used to be read as.
+  'method_no_earlier_version',
+  'method_revision_unavailable',
 ])
 
 /**
@@ -1138,6 +1143,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
   capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
+  method_no_earlier_version: '这个做法没有更早的版本。',
+  method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
