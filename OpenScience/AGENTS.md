@@ -58,7 +58,7 @@ per-project workspace + JSONL provenance.
   (`dsh` / `openlist` / `evimed-extract` / `openviking` / `pgvector` / `knowledge-plugin`). A Dockerfile ARG, a seam manifest,
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
-- `runtime/` — `mcp` (the `evimed` research server, 37 tools), `skills` (the
+- `runtime/` — `mcp` (the `evimed` research server, 41 tools), `skills` (the
   general skill libraries the image ships: `core`, `community`,
   `curated-scientific`, `office`; `evimed` and `external`
   predate `capabilities/` — the image takes only `open-domain-answer` out of

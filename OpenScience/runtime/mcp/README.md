@@ -1,30 +1,26 @@
 # runtime/mcp
 
-MCP (Model Context Protocol) server configurations.
+The platform's MCP (Model Context Protocol) servers.
 
-## Bundled runtime servers
-
-| MCP | Purpose | Phase |
+| Server | Used by | What it is |
 | --- | --- | --- |
-| `filesystem` | Project file read/write | v0.1 |
-| `evimed-research` | EviMed evidence, specialist agents, and public biomedical sources | enabled |
-| `science-paper-search` | Crossref scholarly search | enabled |
-| `science-biomcp` | PubMed, ClinicalTrials.gov, and ClinVar search | enabled |
-| `science-materials-project` | Materials Project summary data | enabled; server-held API key required |
-| `science-fred` | Public FRED time series | enabled |
-| `science-spaceweather` | NOAA SWPC alerts | enabled |
-| `science-open-meteo` | Open-Meteo weather and climate data | enabled |
-| `science-usgs-water` | USGS instantaneous water observations | enabled |
-| `Zotero MCP` | Reference library | later |
-| `GitHub MCP` | Repos / issues / releases | later |
-| `local runtime MCP` | Local execution status | later |
+| `evimed-research/` | every hosted runtime | The research server: 41 tools, exactly `MCP_TOOL_BASE_NAMES` in `packages/domain/src/toolNames.mjs` — retrieval, full text and web pages, pharmacy data, deterministic compilers, the specialist engines as managed jobs, the first-party science connectors (`science_connectors.py`), local tools, the knowledge base and the frontier feed. |
+| `evimed-memory/` | external agents | Two tools (recall, note) over the control plane's `/api/agent-memory/v1`. Not in the runtime image. |
 
-Hosted runtimes register all seven science connectors as independent local MCP
-processes. Their HTTP requests traverse the authenticated server-side public
-source gateway and its fixed official-host allowlist, so runtime containers keep
-their default internal-only network. Materials Project credentials stay in the
-Web gateway (`apps/server/src/publicSourceGateway.mjs`) and are never written
-into a runtime's own configuration, where the run itself could read them.
+In a hosted runtime the kernel mounts one MCP server. The profile patch
+(`apps/server/src/dshProfilePatch.mjs`) inserts the row `mcp-evimed`:
+`@deepseek-ai/dsh-mcp-client` over `stdio`, `serverName: evimed`, running
+`python3 /opt/evimed/mcp/evimed-research/server.py`, with
+`failOnStartupError: true`. The model sees each tool as `mcp__evimed__<name>`.
+A deployment can switch single tools off with `EVIMED_DISABLED_TOOLS`.
 
-Desktop users may still install alternative upstream connector packages from
-Settings. MCP servers remain pluggable and operator-configurable.
+The process holds the workload token and nothing else. Public sources are
+reached through the control plane's gateways, so the runtime container keeps
+its internal-only network, and upstream credentials (Materials Project's key
+among them) stay in the web container (`apps/server/src/publicSourceGateway.mjs`).
+
+The one optional second server is the ToolUniverse sidecar: when the deployment
+sets `OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL`, the patch adds `mcp-tooluniverse`
+over `streamable-http` with `failOnStartupError: false`.
+
+Tests: `pnpm test:mcp`.
