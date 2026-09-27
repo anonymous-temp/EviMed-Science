@@ -21,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from execution_evidence import execution_evidence
+import job_heartbeat
 
 
 MAX_STATE_BYTES = 256 * 1024
@@ -610,7 +611,7 @@ def status_job(tool_name, arguments):
         return {
             "status": "warning",
             "summary": "%s job %s is %s." % (spec["label"], job_id, job_status),
-            "data": {"jobId": job_id, "jobStatus": job_status, "updatedAt": state.get("updatedAt")},
+            "data": {"jobId": job_id, "jobStatus": job_status, **job_heartbeat.liveness(state)},
             "sources": [_source(spec, job_id)],
             "warnings": ["The specialist analysis is not complete; do not draw final conclusions yet."],
             "next_actions": ["Poll this job again after additional processing time."],
@@ -641,7 +642,11 @@ def status_job(tool_name, arguments):
     return {
         "status": "success",
         "summary": "%s job %s completed." % (spec["label"], job_id),
-        "data": {"jobId": job_id, "jobStatus": job_status},
+        "data": {
+            "jobId": job_id,
+            "jobStatus": job_status,
+            **({"elapsedSeconds": job_heartbeat.duration(state)} if job_heartbeat.duration(state) is not None else {}),
+        },
         "sources": [_source(spec, job_id)],
         "artifacts": state.get("artifacts") or [],
     }
@@ -717,12 +722,20 @@ def _run_job(state_path):
         )
     _atomic_json(request_path, request)
     _, _, log_path = _paths(spec, state["jobId"])
+    # Beside the state, not in the output: the engine's word on where it is,
+    # not a deliverable, and gone once the job has ended.
+    progress_path = state_path.with_name(state["jobId"] + ".progress.json")
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(root)
+    environment[job_heartbeat.PROGRESS_ENV] = str(progress_path)
     command = [str(python), str(root / "evimed_runner.py"), "--request", str(request_path), "--output-dir", str(output_root)]
     log_descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(log_descriptor, "ab", buffering=0) as log:
-        try:
+    # The heartbeat has stopped before any terminal state below is written.
+    try:
+        with os.fdopen(log_descriptor, "ab", buffering=0) as log, job_heartbeat.heartbeat(
+            state_path, state, read=_read_json, write=_atomic_json, log_path=log_path,
+            progress=lambda: job_heartbeat.engine_progress(progress_path),
+        ):
             completed = subprocess.run(
                 command,
                 cwd=str(root),
@@ -737,17 +750,22 @@ def _run_job(state_path):
                 # outlive every limit the platform believed it had.
                 timeout=_execution_timeout_seconds(),
             )
-        except subprocess.TimeoutExpired:
-            state.update({
-                "status": "failed",
-                "updatedAt": _now(),
-                "finishedAt": _now(),
-                "returnCode": None,
-                "retryable": True,
-                "error": "%s exceeded the %d second execution limit." % (spec["label"], _execution_timeout_seconds()),
-            })
-            _atomic_json(state_path, state)
-            return 1
+    except subprocess.TimeoutExpired:
+        state.update({
+            "status": "failed",
+            "updatedAt": _now(),
+            "finishedAt": _now(),
+            "returnCode": None,
+            "retryable": True,
+            "error": "%s exceeded the %d second execution limit." % (spec["label"], _execution_timeout_seconds()),
+        })
+        _atomic_json(state_path, state)
+        return 1
+    finally:
+        try:
+            progress_path.unlink()
+        except OSError:
+            pass
     result_path = output_root / "result.json"
     if state["tool"] == "mendelian_randomization" and result_path.is_file():
         result = _read_json(result_path)

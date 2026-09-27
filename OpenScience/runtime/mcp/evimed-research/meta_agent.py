@@ -21,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from execution_evidence import execution_evidence
+import job_heartbeat
 
 
 MAX_STATE_BYTES = 256 * 1024
@@ -567,7 +568,7 @@ def status_job(arguments):
             return {
                 "status": "warning",
                 "summary": "MetaAgent job %s is %s." % (job_id, job_status),
-                "data": {"jobId": job_id, "jobStatus": job_status, "updatedAt": state.get("updatedAt")},
+                "data": {"jobId": job_id, "jobStatus": job_status, **job_heartbeat.liveness(state)},
                 "sources": [_source(job_id)],
                 "warnings": ["The evidence synthesis is not complete; do not draw final conclusions yet."],
                 "next_actions": ["Poll this job again after additional processing time."],
@@ -576,7 +577,7 @@ def status_job(arguments):
         return {
             "status": "warning",
             "summary": "MetaAgent job %s is %s." % (job_id, job_status),
-            "data": {"jobId": job_id, "jobStatus": job_status, "updatedAt": state.get("updatedAt")},
+            "data": {"jobId": job_id, "jobStatus": job_status, **job_heartbeat.liveness(state)},
             "sources": [_source(job_id)],
             "warnings": ["The evidence synthesis is not complete; do not draw final conclusions yet."],
             "next_actions": ["Poll this job again after additional processing time."],
@@ -620,6 +621,7 @@ def status_job(arguments):
             "phase": state.get("phase"),
             "phaseStatus": state.get("phaseStatus"),
             "retryable": bool(state.get("retryable", False)),
+            **({"elapsedSeconds": job_heartbeat.duration(state)} if job_heartbeat.duration(state) is not None else {}),
         },
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
@@ -732,7 +734,10 @@ def _run_job(state_path):
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
         0o600,
     )
-    with os.fdopen(log_descriptor, "ab", buffering=0) as log:
+    with os.fdopen(log_descriptor, "ab", buffering=0) as log, job_heartbeat.heartbeat(
+        state_path, state, read=_read_json_no_follow, write=_atomic_json, log_path=log_path,
+        progress=lambda: job_heartbeat.step_manifest_progress(output_root),
+    ):
         completed = subprocess.run(
             command,
             cwd=str(root),
