@@ -90,6 +90,41 @@ export function cleanMethodDisplay(value) {
   return { title, summary }
 }
 
+/**
+ * How long the researcher-facing rendering of a method's steps may be.
+ *
+ * Opening a method on the memory page showed its SKILL.md body — English,
+ * written for the model — to a Chinese reader (audit 2026-09-26, M-5). The
+ * rendering a person reads is kept on the record beside `display`, never in
+ * SKILL.md, and it names the body digest it renders, so an amended body never
+ * shows the steps of the text it replaced.
+ */
+export const METHOD_STEPS_MAX_CHARS = 4000
+
+/**
+ * A researcher-facing rendering of a method's steps, cleaned, or null when it
+ * is missing, empty or longer than `METHOD_STEPS_MAX_CHARS`.
+ *
+ * Line breaks are kept — steps are a list — and every other control character
+ * becomes a space; runs of blank lines collapse to one.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function cleanMethodSteps(value) {
+  if (typeof value !== 'string') return null
+  const text = [...value.replace(/\r\n?/g, '\n')]
+    .map((char) => {
+      const code = char.charCodeAt(0)
+      return char !== '\n' && (code < 32 || code === 127) ? ' ' : char
+    })
+    .join('')
+    .split('\n').map((line) => line.replace(/[ \t]+$/g, '')).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  if (!text || [...text].length > METHOD_STEPS_MAX_CHARS) return null
+  return text
+}
+
 /** SkillPyramid's section template, which the distiller writes and the
  *  consolidation builder must preserve. */
 export const METHOD_BODY_SECTIONS = Object.freeze([

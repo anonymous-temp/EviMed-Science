@@ -446,8 +446,12 @@ test("a step is keyed on what it reads: an unchanged group reads its answer agai
 
 test("a method without the researcher's line gets one at the end of the pass, and one that has it is left alone", async () => {
   // 2026-09-21: the memory page printed the model's English name and routing
-  // description to a Chinese reader.
-  const named = doc("m2", "resolve-claim-anchor", { display: { title: "先锚定再改写", summary: "修报告前先把每条主张对回原文位置。" } });
+  // description to a Chinese reader. A method with its line and its steps in
+  // the reader's language, for the body it holds, has nothing to be asked.
+  const named = doc("m2", "resolve-claim-anchor", {
+    display: { title: "先锚定再改写", summary: "修报告前先把每条主张对回原文位置。" },
+    displaySteps: { text: "1. 先锚定\n2. 再改写", contentDigest: `sha256:${"m2".padEnd(64, "0").slice(0, 64)}` },
+  });
   const learning = fakeLearning([doc("m1", "resolve-claim-span"), named]);
   /** @type {any[]} */
   const written = [];
@@ -465,4 +469,29 @@ test("a method without the researcher's line gets one at the end of the pass, an
   assert.deepEqual(asked, ["m1"], "only the method without a line is described");
   assert.deepEqual(written, [{ id: "m1", display: { title: "按原文锚定主张", summary: "交付前逐条把主张对回来源原文的确切位置。" } }]);
   assert.deepEqual(result.described, ["m1"]);
+});
+
+test("a method whose steps are not in the reader's language, or render another body, is described again", async () => {
+  // 2026-09-26 audit (M-5): opening a method showed its English SKILL.md. The
+  // steps are rendered beside it and name the body they render, so an amended
+  // body is rendered afresh.
+  const line = { title: "先锚定再改写", summary: "修报告前先把每条主张对回原文位置。" };
+  const noSteps = doc("m1", "resolve-claim-span", { display: line });
+  const staleSteps = doc("m2", "resolve-claim-anchor", { display: line, displaySteps: { text: "1. 旧的步骤", contentDigest: `sha256:${"f".repeat(64)}` } });
+  const learning = fakeLearning([noSteps, staleSteps]);
+  /** @type {string[]} */
+  const asked = [];
+  /** @type {any[]} */
+  const written = [];
+  /** @type {any} */ (learning).setDisplay = async (_userId, id, display) => { written.push({ id, display }); return { id }; };
+  const consolidation = new MethodConsolidation({
+    learning,
+    dispatch: async (request) => ({ runId: "r1", sessionId: "s1", dispatchId: request.dispatchId }),
+    readResult: async () => ({ status: "succeeded", output: { pairs: [] } }),
+    describe: async (document) => { asked.push(document.id); return { ...line, steps: "1. 先锚定\n2. 再改写" }; },
+    wait: async () => {},
+  });
+  await consolidation.sleep({ job: { id: "job_2", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(asked.sort(), ["m1", "m2"]);
+  assert.ok(written.every((entry) => entry.display.steps === "1. 先锚定\n2. 再改写"));
 });

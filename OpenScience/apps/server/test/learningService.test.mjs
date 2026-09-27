@@ -11,8 +11,11 @@ import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill, evaluationEligible } from "@evimed/domain";
 
-import { LearningService, learnedMethodId, methodRecordFrom } from "../src/learningService.mjs";
+import {
+  HANDBOOK_CANDIDATE_RECORD_TYPE, LearningService, effectiveStatusReason, learnedMethodId, methodRecordFrom, methodStepsOf,
+} from "../src/learningService.mjs";
 import { MethodConsolidation } from "../src/methodConsolidation.mjs";
+import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 /** @param {string} text */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -414,4 +417,170 @@ test("the researcher's line is kept beside the method: never in its digest, neve
   assert.equal(named.payload.contentDigest, plain.payload.contentDigest);
   assert.deepEqual(named.payload.learning, plain.payload.learning, "nothing measured about it resets");
   await assert.rejects(learning.setDisplay("u1", plain.id, { title: "只有标题" }), { code: "method_display_invalid" });
+});
+
+/* ------------------------------------------------ audit 2026-09-26: L-G1, L-G4, M-5 */
+
+/** The service over the store double, which holds `telemetry` as the real store does. */
+function realisticService() {
+  const documents = productDocumentsDouble();
+  return { documents, learning: new LearningService({ documents, now: () => new Date("2026-09-27T00:00:00.000Z") }) };
+}
+
+test("a method is the account's: filed under no project, with the project it was learnt in as provenance", async () => {
+  // 2026-09-23: `pre-submission-freeze-check` was filed under its project and
+  // went with it, revisions and all (audit 2026-09-26, L-G1).
+  const { documents, learning } = realisticService();
+  const created = await create(learning, { projectId: "paper" });
+  assert.equal(created.projectId, null, "no project row can cascade it away");
+  assert.equal(created.payload.provenance.sourceProjectId, "paper");
+  assert.equal(created.payload.bodyVersion, 1);
+  // A provenance that already names its source keeps it.
+  const named = await create(learning, { frontmatter: frontmatter({ name: "another-thing" }), projectId: null,
+    provenance: { origin: "inferred", runId: "run_2", sourceProjectId: "thesis" } });
+  assert.equal(named.payload.provenance.sourceProjectId, "thesis");
+  // A later lesson from another project amends it and does not move its source.
+  const amended = await learning.amendMethod("u1", created.id, { expectedRevision: created.revision, frontmatter: frontmatter(),
+    body: `${BODY}\n\nOne more line.`, provenance: { origin: "inferred", runId: "run_3", sourceProjectId: "elsewhere" } });
+  assert.equal(amended.payload.provenance.sourceProjectId, "paper");
+  assert.equal(amended.projectId, null);
+  // Narrowed by where it was learnt, from the provenance.
+  assert.deepEqual((await learning.listMethods("u1", { projectId: "thesis" })).items.map((item) => item.id), [named.id]);
+  assert.equal((await learning.listMethods("u1")).items.length, 2);
+  assert.equal([...documents.rows.values()].every((row) => row.projectId === null), true);
+});
+
+test("counting a use is not a revision: no history row, no new updated time, and no conflict lost", async () => {
+  // 2026-09-26: `claim-verdict-audit` had 77 revisions and two bodies; 75 were
+  // counter writes, and 「回到上一版」 restored a counter (L-G4).
+  const { documents, learning } = realisticService();
+  const created = await create(learning);
+  const before = await documents.history("u1", "method", created.id);
+  const observed = await learning.recordObservation("u1", created.id, { runId: "r1", family: "r1:d1", outcome: "accepted",
+    at: "2026-09-27T00:00:00.000Z", invoked: true, contentDigest: created.payload.contentDigest });
+  await learning.recordEligible("u1", created.id);
+  const read = await learning.recordRead("u1", created.id, "2026-09-27T01:00:00.000Z");
+  assert.equal(read.payload.learning.counts.loaded, 1);
+  assert.equal(read.payload.learning.counts.eligible, 1);
+  assert.equal(read.payload.learning.counts.read, 1);
+  assert.equal(read.revision, created.revision + 3, "the revision still moves, so a writer holding the old record conflicts");
+  assert.equal(read.updatedAt, created.updatedAt, "a count is not a change of the method");
+  assert.equal((await documents.history("u1", "method", created.id)).length, before.length, "and leaves no history row");
+  await assert.rejects(learning.retire("u1", created.id, { expectedRevision: observed.revision }), { code: "product_revision_conflict" });
+});
+
+test("「回到上一版」 goes to the previous body, past every counter write and status change of the text it holds", async () => {
+  const { documents, learning } = realisticService();
+  const created = await create(learning);
+  const amended = await learning.amendMethod("u1", created.id, { expectedRevision: created.revision, frontmatter: frontmatter(),
+    body: `${BODY}\n\nA regrettable change.`, steps: "1. 新的步骤" });
+  const approved = await learning.approve("u1", created.id, { expectedRevision: amended.revision });
+  assert.equal(approved.payload.bodyVersion, 2);
+  // Counters written the way they were before 2026-09-27, as revisions, so the
+  // walk-back is exercised on the data production already holds.
+  let current = approved;
+  for (let index = 0; index < 3; index += 1) {
+    current = await documents.put("u1", "method", created.id, { ...current.payload,
+      learning: { ...current.payload.learning, counts: { ...current.payload.learning.counts, eligible: index + 1 } } },
+    { expectedRevision: current.revision });
+  }
+  // And one the new way, which saves nothing.
+  current = await learning.recordEligible("u1", created.id);
+  // What the page sends: the revision before the one it holds.
+  const restored = await learning.rollback("u1", created.id, { expectedRevision: current.revision, targetRevision: current.revision - 1 });
+  assert.equal(restored.payload.body, BODY, "the previous body, not the previous counter");
+  assert.equal(restored.payload.status, "approved");
+  assert.equal(restored.payload.statusReason, effectiveStatusReason({ status: "approved", provenance: { origin: "inferred" } }));
+  assert.equal(restored.payload.bodyVersion, 3, "a restore is a new version on the record");
+  assert.deepEqual(restored.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 },
+    "counters about another body are not this body's");
+  assert.equal(methodStepsOf(restored.payload), null, "the steps rendered the amended body and are not shown for this one");
+  assert.equal(restored.payload.provenance.sourceProjectId, "p1");
+
+  // 「历史版本」: the three bodies, newest first, never a counter or a status flip.
+  const history = await learning.history("u1", created.id);
+  assert.deepEqual(history.map((entry) => [entry.version, entry.current]), [[3, true], [2, false], [1, false]]);
+  assert.equal(history[0].contentDigest, created.payload.contentDigest);
+
+  // A method that has only ever held one body has nothing to go back to.
+  const single = await create(learning, { frontmatter: frontmatter({ name: "single-body" }) });
+  const counted = await learning.recordEligible("u1", single.id);
+  await assert.rejects(learning.rollback("u1", single.id, { expectedRevision: counted.revision, targetRevision: counted.revision - 1 }),
+    { code: "method_no_earlier_version" });
+  await assert.rejects(learning.rollback("u1", single.id, { expectedRevision: counted.revision, targetRevision: counted.revision + 5 }),
+    { code: "method_revision_unavailable" });
+});
+
+test("「恢复」 undoes a stop with the state before it, keeping the body and what was counted about it", async () => {
+  const { learning } = realisticService();
+  const created = await create(learning);
+  const used = await learning.recordObservation("u1", created.id, { runId: "r1", family: "r1:d1", outcome: "accepted",
+    at: "2026-09-27T00:00:00.000Z", invoked: true, contentDigest: created.payload.contentDigest });
+  const stopped = await learning.retire("u1", created.id, { expectedRevision: used.revision, reason: "在记忆页里停用" });
+  // A late count after the stop leaves no history row to land on.
+  const late = await learning.recordEligible("u1", created.id);
+  const restored = await learning.rollback("u1", created.id, { expectedRevision: late.revision, targetRevision: late.revision - 1 });
+  assert.equal(restored.payload.status, "approved");
+  assert.equal(restored.payload.body, BODY);
+  assert.equal(restored.payload.bodyVersion, 1, "the same body is the same version");
+  assert.equal(restored.payload.learning.counts.loaded, 1, "what was counted about this body stays");
+  assert.equal(restored.payload.learning.counts.eligible, 1);
+  assert.ok(restored.revision > stopped.revision);
+});
+
+test("a stopped method keeps the reason it was stopped with; any other reads its standing from the record", async () => {
+  // `claim-verdict-audit` carried an English reason naming a retirement by
+  // paired evaluation that no longer exists (audit 2026-09-26, L-G8).
+  assert.equal(effectiveStatusReason({ status: "approved", provenance: { origin: "inferred" } }),
+    "从你自己的研究里学到，已直接生效；用上它的研究若明显更常被退回，会自动停用，你也可以随时停用。");
+  assert.equal(effectiveStatusReason({ status: "candidate", learning: { relations: [{ type: "conflicts_with", target: "m2" }] } }),
+    "它和另一条做法说法相反，理清之前不会用上。");
+  assert.equal(effectiveStatusReason({ status: "candidate", learning: { relations: [] } }), "刚刚更新过，下一次整理时生效。");
+  const { learning } = realisticService();
+  const created = await create(learning);
+  const amended = await learning.amendMethod("u1", created.id, { expectedRevision: created.revision, frontmatter: frontmatter(),
+    body: `${BODY}\n\nOne more line.` });
+  const english = await learning.documents.put("u1", "method", created.id, { ...amended.payload, statusReason: "Retired by the paired evaluation." },
+    { expectedRevision: amended.revision });
+  const approved = await learning.approve("u1", created.id, { expectedRevision: english.revision });
+  assert.equal(approved.payload.statusReason, effectiveStatusReason(approved.payload), "a promotion writes the reader's sentence");
+});
+
+test("the steps in the researcher's language are kept beside the method and shown only for the body they render", async () => {
+  // 2026-09-26 audit (M-5): opening a method showed its English SKILL.md.
+  const { documents, learning } = realisticService();
+  const created = await create(learning, { display: { title: "先做一件事", summary: "需要时先把它做完。" }, steps: "1. 先做\n2. 再核对" });
+  assert.equal(methodStepsOf(created.payload), "1. 先做\n2. 再核对");
+  assert.equal(created.payload.contentDigest, methodContentDigest({ frontmatter: frontmatter(), body: BODY }, sha256), "not part of the digest");
+  // Rendering them later is not a revision, and a line the method has stays.
+  const plain = await create(learning, { frontmatter: frontmatter({ name: "plain-thing" }), display: { title: "原来的标题", summary: "原来的说明。" } });
+  const historyBefore = (await documents.history("u1", "method", plain.id)).length;
+  const rendered = await learning.setDisplay("u1", plain.id, { title: "新标题", summary: "新说明。", steps: "1. 第一步" });
+  assert.equal(rendered.payload.display.title, "原来的标题");
+  assert.equal(methodStepsOf(rendered.payload), "1. 第一步");
+  assert.equal((await documents.history("u1", "method", plain.id)).length, historyBefore);
+  // An amendment without new steps leaves the old ones naming the old body.
+  const amended = await learning.amendMethod("u1", created.id, { expectedRevision: created.revision, frontmatter: frontmatter(),
+    body: `${BODY}\n\nOne more line.` });
+  assert.equal(methodStepsOf(amended.payload), null);
+  assert.equal(amended.payload.bodyVersion, 2);
+});
+
+test("a lesson the platform's reviewer taught is kept for the handbook, never as the researcher's method", async () => {
+  // Both methods production learnt in September came from the reviewer's
+  // findings alone and read as 「我的做法」 (audit 2026-09-26, L-G3).
+  const { learning } = realisticService();
+  const kept = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: BODY,
+    provenance: { origin: "inferred", runId: "run_1", signal: "reviewer" }, capabilityId: "meta-analysis" });
+  assert.equal(kept.payload.recordType, HANDBOOK_CANDIDATE_RECORD_TYPE);
+  assert.equal(kept.payload.status, "candidate");
+  assert.equal(kept.payload.provenance.derivedFrom, "reviewer");
+  assert.equal(kept.payload.capabilityId, "meta-analysis");
+  assert.deepEqual((await learning.listMethods("u1")).items, [], "not in the researcher's list");
+  assert.deepEqual(await learning.approvedMethods("u1"), [], "never mounted");
+  // The same lesson again replaces it rather than piling up.
+  const again = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: `${BODY}\n\nRefined.`,
+    provenance: { origin: "inferred", runId: "run_2" } });
+  assert.equal(again.id, kept.id);
+  assert.equal(again.revision, kept.revision + 1);
 });

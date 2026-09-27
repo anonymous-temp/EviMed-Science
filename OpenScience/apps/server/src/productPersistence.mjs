@@ -339,6 +339,44 @@ CREATE TRIGGER product_documents_memory_index_outbox
 AFTER INSERT OR UPDATE OF payload,revision,deleted_at ON evimed_product.documents
 FOR EACH ROW WHEN (NEW.kind IN ('capsule','fact')) EXECUTE FUNCTION evimed_product.enqueue_memory_index_job();
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-05-memory-index-outbox-v1') ON CONFLICT DO NOTHING;
+-- A learned method is the account's, not a project's (2026-09-27, audit L-G1).
+-- Filed under the project it was learnt in, it went with that project through
+-- documents(user_id,project_id) -> projects ON DELETE CASCADE, revisions and
+-- all: pre-submission-freeze-check on 2026-09-23. The project stays a fact of
+-- its provenance. Neither the revision nor updated_at moves: this is where the
+-- row is filed, not a change of the method. Unguarded and idempotent, so a
+-- method written with a project by an older process is moved at the next start.
+UPDATE evimed_product.documents
+   SET payload = payload || jsonb_build_object('provenance',
+         coalesce(payload->'provenance','{}'::jsonb) || jsonb_build_object('sourceProjectId',
+           coalesce(payload #>> '{provenance,sourceProjectId}', project_id))),
+       project_id = NULL
+ WHERE kind='method' AND project_id IS NOT NULL
+   AND payload->>'recordType' IN ('learned-method','handbook-candidate');
+-- Which body a method is on, counted from its saved revisions: a new text is a
+-- new version, a counter write or a status change of the same text is not
+-- (audit L-G4). Once, for the methods written before the count existed.
+DO $method_body_versions$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-09-27-account-level-methods-v1') THEN
+    UPDATE evimed_product.documents d
+       SET payload = d.payload || jsonb_build_object(
+             'bodyVersion', v.versions,
+             'bodyUpdatedAt', to_char(v.changed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+      FROM (
+        SELECT user_id, kind, id,
+               count(*) FILTER (WHERE digest IS DISTINCT FROM previous)::integer AS versions,
+               max(recorded_at) FILTER (WHERE digest IS DISTINCT FROM previous) AS changed_at
+          FROM (SELECT user_id, kind, id, recorded_at, payload->>'contentDigest' AS digest,
+                       lag(payload->>'contentDigest') OVER (PARTITION BY user_id, kind, id ORDER BY revision) AS previous
+                  FROM evimed_product.revisions WHERE kind='method') r
+         GROUP BY user_id, kind, id
+      ) v
+     WHERE d.user_id=v.user_id AND d.kind=v.kind AND d.id=v.id AND d.kind='method'
+       AND d.payload->>'recordType'='learned-method' AND NOT (d.payload ? 'bodyVersion') AND v.versions >= 1;
+  END IF;
+END $method_body_versions$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-27-account-level-methods-v1') ON CONFLICT DO NOTHING;
 `;
 
 /** Idempotent across processes; only the control-plane connection performs DDL.

@@ -29,7 +29,17 @@ import {
   skillBodyDigest,
   toolConfigIssues,
   validateMethodSkill,
+  cleanMethodSteps,
+  METHOD_STEPS_MAX_CHARS,
 } from "../src/methodSkill.mjs";
+
+test("a rendering of a method's steps keeps its lines and nothing a page cannot show", () => {
+  assert.equal(cleanMethodSteps("1. 先核对编号\r\n2. 再分开\u0007说法\n\n\n\n3. 最后交付  "), "1. 先核对编号\n2. 再分开 说法\n\n3. 最后交付");
+  assert.equal(cleanMethodSteps("   \n "), null, "nothing to read is no rendering");
+  assert.equal(cleanMethodSteps(42), null);
+  assert.equal(cleanMethodSteps("步".repeat(METHOD_STEPS_MAX_CHARS)), "步".repeat(METHOD_STEPS_MAX_CHARS));
+  assert.equal(cleanMethodSteps("步".repeat(METHOD_STEPS_MAX_CHARS + 1)), null, "too long is refused, never cut mid-step");
+});
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");

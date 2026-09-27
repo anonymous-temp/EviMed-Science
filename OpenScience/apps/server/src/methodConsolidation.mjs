@@ -46,7 +46,7 @@ import {
   retirementProposal,
   validateMethodGraph,
 } from "@evimed/domain";
-import { methodRecordFrom } from "./learningService.mjs";
+import { methodRecordFrom, methodStepsOf } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
@@ -374,13 +374,16 @@ export class MethodConsolidation {
 
     // Last, so no write above races these revisions: every method a researcher
     // would read without a line of their own gets one — those that predate
-    // `display`, and any candidate that came without it.
+    // `display`, and any candidate that came without it — and every method
+    // whose steps are not yet in their language, or render a body it no
+    // longer holds, gets those (M-5). A line it already has is kept.
     const described = [];
     if (this.describe) {
       const current = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
       for (const document of current) {
         if (described.length >= CONSOLIDATION_LIMITS.maxDescriptions) break;
-        if (document.payload?.status === "retired" || cleanMethodDisplay(document.payload?.display)) continue;
+        if (document.payload?.status === "retired") continue;
+        if (cleanMethodDisplay(document.payload?.display) && methodStepsOf(document.payload)) continue;
         const display = await this.describe(document, { userId: job.userId, projectId: job.projectId ?? null }).catch(() => null);
         if (!display) continue;
         if (await this.learning.setDisplay(job.userId, document.id, display).catch(() => null)) described.push(document.id);

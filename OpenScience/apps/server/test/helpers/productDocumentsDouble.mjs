@@ -65,10 +65,13 @@ export function productDocumentsDouble() {
         .slice(0, limit)
         .map(publicRow);
     },
-    async put(userId, kind, id, payload, { expectedRevision, projectId = null }) {
+    // `telemetry` as the real store reads it: the revision moves, no history
+    // row is saved and `updatedAt` stays where it was.
+    async put(userId, kind, id, payload, { expectedRevision, projectId = null, telemetry = false }) {
       const key = keyOf(userId, kind, id);
       const current = rows.get(key);
       if (expectedRevision === 0) {
+        if (telemetry) throw new HttpError(400, "product_document_invalid", "A counter update cannot create a record.");
         if (current) throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
         const at = tick();
         const row = { id, kind, userId, projectId, payload: structuredClone(payload), revision: 1, createdAt: at, updatedAt: at, deletedAt: null };
@@ -81,8 +84,10 @@ export function productDocumentsDouble() {
       }
       current.payload = structuredClone(payload);
       current.revision += 1;
-      current.updatedAt = tick();
-      saveRevision(key, current);
+      if (!telemetry) {
+        current.updatedAt = tick();
+        saveRevision(key, current);
+      }
       return publicRow(current);
     },
     async createBatch(userId, records) {
@@ -105,8 +110,10 @@ export function productDocumentsDouble() {
       saveRevision(key, current);
       return publicRow(current);
     },
-    async history(userId, kind, id, { limit = 50 } = {}) {
-      return [...(revisions.get(keyOf(userId, kind, id)) ?? [])].reverse().slice(0, limit).map((entry) => structuredClone(entry));
+    async history(userId, kind, id, { limit = 50, beforeRevision = null } = {}) {
+      return [...(revisions.get(keyOf(userId, kind, id)) ?? [])].reverse()
+        .filter((entry) => beforeRevision == null || entry.revision < beforeRevision)
+        .slice(0, limit).map((entry) => structuredClone(entry));
     },
   };
 }

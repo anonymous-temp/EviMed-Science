@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { cleanMethodDisplay, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
-import { methodRecordFrom } from "./learningService.mjs";
+import { bodyVersionOf, effectiveStatusReason, methodRecordFrom, methodStepsOf } from "./learningService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -55,10 +55,21 @@ async function bodyOf(req, limit, allowed) {
 export function methodView(document) {
   const payload = document.payload ?? {};
   const verdict = promotionVerdict(methodRecordFrom(document));
+  const status = payload.status ?? "candidate";
   return {
     id: document.id,
-    projectId: document.projectId,
+    // Where it was learnt. The record is the account's (`createCandidate`),
+    // so this is the provenance's project, never a storage column — which is
+    // null for every method since 2026-09-27.
+    projectId: payload.provenance?.sourceProjectId ?? document.projectId ?? null,
+    // The optimistic-concurrency token. It moves on every write, counters
+    // included, so it is never a version number a person reads: that is
+    // `version`.
     revision: document.revision,
+    // Which body this is, counting from 1: what 「第 N 版」 means.
+    version: bodyVersionOf(payload),
+    // When the body last changed; `updatedAt` also moves on a status change.
+    bodyUpdatedAt: payload.bodyUpdatedAt ?? document.createdAt ?? null,
     name: payload.frontmatter?.name ?? "",
     description: payload.frontmatter?.description ?? "",
     whenToUse: payload.frontmatter?.whenToUse ?? "",
@@ -67,9 +78,15 @@ export function methodView(document) {
     // or a consolidation pass has written one.
     title: cleanMethodDisplay(payload.display)?.title ?? null,
     summary: cleanMethodDisplay(payload.display)?.summary ?? null,
+    // The steps in the researcher's language, when they render the body the
+    // method holds now; `body` is the SKILL.md written for the model.
+    steps: methodStepsOf(payload),
     role: payload.frontmatter?.metadata?.role ?? "functional",
-    status: payload.status ?? "candidate",
-    statusReason: payload.statusReason ?? null,
+    status,
+    // A retired method keeps the reason it was stopped with; any other reads
+    // its standing from the record, never from a sentence an older path
+    // stored (`effectiveStatusReason`).
+    statusReason: status === "retired" ? payload.statusReason ?? null : effectiveStatusReason(payload),
     // When it started being used: what the row reads 「新」 from, and what
     // 「9月18日起生效」 says. Absent on a method written before it was stamped.
     statusChangedAt: payload.statusChangedAt ?? null,
@@ -95,8 +112,13 @@ export function methodView(document) {
   };
 }
 
-/** @param {{store: any, service: any, maxJsonBytes: number, evaluationUsers?: readonly string[], trialTtlMs?: number}} dependencies */
-export function createLearningRoutes({ store, service, maxJsonBytes, evaluationUsers = [], trialTtlMs = 6 * 60 * 60 * 1000 }) {
+/**
+ * `summary` is the loop's own counts for this account (`learningMetrics.mjs`
+ * `learningSummary`): read-only, beside the list, and absent rather than an
+ * error when it cannot be read — the list is what the page needs.
+ * @param {{store: any, service: any, maxJsonBytes: number, evaluationUsers?: readonly string[], trialTtlMs?: number,
+ *   summary?: ((userId: string) => Promise<any>) | null}} dependencies */
+export function createLearningRoutes({ store, service, maxJsonBytes, evaluationUsers = [], trialTtlMs = 6 * 60 * 60 * 1000, summary = null }) {
   const evaluators = new Set((evaluationUsers ?? []).map((value) => String(value)));
   /** @param {any} req @param {any} res */
   return async (req, res) => {
@@ -120,7 +142,10 @@ export function createLearningRoutes({ store, service, maxJsonBytes, evaluationU
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),
       });
-      return reply({ items: (page.items ?? []).map(methodView), nextCursor: page.nextCursor ?? null });
+      // Whether the loop is turning for this account (build spec §13): one
+      // read beside the list, on the first page only.
+      const counts = summary && !url.searchParams.get("cursor") ? await summary(user.id).catch(() => null) : null;
+      return reply({ items: (page.items ?? []).map(methodView), nextCursor: page.nextCursor ?? null, ...(counts ? { summary: counts } : {}) });
     }
     // Before the by-id branch: a method id is authored text, so `trial` has to
     // be claimed as a literal here or `GET /api/methods/trial` reads as a
@@ -156,6 +181,11 @@ export function createLearningRoutes({ store, service, maxJsonBytes, evaluationU
     }
     if (parts.length === 1 && method === "GET") {
       return reply(methodView(await service.getMethod(user.id, parts[0])));
+    }
+    // 「历史版本」: the bodies the method has held, newest first — never a
+    // counter write or a status change of the same text.
+    if (parts.length === 2 && parts[1] === "history" && method === "GET") {
+      return reply({ items: await service.history(user.id, parts[0]) });
     }
     if (parts.length === 0 && method === "POST") {
       // The whole SKILL.md, parsed by the parser the distillation path uses.

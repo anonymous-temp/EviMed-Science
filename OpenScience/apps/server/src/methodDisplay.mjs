@@ -14,15 +14,16 @@
  * @module methodDisplay
  */
 
-import { cleanMethodDisplay } from "@evimed/domain";
+import { METHOD_STEPS_MAX_CHARS, cleanMethodDisplay, cleanMethodSteps } from "@evimed/domain";
 
 import { callModelForControlPlane } from "./modelGateway.mjs";
 
 const displayInstructions = [
-  "你为研究者的一条工作做法写一个标题和一句说明，显示在他的「记忆胶囊」页面上。",
+  "你为研究者的一条工作做法写一个标题、一句说明和它的步骤，显示在他的「记忆胶囊」页面上。",
   "做法原文是写给模型看的英文；你要用简体中文告诉研究者：他做研究时会多做或换一种做法做的是什么，以及什么时候用。",
   "标题不超过 16 个字，说明不超过 80 个字；不要出现工具名、文件名、英文代号或连字符写法，不要写「该方法」「本做法」之类的套话。",
-  "只输出 JSON：{\"title\": \"...\", \"summary\": \"...\"}。",
+  `步骤按原文的 Workflow 一节，用简体中文写成编号列表，一行一步，每步一句话，写清楚什么时候做、做什么；原文的核对与限制各写成一步放在最后。步骤合计不超过 ${Math.floor(METHOD_STEPS_MAX_CHARS / 4)} 个字，不加原文没有的内容。`,
+  "只输出 JSON：{\"title\": \"...\", \"summary\": \"...\", \"steps\": \"1. ...\\n2. ...\"}。",
 ].join("");
 
 /**
@@ -61,12 +62,17 @@ export class MethodDescriber {
   }
 
   /**
-   * A title and sentence for one method, or null — never a throw. Why it failed
-   * goes to stderr once: a line that silently never arrives looks exactly like
-   * a feature that is off.
+   * A title, a sentence and the steps for one method, or null — never a
+   * throw. Why it failed goes to stderr once: a line that silently never
+   * arrives looks exactly like a feature that is off.
+   *
+   * The steps are the body's Workflow in the researcher's language (audit
+   * 2026-09-26, M-5): opening a method showed its English SKILL.md. They are
+   * kept beside the method, bound to the body digest they render
+   * (`LearningService.setDisplay`), and never written into SKILL.md.
    * @param {any} document a learned method document
    * @param {{ userId: string, projectId: string | null }} owner
-   * @returns {Promise<{title: string, summary: string} | null>}
+   * @returns {Promise<{title: string, summary: string, steps?: string} | null>}
    */
   async describe(document, { userId, projectId }) {
     if (!this.available) return null;
@@ -75,7 +81,7 @@ export class MethodDescriber {
       `name: ${String(frontmatter.name ?? "")}`,
       `description: ${String(frontmatter.description ?? "")}`,
       `whenToUse: ${String(frontmatter.whenToUse ?? "")}`,
-      String(document?.payload?.body ?? "").slice(0, 3_000),
+      String(document?.payload?.body ?? "").slice(0, 8_000),
     ].join("\n");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -92,7 +98,8 @@ export class MethodDescriber {
             temperature: 0,
             // The same measurement as run titles: a line needs no reasoning.
             thinking: { type: "disabled" },
-            max_tokens: 2_000,
+            // A title, a sentence and up to a thousand characters of steps.
+            max_tokens: 4_000,
             response_format: { type: "json_object" },
             messages: [
               { role: "system", content: displayInstructions },
@@ -102,9 +109,12 @@ export class MethodDescriber {
         },
       );
       const message = body?.choices?.[0]?.message;
-      const display = cleanMethodDisplay(displayFrom(message?.content) ?? displayFrom(message?.reasoning_content));
-      if (!display) process.stderr.write(`method display produced no usable line for ${String(document?.id ?? "")}\n`);
-      return display;
+      const answer = displayFrom(message?.content) ?? displayFrom(message?.reasoning_content);
+      const display = cleanMethodDisplay(answer);
+      const steps = cleanMethodSteps(answer?.steps);
+      if (!display && !steps) process.stderr.write(`method display produced no usable line for ${String(document?.id ?? "")}\n`);
+      if (!display) return steps ? { title: "", summary: "", steps } : null;
+      return steps ? { ...display, steps } : display;
     } catch (error) {
       process.stderr.write(`method display failed for ${String(document?.id ?? "")}: ${error?.name === "AbortError" ? "timeout" : error?.code ?? "error"}\n`);
       return null;

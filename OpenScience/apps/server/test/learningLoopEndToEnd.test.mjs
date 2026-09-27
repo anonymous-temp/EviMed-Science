@@ -207,13 +207,22 @@ test("a distilled method takes effect at once, is measured afterwards, and one r
   assert.equal(proposal.immediate, true, "a measured harm does not wait another night");
   assert.match(proposal.reason, /worse than working without it/);
 
-  // 6. One rollback undoes an effective method, saving forward.
-  const rolled = await learning.rollback("u1", methodId, { expectedRevision: document.revision, targetRevision: 1 });
-  assert.equal(rolled.payload.status, "approved", "revision 1 was effective, so restoring it is effective");
-  assert.ok(rolled.revision > document.revision, "history is kept, never deleted");
-  const stopped = await learning.retire("u1", methodId, { expectedRevision: rolled.revision, reason: "在记忆页里停用" });
+  // 6. 「回到上一版」 goes to the previous *body*. This method has held one
+  //    body, however many counter and status writes it has seen, so there is
+  //    nothing to go back to and the answer says so rather than restoring a
+  //    counter and calling it a rollback (audit 2026-09-26, L-G4).
+  await assert.rejects(
+    () => learning.rollback("u1", methodId, { expectedRevision: document.revision, targetRevision: document.revision - 1 }),
+    (error) => /** @type {any} */ (error).code === "method_no_earlier_version",
+  );
+  // 7. One stop takes it out of the next launch, and one rollback undoes the stop.
+  const stopped = await learning.retire("u1", methodId, { expectedRevision: document.revision, reason: "在记忆页里停用" });
   assert.equal(stopped.payload.status, "retired");
   assert.deepEqual(await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" }), []);
+  const restored = await learning.rollback("u1", methodId, { expectedRevision: stopped.revision, targetRevision: stopped.revision - 1 });
+  assert.equal(restored.payload.status, "approved", "the stop is undone, body and counters as they were");
+  assert.deepEqual(restored.payload.learning.counts, document.payload.learning.counts);
+  assert.ok(restored.revision > stopped.revision, "history is kept, never deleted");
 });
 
 test("trajectories decide who is worth measuring, and the reason says which one is short", async () => {
