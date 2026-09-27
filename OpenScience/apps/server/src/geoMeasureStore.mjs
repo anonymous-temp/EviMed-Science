@@ -35,6 +35,7 @@
 
 import { migrateGeo } from "./geoPersistence.mjs";
 import { randomId } from "./security.mjs";
+import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
 /** The advisory lock key text; `hashtext` of it is the lock. */
 export const GEO_PROBE_LOCK_KEY = "evimed_geo_probe";
@@ -613,15 +614,21 @@ export class GeoMeasureStore {
 
   /**
    * What `geo`-purpose model calls cost since `since`, across every account:
-   * settled cost plus what is still reserved or uncertain. Null when the usage
-   * ledger has no table here (nothing can be measured, so nothing is spent).
+   * settled cost, plus what is still reserved at its ceiling, plus an
+   * uncertain call at what it can have cost — the usage ledger's own rule
+   * (`OPEN_COST_VALUE`: its recorded estimate, the reservation only where
+   * nothing could be counted). The judge's daily budget used to hold every
+   * uncertain row at its full reservation, about 70 times what a call
+   * settles at, so a few lost streams stopped the day's judging for spend
+   * that never happened. Null when the usage ledger has no table here
+   * (nothing can be measured, so nothing is spent).
    * @param {Date} since
    */
   async geoSpendSince(since) {
     const table = await this.query("SELECT to_regclass('evimed_usage.model_requests') AS name");
     if (!table.rows[0]?.name) return null;
     const result = await this.query(`SELECT coalesce(sum(CASE WHEN status = 'settled' THEN coalesce(actual_cost, 0)
-        WHEN status IN ('reserved', 'uncertain') THEN reserved_cost ELSE 0 END), 0) AS spent
+        WHEN status IN ('reserved', 'uncertain') THEN ${OPEN_COST_VALUE} ELSE 0 END), 0) AS spent
       FROM evimed_usage.model_requests WHERE purpose = 'geo' AND created_at >= $1`, [since.toISOString()]);
     return Math.round(Number(result.rows[0]?.spent ?? 0) * 10_000) / 10_000;
   }

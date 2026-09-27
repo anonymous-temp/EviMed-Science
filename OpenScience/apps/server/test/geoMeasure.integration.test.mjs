@@ -847,6 +847,34 @@ test("the judge stops when the module's daily budget is spent: answers wait unpa
   }
 });
 
+test("the daily budget counts an uncertain call at what it can have cost, and at its reservation only when nothing was counted", options, async () => {
+  await reset();
+  await migrateUsageLedger(database);
+  const user = `geo_uncertain_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'GEO uncertain','development')", [user]);
+  const at = new Date();
+  const since = new Date(at.getTime() - 60_000);
+  const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  const row = (/** @type {string} */ id, /** @type {string} */ status, /** @type {number} */ reserved, /** @type {number | null} */ actual,
+    /** @type {number | null} */ estimated) => database.query(`INSERT INTO evimed_usage.model_requests (id,user_id,project_id,model,price_version,currency,
+      request_fingerprint,status,reserved_cost,actual_cost,estimated_cost,reservation_expires_at,created_at,settled_at,purpose)
+    VALUES ($1,$2,NULL,'deepseek-flash','test','CNY',$3,$4,$5,$6,$7,$8,$8,$9,'geo')`,
+  [id, user, createHash("sha256").update(id).digest("hex"), status, reserved, actual, estimated, at.toISOString(),
+    status === "reserved" ? null : at.toISOString()]);
+  try {
+    await row(ids[0], "settled", 25, 0.3, null);
+    await row(ids[1], "uncertain", 25, null, 0.5);
+    assert.equal(await store.geoSpendSince(since), 0.8, "a settled call at its cost, an uncertain one at its estimate");
+    await row(ids[2], "uncertain", 4, null, null);
+    assert.equal(await store.geoSpendSince(since), 4.8, "an uncertain call nothing could be counted for holds its reservation");
+    await row(ids[3], "reserved", 2, null, null);
+    assert.equal(await store.geoSpendSince(since), 6.8, "a call in flight holds its reservation");
+  } finally {
+    await database.query("DELETE FROM evimed_usage.model_requests WHERE id = ANY($1::text[])", [ids]);
+    await database.query("DELETE FROM evimed_control.users WHERE id = $1", [user]);
+  }
+});
+
 // ---------------------------------------------------------------- counting again (G2)
 
 test("a changed registry counts the stored answers again in code: no judge call, the facts' brands and citations move, and the round's numbers follow", options, async () => {
