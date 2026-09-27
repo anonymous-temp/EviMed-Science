@@ -93,6 +93,17 @@ export function pluginFailure(error) {
 }
 
 /**
+ * The source's health a proof reported, when it was not healthy: a warning on
+ * the row and in the ledger, never the outcome. The configuration proved; the
+ * source behind the gateway (Crossref, a quarter of requests timing out from
+ * the production host on 2026-09-26) is not the configuration's to answer for.
+ * @param {any} proof @returns {{ upstream: { ok: false, code: string | null } } | null}
+ */
+function upstreamWarning(proof) {
+  return proof?.upstream && proof.upstream.ok === false ? { upstream: { ok: false, code: proof.upstream.code ?? null } } : null;
+}
+
+/**
  * Every startup is followed by an independent live probe, including the one
  * that restores.
  *
@@ -113,8 +124,10 @@ export function pluginFailure(error) {
  *   in all three: nothing was rolled back. This case used to stop the runtime
  *   and report `plugin_rollback_failed`, which is what production showed.
  *
- * `detail` carries the failure of each step that failed; it is recorded, never
- * shown to the researcher.
+ * `detail` carries the failure of each step that failed, and `upstream` when
+ * the proof that decided the outcome found the source unhealthy -- an
+ * `effective` apply can carry that warning and nothing else. It is recorded,
+ * never shown to the researcher.
  *
  * @param {any} runtime @param {any} project @param {any} candidate @param {any} previous
  * @param {() => Promise<void>} guard @param {string} pluginId @param {any} [fallback]
@@ -127,7 +140,7 @@ export async function applyPluginCandidate(runtime, project, candidate, previous
     await guard();
     const proof = await runtime.probePlugin(project, candidate, pluginId);
     await guard();
-    return { phase: "effective", effective: candidate, generation: proof.generation, error: null, detail: null };
+    return { phase: "effective", effective: candidate, generation: proof.generation, error: null, detail: upstreamWarning(proof) };
   } catch (error) {
     // Authority loss is not an apply failure. It cannot grant a stale worker a
     // second startup, nor let it shut down a newer worker's runtime.
@@ -147,7 +160,7 @@ export async function applyPluginCandidate(runtime, project, candidate, previous
     await guard();
     const proof = await runtime.probePlugin(project, restore, pluginId);
     await guard();
-    return { phase: "rolled_back", effective: restore, generation: proof.generation, error: "plugin_apply_failed", detail: { apply, restored } };
+    return { phase: "rolled_back", effective: restore, generation: proof.generation, error: "plugin_apply_failed", detail: { apply, restored, ...upstreamWarning(proof) } };
   } catch (error) {
     await guard();
     const failure = pluginFailure(error);
@@ -170,6 +183,7 @@ export function pluginApplyAuditDetail(project, pluginId, revision, detail) {
   const step = (/** @type {string} */ label, /** @type {any} */ failure) => failure
     ? ` ${label}=${failure.code}${failure.message ? `: ${String(failure.message).slice(0, 120)}` : ""}` : "";
   return `project=${project?.id ?? ""} plugin=${pluginId} revision=${revision}${detail?.restored ? ` restored=${detail.restored}` : ""}`
+    + `${detail?.upstream ? ` upstream=${detail.upstream.code ?? "unhealthy"}` : ""}`
     + `${step("apply", detail?.apply)}${step("rollback", detail?.rollback)}${step("restore", detail?.restore)}${step("baseline", detail?.baseline)}`;
 }
 
@@ -280,6 +294,7 @@ export class PluginApplyWorker {
         const fallback = { revision: 0, ...defaultConfiguration(pluginEntry(pluginId, this.service.registry), this.service.maxTimeoutMs ?? 15000) };
         const applied = await applyPluginCandidate(this.runtime, project, candidate, previous, guard, pluginId, fallback);
         await guard();
+        /** @type {Record<string, any> | null} */
         const detail = applied.detail || baselineFailure ? { ...applied.detail, ...(baselineFailure ? { baseline: baselineFailure } : {}) } : null;
         const finished = await this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { phase: applied.phase, error: applied.error, detail }, async c => {
           const latest = await c.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='plugin' AND id=$2 AND deleted_at IS NULL FOR UPDATE", [job.userId, id]);
@@ -296,7 +311,10 @@ export class PluginApplyWorker {
           [job.userId, id, applied.phase, applied.effective ? JSON.stringify(applied.effective) : null, applied.generation, applied.error,
             detail ? JSON.stringify(detail) : null]);
         });
-        await this.record(applied.phase, job, applied.error, pluginApplyAuditDetail(project, pluginId, current.revision, detail));
+        // An effective apply whose source was unhealthy is a warning line: the
+        // outcome stands, the code says what to keep an eye on.
+        await this.record(applied.phase, job, applied.error ?? (detail?.upstream ? "plugin_upstream_unhealthy" : null),
+          pluginApplyAuditDetail(project, pluginId, current.revision, detail));
         return finished;
       });
     } catch (error) {

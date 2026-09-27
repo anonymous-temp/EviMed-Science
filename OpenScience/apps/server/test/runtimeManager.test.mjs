@@ -29,7 +29,7 @@ import {
   runtimeTmpDir,
   syncRuntimeDshProfile,
 } from "../src/runtimeManager.mjs";
-import { expectedPluginTools, pluginProofMismatch, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
+import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
 import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
@@ -3256,8 +3256,8 @@ const citeExpected = { revision: 7, enabled: true, settings: { timeoutMs: 4000 }
 
 test("dsh-cite's probe verdict is the verdict it always was", async () => {
   const { manager, asked } = probeManager(citeProof);
-  assert.deepEqual(await manager.probePlugin(project, citeExpected), { generation: "gen-1" });
-  assert.deepEqual(await manager.probePlugin(project, citeExpected, PLUGIN_ID), { generation: "gen-1" },
+  assert.deepEqual(await manager.probePlugin(project, citeExpected), { generation: "gen-1", upstream: null });
+  assert.deepEqual(await manager.probePlugin(project, citeExpected, PLUGIN_ID), { generation: "gen-1", upstream: null },
     "naming the default plugin must be the same call as naming nothing");
   assert.deepEqual(asked, ["evimedPlugins/verify", "evimedPlugins/verify"]);
   // Each refusal names the comparison that failed, with both values: the first
@@ -3277,9 +3277,26 @@ test("dsh-cite's probe verdict is the verdict it always was", async () => {
       (/** @type {any} */ error) => error.status === 502 && error.code === "plugin_probe_invalid" && error.message.includes(reason));
   }
   assert.equal(pluginProofMismatch(citeProof, citeExpected, "0.3.2", ["timeoutMs"], [...recordedCite.tools]), null);
+  // The source's health rides beside the proof and is never part of its
+  // verdict: Crossref answering 429 (or timing out, as a quarter of requests
+  // from the production host did on 2026-09-26) is a proved configuration with
+  // a warning, not a refused one.
+  for (const [upstream, reported] of [
+    [{ ok: false, code: "http_429" }, { ok: false, code: "http_429" }],
+    [{ ok: false, code: "citation_gateway_timeout" }, { ok: false, code: "citation_gateway_timeout" }],
+    [{ ok: false, code: "Not A Code!" }, { ok: false, code: "upstream_unhealthy" }],
+    [{ ok: false }, { ok: false, code: "upstream_unhealthy" }],
+    [{ ok: true, code: "ignored" }, { ok: true, code: null }],
+    [{ code: "http_429" }, null],
+    ["unhealthy", null],
+  ]) {
+    assert.deepEqual(await probeManager({ ...citeProof, upstream }).manager.probePlugin(project, citeExpected),
+      { generation: "gen-1", upstream: reported }, JSON.stringify(upstream));
+  }
+  assert.deepEqual(pluginUpstreamHealth({ ok: false, code: "http_504" }), { ok: false, code: "http_504" });
   // Disabled is proved by an empty registration, not by a smaller one.
   const disabled = { revision: 7, enabled: false, settings: { timeoutMs: 4000 } };
-  assert.deepEqual(await probeManager({ ...citeProof, enabled: false, tools: [] }).manager.probePlugin(project, disabled), { generation: "gen-1" });
+  assert.deepEqual(await probeManager({ ...citeProof, enabled: false, tools: [] }).manager.probePlugin(project, disabled), { generation: "gen-1", upstream: null });
   await assert.rejects(probeManager({ ...citeProof, enabled: false, tools: ["cite_health"] }).manager.probePlugin(project, disabled),
     { status: 502, code: "plugin_probe_invalid" });
 });
@@ -3293,7 +3310,7 @@ test("the version a probe demands comes from the registry, so moving the pin mov
     { status: 502, code: "plugin_probe_invalid" });
   assert.deepEqual(
     await probeManager({ ...citeProof, binaryVersion: "0.3.4" }, upgraded).manager.probePlugin(project, citeExpected),
-    { generation: "gen-1" },
+    { generation: "gen-1", upstream: null },
   );
 });
 
@@ -3328,7 +3345,7 @@ test("a probe reaches no verdict for a bundle whose configuration this deploymen
       `${entry.id} declares settings evimedPlugins/verify does not restate; teach the kernel's proof before registering it`);
   }
   // dsh-cite is untouched by the second registration.
-  assert.deepEqual(await probeManager(citeProof, twoPluginRegistry).manager.probePlugin(project, citeExpected), { generation: "gen-1" });
+  assert.deepEqual(await probeManager(citeProof, twoPluginRegistry).manager.probePlugin(project, citeExpected), { generation: "gen-1", upstream: null });
   // And a plugin this image never approved is refused before the kernel is asked.
   const unapproved = probeManager(citeProof);
   await assert.rejects(unapproved.manager.probePlugin(project, citeExpected, "dsh-browse"), { status: 404, code: "plugin_not_supported" });

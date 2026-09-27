@@ -115,8 +115,10 @@ for(const [index,enabled,timeoutMs] of [[1,true,2000],[2,true,4000],[3,false,400
       if(requests.length!==beforeMissing)throw Error('Missing token reached source');
       fs.writeFileSync(tokenFile,'revoked');await rejected();
       if(requests.length!==beforeMissing)throw Error('Revoked token reached source');
-      fs.writeFileSync(tokenFile,activeToken);sourceStatus=503;await rejected();sourceStatus=200;
-      sourceDelay=2500;await rejected();sourceDelay=0;
+      // An unhealthy source is a warning beside the proof, never a failed proof.
+      const warned=async code=>{const proof=await verify();if(proof.upstream?.ok!==false||(code&&proof.upstream.code!==code))throw Error(`Unhealthy source must be reported beside the proof: ${JSON.stringify(proof.upstream)}`);};
+      fs.writeFileSync(tokenFile,activeToken);sourceStatus=503;await warned('http_502');sourceStatus=200;
+      sourceDelay=2500;await warned(null);sourceDelay=0;
     }
     if(index===2){sourceDelay=2500;await verify();sourceDelay=0;}
     // Instance-local probe filtering must leave normal persistence observers live.
@@ -128,6 +130,6 @@ for(const [index,enabled,timeoutMs] of [[1,true,2000],[2,true,4000],[3,false,400
     if(snapshot(path.join(home,'sessions'))===priorUserSessions||snapshot(path.join(home,'storages','session_projcache'))===priorUserCache)throw Error('Probe disabled ordinary user persistence observers');
   }finally{if(child.exitCode===null){child.kill();await new Promise(resolve=>child.once('exit',resolve));}}
 }
-if(!requests.length||requests.some(url=>!['https://api.crossref.org/works?rows=1&select=DOI','https://api.crossref.org/works/10.1038%2Fnphys1170'].includes(url)))throw Error('Unexpected probe network call');
+if(!requests.length||requests.some(url=>url!=='https://api.crossref.org/works?rows=1&select=DOI'))throw Error('Unexpected probe network call');
 process.stdout.write(JSON.stringify(results));
 }finally{gateway.closeAllConnections();gateway.close();fs.rmSync(base,{recursive:true,force:true});}

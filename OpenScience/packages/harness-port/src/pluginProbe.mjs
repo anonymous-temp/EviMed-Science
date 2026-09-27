@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { loadHarnessModule } from '../index.mjs'
 export const CITATION_TOOLS = Object.freeze(['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'])
-const DOI = '10.1038/nphys1170'
 /** Read the installed package selected by the bundle's own module resolver.
  * @param {string} manifestUrl */
 export async function installedCitationVersion(manifestUrl) {
@@ -57,16 +56,78 @@ function probeFailure(code, reason = '') {
   return new Error(detail ? `${code}: ${detail}` : code)
 }
 
-/** The failed checks a `cite_health` result reports, as one line.
- * @param {any} health */
-function failedHealthChecks(health) {
+/**
+ * The managed transport's own failures that are this deployment's, not the
+ * source's: the runtime was given no gateway or token file, it cannot read the
+ * token, or it cannot reach the control plane's gateway. The names are the
+ * codes `createManagedFetch` in the socket's citation bridge throws -- a closed
+ * vocabulary.
+ */
+const TRANSPORT_FAILURES = Object.freeze({
+  citation_gateway_unconfigured: 'the runtime was given no source gateway or token file',
+  citation_gateway_token_unavailable: 'the runtime could not read its gateway token',
+  citation_gateway_unavailable: 'the runtime could not reach the source gateway',
+})
+
+/**
+ * Gateway statuses that are the gateway's own refusal and never a source's:
+ * `publicSourceGateway.mjs` passes an upstream 404 and 429 through, maps every
+ * other upstream 4xx to 400 and every 5xx to 502, and answers 401 only for a
+ * token it does not accept and 403 only for an endpoint its policy refuses.
+ */
+const GATEWAY_REFUSALS = Object.freeze({
+  401: 'the source gateway refused the runtime token',
+  403: 'the source gateway refused the approved endpoint',
+})
+
+/**
+ * What one `cite_health` call says about the source behind the gateway, kept
+ * apart from the configuration proof.
+ *
+ * The proof is what the control plane owns -- the build, the revision, the
+ * switch, the settings and the tools registered -- plus a transport it can
+ * use: a token the runtime reads and the gateway accepts. Those failures throw.
+ * Everything past the gateway is Crossref, measured at about a quarter of
+ * requests timing out from the production host (2026-09-26 audit), and a proof
+ * that needed a live answer from it failed applies at random. So the source's
+ * health is reported, `{ ok, code }`, and never fails the proof: `code` is
+ * `http_<status>` for a status the gateway passed on, one of the transport's
+ * own codes (`citation_gateway_timeout`, `citation_response_too_large`), or
+ * `cite_health_failed` for anything else.
+ *
+ * `cite_health` reports its checks as dsh-cite 0.3.2 writes them -- the
+ * version this probe is pinned to above: `HTTP <status>` for an answer, the
+ * thrown error's message for a transport failure.
+ * @param {any} health the `cite_health` result
+ * @returns {{ ok: boolean, code: string | null }}
+ */
+export function citationUpstreamHealth(health) {
+  if (health?.ok === true) return { ok: true, code: null }
   const checks = Array.isArray(health?.checks) ? health.checks : []
-  const failed = checks.filter((/** @type {any} */ check) => check?.ok !== true)
-    .map((/** @type {any} */ check) => `${String(check?.name ?? 'check')} ${String(check?.detail ?? '')}`.trim())
-  return failed.length ? `cite_health: ${failed.join('; ')}` : 'cite_health did not report ok'
+  const text = checks.filter((/** @type {any} */ check) => check?.ok !== true).map((/** @type {any} */ check) => String(check?.detail ?? '')).join(' ')
+  const transport = Object.keys(TRANSPORT_FAILURES).find(code => new RegExp(`\\b${code}\\b`, 'u').test(text))
+  if (transport) throw probeFailure('citation_probe_gateway_failed', `${TRANSPORT_FAILURES[/** @type {keyof typeof TRANSPORT_FAILURES} */ (transport)]} (${transport})`)
+  const status = /\bHTTP (\d{3})\b/u.exec(text)?.[1]
+  if (status && Object.hasOwn(GATEWAY_REFUSALS, status)) {
+    throw probeFailure('citation_probe_gateway_failed', `${GATEWAY_REFUSALS[/** @type {keyof typeof GATEWAY_REFUSALS} */ (Number(status))]} (HTTP ${status})`)
+  }
+  if (status) return { ok: false, code: `http_${status}` }
+  const own = /\b(citation_gateway_timeout|citation_response_too_large)\b/u.exec(text)?.[1]
+  if (own) return { ok: false, code: own }
+  // `cite_health` and the managed transport time out at the same moment, and
+  // when the tool's own timer wins, what it reports is the platform's
+  // `TimeoutError` message rather than the transport's code. Measured on a
+  // local kernel with a source slower than the timeout (2026-09-27).
+  if (text.includes('The operation was aborted due to timeout')) return { ok: false, code: 'citation_gateway_timeout' }
+  return { ok: false, code: 'cite_health_failed' }
 }
 
 /** Read the metadata provided in that same Agent scope, then its real registry.
+ *
+ * The proof holds the configuration the control plane owns and a usable
+ * transport; the source's own health rides beside it as `upstream`
+ * (`citationUpstreamHealth`), `null` when the tools are switched off and there
+ * is nothing to ask.
  * @param {any} ctx @param {any} agent */
 export async function verifyCitationAgent(ctx, agent) {
   const { scopeChainOf } = await loadHarnessModule('@deepseek-ai/dsh-scope')
@@ -81,6 +142,8 @@ export async function verifyCitationAgent(ctx, agent) {
   if (tools.length !== (config.enabled ? CITATION_TOOLS.length : 0)) {
     throw probeFailure('citation_probe_registrations_invalid', `enabled=${config.enabled}, registered ${tools.length ? tools.join(',') : 'none'}`)
   }
+  /** @type {{ ok: boolean, code: string | null } | null} */
+  let upstream = null
   if (config.enabled) {
     const [{ Context }, { ToolRuntime }, { SystemPrompt }] = await Promise.all([
       loadHarnessModule('@deepseek-ai/cordis'), loadHarnessModule('@deepseek-ai/dsh-tools'),
@@ -94,23 +157,23 @@ export async function verifyCitationAgent(ctx, agent) {
       new SystemPrompt(isolated, { includeHarnessIdentity: false, includeRuntimeContext: false })
       const pipeline = new ToolRuntime(isolated)
       for (const name of tools) pipeline.register(ctx.tools.get(name, agent))
+      // One call, `cite_health`: it exercises the registered definition, the
+      // managed transport and the token, and it is the whole of what the
+      // source is asked. A DOI lookup used to follow it, a second Crossref
+      // request per probe that proved nothing about the configuration.
       await agent.runMaintenance(async (/** @type {AbortSignal} */ signal) => {
-        const execute = async (/** @type {string} */ name, /** @type {any} */ args) => {
-          const result = await pipeline.execute({ agent, callId: `evimed-plugin-${name}-${Date.now()}`, name,
-            arguments: args, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
-          if (result.isError) throw probeFailure('citation_probe_gateway_failed', `${name}: ${result.error?.message ?? 'failed'}`)
-          return result.value
-        }
-        const health = await execute('cite_health', {})
-        if (health?.ok !== true) throw probeFailure('citation_probe_gateway_failed', failedHealthChecks(health))
-        const lookup = await execute('cite_lookup', { doi: DOI })
-        if (!Array.isArray(lookup?.works) || !lookup.works.some((/** @type {any} */ work) => work.doi === DOI)) {
-          throw probeFailure('citation_probe_lookup_failed', `cite_lookup returned ${Array.isArray(lookup?.works) ? `${lookup.works.length} work(s) without ${DOI}` : 'no works'}`)
-        }
+        const result = await pipeline.execute({ agent, callId: `evimed-plugin-cite_health-${Date.now()}`, name: 'cite_health',
+          arguments: {}, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
+        // The native pipeline refusing the registered definition -- its input
+        // or output schema, a denial -- is the registration failing, not the
+        // source: `cite_health` reports a transport or source failure in its
+        // result and throws only when this call itself is cancelled.
+        if (result.isError) throw probeFailure('citation_probe_gateway_failed', `cite_health: ${result.error?.message ?? 'failed'}`)
+        upstream = citationUpstreamHealth(result.value)
       })
     } finally { await isolated.fiber.dispose() }
   }
-  return { binaryVersion: config.binaryVersion, enabled: config.enabled, revision: config.revision, timeoutMs: config.timeoutMs, tools }
+  return { binaryVersion: config.binaryVersion, enabled: config.enabled, revision: config.revision, timeoutMs: config.timeoutMs, tools, upstream }
 }
 
 /** Only two parameterless methods cross the authenticated kernel wire.

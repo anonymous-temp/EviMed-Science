@@ -100,7 +100,7 @@ test('the 2026-09-27 incident: a first configuration whose probes fail records w
   let generation='running';let current={revision:0,enabled:true,settings:{timeoutMs:15000}};let stops=0;let provable=()=>false;
   const runtime={runtimeGeneration:()=>generation,runtimePluginConfig:()=>current,pluginRuntimeBusy:async()=>false,
     replacePluginRuntime:async(_p,config)=>{current=config;generation=`started-${config.revision}`;},
-    probePlugin:async(_p,config)=>{if(provable(config))return{generation};throw new HttpError(502,'runtime_session_error',`citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r${config.revision}`);},
+    probePlugin:async(_p,config)=>{if(provable(config))return{generation};throw new HttpError(502,'runtime_session_error',`citation_probe_gateway_failed: the runtime could not reach the source gateway (citation_gateway_unavailable) r${config.revision}`);},
     stop:async()=>{stops++;generation=null;}};
   /** @type {any[]} */ const audits=[];
   const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false,audit:(event,status,details)=>{audits.push({event,status,...details});}});
@@ -112,10 +112,10 @@ test('the 2026-09-27 incident: a first configuration whose probes fail records w
   assert.deepEqual(current,{revision:0,enabled:true,settings:{timeoutMs:15000}});
   assert.equal(generation,'started-0');
   assert.deepEqual(state.error_detail,{
-    apply:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r1'},
+    apply:{code:'runtime_session_error',message:'citation_probe_gateway_failed: the runtime could not reach the source gateway (citation_gateway_unavailable) r1'},
     restored:'default',
-    restore:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r0'},
-    baseline:{code:'runtime_session_error',message:'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_unavailable r0'},
+    restore:{code:'runtime_session_error',message:'citation_probe_gateway_failed: the runtime could not reach the source gateway (citation_gateway_unavailable) r0'},
+    baseline:{code:'runtime_session_error',message:'citation_probe_gateway_failed: the runtime could not reach the source gateway (citation_gateway_unavailable) r0'},
   });
   assert.equal(state.effective,null);assert.equal(state.last_good,null);
   assert.deepEqual(audits.map(({event,status,code})=>[event,status,code]),[['plugin.apply','failed','plugin_apply_failed']]);
@@ -142,6 +142,32 @@ test('the 2026-09-27 incident: a first configuration whose probes fail records w
   assert.deepEqual(Object.keys(state.error_detail),['apply','restored','rollback']);
   assert.equal(state.effective,null);
   assert.deepEqual(state.last_good,{revision:0,enabled:true,settings:{timeoutMs:15000}},'last_good survives an outcome with nothing effective');
+  await worker.close();
+});
+
+test('an apply whose source answers 429 is effective, with the warning on the row and in the ledger', options, async()=>{
+  const {PluginApplyWorker}=await import('../src/pluginApplyWorker.mjs');
+  await db.query("UPDATE evimed_product.jobs SET status='canceled',lease_token=NULL,lease_expires_at=NULL WHERE kind='plugin-apply'");
+  const p={id:'upstream-warning',userId:owner};
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Upstream',1000000)",[owner,p.id]);
+  const scoped=new PluginService(db);
+  // Crossref timed out on a quarter of requests from the production host
+  // (2026-09-26); the configuration is what an apply proves.
+  let generation='running';let current={revision:0,enabled:true,settings:{timeoutMs:15000}};
+  const runtime={runtimeGeneration:()=>generation,runtimePluginConfig:()=>current,pluginRuntimeBusy:async()=>false,
+    replacePluginRuntime:async(_p,config)=>{current=config;generation=`started-${config.revision}`;},
+    probePlugin:async()=>({generation,upstream:{ok:false,code:'http_429'}}),stop:async()=>{generation=null;}};
+  /** @type {any[]} */ const audits=[];
+  const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false,audit:(event,status,details)=>{audits.push({event,status,...details});}});
+  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:10000}});await worker.tick();
+  const state=(await db.query(`SELECT phase,error,error_detail,effective,last_good FROM evimed_product.plugin_application_state WHERE user_id=$1 AND id=$2`,[owner,projectPluginId(p.id)])).rows[0];
+  assert.deepEqual([state.phase,state.error],['effective',null]);
+  assert.deepEqual(state.effective,{revision:1,enabled:true,settings:{timeoutMs:10000}});
+  assert.deepEqual(state.last_good,{revision:1,enabled:true,settings:{timeoutMs:10000}});
+  assert.deepEqual(state.error_detail,{upstream:{ok:false,code:'http_429'}});
+  assert.deepEqual(audits.map(({event,status,code})=>[event,status,code]),[['plugin.apply','effective','plugin_upstream_unhealthy']]);
+  const browser=await scoped.get(owner,p);
+  assert.deepEqual([browser.phase,browser.error,browser.effective?.revision],['effective',null,1]);
   await worker.close();
 });
 

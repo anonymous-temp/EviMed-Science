@@ -2262,6 +2262,23 @@ export function pluginProofMismatch(proof, expected, version, settings, tools) {
 }
 
 /**
+ * The source's health as a proof reports it beside the configuration, or null.
+ *
+ * Never part of the verdict: the proof is what the control plane owns (the
+ * comparisons above) and a transport the runtime can use, which the kernel
+ * fails on its own; the source behind the gateway -- Crossref, about a quarter
+ * of requests timing out from the production host on 2026-09-26 -- is a
+ * warning the apply records. Null when the proof carries none: the tools are
+ * switched off, or the runtime image predates the field.
+ * @param {any} value @returns {{ ok: boolean, code: string | null } | null}
+ */
+export function pluginUpstreamHealth(value) {
+  if (!value || typeof value !== "object" || typeof value.ok !== "boolean") return null;
+  const code = typeof value.code === "string" && /^[a-z0-9_]{1,64}$/.test(value.code) ? value.code : null;
+  return { ok: value.ok, code: value.ok ? null : code ?? "upstream_unhealthy" };
+}
+
+/**
  * One plugin's configuration per launch plan, deliberately.
  *
  * Not generalised to every enabled plugin, because nothing downstream of this
@@ -5054,7 +5071,12 @@ export class RuntimeManager {
    *  Both that refusal and an unregistered id are answered before the kernel is
    *  asked. The plugin id defaults to dsh-cite, which is what every existing
    *  caller passes by passing nothing.
-   *  @param {any} project @param {any} expected @param {string} pluginId */
+   *
+   *  What it answers with besides the generation is `upstream`, the source's
+   *  health as the kernel measured it (`pluginUpstreamHealth`) -- reported, and
+   *  never a reason to refuse: the configuration is what is being proved.
+   *  @param {any} project @param {any} expected @param {string} pluginId
+   *  @returns {Promise<{ generation: string, upstream: { ok: boolean, code: string | null } | null }>} */
   async probePlugin(project, expected, pluginId = PLUGIN_ID) {
     const runtime = this.runtimes.get(this.key(project));
     const generation = this.runtimeGeneration(project);
@@ -5069,7 +5091,7 @@ export class RuntimeManager {
     if (mismatch) {
       throw new HttpError(502, "plugin_probe_invalid", `The runtime did not prove the expected plugin configuration: ${mismatch}.`);
     }
-    return { generation };
+    return { generation, upstream: pluginUpstreamHealth(proof.upstream) };
   }
 
   async restart(project) {

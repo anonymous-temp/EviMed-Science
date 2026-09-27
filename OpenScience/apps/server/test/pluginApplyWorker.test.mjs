@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { PLUGIN_ID, PLUGIN_SUPPORT_SNAPSHOT, pluginRegistryFrom } from '../src/pluginService.mjs';
 import { HttpError } from '../src/security.mjs';
 import { PluginApplyWorker, applyPluginCandidate, jobPluginId, pluginFailure } from '../src/pluginApplyWorker.mjs';
+import { RuntimeManager } from '../src/runtimeManager.mjs';
 const candidate={revision:2,enabled:false,settings:{timeoutMs:5000}};
 const previous={revision:1,enabled:true,settings:{timeoutMs:4000}};
 test('candidate failure restores and independently verifies the previous configuration',async()=>{
@@ -86,6 +87,58 @@ test('a step failure keeps its code and a bounded one-line message, whatever was
   assert.deepEqual(pluginFailure(Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'})),{code:'ECONNREFUSED',message:'connect ECONNREFUSED'});
   assert.equal(pluginFailure(new Error('m'.repeat(1000))).message.length,300);
   assert.deepEqual(pluginFailure('plain'),{code:'plugin_step_failed',message:'plain'});
+});
+
+// --- the source's health is a warning, not the verdict (2026-09-27) ------
+// Crossref timed out on about a quarter of requests from the production host
+// (2026-09-26 audit). A proof that needed its answer failed applies at random;
+// the configuration is what an apply proves.
+const citeTools = ['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'];
+/** The real `RuntimeManager.probePlugin` over one runtime whose kernel answers `proofFor(config)`.
+ * @param {(config:any)=>any} proofFor */
+function managerWithKernel(proofFor) {
+  const manager = new RuntimeManager({});
+  const project = { id: 'one', userId: 'owner' };
+  /** @type {any} */ let running = null;
+  manager.runtimes.set('owner:one', { modelGatewayTokenJti: 'gen-1' });
+  manager.callKernel = async () => proofFor(running);
+  /** @type {any} */ (manager).replacePluginRuntime = async (/** @type {any} */ _p, /** @type {any} */ config) => { running = config; };
+  /** @type {any} */ (manager).stop = async () => { running = 'stopped'; };
+  return { manager, project, running: () => running };
+}
+const proofOf = (/** @type {any} */ config, /** @type {any} */ upstream) => ({
+  binaryVersion: '0.3.2', revision: config.revision, enabled: config.enabled, timeoutMs: config.settings.timeoutMs,
+  tools: config.enabled ? citeTools : [], upstream,
+});
+
+test('a proof with Crossref answering 429 is effective, with the source recorded as a warning', async () => {
+  const { manager, project, running } = managerWithKernel((config) => proofOf(config, { ok: false, code: 'http_429' }));
+  const wanted = { revision: 1, enabled: true, settings: { timeoutMs: 10000 } };
+  const result = await applyPluginCandidate(manager, project, wanted, null, async () => {}, PLUGIN_ID, defaults);
+  assert.equal(result.phase, 'effective');
+  assert.equal(result.error, null);
+  assert.deepEqual(result.effective, wanted);
+  assert.deepEqual(result.detail, { upstream: { ok: false, code: 'http_429' } });
+  assert.deepEqual(running(), wanted, 'the configuration asked for is the one left running');
+});
+
+test('a healthy source, or a proof from an image that does not report one, leaves no warning', async () => {
+  for (const upstream of [{ ok: true, code: null }, undefined]) {
+    const { manager, project } = managerWithKernel((config) => proofOf(config, upstream));
+    const result = await applyPluginCandidate(manager, project, candidate, previous, async () => {}, PLUGIN_ID, defaults);
+    assert.deepEqual([result.phase, result.error, result.detail], ['effective', null, null]);
+  }
+});
+
+test('a configuration mismatch still fails the apply, whatever the source says', async () => {
+  // The runtime proves the defaults whatever it was started on: the saved
+  // configuration never reached it.
+  const { manager, project } = managerWithKernel(() => proofOf(defaults, { ok: true, code: null }));
+  const wanted = { revision: 1, enabled: true, settings: { timeoutMs: 10000 } };
+  const result = await applyPluginCandidate(manager, project, wanted, null, async () => {}, PLUGIN_ID, defaults);
+  assert.deepEqual([result.phase, result.error], ['rolled_back', 'plugin_apply_failed']);
+  assert.equal(result.detail.apply.code, 'plugin_probe_invalid');
+  assert.match(result.detail.apply.message, /revision 0, expected 1/);
 });
 
 // --- the plugin a job is about -------------------------------------------
@@ -326,4 +379,16 @@ test('an apply that throws past its own handling records the cause on the row, t
   assert.deepEqual(harness.failures, [{ code: 'plugin_apply_failed', message: 'runtime_unreachable: no' }]);
   assert.deepEqual(harness.audits.map(({ status, code, detail }) => [status, code, detail]),
     [['failed', 'plugin_apply_failed', 'project=one plugin=dsh-cite revision=3 apply=runtime_unreachable: no']]);
+});
+
+test('an effective apply whose source was unhealthy is recorded as a warning on the row and in the ledger', async () => {
+  const harness = workerHarness({ probe: async () => ({ generation: 'gen-1', upstream: { ok: false, code: 'citation_gateway_timeout' } }) });
+  await harness.worker.run();
+  const [, , phase, effective, , error, detail] = harness.outcome() ?? [];
+  assert.equal(phase, 'effective');
+  assert.deepEqual(JSON.parse(effective), { revision: 3, enabled: true, settings: { timeoutMs: 4000 } });
+  assert.equal(error, null, 'the outcome code the browser reads says nothing failed');
+  assert.deepEqual(JSON.parse(detail), { upstream: { ok: false, code: 'citation_gateway_timeout' } });
+  assert.deepEqual(harness.audits.map(({ status, code, detail: line }) => [status, code, line]),
+    [['effective', 'plugin_upstream_unhealthy', 'project=one plugin=dsh-cite revision=3 upstream=citation_gateway_timeout']]);
 });
