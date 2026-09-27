@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import pg from "pg";
+import { CONTROL_PLANE_SCHEMA_VERSION } from "../src/controlPlaneDatabase.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -371,7 +372,11 @@ test("a stored English default is renamed once, and a rename and an archive are 
     assert.equal(byId.get(created.data.id).archivedAt, archived.data.archivedAt);
     assert.equal(byId.get("default").name, "Default Project", "renamed once, not on every start");
     const versions = await admin.query("SELECT version FROM evimed_control.schema_migrations ORDER BY version");
-    assert.deepEqual(versions.rows.map((row) => row.version), [1, 2]);
+    // Every version up to the one this build writes last, each once: the
+    // default rename is version 2, and later versions (3: the `evimed` and
+    // `subject` account kinds) are recorded by the same start.
+    assert.deepEqual(versions.rows.map((row) => row.version),
+      Array.from({ length: CONTROL_PLANE_SCHEMA_VERSION }, (_, index) => index + 1));
   } finally {
     await first?.app.close();
     await second?.app.close();
