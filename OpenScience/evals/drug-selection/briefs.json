@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "drug-selection",
+  "note": "Three briefs, written the way a pharmacy and therapeutics committee hands the pharmacy a 药品遴选 task: candidates, one indication, and whatever rubric and price data it happens to have. A scorecard looks equally finished whether its ranking is supported or not, so every brief turns on the one input that decides whether a ranking may exist at all — no approved rubric, a published rubric replayed with a price date nobody recorded, and prices of different dates and procurement status in one column. The selectionCase of evals/drug-evidence-quality/benchmark_cases.json (JAK inhibitors for atopic dermatitis under the Quick Guide second edition) is the reference behind brief 002 and its numbers come from there. Sources are left for the run to retrieve and freeze; the brief is the request, not the evidence.",
+  "briefs": [
+    {
+      "id": "ds-001-doac-nvaf-no-rubric",
+      "title": "非瓣膜性房颤抗凝：三个直接口服抗凝药选一个，药事会还没给量表",
+      "why": "The ordinary case, and the one whose correct output has no ranking in it. The committee named three candidates and an indication and supplied no approved rubric, weights or policy version — so the capability owes a domain-by-domain qualitative comparison and a withheld ranking, and the pull toward equal weights 'for now' is strong because the evidence is rich. The second trap is the evidence itself: each medicine was tested against warfarin in its own outcome trial, there is no large head-to-head trial among them, and differences read across those trials are indirect comparisons of different populations. Renal elimination differs a great deal among the three, which matters for the committee's elderly and reduced-clearance patients and is exactly the kind of difference a single total would bury.",
+      "inputs": {
+        "candidateDrugs": [
+          "阿哌沙班（apixaban）",
+          "利伐沙班（rivaroxaban）",
+          "达比加群酯（dabigatran etexilate）"
+        ],
+        "indication": "非瓣膜性心房颤动患者的卒中与体循环栓塞预防",
+        "population": "成人非瓣膜性房颤住院及门诊患者，含 ≥80 岁与肌酐清除率 30–50 mL/min 亚组",
+        "jurisdiction": "中国（NMPA）",
+        "careSetting": "三级综合医院心内科",
+        "decisionDate": "2026-10-15"
+      },
+      "mustDo": [
+        "Call the requirements action first, ask once for the rubric, weights, policy version and price data as one group, and proceed qualitatively when they are not supplied.",
+        "Normalize every candidate, freeze the deduplicated sources in evidence-snapshot.json before assessment, and cite nothing outside it.",
+        "Compare the candidates domain by domain with status, rationale and evidence ids, and keep the ranking withheld with the reason stated in decision-summary.json.",
+        "Label every cross-trial difference as an indirect comparison of trials against warfarin, naming the trials and how their populations differed.",
+        "Report dose adjustment and contraindication by renal function and age from each current label as observed facts for the committee's two subgroups."
+      ],
+      "mustNotDo": [
+        "Invent a rubric, assign equal weights, or produce any total or ordering.",
+        "Rank the candidates on hazard ratios taken from different trials.",
+        "Enter a price or a cost comparison the committee did not supply.",
+        "Recommend one medicine for the formulary or for any patient group."
+      ],
+      "gradedOn": "Whether the scorecard is complete per domain and still carries no ranking, and whether every comparative sentence says it is indirect.",
+      "generated": {
+        "authoredAt": "2026-09-27",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "ds-002-jak-ad-published-rubric-replay",
+      "title": "特应性皮炎 JAK 抑制剂遴选：按已发表的快速指南评分表复现一遍",
+      "why": "A replay of a published selection, which looks like the easiest possible job and is the one most likely to import the paper's defects. The paper scored abrocitinib, upadacitinib and baricitinib under the Quick Guide second edition (pharmaceutical properties 28, effectiveness 27, safety 25, economics 10, other 10) and reported totals of 72.19, 77.5 and 67.16. It reports a search cutoff of 2023-06-31, a date that does not exist, and no date for the prices behind its economics scores, so the economics domain cannot be reproduced or carried to a 2026 decision. A second publication scored upadacitinib 80.5 and abrocitinib 80.2 — the five-point gap nearly vanishes. The capability owes a replay that reproduces what can be reproduced, names what cannot, and shows whether the order survives removing a domain.",
+      "inputs": {
+        "candidateDrugs": [
+          "阿布昔替尼（abrocitinib）",
+          "乌帕替尼（upadacitinib）",
+          "巴瑞替尼（baricitinib）"
+        ],
+        "indication": "中重度特应性皮炎",
+        "jurisdiction": "中国（NMPA）",
+        "selectionDomains": [
+          "pharmaceutical_properties",
+          "effectiveness",
+          "safety",
+          "economics",
+          "other"
+        ],
+        "scoringRubric": {
+          "source": "《中国医疗机构药品评价与遴选快速指南（第二版）》",
+          "maxPoints": {
+            "pharmaceutical_properties": 28,
+            "effectiveness": 27,
+            "safety": 25,
+            "economics": 10,
+            "other": 10
+          },
+          "missingData": "缺项不计零分；经济性缺价格日期时不参与排名"
+        },
+        "scoringPolicyVersion": "quick-guide-2-paper-replay",
+        "selectionCriteria": "复现已发表遴选评分（jak-selection-2023），并判断其排序能否用于 2026 年本院决策"
+      },
+      "mustDo": [
+        "Rebuild each candidate's domain scores from the paper's items, report whether the published totals reproduce, and name any item that does not.",
+        "State that the reported search cutoff 2023-06-31 is not a real date and record it as unresolved rather than correcting it.",
+        "Mark economics as not comparable for a current decision because no price date was reported, and show the order with and without that domain.",
+        "Report the compiler's leave-one-domain-out sensitivity and the second publication's scores as a drift control, with both sources in the snapshot.",
+        "Carry the class safety warning's source population into the safety rationale for all three candidates."
+      ],
+      "mustNotDo": [
+        "Present the paper's order as this hospital's ranking.",
+        "Fill the missing price date, or update the prices, from memory or from any source not in the snapshot.",
+        "Silently change 2023-06-31 to a valid date.",
+        "Average the two publications' scores into one."
+      ],
+      "gradedOn": "Whether the replay separates the reproduced, the unreproducible and the out-of-date, and whether a reader can see that the top two candidates' order depends on the economics domain and on which publication is read.",
+      "generated": {
+        "authoredAt": "2026-09-27",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "ds-003-statins-mixed-procurement-prices",
+      "title": "他汀遴选：集采中选价和挂网价放在同一列里",
+      "why": "The committee supplied a rubric and a price list, which is where this capability's arithmetic goes wrong quietly. Two candidates are volume-based-procurement products whose price is a tender result with its own date; the third is bought at a listed price from another date. The prices are per tablet of different strengths, and statins are compared clinically by intensity — the LDL-C lowering of a dose — not milligram for milligram, so a cost per tablet compares unlike things. The outcome evidence also differs in kind across the three, from large placebo-controlled event trials to trials against a lower dose of the same drug, and a candidate marked down for 'missing hard-outcome data' may simply not have been searched. The capability owes a ranking only if prices are comparable, and a withheld economics comparison with the reason if they are not.",
+      "inputs": {
+        "candidateDrugs": [
+          "阿托伐他汀钙片（atorvastatin）",
+          "瑞舒伐他汀钙片（rosuvastatin）",
+          "匹伐他汀钙片（pitavastatin）"
+        ],
+        "indication": "动脉粥样硬化性心血管疾病二级预防的降脂治疗",
+        "population": "已确诊 ASCVD 的成人门诊与住院患者",
+        "jurisdiction": "中国（NMPA；国家组织药品集中采购）",
+        "careSetting": "三级综合医院",
+        "decisionDate": "2026-11-01",
+        "selectionDomains": [
+          "pharmaceutical_properties",
+          "effectiveness",
+          "safety",
+          "economics",
+          "appropriateness"
+        ],
+        "scoringRubric": {
+          "weights": {
+            "pharmaceutical_properties": 20,
+            "effectiveness": 30,
+            "safety": 25,
+            "economics": 15,
+            "appropriateness": 10
+          },
+          "scale": "每个维度 0–10 分，按条目细则计分后乘以权重合计",
+          "missingData": "缺项维度不计零分；任一候选缺项则不出总排名"
+        },
+        "scoringPolicyVersion": "院内药品遴选量表 2026-v2",
+        "economicContext": "药剂科口径：阿托伐他汀、瑞舒伐他汀为国家集采中选价，匹伐他汀为省平台挂网价；价格按每片计，采集日期各不相同，未统一换算。",
+        "productSpecifications": "本院在用规格：阿托伐他汀 20 mg、瑞舒伐他汀 10 mg、匹伐他汀 2 mg"
+      },
+      "mustDo": [
+        "Ask once for each price's date, procurement status and pack basis, and treat economics as not comparable until all three are dated and on one basis.",
+        "Convert cost to a clinically comparable unit — daily cost at a stated intensity — only when the dose equivalence is sourced; otherwise leave the conversion undone and say why.",
+        "Search each candidate's outcome evidence and describe what kind it is (versus placebo, versus a lower dose, surrogate LDL-C only) before any effectiveness score.",
+        "Record generic-consistency-evaluation and procurement status per product as dated observed facts.",
+        "Pass the rubric exactly as supplied and report the compiler's ranking or its withholding reasons, with the leave-one-domain-out result."
+      ],
+      "mustNotDo": [
+        "Compare prices per tablet across different strengths, or across different price dates, as if they were one comparison.",
+        "Treat a tender price as the current or permanent price without its date.",
+        "Score a candidate down for lacking outcome trials that were not searched for.",
+        "Recommend a product for procurement or say one may replace another."
+      ],
+      "gradedOn": "Whether every economics number carries its date, procurement status and dosing basis, and whether a ranking appears only if those are comparable across all three candidates.",
+      "generated": {
+        "authoredAt": "2026-09-27",
+        "authoredAtSource": "first-commit"
+      }
+    }
+  ]
+}

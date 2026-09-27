@@ -16,7 +16,7 @@
     },
     "evidence": "Either a repository-relative path that must exist, or 'PROGRESS.md@YYYY-MM-DD HH:MM' naming a log entry that must be there. Line numbers are not a form: PROGRESS.md is written newest first, so every new milestone would invalidate every anchor below it.",
     "evalHarness": "The directory under evals/ that holds this capability's eval assets, or null when it has none. Most rows name their own evals/<id>; comprehensive-drug-evaluation and drug-selection still share evals/drug-evidence-quality, and two rows point at a differently named harness (evals/clinical-review-quality, evals/research-topic-quality).",
-    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones.",
+    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones. Exemption: an internal capability that only a platform job dispatches (method-distillation, method-relations — the learning loop) has no researcher request to write a brief from; its inputs are the platform's own run records, and it is evaluated by the job-level harness its row names (evals/method-quality splits) instead. An internal capability a person's material reaches (source-understanding) is not exempt.",
     "relatedEvidence": "References that exist and are worth keeping in view but that do not establish a capability-level accepted delivery. The checker resolves each one so it cannot rot."
   },
   "capabilities": [
@@ -80,8 +80,8 @@
     {
       "id": "comprehensive-drug-evaluation",
       "visibility": "public",
-      "evalHarness": "evals/drug-evidence-quality",
-      "briefCount": 0,
+      "evalHarness": "evals/comprehensive-drug-evaluation",
+      "briefCount": 3,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
@@ -91,7 +91,7 @@
       "relatedEvidence": [
         "evals/drug-evidence-quality/benchmark_cases.json"
       ],
-      "note": "Covered by the comprehensiveCase of the drug-evidence benchmark, which grades the deterministic assessment compiler rather than a delivered package. No delivery on record and no briefs."
+      "note": "Three briefs written on 2026-09-27 under evals/comprehensive-drug-evaluation (dapagliflozin in CKD, semaglutide product scope, upadacitinib scored without prices). The drug-evidence benchmark's comprehensiveCase stays related evidence: it grades the deterministic assessment compiler, not a delivered package. No delivery on record."
     },
     {
       "id": "dataset-research-scoping",
@@ -113,8 +113,8 @@
     {
       "id": "drug-selection",
       "visibility": "public",
-      "evalHarness": "evals/drug-evidence-quality",
-      "briefCount": 0,
+      "evalHarness": "evals/drug-selection",
+      "briefCount": 3,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
@@ -124,7 +124,7 @@
       "relatedEvidence": [
         "evals/drug-evidence-quality/benchmark_cases.json"
       ],
-      "note": "Covered by the selectionCase of the drug-evidence benchmark. No delivery on record and no briefs."
+      "note": "Three briefs written on 2026-09-27 under evals/drug-selection (DOACs without a rubric, the JAK atopic-dermatitis paper replay, statins with mixed procurement prices). The benchmark's selectionCase stays related evidence. No delivery on record."
     },
     {
       "id": "evidence-appraisal",
@@ -269,7 +269,7 @@
         "PROGRESS.md@2026-09-07 13:45",
         "PROGRESS.md@2026-09-07 11:30"
       ],
-      "note": "Internal: dispatched only by a distill job, never by a user request. Designed in docs/superpowers/plans/2026-09-07-self-evolving-agent-loop.md at the repository root. The capability package, its contract and the bounded run path landed with the self-evolution loop on 2026-09-07 and are covered by unit and contract tests. `evals/method-quality` is a paired-comparison harness (run_paired.py + splits.json), not a brief harness, so it ships no briefs and briefCount is 0 rather than a number no file backs. No distillation has been run against a live kernel."
+      "note": "Internal: dispatched only by a distill job, never by a user request. Designed in docs/superpowers/plans/2026-09-07-self-evolving-agent-loop.md at the repository root. The capability package, its contract and the bounded run path landed with the self-evolution loop on 2026-09-07 and are covered by unit and contract tests. `evals/method-quality` is a paired-comparison harness (run_paired.py + splits.json), not a brief harness, so it ships no briefs and briefCount is 0 rather than a number no file backs. No distillation has been run against a live kernel. Exempt from the three-brief rule as a platform-job-only internal capability; see definitions.briefCount."
     },
     {
       "id": "method-relations",
@@ -287,7 +287,7 @@
         "evals/method-quality/splits.json",
         "PROGRESS.md@2026-09-07 11:30"
       ],
-      "note": "Internal: dispatched only by a consolidate job. Designed in the same repository-root plan; same standing as method-distillation — package, contract and the three actions (screen, decide, build) are unit-tested, and nothing has run against a live kernel. Shares the method-quality harness, which holds no briefs."
+      "note": "Internal: dispatched only by a consolidate job. Designed in the same repository-root plan; same standing as method-distillation — package, contract and the three actions (screen, decide, build) are unit-tested, and nothing has run against a live kernel. Shares the method-quality harness, which holds no briefs. Exempt from the three-brief rule as a platform-job-only internal capability; see definitions.briefCount."
     },
     {
       "id": "off-label-analysis",

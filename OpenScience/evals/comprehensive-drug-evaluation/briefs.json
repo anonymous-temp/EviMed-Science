@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "comprehensive-drug-evaluation",
+  "note": "Three briefs, written the way a hospital pharmacy department commissions a 药品临床综合评价 under the National Health Commission's 2021 guidance: one medicine, one indication, and a list of domains the committee wants covered. This capability's failures are not missing evidence but evidence moved to where it does not belong — a trial stopped early read as a settled effect size, one product's trial programme credited to another product with the same INN, a class warning measured in one population applied to another, a published score reused as this institution's score, and a missing price read as a zero. Each brief is built around one of those moves. The comprehensiveCase of evals/drug-evidence-quality/benchmark_cases.json (JAK inhibitors for atopic dermatitis, six domains) is the reference behind brief 003. Sources are left for the run to retrieve and freeze; the brief is the request, not the evidence.",
+  "briefs": [
+    {
+      "id": "cde-001-dapagliflozin-ckd",
+      "title": "达格列净用于慢性肾脏病：一次常规的院内综合评价",
+      "why": "The ordinary case, and the baseline the other two fail against. Efficacy evidence is strong and the guideline position is clear, so every core domain has content and the work is keeping domains apart and traceable. Two things make it harder than it looks. The pivotal outcome trial was stopped early for efficacy, and an effect estimated at an early stop is the one most likely to be larger than the truth — a run that reports the hazard ratio as the settled size of the benefit has read a design fact as a clinical one. And the committee asked for economics without supplying a local price, a price date or a perspective, which the capability must turn into a named gap rather than a low score or a borrowed foreign cost-effectiveness result.",
+      "inputs": {
+        "drug": "达格列净（dapagliflozin）",
+        "indication": "慢性肾脏病（伴或不伴 2 型糖尿病）",
+        "comparator": "标准治疗（最大耐受剂量的 ACEI 或 ARB）",
+        "population": "eGFR 25–75 mL/min/1.73m²、伴白蛋白尿的成人慢性肾脏病患者",
+        "jurisdiction": "中国（NMPA；国家医保药品目录）",
+        "outcomes": [
+          "肾脏复合终点（eGFR 持续下降、终末期肾病、肾性或心血管死亡）",
+          "全因死亡",
+          "安全性：酮症酸中毒、容量不足、生殖器感染、急性肾损伤"
+        ],
+        "careSetting": "三级医院肾内科门诊",
+        "timeHorizon": "3 年",
+        "decisionDate": "2026-06-30",
+        "evaluationDomains": [
+          "effectiveness",
+          "safety",
+          "applicability",
+          "economics"
+        ]
+      },
+      "mustDo": [
+        "Call the requirements action first, ask once for the returned missing fields as one group, and record every field that stays unresolved — the local price, its date and the budget perspective among them — as a gap.",
+        "Normalize the medicine, freeze the deduplicated sources, queries and retrieval times in evidence-snapshot.json before assessment, and cite nothing that is not in it.",
+        "Trace the landmark outcome trial and the newest KDIGO guideline through reference_list rather than keyword search alone, and read the trial report, not its bibliographic record, before any effectiveness claim.",
+        "State that the pivotal trial was stopped early for efficacy and what that does to the reported effect size, in the effectiveness domain rather than in a limitations footnote.",
+        "Keep the with-diabetes and without-diabetes results separate with their own denominators, and say which of them the committee's population resembles.",
+        "Leave economics unscored with its missing inputs named; describe what a local price, price date and perspective would let the committee compute."
+      ],
+      "mustNotDo": [
+        "Rate certainty high, or convert it into recommendation strength, because the evidence is a randomized trial; certainty is not_rated unless a formal assessment with named judgements is supplied.",
+        "Report a cost-effectiveness ratio, budget impact or price from another country, another year or memory as if it answered this committee's economics question.",
+        "Compute or imply a composite score — none was requested.",
+        "Write that the hospital should list, prescribe or prefer the medicine."
+      ],
+      "gradedOn": "Whether a committee member can trace every domain finding to a frozen source, see the early stop weighed where the benefit is stated, and see economics as an explicit gap rather than a number.",
+      "generated": {
+        "authoredAt": "2026-09-27",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "cde-002-semaglutide-product-scope",
+      "title": "司美格鲁肽用于 2 型糖尿病合并肥胖：评的是哪一个产品、哪一个剂量",
+      "why": "The failure is scope. One INN names three products with three trial programmes — the weekly injection for type 2 diabetes (SUSTAIN), the higher-dose weekly injection for weight management (STEP, and the cardiovascular outcome trial SELECT in people without diabetes) and the daily tablet (PIONEER). A request phrased as 「司美格鲁肽用于 2 型糖尿病合并肥胖」 invites the run to credit the weight loss of the weight-management dose, or a cardiovascular result from a population without diabetes, to the diabetes product, and the report reads fluently while every effectiveness row is about a different regimen. What the run owes is a scope decision stated up front and one product and regimen named on every evidence row.",
+      "inputs": {
+        "drug": "司美格鲁肽（semaglutide）",
+        "indication": "2 型糖尿病合并肥胖",
+        "comparator": "度拉糖肽、利拉鲁肽",
+        "population": "BMI ≥ 28 kg/m² 的成人 2 型糖尿病患者",
+        "jurisdiction": "中国（NMPA）",
+        "outcomes": [
+          "HbA1c 变化",
+          "体重变化",
+          "主要不良心血管事件",
+          "胃肠道不良反应与停药率"
+        ],
+        "careSetting": "内分泌科门诊",
+        "decisionDate": "2026-09-01",
+        "evaluationDomains": [
+          "effectiveness",
+          "safety",
+          "applicability",
+          "accessibility"
+        ]
+      },
+      "mustDo": [
+        "Establish from current NMPA labels which semaglutide products, strengths and indications are approved in China at the decision date, and state which product and regimen this evaluation covers before assessing anything.",
+        "Name the product, route, dose and population on every evidence-table row, and keep trial programmes for different products in separate rows.",
+        "Mark evidence from a weight-management dose or a population without diabetes as indirect for this question, in the domain where it is used, with the reason.",
+        "Compare against dulaglutide and liraglutide only through direct head-to-head trials or an explicitly indirect comparison labelled as such.",
+        "Record accessibility as observed facts with their dates — reimbursement status, supply — and leave it unassessed where no dated source is found."
+      ],
+      "mustNotDo": [
+        "Report a weight loss or cardiovascular effect measured with another product or regimen as this product's effect.",
+        "Pool results across SUSTAIN, STEP, SELECT and PIONEER into one estimate.",
+        "Rank semaglutide against the comparators on cross-trial numbers.",
+        "Advise a dose, a switch or an off-label use for weight loss."
+      ],
+      "gradedOn": "Whether a reader can tell, row by row, which product and regimen each number belongs to, and whether any claim about the evaluated product rests on another product's trial.",
+      "generated": {
+        "authoredAt": "2026-09-27",
+        "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "cde-003-upadacitinib-ad-scored-without-prices",
+      "title": "乌帕替尼用于中重度特应性皮炎：药事会要一个分数，但没给价格",
+      "why": "Two traps that point the same way. The committee asked for a quantitative score and supplied its own six-domain rubric, but gave no economic context — so the only correct score is a withheld one, with the compiler's reasons, and the temptation is to fill the gap with a remembered price or with the total a published comprehensive evaluation of JAK inhibitors reported (the benchmark's comprehensiveCase). And the class's boxed warning was issued in 2021 after a safety trial of tofacitinib in rheumatoid arthritis patients aged 50 or over with cardiovascular risk factors; a safety domain that applies it to adolescents and adults with atopic dermatitis on upadacitinib as if measured there has moved evidence across drug, disease and age at once.",
+      "inputs": {
+        "drug": "乌帕替尼（upadacitinib）",
+        "indication": "中重度特应性皮炎（系统治疗候选）",
+        "comparator": "度普利尤单抗、阿布昔替尼",
+        "population": "12 岁及以上、外用治疗控制不佳的中重度特应性皮炎患者",
+        "jurisdiction": "中国（NMPA；国家医保药品目录）",
+        "careSetting": "皮肤科门诊",
+        "decisionDate": "2026-09-15",
+        "quantitativeScoringRequested": true,
+        "evaluationDomains": [
+          "effectiveness",
+          "safety",
+          "economics",
+          "applicability",
+          "accessibility",
+          "innovation"
+        ],
+        "scoringRubric": {
+          "framework": "国家卫生健康委《药品临床综合评价管理指南（2021 年版 试行）》六维度，院内量表",
+          "weights": {
+            "effectiveness": 30,
+            "safety": 30,
+            "economics": 15,
+            "applicability": 10,
+            "accessibility": 10,
+            "innovation": 5
+          },
+          "scale": "每个维度 0–100 分，按条目细则计分后乘以权重合计",
+          "missingData": "缺项维度不计零分，整体评分暂缓并列明原因"
+        },
+        "scoringPolicyVersion": "院内综合评价量表 2026-v1"
+      },
+      "mustDo": [
+        "Pass the rubric, domains and policy version to the compiler exactly as supplied and report its result as it comes back — including a withheld score with every reason it lists.",
+        "Name the missing economic context (price, price date, perspective, time horizon) as the reason economics is unscored, and ask for it once.",
+        "Describe the boxed warning's source — drug, disease, age and risk profile of the trial behind it — and grade its applicability to this population in the safety domain.",
+        "Use the published comprehensive evaluation of JAK inhibitors for atopic dermatitis only as an external reference case, with its own product, price date, rubric and evidence cutoff stated.",
+        "Keep head-to-head evidence against dupilumab or abrocitinib apart from indirect comparisons, and label which is which."
+      ],
+      "mustNotDo": [
+        "Enter a price, a budget figure or an economics score the committee did not supply.",
+        "Report the published evaluation's total, or a domain score from it, as this institution's score.",
+        "Treat the class warning as an upadacitinib-in-atopic-dermatitis finding, or drop it because the population differs.",
+        "Let a computed or withheld score stand in for a recommendation to list the medicine."
+      ],
+      "gradedOn": "Whether the package shows a withheld score with its reasons instead of an invented number, and whether the class safety signal carries its source population in the sentence that uses it.",
+      "generated": {
+        "authoredAt": "2026-09-27",
+        "authoredAtSource": "first-commit"
+      }
+    }
+  ]
+}
