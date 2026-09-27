@@ -28,6 +28,7 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { carriesPlatformContext } from "@evimed/domain";
 import { splitEpisodeBudget, verificationIdFor, verificationWorkspacePath } from "../src/autopilotService.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
@@ -1783,7 +1784,10 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   }
   assert.equal(reserved.length, 1, "no bounded runtime when the project's own is open");
   assert.equal(prompts[1].request.allowBounded, false);
-  assert.equal(String(prompts[1].request.text), brief, "no budget scope on the researcher's own runtime");
+  assert.equal(String(prompts[1].request.text), `${brief}\n\n<evimed-geo-run>geo-content-1-a1</evimed-geo-run>`,
+    "no budget scope on the researcher's own runtime — and the platform's mark all the same (M-2)");
+  // Bounded or open, a brief is machine text to the memory extractor, never what the researcher said.
+  for (const prompt of prompts) assert.equal(carriesPlatformContext(String(prompt.request.text)), true, String(prompt.request.text));
   // A capability this deployment does not have is refused by name.
   await assert.rejects(dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-nonexistent",
     dispatchId: "geo-x-a1", reason: "geo:x", brief }), { status: 503, code: "geo_unavailable" });
