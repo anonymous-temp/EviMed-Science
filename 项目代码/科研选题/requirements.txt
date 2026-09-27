@@ -15,7 +15,7 @@ motor==3.3.2
 pymongo==4.6.1
 
 # LLM Integration
-openai>=1.50.0
+openai==2.50.0  # exact: openai 3.x vendors an aiohttp transport that needs aiohttp>=3.10, and aiohttp is pinned at 3.9.3 above (2026-09-27: every production job failed at import)
 anthropic==0.18.1
 
 # Data Processing
