@@ -318,7 +318,7 @@ describe("native frame identity and readiness", () => {
     mount();
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("今日额度上限已到");
-    expect(alert).toHaveTextContent("约 3 小时 12 分钟后额度开始释放");
+    expect(alert).toHaveTextContent("约 3 小时 12 分后额度开始释放");
     expect(alert).toHaveTextContent("不是整点清零");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "查看用量" }));

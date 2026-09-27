@@ -6,6 +6,7 @@
  * branch is gone with it rather than staying as a constant that is always
  * false and a code path nothing can reach.
  */
+import { formatDuration } from "./format";
 import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage } from "@evimed/domain";
 import { rememberConversationTitles } from "./conversationTitles";
 
@@ -219,12 +220,11 @@ export class WebApiError extends Error {
  */
 export function describeWebRetryAfter(seconds: number): string {
   const total = Math.max(1, Math.ceil(seconds));
-  if (total < 60) return `约 ${total} 秒`;
-  const minutes = Math.ceil(total / 60);
-  if (minutes < 60) return `约 ${minutes} 分钟`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `约 ${hours} 小时` : `约 ${hours} 小时 ${rest} 分钟`;
+  // A wait is rounded up to the minute past the first one — a promise to be
+  // early is the one this sentence must not break — and then written the way
+  // every duration is (spec §14.4: 「10 分钟」, 「3 小时 12 分」).
+  const shown = total < 60 ? total : Math.ceil(total / 60) * 60;
+  return `约 ${formatDuration(shown * 1000)}`;
 }
 
 /**
