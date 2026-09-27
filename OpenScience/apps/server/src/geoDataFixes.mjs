@@ -35,6 +35,7 @@
 import { brandRegistry, registryKey } from "./geoParse.mjs";
 import { recountRegistryFacts } from "./geoJudge.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { migrateGeo } from "./geoPersistence.mjs";
 import { GEO_METRIC_ROUND_KINDS, measureRound } from "./geoMetricsJob.mjs";
 import { GeoStore, geoProjectFromRow, mergedExpectations } from "./geoStore.mjs";
 import { GEO_WRITE_LIMITS, geoRuntimeWrite, geoStrategyDraft } from "./geoWrites.mjs";
@@ -56,9 +57,19 @@ function canonical(value) {
   return JSON.stringify(value ?? null);
 }
 
-/** A store whose migration the caller ran already, outside the fix's transaction. */
+/**
+ * Stores whose migration the caller ran already, outside the fix's
+ * transaction: `ready()` answers with that migration's own result instead of
+ * running it again on the transaction's client.
+ */
 class MigratedGeoStore extends GeoStore {
-  async ready() { return true; }
+  /** @param {ConstructorParameters<typeof GeoStore>[0]} options @param {Awaited<ReturnType<GeoStore["ready"]>>} migrated */
+  constructor(options, migrated) {
+    super(options);
+    this.migrated = migrated;
+  }
+
+  async ready() { return this.migrated; }
 }
 class MigratedMeasureStore extends GeoMeasureStore {
   async ready() { return true; }
@@ -148,8 +159,9 @@ export async function runGeoDataFixes({ database, geoProjectId, apply = false, d
   competitorSingleSource = {}, strategy = null, materials = true, collected = true, now = () => new Date() }) {
   // Migrated once, committed, outside the fix (the server does the same at boot).
   await new GeoMeasureStore(database).ready();
+  const migrated = await migrateGeo(database);
   return inOneTransaction(database, async (db) => {
-    const store = new MigratedGeoStore({ database: db, statementTimeoutMs: 60_000 });
+    const store = new MigratedGeoStore({ database: db, statementTimeoutMs: 60_000 }, migrated);
     const measure = new MigratedMeasureStore(db);
     const row = (await db.query(`SELECT * FROM evimed_geo.projects WHERE id = $1 AND deleted_at IS NULL`, [geoProjectId])).rows[0];
     if (!row) throw Object.assign(new Error(`GEO project ${geoProjectId} not found.`), { code: "geo_project_not_found" });
