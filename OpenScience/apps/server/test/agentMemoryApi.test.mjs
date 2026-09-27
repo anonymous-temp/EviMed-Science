@@ -13,6 +13,7 @@ import test from "node:test";
 import { AGENT_KEY_SCOPES } from "../src/agentApiKeys.mjs";
 import { createAgentMemoryRoutes, AGENT_MEMORY_PATH } from "../src/agentMemoryRoutes.mjs";
 import { agentMemoryOpenApi } from "../src/agentMemoryOpenApi.mjs";
+import { MemoryIntelligence } from "../src/memoryIntelligence.mjs";
 import { HttpError } from "../src/security.mjs";
 
 const config = { agentMemoryApiEnabled: true, maxJsonBytes: 1_048_576 };
@@ -59,12 +60,15 @@ function fixture(overrides = {}) {
     async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return []; },
   };
   const memoryIntelligence = {
-    async recordRun(project, run, messages) {
-      calls.push(["recordRun", project.id, run.sessionId, messages]);
+    async recordRun(project, run, messages, options) {
+      calls.push(["recordRun", project.id, run.sessionId, messages, options]);
       return { proposed: 2, extracted: 1, activated: 0, pending: 1, rejected: 1 };
     },
   };
-  const routes = createAgentMemoryRoutes({ config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate: overrides.memorySubstrate ?? null });
+  const routes = createAgentMemoryRoutes({
+    config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules,
+    memoryIntelligence: overrides.memoryIntelligence ?? memoryIntelligence, memorySubstrate: overrides.memorySubstrate ?? null,
+  });
   return { routes, calls };
 }
 
@@ -134,6 +138,67 @@ test("an episode goes through the platform's own extractor, carrying which turns
   assert.deepEqual(recorded[3].map((message) => message.sender), ["user", "assistant"]);
   assert.equal(res.captured.status, 202);
   assert.equal(res.captured.body.data.activated, 0);
+  // Held for the owner, by the one argument that says so: the extractor is the
+  // platform's own, and without it what it writes takes effect.
+  assert.deepEqual(recorded[4], { holdForOwner: true });
+});
+
+test("what an episode yields waits for the account owner, and a memory already in force is never changed by one", async () => {
+  // The real extractor, a store double and a model double: the property is the
+  // records written, not the arguments passed. Until 2026-09-27 this surface
+  // promised `pending` while the extractor it called activated everything.
+  const records = new Map();
+  let nextId = 1;
+  const store = {
+    async listRecords() { return [...records.values()]; },
+    async upsertRecord(_userId, input, evidence) {
+      const key = [input.scope, input.scopeId ?? "", input.kind, input.key].join("|");
+      const existing = records.get(key);
+      const record = {
+        ...existing, ...input, id: existing?.id ?? `record_${nextId++}`, version: (existing?.version ?? 0) + 1,
+        evidence: [...(existing?.evidence ?? []), ...(evidence ? [evidence] : [])], revisions: existing?.revisions ?? [],
+      };
+      records.set(key, record);
+      return record;
+    },
+  };
+  await store.upsertRecord("u1", {
+    scope: "user", scopeId: "", kind: "preference", key: "preference.output_language",
+    value: "回答请用中文", summary: "中文回答", origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
+  });
+  const fetchImpl = async (_url, init) => {
+    const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
+    const user = sources.find((source) => source.role === "user");
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
+      { scope: "user", kind: "preference", key: "preference.herb_count", value: "药味控制在 12 味以内", summary: "药味不超过 12 味",
+        origin: "explicit", importance: 0.7, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: user.text },
+      { scope: "user", kind: "preference", key: "preference.output_language", value: "回答请用英文", summary: "英文回答",
+        origin: "explicit", importance: 0.7, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: user.text },
+    ] }) } }] });
+  };
+  const memoryIntelligence = new MemoryIntelligence({
+    deepseekProviderEnabled: true, deepseekApiKey: "unit-test-key", deepseekBaseUrl: "https://api.deepseek.com",
+    deepseekModel: "deepseek-v4-pro", memoryExtractionEnabled: true, memoryExtractionTimeoutMs: 1_000,
+  }, store, { fetchImpl });
+  const { routes } = fixture({ memoryIntelligence });
+  const res = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/episodes`, {
+    projectId: "p9", sessionId: "s1", messages: [{ role: "user", text: "我开方一般控制在 12 味以内，回答请用英文。" }],
+  }), res);
+
+  const byKey = (key) => [...records.values()].find((record) => record.key === key);
+  assert.equal(byKey("preference.herb_count").status, "pending", "a proposal, not a memory in force");
+  assert.equal(byKey("preference.herb_count").lastConfirmedAt, null, "and nobody has confirmed it");
+  assert.equal(byKey("preference.output_language").value, "回答请用中文", "the owner's memory in force is not rewritten");
+  assert.equal(byKey("preference.output_language").status, "active");
+  const summaries = [...records.values()].filter((record) => record.kind === "run_summary");
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].status, "pending", "the episode's own summary is held too: every record an episode writes is pending");
+  const data = res.captured.body.data;
+  assert.equal(data.activated, 0);
+  assert.equal(data.pending, 1);
+  const described = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 });
+  assert.match(described.info.description, /stays `pending`/, "and the description says what the code does");
 });
 
 test("an unknown key is refused with one code, and nothing distinguishes it from a revoked one", async () => {

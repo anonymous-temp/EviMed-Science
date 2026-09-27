@@ -19,12 +19,13 @@ import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
  * Three rules that are properties of this surface rather than of the services
  * underneath it, and each one is here because the caller is not ours:
  *
- *  1. **A note arrives as `inferred` and stays pending.** The parameter that
- *     would say otherwise does not exist. A model's claim that its user said
- *     something outright is not the user saying it, and an external agent's
- *     claim is one more step removed. Promotion happens the way it always does:
- *     repeated independent observation, or the person confirming it in their
- *     own inbox.
+ *  1. **Nothing written here takes effect by itself.** A note arrives as an
+ *     `inferred` candidate and every episode-derived record as `pending`
+ *     (`recordRun(..., { holdForOwner: true })`); the parameter that would say
+ *     otherwise does not exist. A model's claim that its user said something
+ *     outright is not the user saying it, and an external agent's claim is one
+ *     more step removed. The account owner confirms, or does not. An episode
+ *     may add evidence to a memory already in force and never changes one.
  *  2. **Scope comes from the key.** A key bound to a project cannot read or
  *     write outside it, and no request field can widen that.
  *  3. **`episodes` is an input, not an import.** An external agent posts what
@@ -232,7 +233,9 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         status: "completed",
         finishedAt: new Date().toISOString(),
       };
-      const outcome = await memoryIntelligence.recordRun({ ...project, userId: user.id }, run, messages);
+      // Held for the owner (rule 1): every record this writes is `pending`,
+      // and nothing it says changes or replaces a memory already in force.
+      const outcome = await memoryIntelligence.recordRun({ ...project, userId: user.id }, run, messages, { holdForOwner: true });
       sendJson(res, 202, {
         data: {
           episodeId: run.id,
@@ -258,7 +261,7 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
         endpoints: ["POST /recall", "POST /note", "GET /records", "POST /episodes"],
         notes: [
-          "Every note and every episode-derived record arrives as inferred and stays pending until it is independently re-observed or the account owner confirms it.",
+          "Every episode-derived record stays pending, and every note an unconfirmed candidate, until the account owner confirms it; an episode never changes a memory already in force.",
           "A key bound to a project cannot read or write outside it.",
         ],
       } });

@@ -54,9 +54,9 @@ per key per minute (`429 agent_memory_rate_limited` beyond that).
 | `GET /openapi.json` | none | The machine-readable description (no key needed, still behind the enable switch). |
 | `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints. An integrator's first call. |
 | `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "scope"? }` | `memory.read` | Searches the account's memory and returns hits with their source. `scope` is `all`, `capsule`, `conversation` or `agenda`. |
-| `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as **inferred and pending** whatever the caller says, and takes effect only when the researcher confirms it or it is observed again independently. |
+| `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it. |
 | `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists structured records, filtered (comma-separated values; `pageSize` up to 200, default 50). **Active records only** unless `status` asks for others: a pending record is a proposal nobody has agreed to. |
-| `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns) for the platform's own extractor to read. Every candidate must quote the conversation exactly; nothing is activated by this call (`activated` is always 0). |
+| `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns) for the platform's own extractor to read. Every candidate must quote the conversation exactly, and **every record it writes is `pending`** until the account owner confirms it (`activated` is always 0). It may add evidence to a memory already in force; a candidate that would change or replace one is refused. |
 
 What an agent can never do through either door: activate a memory, reach a
 project its key is not bound to, or outrun the researcher's own switches. If

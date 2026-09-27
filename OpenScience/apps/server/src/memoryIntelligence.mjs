@@ -105,11 +105,15 @@ function checkpointReason(kind, text) {
 /** What the checkpoint means, for the person reading the run. */
 const checkpointReasonText = Object.freeze({
   clinical_safety: "涉及高警示药品、毒性中药或临床安全规则中的药物，这类长期偏好在你看过之前不会用于回答",
+  // `recordRun(..., { holdForOwner: true })`: the conversation came from an
+  // agent that is not ours (`/api/agent-memory/v1/episodes`).
+  external_source: "来自外部接入的对话，你确认之前不会用于回答",
 });
 
 /** The audit ledger reads English, like every other revision reason here. */
 const checkpointReasonAudit = Object.freeze({
   clinical_safety: "held for its owner: a lasting memory that names a clinical-safety medicine",
+  external_source: "held for its owner: proposed by an agent outside the platform",
 });
 
 function boundedText(value, maximum) {
@@ -786,7 +790,19 @@ export class MemoryIntelligence {
     return id !== "" && this.excludedProjectPrefixes.some((prefix) => id.startsWith(prefix));
   }
 
-  async recordRun(project, run, messages = []) {
+  /**
+   * @param {any} project @param {any} run @param {any[]} [messages]
+   * @param {{ holdForOwner?: boolean }} [options]
+   * `holdForOwner`: the conversation was posted by an agent that is not ours
+   * (`/api/agent-memory/v1/episodes`). Everything it yields is written
+   * `pending` — a proposal the account owner confirms or not — and it may add
+   * evidence to a memory already in force but never change, replace or
+   * re-activate one. The platform's own runs never pass it: their writes take
+   * effect (owner ruling 2026-09-19). An integrator's claim that a turn was
+   * its user's is one step further from the user than our own transcript, and
+   * that is the whole reason the two paths differ.
+   */
+  async recordRun(project, run, messages = [], { holdForOwner = false } = {}) {
     const { sources, excluded } = conversationMemorySources(messages, run.sessionId);
     // The switch covers this too.
     //
@@ -810,7 +826,7 @@ export class MemoryIntelligence {
     // per run rather than cached: "pause" has to hold from the next run on.
     const pause = await memoryPausedFor(this.memoryStore, project.userId, project.id, run.sessionId ?? null);
     if (pause.learning) return skippedResult(pause.trial ? "trial" : "paused", excluded);
-    const runSummary = await this.#recordRunSummary(project, run, sources);
+    const runSummary = await this.#recordRunSummary(project, run, sources, holdForOwner);
     if (sources.length === 0) return skippedResult("none", excluded, runSummary);
     // No model, no extraction. There used to be a fallback here: a keyword wall
     // over the user's messages (「请记住」「我的偏好」…) that decided which kind a
@@ -857,6 +873,12 @@ export class MemoryIntelligence {
       : null;
     for (const candidate of candidates) {
       if (candidate.origin === "inferred") candidate.expiresAt = inferredExpiry;
+      if (holdForOwner) {
+        candidate.status = "pending";
+        candidate.statusReason = "external_source";
+        // Not confirmed by anyone yet, whatever the turn's role said.
+        candidate.lastConfirmedAt = null;
+      }
     }
     const rejectedKeys = await this.#rejectedKeys(project.userId);
     let extracted = 0;
@@ -883,6 +905,14 @@ export class MemoryIntelligence {
         rejections.push(`"${candidate.key}" was removed by the researcher; only their own statement brings it back`);
         continue;
       }
+      // An outside agent proposes; it does not rewrite what the owner already
+      // has in force. The same value seen again is evidence and is kept; a
+      // different value would demote the owner's memory to a proposal.
+      if (holdForOwner && previous && previous.status !== "pending"
+        && normalizedValue(previous.value) !== normalizedValue(candidate.value)) {
+        rejections.push(`"${candidate.key}" is already in force; an outside agent's episode cannot change it`);
+        continue;
+      }
       // Detected before the write and reported after it. The write itself is
       // untouched by the detection: see contradictedValue.
       const contradiction = contradictedValue(previous, candidate);
@@ -892,7 +922,9 @@ export class MemoryIntelligence {
       let superseded = null;
       // Only a new key can replace another: a candidate that reuses its own
       // key is an update, and the store keeps the old value as a revision.
-      const replacing = previous ? null : supersededRecord(candidate, known.values());
+      // A proposal retires nothing: the fact it would replace stays in force
+      // until the owner confirms the proposal (`holdForOwner`).
+      const replacing = previous || holdForOwner ? null : supersededRecord(candidate, known.values());
       if (replacing && "rejection" in replacing) rejections.push(replacing.rejection);
       if (replacing && "record" in replacing && typeof this.memoryStore.supersede === "function") {
         ({ record: stored, superseded } = await this.memoryStore.supersede(project.userId, replacing.record.id, next, candidate.evidence, {
@@ -1119,7 +1151,7 @@ export class MemoryIntelligence {
     }
   }
 
-  async #recordRunSummary(project, run, sources) {
+  async #recordRunSummary(project, run, sources, holdForOwner = false) {
     const lastUser = [...sources].reverse().find((source) => source.role === "user") ?? null;
     const lastAssistant = [...sources].reverse().find((source) => source.role === "assistant") ?? null;
     const question = lastUser?.text.slice(0, 4_000) ?? "";
@@ -1180,8 +1212,9 @@ export class MemoryIntelligence {
       origin: "system",
       // Active and, when the screen matched, flagged: a run summary belongs to
       // the timeline, is never recalled into a prompt (`memoryRecallPolicy`),
-      // and a sensitive one is kept out of every recall path besides.
-      status: "active",
+      // and a sensitive one is kept out of every recall path besides. An
+      // outside agent's episode is held like everything else it yields.
+      status: holdForOwner ? "pending" : "active",
       confidence: 1,
       importance: run.status === "succeeded" ? 0.55 : 0.7,
       sensitive,

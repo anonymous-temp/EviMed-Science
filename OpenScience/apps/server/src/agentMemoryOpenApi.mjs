@@ -56,7 +56,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "",
         "Two rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
-        "1. Nothing you write becomes an active memory. A note, and every record derived from an episode, arrives as `inferred` and stays `pending` until it is independently re-observed across separate episodes or the account owner confirms it in their inbox. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
+        "1. Nothing you write becomes an active memory. Every record extracted from an episode stays `pending`, and a note stays an unconfirmed candidate, until the account owner confirms it. An episode may add evidence to a memory that is already in force; it never changes, replaces or re-activates one. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
@@ -185,13 +185,13 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         post: {
           summary: "Submit a conversation for extraction",
           description: [
-            "The transcript endpoint. The platform's own extractor reads the turns and decides what is worth remembering, subject to the same evidence rules a run of ours is subject to: every candidate must quote its source byte for byte, and everything it produces is pending.",
+            "The transcript endpoint. The platform's own extractor reads the turns and decides what is worth remembering, subject to the same evidence rules a run of ours is subject to: every candidate must quote its source byte for byte, and everything it produces is `pending` until the account owner confirms it. A candidate that would change or replace a memory already in force is refused and counted in `rejected`.",
             "This is the only way to add memory in bulk. There is no endpoint that writes a record directly, because a record with no evidence behind it is what the record shape exists to make impossible.",
           ].join(" "),
           security: [{ agentApiKey: ["memory.write"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/EpisodeRequest" }),
           responses: {
-            202: { description: "Extraction ran. `activated` is zero on this path by construction." },
+            202: { description: "Extraction ran. Every record it wrote is `pending`, so `activated` is zero on this path by construction; `pending` counts them and `rejected` counts what the extractor or the hold refused." },
             400: errorResponse("Malformed request."),
             ...common,
           },
