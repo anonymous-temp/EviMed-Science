@@ -19,6 +19,11 @@ const tlsTargetsFile = path.join(targetsDir, "tls.json");
 const checkOnly = process.argv.includes("--check");
 const probeOnly = process.argv.includes("--probe");
 const prepareReaders = process.argv.includes("--prepare-container-secrets");
+/** Rewrite the probe-target list alone, from the environment (`node
+ *  --env-file=.env`), without the three secrets a full generation asks for:
+ *  the release switch runs it for every release, so the certificate probes
+ *  follow `.env` instead of whoever last ran the generator and with what. */
+const targetsOnly = process.argv.includes("--targets");
 const jsonOutput = process.argv.includes("--json");
 
 function monitoringFiles(directory) {
@@ -201,8 +206,14 @@ async function generate() {
  * scrape job legal — Prometheus treats a missing file-SD file as an error it
  * reports every refresh interval.
  */
-async function writeTlsTargets() {
-  const raw = process.env.OPEN_SCIENCE_PUBLIC_HEALTH_URL ?? "";
+/**
+ * The two probe groups the environment asks for: the public origin's health
+ * URL, and the Tokyo proxy as host:port.
+ * @param {Record<string, string | undefined>} env
+ * @returns {{ targets: string[], edge: string[] }}
+ */
+export function tlsTargetsFromEnv(env) {
+  const raw = env.OPEN_SCIENCE_PUBLIC_HEALTH_URL ?? "";
   const targets = [];
   if (raw) {
     let url;
@@ -221,7 +232,7 @@ async function writeTlsTargets() {
   // as host:port, in a second group its own scrape job keeps. It lives six
   // days and renews twice a day, so its alert line is a day, not three.
   const edge = [];
-  const edgeRaw = process.env.OPEN_SCIENCE_EDGE_PROXY_URL ?? "";
+  const edgeRaw = env.OPEN_SCIENCE_EDGE_PROXY_URL ?? "";
   if (edgeRaw) {
     let url;
     try { url = new URL(edgeRaw); } catch {
@@ -230,6 +241,11 @@ async function writeTlsTargets() {
     if (url.protocol !== "https:") fail("edge_proxy_url_insecure", "OPEN_SCIENCE_EDGE_PROXY_URL must be an https URL.");
     edge.push(`${url.hostname}:${url.port || "443"}`);
   }
+  return { targets, edge };
+}
+
+async function writeTlsTargets() {
+  const { targets, edge } = tlsTargetsFromEnv(process.env);
   await assertNoSymlinkPath(targetsDir, { allowMissingTail: true });
   await fsp.mkdir(targetsDir, { recursive: true, mode: 0o755 });
   await assertNoSymlinkPath(targetsDir);
@@ -268,8 +284,25 @@ async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile
   if (receiver.webhook_configs[0].send_resolved !== true) {
     fail("alertmanager_resolved_disabled", "Alertmanager must notify when alerts resolve.");
   }
-  // Present, parseable and shaped like file-SD. A missing file is an error
-  // Prometheus reports once per refresh interval and nowhere a person looks.
+  const { publicTls } = await checkTlsTargets(targetsFile, readFile);
+  return { receiverName: receiver.name, webhookUrl, tlsTargets: publicTls };
+}
+
+/**
+ * The probe-target list is present, parseable, shaped like file-SD, and
+ * probes what the environment names.
+ *
+ * The last clause is the one that was missing (2026-09-26, platform audit
+ * I3-1): production's `.env` named the public health URL, the list had been
+ * generated without it, and the certificate-expiry alert had no series to fire
+ * on — a check that only read the file's shape passed it for days. A variable
+ * the environment does not set is not asked about: this runs in contexts that
+ * load no `.env`.
+ * @returns {Promise<{ publicTls: number, edgeTls: number }>}
+ */
+async function checkTlsTargets(targetsFile = tlsTargetsFile, readFile = readRegularFile) {
+  // A missing file is an error Prometheus reports once per refresh interval
+  // and nowhere a person looks.
   let tlsTargets;
   try {
     tlsTargets = JSON.parse(await readFile(targetsFile, 16 * 1024, false));
@@ -288,7 +321,15 @@ async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile
       fail("tls_targets_insecure", "Certificate-expiry probe targets must be https URLs.");
     }
   }
-  return { receiverName: receiver.name, webhookUrl, tlsTargets: tlsTargets[0].targets.length };
+  const group = (probe) => tlsTargets.find((entry) => entry?.labels?.probe === probe)?.targets ?? [];
+  const expected = tlsTargetsFromEnv(process.env);
+  for (const [probe, want, variable] of [["public-tls", expected.targets, "OPEN_SCIENCE_PUBLIC_HEALTH_URL"], ["edge-proxy-tls", expected.edge, "OPEN_SCIENCE_EDGE_PROXY_URL"]]) {
+    const have = group(probe);
+    if (want.length && (have.length !== want.length || want.some((target) => !have.includes(target)))) {
+      fail("tls_targets_stale", `monitoring/targets/tls.json does not probe the ${variable} the environment names; run configure:monitoring --targets.`);
+    }
+  }
+  return { publicTls: group("public-tls").length, edgeTls: group("edge-proxy-tls").length };
 }
 
 /** Prepare existing 0600 bind-mounted files for their fixed container readers.
@@ -430,6 +471,15 @@ export async function probeAlertDelivery({ webhookUrl, receiverName, fetchImpl =
 }
 
 async function main() {
+  if (targetsOnly) {
+    if (checkOnly || probeOnly || prepareReaders) fail("monitoring_mode_conflict", "The probe-target list must be written on its own.");
+    await writeTlsTargets();
+    const counts = await checkTlsTargets();
+    const result = { ok: true, mode: "targets", file: tlsTargetsFile, ...counts };
+    process.stdout.write(jsonOutput ? `${JSON.stringify(result)}\n`
+      : `monitoring probe targets written: ${counts.publicTls} public, ${counts.edgeTls} edge proxy (${tlsTargetsFile})\n`);
+    return;
+  }
   let checked;
   let readers;
   if (prepareReaders) {
