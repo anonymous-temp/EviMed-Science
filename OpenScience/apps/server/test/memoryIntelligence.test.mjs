@@ -1519,3 +1519,86 @@ test("what a run wrote is shown where the researcher is, and never posted to the
   assert.equal(result.written.filter((entry) => entry.change === "created").length, 2, "both were written");
   assert.deepEqual(posted, [], "and nothing reached the inbox");
 });
+
+// 2026-09-26 audit (M-12): saying 「忘掉……」 in a conversation did nothing —
+// the extraction instructions had no forget. Whether a sentence asks to forget
+// is the model's judgement; that it quotes the researcher and names a memory
+// in force is checked in code.
+/** An extractor that returns these forget requests, and no candidates. */
+function forgetFetch(requestFactory) {
+  return async (_input, init) => {
+    const request = JSON.parse(String(init.body));
+    const payload = JSON.parse(request.messages[1].content);
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [], forget: requestFactory(payload.sources) }) } }] });
+  };
+}
+
+test("saying 「忘掉」 in a conversation archives the memory it names, as the researcher's revision, and an inference cannot bring it back", async () => {
+  const store = new MemoryStoreDouble();
+  const stored = await store.upsertRecord("user_1", {
+    scope: "user", scopeId: "", kind: "preference", key: "preference.study_design", value: "只看 RCT", summary: "只看 RCT",
+    origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
+  }, null, {});
+  const feedback = [];
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: forgetFetch((sources) => [{ key: "preference.study_design", sourceRef: sources[0].sourceRef, evidenceQuote: "忘掉我只看 RCT 那条" }]),
+    feedbackEvents: {
+      async recordMemoryUpdate(userId, input) { feedback.push({ userId, before: input.before.status, after: input.after.status }); return []; },
+      async list() { return { items: [] }; },
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_forget"), [message("u1", "忘掉我只看 RCT 那条，队列研究也可以。")]);
+
+  const record = [...store.records.values()].find((item) => item.key === "preference.study_design");
+  assert.equal(record.status, "archived", "what 忘记 on the page does, restorable from 已忘记的内容");
+  assert.equal(record.value, "只看 RCT", "nothing it said is rewritten");
+  assert.deepEqual(result.forgotten, [{ id: stored.id, key: "preference.study_design", kind: "preference", scope: "user" }]);
+  const reason = store.reasons.at(-1);
+  assert.equal(reason.status, "archived");
+  assert.match(reason.reason, /forgotten at the researcher's request in conversation: 「忘掉我只看 RCT 那条」/);
+  assert.deepEqual(feedback, [{ userId: "user_1", before: "active", after: "archived" }], "the rejection the next inference reads");
+});
+
+test("a forget the researcher did not ask for is refused, and says why", async () => {
+  const store = new MemoryStoreDouble();
+  for (const [scope, scopeId, key] of [["user", "", "preference.output_language"], ["project", "project_other", "project.fact.topic"]]) {
+    await store.upsertRecord("user_1", { scope, scopeId, kind: scope === "user" ? "preference" : "project_fact", key, value: key, summary: key,
+      origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false }, null, {});
+  }
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: forgetFetch((sources) => {
+      const user = sources.find((source) => source.role === "user");
+      const assistant = sources.find((source) => source.role === "assistant");
+      return [
+        { key: "preference.output_language", sourceRef: assistant.sourceRef, evidenceQuote: "我会忘掉" },
+        { key: "preference.output_language", sourceRef: user.sourceRef, evidenceQuote: "a paraphrase nobody typed" },
+        { key: "preference.never_stored", sourceRef: user.sourceRef, evidenceQuote: "别再用英文" },
+        { key: "project.fact.topic", sourceRef: user.sourceRef, evidenceQuote: "别再用英文" },
+      ];
+    }),
+  });
+  const result = await intelligence.recordRun(project(), run("run_refused"), [
+    message("u1", "别再用英文回答了。"),
+    { info: { id: "a1", role: "assistant" }, parts: [{ type: "text", text: "好的，我会忘掉这条偏好。" }] },
+  ]);
+  assert.deepEqual(result.forgotten, []);
+  assert.ok([...store.records.values()].every((record) => record.status === "active"), "nothing was archived");
+  const reasons = result.rejectionReasons.join(" | ");
+  assert.match(reasons, /only the researcher can ask to forget/);
+  assert.match(reasons, /not quoted verbatim/);
+  assert.match(reasons, /names no memory in force this conversation can see/, "a key nobody stored, and another project's fact");
+});
+
+test("the extraction instructions say how a request to forget is returned", async () => {
+  /** @type {string} */ let instructions = "";
+  const intelligence = new MemoryIntelligence(config, new MemoryStoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      instructions = JSON.parse(String(init.body)).messages[0].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_plain"), [message("u1", "房颤抗凝该怎么选？")]);
+  assert.match(instructions, /"forget":\[\{"key"/);
+  assert.match(instructions, /Only an explicit request from the user counts/);
+  assert.deepEqual(result.forgotten, [], "an answer with no forget list forgets nothing");
+});
