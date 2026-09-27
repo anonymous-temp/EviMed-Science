@@ -2,54 +2,288 @@
   "schemaVersion": 1,
   "incident": "Production adr-analysis run of 2026-09-15: 21 of 27 drug-safety engine jobs failed in ADR-term normalization, and the capability delivered nothing (specialist_deliverable_not_accepted).",
   "source": "Platform audit of 2026-09-26, report I2 section 2.7 and gap list item 1. The auditor called normalize_adr inside the production engine container on the seven-term probe panel below: four were not recognized, and the only candidate offered for bradycardia was urticaria. The built-in table then knew 119 PTs.",
-  "limitation": "The 21 failing job terms themselves are in the production job records, which this case could not read. Extract them read-only with extractCommand and append any term not listed here to jobTerms, with its expected PT.",
+  "limitation": "Resolved: the job terms were extracted on 2026-09-27 (see jobTerms).",
   "extractCommand": "sudo docker exec web-evimed-drug-safety-agent-1 python -c 'import glob,json\nfor p in sorted(glob.glob(\"/data/users/*/projects/*/workspace/**/drug-safety-runs/.jobs/*.json\", recursive=True)):\n    s=json.load(open(p)); print(s.get(\"createdAt\"), s.get(\"status\"), json.dumps(s.get(\"request\",{}).get(\"reactions\"), ensure_ascii=False), (s.get(\"error\") or \"\")[:200])'",
   "auditProbePanel": [
-    {"term": "bradycardia", "expected": "bradycardia", "failedOn": "2026-09-26"},
-    {"term": "palpitations", "expected": "palpitations", "failedOn": "2026-09-26"},
-    {"term": "ventricular fibrillation", "expected": "ventricular fibrillation", "failedOn": "2026-09-26"},
-    {"term": "myocarditis", "expected": "myocarditis", "failedOn": "2026-09-26"},
-    {"term": "cardiac failure", "expected": "cardiac failure", "failedOn": null},
-    {"term": "interstitial lung disease", "expected": "interstitial lung disease", "failedOn": null},
-    {"term": "electrocardiogram qt prolonged", "expected": "electrocardiogram qt prolonged", "failedOn": null}
+    {
+      "term": "bradycardia",
+      "expected": "bradycardia",
+      "failedOn": "2026-09-26"
+    },
+    {
+      "term": "palpitations",
+      "expected": "palpitations",
+      "failedOn": "2026-09-26"
+    },
+    {
+      "term": "ventricular fibrillation",
+      "expected": "ventricular fibrillation",
+      "failedOn": "2026-09-26"
+    },
+    {
+      "term": "myocarditis",
+      "expected": "myocarditis",
+      "failedOn": "2026-09-26"
+    },
+    {
+      "term": "cardiac failure",
+      "expected": "cardiac failure",
+      "failedOn": null
+    },
+    {
+      "term": "interstitial lung disease",
+      "expected": "interstitial lung disease",
+      "failedOn": null
+    },
+    {
+      "term": "electrocardiogram qt prolonged",
+      "expected": "electrocardiogram qt prolonged",
+      "failedOn": null
+    }
   ],
-  "jobTerms": [],
+  "jobTerms": [
+    {
+      "term": "cardiac failure",
+      "expected": "cardiac failure"
+    },
+    {
+      "term": "ejection fraction decreased",
+      "expected": "ejection fraction decreased"
+    },
+    {
+      "term": "QT prolongation",
+      "expected": "electrocardiogram qt prolonged"
+    },
+    {
+      "term": "electrocardiogram QT prolonged",
+      "expected": "electrocardiogram qt prolonged"
+    },
+    {
+      "term": "atrial fibrillation",
+      "expected": "atrial fibrillation"
+    },
+    {
+      "term": "ventricular arrhythmia",
+      "expected": "ventricular arrhythmia"
+    },
+    {
+      "term": "torsade de pointes",
+      "expected": "torsade de pointes"
+    },
+    {
+      "term": "sudden cardiac death",
+      "expected": "sudden cardiac death"
+    },
+    {
+      "term": "myocarditis",
+      "expected": "myocarditis"
+    },
+    {
+      "term": "cardiomyopathy",
+      "expected": "cardiomyopathy"
+    },
+    {
+      "term": "hypertension",
+      "expected": "hypertension"
+    },
+    {
+      "term": "pericardial effusion",
+      "expected": "pericardial effusion"
+    },
+    {
+      "term": "palpitations",
+      "expected": "palpitations"
+    },
+    {
+      "term": "bradycardia",
+      "expected": "bradycardia"
+    },
+    {
+      "term": "ventricular tachycardia",
+      "expected": "ventricular tachycardia"
+    },
+    {
+      "term": "cardiac failure congestive",
+      "expected": "cardiac failure congestive"
+    },
+    {
+      "term": "left ventricular dysfunction",
+      "expected": "left ventricular dysfunction"
+    },
+    {
+      "term": "cardiac arrest",
+      "expected": "cardiac arrest"
+    },
+    {
+      "term": "sudden death",
+      "expected": "sudden death"
+    },
+    {
+      "term": "ventricular extrasystoles",
+      "expected": "ventricular extrasystoles"
+    },
+    {
+      "term": "cardiogenic shock",
+      "expected": "cardiogenic shock"
+    },
+    {
+      "term": "ventricular fibrillation",
+      "expected": "ventricular fibrillation"
+    },
+    {
+      "term": "long qt syndrome",
+      "expected": "long qt syndrome"
+    },
+    {
+      "term": "arrhythmia",
+      "expected": "arrhythmia"
+    },
+    {
+      "term": "atrial flutter",
+      "expected": "atrial flutter"
+    },
+    {
+      "term": "pericarditis",
+      "expected": "pericarditis"
+    },
+    {
+      "term": "blood pressure increased",
+      "expected": "blood pressure increased"
+    },
+    {
+      "term": "cardiac disorder",
+      "expected": "cardiac disorder"
+    },
+    {
+      "term": "supraventricular tachycardia",
+      "expected": "supraventricular tachycardia"
+    },
+    {
+      "term": "myocardial infarction",
+      "expected": "myocardial infarction"
+    }
+  ],
   "reconstructedTerms": {
     "note": "Not extracted from the jobs: English terms of the kind they sent -- the cardiac and pulmonary events a run on brief adr-001 (osimertinib) names, written the way a model writes them (title case, singular, clinical rather than MedDRA wording). Each expected value is a FAERS term.",
     "terms": [
-    {"term": "Bradycardia", "expected": "bradycardia"},
-    {"term": "Palpitation", "expected": "palpitations"},
-    {"term": "Ejection fraction decreased", "expected": "ejection fraction decreased"},
-    {"term": "Cardiac failure congestive", "expected": "cardiac failure congestive"},
-    {"term": "heart failure", "expected": "cardiac failure"},
-    {"term": "QT prolongation", "expected": "electrocardiogram qt prolonged"},
-    {"term": "Left ventricular dysfunction", "expected": "left ventricular dysfunction"},
-    {"term": "Cardiomyopathy", "expected": "cardiomyopathy"},
-    {"term": "Atrial fibrillation", "expected": "atrial fibrillation"},
-    {"term": "Ventricular tachycardia", "expected": "ventricular tachycardia"},
-    {"term": "Torsade de pointes", "expected": "torsade de pointes"},
-    {"term": "Sudden cardiac death", "expected": "sudden cardiac death"},
-    {"term": "Cardiac arrest", "expected": "cardiac arrest"},
-    {"term": "Pericardial effusion", "expected": "pericardial effusion"},
-    {"term": "Pneumonitis", "expected": "pneumonitis"},
-    {"term": "Myocardial infarction", "expected": "myocardial infarction"}
+      {
+        "term": "Bradycardia",
+        "expected": "bradycardia"
+      },
+      {
+        "term": "Palpitation",
+        "expected": "palpitations"
+      },
+      {
+        "term": "Ejection fraction decreased",
+        "expected": "ejection fraction decreased"
+      },
+      {
+        "term": "Cardiac failure congestive",
+        "expected": "cardiac failure congestive"
+      },
+      {
+        "term": "heart failure",
+        "expected": "cardiac failure"
+      },
+      {
+        "term": "QT prolongation",
+        "expected": "electrocardiogram qt prolonged"
+      },
+      {
+        "term": "Left ventricular dysfunction",
+        "expected": "left ventricular dysfunction"
+      },
+      {
+        "term": "Cardiomyopathy",
+        "expected": "cardiomyopathy"
+      },
+      {
+        "term": "Atrial fibrillation",
+        "expected": "atrial fibrillation"
+      },
+      {
+        "term": "Ventricular tachycardia",
+        "expected": "ventricular tachycardia"
+      },
+      {
+        "term": "Torsade de pointes",
+        "expected": "torsade de pointes"
+      },
+      {
+        "term": "Sudden cardiac death",
+        "expected": "sudden cardiac death"
+      },
+      {
+        "term": "Cardiac arrest",
+        "expected": "cardiac arrest"
+      },
+      {
+        "term": "Pericardial effusion",
+        "expected": "pericardial effusion"
+      },
+      {
+        "term": "Pneumonitis",
+        "expected": "pneumonitis"
+      },
+      {
+        "term": "Myocardial infarction",
+        "expected": "myocardial infarction"
+      }
     ]
   },
   "briefTerms": {
     "note": "The Chinese event terms the four adr-analysis briefs (OpenScience/evals/adr-analysis/briefs.json) hand the run, split on 、 the way a run splits them. 心血管死亡 is deliberately absent: MedDRA has no such PT, and mapping it is the model's reading, confirmed or refused like any other.",
     "terms": [
-      {"term": "心力衰竭", "expected": "cardiac failure"},
-      {"term": "左室射血分数下降", "expected": "ejection fraction decreased"},
-      {"term": "QT 间期延长", "expected": "electrocardiogram qt prolonged"},
-      {"term": "心源性猝死", "expected": "sudden cardiac death"},
-      {"term": "心肌梗死", "expected": "myocardial infarction"},
-      {"term": "消化道出血", "expected": "gastrointestinal haemorrhage"},
-      {"term": "上消化道出血", "expected": "upper gastrointestinal haemorrhage"},
-      {"term": "黑便", "expected": "melaena"},
-      {"term": "膀胱炎", "expected": "cystitis"},
-      {"term": "间质性膀胱炎", "expected": "cystitis interstitial"},
-      {"term": "排尿困难", "expected": "dysuria"},
-      {"term": "血尿", "expected": "haematuria"}
+      {
+        "term": "心力衰竭",
+        "expected": "cardiac failure"
+      },
+      {
+        "term": "左室射血分数下降",
+        "expected": "ejection fraction decreased"
+      },
+      {
+        "term": "QT 间期延长",
+        "expected": "electrocardiogram qt prolonged"
+      },
+      {
+        "term": "心源性猝死",
+        "expected": "sudden cardiac death"
+      },
+      {
+        "term": "心肌梗死",
+        "expected": "myocardial infarction"
+      },
+      {
+        "term": "消化道出血",
+        "expected": "gastrointestinal haemorrhage"
+      },
+      {
+        "term": "上消化道出血",
+        "expected": "upper gastrointestinal haemorrhage"
+      },
+      {
+        "term": "黑便",
+        "expected": "melaena"
+      },
+      {
+        "term": "膀胱炎",
+        "expected": "cystitis"
+      },
+      {
+        "term": "间质性膀胱炎",
+        "expected": "cystitis interstitial"
+      },
+      {
+        "term": "排尿困难",
+        "expected": "dysuria"
+      },
+      {
+        "term": "血尿",
+        "expected": "haematuria"
+      }
     ]
-  }
+  },
+  "jobTermsSource": "Extracted read-only on 2026-09-27 from the production engine's job records (web-evimed-drug-safety-agent-1, 27 jobs of 2026-09-15; 21 failed). Every distinct term the jobs sent, with the FAERS term it must resolve to."
 }
