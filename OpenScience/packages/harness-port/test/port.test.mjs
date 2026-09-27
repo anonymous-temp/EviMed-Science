@@ -11,6 +11,7 @@ import {
   isSubagentSession,
   loadHarnessModule,
   onPreStep,
+  onPromptAssemble,
   onToolObserved,
   onToolPolicy,
   onTurnEnd,
@@ -99,6 +100,55 @@ test("context added during pre-step enters that request rather than the next inb
   assert.equal(decision.messages[1].content[0].text, "Reply READY on the first step.");
   injectContext(agent, "A later turn.", "evimed-run-policy");
   assert.equal(queued.length, 1, "the request-local collector is removed after admission");
+});
+
+test("a restriction lifted while a step is assembled reaches that step's request, in the kernel's name order", async () => {
+  // dsh-agent-loop assembles a step's tools, then runs agent/pre-step, then
+  // sends what it assembled — so a grant made in pre-step arrived a request
+  // late. The assembly waterfall is the last awaited point before the list is
+  // final, and the list it returns is the one the request carries.
+  /** @type {any} */
+  let handler;
+  /** @type {string[]} */
+  let visible = ["bash", "mcp__evimed__literature_search", "read"];
+  const agent = { id: "a1", session: { id: "s1", header: { cwd: "/work" } } };
+  const registry = { schemas: (/** @type {any} */ scope) => (scope === agent ? visible : []).map((name) => ({ name, description: `${name}.`, parameters: { type: "object" } })) };
+  const ctx = {
+    get: (/** @type {string} */ key) => (key === "tools" ? registry : undefined),
+    on: (/** @type {string} */ event, /** @type {any} */ callback) => { assert.equal(event, SEAMS.events.promptAssemble); handler = callback; return () => {}; },
+  };
+  /** @type {any[]} */
+  const seen = [];
+  let grant = true;
+  onPromptAssemble(ctx, async (/** @type {any} */ subject) => {
+    seen.push(subject);
+    if (!grant) return false;
+    visible = [...visible, "mcp__evimed__research_topic_selection", "evimed_claim_upsert"];
+    return true;
+  });
+  const schema = (/** @type {string} */ name) => ({ name, description: `${name}.`, parameters: { type: "object" } });
+  const assembly = { sections: [], contexts: [], tools: ["bash", "mcp__evimed__literature_search", "read", "skill_catalog_tool"].map(schema), variables: {} };
+  const result = await handler(assembly, { agent, scope: agent }, async () => assembly);
+  assert.deepEqual(seen, [agent], "fn is handed the agent the assembly is for");
+  assert.deepEqual(result.tools.map((/** @type {any} */ tool) => tool.name), [
+    "bash", "evimed_claim_upsert", "mcp__evimed__literature_search", "mcp__evimed__research_topic_selection", "read", "skill_catalog_tool",
+  ], "the tools the agent now sees are added where the kernel's sort puts them; a provider's own tool stays");
+  assert.deepEqual(result.tools[3], schema("mcp__evimed__research_topic_selection"), "as the registry's model-facing schema");
+
+  grant = false;
+  const untouched = { sections: [], contexts: [], tools: ["bash"].map(schema), variables: {} };
+  assert.deepEqual((await handler(untouched, { agent, scope: agent }, async () => untouched)).tools.map((/** @type {any} */ tool) => tool.name), ["bash"],
+    "nothing changed, nothing added");
+
+  grant = true;
+  seen.length = 0;
+  const agentless = { sections: [], contexts: [], tools: [], variables: {} };
+  await handler(agentless, {}, async () => agentless);
+  assert.deepEqual(seen, [], "an assembly for no agent is not ours to shape");
+
+  const codeMode = { sections: [], contexts: [], tools: [schema("run_code")], variables: {} };
+  assert.deepEqual((await handler(codeMode, { agent, scope: agent }, async () => codeMode)).tools.map((/** @type {any} */ tool) => tool.name), ["run_code"],
+    "a run_code presentation carries no native schemas to add to");
 });
 
 /** A minimal cordis-shaped context with the seams the probe walks.

@@ -49,6 +49,7 @@ import {
 } from '@evimed/domain'
 import { capabilityCatalogue } from './guidance.mjs'
 import {
+  agentSeesTool,
   configSchema,
   defineTool,
   guardTools,
@@ -56,6 +57,7 @@ import {
   isSubagentSession,
   listDirAt,
   onPreStep,
+  onPromptAssemble,
   onSessionEvent,
   onSessionStart,
   onToolObserved,
@@ -356,6 +358,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         contextInjected: false,
         contextRevision: '',
         contextInjection: null,
+        /** The dispatch's context block, read and waiting for the step it
+         *  belongs to; see `deliverBrief`. */
+        pendingContext: null,
+        /** Whether the prompt-assembly seam ran for the step now entering. */
+        assembled: false,
         subagent: false,
         plan: null,
         items: [],
@@ -500,12 +507,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   /**
    * Narrow this root to its own tools plus `allowed`, replacing whatever
-   * narrowing it carried.
+   * narrowing it carried. A set equal to the one it carries changes nothing:
+   * the restriction is left in place rather than lifted and re-applied.
    * @param {any} agent @param {Iterable<string>} allowed
+   * @returns {boolean} whether the restriction changed
    */
   const applyRootNarrowing = (agent, allowed) => {
     const sessionId = String(agent?.session?.id ?? '')
-    for (const dispose of rootScopes.get(agent)?.disposers ?? []) {
+    const keep = new Set(allowed)
+    const current = rootScopes.get(agent)
+    if (current && current.allowed.size === keep.size && [...keep].every((tool) => current.allowed.has(tool))) return false
+    for (const dispose of current?.disposers ?? []) {
       // isolated: a restriction that is already gone is gone; failing here
       // would leave the session with no narrowing and no explanation.
       try {
@@ -514,7 +526,6 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         diagnostics(sessionId)?.degrade?.(`root narrowing not released: ${errorMessage(error)}`)
       }
     }
-    const keep = new Set(allowed)
     /** @type {(() => void)[]} */
     const disposers = []
     // The claim tools are the evidence writer's: without a capability of its
@@ -540,6 +551,114 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       diagnostics(sessionId)?.degrade?.(`root research-tool narrowing failed: ${errorMessage(error)}`)
     }
     rootScopes.set(agent, { disposers, allowed: keep })
+    return true
+  }
+
+  /**
+   * The manifest of a capability this root may take on itself, or null.
+   *
+   * An internal capability is dispatched by its own background workflow and
+   * is not something a conversation takes on — except in that workflow's own
+   * run, which the control plane routed to it in the context it wrote. That
+   * run does the work here now that delegation is on demand, and refusing it
+   * its method failed every distillation, relation and source-understanding
+   * run as `specialist_required_skill_missing` (production, 2026-09-21: the
+   * distiller loaded a prose-polishing skill instead and wrote no method).
+   * @param {Record<string, any>} entry @param {string} capabilityId
+   * @returns {any}
+   */
+  const inlineManifest = (entry, capabilityId) => {
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === capabilityId)
+    if (!manifest) return null
+    if (manifest.visibility === 'internal' && routedCapabilityOf(entry.contextText) !== capabilityId) return null
+    return manifest
+  }
+
+  /** @param {any} manifest @param {string} requested @returns {string} */
+  const inlineContractKind = (manifest, requested) => {
+    const kind = resolveContractKind(manifest, requested)
+    return kind.ok ? kind.contractKind : ''
+  }
+
+  /**
+   * The capability this session is working as, when there is exactly one.
+   *
+   * The plan is the model's own declaration and comes first. Before there is a
+   * plan, a session the control plane routed to a capability says so in the
+   * context block it was dispatched with, and matching that against the
+   * catalogue is a closed-vocabulary lookup (principle 5). Two capabilities
+   * named is a run that should delegate them in parallel, and neither is
+   * activated.
+   * @param {Record<string, any>} entry
+   * @returns {{ capabilityId: string, item: Record<string, any> | null } | null}
+   */
+  const boundCapability = (entry) => {
+    const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
+    if (planned.length > 1) return null
+    if (planned.length === 1) {
+      return { capabilityId: planned[0], item: entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null }
+    }
+    const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
+    return named.length === 1 ? { capabilityId: named[0], item: null } : null
+  }
+
+  /**
+   * Show this root the tools a delegated child of `manifest` would be given.
+   *
+   * Said out loud when one of the capability's own tools is still not visible
+   * afterwards. A hidden managed tool is how a routed run never started its
+   * engine while nothing recorded why (production, 2026-09-27: the model wrote
+   * that the tool "isn't in my tool list" and no job was ever issued).
+   * @param {Record<string, any>} entry @param {any} agent @param {any} manifest @param {string} contractKind
+   * @returns {boolean} whether the restriction changed
+   */
+  const grantCapabilityTools = (entry, agent, manifest, contractKind) => {
+    const scope = rootScopes.get(agent)
+    const changed = scope
+      ? applyRootNarrowing(agent, [...scope.allowed, ...delegationToolFilter(manifest, { allowBash: true, contractKind })])
+      : false
+    const unseen = (manifest.tools ?? []).filter((/** @type {string} */ tool) => !agentSeesTool(ctx, agent, tool))
+    if (unseen.length) {
+      const registered = new Set(registeredToolNames(ctx))
+      const described = unseen.map((/** @type {string} */ tool) => `${tool} (${registered.has(tool) ? 'registered, hidden from this session' : 'not registered'})`)
+      diagnostics(entry.sessionId)?.degrade?.(`capability ${manifest.id}: tools this session cannot call: ${described.join(', ')}`)
+    }
+    return changed
+  }
+
+  /**
+   * Settle the tools a root's next request carries while the kernel is still
+   * assembling it.
+   *
+   * The kernel assembles a step's tools before `agent/pre-step`, so the tools
+   * a capability's activation granted there reached the model one request
+   * late — and the first request of a bound run is the one that plans it. A
+   * session bound to research-topic-selection planned without its engine's
+   * tool, said the tool was not in its list, and never started the job
+   * (production, 2026-09-27). So the dispatch's context is read here, the
+   * capability it binds is resolved the way the step's own activation resolves
+   * it, and its tools are granted before the request exists. The method still
+   * arrives in `agent/pre-step`, with the step's other messages.
+   * @param {any} agent
+   * @returns {Promise<boolean>} whether this root's restriction changed
+   */
+  const prepareRootRequest = async (agent) => {
+    if (!agent?.session || isSubagentSession(agent)) return false
+    const entry = sessionState(String(agent.session.id ?? ''))
+    entry.assembled = true
+    try {
+      await loadBrief(ctx, agent, sessionState, config)
+      const bound = boundCapability(entry)
+      if (!bound || entry.inlineCapabilities.has(bound.capabilityId)) return false
+      const manifest = inlineManifest(entry, bound.capabilityId)
+      if (!manifest) return false
+      return grantCapabilityTools(entry, agent, manifest, inlineContractKind(manifest, bound.item?.contractKind ?? ''))
+    } catch (error) {
+      // isolated: a failure here must not fail the request; the step's own
+      // activation still grants the tools, one request later.
+      diagnostics(entry.sessionId)?.degrade?.(`capability tools not prepared before the request: ${errorMessage(error)}`)
+      return false
+    }
   }
 
   /**
@@ -561,24 +680,16 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const activateInlineCapability = async (entry, agent, capabilityId, options = {}) => {
     if (!agent || entry.subagent || !capabilityId) return false
     if (entry.inlineCapabilities.has(capabilityId)) return false
-    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === capabilityId)
-    // An internal capability is dispatched by its own background workflow and
-    // is not something a conversation takes on — except in that workflow's own
-    // run, which the control plane routed to it in the context it wrote. That
-    // run does the work here now that delegation is on demand, and refusing it
-    // its method failed every distillation, relation and source-understanding
-    // run as `specialist_required_skill_missing` (production, 2026-09-21: the
-    // distiller loaded a prose-polishing skill instead and wrote no method).
+    const manifest = inlineManifest(entry, capabilityId)
     if (!manifest) return false
-    if (manifest.visibility === 'internal' && routedCapabilityOf(entry.contextText) !== capabilityId) return false
     const item = options.item ?? null
-    const kind = resolveContractKind(manifest, options.contractKind ?? item?.contractKind ?? '')
-    const contractKind = kind.ok ? kind.contractKind : ''
+    const contractKind = inlineContractKind(manifest, options.contractKind ?? item?.contractKind ?? '')
     entry.inlineCapabilities.add(capabilityId)
     // Tools before the method: a method naming a tool the session cannot call
-    // is worse than no method at all.
-    const scope = rootScopes.get(agent)
-    if (scope) applyRootNarrowing(agent, [...scope.allowed, ...delegationToolFilter(manifest, { allowBash: true, contractKind })])
+    // is worse than no method at all. A routed session's were already granted
+    // while its first request was assembled (`prepareRootRequest`); a plan that
+    // names the capability later is what relies on this call.
+    grantCapabilityTools(entry, agent, manifest, contractKind)
     /** @type {{ name: string, body: string }[]} */
     let skillBodies = []
     try {
@@ -611,28 +722,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }
 
   /**
-   * The capability this session is working as, when there is exactly one.
-   *
-   * The plan is the model's own declaration and comes first. Before there is a
-   * plan, a session the control plane routed to a capability says so in the
-   * context block it was dispatched with, and matching that against the
-   * catalogue is a closed-vocabulary lookup (principle 5). Two capabilities
-   * named is a run that should delegate them in parallel, and neither is
-   * activated.
+   * Hand this session the method of the capability it is working as, when
+   * there is exactly one (`boundCapability`).
    * @param {Record<string, any>} entry @param {any} agent
    * @returns {Promise<void>}
    */
   const activateBoundCapability = async (entry, agent) => {
     if (!agent || entry.subagent) return
-    const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
-    if (planned.length > 1) return
-    if (planned.length === 1) {
-      const item = entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null
-      await activateInlineCapability(entry, agent, planned[0], { item, contractKind: item?.contractKind ?? '' })
-      return
-    }
-    const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
-    if (named.length === 1) await activateInlineCapability(entry, agent, named[0])
+    const bound = boundCapability(entry)
+    if (bound) await activateInlineCapability(entry, agent, bound.capabilityId, { item: bound.item, contractKind: bound.item?.contractKind ?? '' })
   }
 
   /**
@@ -719,10 +817,22 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }
 
   // ---- each dispatch context, injected as a first-class user message -------
+  //
+  // Read as early as it exists, delivered only inside a step. Session start
+  // used to inject it too, and that injection landed wherever the inbox stood
+  // when the read finished: the control plane creates the session and prompts
+  // it in two calls, so a read finishing after the first step had claimed its
+  // input put the dispatch's context — the routing sentence included — in the
+  // step after the model had already answered or planned (measured on a live
+  // kernel, 2026-09-27). `agent/pre-step` runs before every request and hands
+  // its messages to that same request, so it is the one place that delivers.
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     narrowRootTools(agent)
-    void injectBrief(ctx, agent, sessionState, config)
+    void loadBrief(ctx, agent, sessionState, config)
   }))
+
+  // ---- the tools a root's next request carries -----------------------------
+  ctx.effect(() => onPromptAssemble(ctx, prepareRootRequest))
 
   // ---- budget and the root/child verdict ----------------------------------
   ctx.effect(() => onPreStep(
@@ -764,13 +874,25 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // `?? step.agent` used to sit here. `StepInfo` carries `agentId` and no
         // `agent`, so that fallback was `undefined` every time it was reached —
         // the same never-fires shape as `ctx.get('evimedRunId')`, and just as
-        // reassuring to read. If the lookup misses, `injectBrief` must see the
-        // miss rather than a second name for the same nothing.
+        // reassuring to read. A miss is said out loud: it means this step goes
+        // to the model without the dispatch's context or the method.
         const agent = ctx.get('agents')?.get?.(step.agentId)
-        await injectBrief(ctx, agent, sessionState, config)
-        // What a delegated child would have been handed, handed to the session
-        // that is going to do the work itself.
-        await activateBoundCapability(entry, agent)
+        // The probe for the prompt-assembly seam (`prepareRootRequest`). A
+        // renamed event does not error, it just never fires, and a bound
+        // capability's tools then reach the model one request late again —
+        // exactly the defect that seam is there to prevent.
+        if (!entry.assembled) {
+          diagnostics(step.sessionId)?.degrade?.('seam silent: prompt assembly did not reach the run policy before a root step; a bound capability\'s tools arrive one request late')
+        }
+        entry.assembled = false
+        if (agent) {
+          await injectBrief(ctx, agent, sessionState, config)
+          // What a delegated child would have been handed, handed to the session
+          // that is going to do the work itself.
+          await activateBoundCapability(entry, agent)
+        } else {
+          diagnostics(step.sessionId)?.degrade?.('root step entered with no live agent for its id; its context and capability method were not handed over')
+        }
       }
       // Native UI input has no control-plane brief. Give its root workflow a
       // stable name at the first real step, after an ordinary dispatch has had
@@ -2455,12 +2577,41 @@ async function readDeliverableFiles(ctx, cwd, deliverableId, expectedOutputs, co
 }
 
 /**
+ * Read the dispatch's current context revision into the session's state, and
+ * hand it to the step that is entering (`deliverBrief`).
  * @param {any} ctx @param {any} agent
  * @param {(sessionId: string) => Record<string, any>} sessionState
  * @param {Record<string, any>} config
  * @returns {Promise<void>}
  */
 async function injectBrief(ctx, agent, sessionState, config) {
+  await loadBrief(ctx, agent, sessionState, config)
+  deliverBrief(agent, sessionState(String(agent?.session?.id ?? '')))
+}
+
+/**
+ * The context block read for this session and not yet in front of the model,
+ * as a message of the step that is entering. Called from `agent/pre-step`
+ * only, where `injectContext` adds to that step's own messages.
+ * @param {any} agent @param {Record<string, any>} entry
+ */
+function deliverBrief(agent, entry) {
+  const text = entry.pendingContext
+  if (!text) return
+  entry.pendingContext = null
+  injectContext(agent, text, 'evimed-run-policy')
+}
+
+/**
+ * Read the dispatch's current context revision into the session's state,
+ * without delivering it. De-duplicated: concurrent callers share one read, and
+ * a revision already read is not read again.
+ * @param {any} ctx @param {any} agent
+ * @param {(sessionId: string) => Record<string, any>} sessionState
+ * @param {Record<string, any>} config
+ * @returns {Promise<void>}
+ */
+async function loadBrief(ctx, agent, sessionState, config) {
   const sessionId = String(agent?.session?.id ?? '')
   const entry = sessionState(sessionId)
   if (isSubagentSession(agent)) {
@@ -2470,7 +2621,7 @@ async function injectBrief(ctx, agent, sessionState, config) {
     ctx.get('evimedRun')?.sessionRuns?.set?.(sessionId, entry.runId)
   }
   if (entry.contextInjection) return entry.contextInjection
-  entry.contextInjection = injectBriefRevision(ctx, agent, entry, config)
+  entry.contextInjection = loadBriefRevision(ctx, agent, entry, config)
   try {
     await entry.contextInjection
   } finally {
@@ -2483,7 +2634,7 @@ async function injectBrief(ctx, agent, sessionState, config) {
  * @param {Record<string, any>} config
  * @returns {Promise<void>}
  */
-async function injectBriefRevision(ctx, agent, entry, config) {
+async function loadBriefRevision(ctx, agent, entry, config) {
   const sessionId = String(agent?.session?.id ?? '')
   const cwd = String(agent?.session?.header?.cwd ?? '')
   entry.cwd = cwd
@@ -2581,8 +2732,9 @@ async function injectBriefRevision(ctx, agent, entry, config) {
   // injectable parts is still a run, and the control plane still needs to be
   // able to see it.
   await putRunMirror(ctx, entry, config.bundleVersion)
-  if (!parts.length) return
-  injectContext(agent, parts.join('\n\n'), 'evimed-run-policy')
+  // The newest revision's block, for the next step to carry (`deliverBrief`).
+  // One the model never saw is superseded, not queued behind it.
+  entry.pendingContext = parts.length ? parts.join('\n\n') : null
 }
 
 /** Reset only state owned by one ledger run; the session and in-flight

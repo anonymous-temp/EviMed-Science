@@ -524,6 +524,65 @@ export function onPreStep(ctx, fn, classify) {
 }
 
 /**
+ * Prompt assembly (`system-prompt/assemble`): the last awaited point before a
+ * step's tool list is final.
+ *
+ * The kernel assembles a step's prompt and tools, then runs `agent/pre-step`,
+ * then sends the request with the tools it assembled. A restriction lifted in
+ * `agent/pre-step` therefore reaches the model one request late — for a first
+ * request, after the model has already decided what it can call (2026-09-27: a
+ * session bound to a capability was never shown the capability's own tool on
+ * the request that planned the run). `fn` runs here instead, awaited, for every
+ * assembly that belongs to an agent. When it reports that it changed that
+ * agent's tool restrictions, the tools the agent now sees and this assembly
+ * lacks are added to it, in the kernel's own name order, so this request
+ * carries them.
+ *
+ * Only adds. A tool a restriction removed here stays in this one request and
+ * is gone from the next, and the registry refuses to execute it meanwhile. An
+ * assembly presented through `run_code` is left alone: its tools are not
+ * native schemas.
+ * @param {any} ctx
+ * @param {(agent: any) => Promise<boolean> | boolean} fn resolves true when it changed the agent's restrictions
+ * @returns {() => void}
+ */
+export function onPromptAssemble(ctx, fn) {
+  return ctx.on(SEAMS.events.promptAssemble, async (/** @type {any} */ assembly, /** @type {any} */ context, /** @type {any} */ next) => {
+    const agent = context?.agent
+    if (agent && await fn(agent)) addVisibleTools(ctx, assembly, agent)
+    return next()
+  })
+}
+
+/**
+ * Add to an assembly the tools the registry shows `agent` and the assembly
+ * does not carry, each at its place in code-unit name order — the order the
+ * kernel itself sorts unlisted tools into, so the next step's assembly is the
+ * same list and the request series does not restart.
+ * @param {any} ctx @param {any} assembly @param {any} agent
+ * @returns {string[]} the names added
+ */
+function addVisibleTools(ctx, assembly, agent) {
+  const registry = ctx?.get?.('tools') ?? ctx?.tools
+  if (typeof registry?.schemas !== 'function' || !Array.isArray(assembly?.tools)) return []
+  if (assembly.tools.some((/** @type {any} */ tool) => tool?.name === 'run_code')) return []
+  const present = new Set(assembly.tools.map((/** @type {any} */ tool) => String(tool?.name ?? '')))
+  const tools = [...assembly.tools]
+  /** @type {string[]} */
+  const added = []
+  for (const schema of registry.schemas(agent)) {
+    const name = String(schema?.name ?? '')
+    if (!name || present.has(name)) continue
+    const at = tools.findIndex((/** @type {any} */ tool) => String(tool?.name ?? '') > name)
+    tools.splice(at < 0 ? tools.length : at, 0, { name, description: schema.description, parameters: schema.parameters })
+    present.add(name)
+    added.push(name)
+  }
+  if (added.length) assembly.tools = tools
+  return added
+}
+
+/**
  * Last chance to push one more step before a turn closes.
  * @param {any} ctx
  * @param {(agent: any, turn: number) => Promise<void> | void} fn

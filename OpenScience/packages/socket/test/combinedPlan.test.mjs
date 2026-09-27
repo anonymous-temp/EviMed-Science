@@ -389,7 +389,13 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
     tokenFile: "",
     revisionAuthorizeTimeoutMs: 1000,
   });
+  // The kernel's order: the step's prompt and tools are assembled, then the
+  // step is admitted.
   const step = async (/** @type {number} */ turn) => {
+    const assembly = { sections: [], contexts: [], tools: [], variables: {} };
+    for (const handler of ctx.listeners.get(SEAMS.events.promptAssemble) ?? []) {
+      await handler(assembly, { agent, scope: agent }, async () => assembly);
+    }
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
       await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
     }

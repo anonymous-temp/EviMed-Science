@@ -27,6 +27,7 @@
     "sessionEvent": "session/event",
     "sessionStart": "agent/session-start",
     "preStep": "agent/pre-step",
+    "promptAssemble": "system-prompt/assemble",
     "turnStopping": "agent/turn-stopping",
     "domainChanged": "domain/changed"
   },

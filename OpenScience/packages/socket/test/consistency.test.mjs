@@ -771,6 +771,9 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   const files = new Map();
   /** @type {any[]} */
   const injected = [];
+  /** What went to the agent's inbox outside a step — delivered to whichever
+   *  step claims it next, not to the step that was entering. @type {any[]} */
+  const inbox = [];
   /** Every tool restriction this session was narrowed by, in order. @type {any[]} */
   const filters = [];
   const agent = {
@@ -779,7 +782,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     // The root's own scope, as the registry gives it: a restriction is a
     // disposer, and widening it again is disposing and re-applying.
     ctx: { tools: { restrict: (/** @type {any} */ filter) => { filters.push(filter); return () => { filter.disposed = true; }; } } },
-    inject: (/** @type {any} */ message) => injected.push(message),
+    inject: (/** @type {any} */ message) => { injected.push(message); inbox.push(message); },
   };
   ctx.provide("agents", { get: () => agent });
   ctx.provide("evimedRun", {
@@ -810,14 +813,47 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
     listDir: async (/** @type {string} */ target) => (target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : []),
   });
-  if (registered) /** @type {any} */ (ctx.tools).schemas = () => registered.map((name) => ({ name }));
+  /**
+   * What one scope sees, as the registry resolves it: every registered tool,
+   * less what a live restriction on this agent's own scope takes away.
+   * @param {any} scope @returns {string[]}
+   */
+  const visibleTo = (scope) => (registered ?? []).filter((name) => scope !== agent || filters.every((filter) => filter.disposed
+    || ((!filter.allow || filter.allow.includes(name)) && !(filter.deny ?? []).includes(name))));
+  if (registered) {
+    /** @type {any} */ (ctx.tools).schemas = (/** @type {any} */ scope) => visibleTo(scope).map((name) => ({ name, description: `${name}.`, parameters: {} }));
+    /** @type {any} */ (ctx.tools).get = (/** @type {string} */ name, /** @type {any} */ scope) => (visibleTo(scope).includes(name) ? { name } : undefined);
+  }
   await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000, skillsDir: "/skills", reviewEnabled, reviewPollMs: 10, reviewWaitMs: 3000 });
   const start = () => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
-  const step = async (/** @type {number} */ turn) => {
+  /** Each model request, as the kernel builds it: the tools the assembly
+   *  carried and the messages the entering step was handed.
+   *  @type {{ tools: string[], messages: any[] }[]} */
+  const requests = [];
+  /**
+   * One step in the kernel's order (dsh-agent-loop `preStep`): the prompt and
+   * its tools are assembled from the agent's view as it stands, the assembly
+   * waterfall runs, and only then is the step admitted and handed its
+   * messages. `assemblyTick` lets the timers run between the two, as the
+   * kernel's own awaits do.
+   * @param {number} turn @param {{ assemblyTick?: boolean }} [options]
+   */
+  const step = async (turn, { assemblyTick = false } = {}) => {
+    // Sorted by code-unit name, as the kernel orders tools no `toolOrder` lists.
+    const tools = registered ? /** @type {any[]} */ (/** @type {any} */ (ctx.tools).schemas(agent)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) : [];
+    const assembly = { sections: [], contexts: [], tools, variables: {} };
+    for (const handler of ctx.listeners.get(SEAMS.events.promptAssemble) ?? []) {
+      await handler(assembly, { agent, scope: agent }, async () => assembly);
+    }
+    if (assemblyTick) await new Promise((resolve) => setTimeout(resolve, 5));
+    /** @type {any[]} */
+    const messages = [];
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
       const decision = await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
-      if (decision?.kind === "enter") injected.push(...(decision.messages ?? []));
+      if (decision?.kind === "enter") messages.push(...(decision.messages ?? []));
     }
+    injected.push(...messages);
+    requests.push({ tools: assembly.tools.map((/** @type {any} */ tool) => tool.name), messages });
   };
   const execute = (/** @type {string} */ name, /** @type {any} */ args, /** @type {Record<string, any>} */ extra = {}) => ctx.tools.execute({ agent, name, callId: `call-${name}`, arguments: args, signal: AbortSignal.timeout(2000), ...extra });
   // The end of a turn is the end of the run (2026-09-20): the delivery summary
@@ -829,7 +865,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     }
     for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   };
-  return { ctx, rows, childRows, files, injected, filters, agent, step, start, execute, endTurn };
+  return { ctx, rows, childRows, files, injected, inbox, requests, filters, agent, step, start, execute, endTurn };
 }
 
 test("each session-scoped dispatch revision is logged once before its model step", async () => {
@@ -1432,6 +1468,107 @@ test("a session that does the work itself is handed the capability's method, its
     deliverables: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综合（修订）", dependsOn: [] }],
   });
   assert.deepEqual(injectedSkills, ["clinical-evidence-synthesis"]);
+});
+
+/** A routed capability with a managed engine tool, as its manifest reads. */
+const TOPIC_CAPABILITY = Object.freeze({
+  id: "research-topic-selection",
+  skills: ["research-topic-selection"],
+  tools: ["mcp__evimed__research_topic_selection", "mcp__evimed__literature_search"],
+  persona: "你是科研选题分析师。",
+  produces: [{ contractKind: "research-topic-report", outputs: [{ path: "research-topic-report.md", required: true }] }],
+});
+
+/** Write one session-scoped dispatch the way the control plane does before it
+ *  creates and prompts the session. @param {any} f @param {string} context */
+function dispatchContext(f, context) {
+  const root = "/workspace/.evimed-brief/sessions/native-session";
+  f.files.set(`${root}/index.json`, JSON.stringify({ runId: "run_dispatched", contextRevision: "req_1" }));
+  f.files.set(`${root}/context.md`, context);
+}
+
+/** @param {any[]} messages */
+const messageText = (messages) => messages.map((message) => message?.content?.[0]?.text ?? "").join("\n");
+
+test("a session bound to a capability carries that capability's tools on its first request; a plain session does not", async () => {
+  // 2026-09-27, production: a session bound to research-topic-selection wrote
+  // "run the specialist job (mcp__evimed__research_topic_selection) — wait,
+  // that tool isn't in my tool list", planned without it, and the engine job
+  // was never issued. The kernel assembles a step's tools BEFORE
+  // `agent/pre-step`, where the capability's tools were granted, so the grant
+  // reached the model one request late — after the request that planned the run.
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const managed = "mcp__evimed__research_topic_selection";
+  const registered = [...mcpNames, "bash", "read", "skill"];
+  const skills = { "research-topic-selection": "# 科研选题\n先启动专项任务，再补充检索。\n" };
+
+  const bound = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+  dispatchContext(bound, "平台已根据当前问题确定性路由到专项能力：research-topic-selection（research-topic-selection）。\n");
+  bound.start();
+  assert.ok(!/** @type {any} */ (bound.ctx.tools).schemas(bound.agent).some((/** @type {any} */ tool) => tool.name === managed),
+    "narrowed at session start: the engine's tool starts out hidden from the root");
+  await bound.step(1);
+  const [first] = bound.requests;
+  assert.ok(first.tools.includes(managed), `the first request carries the capability's own tool: ${JSON.stringify(first.tools)}`);
+  assert.ok(!first.tools.includes("mcp__evimed__comprehensive_drug_evaluation"), "and nothing the capability did not ask for");
+  assert.deepEqual(first.tools, [...first.tools].sort(), "in the kernel's own name order");
+  assert.match(messageText(first.messages), /<evimed-method capability="research-topic-selection">/, "the method arrives with the same request");
+  await bound.step(1);
+  assert.deepEqual(bound.requests[1].tools, first.tools, "the next request carries the same list, so the request series does not restart");
+
+  const plain = await nativePolicyFixture({ registered, capabilities: [TOPIC_CAPABILITY], skills });
+  dispatchContext(plain, "本轮未命中确定性专项路由，由开放域答问主路处理。\n");
+  plain.start();
+  await plain.step(1);
+  assert.ok(!plain.requests[0].tools.includes(managed), "a plain question stays light (principle 12)");
+  assert.equal(plain.filters.filter((/** @type {any} */ filter) => filter.disposed).length, 0, "and its narrowing is never lifted");
+});
+
+test("the dispatch's context reaches the first request even when its read finishes while that request is assembled", async () => {
+  // Measured on a live kernel (2026-09-27): session start read the context and
+  // injected it into the inbox. The control plane creates the session and
+  // prompts it in two calls, so the read finished after the first step had
+  // claimed its input, and the routing sentence reached the model one step
+  // after it had already answered or planned.
+  const f = await nativePolicyFixture();
+  dispatchContext(f, "平台已根据当前问题确定性路由到专项能力：research-brief（research-brief）。\n");
+  f.start();
+  await f.step(1, { assemblyTick: true });
+  assert.match(messageText(f.requests[0].messages), /确定性路由到专项能力：research-brief/, "the context is part of the first request");
+  assert.deepEqual(f.inbox, [], "nothing is left in the inbox for a later step");
+  await f.step(1);
+  assert.doesNotMatch(messageText(f.requests[1].messages), /确定性路由到专项能力/, "and it is delivered once");
+});
+
+test("a capability's tools that stay out of reach, a silent assembly seam and a missing agent are each said out loud", async () => {
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const capability = { ...TOPIC_CAPABILITY, tools: [...TOPIC_CAPABILITY.tools, "mcp__evimed__engine_not_offered_here"] };
+  const f = await nativePolicyFixture({ registered: [...mcpNames, "bash", "read", "skill"], capabilities: [capability], skills: { "research-topic-selection": "# 科研选题\n" } });
+  /** @type {string[]} */
+  const degraded = [];
+  f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  dispatchContext(f, "平台已根据当前问题确定性路由到专项能力：research-topic-selection（research-topic-selection）。\n");
+  f.start();
+  await f.step(1);
+  assert.ok(degraded.some((line) => line.includes("mcp__evimed__engine_not_offered_here (not registered)")),
+    `a manifest tool the server does not offer is named: ${JSON.stringify(degraded)}`);
+  assert.ok(!degraded.some((line) => line.includes("mcp__evimed__research_topic_selection")), "the granted one is not");
+  assert.ok(!degraded.some((line) => /seam silent/.test(line)), "the assembly seam ran before the step");
+
+  // A kernel whose assembly event no longer reaches the plugin: the step is
+  // still admitted, and the run says its tools will be a request late.
+  for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+    await handler({ agent: f.agent, turn: 2, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+  }
+  assert.ok(degraded.some((line) => /seam silent: prompt assembly/.test(line)), `a silent seam is named: ${JSON.stringify(degraded)}`);
+
+  // A root step whose agent the registry cannot find goes to the model without
+  // its context or method; that used to be a silent no-op.
+  f.ctx.provide("agents", { get: () => undefined });
+  for (const handler of f.ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+    await handler({ agent: f.agent, turn: 3, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+  }
+  assert.ok(degraded.some((line) => /no live agent for its id/.test(line)), `a missing agent is named: ${JSON.stringify(degraded)}`);
 });
 
 test("two capabilities in one plan are delegations, not an inline method", async () => {
