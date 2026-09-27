@@ -295,6 +295,18 @@ export async function removeGeoScreenshotFiles(dataDir, shas, report = () => {})
   return removed;
 }
 
+/**
+ * The expectations of a new strategy version: the previous ones, each
+ * engine's replaced by the write's entry for it when it has one.
+ * @param {unknown} previous @param {unknown} given @returns {any[] | null}
+ */
+export function mergedExpectations(previous, given) {
+  const before = Array.isArray(previous) ? previous.filter((entry) => entry && typeof entry === "object") : [];
+  if (!Array.isArray(given)) return before.length ? before : null;
+  const engines = new Set(given.map((entry) => entry?.engine));
+  return [...before.filter((entry) => !engines.has(entry.engine)), ...given];
+}
+
 /** Whitespace-folded text, for deciding whether a claim changed. @param {unknown} value */
 const folded = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
@@ -646,19 +658,28 @@ export class GeoStore {
   }
 
   /**
+   * The next strategy version: the latest one with what this write carries
+   * laid over it. A field the write does not carry keeps its value (G4,
+   * 2026-09-26: every write used to be a version of only its own fields, so
+   * a write of the sources alone left a version with no battlefield and no
+   * expectations — and the page and the program read only the latest).
+   * Expectations are laid over per engine: a write about two engines leaves
+   * the others' as they were.
    * @param {string} userId @param {string} geoId
    * @param {{ battlefield?: any, expectations?: any, gaps?: any, layout?: any, summary?: string | null, runId?: string | null }} fields
    */
   async writeStrategy(userId, geoId, fields) {
     return this.transaction(async (client) => {
       await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-doc:strategy:' || $1))`, [geoId]);
-      const version = Number((await client.query(`SELECT coalesce(max(version), 0) + 1 AS next FROM evimed_geo.strategy
-        WHERE geo_project_id = $1`, [geoId])).rows[0].next);
+      const latest = (await client.query(`SELECT * FROM evimed_geo.strategy WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoId])).rows[0] ?? null;
+      const version = Number(latest?.version ?? 0) + 1;
       const json = (/** @type {unknown} */ value) => (value === undefined || value === null ? null : JSON.stringify(value));
+      const carried = (/** @type {"battlefield" | "gaps" | "layout"} */ key) => (fields[key] !== undefined ? fields[key] : latest?.[key] ?? null);
+      const expectations = mergedExpectations(latest?.expectations ?? null, fields.expectations);
       await client.query(`INSERT INTO evimed_geo.strategy (geo_project_id, version, user_id, battlefield, expectations, gaps, layout, summary, run_id)
         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)`,
-      [geoId, version, userId, json(fields.battlefield), json(fields.expectations), json(fields.gaps), json(fields.layout),
-        fields.summary ?? null, fields.runId ?? null]);
+      [geoId, version, userId, json(carried("battlefield")), json(expectations), json(carried("gaps")), json(carried("layout")),
+        fields.summary !== undefined ? fields.summary : text(latest?.summary), fields.runId ?? null]);
       return { version };
     });
   }
@@ -794,6 +815,29 @@ export class GeoStore {
       }
       return ids;
     });
+  }
+
+  /**
+   * A correction article registered for errors: each open error of the
+   * project it names gets the article as material (once — a second
+   * registration of the same article adds nothing) and moves from 待处理 to
+   * 处置中 (`acting`). A closed error is left alone: it reopens only when an
+   * engine says it again. Returns the errors that took the material.
+   * @param {string} geoId @param {string[]} errorIds
+   * @param {{ articleId: string, path: string, layer: string, title: string | null, runId: string | null }} material
+   * @returns {Promise<string[]>}
+   */
+  async attachCorrection(geoId, errorIds, material) {
+    if (!errorIds.length) return [];
+    const entry = { kind: "article", ...material, at: new Date().toISOString() };
+    const result = await this.query(`UPDATE evimed_geo.errors
+      SET materials = coalesce(materials, '[]'::jsonb) || jsonb_build_array($3::jsonb),
+          status = CASE WHEN status = 'open' THEN 'acting' ELSE status END,
+          updated_at = now()
+      WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND status <> 'closed'
+        AND NOT (coalesce(materials, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('articleId', $4::text)))
+      RETURNING id`, [geoId, [...new Set(errorIds)], JSON.stringify(entry), material.articleId]);
+    return result.rows.map((/** @type {any} */ row) => String(row.id));
   }
 
   /**

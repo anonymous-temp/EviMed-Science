@@ -452,6 +452,13 @@ export function articleProblems(article) {
  * Why an outlet may not carry an article (empty = admitted): the three
  * conditions, the blacklist, the price cap, the same-domain cap, an unknown
  * order on the outlet.
+ *
+ * The three conditions are the project's own checks, recorded on its source
+ * table by the strategy run — ICP holder matches, indexed as news, a medical
+ * vertical — and all three must hold (the method's 「与关系」). A condition
+ * nobody checked is not a condition met (G3, 2026-09-26: 963 sources, none
+ * checked, and the vendor's category label stood in for our check): the
+ * vendor's own category says only what the vendor files the outlet under.
  * @param {any} media
  * @param {{ source?: any, domainCount?: number, outletBlocked?: boolean }} context
  */
@@ -464,12 +471,14 @@ export function outletProblems(media, { source = null, domainCount = 0, outletBl
   else if (media.priceCny > MARKET_RULES.autoSelectMaxPriceCny) problems.push("price_above_auto_cap");
   if (!media.domain) problems.push("domain_unknown");
   else if (media.domainVerified !== true) problems.push("domain_unverified");
-  if (source?.icpMatches === false) problems.push("icp_mismatch");
   if (source?.impostor || source?.blacklistReason) problems.push("impostor");
-  const newsIndexed = source?.newsIndexed === false ? false : source?.newsIndexed === true || media.flags?.newsSourceCategory === true;
-  if (!newsIndexed) problems.push("not_news_indexed");
-  const medical = source?.medicalVertical === false ? false : source?.medicalVertical === true || media.flags?.medicalCategory === true;
-  if (!medical) problems.push("not_medical");
+  const condition = (/** @type {unknown} */ value, /** @type {string} */ failed, /** @type {string} */ unchecked) => {
+    if (value === false) problems.push(failed);
+    else if (value !== true) problems.push(unchecked);
+  };
+  condition(source?.icpMatches, "icp_mismatch", "icp_unchecked");
+  condition(source?.newsIndexed, "not_news_indexed", "news_unchecked");
+  condition(source?.medicalVertical, "not_medical", "medical_unchecked");
   if (domainCount >= MARKET_RULES.sameDomainMaxPerWindow) problems.push("domain_cap_reached");
   if (outletBlocked) problems.push("outlet_unknown_order");
   return problems;
@@ -1407,7 +1416,7 @@ async function verifyOrder(ctx, order, checkpoint, counts) {
   if (failure) {
     counts.failed += 1;
     const info = failure === "text_changed"
-      ? `发布正文与交稿不一致：${check.missing.slice(0, 8).map((item) => `「${item.text}」`).join("、")}`.slice(0, 900)
+      ? `发布正文与交稿不一致：${check.missing.slice(0, 8).map((item) => `“${item.text}”`).join("、")}`.slice(0, 900)
       : failure === "domain_mismatch" ? `发布链接不在该媒体的域名 ${media?.domain ?? ""} 上：${check.finalUrl ?? order.publishedUrl}` : "时效内链接打不开";
     const appeal = await fileAppeal(ctx, order, failure, info, checkpoint);
     if (appeal.result === "filed") counts.appeals += 1;

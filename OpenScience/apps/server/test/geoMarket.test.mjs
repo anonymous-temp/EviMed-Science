@@ -65,21 +65,26 @@ test("the catalogue's own words: blacklist rules and remark flags", () => {
 });
 
 test("admission: the three conditions, the blacklist, the price and domain caps, an unknown order", () => {
-  assert.deepEqual(outletProblems(admitted), []);
-  assert.deepEqual(outletProblems({ ...admitted, priceCny: 2000 }), [], "the cap itself is allowed");
-  assert.deepEqual(outletProblems({ ...admitted, priceCny: 2000.01 }), ["price_above_auto_cap"]);
-  assert.deepEqual(outletProblems({ ...admitted, domainVerified: null }), ["domain_unverified"]);
-  assert.deepEqual(outletProblems({ ...admitted, flags: { medicalCategory: false, newsSourceCategory: true } }), ["not_medical"]);
-  assert.deepEqual(outletProblems({ ...admitted, flags: { medicalCategory: true } }), ["not_news_indexed"]);
-  assert.deepEqual(outletProblems({ ...admitted, flags: {} }, { source: { newsIndexed: true, medicalVertical: true } }), [], "the source table can supply both");
-  assert.deepEqual(outletProblems(admitted, { source: { newsIndexed: false } }), ["not_news_indexed"], "our own check outranks the vendor's label");
-  assert.deepEqual(outletProblems(admitted, { source: { icpMatches: false } }), ["icp_mismatch"]);
-  assert.deepEqual(outletProblems(admitted, { source: { impostor: true } }), ["impostor"]);
-  assert.deepEqual(outletProblems(admitted, { domainCount: 1 }), []);
-  assert.deepEqual(outletProblems(admitted, { domainCount: 2 }), ["domain_cap_reached"]);
-  assert.deepEqual(outletProblems(admitted, { outletBlocked: true }), ["outlet_unknown_order"]);
-  assert.deepEqual(outletProblems({ ...admitted, blacklisted: true, blacklistReason: "contact_allowed" }), ["blacklisted:contact_allowed"]);
-  assert.deepEqual(outletProblems({ ...admitted, available: false }), ["media_unavailable"]);
+  // The project's own check of the three conditions, as the strategy run records it.
+  const checked = { icpMatches: true, newsIndexed: true, medicalVertical: true };
+  const ok = (/** @type {any} */ media, /** @type {any} */ context = {}) => outletProblems(media, { source: checked, ...context });
+  assert.deepEqual(ok(admitted), []);
+  assert.deepEqual(ok({ ...admitted, priceCny: 2000 }), [], "the cap itself is allowed");
+  assert.deepEqual(ok({ ...admitted, priceCny: 2000.01 }), ["price_above_auto_cap"]);
+  assert.deepEqual(ok({ ...admitted, domainVerified: null }), ["domain_unverified"]);
+  // A condition nobody checked is not met: the vendor's category says only how the vendor files the outlet (G3).
+  assert.deepEqual(outletProblems(admitted), ["icp_unchecked", "news_unchecked", "medical_unchecked"]);
+  assert.deepEqual(outletProblems(admitted, { source: { newsIndexed: true, medicalVertical: true } }), ["icp_unchecked"]);
+  assert.deepEqual(outletProblems({ ...admitted, flags: {} }, { source: checked }), [], "the source table's check is what admits");
+  assert.deepEqual(ok(admitted, { source: { ...checked, newsIndexed: false } }), ["not_news_indexed"], "our own check outranks the vendor's label");
+  assert.deepEqual(ok(admitted, { source: { ...checked, icpMatches: false } }), ["icp_mismatch"]);
+  assert.deepEqual(ok(admitted, { source: { ...checked, medicalVertical: false } }), ["not_medical"]);
+  assert.deepEqual(ok(admitted, { source: { ...checked, impostor: true } }), ["impostor"]);
+  assert.deepEqual(ok(admitted, { domainCount: 1 }), []);
+  assert.deepEqual(ok(admitted, { domainCount: 2 }), ["domain_cap_reached"]);
+  assert.deepEqual(ok(admitted, { outletBlocked: true }), ["outlet_unknown_order"]);
+  assert.deepEqual(ok({ ...admitted, blacklisted: true, blacklistReason: "contact_allowed" }), ["blacklisted:contact_allowed"]);
+  assert.deepEqual(ok({ ...admitted, available: false }), ["media_unavailable"]);
 
   assert.deepEqual(articleProblems(article), []);
   assert.deepEqual(articleProblems({ ...article, safety: "released" }), []);

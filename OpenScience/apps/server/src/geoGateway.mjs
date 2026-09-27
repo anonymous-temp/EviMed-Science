@@ -264,7 +264,7 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       } else {
         const request = socialRequest(body);
         if (!geo.social?.configured) {
-          throw gatewayError(503, "social_posts_unconfigured", "The social channel is not configured on this deployment; say 「无信号」 for real phrasings, never zero.");
+          throw gatewayError(503, "social_posts_unconfigured", "The social channel is not configured on this deployment; say “无信号” for real phrasings, never zero.");
         }
         budget = Math.max(budgetMs, Number(config.geoSocialTimeoutMs ?? 120_000) + 5_000);
         work = async () => ({ query: request.query, sort: request.sort, ...(await geo.social.search(request)) });

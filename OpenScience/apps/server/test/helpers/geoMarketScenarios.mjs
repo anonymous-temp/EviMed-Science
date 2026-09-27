@@ -155,12 +155,21 @@ export async function world(makeFixture, { catalogue = standardCatalogue(), bala
    * A GEO project with a budget and one publishable article per entry.
    * @param {{ id?: string, userId?: string, totalCny?: number, dailyCny?: number, articles?: Array<Record<string, any>>, engines?: string[] }} [spec]
    */
-  const project = async ({ id = "geo_p1", userId = "u1", totalCny = 1_000, dailyCny = 1_000, articles = [{}], engines = ["deepseek", "doubao"] } = {}) => {
+  /**
+   * `checked`: the outlet domains whose three conditions the project's source
+   * table has checked and found to hold, beside jksb.com.cn (the market admits
+   * no other).
+   */
+  const project = async ({ id = "geo_p1", userId = "u1", totalCny = 1_000, dailyCny = 1_000, articles = [{}], engines = ["deepseek", "doubao"],
+    checked = ["smjk.cn", "health-b.com"] } = {}) => {
     await fixture.seed.project({ id, userId, engines, product: { brandName: "诺和泰", genericName: "司美格鲁肽" }, createdAt: clock.now().toISOString() });
     await fixture.seed.group({ id: `${id}_g1`, userId, geoProjectId: id, pool: "P2", name: "用法", isControl: false });
     // The project's source table has seen DeepSeek cite this domain: it is the outlet to beat.
     await fixture.seed.source({ geoProjectId: id, domain: "jksb.com.cn", layer: "coverage", icpMatches: true, newsIndexed: true,
       medicalVertical: true, cited: { deepseek: { P2: 5 } } });
+    for (const domain of checked) {
+      await fixture.seed.source({ geoProjectId: id, domain, layer: "coverage", icpMatches: true, newsIndexed: true, medicalVertical: true });
+    }
     await fixture.seed.group({ id: `${id}_gc`, userId, geoProjectId: id, pool: "P2", name: "对照", isControl: true });
     const ids = [];
     for (const [index, spec] of articles.entries()) {
@@ -278,10 +287,10 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.ok(planned.every((order) => order.articleId !== `${p.id}_a4` && order.articleId !== `${p.id}_a5`));
 
       // Where only one domain qualifies, it takes two articles in 30 days and no third.
-      const capped = await w.project({ id: "geo_cap", userId: "u9", totalCny: 2_000, dailyCny: 2_000, articles: [{}, {}, {}] });
-      for (const domain of ["smjk.cn", "health-b.com"]) {
-        await w.fixture.seed.source({ geoProjectId: capped.id, domain, layer: "coverage", newsIndexed: false });
-      }
+      const capped = await w.project({ id: "geo_cap", userId: "u9", totalCny: 2_000, dailyCny: 2_000, articles: [{}, {}, {}], checked: [] });
+      await w.fixture.seed.source({ geoProjectId: capped.id, domain: "smjk.cn", layer: "coverage", icpMatches: true, newsIndexed: false, medicalVertical: true });
+      // Checked on two conditions, the third never: not admitted either.
+      await w.fixture.seed.source({ geoProjectId: capped.id, domain: "health-b.com", layer: "coverage", icpMatches: true, newsIndexed: true });
       const cappedTick = await tickOrders(w.deps);
       const cappedOrders = await orders(store, capped.id);
       assert.equal(cappedOrders.length, 2);

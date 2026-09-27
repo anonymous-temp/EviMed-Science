@@ -35,9 +35,10 @@
  */
 
 import {
-  GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_ENGINES, GEO_GAP_CLASSES,
+  GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
+  GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
   GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS, GEO_RX_CLASSES, GEO_SOURCE_KINDS,
-  GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath,
+  GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath,
   geoConstant } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
@@ -237,15 +238,24 @@ function notAnObject(item, index, issues) {
 
 const PRODUCT_TEXT_FIELDS = Object.freeze({ brandName: 80, genericName: 120, approvalNo: 60, holder: 120, form: 60, strength: 120,
   indication: 4000, labelRef: 500 });
-const PRODUCT_LIST_FIELDS = Object.freeze({ aliases: [30, 80], misspellings: [30, 80] });
-const COMPETITOR_FIELDS = Object.freeze(["brandName", "genericName", "aliases", "holder", "indication", "reason"]);
+const PRODUCT_LIST_FIELDS = Object.freeze({ aliases: [30, 80], misspellings: [30, 80], genericAliases: [10, 80] });
+const COMPETITOR_FIELDS = Object.freeze(["brandName", "genericName", "aliases", "genericAliases", "singleSource", "holder", "indication", "reason"]);
+/**
+ * The identity a measurement counts by (SPEC §2.1): what an answer may call
+ * the product, how it is misspelled, the approval number that tells one
+ * holder's product from another's, prescription or not, and whether the
+ * identity is confirmed. Missing after a write is a notice, not a refusal —
+ * the rest of the identity is still written.
+ */
+export const GEO_IDENTITY_FIELDS = Object.freeze(["aliases", "misspellings", "approvalNo", "rx", "identityStatus", "singleSource"]);
 
 /** @param {Record<string, any>} data @param {GeoIssue[]} issues */
 function validatedProduct(data, issues) {
   /** @type {Record<string, any>} */
   const product = {};
   const read = fields(data, issues, {});
-  const allowed = [...Object.keys(PRODUCT_TEXT_FIELDS), ...Object.keys(PRODUCT_LIST_FIELDS), "rx", "tcm", "variants", "identityStatus", "competitors"];
+  const allowed = [...Object.keys(PRODUCT_TEXT_FIELDS), ...Object.keys(PRODUCT_LIST_FIELDS), "rx", "tcm", "variants", "identityStatus", "singleSource",
+    "competitors"];
   read.unknown(allowed);
   for (const [field, max] of Object.entries(PRODUCT_TEXT_FIELDS)) {
     if (!(field in data)) continue;
@@ -264,6 +274,12 @@ function validatedProduct(data, issues) {
   if ("tcm" in data) {
     const tcm = read.flag("tcm");
     if (tcm !== undefined) product.tcm = tcm;
+  }
+  // Whether one approved holder markets the generic: then the generic name
+  // counts as a mention of this product (`geoParse.countedNames`).
+  if ("singleSource" in data) {
+    const single = read.flag("singleSource");
+    if (single !== undefined) product.singleSource = single;
   }
   if ("identityStatus" in data) {
     const status = read.word("identityStatus", GEO_IDENTITY_STATUSES);
@@ -293,6 +309,7 @@ function validatedProduct(data, issues) {
         // rival only by a registered name.
         const competitor = {
           brandName: item.text("brandName", 80), genericName: item.text("genericName", 120), aliases: item.texts("aliases", 10, 80) ?? [],
+          genericAliases: item.texts("genericAliases", 10, 80) ?? [], singleSource: item.flag("singleSource") ?? null,
           holder: item.text("holder", 120), indication: item.text("indication", 1000, { multiline: true }), reason: item.text("reason", 300),
         };
         if (!competitor.brandName && !competitor.genericName) item.refuse("brandName", "missing", "A competitor needs a brand or generic name.");
@@ -353,8 +370,25 @@ function validatedClaims(items, issues) {
 const GROUP_FIELDS = Object.freeze(["pool", "name", "typicalQuestion", "journeyStage", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
 const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured"]);
 
-/** @param {Record<string, any>} data @param {GeoIssue[]} issues */
-function validatedGroups(data, issues) {
+/**
+ * A group name's leading internal number (「P1-01 品牌身份」): the method's
+ * numbering of a group inside its pool — a closed format, the pool id and a
+ * number — which means nothing to a reader (F-G10). The name keeps the rest.
+ */
+const GROUP_NUMBER = /^\s*P[1-4]\s*[-_.]\s*\d{1,3}\s*[·:：、.\-—]?\s*/u;
+
+/** @param {string | null | undefined} name */
+export function geoGroupName(name) {
+  if (typeof name !== "string") return name;
+  const stripped = name.replace(GROUP_NUMBER, "").trim();
+  return stripped || name.trim();
+}
+
+/**
+ * @param {Record<string, any>} data @param {GeoIssue[]} issues
+ * @param {string} [writtenAt] when the write reached the platform: a real phrasing written without its `collectedAt` was collected by then
+ */
+function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
   const read = fields(data, issues, {});
   read.unknown(["groups", "note"]);
   const note = read.text("note", 500);
@@ -364,14 +398,16 @@ function validatedGroups(data, issues) {
   /** @type {any[]} */
   const groups = [];
   let total = 0;
+  let stamped = 0;
   data.groups.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
     if (notAnObject(entry, index, issues)) return;
     const item = /** @type {Record<string, any>} */ (entry);
     const group = fields(item, issues, { index });
     group.unknown(GROUP_FIELDS);
+    const name = group.text("name", 80, { required: true });
     const value = {
       pool: group.word("pool", GEO_POOLS, { required: true }),
-      name: group.text("name", 80, { required: true }),
+      name: typeof name === "string" ? geoGroupName(name) : name,
       typicalQuestion: group.text("typicalQuestion", 300),
       journeyStage: group.text("journeyStage", 60),
       audience: group.word("audience", GEO_AUDIENCES),
@@ -404,6 +440,13 @@ function validatedGroups(data, issues) {
         isMeasured: question.flag("isMeasured") ?? false,
       };
       if (question.refused) return;
+      // A real phrasing has a day it was heard (G9: 56 of 56 written without
+      // one). The run passes the post's own `collectedAt`; without it the
+      // phrasing was collected no later than this write, and says so.
+      if (parsed.kind === "real" && !parsed.collectedAt) {
+        parsed.collectedAt = writtenAt;
+        stamped += 1;
+      }
       if (total >= GEO_WRITE_LIMITS.questions) {
         issues.push({ group: index, index: questionIndex, code: "too_many", message: `A set holds at most ${GEO_WRITE_LIMITS.questions} questions.` });
         return;
@@ -413,6 +456,10 @@ function validatedGroups(data, issues) {
     });
     groups.push(value);
   });
+  if (stamped) {
+    issues.push({ field: "collectedAt", code: "notice",
+      message: `${stamped} real phrasing(s) came without collectedAt and are dated to this write; pass each post's collectedAt from social_posts_search.` });
+  }
   return { groups, note };
 }
 
@@ -451,6 +498,9 @@ export function geoLockCheck(groups, minimal) {
 }
 
 // --- journey, strategy, placement plan ---------------------------------------------------------
+
+/** What a full journey carries beside its stages and care nodes (plan §3.2). */
+export const GEO_JOURNEY_EXPECTED = Object.freeze(["subtypes", "personas", "files"]);
 
 /** @param {Record<string, any>} data @param {GeoIssue[]} issues */
 function validatedJourney(data, issues) {
@@ -507,14 +557,65 @@ function validatedJourney(data, issues) {
   return journey;
 }
 
-/** @param {Record<string, any>} data @param {GeoIssue[]} issues */
+/** An engine as a run may name it: the platform's id, or its reader's name (「豆包」). */
+const ENGINE_BY_LABEL = Object.freeze(Object.fromEntries(Object.entries(GEO_ENGINE_LABELS_ZH).map(([engine, label]) => [label, engine])));
+/** A gap class as the method writes it in Chinese (「缺证据」), or the platform's id. */
+const GAP_CLASS_BY_LABEL = Object.freeze(Object.fromEntries(Object.entries(GEO_GAP_CLASS_LABELS_ZH).map(([id, label]) => [label, id])));
+/** The method's promise ceiling (`expectations.json` `promise_ceiling.value`), in the reader's words. */
+const PROMISE_WORDS = Object.freeze({
+  mention_and_accuracy: "可以承诺被提及并讲对",
+  accuracy_only: "只承诺讲对，不承诺被提及",
+  undetermined: "样本不足，暂不承诺",
+});
+/** The method's layout (`source_table.json` `layout`): its parts, by their names on the wire. */
+const LAYOUT_PARTS = Object.freeze({ layers: "layers", byEngine: "byEngine", by_engine: "byEngine", constraints: "constraints",
+  excluded: "excluded", clientActions: "clientActions", client_actions: "clientActions" });
+/** The measured parts of the method's per-engine record: the platform's own rows (M-10, the citations), never stored twice. */
+const MEASURED_EXPECTATION_PARTS = Object.freeze(["retrieval", "citationMix", "citation_mix", "citationDisplay", "citation_display", "bodyUse",
+  "body_use", "ownEcosystem", "own_ecosystem", "priors", "surface", "clusterLeverage", "cluster_leverage"]);
+
+/** @param {unknown} value */
+function engineId(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return GEO_ENGINES.includes(trimmed) ? trimmed : /** @type {Record<string, string>} */ (ENGINE_BY_LABEL)[trimmed] ?? trimmed;
+}
+
+/**
+ * The promise as the page says it: text as written, or the method's ceiling
+ * object `{ value, basis }` in words, its basis after it.
+ * @param {unknown} value
+ */
+function promiseText(value) {
+  if (typeof value === "string") return value;
+  if (!isObject(value)) return value;
+  const record = /** @type {Record<string, any>} */ (value);
+  const word = /** @type {Record<string, string>} */ (PROMISE_WORDS)[String(record.value ?? "")] ?? (typeof record.value === "string" ? record.value : null);
+  const basis = typeof record.basis === "string" && record.basis.trim() ? record.basis.trim() : null;
+  return word && basis ? `${word}（${basis}）` : word ?? basis;
+}
+
+/**
+ * What a `strategy` write says, field by field: only what it carries is
+ * returned, so a write of one field leaves the rest of the strategy as it
+ * was (`GeoStore.writeStrategy` merges forward). The method pack's names are
+ * read too (G3/G4, 2026-09-26: the run wrote `provider`, `promiseCeiling`,
+ * `layersNeeded` and the method's layout, all were dropped, and the page's
+ * 「投哪一层」「这个周期能做到」 stayed empty).
+ * @param {Record<string, any>} data @param {GeoIssue[]} issues
+ */
 function validatedStrategy(data, issues) {
   const read = fields(data, issues, {});
-  read.unknown(["battlefield", "expectations", "gaps", "layout", "summary", "sources"]);
+  read.unknown(["battlefield", "expectations", "gaps", "layout", "summary", "sources", "secondary"]);
   /** @type {Record<string, any>} */
-  const strategy = { summary: read.text("summary", 4000, { multiline: true }) ?? null };
-  if (data.battlefield != null) {
-    const battlefield = isObject(data.battlefield) ? fields(data.battlefield, issues, { }) : null;
+  const strategy = {};
+  const summary = read.text("summary", 4000, { multiline: true });
+  if (summary) strategy.summary = summary;
+  const battlefieldData = isObject(data.battlefield) ? { ...data.battlefield }
+    : Array.isArray(data.battlefield) ? { groups: data.battlefield } : data.battlefield;
+  if (isObject(battlefieldData) && data.secondary != null && battlefieldData.secondary == null) battlefieldData.secondary = data.secondary;
+  if (battlefieldData != null) {
+    const battlefield = isObject(battlefieldData) ? fields(battlefieldData, issues, { }) : null;
     if (!battlefield) read.refuse("battlefield", "invalid", "battlefield is an object { groups, reason }.");
     else {
       battlefield.unknown(["groups", "reason", "secondary"]);
@@ -529,10 +630,22 @@ function validatedStrategy(data, issues) {
       strategy.expectations = [];
       data.expectations.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
         if (!isObject(entry)) { issues.push({ field: "expectations", index, code: "invalid", message: "An expectation is an object." }); return; }
-        const item = fields(/** @type {Record<string, any>} */ (entry), issues, { index });
+        const raw = /** @type {Record<string, any>} */ (entry);
+        /** @type {Record<string, any>} */
+        const given = {
+          ...raw,
+          engine: engineId(raw.engine ?? raw.provider),
+          promise: promiseText(raw.promise ?? raw.promiseCeiling ?? raw.promise_ceiling),
+          layers: raw.layers ?? raw.layersNeeded ?? raw.layers_needed,
+        };
+        for (const alias of ["provider", "promiseCeiling", "promise_ceiling", "layersNeeded", "layers_needed", ...MEASURED_EXPECTATION_PARTS]) delete given[alias];
+        const item = fields(given, issues, { index });
         item.unknown(["engine", "promise", "layers", "cites", "leverage"]);
-        const layers = item.texts("layers", 3, 20);
-        if (layers && layers.some((layer) => !GEO_SOURCE_LAYERS.includes(layer))) item.refuse("layers", "unknown_value", `layers are ${GEO_SOURCE_LAYERS.join(", ")}.`);
+        const listed = item.texts("layers", 10, 40);
+        const layers = listed ? listed.filter((layer) => GEO_SOURCE_LAYERS.includes(layer)) : listed;
+        if (listed && layers && layers.length < listed.length) {
+          issues.push({ index, field: "layers", code: "notice", message: `Only ${GEO_SOURCE_LAYERS.join(", ")} are placement layers; the others were left out.` });
+        }
         const value = { engine: item.word("engine", GEO_ENGINES, { required: true }), promise: item.text("promise", 500), layers,
           cites: item.texts("cites", 20, 200), leverage: item.text("leverage", 500) };
         if (!item.refused) strategy.expectations.push(value);
@@ -546,7 +659,12 @@ function validatedStrategy(data, issues) {
       strategy.gaps = [];
       data.gaps.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
         if (!isObject(entry)) { issues.push({ field: "gaps", index, code: "invalid", message: "A gap is an object." }); return; }
-        const item = fields(/** @type {Record<string, any>} */ (entry), issues, { index });
+        const raw = /** @type {Record<string, any>} */ (entry);
+        const label = raw.class ?? raw.category;
+        /** @type {Record<string, any>} */
+        const given = { ...raw, class: typeof label === "string" ? /** @type {Record<string, string>} */ (GAP_CLASS_BY_LABEL)[label.trim()] ?? label.trim() : label };
+        delete given.category;
+        const item = fields(given, issues, { index });
         item.unknown(["class", "groupId", "group", "text", "priority"]);
         const value = { class: item.word("class", GEO_GAP_CLASSES, { required: true }), groupId: item.text("groupId", 80), group: item.text("group", 120),
           text: item.text("text", 1000, { required: true }), priority: item.number("priority", 0, 1000) };
@@ -555,12 +673,25 @@ function validatedStrategy(data, issues) {
     }
   }
   if (data.layout != null) {
-    if (!isObject(data.layout)) read.refuse("layout", "invalid", "layout is an object keyed by engine.");
-    else {
+    if (!isObject(data.layout)) read.refuse("layout", "invalid", "layout is an object: by engine, or the method's { layers, byEngine, constraints }.");
+    else if (Object.keys(data.layout).some((key) => key in LAYOUT_PARTS)) {
+      // The method's layout, kept as written and bounded, for the runs that
+      // read it back (content, proposal); the page reads each source's layer.
+      /** @type {Record<string, any>} */
+      const plan = {};
+      for (const [key, value] of Object.entries(data.layout)) {
+        const part = /** @type {Record<string, string>} */ (LAYOUT_PARTS)[key];
+        if (!part) { issues.push({ field: `layout.${key}`, code: "ignored_fields", message: `Not stored by the platform (kept only in the files): ${key}.` }); continue; }
+        plan[part] = value;
+      }
+      if (withinSize(plan, 32 * 1024)) strategy.layout = plan;
+      else read.refuse("layout", "too_long", "layout is at most 32 KB.");
+    } else {
       strategy.layout = {};
-      for (const [engine, entry] of Object.entries(data.layout)) {
-        if (!GEO_ENGINES.includes(engine) || !isObject(entry)) {
-          issues.push({ field: `layout.${engine}`, code: "unknown_value", message: `layout is keyed by engine (${GEO_ENGINES.join(", ")}) with layer lists.` });
+      for (const [key, entry] of Object.entries(data.layout)) {
+        const engine = engineId(key);
+        if (typeof engine !== "string" || !GEO_ENGINES.includes(engine) || !isObject(entry)) {
+          issues.push({ field: `layout.${key}`, code: "unknown_value", message: `layout is keyed by engine (${GEO_ENGINES.join(", ")}) with layer lists.` });
           continue;
         }
         const item = fields(/** @type {Record<string, any>} */ (entry), issues, { });
@@ -573,10 +704,101 @@ function validatedStrategy(data, issues) {
   return strategy;
 }
 
+/**
+ * A strategy write read without writing it: what would be stored and what
+ * would be refused or noted — the backfill script's dry run.
+ * @param {Record<string, any>} data
+ */
+export function geoStrategyDraft(data) {
+  /** @type {GeoIssue[]} */
+  const issues = [];
+  const strategy = validatedStrategy(data, issues);
+  /** @type {GeoIssue[]} */
+  const sourceIssues = [];
+  const sources = Array.isArray(data.sources) ? validatedSources(data.sources.slice(0, GEO_WRITE_LIMITS.sources), sourceIssues) : [];
+  return { strategy, sources, issues: [...issues, ...sourceIssues.map((issue) => ({ ...issue, field: `sources.${issue.field ?? ""}`.replace(/\.$/, "") }))] };
+}
+
 // --- sources, targets, articles, placement plan, step ---------------------------------------------
 
 const SOURCE_FIELDS = Object.freeze(["domain", "name", "kind", "layer", "icpOwner", "icpMatches", "newsIndexed", "medicalVertical", "impostor",
   "blacklistReason", "checkedAt"]);
+
+/**
+ * The method pack's words for a source (`source_table.json`, owner geo-skills
+ * 3.0) and the platform's: a strategy run writes the method's record, so its
+ * names are accepted and stored under the platform's (G3, 2026-09-26 — the
+ * run wrote `threeConditions` and `sourceType`, both were dropped as unknown,
+ * and 963 sources ended with no condition checked). Each key is the method's
+ * field; the value is the platform's.
+ */
+const SOURCE_ALIASES = Object.freeze({
+  displayName: "name", display_name: "name", sourceType: "kind", source_type: "kind",
+  icpOwnerMatch: "icpMatches", icp_owner_match: "icpMatches", icp_matches: "icpMatches",
+  news_indexed: "newsIndexed", medical_vertical: "medicalVertical", checkedOn: "checkedAt", checked_on: "checkedAt", checked_at: "checkedAt",
+  blacklist_reason: "blacklistReason", icp_owner: "icpOwner",
+});
+/** The condition object the method nests the three checks in, and its key for each. */
+const CONDITION_ALIASES = Object.freeze({
+  icpMatches: ["icpMatches", "icpOwnerMatch", "icp_owner_match", "icp_matches", "icp"],
+  newsIndexed: ["newsIndexed", "news_indexed", "news"],
+  medicalVertical: ["medicalVertical", "medical_vertical", "medical"],
+  checkedAt: ["checkedAt", "checkedOn", "checked_on", "checked_at"],
+});
+/**
+ * The method's fine-grained source types, and the one of the platform's seven
+ * public-study kinds each is counted under — a closed table, the method's own
+ * list (`source_table.schema.json` `source_type`). The platform's own Chinese
+ * labels are accepted too.
+ */
+const SOURCE_TYPE_KINDS = Object.freeze({
+  指南与共识: "academic", 说明书与监管机构: "government", 期刊与文献库: "academic", 学会与医院: "academic", 医学科普平台: "vertical",
+  百科: "encyclopedia", 问答与社区: "qa", 自媒体号: "wemedia", 电商与药房: "ecommerce", 新闻媒体: "news", 企业自有: "brand", 竞品自有: "brand",
+  内容农场: "other", 冒名站: "other", 未分类: "other",
+  ...Object.fromEntries(Object.entries(GEO_SOURCE_KIND_LABELS_ZH).map(([kind, label]) => [label, kind])),
+  新闻: "news", 垂直门户: "vertical", 品牌官网: "brand", 政府: "government", 其他: "other",
+});
+/** The method's layers the platform does not place into: stored as no layer (the site is still recorded). */
+const UNPLACED_LAYERS = Object.freeze(["correction_only", "excluded", "unassigned", "blacklist"]);
+
+/**
+ * One source entry in the platform's own words: the method's names renamed,
+ * its nested three conditions lifted, its source type mapped to a kind, and
+ * its impostor record (`{ flag: true }`) read as the flag.
+ * @param {Record<string, any>} entry @param {GeoIssue[]} issues @param {number} index
+ */
+function sourceInPlatformWords(entry, issues, index) {
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const [key, value] of Object.entries(entry)) {
+    if (key === "threeConditions" || key === "three_conditions") continue;
+    const platform = /** @type {Record<string, string>} */ (SOURCE_ALIASES)[key] ?? key;
+    if (!(platform in out) || key === platform) out[platform] = value;
+  }
+  const conditions = entry.threeConditions ?? entry.three_conditions;
+  if (isObject(conditions)) {
+    for (const [field, names] of Object.entries(CONDITION_ALIASES)) {
+      const name = names.find((candidate) => conditions[candidate] !== undefined);
+      if (name !== undefined && out[field] == null) out[field] = conditions[name];
+    }
+  } else if (conditions != null) {
+    issues.push({ index, field: "threeConditions", code: "invalid", message: "threeConditions is an object { icpMatches, newsIndexed, medicalVertical, checkedAt }." });
+  }
+  if (typeof out.kind === "string" && !GEO_SOURCE_KINDS.includes(out.kind)) {
+    const mapped = /** @type {Record<string, string>} */ (SOURCE_TYPE_KINDS)[out.kind.trim()];
+    if (mapped) {
+      if (out.kind.trim() === "冒名站" && out.impostor == null) out.impostor = true;
+      out.kind = mapped;
+    }
+  }
+  if (isObject(out.impostor)) out.impostor = typeof out.impostor.flag === "boolean" ? out.impostor.flag : null;
+  if (typeof out.layer === "string" && UNPLACED_LAYERS.includes(out.layer)) {
+    if (out.layer === "blacklist" && !out.blacklistReason) out.blacklistReason = "blacklist";
+    issues.push({ index, field: "layer", code: "notice", message: `layer ${out.layer} is recorded as no placement layer (anchor, coverage and owned are placed into).` });
+    out.layer = null;
+  }
+  return out;
+}
 
 /** @param {unknown[]} items @param {GeoIssue[]} issues */
 function validatedSources(items, issues) {
@@ -585,7 +807,7 @@ function validatedSources(items, issues) {
   const sources = [];
   items.forEach((entry, index) => {
     if (notAnObject(entry, index, issues)) return;
-    const read = fields(/** @type {Record<string, any>} */ (entry), issues, { index });
+    const read = fields(sourceInPlatformWords(/** @type {Record<string, any>} */ (entry), issues, index), issues, { index });
     read.unknown(SOURCE_FIELDS);
     const rawDomain = read.text("domain", 253, { required: true });
     const domain = rawDomain ? rawDomain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : rawDomain;
@@ -598,11 +820,19 @@ function validatedSources(items, issues) {
       checkedAt: read.instant("checkedAt"),
     };
     if (read.refused) return;
+    // A verdict on the three conditions is dated: a condition written true or
+    // false without the day it was checked is a notice (the market admits
+    // only sites whose three conditions were checked and hold).
+    const judged = [source.icpMatches, source.newsIndexed, source.medicalVertical].some((value) => typeof value === "boolean");
+    if (judged && !source.checkedAt) issues.push({ index, field: "checkedAt", code: "notice", message: "A checked condition carries the day it was checked (checkedAt)." });
     seen.add(domain);
     sources.push(source);
   });
   return sources;
 }
+
+/** The metrics the page states a target beside: the index and mention over P2 and P3. */
+export const GEO_HEADLINE_TARGETS = Object.freeze(["M-19", "M-01S"]);
 
 const TARGET_FIELDS = Object.freeze(["tier", "metricId", "pool", "baseline", "target", "horizonWeeks", "placements", "budgetCny", "dataType"]);
 
@@ -643,11 +873,11 @@ function validatedTargets(items, issues) {
 }
 
 const ARTICLE_FIELDS = Object.freeze(["path", "layer", "title", "groupId", "claimIds", "gate", "safety", "contentSha256", "protectedSha256",
-  "deliverableId", "runId"]);
+  "deliverableId", "runId", "errorIds"]);
 
 /**
  * @param {unknown[]} items @param {GeoIssue[]} issues
- * @param {{ claimIds: Set<string>, groupIds: Set<string> }} known
+ * @param {{ claimIds: Set<string>, groupIds: Set<string>, errorIds: Set<string> }} known
  */
 function validatedArticles(items, issues, known) {
   const seen = new Set();
@@ -688,10 +918,17 @@ function validatedArticles(items, issues, known) {
     if (contentSha256 && !SHA256.test(contentSha256)) read.refuse("contentSha256", "invalid", "contentSha256 is a lowercase sha256.");
     const protectedSha256 = read.text("protectedSha256", 64);
     if (protectedSha256 && !SHA256.test(protectedSha256)) read.refuse("protectedSha256", "invalid", "protectedSha256 is a lowercase sha256.");
+    // The 讲错我方 a correction answers (G7): each is an error of this project.
+    const errorIds = read.texts("errorIds", 20, 80) ?? [];
+    const unknownErrors = errorIds.filter((id) => !known.errorIds.has(id));
+    if (unknownErrors.length) read.refuse("errorIds", "not_found", `Errors not in this project: ${unknownErrors.slice(0, 5).join(", ")}.`);
+    if (layer === "correction" && !errorIds.length && !read.refused) {
+      issues.push({ index, field: "errorIds", code: "notice", message: "A correction names the errors it corrects (errorIds, from geo_read errors); without them the error does not move to 处置中." });
+    }
     const article = {
       path: pathValue, layer, title: read.text("title", 200), groupId, claimIds,
       safety: read.word("safety", RUN_ARTICLE_SAFETY, { required: true }),
-      contentSha256, protectedSha256, deliverableId, runId: read.text("runId", 120),
+      contentSha256, protectedSha256, deliverableId, runId: read.text("runId", 120), errorIds,
     };
     if (read.refused) return;
     seen.add(pathValue);
@@ -765,6 +1002,11 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
       if (!Object.keys(product).length && competitors === undefined) return done([]);
       const merged = { ...project.product, ...product };
       await store.updateProject(userId, project.id, { product: merged, ...(competitors !== undefined ? { competitors } : {}) });
+      const missing = GEO_IDENTITY_FIELDS.filter((field) => merged[field] == null || (Array.isArray(merged[field]) && field !== "misspellings" && !merged[field].length));
+      if (merged.brandName && missing.length) {
+        issues.push({ field: missing.join(","), code: "notice",
+          message: `The product identity still lacks: ${missing.join(", ")}. The measurement counts mentions by these names and by singleSource (whether the generic name is this product's alone).` });
+      }
       // The sidebar names the project by its control-plane name; a project
       // created before its brand was known takes the brand once it is.
       if (product.brandName && renameProject) await renameProject(userId, project.projectId, product.brandName).catch(() => null);
@@ -813,6 +1055,15 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
     case "journey": {
       const journey = validatedJourney(dataOf(body), issues);
       const written = await store.writeJourney(userId, project.id, journey);
+      // What a full journey carries beside its stages (plan §3.2): the
+      // subtype tree, the personas and the full matrix as a file. Missing is a
+      // notice — the stages are written either way (G10: all three were
+      // empty on the first production project).
+      const missing = GEO_JOURNEY_EXPECTED.filter((part) => !journey[part]?.length);
+      if (missing.length) {
+        issues.push({ field: missing.join(","), code: "notice",
+          message: `A full journey also carries ${missing.join(", ")}: the patient subtypes with their size, 3–5 personas, and the full stage × column matrix saved as a file and listed in files.` });
+      }
       return done([String(written.version)], { version: written.version });
     }
     case "strategy": {
@@ -832,6 +1083,13 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
           if (sources.length) sourceIds = await store.upsertSources(userId, project.id, sources);
         }
       }
+      // A write that carries only sources is a sources write: it makes no
+      // strategy version (G4 — sixteen versions, the last one empty, and the
+      // page and the program read only the last).
+      if (!Object.keys(strategy).length) {
+        const latest = await store.latestStrategy(project.id);
+        return done(sourceIds, { version: latest?.version ?? null, sourceIds });
+      }
       const written = await store.writeStrategy(userId, project.id, strategy);
       return done([String(written.version)], { version: written.version, sourceIds });
     }
@@ -846,22 +1104,43 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
       const tiers = new Set(targets.map((target) => target.tier));
       const missing = GEO_TIERS.filter((tier) => !tiers.has(tier));
       if (missing.length) issues.push({ field: "tier", code: "notice", message: `Targets are written in three tiers; missing: ${missing.join(", ")}.` });
+      // The page's two headline numbers are the index (M-19) and mention over
+      // P2 and P3 (M-01S): without a project-wide target for each, neither
+      // shows one (G16).
+      for (const tier of tiers) {
+        const absent = GEO_HEADLINE_TARGETS.filter((metricId) => !targets.some((target) => target.tier === tier && target.metricId === metricId && target.pool === "all"));
+        if (absent.length) issues.push({ field: "metricId", code: "notice", message: `Tier ${tier} has no project-wide (pool all) target for ${absent.join(", ")}.` });
+      }
       const written = await store.writeTargets(userId, project.id, targets);
       return done([String(written.version)], { version: written.version });
     }
     case "articles": {
       const items = itemsOf(body, GEO_WRITE_LIMITS.articles);
-      const [claimIds, groups] = await Promise.all([
+      const [claimIds, groups, errors] = await Promise.all([
         store.claimIds(project.id),
         store.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
+        store.query(`SELECT id FROM evimed_geo.errors WHERE geo_project_id = $1`, [project.id]),
       ]);
-      const articles = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))) });
+      const articles = validatedArticles(items, issues, { claimIds, groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
+        errorIds: new Set(errors.rows.map((/** @type {any} */ row) => String(row.id))) });
       for (const article of articles) {
         const gate = articleGate ? await articleGate(project, { runId: article.runId ?? null, deliverableId: article.deliverableId ?? null, path: article.path }) : null;
         article.gate = GEO_ARTICLE_GATES.includes(String(gate)) ? gate : "unverified";
       }
       const ids = articles.length ? await store.registerArticles(userId, project.id, articles) : [];
-      return done(ids, { articles: articles.map((article, index) => ({ id: ids[index], path: article.path, gate: article.gate })) });
+      // A correction written for an error is that error's material, and the
+      // error is being handled (G7: 12 corrections were written and all 66
+      // errors stayed 「待处理」). Closing stays the measurement's.
+      /** @type {string[]} */
+      const acting = [];
+      for (const [index, article] of articles.entries()) {
+        if (!article.errorIds.length || !ids[index]) continue;
+        acting.push(...await store.attachCorrection(project.id, article.errorIds, {
+          articleId: ids[index], path: article.path, layer: article.layer, title: article.title ?? null, runId: article.runId ?? null,
+        }));
+      }
+      return done(ids, { articles: articles.map((article, index) => ({ id: ids[index], path: article.path, gate: article.gate })),
+        ...(acting.length ? { errorsActing: [...new Set(acting)] } : {}) });
     }
     case "placement_plan": {
       const plan = validatedPlacementPlan(dataOf(body), issues);

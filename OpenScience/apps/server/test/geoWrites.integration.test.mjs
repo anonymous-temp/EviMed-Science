@@ -120,7 +120,9 @@ test("the product merges field by field, a competitor is refused alone, and a br
     competitors: [{ brandName: "替尔泊肽", reason: "同适应证" }, { reason: "no name" }], dosage: "2mg",
   } }, async (/** @type {string} */ userId, /** @type {string} */ projectId, /** @type {string} */ name) => { renamed.push([userId, projectId, name]); });
   assert.equal(result.ok, true);
-  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["dosage", "ignored_fields"], ["brandName", "missing"]]);
+  // The identity the measurement counts by is asked for as a notice, never refused (G5).
+  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["dosage", "ignored_fields"], ["brandName", "missing"],
+    ["misspellings,approvalNo,singleSource", "notice"]]);
   const saved = await store.getProject(USER, project.id);
   assert.equal(saved?.product.brandName, "玛仕度肽");
   assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["替尔泊肽"]);
@@ -133,8 +135,18 @@ test("the product merges field by field, a competitor is refused alone, and a br
   // is refused leaves the registered rivals alone, and only [] clears them.
   await write(/** @type {any} */ (merged), "product", { data: { competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] }] } });
   const aliased = await store.getProject(USER, project.id);
+  // One rule on both sides (ruling 2026-09-26): a generic that more than one
+  // holder may market — or one nobody said is single-source — names no brand.
   assert.deepEqual(brandRegistry(aliased?.product, aliased?.competitors).filter((entry) => entry.competitor).map((entry) => entry.aliases),
-    [["穆峰达", "替尔泊肽", "mounjaro"]], "folded, as the parser matches them");
+    [["穆峰达", "mounjaro"]], "folded, as the parser matches them; the generic's short form is not the brand's");
+  const single = await write(/** @type {any} */ (aliased), "product", { data: { singleSource: true, misspellings: [], approvalNo: "国药准字H20250037",
+    competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"], singleSource: true }] } });
+  assert.deepEqual(single.issues, [], "the identity is complete");
+  const counted = await store.getProject(USER, project.id);
+  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases]), [
+    ["玛仕度肽", ["玛仕度肽", "信尔美", "玛仕度肽注射液"]],
+    ["穆峰达", ["穆峰达", "替尔泊肽", "mounjaro", "替尔泊肽注射液"]],
+  ], "a single-source generic counts on both sides");
   const refused = await write(/** @type {any} */ (aliased), "product", { data: { competitors: [{ name: "诺和盈" }] } });
   assert.ok(refused.issues.some((/** @type {any} */ issue) => issue.code === "missing"));
   assert.deepEqual((await store.getProject(USER, project.id))?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["穆峰达"]);
@@ -155,9 +167,20 @@ test("a question map is a new unlocked version; invalid groups and questions are
   assert.equal(result.ids.length, 2);
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.group ?? null, issue.index ?? null, issue.field ?? null, issue.code]), [
     [0, 1, "text", "missing"], [0, 2, "platform", "unknown_value"], [null, 1, "pool", "unknown_value"], [2, 0, "sourceUrl", "invalid"],
+    [null, null, "collectedAt", "notice"],
   ]);
   const map = await store.questionMap(project.id, 1);
   assert.deepEqual(map.map((group) => [group.name, group.questions.map((question) => question.text)]), [["用法", ["怎么打"]], ["对比", ["哪个好"]]]);
+  // A real phrasing written without its day is dated to the write (G9); one with its day keeps it.
+  const real = map[1].questions[0];
+  assert.equal(real.kind, "real");
+  assert.ok(real.collectedAt && Date.now() - Date.parse(real.collectedAt) < 60_000);
+  const dated = await write(project, "questions", { data: { groups: [{ pool: "P1", name: "P1-03 与其他减重药怎么选",
+    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
+  assert.deepEqual(dated.issues, []);
+  const [group] = await store.questionMap(project.id, dated.version);
+  assert.equal(group.name, "与其他减重药怎么选", "the method's internal group number is not part of the name a reader sees");
+  assert.equal(group.questions[0].collectedAt, "2026-09-25T09:40:00.000Z");
   assert.equal(map[1].questions[0].pool, "P2", "a question takes its group's pool");
   assert.equal((await store.questionSets(project.id))[0].lockedAt, null);
 });
@@ -237,8 +260,12 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
     { tier: "1", metricId: "M-19", pool: "all", target: 26, dataType: "forecast" },
     { tier: "4", metricId: "M-19", dataType: "forecast" },
   ] });
-  assert.deepEqual(targets.issues.map((/** @type {any} */ issue) => [issue.index ?? null, issue.field, issue.code]), [
-    [1, "dataType", "unknown_value"], [3, "metricId", "duplicate"], [4, "tier", "unknown_value"], [null, "tier", "notice"],
+  // Each tier without a project-wide target for the page's headline numbers (M-19, M-01S) is told so (G16).
+  assert.deepEqual(targets.issues.map((/** @type {any} */ issue) => [issue.index ?? null, issue.field, issue.code, issue.message]), [
+    [1, "dataType", "unknown_value", targets.issues[0].message], [3, "metricId", "duplicate", targets.issues[1].message],
+    [4, "tier", "unknown_value", targets.issues[2].message], [null, "tier", "notice", targets.issues[3].message],
+    [null, "metricId", "notice", "Tier 1 has no project-wide (pool all) target for M-01S."],
+    [null, "metricId", "notice", "Tier 2 has no project-wide (pool all) target for M-01S."],
   ]);
   assert.deepEqual((await store.latestTargets(project.id))?.rows.map((row) => [row.tier, row.pool, row.dataType]), [["1", "all", "forecast"], ["2", "all", "commercial"]]);
 
@@ -248,8 +275,8 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
     { domain: "39.net", kind: "news" },
     { domain: "fake-times.cn", impostor: true, blacklistReason: "冒名站", layer: "anchor", cited: { deepseek: 9 } },
   ] });
-  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[1, "invalid"], [2, "duplicate"], [3, "ignored_fields"]],
-    "measured counts are the platform's, not the run's: dropped, the rest of the source kept");
+  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[0, "notice"], [1, "invalid"], [2, "duplicate"], [3, "ignored_fields"]],
+    "a condition checked without its day is noted; measured counts are the platform's, not the run's: dropped, the rest of the source kept");
   const listed = await store.listSources(project.id);
   assert.deepEqual(listed.map((source) => source.domain).sort(), ["39.net", "fake-times.cn"]);
   assert.deepEqual(listed.find((source) => source.domain === "fake-times.cn")?.cited ?? {}, {}, "no count came from the run");
@@ -308,8 +335,8 @@ test("every article but a correction names its question group", options, async (
     { path: "deliverables/geo-content/qa.md", layer: "qa", claimIds: [], safety: "clear", contentSha256: sha },
     { path: "deliverables/geo-content/fix.md", layer: "correction", claimIds: [], safety: "clear", contentSha256: sha },
   ] }, null, ledgerPassed);
-  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[0, "groupId", "missing"], [1, "groupId", "missing"]],
-    "a group-less article could be placed into a control group unseen");
+  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[0, "groupId", "missing"], [1, "groupId", "missing"],
+    [2, "errorIds", "notice"]], "a group-less article could be placed into a control group unseen; a correction names what it corrects");
   assert.deepEqual((await store.listArticles(project.id)).map((row) => row.layer), ["correction"]);
 });
 
@@ -372,7 +399,9 @@ test("journey, strategy and placement preferences are versions, and each refused
     files: [{ path: "deliverables/journey.xlsx", title: "完整旅程矩阵" }, { path: "/etc/x" }],
   } });
   assert.equal(journey.version, 1);
-  assert.deepEqual(journey.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "name", "missing"], [1, "path", "invalid"]]);
+  // A journey without personas is written, and told what a full one carries (G10).
+  assert.deepEqual(journey.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "name", "missing"], [1, "path", "invalid"],
+    [undefined, "personas", "notice"]]);
   const saved = await store.latestJourney(project.id);
   assert.equal(saved?.data.subtypes[0].size, "12000000");
   assert.equal(saved?.data.stages[0].questions[0], "减肥针安全吗");
@@ -392,6 +421,14 @@ test("journey, strategy and placement preferences are versions, and each refused
   assert.deepEqual(latest?.expectations.map((/** @type {any} */ entry) => entry.engine), ["deepseek"]);
   assert.deepEqual(Object.keys(latest?.layout ?? {}), ["doubao"]);
   assert.equal((await write(project, "strategy", { data: { summary: "second" } })).version, 2);
+  // Merge-forward (G4): a write of one field keeps the rest of the strategy.
+  const second = await store.latestStrategy(project.id);
+  assert.deepEqual([second?.summary, second?.battlefield?.groups, second?.expectations?.map((/** @type {any} */ entry) => entry.promise),
+    Object.keys(second?.layout ?? {})], ["second", ["语义群 1"], ["讲对"], ["doubao"]]);
+  // A write of the sources alone is a sources write: no version.
+  const sourcesOnly = await write(project, "strategy", { data: { sources: [{ domain: "health.baidu.com", layer: "coverage" }] } });
+  assert.deepEqual([sourcesOnly.ok, sourcesOnly.version, sourcesOnly.sourceIds.length], [true, 2, 1]);
+  assert.equal((await store.latestStrategy(project.id))?.version, 2);
 
   const plan = await write(project, "placement_plan", { data: { preferred: [{ layer: "coverage", engines: ["doubao"], outlets: ["39.net"] }, { engines: ["bing"] }],
     avoid: ["fake-times.cn"] } });
@@ -434,4 +471,73 @@ test("factual accuracy is a hard line of 98 % in every tier", options, async () 
     [[0, "below_hard_line"]]);
   assert.deepEqual((await store.latestTargets(project.id))?.rows.map((row) => [row.tier, row.metricId, row.target]).sort(),
     [["2", "M-01", 20], ["2", "M-06", 98]]);
+});
+
+test("a strategy written in the method's words is stored in the platform's: three conditions, source types, promises, layers, layout", options, async () => {
+  const project = await measured(await freshProject());
+  // What the production strategy run wrote on 2026-09-25, in the owner's
+  // method-pack shapes (source_table.json, expectations.json) — every one of
+  // these fields used to be dropped as unknown (G3, G4).
+  const result = await write(project, "strategy", { data: {
+    battlefield: { groups: ["增量：品类对比"], reason: "证据最硬" },
+    secondary: ["泛增量：症状"],
+    expectations: [
+      { provider: "豆包", promiseCeiling: { value: "accuracy_only", basis: "检索触发率 12%" }, layersNeeded: ["coverage", "owned", "correction_only"],
+        retrieval: { value: 12, numerator: 10, denominator: 84, dataType: "measured" }, citationMix: { 自媒体号: 40 } },
+      { engine: "deepseek", promise: "可以承诺被提及并讲对", layers: ["anchor"] },
+    ],
+    gaps: [{ class: "只讲获益不讲安全", text: "只讲减重不讲胃肠反应" }, { category: "丢条件", text: "漏了 BMI 门槛" }],
+    layout: { layers: { anchor: ["dayi.org.cn"], coverage: ["39.net"] }, by_engine: [{ provider: "doubao", coverage: ["toutiao.com"] }],
+      constraints: ["处方药只进专业渠道"], client_actions: ["开通官方号"], notes: "x" },
+    sources: [
+      { domain: "dayi.org.cn", sourceType: "医学科普平台", layer: "anchor",
+        threeConditions: { icp_owner_match: true, news_indexed: true, medical_vertical: true, checked_on: "2026-09-25" } },
+      { domain: "fake-shibao.cn", sourceType: "冒名站", layer: "blacklist", impostor: { flag: true } },
+      { domain: "hnysfww.com", source_type: "新闻媒体", layer: "coverage", three_conditions: { icpMatches: true, newsIndexed: true, medicalVertical: null } },
+    ],
+  } });
+  assert.equal(result.ok, true);
+  const strategy = await store.latestStrategy(project.id);
+  assert.deepEqual(strategy?.expectations.map((/** @type {any} */ entry) => [entry.engine, entry.promise, entry.layers]), [
+    ["doubao", "只承诺讲对，不承诺被提及（检索触发率 12%）", ["coverage", "owned"]],
+    ["deepseek", "可以承诺被提及并讲对", ["anchor"]],
+  ]);
+  assert.deepEqual(strategy?.battlefield, { groups: ["增量：品类对比"], reason: "证据最硬", secondary: ["泛增量：症状"] });
+  assert.deepEqual(strategy?.gaps.map((/** @type {any} */ gap) => gap.class), ["benefit_only", "dropped_condition"]);
+  assert.deepEqual(Object.keys(strategy?.layout ?? {}).sort(), ["byEngine", "clientActions", "constraints", "layers"]);
+  const sources = new Map((await store.listSources(project.id)).map((source) => [source.domain, source]));
+  const dayi = sources.get("dayi.org.cn");
+  assert.deepEqual([dayi?.kind, dayi?.layer, dayi?.icpMatches, dayi?.newsIndexed, dayi?.medicalVertical, dayi?.checkedAt],
+    ["vertical", "anchor", true, true, true, "2026-09-25T00:00:00.000Z"]);
+  const fake = sources.get("fake-shibao.cn");
+  assert.deepEqual([fake?.impostor, fake?.layer, fake?.kind, fake?.blacklistReason], [true, null, "other", "blacklist"]);
+  assert.deepEqual([sources.get("hnysfww.com")?.kind, sources.get("hnysfww.com")?.medicalVertical], ["news", null]);
+  const codes = result.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]);
+  assert.ok(codes.some(([field, code]) => field === "layers" && code === "notice"), "a layer the platform does not place into is left out, and said");
+  assert.ok(codes.some(([field, code]) => field === "layout.notes" && code === "ignored_fields"));
+  assert.ok(codes.some(([field, code]) => field === "sources.checkedAt" && code === "notice"), "a condition checked without its day is noted");
+  assert.equal(codes.some(([, code]) => code === "unknown_value" || code === "invalid"), false, JSON.stringify(codes));
+});
+
+test("a correction registered for 讲错我方 becomes their material and moves them to 处置中, once", options, async () => {
+  const project = await freshProject();
+  for (const [id, status] of [["ge-open", "open"], ["ge-closed", "closed"]]) {
+    await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, status, materials)
+      VALUES ($1, $2, $3, $4, 'kimi', $5, '[]'::jsonb)`, [`${id}-${project.id}`, USER, project.id, `fp-${id}`, status]);
+  }
+  const open = `ge-open-${project.id}`;
+  const closed = `ge-closed-${project.id}`;
+  const item = { path: "deliverables/geo-content-1/articles/fix.md", layer: "correction", claimIds: [], safety: "clear", contentSha256: "c".repeat(64),
+    errorIds: [open, closed] };
+  const first = await write(project, "articles", { items: [item] }, null, ledgerPassed);
+  assert.deepEqual(first.errorsActing, [open], "a closed error reopens only when an engine says it again");
+  const refused = await write(project, "articles", { items: [{ ...item, path: "x.md", errorIds: ["ge-elsewhere"] }] }, null, ledgerPassed);
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["errorIds", "not_found"]]);
+  await write(project, "articles", { items: [item] }, null, ledgerPassed);
+  const rows = (await database.query(`SELECT id, status, materials FROM evimed_geo.errors WHERE geo_project_id = $1 ORDER BY id`, [project.id])).rows;
+  const [closedRow, openRow] = rows;
+  assert.equal(openRow.status, "acting");
+  assert.equal(openRow.materials.length, 1, "registering the same article again adds nothing");
+  assert.deepEqual([openRow.materials[0].kind, openRow.materials[0].path, openRow.materials[0].layer], ["article", item.path, "correction"]);
+  assert.deepEqual([closedRow.status, closedRow.materials], ["closed", []]);
 });
