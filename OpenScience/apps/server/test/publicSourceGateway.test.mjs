@@ -514,6 +514,80 @@ test("credential profiles fail closed when missing, caller-supplied, or used on 
   assert.equal(fetchCalls, 0);
 });
 
+test("a keyless source with no key goes upstream anonymously; a configured key is sent, a broken one refused", async (t) => {
+  // 2026-09-26 audit I1-3: the domain registry, the account page and the ops
+  // checker called Semantic Scholar keyless, and this gateway answered every
+  // keyless request with public_source_semantic_scholar_credential_missing.
+  const seen = [];
+  const fetchImpl = async (url, options) => {
+    seen.push({ url: String(url), key: options.headers["x-api-key"] ?? null });
+    return new Response("{\"data\":[]}", { headers: { "content-type": "application/json" } });
+  };
+  const request = { url: "https://api.semanticscholar.org/graph/v1/paper/search?query=TP53", accept: ["application/json"], credentialProfile: "semantic-scholar" };
+  for (const [config, status, key] of [
+    [{}, 200, null],
+    [{ publicSourceCredentials: { semanticScholar: "s2-secret" } }, 200, "s2-secret"],
+    // A key the operator configured and the process could not read is not
+    // quietly replaced by the public tier: the refusal is what says so.
+    [{ publicSourceCredentials: { semanticScholar: "" }, publicSourceCredentialErrors: { semanticScholar: "public_source_semantic_scholar_file_permissions" } }, 503, undefined],
+  ]) {
+    const server = createServer(createPublicSourceGatewayHandler(config, runtimeManager(), { fetchImpl }));
+    const base = await listen(server);
+    t.after(() => close(server));
+    seen.length = 0;
+    const answer = await gatewayRequest(base, request);
+    assert.equal(answer.status, status);
+    if (status === 200) assert.deepEqual(seen, [{ url: request.url, key }]);
+    else {
+      assert.equal((await answer.json()).error.code, "public_source_semantic_scholar_credential_missing");
+      assert.deepEqual(seen, []);
+    }
+  }
+});
+
+test("every refusal for a missing credential is counted by source and by why", async (t) => {
+  const { publicSourceCredentialMissingMetricFamily } = await import("../src/publicSourceGateway.mjs");
+  const count = (source, reason) => publicSourceCredentialMissingMetricFamily().series
+    .find((series) => series.labels.source === source && series.labels.reason === reason)?.value;
+  // Present at zero before any refusal, so the first one is an increase.
+  assert.equal(count("evimed-evidence", "unusable") >= 0, true);
+  assert.equal(count("umls", "absent") >= 0, true);
+  const before = { evimed: count("evimed-evidence", "unusable"), umls: count("umls", "absent") };
+  // 2026-09-22: the EviMed key file lost its group bit; config loaded an
+  // empty key with a load error, and every literature search was refused.
+  const broken = createServer(createPublicSourceGatewayHandler({
+    publicSourceCredentials: { evimedEvidence: "" },
+    publicSourceCredentialErrors: { evimedEvidence: "public_source_evimed_evidence_file_permissions" },
+  }, runtimeManager(), { fetchImpl: async () => { throw new Error("must not be called"); } }));
+  const bare = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), { fetchImpl: async () => { throw new Error("must not be called"); } }));
+  const brokenBase = await listen(broken);
+  const bareBase = await listen(bare);
+  t.after(() => close(broken));
+  t.after(() => close(bare));
+  const evimed = await gatewayRequest(brokenBase, {
+    url: "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/literature", accept: ["application/json"], method: "POST",
+    credentialProfile: "evimed-evidence", body: { query: "aspirin" },
+  });
+  assert.equal(evimed.status, 503);
+  const umls = await gatewayRequest(bareBase, { url: "https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53", accept: ["application/json"], credentialProfile: "umls" });
+  assert.equal(umls.status, 503);
+  assert.equal(count("evimed-evidence", "unusable"), before.evimed + 1);
+  assert.equal(count("umls", "absent"), before.umls + 1);
+  // A keyless source with no key is never counted as absent: it went upstream.
+  assert.equal(count("semantic-scholar", "absent"), 0);
+  // And the alerts read exactly this family, on labels it carries.
+  const rules = JSON.parse(fs.readFileSync(new URL("../../../deploy/web/monitoring/open-science.rules.json", import.meta.url), "utf8"));
+  const group = rules.groups.find((entry) => entry.name === "evimed-evidence-sources");
+  assert.deepEqual(group?.rules.map((rule) => rule.alert), ["PublicSourceCredentialUnusable", "EvimedEvidenceRefused"]);
+  const family = publicSourceCredentialMissingMetricFamily();
+  for (const rule of group.rules) {
+    assert.match(rule.expr, new RegExp(`\\b${family.name}\\{`));
+    for (const [, label, value] of rule.expr.matchAll(/(\w+)="([^"]+)"/g)) {
+      assert.ok(family.series.some((series) => series.labels[label] === value), `${rule.alert} selects ${label}="${value}", which no series carries`);
+    }
+  }
+});
+
 test("public-source gateway rejects arbitrary hosts, plain HTTP, and inactive runtime tokens", async (t) => {
   let fetchCalls = 0;
   const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {

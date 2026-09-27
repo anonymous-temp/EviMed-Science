@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
+import { connectorCredentialSpec } from "@evimed/domain";
 import { privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
 
 const gatewayPath = "/internal/sources/v1/fetch";
@@ -119,6 +120,69 @@ const credentialProfiles = new Map([
   ["materials-project", { configValue: "materialsProjectApiKey", host: "api.materialsproject.org", path: "/materials/", header: "x-api-key" }],
 ]);
 const credentialHosts = new Set([...credentialProfiles.values()].map((profile) => profile.host));
+
+/**
+ * The profiles whose upstream serves without a key, only slower — read from
+ * the domain's connector registry (`keyless`), the one place that says so.
+ *
+ * With none configured, such a request goes upstream anonymously. The
+ * registry, the account page and `check-evidence-connectors.mjs` all said
+ * Semantic Scholar was keyless, while this gateway refused it with
+ * `public_source_semantic_scholar_credential_missing` whenever no key was
+ * set (36 refusals in a week, 2026-09-26 audit I1-3): the one path a hosted
+ * run takes. A configured key is still sent, and a configured key that is
+ * malformed is still refused — anonymous is the answer to "none", not to
+ * "broken".
+ * @param {string} profile @returns {boolean}
+ */
+function keylessProfile(profile) {
+  return connectorCredentialSpec(profile)?.keyless === true;
+}
+
+/**
+ * Requests refused because a credential was missing, by source and why:
+ * `absent` (the deployment and the account have none) or `unusable` (the
+ * deployment configured one that could not be read — a file with the wrong
+ * mode, a symlink, an unreadable path).
+ *
+ * The EviMed evidence key's file lost its group bit on 2026-09-22 and every
+ * literature search fell back to PubMed for three days: 325 refusals, readiness
+ * green (the credential check is informational), no alert, found by an audit
+ * (I1-4). Module-level like `providerRefusals.mjs`: one process, one table,
+ * read by `/api/ops/metrics`. Every profile's two series exist from the start
+ * at zero, so the first refusal is an increase `increase()` can see.
+ * @type {Map<string, Map<string, number>>}
+ */
+const credentialMissingCounts = new Map([...credentialProfiles.keys()].map((profile) => [profile, new Map([["absent", 0], ["unusable", 0]])]));
+
+/**
+ * @param {string} profile a credential profile of this gateway
+ * @param {any} config
+ * @returns {"absent" | "unusable"}
+ */
+function recordCredentialMissing(profile, config) {
+  const spec = credentialProfiles.get(profile);
+  const loadError = spec?.configValue ? config?.[`${spec.configValue}Error`] : config?.publicSourceCredentialErrors?.[spec?.configKey ?? ""];
+  const reason = loadError ? "unusable" : "absent";
+  const bySource = credentialMissingCounts.get(profile);
+  if (bySource) bySource.set(reason, (bySource.get(reason) ?? 0) + 1);
+  return reason;
+}
+
+/**
+ * The counts as the operator's metric family (alerts
+ * `PublicSourceCredentialUnusable`, `EvimedEvidenceRefused`).
+ * @returns {{ name: string, help: string, type: "counter", series: Array<{ value: number, labels: Record<string, string> }> }}
+ */
+export function publicSourceCredentialMissingMetricFamily() {
+  return {
+    name: "open_science_public_source_credential_missing_total",
+    help: "Public-source requests refused for a missing credential, by source and reason: absent (none configured for the deployment or the account) or unusable (the deployment configured one that could not be read).",
+    type: "counter",
+    series: [...credentialMissingCounts].flatMap(([source, byReason]) => [...byReason]
+      .map(([reason, value]) => ({ value, labels: { source, reason } }))),
+  };
+}
 
 /**
  * Credentials that raise a rate ceiling rather than grant access.
@@ -685,6 +749,7 @@ async function readBoundedBody(body, maxBytes) {
 async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal, documentParser }) {
   const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
   if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
+    recordCredentialMissing("unpaywall", config);
     throw gatewayError(503, "public_source_unpaywall_credential_missing", "The server-managed unpaywall credential is unavailable.");
   }
   const lookup = new URL(`https://api.unpaywall.org/v2/${encodeURIComponent(request.doi)}`);
@@ -948,14 +1013,20 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
           if (!credential && connectorCredentials && typeof identity?.userId === "string") {
             credential = String(await connectorCredentials.resolveOwn(identity.userId, request.credentialProfile) ?? "").trim();
           }
-          if (!credential || credential.length > 8 * 1024 || /[\r\n\0]/.test(credential)) {
+          const anonymous = !credential && keylessProfile(request.credentialProfile)
+            && !config.publicSourceCredentialErrors?.[profile.configKey ?? ""];
+          if (!anonymous && (!credential || credential.length > 8 * 1024 || /[\r\n\0]/.test(credential))) {
+            recordCredentialMissing(request.credentialProfile, config);
             throw gatewayError(
               503,
               `public_source_${request.credentialProfile.replaceAll("-", "_")}_credential_missing`,
               `No ${request.credentialProfile} credential is configured for this deployment or this account; one can be added under 设置 → 数据源.`,
             );
           }
-          if (profile.header) {
+          if (anonymous) {
+            // The upstream's public tier: nothing injected, its shared rate
+            // limit applies (a 429 comes back as rate_limited, by name).
+          } else if (profile.header) {
             upstreamHeaders[profile.header] = profile.scheme ? `${profile.scheme} ${credential}` : credential;
           } else {
             request.url.searchParams.set(profile.query, credential);

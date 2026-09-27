@@ -495,6 +495,35 @@
           }
         }
       ]
+    },
+    {
+      "name": "evimed-evidence-sources",
+      "rules": [
+        {
+          "alert": "PublicSourceCredentialUnusable",
+          "expr": "sum by (source) (increase(open_science_public_source_credential_missing_total{reason=\"unusable\"}[15m])) > 0",
+          "for": "0m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "数据源 {{ $labels.source }} 的部署密钥已配置却读不到：对它的每一次请求都被拒绝",
+            "description": "网关因凭据缺失拒绝了 {{ $labels.source }} 的请求，而部署为它配置过密钥文件或变量——文件权限、属组、符号链接或路径不对（/api/ready 的 publicSourceCredentials 写着具体错误码）。运行不会报错，只会悄悄改用别的来源：2026-09-22 起 EviMed 文献接口的密钥文件因属组权限读不到，三天里 325 次文献检索退回 PubMed，没有任何告警。修好文件后重启 web 容器即恢复。"
+          }
+        },
+        {
+          "alert": "EvimedEvidenceRefused",
+          "expr": "sum(increase(open_science_public_source_credential_missing_total{source=\"evimed-evidence\"}[1h])) >= 3",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "EviMed 自有证据接口在过去一小时被网关拒绝 {{ $value }} 次（没有可用的密钥）",
+            "description": "文献、指南、试验、专利、说明书检索都会先问 EviMed 接口，被拒后静默退回 PubMed 等公共源，报告质量下降而运行照常成功。检查部署的 OPEN_SCIENCE_EVIMED_API_KEY_FILE（0440、属组与知识源插件共用）与 /api/ready 的 publicSourceCredentials；本部署若有意不接 EviMed 接口，静默此告警。"
+          }
+        }
+      ]
     }
   ]
 }

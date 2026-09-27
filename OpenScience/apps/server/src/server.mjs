@@ -62,6 +62,7 @@ import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
+  publicSourceCredentialMissingMetricFamily,
   publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
@@ -6392,6 +6393,12 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // pages (providerRefusals.mjs, alert ModelProviderBalanceExhausted).
   const refusals = providerRefusalMetricFamily();
   addMetric(lines, refusals.name, refusals.help, refusals.type, refusals.series);
+  // Public-source requests refused for a missing credential, by source and
+  // whether the deployment's configured one could not be read
+  // (publicSourceGateway.mjs; alerts PublicSourceCredentialUnusable,
+  // EvimedEvidenceRefused).
+  const credentialMissing = publicSourceCredentialMissingMetricFamily();
+  addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();
