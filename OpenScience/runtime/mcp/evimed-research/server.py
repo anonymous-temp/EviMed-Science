@@ -112,6 +112,13 @@ MR_SOURCE_SCHEMA = {
 NUMBER = {"type": "number"}
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 200}
 EVIMED_SEARCH_LIMIT = {"type": "integer", "minimum": 1, "maximum": 100}
+# The study-type labels the EviMed evidence API accepts, in its own words; the
+# control plane's gateway refuses anything else (EVIMED_ENUMERATED_FILTERS).
+EVIMED_ARTICLE_TYPES = (
+    "系统综述/Meta分析", "指南/共识", "传统综述", "随机对照试验", "临床试验", "队列研究",
+    "病例对照研究", "横断面研究", "病例系列", "病例报告", "经济学评价", "专家意见和评价",
+    "动物实验", "体外实验", "其他",
+)
 LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 10}
 LABEL_SECTIONS = {"type": "array", "maxItems": 17, "items": SHORT_STRING}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
@@ -476,7 +483,8 @@ TOOL_DEFINITIONS = [
                 "articleTypes": {
                     "type": "array",
                     "maxItems": 15,
-                    "items": SHORT_STRING,
+                    "items": {"type": "string", "enum": list(EVIMED_ARTICLE_TYPES)},
+                    "description": "EviMed's own study-type labels, e.g. 随机对照试验 for randomized controlled trials.",
                 },
                 "hasPdf": {"type": "boolean"},
                 "language": {"type": "string", "enum": ["zh", "en"]},

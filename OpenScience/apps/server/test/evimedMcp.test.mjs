@@ -25,6 +25,7 @@ import { FRONTIER_LANES, FRONTIER_SPECIALTIES, GEO_ENGINES, GEO_POOLS, GEO_READ_
   MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
 import { GEO_READ_MAX_ITEMS } from "../src/geoService.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "../src/socialCrawlClient.mjs";
+import { EVIMED_ENUMERATED_FILTERS } from "../src/publicSourceGateway.mjs";
 import { FRONTIER_SEARCH_DEFAULT_LIMIT, FRONTIER_SEARCH_MAX_LIMIT, FRONTIER_SEARCH_MAX_QUERY_LENGTH, FRONTIER_SEARCH_MODES } from "../src/frontierGateway.mjs";
 import { FRONTIER_WINDOWS } from "../src/frontierService.mjs";
 import { dshProfileInput } from "../src/runtimeManager.mjs";
@@ -1041,6 +1042,18 @@ test("frontier_search offers exactly the domain's lanes and specialties, and the
   assert.equal(schema.properties.q.maxLength, FRONTIER_SEARCH_MAX_QUERY_LENGTH);
   assert.equal(schema.required, undefined, "no field is required: without q the tool lists the newest items");
   assert.match(description, /leads, not evidence/);
+});
+
+// literature_search's array filters are the EviMed API's closed vocabularies.
+// When articleTypes took any string, a model asked for "Randomized Controlled
+// Trial", the gateway refused the search as malformed and the tool quietly fell
+// back to another endpoint (production, 2026-09-27).
+test("literature_search offers exactly the EviMed filter vocabularies the gateway accepts", async () => {
+  const script = "import json,sys; sys.path.insert(0, '.'); import server; print(json.dumps(server.TOOLS['literature_search']))";
+  const { stdout } = await execFile("python3", ["-c", script], { cwd: path.join(repoRoot, "runtime/mcp/evimed-research") });
+  const { properties } = JSON.parse(stdout).inputSchema;
+  assert.deepEqual(properties.articleTypes.items.enum, [...EVIMED_ENUMERATED_FILTERS.articleTypes]);
+  assert.deepEqual(properties.journalTiers.items.enum, [...EVIMED_ENUMERATED_FILTERS.journalTiers]);
 });
 
 // The GEO tools' schemas are written in Python and their vocabularies are the

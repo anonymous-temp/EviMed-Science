@@ -389,6 +389,23 @@ function validEvimedTextArray(value, { maxItems = 20, maxLength = 128 } = {}) {
   );
 }
 
+
+/**
+ * The closed vocabularies the EviMed evidence API accepts for its array
+ * filters, in its own (Chinese) labels. `literature_search` offers exactly these
+ * as enums (evimedMcp.test.mjs holds the two equal): when the tool took any
+ * string, a model asked for "Randomized Controlled Trial", the API refused the
+ * whole search as malformed and the tool fell back to another endpoint.
+ */
+export const EVIMED_ENUMERATED_FILTERS = Object.freeze({
+  articleTypes: Object.freeze([
+    "系统综述/Meta分析", "指南/共识", "传统综述", "随机对照试验", "临床试验", "队列研究",
+    "病例对照研究", "横断面研究", "病例系列", "病例报告", "经济学评价", "专家意见和评价",
+    "动物实验", "体外实验", "其他",
+  ]),
+  journalTiers: Object.freeze(["北大核心", "科技核心", "南大核心"]),
+});
+
 function validEvimedEnumArray(value, allowed) {
   return Array.isArray(value) && value.length > 0 && value.length <= 20 && value.every((item) => allowed.has(item));
 }
@@ -611,16 +628,8 @@ function validatedRequest(value) {
     ) {
       throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed publisher filter is invalid.");
     }
-    const enumeratedArrays = {
-      articleTypes: new Set([
-        "系统综述/Meta分析", "指南/共识", "传统综述", "随机对照试验", "临床试验", "队列研究",
-        "病例对照研究", "横断面研究", "病例系列", "病例报告", "经济学评价", "专家意见和评价",
-        "动物实验", "体外实验", "其他",
-      ]),
-      journalTiers: new Set(["北大核心", "科技核心", "南大核心"]),
-    };
-    for (const [name, allowed] of Object.entries(enumeratedArrays)) {
-      if (body[name] !== undefined && !validEvimedEnumArray(body[name], allowed)) {
+    for (const [name, values] of Object.entries(EVIMED_ENUMERATED_FILTERS)) {
+      if (body[name] !== undefined && !validEvimedEnumArray(body[name], new Set(values))) {
         throw gatewayError(400, "public_source_gateway_evimed_request_invalid", `The EviMed ${name} filter is invalid.`);
       }
     }

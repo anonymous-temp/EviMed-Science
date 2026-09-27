@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "manuscript-support",
-  "version": "sha256:54358c4403bd243322c386a527f3d9afccd06fc86d4c4512e039b1684b27db52",
+  "version": "sha256:b08ac074ee98786a33b49f36f42a6cfa49b6f7231bf24841b9c631b6faddbaaa",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 26,
@@ -950,9 +950,25 @@
             "maxItems": 15,
             "items": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
+              "enum": [
+                "系统综述/Meta分析",
+                "指南/共识",
+                "传统综述",
+                "随机对照试验",
+                "临床试验",
+                "队列研究",
+                "病例对照研究",
+                "横断面研究",
+                "病例系列",
+                "病例报告",
+                "经济学评价",
+                "专家意见和评价",
+                "动物实验",
+                "体外实验",
+                "其他"
+              ]
+            },
+            "description": "EviMed's own study-type labels, e.g. 随机对照试验 for randomized controlled trials."
           },
           "hasPdf": {
             "type": "boolean"
