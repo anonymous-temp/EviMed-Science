@@ -65,6 +65,70 @@ function learnedMethodText(payload) {
   return `${head}\n\n${String(payload?.body ?? "").trim()}`.slice(0, 20_000);
 }
 
+/** What a pack's card may say, and how long each field may be. The card is
+ *  plain text in the signed manifest: what a recipient reads before any entry
+ *  (2026-09-26 audit, M-6: 「包卡片」 — a received pack was named by whoever
+ *  imported it, 「收到的研究胶囊」, and said nothing of who sent it). */
+const CARD_LIMITS = Object.freeze({ title: 150, author: 150, summary: 500, changelog: 2000 });
+
+/** What each kind is called on a card. */
+const CARD_KIND_LABELS = Object.freeze({
+  method_preference: "做法", writing_style: "写作偏好", preference: "工作偏好", tooling: "工具习惯",
+  profile: "个人背景", behavior: "工作习惯", expertise: "背景知识",
+  project_fact: "项目事实", analysis: "分析", decision: "决定", stance: "立场", tension: "分歧", correction: "经验教训", follow_up: "待办",
+});
+
+/** One card field, trimmed and bounded, or absent. @param {unknown} value @param {number} max */
+function cardText(value, max) {
+  if (value == null) return undefined;
+  if (typeof value !== "string" || value.includes("\0")) throw invalid();
+  const text = value.trim();
+  if (text.length > max) throw invalid();
+  return text || undefined;
+}
+
+/** A card as a manifest carries it; unknown fields are refused. @param {unknown} value */
+export function capsuleCard(value) {
+  if (value == null) return null;
+  fields(value, Object.keys(CARD_LIMITS));
+  const card = Object.fromEntries(Object.entries(CARD_LIMITS)
+    .map(([name, max]) => [name, cardText(/** @type {any} */ (value)[name], max)])
+    .filter(([, text]) => text !== undefined));
+  return Object.keys(card).length ? card : null;
+}
+
+/** Latin text meets Chinese across a typed space (「cdss-access 的工作方式」). @param {string} left @param {string} right */
+function joinZh(left, right) {
+  return /[A-Za-z0-9]$/.test(left) ? `${left} ${right}` : `${left}${right}`;
+}
+
+/** What a pack holds, counted in the recipient's words: 「2 条做法、1 条工作偏好」. @param {readonly { factKind: string }[]} entries */
+export function capsuleCardSummary(entries) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const entry of entries) {
+    const label = CARD_KIND_LABELS[/** @type {keyof typeof CARD_KIND_LABELS} */ (entry.factKind)] ?? "条目";
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts].map(([label, count]) => `${count} 条${label}`).join("、");
+}
+
+/**
+ * What changed since the snapshot a new one replaces, counted by content: an
+ * entry is the same entry when its text is (ids are minted per export).
+ * @param {readonly string[]} before the replaced snapshot's entry digests
+ * @param {readonly string[]} after this snapshot's entry digests
+ */
+export function capsuleChangelog(before, after) {
+  const earlier = new Set(before);
+  const later = new Set(after);
+  const added = [...later].filter((digest) => !earlier.has(digest)).length;
+  const removed = [...earlier].filter((digest) => !later.has(digest)).length;
+  const kept = [...later].filter((digest) => earlier.has(digest)).length;
+  const parts = [...(added ? [`新增 ${added} 条`] : []), ...(removed ? [`移除 ${removed} 条`] : []), ...(kept ? [`保留 ${kept} 条`] : [])];
+  return { added, removed, kept, text: parts.join("、") || "内容未变" };
+}
+
 function decodeBase64(value, maxBytes) {
   if (typeof value !== "string" || value.length > Math.ceil(maxBytes / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw invalid();
   const decoded = Buffer.from(value, "base64");
@@ -81,12 +145,15 @@ function parseArchive(archive) {
   fields(envelope.payload, Object.keys(envelope.payload ?? {}));
   if (Object.keys(envelope.payload).length > 102) throw invalid();
   const payload = Object.fromEntries(Object.entries(envelope.payload).map(([name, content]) => [name, decodeBase64(content, CAPSULE_TRANSFER_MAX_BYTES)]));
-  return { envelope, container: { manifest: envelope.manifest, payload }, passwordWrap: decodeBase64(envelope.passwordWrap, 1086) };
+  // A pack sealed only for named recipients carries no password wrap.
+  const passwordWrap = envelope.passwordWrap === undefined ? null : decodeBase64(envelope.passwordWrap, 1086);
+  return { envelope, container: { manifest: envelope.manifest, payload }, passwordWrap };
 }
 function snapshotView(record) {
   // Preserve version/digest evidence while omitting private local record identifiers.
-  const { sourceEntries, capsuleId: _capsuleId, issuerId: _issuerId, ...metadata } = record.payload;
+  const { sourceEntries, capsuleId: _capsuleId, issuerId: _issuerId, recipients: _recipients, ...metadata } = record.payload;
   return { id: record.id, revision: record.revision, createdAt: record.createdAt, ...metadata,
+    recipientCount: Array.isArray(record.payload.recipients) ? record.payload.recipients.length : 0,
     entryVersions: sourceEntries.map(entry => ({ version: entry.revision, sha256: entry.sha256 })) };
 }
 
@@ -120,13 +187,13 @@ export class CapsuleTransferService {
     return result;
   }
 
-  async export(userId, capsuleId, input, options = {}) {
-    fields(input, ["password", "scopes", "supersedes"]); checkedText(input.password, 1024);
-    const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
-    if (input.supersedes != null) await this.snapshot(userId, capsuleId, input.supersedes);
-    const scopes = scopesOf(input.scopes); const kinds = kindsFor(scopes);
-    await this.capsules.get(userId, capsuleId);
-    const source = await this.documents.database.transaction(async client => {
+  /**
+   * What a pack of this capsule would carry, read in one snapshot of the
+   * stores: the facts, learned methods and stated preferences `export` packs.
+   * @param {string} userId @param {string} capsuleId @param {readonly string[]} kinds
+   */
+  async #assemble(userId, capsuleId, kinds) {
+    return this.documents.database.transaction(async client => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);
       if (!capsule.rows[0]) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
@@ -169,7 +236,92 @@ export class CapsuleTransferService {
           factKind: row.kind, origin: "explicit", content: String(row.summary || row.value) } })),
       ] };
     });
-    if (!source.facts.length) throw new HttpError(400, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
+  }
+
+  /**
+   * The card a pack of this account carries: who sent it (the account's
+   * display name, never its id), what it is called and what it holds, and —
+   * for one that replaces an earlier snapshot — what changed. The sender may
+   * name the title, summary and changelog; the author is the account's own.
+   * @param {string} userId @param {readonly { factKind: string, sha256: string }[]} entries
+   * @param {any} previous the snapshot record this one replaces, or null @param {any} requested
+   */
+  async #card(userId, entries, previous, requested) {
+    const asked = capsuleCard(requested) ?? {};
+    const name = String((await this.documents.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [userId])).rows[0]?.name ?? "").trim();
+    const author = name ? cardText(name.slice(0, CARD_LIMITS.author), CARD_LIMITS.author) : undefined;
+    const changes = previous
+      ? capsuleChangelog((previous.payload.sourceEntries ?? []).map((/** @type {any} */ entry) => entry.sha256), entries.map((entry) => entry.sha256))
+      : null;
+    return capsuleCard({
+      title: asked.title ?? (author ? joinZh(author, "的工作方式") : "分享的工作方式"),
+      ...(author ? { author } : {}),
+      summary: asked.summary ?? capsuleCardSummary(entries),
+      ...(asked.changelog ?? changes?.text ? { changelog: asked.changelog ?? changes?.text } : {}),
+    });
+  }
+
+  /**
+   * The X25519 keys of the accounts a pack is sealed for (build spec §9.2):
+   * each named account on this deployment can open it with its own key, and
+   * nobody needs the password. An account that does not exist is refused by
+   * name rather than silently left out of a pack its sender thinks it reaches.
+   * @param {unknown} recipients @param {string} sender
+   */
+  async #recipientKeys(recipients, sender) {
+    if (recipients == null) return [];
+    if (!Array.isArray(recipients) || recipients.length > 32 || recipients.some((id) => typeof id !== "string" || !id.trim())) throw invalid();
+    const ids = [...new Set(recipients.map((id) => id.trim()))].filter((id) => id !== sender);
+    const keys = [];
+    for (const id of ids) {
+      productId(id, "user");
+      const exists = await this.documents.database.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [id]);
+      if (exists.rowCount !== 1) throw new HttpError(400, "capsule_recipient_unknown", "A named recipient is not an account on this deployment.");
+      const identity = await this.withAccount(id, null, () => this.identities.forUser(id));
+      if (!identity?.encryption?.keyId || !identity.encryption.publicKey) throw new HttpError(503, "capsule_identity_unavailable", "A recipient key is unavailable.");
+      keys.push({ userId: id, encKeyId: identity.encryption.keyId, publicKey: identity.encryption.publicKey });
+    }
+    return keys;
+  }
+
+  /**
+   * 「对方会看到什么」: the pack as its recipient would read it, before any
+   * password is chosen — the card, and every entry that would leave. An
+   * account with nothing to share hears it here as a state, not as a refused
+   * export (2026-09-26 audit, M-6: the owner's own account had no learned
+   * method and no stated preference, and 加密导出 answered 400).
+   * @param {string} userId @param {string} capsuleId @param {any} input
+   */
+  async exportPreview(userId, capsuleId, input = {}) {
+    fields(input, ["scopes", "supersedes", "card"]);
+    const scopes = scopesOf(input.scopes ?? undefined);
+    await this.capsules.get(userId, capsuleId);
+    const previous = input.supersedes != null ? await this.snapshot(userId, capsuleId, input.supersedes) : null;
+    const source = await this.#assemble(userId, capsuleId, kindsFor(scopes));
+    const entries = source.facts.slice(0, MAX_ENTRIES).map((fact) => {
+      const content = String(fact.payload.content ?? "");
+      return { factKind: fact.payload.factKind, layer: location(fact.payload.factKind).layer, content, sha256: digest(content),
+        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
+    });
+    return {
+      scopes, empty: entries.length === 0, tooMany: source.facts.length > MAX_ENTRIES,
+      card: entries.length ? await this.#card(userId, entries, previous, input.card) : null,
+      entries: entries.map(({ sha256: _sha256, ...entry }) => entry),
+    };
+  }
+
+  async export(userId, capsuleId, input, options = {}) {
+    fields(input, ["password", "scopes", "supersedes", "recipients", "card"]);
+    if (input.password !== undefined) checkedText(input.password, 1024);
+    const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
+    const previous = input.supersedes != null ? await this.snapshot(userId, capsuleId, input.supersedes) : null;
+    const scopes = scopesOf(input.scopes); const kinds = kindsFor(scopes);
+    await this.capsules.get(userId, capsuleId);
+    const recipients = await this.#recipientKeys(input.recipients, userId);
+    // Sealed for a password, for named accounts, or both; never for nobody.
+    if (input.password === undefined && recipients.length === 0) throw invalid();
+    const source = await this.#assemble(userId, capsuleId, kinds);
+    if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
     const snapshotId = randomUUID();
     const entries = source.facts.map(fact => {
@@ -177,17 +329,25 @@ export class CapsuleTransferService {
       return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md`,
         origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
     });
+    const card = await this.#card(userId, entries, previous, input.card);
     const files = renderedFiles(snapshotId, entries);
     const identity = await this.withAccount(userId, accountCreatedAt, () => this.identities.forUser(userId, { accountCreatedAt }));
     const container = await packCapsule({ capsuleId: snapshotId, version: source.revision, createdAt: new Date().toISOString(),
       issuer: { userId: identity.issuerId, signingKeyId: identity.signing.keyId, signingPrivateKey: identity.signing.privateKey },
-      scope: scopes, layers: [...new Set([...entries.map(entry => entry.layer), "methods"])], password: input.password,
+      scope: scopes, layers: [...new Set([...entries.map(entry => entry.layer), "methods"])],
+      ...(input.password !== undefined ? { password: input.password } : {}),
+      ...(recipients.length ? { recipients: recipients.map(({ encKeyId, publicKey }) => ({ encKeyId, publicKey })) } : {}),
+      // The version chain (build spec §9.2): what an importer that holds the
+      // replaced snapshot upgrades in place.
+      prevManifestSha256: previous?.payload.manifestSha256 ?? null,
+      ...(card ? { card } : {}),
       entries: Object.entries(files).map(([file, content]) => ({ path: file, content,
         mime: file.endsWith(".json") ? "application/json" : file.endsWith(".jsonl") ? "application/x-ndjson" : "text/markdown",
         layer: file === "provenance.json" ? "methods" : entries.find(entry => entry.path === file).layer })),
     });
     const archive = JSON.stringify({ format: "evimedcap", version: 1, manifest: container.manifest, issuerPublicKey: identity.signing.publicKey,
-      passwordWrap: container.passwordWrap.toString("base64"), payload: Object.fromEntries(Object.entries(container.payload).map(([file, bytes]) => [file, bytes.toString("base64")])) });
+      ...(container.passwordWrap ? { passwordWrap: container.passwordWrap.toString("base64") } : {}),
+      payload: Object.fromEntries(Object.entries(container.payload).map(([file, bytes]) => [file, bytes.toString("base64")])) });
     if (Buffer.byteLength(archive) > CAPSULE_TRANSFER_MAX_BYTES) throw new HttpError(413, "capsule_transfer_too_large", "This encrypted snapshot exceeds 2 MiB.");
     const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
     const filename = `${capsuleAccountHash(userId)}-${snapshotId}.evimedcap`;
@@ -197,6 +357,7 @@ export class CapsuleTransferService {
       recordType: "capsule-snapshot", capsuleId, issuerId: identity.issuerId, status: "active", scopes, supersedes: input.supersedes ?? null,
       archiveSha256: digest(archive), manifestSha256: digest(JSON.stringify(container.manifest)), capsuleRevision: source.revision,
       entryCount: entries.length, sourceEntries: source.facts.map((fact, index) => ({ id: fact.id, revision: fact.revision, sha256: entries[index].sha256 })),
+      ...(card ? { card } : {}), ...(recipients.length ? { recipients: recipients.map((recipient) => recipient.userId) } : {}),
     } }], { accountCreatedAt }); } catch (error) {
       await unlinkCapsuleFile(directory, filename);
       throw error;
@@ -236,11 +397,21 @@ export class CapsuleTransferService {
 
   async inspect(userId, input, options = {}) {
     const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
-    productId(userId); fields(input, ["archive", "password"]); checkedText(input.password, 1024);
+    productId(userId); fields(input, ["archive", "password"]);
+    if (input.password !== undefined) checkedText(input.password, 1024);
     const { envelope, container, passwordWrap } = parseArchive(input.archive);
     const manifest = envelope.manifest;
     const beforeKdf = await this.identities.resolve(manifest.issuer?.userId, manifest.issuer?.signingKeyId);
-    const opened = await openCapsule(container, { issuer: { signingPublicKey: beforeKdf?.publicKey ?? envelope.issuerPublicKey }, password: input.password, passwordWrap });
+    // A pack sealed for this account opens with its own key; any other needs
+    // the password its sender chose.
+    const own = await this.withAccount(userId, accountCreatedAt, () => this.identities.forUser(userId, { accountCreatedAt }));
+    const addressed = Array.isArray(manifest.encryption?.recipients)
+      && manifest.encryption.recipients.some((/** @type {any} */ entry) => entry?.encKeyId === own?.encryption?.keyId);
+    if (!addressed && input.password === undefined) throw new HttpError(400, "capsule_password_required", "This capsule needs the password its sender chose.");
+    const keys = addressed
+      ? { recipient: { encKeyId: own.encryption.keyId, privateKey: own.encryption.privateKey, publicKey: own.encryption.publicKey } }
+      : { password: input.password, passwordWrap: passwordWrap ?? undefined };
+    const opened = await openCapsule(container, { issuer: { signingPublicKey: beforeKdf?.publicKey ?? envelope.issuerPublicKey }, ...keys });
     if ("issues" in opened) throw new HttpError(opened.issues[0]?.code === "capsule_password_busy" ? 429 : 400, "capsule_transfer_open_failed", "The capsule could not be verified or decrypted.");
     // KDF can outlive account deletion. Refresh the issuer and retain any prior
     // local classification; disappearance must never grant foreign-import fallback.
@@ -273,21 +444,46 @@ export class CapsuleTransferService {
     // Whole-pack trust with an automatic scan (plan §3.3 #4): what would be
     // dropped is part of what the researcher previews.
     const scan = await this.scanned(userId, options.projectId ?? null, archiveSha256, metadata.entries);
-    const preview = { archiveSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
+    let card = null;
+    try { card = capsuleCard(manifest.card); } catch { throw invalid(); }
+    const manifestSha256 = digest(JSON.stringify(manifest));
+    const upgrade = await this.#upgradeTarget(userId, manifest, metadata.entries);
+    const preview = { archiveSha256, manifestSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
+      card, upgrades: upgrade ? upgrade.view : null,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
       hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? (known ? "unavailable" : "unknown"),
       canImport: !known || Boolean(currentIssuer && !currentIssuer.revoked && sourceAccountPresent && hosted?.payload.status === "active"), offlineRevocable: false };
     if (!preview.canImport) preview.entries = [];
     const guards = known?.ownerId ? [{ userId: known.ownerId, kind: "preferences", id: metadata.snapshotId, filter: { status: "active", archiveSha256 } }] : [];
-    return { preview, guards, accountCreatedAt };
+    return { preview, guards, accountCreatedAt, upgrade };
+  }
+
+  /**
+   * The received pack this one continues, when the account holds it: the same
+   * issuer, and a manifest whose version chain names the one it was imported
+   * from. What changed is counted by content, since ids are minted per export.
+   * @param {string} userId @param {any} manifest @param {readonly any[]} entries
+   */
+  async #upgradeTarget(userId, manifest, entries) {
+    if (typeof manifest.prevManifestSha256 !== "string" || !/^[a-f0-9]{64}$/.test(manifest.prevManifestSha256)) return null;
+    const received = await this.documents.list(userId, "capsule", { limit: 100,
+      filter: { imported: true, transfer: { manifestSha256: manifest.prevManifestSha256, issuerId: manifest.issuer.userId } } });
+    const capsule = received.items[0];
+    if (!capsule) return null;
+    const facts = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id } })).items
+      .filter((/** @type {any} */ fact) => fact.payload.status !== "retired" && fact.payload.transfer?.sha256);
+    const changes = capsuleChangelog(facts.map((/** @type {any} */ fact) => fact.payload.transfer.sha256), entries.map((entry) => entry.sha256));
+    return { capsule, facts, view: { capsuleId: capsule.id, title: capsule.payload.title, added: changes.added, removed: changes.removed, kept: changes.kept } };
   }
 
   async import(userId, input, options = {}) {
     fields(input, ["archive", "password", "expectedDigest", "confirmed", "title"]);
     if (input.confirmed !== true) throw new HttpError(400, "capsule_import_confirmation_required", "Preview and explicitly confirm the capsule before importing.");
     if (input.expectedDigest !== digest(checkedText(input.archive, CAPSULE_TRANSFER_MAX_BYTES))) throw new HttpError(409, "capsule_preview_changed", "The archive changed after preview.");
-    const { preview, guards, accountCreatedAt } = await this.inspect(userId, { archive: input.archive, password: input.password }, options);
+    const { preview, guards, accountCreatedAt, upgrade } = await this.inspect(userId,
+      { archive: input.archive, ...(input.password !== undefined ? { password: input.password } : {}) }, options);
     if (!preview.canImport) throw new HttpError(409, "capsule_snapshot_revoked", "This hosted snapshot has been revoked.");
+    if (upgrade) return this.#upgrade(userId, preview, upgrade, guards);
     const capsuleId = randomUUID();
     // The only transaction starts after KDF and parsing have finished. All rows
     // are new, owned by this account and context-only. The pack is trusted as
@@ -305,8 +501,10 @@ export class CapsuleTransferService {
     const held = new Set(Array.isArray(preview.scan.held) ? preview.scan.held : []);
     let records;
     try { records = await this.documents.createBatch(userId, [
-      { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
-        transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, issuerTrust: preview.issuerTrust, importedAt: new Date().toISOString() },
+      { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? preview.card?.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
+        transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, manifestSha256: preview.manifestSha256, issuerId: preview.issuerId,
+          issuerTrust: preview.issuerTrust, importedAt: new Date().toISOString() },
+        ...(preview.card ? { card: preview.card } : {}),
         scan: preview.scan } },
       ...preview.entries.filter(entry => kept.has(entry.id)).map(entry => ({ kind: "fact", id: randomUUID(), payload: {
         // The sharer's runtime note stays the assistant's note here, and so is
@@ -324,6 +522,55 @@ export class CapsuleTransferService {
       throw error;
     }
     return records[0];
+  }
+
+  /**
+   * Take a newer snapshot of a pack the account holds in place: the same
+   * capsule, so whether and where it is in force does not change; its card,
+   * transfer record and scan move to the new snapshot; the entries the new
+   * snapshot no longer carries are retired, and what it carries is written as
+   * this pack's. One transaction, so no reader sees both or neither.
+   * @param {string} userId @param {any} preview @param {any} upgrade @param {readonly any[]} guards
+   */
+  async #upgrade(userId, preview, upgrade, guards) {
+    const kept = new Set(preview.scan.kept);
+    const unchecked = new Set(Array.isArray(preview.scan.unchecked) ? preview.scan.unchecked : preview.scan.model === "ok" ? [] : preview.scan.kept);
+    const held = new Set(Array.isArray(preview.scan.held) ? preview.scan.held : []);
+    const at = new Date().toISOString();
+    try {
+      return await this.documents.database.transaction(async (/** @type {any} */ client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-user:${productId(userId)}`]);
+        for (const guard of guards) {
+          const source = await client.query(`SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind=$2 AND id=$3
+            AND deleted_at IS NULL AND payload @> $4::jsonb FOR SHARE`, [guard.userId, guard.kind, guard.id, JSON.stringify(guard.filter)]);
+          if (source.rowCount !== 1) throw new HttpError(409, "capsule_snapshot_revoked", "The hosted snapshot was revoked or changed before import.");
+        }
+        for (const fact of upgrade.facts) {
+          await this.documents.put(userId, "fact", fact.id, { ...fact.payload, status: "retired", retiredBy: { type: "upgrade", snapshotId: preview.snapshotId, at } },
+            { expectedRevision: fact.revision, transactionClient: client });
+        }
+        for (const entry of preview.entries.filter((/** @type {any} */ item) => kept.has(item.id))) {
+          await this.documents.put(userId, "fact", randomUUID(), {
+            capsuleId: upgrade.capsule.id, factKind: entry.factKind, layer: entry.layer, content: entry.content,
+            origin: entry.origin === "inferred" ? "inferred" : "system", status: "approved", contextOnly: true,
+            ...(unchecked.has(entry.id) ? { unscanned: true } : {}), ...(held.has(entry.id) ? { safetyHold: true } : {}),
+            provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }],
+            transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
+          }, { expectedRevision: 0, transactionClient: client });
+        }
+        return this.documents.put(userId, "capsule", upgrade.capsule.id, {
+          ...upgrade.capsule.payload,
+          transfer: { ...upgrade.capsule.payload.transfer, snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256,
+            manifestSha256: preview.manifestSha256, issuerId: preview.issuerId, issuerTrust: preview.issuerTrust, upgradedAt: at,
+            previousSnapshotId: upgrade.capsule.payload.transfer?.snapshotId ?? null },
+          ...(preview.card ? { card: preview.card } : {}),
+          scan: preview.scan,
+        }, { expectedRevision: upgrade.capsule.revision, transactionClient: client });
+      });
+    } catch (error) {
+      if (error?.code === "product_revision_conflict") throw new HttpError(409, "capsule_preview_changed", "The received capsule changed before the upgrade completed.");
+      throw error;
+    }
   }
 
   /** File publication only holds the same short lock as account deletion; never perform KDF inside it. */

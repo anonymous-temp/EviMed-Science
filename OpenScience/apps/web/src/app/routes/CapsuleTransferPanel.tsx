@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { CAPSULE_SCAN_REASONS, capsuleEntryLabel } from "@/lib/capsuleText";
+import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { formatDateTime } from "@/lib/format";
 import { labelFor } from "@/lib/statusLabel";
 import {
-  downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleImport,
+  downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleExport, previewCapsuleImport,
   productErrorMessage, revokeCapsuleExport, saveCapsuleDownload,
-  type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
+  type CapsuleExportPreview, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
 } from "@/lib/productClient";
 
 const SCOPE_LABELS: Record<string, string> = { workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" };
@@ -33,6 +33,8 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
   const [archive, setArchive] = useState("");
   const [importTitle, setImportTitle] = useState("收到的研究胶囊");
   const [preview, setPreview] = useState<CapsuleTransferPreview | null>(null);
+  /** 「对方会看到什么」 for the scopes chosen; null until read, or when it cannot be. */
+  const [outgoing, setOutgoing] = useState<CapsuleExportPreview | null>(null);
   const [history, setHistory] = useState<CapsuleExportSnapshot[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -59,6 +61,23 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
     return () => { active = false; };
   }, [capsuleId, refresh]);
 
+  // What a pack of the chosen scopes would carry, read before any password is
+  // typed: an account with nothing to share is told so here, not by a refused
+  // export (2026-09-26 audit, M-6).
+  useEffect(() => {
+    let active = true;
+    setOutgoing(null);
+    if (!capsuleId) return;
+    const scopes = ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])];
+    void (async () => {
+      try {
+        const result = await previewCapsuleExport(capsuleId, { scopes });
+        if (active) setOutgoing(result ?? null);
+      } catch { /* the export itself still says why it cannot run */ }
+    })();
+    return () => { active = false; };
+  }, [capsuleId, profile, knowledge, refresh]);
+
   const perform = async (action: () => Promise<void>) => {
     if (busy) return; setBusy(true); setError(null); setNotice(null);
     try { await action(); } catch (caught) { if (mounted.current) setError(productErrorMessage(caught)); }
@@ -72,6 +91,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
     if (mounted.current) { setExportPassword(""); setRefresh(value => value + 1); setNotice("已下载"); }
   });
 
+  const upgrading = preview?.upgrades ?? null;
   const status = preview ? [
     preview.issuerTrust === "verified" ? "已验证" : "未验证",
     `${preview.entries.length} 条`,
@@ -112,7 +132,21 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
         <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={profile} disabled={busy} onChange={event => setProfile(event.target.checked)} />个人背景</label>
         <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={knowledge} disabled={busy} onChange={event => setKnowledge(event.target.checked)} />知识与项目事实</label>
       </fieldset>
-      <Button disabled={busy || !capsuleId || !exportPassword} loading={busy} onClick={() => void createExport()}>加密导出</Button>
+      {outgoing?.empty ? (
+        <p className="text-ui text-text-2">还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。</p>
+      ) : outgoing?.card?.summary ? (
+        <Disclosure summary={`对方会看到：${outgoing.card.summary}`}>
+          <ul className="space-y-2">
+            {outgoing.entries.map((entry, index) => (
+              <li key={index} className="text-ui">
+                <span className="text-text-3">{capsuleEntryLabel(entry.factKind)}</span>
+                <p className="max-w-measure whitespace-pre-wrap text-text">{entry.content}</p>
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      ) : null}
+      <Button disabled={busy || !capsuleId || !exportPassword || outgoing?.empty === true} loading={busy} onClick={() => void createExport()}>加密导出</Button>
     </section>
 
     <section className="space-y-3" aria-label="胶囊导入">
@@ -124,10 +158,22 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
         void perform(async () => { const content = await file.text(); if (mounted.current) setArchive(content); });
       }} /></label>
       <Input label="导入口令" type="password" autoComplete="off" disabled={busy} maxLength={1024} value={importPassword} onChange={event => { setImportPassword(event.target.value); setPreview(null); }} />
-      <Button variant="secondary" disabled={busy || !archive || !importPassword} onClick={() => void perform(async () => {
-        const result = await previewCapsuleImport({ archive, password: importPassword }); if (mounted.current) setPreview(result);
+      {/* A pack sealed for this account opens without a password. */}
+      <Button variant="secondary" disabled={busy || !archive} onClick={() => void perform(async () => {
+        const result = await previewCapsuleImport({ archive, ...(importPassword ? { password: importPassword } : {}) });
+        if (mounted.current) { setPreview(result); if (result?.card?.title) setImportTitle(result.card.title); }
       })}>解密并预览</Button>
       {preview && <div className="space-y-3 pt-2">
+        {/* The card its sender signed: what it is, who sent it, what it holds. */}
+        {preview.card && <div className="space-y-1">
+          {preview.card.title && <p className="text-ui font-semibold text-text">{preview.card.title}</p>}
+          {(preview.card.author || preview.card.summary) && <p className="text-ui text-text-2">
+            {[preview.card.author ? fromSender(preview.card.author) : null, preview.card.summary ?? null].filter(Boolean).join(" · ")}
+          </p>}
+        </div>}
+        {upgrading && <p className="text-ui text-text">
+          会更新你已收下的“{upgrading.title}”：{preview.card?.changelog ?? `新增 ${upgrading.added} 条、移除 ${upgrading.removed} 条`}
+        </p>}
         <p className="text-ui text-text">{status}</p>
         {/* Whole-pack trust (plan §3.3 #4): what the scan would drop is part
             of what is previewed, entry by entry. */}
@@ -142,11 +188,15 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
             </li>;
           })}
         </ul>
-        <Input label="收下后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />
-        <Button disabled={busy || !preview.canImport || !importTitle.trim()} onClick={() => void perform(async () => {
-          const result = await importCapsule({ archive, password: importPassword, expectedDigest: preview.archiveSha256, confirmed: true, title: importTitle.trim() });
-          if (mounted.current) { setPreview(null); setArchive(""); setImportPassword(""); setNotice(`已收下「${result.payload.title}」`); onImported(result); }
-        })}>收下这个胶囊</Button>
+        {!upgrading && <Input label="收下后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />}
+        <Button disabled={busy || !preview.canImport || (!upgrading && !importTitle.trim())} onClick={() => void perform(async () => {
+          const result = await importCapsule({ archive, ...(importPassword ? { password: importPassword } : {}), expectedDigest: preview.archiveSha256, confirmed: true,
+            ...(upgrading ? {} : { title: importTitle.trim() }) });
+          if (mounted.current) {
+            setPreview(null); setArchive(""); setImportPassword("");
+            setNotice(upgrading ? `已更新“${result.payload.title}”` : `已收下「${result.payload.title}」`); onImported(result);
+          }
+        })}>{upgrading ? "更新这个胶囊" : "收下这个胶囊"}</Button>
       </div>}
     </section>
 

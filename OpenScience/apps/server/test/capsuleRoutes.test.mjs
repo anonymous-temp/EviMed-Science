@@ -131,3 +131,46 @@ test("a received pack: shelf, one-click enable and disable, and a trial marked o
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: "ses-new-2" }) });
   assert.equal(unavailable.status, 503);
 });
+
+// 2026-09-26 audit (M-6): no pack action wrote an audit row (build spec §12).
+test("every action on a pack writes an audit row with ids and counts, and a preview writes none", async (t) => {
+  const audited = [];
+  const service = {
+    enableReceived: async (_user, id) => ({ id, enabled: true }),
+    disable: async () => ({ disabled: true, lists: 1 }),
+    prepareTrial: async (_user, id) => ({ id }),
+  };
+  const transferService = {
+    exportPreview: async (_user, id, input) => ({ empty: false, scopes: input.scopes ?? ["workstyle"], card: null, entries: [] }),
+    export: async () => ({ archive: "ciphertext", filename: "capsule-s1.evimedcap",
+      snapshot: { id: "snap-1", entryCount: 3, scopes: ["workstyle"], recipientCount: 1, supersedes: null } }),
+    revoke: async (_user, _capsule, id) => ({ id, status: "revoked" }),
+    import: async () => ({ id: "pack-2", payload: { transfer: { snapshotId: "snap-9", issuerTrust: "verified", upgradedAt: "2026-09-27T00:00:00Z" },
+      scan: { dropped: [{ id: "x" }] } } }),
+  };
+  const store = { ensureSessionUser: async () => ({ user: { id: "owner", accountCreatedAt: "epoch" } }), assertCsrf: async () => {},
+    selectedProject: async () => ({ id: "current-project" }) };
+  const handle = createCapsuleRoutes({ store, service, transferService, maxJsonBytes: 262144,
+    trials: { mark: async () => {} }, audit: async (user, action, details) => { audited.push({ user: user.id, action, details }); } });
+  const server = createServer((req, res) => { handle(req, res).catch((error) => sendError(res, error)); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${server.address().port}/api/capsules`;
+  const call = (method, path, body = {}) => fetch(`${base}${path}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  assert.equal((await call("POST", "/mine-1/exports/preview", { scopes: ["workstyle"] })).status, 200);
+  assert.deepEqual(audited, [], "reading what a pack would carry is not an action on one");
+  assert.equal((await call("POST", "/mine-1/exports", { password: "test-only-transfer", recipients: ["colleague"] })).status, 201);
+  assert.equal((await call("DELETE", "/mine-1/exports/snap-1", { expectedRevision: 1 })).status, 200);
+  assert.equal((await call("POST", "/transfers/import", { archive: "x", expectedDigest: "d", confirmed: true })).status, 201);
+  assert.equal((await call("POST", "/pack-2/enable")).status, 200);
+  assert.equal((await call("POST", "/pack-2/disable")).status, 200);
+  assert.equal((await call("POST", "/pack-2/trial", { sessionId: "ses-1" })).status, 200);
+  assert.deepEqual(audited.map((row) => row.action), [
+    "capsule.pack.export", "capsule.pack.revoke", "capsule.pack.upgrade", "capsule.pack.enable", "capsule.pack.disable", "capsule.pack.trial",
+  ]);
+  assert.ok(audited.every((row) => row.user === "owner"));
+  assert.deepEqual(audited[0].details, { capsuleId: "mine-1", snapshotId: "snap-1", entries: 3, scopes: ["workstyle"], recipients: 1, supersedes: null });
+  assert.equal(audited[2].details.dropped, 1);
+  assert.ok(!JSON.stringify(audited).includes("test-only-transfer"), "no password, no content");
+});

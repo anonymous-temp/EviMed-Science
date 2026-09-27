@@ -17,9 +17,14 @@ function pageOptions(url) {
 }
 
 /** Typed user endpoints; no generic product document write API is exposed.
+ *
+ * Every action on a pack — export, revoke, import (or an upgrade in place),
+ * enable, disable, a trial — writes an audit row (build spec §12; 2026-09-26
+ * audit, M-6: none of them did). Counts and ids only, never an entry's text.
  * @param {{ store: any, service: any, transferService?: any, maxJsonBytes: number,
- *   trials?: { mark: (userId: string, projectId: string, sessionId: string, capsuleId: string) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null }) {
+ *   trials?: { mark: (userId: string, projectId: string, sessionId: string, capsuleId: string) => Promise<unknown> } | null,
+ *   audit?: (user: any, action: string, details: Record<string, unknown>) => Promise<void> }} dependencies */
+export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null, audit = async () => {} }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -67,18 +72,40 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       if (parts[0] === "transfers" && method === "POST") {
         if (parts[1] === "preview") return reply(await transferService.preview(user.id,
           await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"]), accountContext));
-        if (parts[1] === "import") return reply(await transferService.import(user.id,
-          await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password", "expectedDigest", "confirmed", "title"]), accountContext), 201);
+        if (parts[1] === "import") {
+          const imported = await transferService.import(user.id,
+            await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password", "expectedDigest", "confirmed", "title"]), accountContext);
+          await audit(user, imported.payload?.transfer?.upgradedAt ? "capsule.pack.upgrade" : "capsule.pack.import", {
+            capsuleId: imported.id, snapshotId: imported.payload?.transfer?.snapshotId ?? null, issuerTrust: imported.payload?.transfer?.issuerTrust ?? null,
+            dropped: imported.payload?.scan?.dropped?.length ?? 0,
+          });
+          return reply(imported, 201);
+        }
       }
       if (parts[1] === "exports" && parts.length === 2) {
         if (method === "GET") return reply(await transferService.history(user.id, parts[0], { cursor: url.searchParams.get("cursor") }));
-        if (method === "POST") return reply(await transferService.export(user.id, parts[0],
-          await bodyOf(req, 4096, ["password", "scopes", "supersedes"]), accountContext), 201);
+        if (method === "POST") {
+          const result = await transferService.export(user.id, parts[0],
+            await bodyOf(req, 16 * 1024, ["password", "scopes", "supersedes", "recipients", "card"]), accountContext);
+          await audit(user, "capsule.pack.export", {
+            capsuleId: parts[0], snapshotId: result.snapshot?.id ?? null, entries: result.snapshot?.entryCount ?? null, scopes: result.snapshot?.scopes ?? null,
+            recipients: result.snapshot?.recipientCount ?? 0, supersedes: result.snapshot?.supersedes ?? null,
+          });
+          return reply(result, 201);
+        }
+      }
+      // 「对方会看到什么」: the pack as its recipient would read it, before a
+      // password is chosen — and, for an account with nothing to share yet,
+      // that state rather than a refused export.
+      if (parts[1] === "exports" && parts.length === 3 && parts[2] === "preview" && method === "POST") {
+        return reply(await transferService.exportPreview(user.id, parts[0], await bodyOf(req, 16 * 1024, ["scopes", "supersedes", "card"])));
       }
       if (parts[1] === "exports" && parts.length === 3) {
         if (method === "DELETE") {
           const body = await bodyOf(req, 4096, ["expectedRevision"]);
-          return reply(await transferService.revoke(user.id, parts[0], parts[2], body.expectedRevision));
+          const revoked = await transferService.revoke(user.id, parts[0], parts[2], body.expectedRevision);
+          await audit(user, "capsule.pack.revoke", { capsuleId: parts[0], snapshotId: parts[2] });
+          return reply(revoked);
         }
         if (method === "GET") {
           const result = await transferService.download(user.id, parts[0], parts[2]);
@@ -108,11 +135,15 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     // conversation of its own that writes nothing into the researcher's memory.
     if (parts.length === 2 && action === "enable" && method === "POST") {
       await bodyOf(req, maxJsonBytes, []);
-      return reply(await service.enableReceived(user.id, capsuleId, { projectId: await current() }));
+      const enabled = await service.enableReceived(user.id, capsuleId, { projectId: await current() });
+      await audit(user, "capsule.pack.enable", { capsuleId });
+      return reply(enabled);
     }
     if (parts.length === 2 && action === "disable" && method === "POST") {
       await bodyOf(req, maxJsonBytes, []);
-      return reply(await service.disable(user.id, capsuleId));
+      const disabled = await service.disable(user.id, capsuleId);
+      await audit(user, "capsule.pack.disable", { capsuleId });
+      return reply(disabled);
     }
     if (parts.length === 2 && action === "trial" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["sessionId"]);
@@ -123,6 +154,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       }
       await service.prepareTrial(user.id, capsuleId, { projectId });
       await trials.mark(user.id, projectId, body.sessionId, capsuleId);
+      await audit(user, "capsule.pack.trial", { capsuleId, projectId, sessionId: body.sessionId });
       return reply({ capsuleId, sessionId: body.sessionId });
     }
     if (parts.length === 2 && action === "restore" && method === "POST") {

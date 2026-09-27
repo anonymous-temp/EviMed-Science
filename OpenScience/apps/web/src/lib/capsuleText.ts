@@ -34,3 +34,8 @@ export const CAPSULE_SCAN_MODEL_STATUS: Record<string, string> = {
   partial: "签名和格式检查已完成；内容检查只完成了一部分（没检查到的方法先只作参考、不载入运行，下次试用或启用时再检查）",
   unavailable: "签名和格式检查已完成；内容检查暂时不可用（其中的方法先只作参考、不载入运行，下次试用或启用时再检查）",
 };
+
+/** 「来自 …」 with a typed space only before Latin text: 「来自李主任」, 「来自 Alice」. */
+export function fromSender(author: string): string {
+  return /^[A-Za-z0-9]/.test(author) ? `来自 ${author}` : `来自${author}`;
+}

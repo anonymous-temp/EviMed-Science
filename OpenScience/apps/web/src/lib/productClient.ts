@@ -101,6 +101,17 @@ export interface CapsuleExportSnapshot {
   id: string; revision: number; createdAt: string; status: string; scopes: string[];
   capsuleRevision: number; entryCount: number; archiveSha256: string; supersedes: string | null;
   entryVersions: Array<{version: number; sha256: string}>;
+  /** How many accounts on this deployment the pack is sealed for. */
+  recipientCount?: number;
+  card?: CapsuleCard | null;
+}
+/** What a pack says about itself, in its signed manifest: its title, who sent
+ *  it, what it holds, and what changed since the snapshot it replaces. */
+export interface CapsuleCard { title?: string; author?: string; summary?: string; changelog?: string }
+/** 「对方会看到什么」: a pack of this capsule as its recipient would read it. */
+export interface CapsuleExportPreview {
+  scopes: string[]; empty: boolean; tooMany: boolean; card: CapsuleCard | null;
+  entries: Array<{ factKind: string; layer: string; origin: string; content: string }>;
 }
 /** The automatic scan a shared pack passes before it can take effect (capsuleScan.mjs). */
 export interface CapsuleScanResult {
@@ -115,6 +126,9 @@ export interface CapsuleTransferPreview {
   entries: Array<{ id: string; version: number; factKind: string; layer: string; content: string; path: string; sha256: string }>;
   /** Absent from a control plane older than whole-pack trust. */
   scan?: CapsuleScanResult;
+  card?: CapsuleCard | null;
+  /** The pack already received that this snapshot updates in place, and what changes. */
+  upgrades?: { capsuleId: string; title: string; added: number; removed: number; kept: number } | null;
 }
 export function listCapsuleExports(id: string, cursor?: string | null) {
   return productRequest<ProductPage<CapsuleExportSnapshot>>(`/capsules/${encodeURIComponent(id)}/exports${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
@@ -125,10 +139,13 @@ export function exportCapsule(id: string, input: { password: string; scopes: str
 export function revokeCapsuleExport(id: string, snapshot: CapsuleExportSnapshot) {
   return productRequest<CapsuleExportSnapshot>(`/capsules/${encodeURIComponent(id)}/exports/${encodeURIComponent(snapshot.id)}`, "DELETE", { expectedRevision: snapshot.revision });
 }
-export function previewCapsuleImport(input: { archive: string; password: string }) {
+export function previewCapsuleExport(id: string, input: { scopes: string[] }) {
+  return productRequest<CapsuleExportPreview>(`/capsules/${encodeURIComponent(id)}/exports/preview`, "POST", input);
+}
+export function previewCapsuleImport(input: { archive: string; password?: string }) {
   return productRequest<CapsuleTransferPreview>("/capsules/transfers/preview", "POST", input);
 }
-export function importCapsule(input: { archive: string; password: string; expectedDigest: string; confirmed: true; title?: string }) {
+export function importCapsule(input: { archive: string; password?: string; expectedDigest: string; confirmed: true; title?: string }) {
   return productRequest<CapsuleRecord>("/capsules/transfers/import", "POST", input);
 }
 export function saveCapsuleDownload(archive: string, filename: string) {

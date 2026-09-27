@@ -99,6 +99,15 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(where.textContent).toContain('"kind":"create"');
   });
 
+  // 2026-09-26 audit (M-6): a received pack said nothing of who sent it.
+  it("says who sent a pack and what its card says it holds, and when a newer snapshot last updated it", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...pack, card: { title: "李主任的工作方式", author: "李主任", summary: "我做 Meta 分析的两条规矩", changelog: "新增 2 条、移除 1 条" },
+      upgradedAt: "2026-09-27T02:00:00Z" }]);
+    shelf();
+    expect(await screen.findByText("来自李主任 · 我做 Meta 分析的两条规矩")).toBeInTheDocument();
+    expect(screen.getByText("9月27日更新：新增 2 条、移除 1 条")).toBeInTheDocument();
+  });
+
   it("is silent when nothing was received", async () => {
     client.fetchReceivedCapsules.mockResolvedValueOnce([]);
     shelf();

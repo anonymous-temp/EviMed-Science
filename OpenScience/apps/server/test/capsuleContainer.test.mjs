@@ -485,3 +485,18 @@ test("import supports only explicit UTF-8 text formats and matching MIME types",
     assert.ok((await openCapsule(allowed, { issuer: { signingPublicKey: alice.signing.publicKey } })).ok);
   }
 });
+
+// 2026-09-26 audit (M-6): a pack had no card — the recipient named it and could
+// not see who sent it. The card rides inside the signed manifest.
+test("a pack's card is signed with it: what the recipient reads first is what the sender signed", async () => {
+  const card = { title: "Alice 的工作方式", author: "Alice", summary: "1 条做法、1 条工作偏好", changelog: "新增 1 条" };
+  const container = await packForBob({ card });
+  assert.deepEqual(container.manifest.card, card);
+  assert.ok(validateCapsuleManifest(container.manifest).ok);
+  assert.ok(verifyCapsule(container, { signingPublicKey: alice.signing.publicKey }).ok);
+  const forged = { ...container, manifest: { ...container.manifest, card: { ...card, author: "Mallory" } } };
+  assert.deepEqual(verifyCapsule(forged, { signingPublicKey: alice.signing.publicKey }).issues.map((issue) => issue.code), ["capsule_signature_invalid"]);
+  for (const bad of [{ title: 7 }, { owner: "x" }, { summary: "x".repeat(501) }, "a card"]) {
+    assert.equal(validateCapsuleManifest({ ...container.manifest, card: bad }).ok, false, JSON.stringify(bad));
+  }
+});

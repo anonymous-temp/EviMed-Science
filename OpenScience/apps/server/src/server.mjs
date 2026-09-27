@@ -1157,7 +1157,11 @@ export function createWebApiApp(overrides = {}) {
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
     // A 「试用一次」 conversation is marked in its own memory state.
     trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
-      { trialCapsuleId: capsuleId }) } : null });
+      { trialCapsuleId: capsuleId }) } : null,
+    // An account's pack actions, in its account-level ledger (build spec §12).
+    audit: (user, action, details) => securityAudit(config, action, "completed", {
+      userId: user.id, username: user.id, detail: JSON.stringify(details),
+    }) });
   const memoryRoutes = createMemoryRoutes({
     config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });

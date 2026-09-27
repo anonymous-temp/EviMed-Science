@@ -152,6 +152,9 @@ export const CAPSULE_SIGNATURE_ALG = 'ed25519'
  * @property {readonly string[]} layers
  * @property {string} [license]
  * @property {string} [attribution]
+ * @property {{ title?: string, author?: string, summary?: string, changelog?: string }} [card]
+ *   what a recipient reads before any entry: the pack's title, who sent it,
+ *   what it holds and what changed since the snapshot it replaces
  * @property {readonly CapsuleEntry[]} entries
  * @property {string} merkleRoot
  * @property {string | null} prevManifestSha256
@@ -258,6 +261,14 @@ export function validateCapsuleManifest(value) {
   }
   if (raw.prevManifestSha256 != null && !SHA256_PATTERN.test(String(raw.prevManifestSha256))) {
     issues.push({ code: 'capsule_manifest_invalid', message: 'prevManifestSha256 must be a digest or null.' })
+  }
+  if (raw.card != null) {
+    const card = raw.card && typeof raw.card === 'object' && !Array.isArray(raw.card) ? raw.card : null
+    const bounds = { title: 150, author: 150, summary: 500, changelog: 2000 }
+    if (!card || Object.keys(card).some((key) => !Object.hasOwn(bounds, key))
+      || Object.entries(card).some(([key, text]) => typeof text !== 'string' || text.length > bounds[/** @type {keyof typeof bounds} */ (key)])) {
+      issues.push({ code: 'capsule_manifest_invalid', message: 'card holds only a title, author, summary and changelog, each a bounded string.' })
+    }
   }
   if (raw.encryption != null) {
     const encryption = raw.encryption && typeof raw.encryption === 'object' ? raw.encryption : {}

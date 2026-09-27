@@ -68,3 +68,43 @@ it("says what cannot be taken back where it matters: in the confirmation of 撤�
   expect(within(dialog).getByText(/已下载的离线副本无法收回/)).toBeInTheDocument();
   expect(api.revokeCapsuleExport).not.toHaveBeenCalled();
 });
+
+// 2026-09-26 audit (M-6): the owner's own account had nothing to share and
+// 加密导出 answered with a 400; a pack said nothing of who sent it; a newer
+// snapshot could only be imported as a second pack.
+it("says there is nothing to share yet instead of offering an export that fails",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue({scopes:["workstyle"],empty:true,tooMany:false,card:null,entries:[]});
+  render(<CapsuleTransferPanel capsule={capsule} onImported={vi.fn()}/>);
+  expect(await screen.findByText("还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。")).toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("导出口令"),"test-only-passphrase");
+  expect(screen.getByRole("button",{name:"加密导出"})).toBeDisabled();
+  expect(api.previewCapsuleExport).toHaveBeenCalledWith(capsule.id,{scopes:["workstyle"]});
+});
+
+it("shows what the recipient will see before the export",async()=>{
+  vi.mocked(api.previewCapsuleExport).mockResolvedValue({scopes:["workstyle"],empty:false,tooMany:false,
+    card:{title:"李主任的工作方式",author:"李主任",summary:"1 条做法"},entries:[{factKind:"method_preference",layer:"methods",origin:"system",content:"Meta 分析先报 GRADE。"}]});
+  render(<CapsuleTransferPanel capsule={capsule} onImported={vi.fn()}/>);
+  await userEvent.click(await screen.findByText("对方会看到：1 条做法"));
+  expect(screen.getByText("Meta 分析先报 GRADE。")).toBeInTheDocument();
+});
+
+it("reads a pack's card, and updates the pack already received in place",async()=>{
+  const done=vi.fn();
+  vi.mocked(api.previewCapsuleImport).mockResolvedValue({...preview,scan:{...preview.scan,dropped:[]},issuerTrust:"verified",
+    card:{title:"李主任的工作方式",author:"李主任",summary:"我做 Meta 分析的规矩",changelog:"新增 2 条、移除 1 条"},
+    upgrades:{capsuleId:"held-1",title:"李主任的工作方式",added:2,removed:1,kept:1}});
+  vi.mocked(api.importCapsule).mockResolvedValue({...capsule,id:"held-1",payload:{title:"李主任的工作方式",description:""}});
+  render(<CapsuleTransferPanel capsule={null} onImported={done}/>);
+  const file=new File(["{}"],"methods.evimedcap");Object.defineProperty(file,"text",{value:async()=>"{}"});
+  await userEvent.upload(screen.getByLabelText("选择胶囊文件"),file);
+  // A pack sealed for this account opens with no password typed.
+  await userEvent.click(screen.getByRole("button",{name:"解密并预览"}));
+  expect(api.previewCapsuleImport).toHaveBeenCalledWith({archive:"{}"});
+  expect(await screen.findByText("来自李主任 · 我做 Meta 分析的规矩")).toBeInTheDocument();
+  expect(screen.getByText("会更新你已收下的“李主任的工作方式”：新增 2 条、移除 1 条")).toBeInTheDocument();
+  expect(screen.queryByLabelText("收下后的胶囊名称")).toBeNull();
+  await userEvent.click(screen.getByRole("button",{name:"更新这个胶囊"}));
+  await waitFor(()=>expect(api.importCapsule).toHaveBeenCalledWith({archive:"{}",expectedDigest:preview.archiveSha256,confirmed:true}));
+  expect(await screen.findByText("已更新“李主任的工作方式”")).toBeInTheDocument();
+});

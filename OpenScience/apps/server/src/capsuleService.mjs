@@ -288,6 +288,9 @@ export class CapsuleService {
       }
       result.push({
         id: capsule.id, revision: capsule.revision, title: capsule.payload.title, description: capsule.payload.description ?? "",
+        // The pack's card as its sender signed it — who sent it, what it holds,
+        // what changed — and when a newer snapshot last replaced it in place.
+        card: capsule.payload.card ?? null, upgradedAt: capsule.payload.transfer?.upgradedAt ?? null,
         issuerTrust: capsule.payload.transfer?.issuerTrust ?? "unverified", importedAt: capsule.payload.transfer?.importedAt ?? capsule.createdAt ?? null,
         enabled: inForce.has(capsule.id), counts, methods,
         // A pack imported before whole-pack trust still holds candidates; the

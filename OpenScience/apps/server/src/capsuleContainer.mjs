@@ -158,6 +158,7 @@ function privateKeyFrom(base64) {
  *   prevManifestSha256?: string | null,
  *   license?: string,
  *   attribution?: string,
+ *   card?: { title?: string, author?: string, summary?: string, changelog?: string },
  *   password?: string,
  * }} input
  * @returns {Promise<PackedContainer>}
@@ -211,6 +212,9 @@ export async function packCapsule(input) {
     layers: [...input.layers],
     ...(input.license ? { license: input.license } : {}),
     ...(input.attribution ? { attribution: input.attribution } : {}),
+    // The pack's card — title, sender, summary, what changed — inside the
+    // signed bytes, so what a recipient reads first is what the sender signed.
+    ...(input.card ? { card: { ...input.card } } : {}),
     entries: manifestEntries,
     merkleRoot: root,
     prevManifestSha256: input.prevManifestSha256 ?? null,

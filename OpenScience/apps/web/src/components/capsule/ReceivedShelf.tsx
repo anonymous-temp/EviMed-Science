@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { CAPSULE_ENTRY_TYPES, CAPSULE_SCAN_REASONS } from "@/lib/capsuleText";
+import { CAPSULE_ENTRY_TYPES, CAPSULE_SCAN_REASONS, fromSender } from "@/lib/capsuleText";
 import {
   announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, startCapsuleTrial, type ReceivedCapsule,
 } from "@/lib/memoryClient";
+import { formatDay } from "@/lib/format";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
@@ -93,7 +94,14 @@ export function ReceivedShelf() {
               title={pack.title}
               meta={(
                 <>
-                  <p>{contents(pack)}{pack.issuerTrust === "verified" ? "" : " · 发布者未验证"}</p>
+                  {/* Who sent it and what it says it holds, from the card its
+                      sender signed; the counts when a pack carries no card. */}
+                  <p>{[
+                    pack.card?.author ? fromSender(pack.card.author) : null,
+                    pack.card?.summary || contents(pack),
+                    pack.issuerTrust === "verified" ? null : "发布者未验证",
+                  ].filter(Boolean).join(" · ")}</p>
+                  {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
                   {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
                   {dropped.length > 0 && (
                     <Disclosure summary={`已剔除 ${dropped.length} 条`} summaryClassName="text-caption" className="mt-1">

@@ -7,7 +7,7 @@
  * `{ data }` envelope, the CSRF header and the error dictionary.
  */
 import type { WebMemoryProvenance, WebStructuredMemory } from "./apiClient";
-import { productRequest, type CapsuleEntry, type CapsuleRecord, type CapsuleScanResult } from "./productClient";
+import { productRequest, type CapsuleCard, type CapsuleEntry, type CapsuleRecord, type CapsuleScanResult } from "./productClient";
 
 /** One memory that changed by itself — a line of the write prompt 「刚记住了…」. */
 export interface MemoryChange {
@@ -130,6 +130,10 @@ export interface ReceivedCapsule {
   scanned: boolean;
   waiting: number;
   scan: Pick<CapsuleScanResult, "model" | "checkedAt" | "dropped"> | null;
+  /** Who sent it and what it holds, as the sender signed it. */
+  card?: CapsuleCard | null;
+  /** When a newer snapshot last replaced it in place. */
+  upgradedAt?: string | null;
 }
 
 export function fetchReceivedCapsules() {

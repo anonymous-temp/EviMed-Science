@@ -780,6 +780,18 @@ const libraryErrorCodes = Object.freeze([
 ])
 
 /**
+ * Codes sharing a memory capsule answers with (`capsuleTransferService.mjs`):
+ * shown in 分享与导入 where a pack is exported or opened. Private for the same
+ * reason as the library list. `capsule_export_empty` was a bare 400 on the
+ * owner's own account (2026-09-26 audit, M-6); it is a state with a sentence.
+ */
+const capsuleTransferErrorCodes = Object.freeze([
+  'capsule_export_empty',
+  'capsule_recipient_unknown',
+  'capsule_password_required',
+])
+
+/**
  * Codes the 「循证 GEO」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
  * the module off, a project that is not this account's, a request the page
  * built wrong, an action whose worker is not composed. The page reads them
@@ -857,6 +869,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
   ...libraryErrorCodes,
+  ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
 ])])
@@ -1122,6 +1135,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_understanding_missing: '这份资料还没有资料理解结果。分析深度为“结构化”或“深度”的资料理解完成后，才能发布到记忆胶囊。',
   library_capsule_unavailable: '账户的主要胶囊是别人分享来的，资料只会写进你自己的胶囊。先把自己的胶囊设为主要胶囊，再发布。',
   library_publish_busy: '资料库正有一次发布到记忆胶囊的操作在进行，等它完成后再试。',
+  capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
+  capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
+  capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
 
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
@@ -1359,6 +1375,10 @@ export function errorCodeOutcome(code) {
   // else names a document that is not there to act on.
   if (text === 'library_full' || text === 'library_publish_busy') return 'capped'
   if (libraryErrorCodes.includes(text)) return 'upstream'
+  // Sharing a capsule refuses for what the pack holds or who it is for —
+  // nothing to share yet, an account that is not here, a missing password —
+  // never as a verdict on a run.
+  if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
   // 循证 GEO's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
