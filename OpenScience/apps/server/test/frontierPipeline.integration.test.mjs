@@ -134,17 +134,19 @@ const marker = (title, name) => new RegExp(`\\[${name}:([a-z0-9-]+)\\]`).exec(ti
  * [lane:x], [score:n] (the model's share of the total), [pending],
  * [edit-throws], [screen-error], [digest] (a piece covering several stories).
  */
-function fakeEditor() {
+function fakeEditor(provider = { balanceSpent: false }) {
   /** @type {{ screen: string[][], edit: string[] }} */
   const calls = { screen: [], edit: [] };
   return {
-    owner, available: true, calls,
+    owner, available: true, calls, provider,
     /** @param {any[]} batch */
     async screen(batch) {
       calls.screen.push(batch.map((input) => input.key));
       const verdicts = new Map();
       const errors = new Map();
       for (const input of batch) {
+        // The provider's answer for a spent balance, as the editor reports it.
+        if (provider.balanceSpent) { errors.set(input.key, "model_gateway_payment_required"); continue; }
         if (input.title.includes("[screen-error]")) { errors.set(input.key, "frontier_screen_invalid"); continue; }
         const wanted = marker(input.title, "lane");
         verdicts.set(input.key, {
@@ -163,6 +165,7 @@ function fakeEditor() {
       const base = { modelInput, modelInputSha256: sha256(modelInput), attempts: 1, issues: [], numbers: null, error: null,
         model: "deepseek-flash", editorVersion: FRONTIER_EDITOR_VERSION };
       if (item.titleRaw.includes("[pending]")) return { ...base, verification: "pending", output: null, error: "model_gateway_timeout" };
+      if (provider.balanceSpent) return { ...base, verification: "pending", output: null, error: "model_gateway_payment_required" };
       const share = Number(marker(item.titleRaw, "score") ?? 30);
       const impact = Math.min(30, share);
       const novelty = Math.min(20, share - impact);
@@ -470,6 +473,72 @@ test("failures are attempts: a third one fails the entry or the item with its re
   const revived = await item(Number(exploded.id));
   assert.equal(revived.state, "screened", "back in its queue (and the editor that throws failed it once more)");
   assert.equal(revived.attempts, 1);
+});
+
+test("a spent provider balance is a wait, never an attempt: no entry or item is failed by the outage", options, async () => {
+  // 2026-09-23: DeepSeek answered every call 402 for two hours; each screening
+  // was a used attempt, and a third failed the entry for good.
+  await reset();
+  let clock = new Date("2026-09-22T12:00:00Z");
+  const provider = { balanceSpent: false };
+  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock, editor: fakeEditor(provider) });
+  // One item already published title-only and owed an edit (published at peak).
+  clock = new Date("2026-09-22T02:00:00Z");
+  const owed = await deliver({ source_id: "m-stat", title: "Semaglutide study in adolescents [score:60]", summary: "S".repeat(200) });
+  plugin.texts.set(owed.pluginEntryId, { entry_id: owed.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  await pipeline.processBatch();
+  const owedItem = Number((await entry(owed.id)).item_id);
+  assert.deepEqual([(await item(owedItem)).state, (await item(owedItem)).editor_version], ["published", null]);
+
+  // The balance runs out; a new entry arrives. Five hours of batches, every minute.
+  provider.balanceSpent = true;
+  clock = new Date("2026-09-22T11:00:00Z");
+  const fresh = await deliver({ source_id: "m-stat", title: "Heart failure trial reads out [score:60]", summary: "H".repeat(200) });
+  plugin.texts.set(fresh.pluginEntryId, { entry_id: fresh.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+  const refusedAt = clock;
+  await pipeline.processBatch();
+  const waiting = await entry(fresh.id);
+  assert.deepEqual([waiting.state, waiting.state_reason, waiting.attempts], ["received", "provider-refused", 0]);
+  assert.equal(new Date(waiting.hold_until).getTime(), refusedAt.getTime() + 30 * 60_000, "asked again in half an hour");
+  assert.ok(pipeline.status().providerPausedUntil, "the pause is in the status");
+  const screens = editor.calls.screen.length;
+  const edits = editor.calls.edit.length;
+  for (let minute = 1; minute < 300; minute += 1) {
+    clock = new Date(refusedAt.getTime() + minute * 60_000);
+    await pipeline.processBatch();
+  }
+  assert.ok(editor.calls.screen.length - screens <= 10, `the model is asked about twice an hour, not every minute (${editor.calls.screen.length - screens})`);
+  assert.ok(editor.calls.edit.length - edits <= 10, `and the owed edit likewise (${editor.calls.edit.length - edits})`);
+  const still = await entry(fresh.id);
+  assert.deepEqual([still.state, still.attempts], ["received", 0], "no attempt was spent on our account's outage");
+  const stillOwed = await item(owedItem);
+  assert.deepEqual([stillOwed.attempts, stillOwed.editor_version, stillOwed.verification], [0, null, "pending"], "the owed edit is not given up");
+  assert.ok(pipeline.status().counters.providerRefusedWaits >= 2);
+
+  // Topped up: the next ask after the pause goes through.
+  provider.balanceSpent = false;
+  clock = new Date(clock.getTime() + 31 * 60_000);
+  await pipeline.processBatch();
+  assert.equal((await entry(fresh.id)).state, "promoted");
+  assert.equal((await item(owedItem)).verification, "passed");
+});
+
+test("the day's budget counts an uncertain call at its recorded bound, not its reservation", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline } = pipelineWith({ now: () => clock });
+  const uncertain = async (/** @type {number} */ reserved, /** @type {number | null} */ estimated, /** @type {string} */ fingerprint) => {
+    await database.query(`INSERT INTO evimed_usage.model_requests (id,user_id,project_id,model,price_version,currency,request_fingerprint,status,
+        reserved_cost,estimated_cost,reservation_expires_at,created_at,settled_at,error_code,purpose)
+      VALUES ($1,$2,'evimed-frontier','deepseek-flash','v','CNY',$3,'uncertain',$4,$5,$6,$6,$6,'provider_response_incomplete','frontier')`,
+    [randomUUID(), operator, fingerprint.repeat(64), reserved, estimated, new Date("2026-09-22T11:00:00Z")]);
+  };
+  // 9.5 reserved at the cache-miss ceiling; the call can have cost 0.25.
+  await uncertain(9.5, 0.25, "c");
+  assert.deepEqual([(await pipeline.budget(clock)).spentCny, (await pipeline.budget(clock)).state], [0.25, "ok"]);
+  // With no bound recorded (an answer lost before it arrived) the reservation stands.
+  await uncertain(0.5, null, "d");
+  assert.equal((await pipeline.budget(clock)).spentCny, 0.75);
 });
 
 test("vectors come after publication and never block it; two concurrent batches never claim one entry twice", options, async () => {

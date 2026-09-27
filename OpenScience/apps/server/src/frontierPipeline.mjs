@@ -97,6 +97,20 @@ export const FRONTIER_TEXT_RETRY_MS = 15 * MINUTE;
 export const FRONTIER_IN_FLIGHT_WAIT_MS = 10 * MINUTE;
 /** Claims per row before it fails with its last reason. */
 export const FRONTIER_MAX_ATTEMPTS = 3;
+/**
+ * How long the pipeline stops asking the model after the provider refused a
+ * call for its balance (`model_gateway_payment_required`, HTTP 402). A spent
+ * balance is topped up by a person, not by time, so this is a wait and never
+ * an attempt: on 2026-09-23 DeepSeek answered every call 402 for two hours,
+ * each screening was counted as a used attempt, and a third failed the entry
+ * for good — feed items lost to an outage of our own account (audit
+ * follow-up). Half an hour between asks bounds the refused calls (each is a
+ * released ledger row and a count in ModelProviderBalanceExhausted) without
+ * holding the feed up long after the top-up.
+ */
+export const FRONTIER_PROVIDER_REFUSED_WAIT_MS = 30 * MINUTE;
+/** The provider's answer for a spent balance, as the model gateway names it. */
+const PROVIDER_BALANCE_REFUSAL = "model_gateway_payment_required";
 /** The 72-hour rule of `timeline_at` (plan §6.1). */
 export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
 /** A lane with an item at or above this score today gets at least one selected. */
@@ -466,7 +480,11 @@ export class FrontierPipeline {
       failed: 0, dropped: 0, waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, embedFailures: 0,
       titleDuplicates: 0, notices: 0, laneFloor: 0, selected: 0, capped: 0, releaseFailures: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
+      // Rows released to wait out a provider balance refusal, never charged an attempt.
+      providerRefusedWaits: 0,
     };
+    /** Until when (epoch ms) the model is not asked, after a balance refusal. @type {number | null} */
+    this.providerPausedUntil = null;
     /** @type {string | null} */
     this.lastError = null;
     /** @type {string | null} */
@@ -499,11 +517,21 @@ export class FrontierPipeline {
       const table = await this.database.query("SELECT to_regclass('evimed_usage.model_requests') AS name");
       if (table.rows[0]?.name) {
         const { start } = frontierDayWindow(now, this.timeZone);
+        // An uncertain call counts at the bound its client recorded
+        // (`estimated_cost`: its prompt plus the output seen), falling back to
+        // the reservation — the rule the account caps use (usageLedger.mjs
+        // OPEN_COST_VALUE). At the full reservation, a burst of lost calls
+        // priced at the cache-miss ceiling (09-23: 479 frontier rows) spent
+        // the day's budget on money nobody was charged. Read through to_jsonb
+        // so a database whose usage migration has not yet added the column
+        // still answers, at the reservation.
         const result = await this.database.query(`SELECT coalesce(sum(CASE
-            WHEN status='settled' THEN coalesce(actual_cost, 0)
-            WHEN status IN ('reserved','uncertain') THEN reserved_cost ELSE 0 END), 0) AS spent
-          FROM evimed_usage.model_requests
-          WHERE user_id=$1 AND project_id=$2 AND purpose='frontier' AND created_at >= $3::timestamptz`,
+            WHEN m.status='settled' THEN coalesce(m.actual_cost, 0)
+            WHEN m.status='reserved' THEN m.reserved_cost
+            WHEN m.status='uncertain' THEN LEAST(m.reserved_cost, coalesce((to_jsonb(m)->>'estimated_cost')::numeric, m.reserved_cost))
+            ELSE 0 END), 0) AS spent
+          FROM evimed_usage.model_requests m
+          WHERE m.user_id=$1 AND m.project_id=$2 AND m.purpose='frontier' AND m.created_at >= $3::timestamptz`,
         [owner.userId, owner.projectId, start.toISOString()]);
         spentCny = Math.round(Number(result.rows[0]?.spent ?? 0) * 10_000) / 10_000;
         measured = true;
@@ -551,6 +579,9 @@ export class FrontierPipeline {
     return {
       workerId: this.workerId, lastError: this.lastError, lastEmbedError: this.lastEmbedError,
       lastBatch: this.lastBatch, budget: this.lastBudget, counters: structuredClone(this.counters),
+      // The model is not asked until then: the provider refused for its balance.
+      providerPausedUntil: this.providerPausedUntil !== null && this.providerPausedUntil > this.now().getTime()
+        ? new Date(this.providerPausedUntil).toISOString() : null,
       editor: typeof this.editor.status === "function" ? this.editor.status() : null,
     };
   }
@@ -682,6 +713,17 @@ export class FrontierPipeline {
         item_id = CASE WHEN $4::boolean THEN $5::bigint ELSE item_id END, hold_until = $6,
         lease_owner = NULL, lease_until = NULL
       WHERE id = $1`, [entry.id, state, reason ? String(reason).slice(0, 200) : null, itemId !== undefined, itemId ?? null, holdUntil]);
+  }
+
+  /** Until when the model is not asked after a balance refusal, or null. @param {Date} now @returns {Date | null} */
+  #providerPause(now) {
+    return this.providerPausedUntil !== null && now.getTime() < this.providerPausedUntil ? new Date(this.providerPausedUntil) : null;
+  }
+
+  /** The provider refused for its balance: stop asking for a while. @param {Date} now @returns {Date} */
+  #pauseForProvider(now) {
+    this.providerPausedUntil = Math.max(this.providerPausedUntil ?? 0, now.getTime() + FRONTIER_PROVIDER_REFUSED_WAIT_MS);
+    return new Date(this.providerPausedUntil);
   }
 
   /** Release an entry to try again later: a wait, not an attempt. @param {any} entry @param {Date} holdUntil @param {string | null} reason */
@@ -899,6 +941,14 @@ export class FrontierPipeline {
   async #screenAndPromote(entries, sources, context) {
     const { now, budget, summary } = context;
     if (!entries.length) return;
+    // The provider refused for its balance a moment ago: wait it out.
+    const paused = this.#providerPause(now);
+    if (paused) {
+      for (const entry of entries) await this.#waitEntry(entry, paused, "provider-refused");
+      summary.deferred += entries.length;
+      this.counters.providerRefusedWaits += entries.length;
+      return;
+    }
     // Collect only: nothing to screen with, or nothing to spend.
     if (!this.editor.available || budget.state === "exhausted") {
       const until = budget.state === "exhausted"
@@ -925,6 +975,11 @@ export class FrontierPipeline {
           if (code === "usage_budget_exceeded") {
             await this.#waitEntry(entry, frontierDayWindow(now, this.timeZone).end, "budget-exhausted");
             summary.deferred += 1;
+          } else if (code === PROVIDER_BALANCE_REFUSAL) {
+            // Our account, not the entry: a wait, never an attempt.
+            await this.#waitEntry(entry, this.#pauseForProvider(now), "provider-refused");
+            summary.deferred += 1;
+            this.counters.providerRefusedWaits += 1;
           } else await this.#failEntry(entry, Object.assign(new Error(code), { code }), summary);
           continue;
         }
@@ -1256,11 +1311,14 @@ export class FrontierPipeline {
         }
         const { texts, source, entry } = await this.#itemContext(item);
         if (item.state === "screened") {
-          const decision = frontierEditDecision({ source, budget: context.budget, offpeak: this.offpeak, now, available: this.editor.available });
+          // A paused provider is an unavailable editor: published title-only, edited later.
+          const available = this.editor.available && !this.#providerPause(now);
+          const decision = frontierEditDecision({ source, budget: context.budget, offpeak: this.offpeak, now, available });
           let result = null;
           if (decision.edit) {
             result = await this.editor.edit(this.#editItem(item, texts, entry, source, context.glossary));
             if (result.verification !== "pending") summary.edited += 1;
+            else if (result.error === PROVIDER_BALANCE_REFUSAL) this.#pauseForProvider(now);
           } else {
             this.counters.editSkipped[decision.reason] += 1;
             summary.deferred += 1;
@@ -1282,7 +1340,7 @@ export class FrontierPipeline {
    */
   async #processOwedEdits(context) {
     const { now, budget, summary } = context;
-    if (!this.editor.available || budget.state === "exhausted") return;
+    if (!this.editor.available || budget.state === "exhausted" || this.#providerPause(now)) return;
     const general = budget.state === "ok" && !(this.offpeak && isPeak(now));
     const items = await this.#claimItems(now, `i.state = 'published' AND i.editor_version IS NULL AND i.timeline_at > $5
       AND ($6::boolean OR s.safety_feed OR s.source_type = 'regulator' OR (s.source_type = 'journal' AND s.authority >= 5))`,
@@ -1290,7 +1348,20 @@ export class FrontierPipeline {
     for (const item of items) {
       try {
         const { texts, source, entry } = await this.#itemContext(item);
+        if (this.#providerPause(now)) {
+          // Refused for the balance earlier in this batch: released untouched.
+          await this.#releaseItem(item);
+          continue;
+        }
         const result = await this.editor.edit(this.#editItem(item, texts, entry, source, context.glossary));
+        if (result.verification === "pending" && result.error === PROVIDER_BALANCE_REFUSAL) {
+          // Our account, not the item: a wait, never an attempt — a third
+          // would have left it title-only for good.
+          this.#pauseForProvider(now);
+          await this.#releaseItem(item);
+          this.counters.providerRefusedWaits += 1;
+          continue;
+        }
         if (result.verification === "pending") {
           // No answer: the attempt is spent; the third leaves the item title-only for good.
           const attempts = Number(item.attempts) + 1;
@@ -1309,6 +1380,11 @@ export class FrontierPipeline {
         await this.#failItem(item, error, summary);
       }
     }
+  }
+
+  /** Release a claimed item without spending an attempt. @param {any} item */
+  async #releaseItem(item) {
+    await this.database.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
   }
 
   /** @param {any} item @param {unknown} error @param {FrontierBatchSummary} summary */
