@@ -5,6 +5,7 @@ PubMed NCBI E-utilities API 检索服务 V5.0
 import asyncio
 import aiohttp
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from collections import Counter
@@ -14,6 +15,50 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+class PubMedRequestError(Exception):
+    """PubMed did not answer a request: throttled (429 after retries) or failed.
+
+    Distinct from an answer with no hits. ``partial_records`` carries what
+    earlier efetch batches of the same sub-query did return, so a later
+    batch's failure does not discard them.
+    """
+
+    def __init__(self, stage: str, reason: str, detail: str = "", *,
+                 found: int = 0, partial_records: Optional[List[LiteratureRecord]] = None):
+        self.stage = stage          # "esearch" | "efetch" | "search"
+        self.reason = reason        # "throttled" | "failed"
+        self.detail = detail
+        self.found = found
+        self.partial_records = list(partial_records or [])
+        super().__init__(f"PubMed {stage} {reason}" + (f": {detail}" if detail else ""))
+
+
+@dataclass
+class SubQueryOutcome:
+    """What happened to one sub-query: ok, throttled, failed or timed_out."""
+
+    query: str
+    status: str = "pending"
+    found: int = 0      # PMIDs esearch returned
+    fetched: int = 0    # records efetch returned
+    attempts: int = 0
+    detail: str = ""
+
+
+@dataclass
+class PubMedSearchResult:
+    records: List[LiteratureRecord]
+    outcomes: List[SubQueryOutcome] = field(default_factory=list)
+
+    @property
+    def throttled(self) -> List[SubQueryOutcome]:
+        return [outcome for outcome in self.outcomes if outcome.status == "throttled"]
+
+    @property
+    def unfinished(self) -> List[SubQueryOutcome]:
+        """Every sub-query PubMed did not fully answer, whatever the reason."""
+        return [outcome for outcome in self.outcomes if outcome.status != "ok"]
 
 
 class PubMedSearchService:
@@ -91,61 +136,116 @@ class PubMedSearchService:
         sub_queries: List[str],
         max_results: int = 500,
         date_range: tuple = None
-    ) -> List[LiteratureRecord]:
-        """
-        V5.0: 使用多个子查询并行检索PubMed
+    ) -> "PubMedSearchResult":
+        """Run every sub-query and say what happened to each one.
 
-        Args:
-            sub_queries: LLM生成的多个子查询
-            max_results: 每个子查询的最大结果数
-            date_range: (开始年份, 结束年份)，默认近5年
-
-        Returns:
-            合并去重后的文献记录列表
+        A sub-query PubMed throttled (HTTP 429) or failed is not a sub-query
+        with no hits. It used to return ``[]`` either way, so a throttled
+        search read as thin literature and the job reported "仅检索到N篇"
+        as if that were the field. Each sub-query now ends as an outcome
+        (ok / throttled / failed / timed_out); the ones that did not finish
+        are retried in rounds with backoff, all inside one wall-clock budget
+        (settings PUBMED_RETRY_ROUNDS, PUBMED_RETRY_BACKOFF_SECONDS,
+        PUBMED_SEARCH_BUDGET_SECONDS), and whatever is still unfinished is
+        returned as such for the job's diagnosis.
         """
+        from config.settings import settings
+
         if not sub_queries:
-            return []
-
-        # 默认检索近5年
+            return PubMedSearchResult(records=[], outcomes=[])
         if date_range is None:
             current_year = datetime.now().year
             date_range = (current_year - 4, current_year)
 
-        logger.info(f"开始并行检索 {len(sub_queries)} 个子查询，时间范围: {date_range[0]}-{date_range[1]}...")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + float(settings.PUBMED_SEARCH_BUDGET_SECONDS)
+        outcomes = [SubQueryOutcome(query=query) for query in sub_queries]
+        records_by_query: Dict[int, List[LiteratureRecord]] = {}
 
-        # 并行执行所有子查询，设置整体超时防止服务卡死
-        tasks = []
-        for i, query in enumerate(sub_queries):
-            task = self._search_single_query(query, max_results, query_index=i, date_range=date_range)
-            tasks.append(task)
-
-        _TOTAL_TIMEOUT = 180  # PubMed多子查询整体超时3分钟
-        try:
-            results_list = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=_TOTAL_TIMEOUT
+        logger.info(
+            f"开始并行检索 {len(sub_queries)} 个子查询，时间范围: {date_range[0]}-{date_range[1]}..."
+        )
+        pending = list(range(len(sub_queries)))
+        rounds = max(0, int(settings.PUBMED_RETRY_ROUNDS))
+        for round_index in range(rounds + 1):
+            if round_index > 0:
+                wait = float(settings.PUBMED_RETRY_BACKOFF_SECONDS) * (2 ** (round_index - 1))
+                if loop.time() + wait >= deadline:
+                    logger.warning(
+                        "PubMed 重试预算不足，%d 个子查询不再重试", len(pending)
+                    )
+                    break
+                logger.warning(
+                    "PubMed 第 %d 轮重试：%d 个子查询未完成，%.0fs 后重试",
+                    round_index, len(pending), wait,
+                )
+                await asyncio.sleep(wait)
+            await self._run_round(
+                pending, sub_queries, outcomes, records_by_query,
+                max_results, date_range, deadline,
             )
-        except asyncio.TimeoutError:
-            logger.warning(f"PubMed多子查询检索整体超时（>{_TOTAL_TIMEOUT}s），返回空列表")
-            return []
+            pending = [index for index in pending if outcomes[index].status != "ok"]
+            if not pending:
+                break
 
-        # 合并所有结果
-        all_records = []
+        all_records: List[LiteratureRecord] = []
         seen_pmids = set()
-
-        for i, result in enumerate(results_list):
-            if isinstance(result, Exception):
-                logger.warning(f"子查询 {i+1} 失败: {result}")
-                continue
-
-            logger.info(f"子查询 {i+1} 返回 {len(result)} 篇文献")
-            for record in result:
+        for index, outcome in enumerate(outcomes):
+            logger.info(
+                "子查询 %d: %s，检索到 %d 篇，取回 %d 篇（%d 次尝试）%s",
+                index + 1, outcome.status, outcome.found, outcome.fetched, outcome.attempts,
+                f"：{outcome.detail}" if outcome.detail else "",
+            )
+            for record in records_by_query.get(index, []):
                 if record.pmid and record.pmid not in seen_pmids:
                     seen_pmids.add(record.pmid)
                     all_records.append(record)
 
         logger.info(f"去重后共 {len(all_records)} 篇文献")
-        return all_records
+        return PubMedSearchResult(records=all_records, outcomes=outcomes)
+
+    async def _run_round(
+        self,
+        indexes: List[int],
+        sub_queries: List[str],
+        outcomes: List["SubQueryOutcome"],
+        records_by_query: Dict[int, List[LiteratureRecord]],
+        max_results: int,
+        date_range: tuple,
+        deadline: float,
+    ) -> None:
+        """One pass over ``indexes``; what the deadline cuts off is timed_out."""
+        loop = asyncio.get_running_loop()
+        tasks = {
+            index: asyncio.create_task(
+                self._search_single_query(sub_queries[index], max_results, index, date_range)
+            )
+            for index in indexes
+        }
+        remaining = max(0.0, deadline - loop.time())
+        done, not_done = await asyncio.wait(tasks.values(), timeout=remaining)
+        for task in not_done:
+            task.cancel()
+        if not_done:
+            await asyncio.gather(*not_done, return_exceptions=True)
+        for index, task in tasks.items():
+            outcome = outcomes[index]
+            outcome.attempts += 1
+            if task in not_done:
+                outcome.status = "timed_out"
+                outcome.detail = "PubMed search budget ran out before this sub-query finished"
+                continue
+            found, records, error = task.result()
+            outcome.found = max(outcome.found, found)
+            if records:
+                merged = {record.pmid: record for record in records_by_query.get(index, [])}
+                merged.update({record.pmid: record for record in records if record.pmid})
+                records_by_query[index] = list(merged.values())
+            outcome.fetched = len(records_by_query.get(index, []))
+            if error is None:
+                outcome.status, outcome.detail = "ok", ""
+            else:
+                outcome.status, outcome.detail = error.reason, str(error)
 
     async def _search_single_query(
         self,
@@ -153,18 +253,29 @@ class PubMedSearchService:
         max_results: int,
         query_index: int = 0,
         date_range: tuple = None
-    ) -> List[LiteratureRecord]:
-        """执行单个子查询检索（通过信号量限制并发数）"""
+    ) -> tuple:
+        """(PMIDs found, records fetched, error or None) for one sub-query.
+
+        A PubMed failure is returned, not swallowed: the caller must be able
+        to tell "no hits" from "PubMed did not answer".
+        """
         async with self._get_semaphore():
             try:
                 pmids = await self._esearch(query, max_results, date_range)
                 if not pmids:
-                    return []
+                    return 0, [], None
                 records = await self._efetch(pmids)
-                return records
-            except Exception as e:
-                logger.warning(f"子查询 {query_index + 1} 执行失败: {e}")
-                return []
+                return len(pmids), records, None
+            except PubMedRequestError as error:
+                logger.warning(f"子查询 {query_index + 1} 未完成: {error}")
+                return (
+                    error.found,
+                    list(error.partial_records),
+                    error,
+                )
+            except Exception as error:  # a parsing or programming fault, still not "no hits"
+                logger.warning(f"子查询 {query_index + 1} 执行失败: {error}")
+                return 0, [], PubMedRequestError("search", "failed", str(error))
 
     async def search(
         self,
@@ -187,7 +298,7 @@ class PubMedSearchService:
         """
         # V5.0: 如果提供了子查询，使用新的多子查询检索
         if sub_queries:
-            return await self.search_with_subqueries(sub_queries, max_results)
+            return (await self.search_with_subqueries(sub_queries, max_results)).records
 
         # 向后兼容：使用旧的查询构建方式
         query = self._build_query(query_terms)
@@ -258,7 +369,8 @@ class PubMedSearchService:
             params["maxdate"] = f"{date_range[1]}/12/31"
 
         timeout = aiohttp.ClientTimeout(total=30)
-        for attempt in range(3):
+        attempts = 3
+        for attempt in range(attempts):
             try:
                 await self._rate_limit()
                 session = await self._get_session()
@@ -267,30 +379,40 @@ class PubMedSearchService:
                     timeout=timeout
                 ) as resp:
                     if resp.status == 429:
+                        if attempt == attempts - 1:
+                            break
                         wait = 2 ** (attempt + 1)
                         logger.warning(f"PubMed 限流(429), {wait}s 后重试...")
                         await asyncio.sleep(wait)
                         continue
                     if resp.status != 200:
-                        raise Exception(f"esearch请求失败: {resp.status}")
+                        raise PubMedRequestError("esearch", "failed", f"HTTP {resp.status}")
                     data = await resp.json()
                     return data.get("esearchresult", {}).get("idlist", [])
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 logger.warning(f"esearch网络错误(attempt {attempt+1}): {e}")
-                if attempt == 2:
-                    raise
+                if attempt == attempts - 1:
+                    raise PubMedRequestError("esearch", "failed", str(e) or type(e).__name__) from e
                 await asyncio.sleep(2 ** attempt)
-        return []
+        # Three 429s: PubMed did not answer. Not an empty result.
+        raise PubMedRequestError("esearch", "throttled", f"HTTP 429 on {attempts} attempts")
 
     async def _efetch(self, pmids: List[str]) -> List[LiteratureRecord]:
-        """使用efetch获取文献详细信息（含重试和超时）"""
+        """使用efetch获取文献详细信息（含重试和超时）
+
+        A batch PubMed does not answer raises PubMedRequestError carrying the
+        records earlier batches returned; it used to be dropped with a log
+        line, and the sub-query looked complete with fewer records.
+        """
         batch_size = 200
         all_records = []
         timeout = aiohttp.ClientTimeout(total=60)
+        attempts = 3
 
         for i in range(0, len(pmids), batch_size):
             batch_pmids = pmids[i:i + batch_size]
             pmid_str = ",".join(batch_pmids)
+            batch_label = f"batch {i // batch_size + 1}"
 
             params = self._build_params({
                 "db": "pubmed",
@@ -298,7 +420,8 @@ class PubMedSearchService:
                 "retmode": "xml"
             })
 
-            for attempt in range(3):
+            failure: Optional[PubMedRequestError] = None
+            for attempt in range(attempts):
                 try:
                     await self._rate_limit()
                     session = await self._get_session()
@@ -307,23 +430,41 @@ class PubMedSearchService:
                         timeout=timeout
                     ) as resp:
                         if resp.status == 429:
+                            failure = PubMedRequestError(
+                                "efetch", "throttled", f"{batch_label}: HTTP 429 on {attempts} attempts"
+                            )
+                            if attempt == attempts - 1:
+                                break
                             wait = 2 ** (attempt + 1)
                             logger.warning(f"PubMed efetch 限流(429), {wait}s 后重试...")
                             await asyncio.sleep(wait)
                             continue
                         if resp.status != 200:
-                            logger.warning(f"efetch批次 {i//batch_size+1} 请求失败: {resp.status}")
+                            failure = PubMedRequestError(
+                                "efetch", "failed", f"{batch_label}: HTTP {resp.status}"
+                            )
                             break
                         xml_text = await resp.text()
                         records = await asyncio.to_thread(self._parse_pubmed_xml, xml_text)
                         all_records.extend(records)
+                        failure = None
                         break
                 except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                     logger.warning(f"efetch网络错误(attempt {attempt+1}): {e}")
-                    if attempt == 2:
-                        logger.error(f"efetch批次 {i//batch_size+1} 最终失败: {e}")
-                    else:
+                    failure = PubMedRequestError(
+                        "efetch", "failed", f"{batch_label}: {e or type(e).__name__}"
+                    )
+                    if attempt < attempts - 1:
                         await asyncio.sleep(2 ** attempt)
+
+            if failure is not None:
+                raise PubMedRequestError(
+                    failure.stage,
+                    failure.reason,
+                    failure.detail,
+                    found=len(pmids),
+                    partial_records=all_records,
+                )
 
             if i + batch_size < len(pmids):
                 await asyncio.sleep(0.5)

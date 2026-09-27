@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     MAX_SEARCH_RESULTS: int = 1000
     SEARCH_TIMEOUT_SECONDS: int = 30
     PUBMED_MAX_CONCURRENT: int = 3  # PubMed并发请求数限制
+    # A throttled or failed PubMed sub-query is retried in rounds, waiting
+    # BACKOFF, then 2x, ... between rounds, and every round plus the first pass
+    # fits inside one wall-clock budget. NCBI allows 3 requests/s without a key
+    # and 10 with one; a burst above that answers 429, which used to read as
+    # "no hits". Whatever is still throttled when the budget ends is recorded
+    # on the job, never dropped.
+    PUBMED_RETRY_ROUNDS: int = Field(default=2, env="PUBMED_RETRY_ROUNDS")
+    PUBMED_RETRY_BACKOFF_SECONDS: float = Field(default=10.0, env="PUBMED_RETRY_BACKOFF_SECONDS")
+    PUBMED_SEARCH_BUDGET_SECONDS: float = Field(default=240.0, env="PUBMED_SEARCH_BUDGET_SECONDS")
     # A module may consume both bounded Pro attempts plus parsing/chart time.
     # This outer deadline must not race the inner model deadline.
     MODULE_TIMEOUT_SECONDS: int = Field(default=700, env="MODULE_TIMEOUT_SECONDS")

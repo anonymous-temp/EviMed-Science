@@ -28,6 +28,11 @@
 - **相关性筛选**：查询理解模型给出 `concept_groups`——相关文献必须涉及的概念，每组若干短写法；
   检索额外运行一条由这些组组成的 PubMed 查询（组间 AND、组内 OR），检索后按同一组筛选。
   此前每个 PICO 实体各自成为必需短语，「missed dialysis sessions and adherence」688 篇只留下 3 篇
+- **PubMed 限流不再读作"没有文献"**：429 或请求失败的子查询记为 throttled / failed / timed_out，
+  在 `PUBMED_SEARCH_BUDGET_SECONDS`（默认 240 s）内按 `PUBMED_RETRY_BACKOFF_SECONDS`（10 s，逐轮翻倍）
+  重试 `PUBMED_RETRY_ROUNDS`（2）轮；仍未取回的写进诊断（「PubMed 限流 N/M 个子查询」）、报告封面
+  （检索不完整）和台账。一篇也没取回时以 `pubmed_throttled` / `pubmed_unavailable` 失败，runner 退出码 75，
+  适配器据此标记可重试。部署时由 compose 传入 `NCBI_API_KEY`（3 → 10 次/秒）
 - **分阶段架构**：检索与规划 → 六模块逐步分析 → 章节化报告生成
 - **安全JSON解析**：5层容错策略处理LLM输出
 - **中文报告输出**：生成结构化、学术级中文分析报告

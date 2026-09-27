@@ -34,6 +34,7 @@ from models.schemas import (
     TaskStatus,
 )
 from services.llm_service import LLMService, llm_service
+from services.pubmed_service import PubMedSearchResult, SubQueryOutcome
 from services.task_service import TaskService
 
 DATA = Path(__file__).parent / "data"
@@ -125,7 +126,7 @@ def test_multi_source_search_runs_the_groups_query_beside_the_model_queries(monk
 
     async def capture(sub_queries, max_results, date_range):
         seen["sub_queries"] = list(sub_queries)
-        return []
+        return PubMedSearchResult(records=[], outcomes=[])
 
     monkeypatch.setattr("services.task_service.search_internal_db", no_internal)
     monkeypatch.setattr(service.pubmed_service, "search_with_subqueries", capture)
@@ -133,7 +134,7 @@ def test_multi_source_search_runs_the_groups_query_beside_the_model_queries(monk
         "sub_queries": ["(hemodialysis[Title/Abstract])"],
         "concept_groups": RECORDED["concept_groups"],
     }
-    _, sub_queries = asyncio.run(service._multi_source_search(RECORDED["direction"], structure))
+    _, sub_queries, _ = asyncio.run(service._multi_source_search(RECORDED["direction"], structure))
 
     groups_query = LLMService.concept_groups_query(RECORDED["concept_groups"])
     assert seen["sub_queries"] == ["(hemodialysis[Title/Abstract])", groups_query]
@@ -177,7 +178,10 @@ def _stubbed_service(monkeypatch, records):
         return []
 
     async def pubmed(sub_queries, max_results, date_range):
-        return list(records)
+        return PubMedSearchResult(
+            records=list(records),
+            outcomes=[SubQueryOutcome(query=q, status="ok", attempts=1) for q in sub_queries],
+        )
 
     async def module(module_id, **_kwargs):
         return ModuleOutput(module_id=module_id, status="success", data={"ok": True})

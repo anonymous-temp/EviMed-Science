@@ -15,6 +15,8 @@ from core.research_portfolio import build_research_portfolio
 from services import llm_usage as provider_usage
 
 ROOT = Path(__file__).resolve().parent
+#: Failures a later run of the same request can clear.
+RETRYABLE_ERROR_CODES = frozenset({"pubmed_throttled", "pubmed_unavailable"})
 # Marks the managed path so services/llm_service.py refuses its development stub.
 os.environ["EVIMED_MANAGED_RUN"] = "1"
 
@@ -74,10 +76,17 @@ def _module_ledger(completed, evidence_records) -> dict:
             modules[module_id] = _module("failed", reason or status, fatal=True)
 
     diagnostics = getattr(getattr(completed, "blueprint", None), "search_diagnostics", None)
+    incomplete = bool(getattr(diagnostics, "retrieval_incomplete", False))
     if not evidence_records:
         modules["evidenceRetrieval"] = _module(
-            "failed", "no literature records were retrieved", fatal=True
+            "failed",
+            diagnostics.retrieval_note() if incomplete else "no literature records were retrieved",
+            fatal=True,
         )
+    elif incomplete:
+        # PubMed left sub-queries unanswered: the report is built on a partial
+        # set and says so; the ledger names how many.
+        modules["evidenceRetrieval"] = _module("degraded", diagnostics.retrieval_note())
     elif getattr(diagnostics, "status", "") == "low_recall":
         # A thin evidence base is delivered, and marked, not hidden.
         modules["evidenceRetrieval"] = _module("degraded", diagnostics.diagnosis)
@@ -438,10 +447,21 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
         status = getattr(completed.status, "value", completed.status)
         reason = f"status={status}, report={'present' if completed.report else 'missing'}"
         note = (completed.error_message or "").strip()
-        raise RuntimeError(
+        failure = RuntimeError(
             f"research-topic pipeline did not complete ({reason})"
             + (f"; service note: {note}" if note else "")
         )
+        diagnostics = getattr(getattr(completed, "blueprint", None), "search_diagnostics", None)
+        if getattr(diagnostics, "retrieval_incomplete", False):
+            # Nothing was retrieved because PubMed did not answer, not because
+            # the literature is absent: a named, retryable failure.
+            failure.code = (
+                "pubmed_throttled" if diagnostics.pubmed_throttled else "pubmed_unavailable"
+            )
+            failure.modules = {
+                "evidenceRetrieval": _module("failed", diagnostics.retrieval_note(), fatal=True)
+            }
+        raise failure
     invalid_modules = []
     module_codes = {}
     for module_id, module_output in completed.module_outputs.items():
@@ -646,7 +666,9 @@ def run(request_path: Path, output_dir: Path) -> int:
             failure["modules"] = modules
             failure["degraded"] = True
         _write_result(output_dir, failure)
-        return 1
+        # EX_TEMPFAIL: the adapter marks exit 75 retryable. A job PubMed
+        # throttled can succeed when run again; one with no literature cannot.
+        return 75 if code in RETRYABLE_ERROR_CODES else 1
 
 
 def main() -> int:

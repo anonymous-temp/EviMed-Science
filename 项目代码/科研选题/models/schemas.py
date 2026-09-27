@@ -215,6 +215,27 @@ class SearchDiagnostics(BaseModel):
     diagnosis: str = ""
     suggestions: List[str] = []
     can_proceed: bool = True
+    # PubMed sub-queries that ended without an answer after the bounded retry
+    # rounds. Non-zero means the retrieved set is incomplete, and nothing
+    # downstream may present it as the whole literature.
+    pubmed_subqueries: int = 0
+    pubmed_throttled: int = 0
+    pubmed_failed: int = 0
+
+    @property
+    def retrieval_incomplete(self) -> bool:
+        return self.pubmed_throttled + self.pubmed_failed > 0
+
+    def retrieval_note(self) -> str:
+        """One English sentence for ledgers and error codes' readers."""
+        parts = []
+        if self.pubmed_throttled:
+            parts.append(f"PubMed throttled {self.pubmed_throttled} of {self.pubmed_subqueries} sub-queries")
+        if self.pubmed_failed:
+            parts.append(f"PubMed failed {self.pubmed_failed} of {self.pubmed_subqueries} sub-queries")
+        if not parts:
+            return ""
+        return "; ".join(parts) + " after bounded retries; the retrieved set is incomplete"
 
 
 class AnalysisBlueprint(BaseModel):

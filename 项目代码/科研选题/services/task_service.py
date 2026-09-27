@@ -21,7 +21,7 @@ from core.new_planner import AnalysisPlanner
 from core.new_analysis_engine import AnalysisEngine
 from core.new_report_generator import ReportGenerator
 from services.llm_service import llm_service
-from services.pubmed_service import PubMedSearchService
+from services.pubmed_service import PubMedSearchResult, PubMedSearchService
 from services.internal_db_service import search_internal_db
 from config.settings import settings
 
@@ -153,7 +153,9 @@ class TaskService:
 
             # Step 3: 多源检索（优先内部数据库，无结果时再生成子查询走 PubMed）
             task.current_phase = "多源并行检索"
-            evidence_records, sub_queries = await self._multi_source_search(task.input_text, query_structure)
+            evidence_records, sub_queries, pubmed = await self._multi_source_search(
+                task.input_text, query_structure
+            )
 
             # Step 5: 去重
             evidence_records = await self.pubmed_service.deduplicate_records(evidence_records)
@@ -169,6 +171,7 @@ class TaskService:
             search_diagnostics = self._diagnose_search_results(
                 evidence_records, sub_queries, query_structure,
                 retrieved_count=retrieved_count,
+                pubmed=pubmed,
             )
             logger.info(f"检索诊断: {search_diagnostics.status}, 共{search_diagnostics.retrieved_count}篇")
 
@@ -248,7 +251,8 @@ class TaskService:
         优先使用内部数据库检索，无结果或异常时降级到 PubMed。
 
         Returns:
-            (records, sub_queries) — sub_queries 内部数据库时为空列表，PubMed 时为实际使用的子查询
+            (records, sub_queries, pubmed) — ``pubmed`` is the PubMedSearchResult
+            whose outcomes say which sub-queries PubMed throttled or failed
         """
         logger.info(f"[检索] 优先调用内部数据库，查询词: {input_text!r}")
         internal_records = await search_internal_db(input_text)
@@ -278,15 +282,15 @@ class TaskService:
             logger.info("[检索] 追加按概念组组成的子查询: %s", groups_query)
 
         current_year = datetime.now().year
-        pubmed_records = await self.pubmed_service.search_with_subqueries(
+        pubmed = await self.pubmed_service.search_with_subqueries(
             sub_queries, max_results=300, date_range=(current_year - 4, current_year)
         )
-        pubmed_records = pubmed_records if isinstance(pubmed_records, list) else []
         logger.info(
-            "[检索] 多源合并：内部库 %d 篇 + PubMed %d 篇",
-            len(internal_records), len(pubmed_records),
+            "[检索] 多源合并：内部库 %d 篇 + PubMed %d 篇（%d/%d 个子查询未完成）",
+            len(internal_records), len(pubmed.records),
+            len(pubmed.unfinished), len(pubmed.outcomes),
         )
-        return [*internal_records, *pubmed_records], sub_queries
+        return [*internal_records, *pubmed.records], sub_queries, pubmed
 
     @staticmethod
     def _normalized_evidence_text(value: Any) -> str:
@@ -416,6 +420,53 @@ class TaskService:
         )
 
     def _diagnose_search_results(
+        self,
+        records: List,
+        sub_queries: List[str],
+        query_structure: Dict,
+        retrieved_count: Optional[int] = None,
+        pubmed: Optional[PubMedSearchResult] = None,
+    ) -> SearchDiagnostics:
+        """The count-based diagnosis, plus what PubMed did not answer.
+
+        A sub-query PubMed throttled or failed after the bounded retries is
+        named here, so a thin or empty result caused by throttling is never
+        presented as the size of the literature.
+        """
+        diagnostics = self._diagnose_by_count(
+            records, sub_queries, query_structure, retrieved_count=retrieved_count
+        )
+        if pubmed is None or not pubmed.unfinished:
+            return diagnostics
+        throttled = len(pubmed.throttled)
+        failed = len(pubmed.unfinished) - throttled
+        total = len(pubmed.outcomes)
+        causes = []
+        if throttled:
+            causes.append(f"PubMed 限流 {throttled}/{total} 个子查询")
+        if failed:
+            causes.append(f"PubMed 请求失败或超时 {failed}/{total} 个子查询")
+        cause = "、".join(causes) + "（有限次退避重试后仍未取回）"
+        if not records:
+            diagnosis = f"{cause}，没有取回可纳入的文献。这不说明该主题缺少文献，请稍后重试。"
+        else:
+            diagnosis = (
+                f"检索不完整：{cause}。报告基于已取回的文献生成，并在开头标注检索不完整。"
+                + diagnostics.diagnosis
+            )
+        return diagnostics.model_copy(update={
+            "diagnosis": diagnosis,
+            "suggestions": [
+                "稍后重试以取回被限流的子查询",
+                "配置 NCBI_API_KEY 可将 PubMed 速率上限由每秒 3 次提高到 10 次",
+                *diagnostics.suggestions,
+            ],
+            "pubmed_subqueries": total,
+            "pubmed_throttled": throttled,
+            "pubmed_failed": failed,
+        })
+
+    def _diagnose_by_count(
         self,
         records: List,
         sub_queries: List[str],
@@ -854,7 +905,8 @@ class TaskService:
                 execution_plan=task.execution_plan,
                 module_outputs=task.module_outputs,
                 evidence_stats=task.evidence_stats,
-                evidence_records=task.evidence_records
+                evidence_records=task.evidence_records,
+                search_diagnostics=getattr(getattr(task, "blueprint", None), "search_diagnostics", None),
             )
 
             task.status = TaskStatus.COMPLETED
@@ -894,6 +946,7 @@ class TaskService:
             module_outputs=task.module_outputs,
             evidence_stats=task.evidence_stats,
             evidence_records=task.evidence_records,
+            search_diagnostics=getattr(getattr(task, "blueprint", None), "search_diagnostics", None),
         ):
             final_content = cumulative
             yield section_name, cumulative

@@ -17,7 +17,7 @@ from collections import OrderedDict
 from models.schemas import (
     AnalysisReport, ModuleOutput, EvidenceStats,
     StandardizedInput, ExecutionPlan, LiteratureRecord,
-    ChartInfo, SupportingEvidence, LOW_RECALL_BELOW
+    ChartInfo, SupportingEvidence, LOW_RECALL_BELOW, SearchDiagnostics
 )
 from services.llm_service import llm_service
 from utils import safe_parse_json
@@ -66,7 +66,8 @@ class ReportGenerator:
         execution_plan: ExecutionPlan,
         module_outputs: Dict[str, ModuleOutput],
         evidence_stats: EvidenceStats,
-        evidence_records: List[LiteratureRecord] = None
+        evidence_records: List[LiteratureRecord] = None,
+        search_diagnostics: Optional[SearchDiagnostics] = None,
     ) -> AnalysisReport:
         """
         生成专家级循证选题分析报告
@@ -109,7 +110,7 @@ class ReportGenerator:
         # 4a: 封面与元信息
         logger.info(f"[报告生成] 生成标题和元信息")
         title = self._generate_title(query_context, standardized_input)
-        sections.append(self._render_cover(title, evidence_stats, query_context, module_outputs))
+        sections.append(self._render_cover(title, evidence_stats, query_context, module_outputs, search_diagnostics))
         if standardized_input.research_context:
             sections.append(render_research_context(json.loads(standardized_input.research_context)))
 
@@ -214,7 +215,8 @@ class ReportGenerator:
         execution_plan: ExecutionPlan,
         module_outputs: Dict[str, ModuleOutput],
         evidence_stats: EvidenceStats,
-        evidence_records: List[LiteratureRecord] = None
+        evidence_records: List[LiteratureRecord] = None,
+        search_diagnostics: Optional[SearchDiagnostics] = None,
     ) -> AsyncGenerator[tuple, None]:
         """
         流式生成报告 - 逐token yield (section_name, cumulative_content)，实现打字机效果
@@ -237,7 +239,7 @@ class ReportGenerator:
         sections = []
 
         # 封面（同步，立即推）
-        cover = self._render_cover(title, evidence_stats, query_context, module_outputs)
+        cover = self._render_cover(title, evidence_stats, query_context, module_outputs, search_diagnostics)
         sections.append(cover)
         if standardized_input.research_context:
             sections.append(render_research_context(json.loads(standardized_input.research_context)))
@@ -1341,6 +1343,25 @@ LLM 对每组科学矛盾依据以下分级标准赋予 0–1 分值，该得分
         return f"「{query_context[:30]}」科研选题循证分析报告"
 
     @staticmethod
+    def _incomplete_retrieval_notice(search_diagnostics: Optional[SearchDiagnostics]) -> str:
+        """Say on the cover when PubMed left sub-queries unanswered."""
+        if search_diagnostics is None or not search_diagnostics.retrieval_incomplete:
+            return ""
+        parts = []
+        if search_diagnostics.pubmed_throttled:
+            parts.append(
+                f"PubMed 限流 {search_diagnostics.pubmed_throttled}/{search_diagnostics.pubmed_subqueries} 个子查询"
+            )
+        if search_diagnostics.pubmed_failed:
+            parts.append(
+                f"PubMed 请求失败或超时 {search_diagnostics.pubmed_failed}/{search_diagnostics.pubmed_subqueries} 个子查询"
+            )
+        return (
+            f"\n> ⚠️ **检索不完整**：{'、'.join(parts)}，重试后仍未取回。"
+            "以下分析只基于已取回的文献，文献量与分布不代表该领域全貌。\n"
+        )
+
+    @staticmethod
     def _thin_evidence_notice(evidence_stats: EvidenceStats) -> str:
         """A visible statement on the cover when the evidence base is thin.
 
@@ -1356,7 +1377,7 @@ LLM 对每组科学矛盾依据以下分级标准赋予 0–1 分值，该得分
             "需在扩大检索后复核。\n"
         )
 
-    def _render_cover(self, title: str, evidence_stats: EvidenceStats, query_context: str, module_outputs: Dict = None) -> str:
+    def _render_cover(self, title: str, evidence_stats: EvidenceStats, query_context: str, module_outputs: Dict = None, search_diagnostics: Optional[SearchDiagnostics] = None) -> str:
         """渲染报告封面"""
         now = datetime.now().strftime("%Y年%m月%d日")
         cover = f"""# {title}
@@ -1366,7 +1387,7 @@ LLM 对每组科学矛盾依据以下分级标准赋予 0–1 分值，该得分
 **分析范围**: {query_context}
 
 **证据基础**: 系统检索并分析 **{evidence_stats.evidence_count}** 篇相关文献（{evidence_stats.earliest_year}-{evidence_stats.latest_year}），涵盖 {len(evidence_stats.design_distribution)} 种研究设计类型
-{self._thin_evidence_notice(evidence_stats)}
+{self._thin_evidence_notice(evidence_stats)}{self._incomplete_retrieval_notice(search_diagnostics)}
 **分析方法**: 基于循证医学框架，通过PICO结构化检索、多维度证据评估、研究生态分析、科学矛盾识别、跨领域机会挖掘等6大分析模块，系统性评估该领域的研究现状与选题机会
 
 ---
