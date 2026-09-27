@@ -45,7 +45,6 @@ const USER_WORDS = [
  */
 const AWAITING_TAG = [
   { file: "server.mjs", text: "marker ? `${promptText}\\n\\n${marker}` : promptText", why: "a GEO step: tagged by the GEO branch" },
-  { file: "learningRuntime.mjs", text: "`${repairText || question}\\n\\n${marker}`", why: "a learning run: tagged by the learning branch" },
 ];
 
 const TAG_ROLES = new Map(PLATFORM_CONTEXT_TAGS.map((entry) => [entry.tag, entry.role]));
