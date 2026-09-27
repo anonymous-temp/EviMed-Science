@@ -169,6 +169,9 @@ export class MemorySubstrate {
     this.rerank = rerank;
     this.jobs = jobs;
     this.contextLimit = Math.max(0, Math.min(20, Number(config.memoryContextLimit ?? 8)));
+    // The memory page's similarity floor (`search`); recall has its budget.
+    const floor = Number(config.memorySearchMinScore ?? 0.5);
+    this.searchMinScore = Number.isFinite(floor) ? Math.max(0, Math.min(1, floor)) : 0.5;
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config.memoryContextMaxChars ?? 20_000)));
     // A derived index is an optimisation. When it is down, a run that would
     // have recalled eight memories should recall the eight the term matcher
@@ -225,6 +228,44 @@ export class MemorySubstrate {
         .filter(Boolean))).catch(() => {});
     }
     return served;
+  }
+
+  /**
+   * The memory page's semantic half: which of this account's records the
+   * index finds for a query, at or above the similarity floor, best first.
+   *
+   * Not `recall`. Recall hands a run the memories of one project inside a
+   * prompt budget and counts their use; the page lists every project and a
+   * person looking is not the platform using one. What they share is the rule
+   * that the index only nominates: the route resolves every id back to the
+   * stored record. And there is a floor, because without one a query always
+   * came back with the index's nearest neighbours however far they were —
+   * searching 「信尔美」 also listed five unrelated memories (2026-09-26 audit,
+   * M-4). On the term matcher there is no semantic half: the keyword half is
+   * already the page's term search.
+   *
+   * @param {string} userId @param {string} query @param {{ limit?: number }} [options]
+   * @returns {Promise<{ recordId: string, score: number }[]>}
+   */
+  async search(userId, query, { limit = 25 } = {}) {
+    if (!this.active || !String(query ?? "").trim()) return [];
+    const hits = await this.openViking.find(userId, query, {
+      targets: researchRoots(userId),
+      limit: Math.max(1, Math.min(100, Number(limit) || 25)),
+      scoreThreshold: this.searchMinScore,
+    });
+    const seen = new Set();
+    const found = [];
+    // Checked here as well as asked of the server: the floor is ours, and a
+    // server that treats its threshold differently must not lower it.
+    for (const hit of [...hits].sort((left, right) => right.score - left.score)) {
+      if (!(hit.score >= this.searchMinScore)) continue;
+      const parsed = parseMemoryUri(hit.uri);
+      if (!parsed || seen.has(parsed.recordId)) continue;
+      seen.add(parsed.recordId);
+      found.push({ recordId: parsed.recordId, score: hit.score });
+    }
+    return found;
   }
 
   /** @param {string} userId @param {string} query

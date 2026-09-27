@@ -1767,6 +1767,15 @@ export function loadConfig(overrides = {}) {
     memoryContextMaxChars: Number(
       overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    // The similarity below which the memory page's search does not show an
+    // index hit (2026-09-26 audit, M-4: 「信尔美」 also listed five unrelated
+    // memories of another project). Measured on the pinned embedder
+    // (qwen3.7-text-embedding, 2026-09-14): relevant hits score 0.71–0.87,
+    // unrelated ones fall to about 0.21. Recall into a run keeps its own
+    // budget and is not affected.
+    memorySearchMinScore: Number(
+      overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.5,
+    ),
     // Which component decides *which* memories a question sees. `builtin` is
     // the term matcher inside the research-memory store and needs nothing
     // deployed; `openviking` delegates the ranking to a context database. The

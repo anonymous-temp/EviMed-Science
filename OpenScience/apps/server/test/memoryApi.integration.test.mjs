@@ -90,8 +90,8 @@ test("the memory page reads its status, its rows and its search, and the note ro
   assert.deepEqual(profile.usage, {}, "a memory nothing has used has no usage row, and says so as an absence");
 
   const found = (await (await fetch(`${base}/api/memory/search?q=${encodeURIComponent("阿司匹林")}`, { headers })).json()).data;
-  assert.deepEqual(found.items.map((item) => item.key).sort(), ["profile.who", "run.session.ses_9"],
-    "the search reaches what recall never serves, and what came out of that conversation");
+  assert.deepEqual(found.items.map((item) => item.key), ["profile.who"],
+    "a memory is found by the conversation it came out of; the run summary that names it is not a row (audit 2026-09-26, M-4)");
   assert.equal(found.query, "阿司匹林");
 
   // A memory handed to a run is counted, which is 「用过 N 次，上次 …」.

@@ -1341,11 +1341,18 @@ export class ResearchMemoryStore {
     });
   }
 
-  /** @param {string} userId @param {{ projectId?: string|null }} scope */
-  async profile(userId, { projectId = null } = {}) {
+  /**
+   * What the memory page lists: everything about the researcher and every
+   * project's memory, whichever project the page was opened from. It used to
+   * list only the current project's, so another project's 45 memories could
+   * be reached only by searching or switching (2026-09-26 audit, M-4); each
+   * row carries its project, and the page filters by it. A conversation's own
+   * (session-scoped) records stay out, as before.
+   * @param {string} userId
+   */
+  async profile(userId) {
     const records = await this.listAllRecords(userId);
-    const visible = records.filter((record) => record.scope === "user"
-      || (record.scope === "project" && record.scopeId === projectId));
+    const visible = records.filter((record) => record.scope === "user" || record.scope === "project");
     const groups = Object.fromEntries(MEMORY_KINDS.map((kind) => [kind, []]));
     for (const record of visible) groups[record.kind].push(record);
     // A run summary is an entry on the timeline, not something in force about
@@ -1512,7 +1519,8 @@ export class ResearchMemoryStore {
    *
    * Three haystacks, because those are the three things a person remembers a
    * memory by: what it says, which conversation it came out of, and which
-   * project it belongs to. The conversation's own words come from its run
+   * project it belongs to. Run summaries are read for the second and are not
+   * results themselves. The conversation's own words come from its run
    * summary — the record the extractor writes per conversation — so this needs
    * no run-ledger scan.
    *
@@ -1525,8 +1533,12 @@ export class ResearchMemoryStore {
     const owner = assertUserId(userId);
     const terms = searchTokens(boundedText(query, MEMORY_QUERY_LIMIT));
     const bound = Math.max(1, Math.min(500, Number(limit) || 100));
-    const records = await this.listAllRecords(owner);
-    const titles = conversationTitlesIn(records);
+    const all = await this.listAllRecords(owner);
+    const titles = conversationTitlesIn(all);
+    // A conversation's run summary names it (`titles`) and is not a memory
+    // row: shown as one, it put a whole task brief — a GEO step's included —
+    // on the page as an inference (2026-09-26 audit, M-4).
+    const records = all.filter((record) => record.kind !== "run_summary");
     const project = String(projectId ?? "");
     if (terms.length === 0) return { items: records.slice(0, bound), titles };
     const scored = records

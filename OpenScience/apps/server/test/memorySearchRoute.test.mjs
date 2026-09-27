@@ -73,10 +73,11 @@ test("the search is keyword over the whole account, with the index's hits unione
   });
   const memorySubstrate = {
     calls: [],
-    async recall(_userId, query, scope) {
-      this.calls.push({ query, scope });
-      return [{ id: "record:rec_far", content: "报告先给 GRADE" }, { id: "record:rec_near", content: "already found" }];
+    async search(_userId, query, options) {
+      this.calls.push({ query, options });
+      return [{ recordId: "rec_far", score: 0.81 }, { recordId: "rec_near", score: 0.74 }];
     },
+    async recall() { throw new Error("the page's search is not a recall: it counts no use and spans every project"); },
   };
   const request = await serve(t, { researchMemory, memorySubstrate });
   const answer = await (await request("/api/memory/search?q=%E9%98%BF%E5%8F%B8%E5%8C%B9%E6%9E%97")).json();
@@ -85,16 +86,14 @@ test("the search is keyword over the whole account, with the index's hits unione
   assert.equal(answer.data.semantic, 1, "the one the keyword pass had not already found");
   assert.deepEqual(researchMemory.calls.searchRecords, [{ query: "阿司匹林", projectId: "prj_1" }]);
   assert.deepEqual(researchMemory.calls.getRecord, ["rec_far"], "a nomination is resolved back to the stored record");
-  // A researcher looking for a memory is not the platform using one, so the
-  // search's own pass through the recall port does not move 「用过 N 次」.
-  assert.equal(memorySubstrate.calls[0].scope.countUsage, false);
+  assert.deepEqual(memorySubstrate.calls, [{ query: "阿司匹林", options: { limit: 25 } }]);
   assert.equal(answer.data.conversations.ses_9, "阿司匹林一级预防", "so the page can say 「来自 9月12日《…》」");
   assert.deepEqual(answer.data.usage.rec_near, { count: 7, lastUsedAt: "2026-09-18T00:00:00.000Z" });
 });
 
 test("an index that is down costs the search its semantic half and nothing else", async (t) => {
   const researchMemory = storeDouble({ found: [record({ summary: "阿司匹林一级预防的适应症" })] });
-  const memorySubstrate = { async recall() { throw new Error("index unreachable"); } };
+  const memorySubstrate = { async search() { throw new Error("index unreachable"); } };
   const request = await serve(t, { researchMemory, memorySubstrate });
   const answer = await (await request("/api/memory/search?q=%E9%98%BF%E5%8F%B8%E5%8C%B9%E6%9E%97")).json();
   assert.deepEqual(answer.data.items.map((item) => item.id), ["rec_1"]);
@@ -102,17 +101,19 @@ test("an index that is down costs the search its semantic half and nothing else"
 });
 
 test("a nomination the store no longer holds is dropped rather than guessed at", async (t) => {
-  const researchMemory = storeDouble({ found: [], byId: {} });
-  const memorySubstrate = { async recall() { return [{ id: "record:rec_gone", content: "x" }, { id: "not-a-record", content: "y" }]; } };
-  const request = await serve(t, { researchMemory, memorySubstrate });
+  const summary = record({ id: "rec_summary", kind: "run_summary", summary: "「循证 GEO」自动运行 · 第 6 步" });
+  const researchMemoryWithSummary = storeDouble({ found: [], byId: { rec_summary: summary } });
+  const memorySubstrate = { async search() { return [{ recordId: "rec_gone", score: 0.9 }, { recordId: "rec_summary", score: 0.8 }]; } };
+  const request = await serve(t, { researchMemory: researchMemoryWithSummary, memorySubstrate });
   const answer = await (await request("/api/memory/search?q=x")).json();
-  assert.deepEqual(answer.data.items, []);
+  assert.deepEqual(answer.data.items, [], "a gone record is dropped, and a run summary is never a row (audit 2026-09-26, M-4)");
   assert.equal(answer.data.semantic, 0);
+  assert.deepEqual(researchMemoryWithSummary.calls.getRecord, ["rec_gone", "rec_summary"]);
 });
 
 test("an empty query asks the index nothing and answers from the store alone", async (t) => {
   const researchMemory = storeDouble({ found: [record()] });
-  const memorySubstrate = { async recall() { throw new Error("an empty query must not reach the index"); } };
+  const memorySubstrate = { async search() { throw new Error("an empty query must not reach the index"); } };
   const request = await serve(t, { researchMemory, memorySubstrate });
   const answer = await (await request("/api/memory/search?q=%20%20")).json();
   assert.deepEqual(answer.data.items.map((item) => item.id), ["rec_1"]);

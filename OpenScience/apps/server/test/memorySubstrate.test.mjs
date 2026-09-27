@@ -508,6 +508,27 @@ test("the sweep walks accounts in turns, and one it cannot read costs the re-arm
   assert.equal(substrate.lastSweep.code, "memory_index_unavailable");
 });
 
+// 2026-09-26 audit (M-4): searching 「信尔美」 also listed five unrelated
+// memories of the default project — the index's nearest neighbours, however
+// far. Measured on the pinned embedder, a relevant hit scores 0.71–0.87 and an
+// unrelated one about 0.21.
+test("the page's search spans every project above a similarity floor, and there is none on the term matcher", async () => {
+  const geo = memoryUri(USER, { scope: "project", scopeId: "geo", kind: "project_fact", recordId: "geo-fact" });
+  const unrelated = memoryUri(USER, { scope: "project", scopeId: "default", kind: "follow_up", recordId: "far" });
+  const index = fakeIndex([hit(unrelated, 0.21), hit(geo, 0.83), hit(geo, 0.8)]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore([]), openViking: index });
+  assert.deepEqual(await substrate.search(USER, "信尔美"), [{ recordId: "geo-fact", score: 0.83 }]);
+  const asked = index.calls.find[0].options;
+  assert.equal(asked.scoreThreshold, 0.5, "the floor is asked of the server as well");
+  const root = `viking://user/${openVikingUserId(USER)}/memories/evimed`;
+  assert.deepEqual(asked.targets, [`${root}/user`, `${root}/project`, `${root}/session`], "every project, not the one the page was opened from");
+
+  const stricter = new MemorySubstrate({ ...openVikingConfig, memorySearchMinScore: 0.9 }, { store: fakeStore([]), openViking: fakeIndex([hit(geo, 0.83)]) });
+  assert.deepEqual(await stricter.search(USER, "信尔美"), []);
+  assert.deepEqual(await new MemorySubstrate({}, { store: fakeStore([]) }).search(USER, "信尔美"), []);
+  assert.deepEqual(await substrate.search(USER, "   "), []);
+});
+
 /** The job queue as the worker sees it: one `finish` and what it was told. */
 function fakeJobs() {
   const finished = [];

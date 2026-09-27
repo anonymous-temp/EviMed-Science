@@ -257,3 +257,32 @@ test("a database that cannot be reached is 503 memory_unavailable, not a rejecte
   await assert.rejects(() => store.relevant("alpha", "anything"), { status: 503, code: "memory_unavailable" },
     "recall reports the outage rather than pretending the account has no memory");
 });
+
+// 2026-09-26 audit (M-4): the page listed only the current project, and its
+// search showed a conversation's run summary — a whole task brief — as a
+// memory row.
+test("the page's read lists every project's memory, and a run summary names its conversation without being a search result", async () => {
+  const store = new ResearchMemoryStore({});
+  const row = (id, patch) => ({ id, scope: "project", scopeId: "geo", kind: "project_fact", key: `k.${id}`, value: id, summary: id,
+    status: "active", evidence: [], updatedAt: "2026-09-26T00:00:00Z", ...patch });
+  const records = [
+    row("about-you", { scope: "user", scopeId: "", kind: "preference", summary: "结论先行" }),
+    row("geo-fact", { summary: "信尔美为处方药，需冷链", evidence: [{ sourceRef: "sessions/ses_geo/messages/m1" }] }),
+    row("meta-fact", { scopeId: "meta", summary: "研究人群为儿童疳证" }),
+    row("in-session", { scope: "session", scopeId: "ses_1", kind: "follow_up" }),
+    row("summary", { kind: "run_summary", summary: "信尔美产品资料整理", value: JSON.stringify({ sessionId: "ses_geo", question: "信尔美产品资料整理" }) }),
+  ];
+  store.listAllRecords = async () => records;
+
+  const profile = await store.profile("alpha");
+  assert.deepEqual(profile.records.map((record) => record.id), ["about-you", "geo-fact", "meta-fact", "summary"],
+    "every project, whichever the page was opened from; a conversation's own records stay out");
+  assert.equal(profile.activeCount, 3);
+  assert.equal(profile.episodeCount, 1);
+
+  const found = await store.searchRecords("alpha", { query: "信尔美", projectId: "meta" });
+  assert.deepEqual(found.items.map((record) => record.id), ["geo-fact"], "the run summary is how the fact is found, not a row of its own");
+  assert.equal(found.titles.ses_geo, "信尔美产品资料整理");
+  const everything = await store.searchRecords("alpha", { query: "" });
+  assert.ok(everything.items.every((record) => record.kind !== "run_summary"));
+});

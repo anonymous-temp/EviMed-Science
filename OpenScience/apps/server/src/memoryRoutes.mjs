@@ -1,4 +1,3 @@
-import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { MEMORY_KINDS, conversationTitlesIn } from "./researchMemory.mjs";
 import {
   HttpError,
@@ -167,7 +166,9 @@ export function createMemoryRoutes({
 
     if (pathname === "/api/memory/profile" && req.method === "GET") {
       const ctx = await context(req, res);
-      const profile = await researchMemory.profile(ctx.user.id, { projectId: ctx.project.id });
+      // Every project's memory, not only the one the page was opened from:
+      // each row names its project and the page filters by it.
+      const profile = await researchMemory.profile(ctx.user.id);
       const ids = profile.records.map((/** @type {any} */ record) => record.id);
       sendJson(res, 200, { data: {
         ...profile,
@@ -189,11 +190,14 @@ export function createMemoryRoutes({
      * `toLowerCase().includes` over the notes already loaded, so a researcher
      * searching 「阿司匹林」 found it only if the row happened to be on screen.
      * Keyword comes from the store, over everything the account holds
-     * including what recall never serves — an archived memory and a 「做过的
-     * 研究」 summary both have to be findable. Semantic comes from the recall
-     * index through the same port every recall uses, and only nominates: each
-     * hit is resolved back to the stored record, so a stale index cannot show
-     * stale text and cannot show a memory the reader is not entitled to.
+     * including what recall never serves — an archived memory has to be
+     * findable, and a memory is found by the words of the conversation it came
+     * out of. A run summary names that conversation and is not itself a row
+     * (2026-09-26 audit, M-4). Semantic comes from the recall index
+     * (`MemorySubstrate.search`, every project, above a similarity floor) and
+     * only nominates: each hit is resolved back to the stored record, so a
+     * stale index cannot show stale text and cannot show a memory the reader
+     * is not entitled to.
      *
      * The keyword half is authoritative. An index that is down, off or
      * unconfigured costs the search its semantic half and nothing else.
@@ -206,19 +210,16 @@ export function createMemoryRoutes({
       const items = [...found.items];
       const seen = new Set(items.map((/** @type {any} */ record) => record.id));
       let semantic = 0;
-      // `conversation` scope: the research-memory records, which is what this
-      // page lists. A capsule entry is a different row with a different editor
-      // and reaches the page through its own read.
-      if (query && memorySubstrate) {
-        const recalled = await recallAcrossMemory({ capsules: null, memorySubstrate }, ctx.user, {
-          query, projectId: ctx.project.id, limit: 25, scope: "conversation", countUsage: false,
-        }).catch(() => null);
-        for (const item of recalled?.items ?? []) {
-          const id = /^record:(.+)$/.exec(String(item.id ?? ""))?.[1];
-          if (!id || seen.has(id)) continue;
-          const record = await researchMemory.getRecord(ctx.user.id, id).catch(() => null);
-          if (!record) continue;
-          seen.add(id);
+      // The research-memory records, which is what this page lists. A capsule
+      // entry is a different row with a different editor and reaches the page
+      // through its own read.
+      if (query && typeof memorySubstrate?.search === "function") {
+        const nominated = await memorySubstrate.search(ctx.user.id, query, { limit: 25 }).catch(() => []);
+        for (const { recordId } of nominated) {
+          if (seen.has(recordId)) continue;
+          const record = await researchMemory.getRecord(ctx.user.id, recordId).catch(() => null);
+          if (!record || record.kind === "run_summary") continue;
+          seen.add(recordId);
           items.push(record);
           semantic += 1;
         }
