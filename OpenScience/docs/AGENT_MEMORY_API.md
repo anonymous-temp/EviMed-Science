@@ -87,6 +87,28 @@ switches are on the memory page (「记忆开关」). A deployment that has turn
 recall off altogether (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED=false`) answers every
 `recall` with `{ "items": [], "mode": "disabled" }`.
 
+## Lineage cards as capsules
+
+A TCM CDSS lineage card (流派卡 — `LineageCard`, optionally with its
+`LineageQuestionStrategy`) becomes a `.evimedcap` with:
+
+```bash
+node scripts/ops/pack-lineage-capsule.mjs --card card.json --identity governance-key.json \
+  --password-file pack.password --out packs/ [--version 2] [--new-identity] [--allow-unreviewed]
+```
+
+The pack holds one method per stage the card speaks to (M02 追问 from the
+question strategy, M03 辨病辨证, M04 候选方药与加减), the card's safety deference
+and cautions as standards, and the card itself with its governance, signed and
+encrypted exactly as an export is. It is laid out as the platform's own importer
+requires, so the institution imports it like any shared capsule (记忆胶囊 ›
+导入) and a recall names it in `capsuleIds`. `--new-identity` writes the
+governance signing key once (0600) and never overwrites it; until an importing
+deployment knows that key the pack shows as 「发布者未验证」. A card that states a
+dose, carries an identifier or credential, is retired, or is not yet reviewed
+(without `--allow-unreviewed`) is refused before anything is written. The
+password is read from a file, never from the command line.
+
 ## The MCP adapter
 
 `runtime/mcp/evimed-memory/server.py` is a stdio MCP server with two tools —

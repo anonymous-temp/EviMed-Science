@@ -634,3 +634,10 @@ export class CapsuleTransferService {
   }
 
 }
+
+// The container layout an import accepts, byte for byte, for the one other
+// producer of packs: `scripts/ops/pack-lineage-capsule.mjs`. A copy of these two
+// functions there would be a second definition of what `inspect` compares
+// against, and the first change to either would make every lineage pack
+// unimportable without a test noticing.
+export { location as capsuleTransferLocation, renderedFiles as renderCapsuleTransferFiles };
