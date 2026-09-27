@@ -352,6 +352,9 @@ services:
       OPEN_SCIENCE_MEMORY_RERANK_MODEL:
       OPEN_SCIENCE_MEMORY_RERANK_API_BASE:
       OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS:
+      # The semantic half of the memory page's search keeps hits at or above this
+      # score (0–1); value-less so the code default (0.5) applies when unset.
+      OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE:
       OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ${OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT:-8}
       OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ${OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS:-20000}
       # Autopilot's levers belong to the base stack, not to an overlay. Compose

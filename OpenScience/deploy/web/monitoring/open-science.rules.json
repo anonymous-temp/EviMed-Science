@@ -565,6 +565,23 @@
           }
         }
       ]
+    },
+    {
+      "name": "evimed-memory",
+      "rules": [
+        {
+          "alert": "MemoryRerankFailing",
+          "expr": "sum(increase(open_science_memory_rerank_total{outcome=\"failed\"}[1h])) >= 3 and sum(increase(open_science_memory_rerank_total{outcome=\"failed\"}[1h])) > (sum(increase(open_science_memory_rerank_total{outcome=\"succeeded\"}[1h])) or vector(0))",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The recall reranker fails more often than it succeeds",
+            "description": "Recall still answers: the reranker fails open and the index's vector order stands, so nothing visible breaks. open_science_memory_rerank_total{code} names why — the DashScope key file, the account's balance, a timeout, or the pinned rerank model withdrawn; see the runbook row MemoryRerankFailing."
+          }
+        }
+      ]
     }
   ]
 }
