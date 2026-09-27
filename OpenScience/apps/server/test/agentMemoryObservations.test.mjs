@@ -66,7 +66,7 @@ test("the method a habit becomes is a valid method, written from the facts, and 
   assert.deepEqual(verdict.issues, [], "a method the ledger accepts");
   assert.ok(!/\d+\s*次/.test(method.body) && !/\d/.test(method.frontmatter.description + display.summary),
     "no count in the text, so it is not rewritten when a count moves and its digest never does");
-  assert.match(method.frontmatter.whenToUse, /所选诊疗思路为「经方思路」/);
+  assert.match(method.frontmatter.whenToUse, /所选诊疗思路为“经方思路”/);
   for (const change of [{ type: "add", herb: "酸枣仁" }, { type: "remove", herb: "甘草" }]) {
     const other = habitMethod("心脾两虚证", change, null, templateDisplay("心脾两虚证", change));
     assert.deepEqual(validateMethodSkill({ ...other, directoryName: other.frontmatter.name, requireProvenance: true }).issues, []);

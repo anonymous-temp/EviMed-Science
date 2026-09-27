@@ -34,7 +34,7 @@ test("the first message is the question, then a 「来自 AI 搜索」 card with
     ">",
     "> 已找到的来源：",
     "> 1. Once-Weekly Semaglutide in Adults with Overweight or Obesity（DOI 10.1056/NEJMoa2032183 · PMID 33567185）",
-    ">    「The mean change in body weight from baseline to week 68 was −14.9% in the semaglutide group.」",
+    ">    “The mean change in body weight from baseline to week 68 was −14.9% in the semaglutide group.”",
     "> 2. 国家药监局说明书（https://www.nmpa.gov.cn/example）",
   ].join("\n"));
   assert.equal(handoffMessage(readHandoff({ question: "只有问题" })), "只有问题", "nothing found, no card");

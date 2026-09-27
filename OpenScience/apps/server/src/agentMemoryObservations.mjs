@@ -265,7 +265,7 @@ export function templateDisplay(syndrome, change) {
  */
 export function habitMethod(syndrome, change, lineage, display) {
   const act = change.type === "replace" ? `以${change.to}替代${change.from}` : change.type === "add" ? `考虑加用${change.herb}` : `考虑去掉${change.herb}`;
-  const when = `候选方的主证为「${syndrome}」${lineage ? `，所选诊疗思路为「${lineage}」` : ""}时`;
+  const when = `候选方的主证为“${syndrome}”${lineage ? `，所选诊疗思路为“${lineage}”` : ""}时`;
   return {
     frontmatter: {
       name: habitName(syndrome, change),
@@ -283,7 +283,7 @@ export function habitMethod(syndrome, change, lineage, display) {
       "## Purpose", display.summary, "",
       "## When to Use", `${when}。`, "",
       "## Inputs", "候选方的药味与主证。", "",
-      "## Workflow", `1. 核对主证为「${syndrome}」。`, `2. ${act}，作为加减建议中靠前的一项，并说明依据是该医生本人的改方习惯。`, "",
+      "## Workflow", `1. 核对主证为“${syndrome}”。`, `2. ${act}，作为加减建议中靠前的一项，并说明依据是该医生本人的改方习惯。`, "",
       "## Verification", "- 调整后的候选方仍须经过安全审核与药事审方。", "",
       "## Constraints", "- 只影响候选的排序与加减建议，不改变任何安全判断。", "- 不涉及剂量，不涉及毒性药。", "",
       "## Output", "带加减建议的候选方。",

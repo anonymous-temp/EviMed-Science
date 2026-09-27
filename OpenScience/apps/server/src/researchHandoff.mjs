@@ -126,7 +126,7 @@ export function handoffMessage({ question, premises, sources }) {
     sources.forEach((source, index) => {
       const identifiers = [source.doi && `DOI ${source.doi}`, source.pmid && `PMID ${source.pmid}`, source.url].filter(Boolean);
       card.push(`${index + 1}. ${source.title}${identifiers.length ? `（${identifiers.join(" · ")}）` : ""}`);
-      if (source.quote) card.push(`   「${source.quote}」`);
+      if (source.quote) card.push(`   “${source.quote}”`);
     });
   }
   return `${question}\n\n${card.map((line) => (line ? `> ${line}` : ">")).join("\n")}`;
