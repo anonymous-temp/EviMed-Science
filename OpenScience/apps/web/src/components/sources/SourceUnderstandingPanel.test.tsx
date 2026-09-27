@@ -162,9 +162,9 @@ describe("SourceUnderstandingPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("无法加载资料理解");
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));
     expect(await screen.findByText("此资料只建索引")).toBeInTheDocument();
-    expect(screen.getByText("可在「调整分析」里提高分析深度。")).toBeInTheDocument();
+    expect(screen.getByText("可在“调整分析”里提高分析深度。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "查看历史" }));
-    await waitFor(() => expect(screen.getByText("暂无历史理解")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("还没有历史理解")).toBeInTheDocument());
   });
 
   it("keeps a parse that failed distinct from one that was never analysed", async () => {
@@ -175,7 +175,7 @@ describe("SourceUnderstandingPanel", () => {
     mocks.getSourceUnderstanding.mockResolvedValue({ ...result("failed"), generation: 3, current: null });
     const failed = render(<SourceUnderstandingPanel {...props} generation={3}
       error={{ code: "source_unreadable", message: "Source analysis failed." }} />);
-    expect(await screen.findByText("这次解析失败，没有理解结果")).toBeInTheDocument();
+    expect(await screen.findByText("这次无法解析，没有理解结果")).toBeInTheDocument();
     expect(failed.container.textContent).toContain(knownErrorCodeMessage("source_unreadable") as string);
     expect(failed.container.textContent).toContain("原件仍在知识库里");
     // The stored English literal is never shown, and the old sentence must not
@@ -187,8 +187,8 @@ describe("SourceUnderstandingPanel", () => {
     // A failure the source row recorded without a code still says it failed.
     mocks.getSourceUnderstanding.mockResolvedValue({ ...result("failed"), generation: 3, current: null });
     const bare = render(<SourceUnderstandingPanel {...props} generation={3} />);
-    expect(await screen.findByText("这次解析失败，没有理解结果")).toBeInTheDocument();
-    expect(bare.container.textContent).toContain("系统没有记下这次失败的原因。");
+    expect(await screen.findByText("这次无法解析，没有理解结果")).toBeInTheDocument();
+    expect(bare.container.textContent).toContain("原因尚未确定。");
     bare.unmount();
 
     // Nothing failed: the empty state is unchanged.

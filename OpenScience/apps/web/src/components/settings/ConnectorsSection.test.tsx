@@ -121,7 +121,7 @@ describe("数据源", () => {
   it("says when the store is unavailable rather than showing an empty list", async () => {
     mocks.fetchWebConnectors.mockRejectedValue(new Error("Connector credentials are not available on this deployment."));
     render(<ConnectorsSection />);
-    expect(await screen.findByText(/读取数据源失败/)).toBeInTheDocument();
+    expect(await screen.findByText(/无法读取数据源/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 });

@@ -88,7 +88,7 @@ export function ConnectorsSection() {
       toast.success(saved.expiresAt ? `已保存，有效期至 ${day(saved.expiresAt)}` : "已保存");
       await reload();
     } catch (caught) {
-      toast.error(`保存失败：${webErrorMessage(caught)}`);
+      toast.error(`无法保存：${webErrorMessage(caught)}`);
     } finally {
       setBusy(null);
     }
@@ -101,7 +101,7 @@ export function ConnectorsSection() {
       toast.success(`已移除 ${connector.title} 凭据`);
       await reload();
     } catch (caught) {
-      toast.error(`移除失败：${webErrorMessage(caught)}`);
+      toast.error(`无法移除：${webErrorMessage(caught)}`);
     } finally {
       setBusy(null);
     }
@@ -171,11 +171,11 @@ export function ConnectorsSection() {
       <Panel title="数据源">
         {error ? (
           <PanelRow
-            label={<span role="alert">读取数据源失败：{error}</span>}
+            label={<span role="alert">无法读取数据源：{error}</span>}
             control={<Button variant="text" onClick={() => void reload()}>重试</Button>}
           />
         ) : !connectors ? (
-          <PanelRow label={<span className="text-text-3">正在读取…</span>} />
+          <PanelRow label={<span className="text-text-3">正在读取</span>} />
         ) : (
           <>
             {shown.map(row)}

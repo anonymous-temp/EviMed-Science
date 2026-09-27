@@ -128,7 +128,7 @@ describe("FilesPage", () => {
     await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(
       [expect.objectContaining({ name: "uploaded.csv" })], "knowledge-base/data", "base"));
     await waitFor(() => expect(listDir).toHaveBeenCalledWith("knowledge-base/data", "base"));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件。");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件");
   });
 
   it("refuses a recording or an unlisted format by name before uploading, and still uploads the rest", async () => {
@@ -175,7 +175,7 @@ describe("FilesPage", () => {
     );
     // The listing reloads after the upload (initial load + refresh).
     await waitFor(() => expect(listDir).toHaveBeenCalledTimes(2));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件。");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件");
   });
 
   it("uploads files into the current session folder and refreshes the listing", async () => {
@@ -188,6 +188,6 @@ describe("FilesPage", () => {
 
     await waitFor(() => expect(mocks.addFilesToWorkspace).toHaveBeenCalledWith("data"));
     await waitFor(() => expect(listDir).toHaveBeenCalledWith("data", "workspace"));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件。");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件");
   });
 });

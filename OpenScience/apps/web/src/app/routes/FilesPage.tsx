@@ -145,10 +145,10 @@ export function FilesPage() {
       const names = accepted.length > 0 ? await uploadFilesToWorkspace(accepted, dir, "base") : [];
       if (names.length > 0) {
         await load(dir);
-        toast.success(`已上传 ${names.length} 个文件。`);
+        toast.success(`已上传 ${names.length} 个文件`);
       }
     } catch (e) {
-      toast.error(`文件上传失败：${webErrorMessage(e)}`);
+      toast.error(`无法上传文件：${webErrorMessage(e)}`);
     } finally {
       setUploading(false);
     }
@@ -356,10 +356,10 @@ export function SessionFilesPane({
       const names = await addFilesToWorkspace(dir);
       if (names.length > 0) {
         await loadEntries(dir);
-        toast.success(`已上传 ${names.length} 个文件。`);
+        toast.success(`已上传 ${names.length} 个文件`);
       }
     } catch (e) {
-      toast.error(`文件上传失败：${webErrorMessage(e)}`);
+      toast.error(`无法上传文件：${webErrorMessage(e)}`);
     } finally {
       setUploading(false);
     }

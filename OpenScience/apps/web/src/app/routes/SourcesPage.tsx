@@ -55,10 +55,10 @@ function isReading(source: SourceRecord): boolean {
  */
 function stateLabel(source: SourceRecord): string {
   const status = source.payload.status;
-  if (status === "needs_attention") return "部分没能读取";
+  if (status === "needs_attention") return "部分无法读取";
   if (isUsable(source)) return "";
-  if (status === "queued" || status === "parsing") return "读取中";
-  if (status === "failed") return "没能读取";
+  if (status === "queued" || status === "parsing") return "正在读取";
+  if (status === "failed") return "无法读取";
   if (status === "missing") return "原件已移除";
   if (status === "canceled") return "已取消";
   return "";
@@ -126,7 +126,7 @@ const kindOf = (source: SourceRecord): Kind =>
 const STATUS_FILTERS: readonly FilterOption<Filter>[] = [
   { value: "all", label: "全部" },
   { value: "attention", label: "需要处理" },
-  { value: "reading", label: "读取中" },
+  { value: "reading", label: "正在读取" },
   { value: "ready", label: "已读取" },
 ];
 
@@ -137,8 +137,8 @@ const STATUS_FILTERS: readonly FilterOption<Filter>[] = [
  *
  * A row is what a file browser shows — the file, its format and length, the
  * day it arrived — and says a state only while the document cannot be used
- * yet (「读取中…」, a few seconds) or when it could not be read (「没能读取 ·
- * 重试」). A document is usable as soon as its text is read; the understanding
+ * yet (“正在读取”, a few seconds) or when it could not be read (“无法读取 ·
+ * 重试”). A document is usable as soon as its text is read; the understanding
  * that follows runs behind it and is never a state on the row (2026-09-24:
  * every stage used to be the same spinner, for minutes). Until 2026-09-23
  * every row also carried the pipeline's bookkeeping (plan §5.5). The
@@ -283,13 +283,13 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
       }
       const names = accepted.length > 0 ? await uploadFilesToWorkspace(accepted, KNOWLEDGE_ROOT, "base") : [];
       if (names.length > 0) {
-        // The row says 「读取中…」 until the document can be used; the toast
+        // The row says “正在读取” until the document can be used; the toast
         // says only what happened.
-        toast.success(`已上传 ${names.length} 个文件。`);
+        toast.success(`已上传 ${names.length} 个文件`);
         await load(true);
       }
     } catch (e) {
-      toast.error(`文件上传失败：${webErrorMessage(e)}`);
+      toast.error(`无法上传文件：${webErrorMessage(e)}`);
     } finally {
       setUploading(false);
     }
@@ -521,7 +521,7 @@ function SourceRow({ source, busy, shared, duplicate, onPreview, onDetails, onDu
       onOpen={onPreview}
       meta={<SourceMeta source={source} name={name} shared={shared === true} duplicate={duplicate !== null} />}
       trailing={<SourceState source={source} name={name} busy={busy} onRetry={onRetry} />}
-      menu={<Menu label={`「${name}」的操作`} items={items.map((item) => item === "separator" ? item : { ...item, disabled: busy })} />}
+      menu={<Menu label={`“${name}”的操作`} items={items.map((item) => item === "separator" ? item : { ...item, disabled: busy })} />}
     />
   );
 }
@@ -548,9 +548,9 @@ function SourceMeta({ source, name, shared, duplicate }: { source: SourceRecord;
 
 /**
  * The end of a row: the day the document arrived once it can be used, and
- * words while it cannot — 「读取中…」 for the few seconds its text is read,
- * 「没能读取」 when it could not be, 「部分没能读取」 when parts of it could
- * not, the last two with 「重试」 beside them. The reason a reading failed is
+ * words while it cannot — “正在读取” for the few seconds its text is read,
+ * “无法读取” when it could not be, “部分无法读取” when parts of it could
+ * not, the last two with “重试” beside them. The reason a reading failed is
  * the words' tooltip and the first line of 「查看理解」. An understanding that
  * failed after the text was read leaves a usable document, and the row says
  * nothing about it.
@@ -560,9 +560,9 @@ function SourceState({ source, name, busy, onRetry }: { source: SourceRecord; na
   // and an empty library asks nothing at all.
   const operator = useOperator();
   const label = stateLabel(source);
-  if (isReading(source)) return <span className="text-text-3">读取中…</span>;
-  if (label === "没能读取" || label === "部分没能读取") {
-    const failed = label === "没能读取";
+  if (isReading(source)) return <span className="text-text-3">正在读取</span>;
+  if (label === "无法读取" || label === "部分无法读取") {
+    const failed = label === "无法读取";
     const failure = source.payload.error;
     // The code is the handle support searches on: an operator gets it after
     // the sentence, a researcher only the sentence.
@@ -572,7 +572,7 @@ function SourceState({ source, name, busy, onRetry }: { source: SourceRecord; na
       <span className={cn("inline-flex items-center gap-1", failed ? "text-danger" : "text-warn")}>
         <span title={tooltip}>{label}</span>
         <span aria-hidden="true">·</span>
-        <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新读取「${name}」`} onClick={onRetry} className="px-1 text-caption">重试</Button>
+        <Button variant="text" size="sm" destructive={failed} disabled={busy} aria-label={`重新读取“${name}”`} onClick={onRetry} className="px-1 text-caption">重试</Button>
       </span>
     );
   }
@@ -813,7 +813,7 @@ export function SyncedFolders({ projectId, refreshToken }: { projectId: string; 
     <h3 id={headingId} className="mb-1 text-ui font-semibold text-text">同步文件夹</h3>
     {loadError ? <LoadError message={loadError} onRetry={() => void load()} />
       : folders === null ? <FilesSkeleton />
-        : folders.length === 0 ? <p className="py-2 text-ui text-text-3">暂无同步文件夹</p>
+        : folders.length === 0 ? <p className="py-2 text-ui text-text-3">还没有同步文件夹</p>
           : <List>{folders.map((folder) => {
             // The folder's own name, not the connector id it is stored under
             // (which is the gateway path, tenant namespace and all).
@@ -827,7 +827,7 @@ export function SyncedFolders({ projectId, refreshToken }: { projectId: string; 
               meta={<FolderSyncLine folder={folder} operator={operator} />}
               actions={<IconButton icon={RefreshCw} label="立即同步" size="sm" disabled={busy || !active}
                 onClick={() => void mutate(() => syncSourceFolder(folder.id, folder.revision))} />}
-              trailing={<Switch checked={active} label={`同步「${name}」`} disabled={busy}
+              trailing={<Switch checked={active} label={`同步“${name}”`} disabled={busy}
                 onChange={(on) => void mutate(() => setSourceFolderStatus(folder.id, folder.revision, on ? "active" : "paused"))} />}
             />;
           })}</List>}
@@ -846,7 +846,7 @@ function FolderSyncLine({ folder, operator }: { folder: SourceFolderRecord; oper
   const lastError = folder.payload.lastError;
   return <div className="space-y-0.5">
     {lastError
-      ? <p className="text-danger" title={operator ? lastError.code : undefined}>上次同步失败：{sourceFailureMessage(lastError)}</p>
+      ? <p className="text-danger" title={operator ? lastError.code : undefined}>上次无法同步：{sourceFailureMessage(lastError)}</p>
       : <p>{sync ? `上次同步${sync.at ? ` ${formatDay(sync.at)} ${formatClock(sync.at)}` : ""} · 新增 ${sync.registered}` : "尚未同步"}</p>}
     {sync && sync.skippedCount > 0 && <Disclosure summary={`跳过 ${sync.skippedCount} 项`} summaryClassName="text-caption">
       <ul className="space-y-0.5">

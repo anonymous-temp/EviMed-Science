@@ -126,8 +126,8 @@ export function SourceUnderstandingPanel({ projectId, sourceId, generation, erro
     </div>
     {historyVisible && <div className="space-y-2" aria-label="理解历史">
       {historyError && <LoadError message={historyError} onRetry={() => void loadHistory(nextCursor)} />}
-      {historyLoading && !history && <p role="status" className="text-ui text-text-3">正在加载理解历史…</p>}
-      {history?.length === 0 && <p className="text-ui text-text-3">暂无历史理解</p>}
+      {historyLoading && !history && <p role="status" className="text-ui text-text-3">正在加载理解历史</p>}
+      {history?.length === 0 && <p className="text-ui text-text-3">还没有历史理解</p>}
       {history && history.length > 0 && <div className="flex flex-wrap gap-1">{history.map(item => <Button key={item.id} size="sm" variant="text"
         aria-pressed={selected?.id === item.id} className={selected?.id === item.id ? "bg-surface-2 text-text" : undefined}
         onClick={() => setSelected(item)}>{writtenAt(item.createdAt)}</Button>)}</div>}
@@ -139,13 +139,13 @@ export function SourceUnderstandingPanel({ projectId, sourceId, generation, erro
         parse a second time. The source's own status is what separates the
         two; the stored error code is what names the cause. */}
     {!shown && (detail.status === "failed"
-      ? <EmptyState icon={FileX2} title="这次解析失败，没有理解结果"
-        description={<><p>{sourceFailureMessage(failure) ?? "系统没有记下这次失败的原因。"}</p>
+      ? <EmptyState icon={FileX2} title="这次无法解析，没有理解结果"
+        description={<><p>{sourceFailureMessage(failure) ?? "原因尚未确定。"}</p>
           <p className="mt-1">原件仍在知识库里，可以重新分析。</p></>} />
       : <EmptyState icon={FileSearch}
         title={detail.depth === "skip" ? "此资料仅保留指纹" : detail.depth === "index_only" ? "此资料只建索引"
           : active(detail.status) ? "正在生成理解" : "这一次分析尚无可用理解"}
-        description={detail.depth === "skip" || detail.depth === "index_only" ? "可在「调整分析」里提高分析深度。"
+        description={detail.depth === "skip" || detail.depth === "index_only" ? "可在“调整分析”里提高分析深度。"
           : active(detail.status) ? undefined : "已完成的旧版本可在理解历史中查看。"} />)}
     {shown && <UnderstandingContent key={shown.id} understanding={shown} historical={selected != null} />}
   </div>;
