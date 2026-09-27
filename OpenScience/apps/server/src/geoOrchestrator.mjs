@@ -423,8 +423,17 @@ export function exportBrief(project, { kind, week = null }) {
  * @param {string} brief @param {string} dispatchId
  */
 export function geoRunPrompt(brief, dispatchId) {
-  const id = String(dispatchId).replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 80);
-  return `${brief}\n\n<evimed-geo-run>${id}</evimed-geo-run>`;
+  return `${brief}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>`;
+}
+
+/**
+ * A dispatch id as the mark carries it: one token, so the mark stays one
+ * tag whatever the id holds. The dispatch site writes the tag itself, as a
+ * literal, so `platformDispatchTags.test.mjs` can read it there.
+ * @param {string} dispatchId
+ */
+export function geoRunId(dispatchId) {
+  return String(dispatchId).replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 80);
 }
 
 // ------------------------------------------------------------------ the orchestrator

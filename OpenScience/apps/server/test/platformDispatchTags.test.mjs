@@ -43,9 +43,8 @@ const USER_WORDS = [
  * match the untagged expression. When the branch lands, the site is tagged on
  * its own and the entry matches nothing — this file then says to delete it.
  */
-const AWAITING_TAG = [
-  { file: "server.mjs", text: "marker ? `${promptText}\\n\\n${marker}` : promptText", why: "a GEO step: tagged by the GEO branch" },
-];
+/** @type {Array<{ file: string, text: string, why: string }>} */
+const AWAITING_TAG = [];
 
 const TAG_ROLES = new Map(PLATFORM_CONTEXT_TAGS.map((entry) => [entry.tag, entry.role]));
 

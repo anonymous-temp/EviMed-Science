@@ -76,8 +76,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // The delivery gate's repair round, sent back into the researcher's own
   // conversation: the gate's words, never theirs.
   { tag: 'evimed-repair', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
-  // Every 「循证 GEO」 dispatch's brief, open runtime or not (`geoRunPrompt`).
-  { tag: 'evimed-geo-run', role: 'injected', emitters: ['apps/server/src/geoOrchestrator.mjs'] },
+  // Every 「循证 GEO」 dispatch's brief, open runtime or not (`geoRunPrompt`,
+  // and the GEO dispatch site in server.mjs, which writes the same text).
+  { tag: 'evimed-geo-run', role: 'injected', emitters: ['apps/server/src/geoOrchestrator.mjs', 'apps/server/src/server.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
   { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
