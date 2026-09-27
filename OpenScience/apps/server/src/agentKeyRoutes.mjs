@@ -39,12 +39,12 @@ export function createAgentKeyRoutes({ config, apiKeys, context, audit }) {
     }
     if (!rest && method === "POST") {
       const body = assertObject(await readJson(req, config.maxJsonBytes), "API key request");
-      const unknown = Object.keys(body).filter((field) => !["name", "scopes", "projectId", "expiresInDays"].includes(field));
+      const unknown = Object.keys(body).filter((field) => !["name", "scopes", "projectId", "expiresInDays", "subjects"].includes(field));
       if (unknown.length) throw new HttpError(400, "agent_key_payload_invalid", `Unsupported field(s): ${unknown.sort().join(", ")}.`);
       const created = await apiKeys.create(ctx.user.id, body);
       // The key itself is never audited — an audit line is a log line, and a
       // credential in a log is the thing this store exists to avoid.
-      await audit(ctx, "agent-key.create", "completed", { target: created.id, scopes: created.scopes.join(",") });
+      await audit(ctx, "agent-key.create", "completed", { target: created.id, scopes: created.scopes.join(","), subjects: created.subjects });
       sendJson(res, 201, { data: created });
       return true;
     }

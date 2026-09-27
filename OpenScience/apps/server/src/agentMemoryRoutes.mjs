@@ -1,6 +1,7 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
+import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
 
 /**
@@ -27,7 +28,10 @@ import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
  *     more step removed. The account owner confirms, or does not. An episode
  *     may add evidence to a memory already in force and never changes one.
  *  2. **Scope comes from the key.** A key bound to a project cannot read or
- *     write outside it, and no request field can widen that.
+ *     write outside it, and no request field can widen that. An integration
+ *     key may name the person a request is for (`X-Subject`), and then every
+ *     read and write is that person's account and nobody else's; without the
+ *     header it is the key's own account — the institution's (agentApiKeys.mjs).
  *  3. **`episodes` is an input, not an import.** An external agent posts what
  *     happened — the turns — and extraction decides what, if anything, is worth
  *     remembering, through the same extractor and the same quote-integrity
@@ -96,8 +100,8 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
 
     const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
     const identity = await apiKeys.resolve(token);
-    const user = await store.userById(identity.userId);
-    if (!user) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
+    const keyAccount = await store.userById(identity.userId);
+    if (!keyAccount) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
     const now = Date.now();
     for (const [key, window] of windows) if (window.until <= now) windows.delete(key);
@@ -108,6 +112,31 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
     windows.set(identity.keyId, window);
     if (++window.count > RATE_LIMIT_PER_MINUTE) throw new HttpError(429, "agent_memory_rate_limited", "Too many memory operations.");
 
+    // Whom this request is for (rule 2). Checked after the rate limit, so a
+    // flood of made-up subjects is a flood of refusals, not of accounts.
+    const named = req.headers["x-subject"];
+    if (named !== undefined && !identity.subjects) {
+      throw new HttpError(400, "agent_key_subject_unsupported", "Only an integration key may name a subject.");
+    }
+    const subject = named === undefined ? null : assertAgentSubject(Array.isArray(named) ? "" : named);
+    /**
+     * The account this request reads and writes: the subject's, or the key's
+     * own. A subject is given its account the first time something is written
+     * for it; a read of one that has none creates nothing and is answered as
+     * an empty account (`null` here), which is what it is.
+     * @param {{ create: boolean }} options
+     */
+    const accountFor = async ({ create }) => {
+      if (!subject) return keyAccount;
+      const id = create
+        ? (await apiKeys.subjectAccount(keyAccount.id, subject)).userId
+        : await apiKeys.findSubjectAccount(keyAccount.id, subject);
+      if (!id) return null;
+      const found = await store.userById(id);
+      if (!found) throw new HttpError(503, "agent_subject_unavailable", "This subject's memory is unavailable.");
+      return found;
+    };
+
     /** @param {string} scope */
     const requireScope = (scope) => {
       if (!identity.scopes.includes(scope)) {
@@ -116,8 +145,19 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
     };
     /** A project the key is allowed to name. A key bound to one project may
      * name that one or none; an unbound key may name any project of its own
-     * account, and `requireProject` is what checks the ownership. */
-    const projectOf = async (requested) => {
+     * account, and `requireProject` is what checks the ownership. A subject's
+     * account has the one project every account starts with; the institution's
+     * projects are the institution's.
+     * @param {any} user @param {unknown} requested */
+    const projectOf = async (user, requested) => {
+      if (subject) {
+        if (requested != null && String(requested) !== "default") {
+          throw new HttpError(400, "agent_subject_project_unsupported", "A subject's memory has one project, \"default\"; name it or name none.");
+        }
+        if (requested == null) return null;
+        await store.requireProject(user, "default");
+        return "default";
+      }
       const wanted = requested == null ? identity.projectId : String(requested);
       if (identity.projectId && wanted !== identity.projectId) {
         throw new HttpError(403, "agent_key_project_denied", "This API key is bound to a different project.");
@@ -146,9 +186,15 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
       if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
         throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
       }
+      const query = boundedString(input.query, "query", 2_000);
+      const user = await accountFor({ create: false });
+      if (!user) {
+        sendJson(res, 200, { data: { items: [], mode: "none", contextOnly: true, sources: { memory: 0, capsule: 0 } } });
+        return true;
+      }
       const result = await recallAcrossMemory({ capsules, memorySubstrate }, user, {
-        query: boundedString(input.query, "query", 2_000),
-        projectId: await projectOf(input.projectId),
+        query,
+        projectId: await projectOf(user, input.projectId),
         limit: Math.max(1, Math.min(50, Number(input.limit ?? 10))),
         factKinds: input.factKinds ?? [],
         since: input.since ?? null,
@@ -162,9 +208,11 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
       requireScope("memory.write");
       const input = fields(body, ["factKind", "content", "projectId"]);
       if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
-      const entry = await capsules.note(user.id, await projectOf(input.projectId), {
+      const content = boundedString(input.content, "content", 8_000);
+      const user = /** @type {any} */ (await accountFor({ create: true }));
+      const entry = await capsules.note(user.id, (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null), {
         factKind: input.factKind,
-        content: boundedString(input.content, "content", 8_000),
+        content,
         // Not a parameter. See rule 1 in the module header.
         origin: "inferred",
         // Neither is this: a third party's note waits for the account owner,
@@ -184,14 +232,16 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         .flatMap((value) => value.split(","))
         .map((value) => value.trim())
         .filter((value) => allowed.has(value));
-      const records = await researchMemory.listRecords(user.id, {
+      const user = await accountFor({ create: false });
+      const scopeId = user ? (await projectOf(user, url.searchParams.get("scopeId"))) ?? "" : "";
+      const records = !user ? [] : await researchMemory.listRecords(user.id, {
         scopes: filters("scope", allowedScopes),
         kinds: filters("kind", allowedKinds),
         // Active only unless asked otherwise: a pending record is a proposal
         // nobody has agreed to, and an external agent reading it as fact is the
         // failure the pending state exists to prevent.
         statuses: filters("status", allowedStatuses).length ? filters("status", allowedStatuses) : ["active"],
-        scopeId: (await projectOf(url.searchParams.get("scopeId"))) ?? "",
+        scopeId,
         query: url.searchParams.get("query") ?? "",
         pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
       });
@@ -203,8 +253,6 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
       requireScope("memory.write");
       const input = fields(body, ["projectId", "sessionId", "messages"]);
       if (!memoryIntelligence) throw new HttpError(503, "product_state_unavailable", "Memory extraction is unavailable.");
-      const projectId = await projectOf(input.projectId);
-      if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
       if (!Array.isArray(input.messages) || input.messages.length === 0 || input.messages.length > 200) {
         throw new HttpError(400, "agent_memory_payload_invalid", "messages must be a list of 1–200 turns.");
       }
@@ -226,6 +274,10 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
           sender: message.role === "user" ? "user" : "assistant",
         };
       });
+      const user = /** @type {any} */ (await accountFor({ create: true }));
+      // A subject's episode belongs to its one project whether or not it is named.
+      const projectId = (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null);
+      if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
       const project = await store.requireProject(user, projectId);
       const run = {
         id: `ext_${identity.keyId}_${Date.now().toString(36)}`,
@@ -258,11 +310,15 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         version: 1,
         scopes: identity.scopes,
         projectId: identity.projectId,
+        // An integration key, and whether this request named a subject.
+        subjects: identity.subjects === true,
+        speaksFor: subject ? "subject" : "account",
         rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
         endpoints: ["POST /recall", "POST /note", "GET /records", "POST /episodes"],
         notes: [
           "Every episode-derived record stays pending, and every note an unconfirmed candidate, until the account owner confirms it; an episode never changes a memory already in force.",
           "A key bound to a project cannot read or write outside it.",
+          "An integration key may name the person a request is for in X-Subject; every read and write is then that person's alone.",
         ],
       } });
       return true;

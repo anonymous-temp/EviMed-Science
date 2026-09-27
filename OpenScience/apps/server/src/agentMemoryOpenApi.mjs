@@ -1,5 +1,5 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
-import { AGENT_KEY_SCOPES } from "./agentApiKeys.mjs";
+import { AGENT_KEY_SCOPES, AGENT_SUBJECT_PATTERN } from "./agentApiKeys.mjs";
 
 /**
  * The agent-memory API, described.
@@ -46,7 +46,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
     429: errorResponse(`More than ${rateLimitPerMinute} operations in one minute for this key.`),
     503: errorResponse("The API is not enabled in this deployment, or memory storage is unavailable."),
   };
-  return {
+  const document = {
     openapi: "3.1.0",
     info: {
       title: "EviMed agent memory",
@@ -57,18 +57,25 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "Two rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
         "1. Nothing you write becomes an active memory. Every record extracted from an episode stays `pending`, and a note stays an unconfirmed candidate, until the account owner confirms it. An episode may add evidence to a memory that is already in force; it never changes, replaces or re-activates one. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
-        "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that.",
+        "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
       ].join("\n"),
     },
     servers: [{ url: basePath }],
     components: {
+      parameters: {
+        Subject: {
+          name: "X-Subject", in: "header", required: false,
+          description: "Integration keys only: the opaque identifier of the person this request is for (1–128 letters, digits and . _ : @ / + = -). Absent, the request is the key's own account. Named by any other key, the request is refused with `agent_key_subject_unsupported`. A subject's memory has one project, `default`.",
+          schema: { type: "string", pattern: AGENT_SUBJECT_PATTERN.source },
+        },
+      },
       securitySchemes: {
         agentApiKey: {
           type: "http",
           scheme: "bearer",
-          description: `An account API key, minted at POST /api/agent-keys. Scopes: ${AGENT_KEY_SCOPES.join(", ")}.`,
+          description: `An account API key, minted at POST /api/agent-keys (\`subjects: true\` makes it an integration key). Scopes: ${AGENT_KEY_SCOPES.join(", ")}.`,
         },
       },
       schemas: {
@@ -199,4 +206,13 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       },
     },
   };
+  // Every operation takes the subject header and can be refused for it.
+  for (const operations of Object.values(document.paths)) {
+    for (const operation of Object.values(/** @type {Record<string, any>} */ (operations))) {
+      operation.parameters = [{ $ref: "#/components/parameters/Subject" }, ...(operation.parameters ?? [])];
+      operation.responses[400] ??= errorResponse("Malformed request.");
+      operation.responses[400] = errorResponse(`${operation.responses[400].description} Also: an X-Subject that is not an identifier (\`agent_subject_invalid\`), named by a key that is not an integration key (\`agent_key_subject_unsupported\`), or a subject request naming a project other than \`default\` (\`agent_subject_project_unsupported\`).`);
+    }
+  }
+  return document;
 }

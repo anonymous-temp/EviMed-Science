@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS ${schema}.users (
   id text PRIMARY KEY,
   name text NOT NULL,
   password_hash text,
-  auth_type text NOT NULL CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed')),
+  auth_type text NOT NULL CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed', 'subject')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((auth_type = 'local' AND password_hash IS NOT NULL) OR auth_type <> 'local')
@@ -99,9 +99,13 @@ END $default_project_name$;
 -- the constraint this build requires, and a database whose constraint is wrong
 -- for any reason is repaired by starting. The table holds one row per account,
 -- so revalidating it costs nothing.
+--
+-- 2026-09-27: 'subject' is the account an integration key makes for one person
+-- behind an institution (agentApiKeys.mjs, subjectAccount) — no password, no
+-- identity provider, reached only through that institution's key.
 ALTER TABLE ${schema}.users DROP CONSTRAINT IF EXISTS users_auth_type_check;
 ALTER TABLE ${schema}.users ADD CONSTRAINT users_auth_type_check
-  CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed'));
+  CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed', 'subject'));
 
 INSERT INTO ${schema}.schema_migrations(version) VALUES (3)
 ON CONFLICT (version) DO NOTHING;

@@ -62,6 +62,7 @@ import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
+import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -1166,6 +1167,11 @@ export function createWebApiApp(overrides = {}) {
     config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
+  /** The accounts an integration key of `ownerId` made for the people behind
+   *  it, deleted the way an account is (`deleteSubjectAccounts`).
+   *  @param {string} ownerId */
+  const deleteAgentSubjects = (ownerId) => deleteSubjectAccounts(
+    { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService }, ownerId);
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
   const documentParser = new DocumentParserClient({
@@ -4521,6 +4527,10 @@ export function createWebApiApp(overrides = {}) {
           }
         }
         await Promise.all(projects.map((project) => runtimeManager.stop(project)));
+        // The accounts an integration key of this one made for the people
+        // behind it go first: a subject's memory has no owner once its
+        // institution is gone, and nothing else would ever delete it.
+        const subjectsDeleted = await deleteAgentSubjects(user.id);
         // The purge still runs first, for the counts the audit line carries.
         // Completeness no longer depends on it: the memory tables reference the
         // account with ON DELETE CASCADE, so `store.deleteUser` below removes
@@ -4560,7 +4570,7 @@ export function createWebApiApp(overrides = {}) {
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
-        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge });
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge, subjectsDeleted });
         sendJson(res, 200, { data });
         return;
       }

@@ -29,13 +29,13 @@ function response() {
   };
 }
 
-/** @param {string} path @param {any} [body] @param {string} [token] @param {string} [method] */
-function request(path, body = undefined, token = "evk_good", method = body === undefined ? "GET" : "POST") {
+/** @param {string} path @param {any} [body] @param {string} [token] @param {string} [method] @param {Record<string, string>} [extra] */
+function request(path, body = undefined, token = "evk_good", method = body === undefined ? "GET" : "POST", extra = {}) {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body), "utf8")];
   return {
     url: path,
     method,
-    headers: { authorization: token ? `Bearer ${token}` : "", "content-type": "application/json" },
+    headers: { authorization: token ? `Bearer ${token}` : "", "content-type": "application/json", ...extra },
     async *[Symbol.asyncIterator]() { for (const chunk of chunks) yield chunk; },
   };
 }
@@ -45,12 +45,20 @@ function fixture(overrides = {}) {
   const apiKeys = {
     async resolve(token) {
       if (token !== "evk_good") throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
-      return { userId: "u1", keyId: "agk_1", projectId: overrides.boundProject ?? null, scopes: overrides.scopes ?? [...AGENT_KEY_SCOPES] };
+      return {
+        userId: "u1", keyId: "agk_1", projectId: overrides.boundProject ?? null,
+        scopes: overrides.scopes ?? [...AGENT_KEY_SCOPES], subjects: overrides.subjects ?? false,
+      };
+    },
+    async subjectAccount(ownerId, subject) { calls.push(["subjectAccount", ownerId, subject]); return { userId: `subj_${subject}`, created: true }; },
+    async findSubjectAccount(ownerId, subject) {
+      calls.push(["findSubjectAccount", ownerId, subject]);
+      return (overrides.knownSubjects ?? []).includes(subject) ? `subj_${subject}` : null;
     },
   };
   const store = {
-    async userById() { return { id: "u1", accountCreatedAt: "2026-01-01T00:00:00.000Z" }; },
-    async requireProject(_user, id) { calls.push(["requireProject", id]); return { id, userId: "u1" }; },
+    async userById(id) { return { id, accountCreatedAt: "2026-01-01T00:00:00.000Z" }; },
+    async requireProject(user, id) { calls.push(["requireProject", id, user.id]); return { id, userId: user.id }; },
   };
   const capsules = {
     async recall(userId, input) { calls.push(["recall", userId, input]); return { items: [] }; },
@@ -242,4 +250,73 @@ test("recall answers from the records as well as the capsule, and each item says
   assert.deepEqual(res.captured.body.data.sources, { memory: 1, capsule: 0 });
   assert.equal(res.captured.body.data.contextOnly, true);
   assert.equal(calls.find((entry) => entry[0] === "recall")[2].scope, "capsule", "the capsule half is asked for the capsule only");
+});
+
+test("an integration key speaks for the doctor it names, and every read and write is that doctor's alone", async () => {
+  const { routes, calls } = fixture({ subjects: true, knownSubjects: ["doc-7"] });
+  const as = (subject) => ({ "x-subject": subject });
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "太子参" }, "evk_good", "POST", as("doc-7")), response());
+  await routes(request(`${AGENT_MEMORY_PATH}/records`, undefined, "evk_good", "GET", as("doc-7")), response());
+  await routes(request(`${AGENT_MEMORY_PATH}/note`, { factKind: "preference", content: "药味不超过 12 味" }, "evk_good", "POST", as("doc-7")), response());
+  await routes(request(`${AGENT_MEMORY_PATH}/episodes`, { messages: [{ role: "user", text: "我一般开 12 味以内。" }] }, "evk_good", "POST", as("doc-7")), response());
+  assert.equal(calls.find((entry) => entry[0] === "recall")[1], "subj_doc-7");
+  assert.equal(calls.find((entry) => entry[0] === "listRecords")[1], "subj_doc-7");
+  const note = calls.find((entry) => entry[0] === "note");
+  assert.deepEqual([note[1], note[2]], ["subj_doc-7", "default"], "a subject's note lands in its one project");
+  assert.equal(calls.find((entry) => entry[0] === "recordRun")[1], "default", "and so does an episode that names none");
+  // Only writes make an account; the reads found the one that exists.
+  assert.deepEqual(calls.filter((entry) => entry[0] === "subjectAccount").map((entry) => entry[1]), ["u1", "u1"]);
+  assert.ok(!calls.some((entry) => ["recall", "listRecords", "note", "recordRun"].includes(entry[0]) && entry[1] === "u1"),
+    "nothing reached the institution's own account");
+});
+
+test("without X-Subject an integration key is its institution, and a read for a doctor never seen creates nothing", async () => {
+  const { routes, calls } = fixture({ subjects: true });
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x" }), response());
+  assert.equal(calls.find((entry) => entry[0] === "recall")[1], "u1", "absent, the key's own account: the institution level");
+  const res = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x" }, "evk_good", "POST", { "x-subject": "doc-new" }), res);
+  assert.deepEqual(res.captured.body.data.items, [], "an empty account, answered as one");
+  assert.ok(!calls.some((entry) => entry[0] === "subjectAccount"), "a read creates no account");
+  const records = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/records`, undefined, "evk_good", "GET", { "x-subject": "doc-new" }), records);
+  assert.deepEqual(records.captured.body.data, []);
+});
+
+test("only an integration key may name a subject, a subject is a plain identifier, and a subject has one project", async () => {
+  const plain = fixture();
+  await assert.rejects(
+    () => plain.routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x" }, "evk_good", "POST", { "x-subject": "doc-7" }), response()),
+    (error) => error.status === 400 && error.code === "agent_key_subject_unsupported",
+  );
+  assert.ok(!plain.calls.some((entry) => entry[0] === "recall"), "refused before any memory was read");
+  const integration = fixture({ subjects: true, knownSubjects: ["doc-7"] });
+  for (const bad of ["", " ", "张医生", "a b", "x".repeat(129)]) {
+    await assert.rejects(
+      () => integration.routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x" }, "evk_good", "POST", { "x-subject": bad }), response()),
+      (error) => error.status === 400 && error.code === "agent_subject_invalid",
+      `refused: ${JSON.stringify(bad)}`,
+    );
+  }
+  await assert.rejects(
+    () => integration.routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", projectId: "ward-3" }, "evk_good", "POST", { "x-subject": "doc-7" }), response()),
+    (error) => error.status === 400 && error.code === "agent_subject_project_unsupported",
+  );
+  const root = response();
+  await integration.routes(request(`${AGENT_MEMORY_PATH}/`, undefined, "evk_good", "GET", { "x-subject": "doc-7" }), root);
+  assert.equal(root.captured.body.data.subjects, true);
+  assert.equal(root.captured.body.data.speaksFor, "subject");
+});
+
+test("the description names the subject header on every operation, with the pattern the route enforces", async () => {
+  const { AGENT_SUBJECT_PATTERN } = await import("../src/agentApiKeys.mjs");
+  const document = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 });
+  assert.equal(document.components.parameters.Subject.name, "X-Subject");
+  assert.equal(document.components.parameters.Subject.schema.pattern, AGENT_SUBJECT_PATTERN.source);
+  for (const [path, operations] of Object.entries(document.paths)) {
+    for (const [method, operation] of Object.entries(operations)) {
+      assert.ok(operation.parameters.some((parameter) => parameter.$ref === "#/components/parameters/Subject"), `${method} ${path}`);
+      assert.match(operation.responses[400].description, /agent_key_subject_unsupported/, `${method} ${path}`);
+    }
+  }
 });

@@ -32,7 +32,7 @@ Keys belong to an account and are managed with that account's browser session
 | Call | What it does |
 |---|---|
 | `GET /api/agent-keys` | The account's keys (prefix, scopes, project, expiry, last use) and the scopes a key may carry. |
-| `POST /api/agent-keys` `{ "name", "scopes", "projectId"?, "expiresInDays"? }` | Creates a key and returns its secret **once**; it is stored as a digest. |
+| `POST /api/agent-keys` `{ "name", "scopes", "projectId"?, "expiresInDays"?, "subjects"? }` | Creates a key and returns its secret **once**; it is stored as a digest. `subjects: true` makes it an integration key (below). |
 | `DELETE /api/agent-keys/<id>` | Revokes it. |
 
 - **Scopes:** `memory.read` (recall, list records) and `memory.write` (note,
@@ -43,6 +43,26 @@ Keys belong to an account and are managed with that account's browser session
 - **Expiry:** `expiresInDays` from 1 to 730; omit it for a key that lasts until
   revoked.
 - A key is never written to an audit line or a log.
+
+### Integration keys: one institution, many people
+
+A key created with `"subjects": true` is an **integration key**: it is held by
+an institution (for example the TCM CDSS behind a hospital's HIS) and a request
+made with it may name the person it is for in an `X-Subject` header — an
+opaque identifier of 1–128 letters, digits and `. _ : @ / + = -`, never a name.
+
+- With `X-Subject`, every read and write of that request is that person's own
+  memory and nobody else's: each subject is an account of its own, made the
+  first time something is written for it. Reading a subject that has nothing
+  yet answers as an empty memory and creates nothing. A subject's memory has
+  one project, `default`; naming another is refused.
+- Without `X-Subject`, the request is the key's own account — the institution
+  level, which is where personalisation lives until the HIS sends a doctor id.
+- Any other key naming a subject is refused (`agent_key_subject_unsupported`).
+- An integration key cannot be bound to a project (`agent_key_subjects_unbound`).
+- The HIS identifier itself is never stored, only a digest. Nobody can sign in
+  as a subject; its memory is reached only through its institution's keys, and
+  it is deleted when the institution's account is.
 
 ## The API
 
