@@ -2896,6 +2896,9 @@ export function createWebApiApp(overrides = {}) {
   const sourceUpdates = config.sourceUpdatesEnabled === false ? null : createSourceUpdateLookup({
     userAgent: webReadUserAgent(config),
     timeoutMs: config.sourceUpdatesTimeoutMs,
+    // Crossref's polite pool: the deployment's contact address, the one
+    // Unpaywall already gets for the same courtesy.
+    mailto: config.publicSourceCredentials?.unpaywall ?? null,
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
   });
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });

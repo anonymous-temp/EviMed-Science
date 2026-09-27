@@ -35,9 +35,23 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 /** @typedef {{ kind: string, noticeDoi: string | null, date: string | null, source: string | null }} SourceUpdate */
 
 /**
- * @param {{ fetchImpl?: typeof fetch, userAgent: string, timeoutMs?: number, now?: () => number }} options
+ * How long one batch may take by default. It was 3 s, and over the week to
+ * 2026-09-26 a quarter of the lookups (60 of 241) timed out from Beijing
+ * (audit I1-11): the badge is missing exactly when it would say most. Six
+ * seconds, and the polite pool below, which Crossref serves from its own
+ * machines rather than the shared anonymous ones. The reader's popover shows
+ * the verdict either way; only the badges wait.
  */
-export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeoutMs = 3_000, now = Date.now }) {
+export const SOURCE_UPDATES_DEFAULT_TIMEOUT_MS = 6_000;
+
+/**
+ * @param {{ fetchImpl?: typeof fetch, userAgent: string, timeoutMs?: number, now?: () => number, mailto?: string | null }} options
+ *   `mailto`: the deployment's contact address, sent as Crossref asks a
+ *   polite-pool client to (`mailto=` on the query); none, and the request is
+ *   anonymous as before. A value that is not an address is not sent.
+ */
+export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeoutMs = SOURCE_UPDATES_DEFAULT_TIMEOUT_MS, now = Date.now, mailto = null }) {
+  const contact = typeof mailto === "string" && /^[^@\s,&=?#]+@[^@\s,&=?#]+\.[^@\s,&=?#]+$/.test(mailto.trim()) ? mailto.trim() : null;
   /** @type {Map<string, { at: number, updates: SourceUpdate[] | null }>} */
   const cache = new Map();
   const counts = { checked: 0, cached: 0, unknown: 0, failed: 0 };
@@ -77,6 +91,7 @@ export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeout
       url.searchParams.set("filter", batch.map((doi) => `doi:${doi}`).join(","));
       url.searchParams.set("select", "DOI,updated-by");
       url.searchParams.set("rows", String(batch.length));
+      if (contact) url.searchParams.set("mailto", contact);
       let items;
       try {
         const response = await fetchImpl(url, {

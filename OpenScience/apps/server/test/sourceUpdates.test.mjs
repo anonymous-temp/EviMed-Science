@@ -70,6 +70,35 @@ test("a failing Crossref says nothing, is not remembered, and is counted", async
   assert.ok(Date.now() - started < 2_000, "a slow Crossref does not hold the reader");
 });
 
+test("the lookup asks Crossref's polite pool with the deployment's contact, and waits six seconds by default", async () => {
+  // Audit I1-11: at three seconds a quarter of the lookups timed out.
+  const { fetchImpl, requests } = crossref(recorded.batch);
+  const polite = createSourceUpdateLookup({ fetchImpl, userAgent: "x", mailto: "research-ops@example.org" });
+  await polite.lookup(["10.1016/S0140-6736(97)11096-0"]);
+  assert.equal(requests[0].url.searchParams.get("mailto"), "research-ops@example.org");
+  // No address, or something that is not one, and the request stays anonymous.
+  for (const mailto of [null, "", "not-an-address", "a@b.org&rows=1000"]) {
+    const { fetchImpl: plain, requests: asked } = crossref(recorded.batch);
+    await createSourceUpdateLookup({ fetchImpl: plain, userAgent: "x", mailto }).lookup(["10.1016/S0140-6736(97)11096-0"]);
+    assert.equal(asked[0].url.searchParams.has("mailto"), false, String(mailto));
+  }
+  const { SOURCE_UPDATES_DEFAULT_TIMEOUT_MS } = await import("../src/sourceUpdates.mjs");
+  const { loadConfig } = await import("../src/config.mjs");
+  assert.equal(SOURCE_UPDATES_DEFAULT_TIMEOUT_MS, 6_000);
+  const saved = process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS;
+  delete process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS;
+  try {
+    assert.equal(loadConfig({}).sourceUpdatesTimeoutMs, SOURCE_UPDATES_DEFAULT_TIMEOUT_MS);
+  } finally {
+    if (saved !== undefined) process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS = saved;
+  }
+  // The deployment files carry the same default, or they would pin the old one.
+  const compose = await readFile(new URL("../../../deploy/web/docker-compose.yml", import.meta.url), "utf8");
+  const example = await readFile(new URL("../../../deploy/web/.env.example", import.meta.url), "utf8");
+  assert.match(compose, /OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS: \$\{OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS:-6000\}/);
+  assert.match(example, /^OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS=6000$/m);
+});
+
 test("each source's DOI comes from its identifier, its address, or the capture it quotes", async () => {
   const verdict = { claims: [
     { claimId: "CLM-001", claimType: "direct", sources: [{ artifactPath: null, status: "no_quote" }] },

@@ -2279,10 +2279,12 @@ export function loadConfig(overrides = {}) {
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
     // One Crossref request for twenty cited works, made while a reader waits
     // for a report's 「依据」 marks: past this the badges are simply absent.
-    // Counted in open_science_source_updates_total{outcome="failed"}.
+    // Counted in open_science_source_updates_total{outcome="failed"}. Six
+    // seconds since 2026-09-27: at three, a quarter timed out from Beijing
+    // (sourceUpdates.mjs SOURCE_UPDATES_DEFAULT_TIMEOUT_MS).
     sourceUpdatesTimeoutMs: Math.max(500, Number(
-      overrides.sourceUpdatesTimeoutMs ?? process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS ?? 3_000,
-    ) || 3_000),
+      overrides.sourceUpdatesTimeoutMs ?? process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS ?? 6_000,
+    ) || 6_000),
     // --- rt: runtime UX (plan §3.1 #8, 2026-09-20) ---
     // Start the runtime of the account's most recently used project in the
     // background of a sign-in, so it is up by the time the project is opened.
