@@ -44,15 +44,18 @@ from safety_agent.evidence.models import EvidenceLayerResult
 from safety_agent.faers import DrugScope, FrozenFAERSSnapshot
 from safety_agent.normalize.adr import normalize_adr_async
 from safety_agent.normalize.drugs import normalize_drug
+from safety_agent.normalize.routes import describe_routes
 from safety_agent.openfda.queries import (
     DRUG_FIELD_MEDICINALPRODUCT,
     DRUG_FIELD_OPENFDA_GENERIC,
     FIELD_REACTION_EXACT,
+    LiveDrugScope,
+    characterization_roles,
     date_range_clause,
     drug_clause,
+    openfda_search_name,
     reaction_clause,
-    route_clause,
-    suspect_only_clause,
+    role_filter_codes,
 )
 from safety_agent.signals import (
     DEFAULT_MGPS_PRIOR,
@@ -166,6 +169,14 @@ class AnalysisPipeline:
                 f"药品名无法归一化: {drug}",
                 detail=f"candidates: {[c.term for c in drug_norm.candidates]}",
             )
+        if openfda_search_name(drug_norm.normalized) is None:
+            # FAERS names are Latin-script and openFDA answers 400 to anything
+            # else; an untranslated CJK name is a normalization failure, not a
+            # query to send.
+            raise NormalizationError(
+                f"药品名无法归一为 FAERS 可检索的拉丁字符名称: {drug}",
+                detail=f"candidates: {[c.term for c in drug_norm.candidates]}",
+            )
         normalized_reactions: list[NormalizedReaction] = []
         unresolved: list[UnresolvedReaction] = []
         for query in reaction_queries:
@@ -249,8 +260,14 @@ class AnalysisPipeline:
                 "信号统计使用冻结 FAERS 逐报告快照;药名与 ROLE_COD 在同一药品对象上精确匹配。"
             )
         else:
+            live_scope = self._live_scope(drug_norm.normalized)
+            if live_scope.unsearchable_aliases:
+                notes.append(
+                    "以下药名别名不是拉丁字符,openFDA 无法检索,未纳入药名检索(仅作记录): "
+                    + "、".join(live_scope.unsearchable_aliases)
+                )
             drug_field_used = self._drug_field
-            drug_search = self._scoped_drug_search(drug_norm.normalized, drug_field_used)
+            drug_search = live_scope.search(drug_field_used)
             builder = OverviewBuilder(self._openfda)
             overview = None
             try:
@@ -272,7 +289,7 @@ class AnalysisPipeline:
                     "openfda.generic_name 字段未检索到报告,已回退为 medicinalproduct 原始药名字段。"
                 )
                 drug_field_used = DRUG_FIELD_MEDICINALPRODUCT
-                drug_search = self._scoped_drug_search(drug_norm.normalized, drug_field_used)
+                drug_search = live_scope.search(drug_field_used)
                 try:
                     overview = await builder.build(
                         drug_search,
@@ -288,8 +305,14 @@ class AnalysisPipeline:
                 )
             if self._drug_routes:
                 notes.append(
-                    "openFDA live 聚合仅表示报告同时含目标药、指定角色和给药途径,"
+                    "给药途径按 openFDA 的 ICH E2B 途径代码检索("
+                    + describe_routes(self._drug_routes)
+                    + ");openFDA live 聚合仅表示报告同时含目标药、指定角色和给药途径,"
                     "无法保证三者属于同一 drug 对象。"
+                )
+            if overview is None or overview.total_reports == 0:
+                raise NoDataError(
+                    await explain_empty_scope(self._count, live_scope, self._drug_field)
                 )
         if overview is None or overview.total_reports == 0:
             raise NoDataError(f"FAERS 中未检索到 {drug_norm.normalized} 的任何报告")
@@ -391,15 +414,13 @@ class AnalysisPipeline:
                 "same_drug_object"
                 if snapshot_scope is not None
                 else "report_contains_suspect_approximation"
-                if self._ps_only
+                if self._live_characterization()
                 else "target_name_only"
             ),
             suspect_roles=(
                 sorted(self._suspect_roles)
                 if snapshot_scope is not None
-                else ["PS", "SS"]
-                if self._ps_only
-                else ["PS", "SS", "C", "I"]
+                else self._live_roles()
             ),
             administration_routes=list(self._drug_routes),
             study_date_from=(
@@ -431,32 +452,31 @@ class AnalysisPipeline:
             gps_prior_id=self._gps_prior.fit_id,
         )
 
-    def _scoped_drug_search(self, drug_name: str, field: str) -> str:
-        """Drug clause in the configured name field, suspect-scoped.
+    def _live_scope(self, drug_name: str) -> LiveDrugScope:
+        """The one live-openFDA scope every drug-side query is built from.
 
-        The suspect filter ANDs into every drug-side query (drug marginal,
+        The role filter ANDs into every drug-side query (drug marginal,
         joint counts, all overview aggregations) so the 2x2 cells b/c/d
         derived from them stay marginally consistent; the reaction
         marginal and the grand total deliberately stay unfiltered.
         """
-        names = (
-            (drug_name, *self._drug_aliases)
-            if field == DRUG_FIELD_MEDICINALPRODUCT
-            else (drug_name,)
+        return LiveDrugScope(
+            drug_name=drug_name,
+            aliases=self._drug_aliases,
+            role_codes=self._suspect_roles if self._ps_only else None,
+            routes=self._drug_routes,
+            date_from=self._study_date_from,
+            date_to=self._study_date_to,
         )
-        clauses = [drug_clause(name, field=field) for name in dict.fromkeys(names)]
-        base = clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
-        if self._ps_only:
-            base = f"({base}) AND ({suspect_only_clause()})"
-        if self._drug_routes:
-            routes = " OR ".join(route_clause(route) for route in self._drug_routes)
-            base = f"({base}) AND ({routes})"
-        if self._study_date_from is not None or self._study_date_to is not None:
-            base = (
-                f"({base}) AND "
-                f"({date_range_clause(self._study_date_from, self._study_date_to)})"
-            )
-        return base
+
+    def _live_characterization(self) -> tuple[str, ...]:
+        """drugcharacterization codes the live role filter applies; () = none."""
+        return role_filter_codes(self._suspect_roles) if self._ps_only else ()
+
+    def _live_roles(self) -> list[str]:
+        """FAERS roles the live filter actually selects (code 1 is PS and SS)."""
+        codes = self._live_characterization()
+        return characterization_roles(codes) if codes else ["PS", "SS", "C", "I"]
 
     def _background_search(self) -> str | None:
         date_from = self._background_date_from or self._study_date_from
@@ -699,6 +719,65 @@ class AnalysisPipeline:
         outcome = self._on_stage(stage, status, detail)
         if inspect.isawaitable(outcome):
             await outcome
+
+
+_FILTER_LABELS = {"role": "药品角色", "route": "给药途径", "date": "目标时间窗"}
+
+
+def _filter_detail(scope: LiveDrugScope, filter_id: str, clause: str) -> str:
+    if filter_id == "role":
+        return (
+            "/".join(sorted(scope.role_codes or ()))
+            + " -> drugcharacterization "
+            + "/".join(scope.characterization)
+        )
+    if filter_id == "route":
+        return describe_routes(scope.routes)
+    return clause
+
+
+async def explain_empty_scope(
+    count: Callable[[str], Awaitable[int]],
+    scope: LiveDrugScope,
+    preferred_field: str,
+) -> str:
+    """Why a scoped live query found no report: which filter emptied it.
+
+    "No reports in FAERS" is only true when the drug name itself matches
+    nothing. Otherwise the filters are re-applied one at a time (role, route,
+    target window) and the first one that takes the count to zero is named,
+    with every step's count, so the caller corrects that filter instead of
+    concluding the drug has no reports.
+    """
+    fields = dict.fromkeys(
+        (preferred_field, DRUG_FIELD_OPENFDA_GENERIC, DRUG_FIELD_MEDICINALPRODUCT)
+    )
+    for field in fields:
+        if not scope.names(field):
+            continue
+        base = scope.name_clause(field)
+        name_total = await count(base)
+        if name_total == 0:
+            continue
+        steps = [f"药名 {name_total:,}"]
+        for filter_id, clause in scope.filters():
+            base = f"({base}) AND ({clause})"
+            total = await count(base)
+            label = f"{_FILTER_LABELS[filter_id]}({_filter_detail(scope, filter_id, clause)})"
+            steps.append(f"+{label} {total:,}")
+            if total == 0:
+                return (
+                    f"FAERS 中有 {scope.drug_name} 的报告 {name_total:,} 份,"
+                    f"范围过滤逐步叠加后为 0 份,降为 0 的一步是{label}:"
+                    f"是过滤条件清空了报告集,不是 FAERS 没有该药的报告。"
+                    f"逐步计数: {' -> '.join(steps)}"
+                )
+        return (
+            f"FAERS 中 {scope.drug_name} 的范围检索未得到报告"
+            f"(逐步计数: {' -> '.join(steps)})"
+        )
+    names = "、".join(scope.names(DRUG_FIELD_MEDICINALPRODUCT))
+    return f"FAERS 中未检索到 {scope.drug_name} 的任何报告(检索药名: {names})"
 
 
 def _focus_reactions(signals: list[SignalRow], user_pts: list[str]) -> list[str]:

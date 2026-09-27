@@ -494,9 +494,10 @@ def _target_drug_predicate(
     clauses = [f"{alias}.role_code IN ({role_marks})", name_sql]
     params: tuple[object, ...] = (*roles, *name_params)
     if scope.routes:
-        route_marks = ",".join("?" for _ in scope.routes)
+        forms = sorted(scope.route_match_forms)
+        route_marks = ",".join("?" for _ in forms)
         clauses.append(f"lower(trim({alias}.route)) IN ({route_marks})")
-        params = (*params, *sorted(scope.routes))
+        params = (*params, *forms)
     return _and(*clauses), params
 
 

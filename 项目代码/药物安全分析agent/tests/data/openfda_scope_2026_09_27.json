@@ -1,0 +1,134 @@
+{
+  "recorded": "2026-09-27, live api.fda.gov without an API key",
+  "route_codes": {
+    "source": "https://open.fda.gov/fields/drugevent.yaml (patient.drug.drugadministrationroute possible_values)",
+    "values": {
+      "001": "Auricular (otic)",
+      "002": "Buccal",
+      "003": "Cutaneous",
+      "004": "Dental",
+      "005": "Endocervical",
+      "006": "Endosinusial",
+      "007": "Endotracheal",
+      "008": "Epidural",
+      "009": "Extra-amniotic",
+      "010": "Hemodialysis",
+      "011": "Intra corpus cavernosum",
+      "012": "Intra-amniotic",
+      "013": "Intra-arterial",
+      "014": "Intra-articular",
+      "015": "Intra-uterine",
+      "016": "Intracardiac",
+      "017": "Intracavernous",
+      "018": "Intracerebral",
+      "019": "Intracervical",
+      "020": "Intracisternal",
+      "021": "Intracorneal",
+      "022": "Intracoronary",
+      "023": "Intradermal",
+      "024": "Intradiscal (intraspinal)",
+      "025": "Intrahepatic",
+      "026": "Intralesional",
+      "027": "Intralymphatic",
+      "028": "Intramedullar (bone marrow)",
+      "029": "Intrameningeal",
+      "030": "Intramuscular",
+      "031": "Intraocular",
+      "032": "Intrapericardial",
+      "033": "Intraperitoneal",
+      "034": "Intrapleural",
+      "035": "Intrasynovial",
+      "036": "Intratumor",
+      "037": "Intrathecal",
+      "038": "Intrathoracic",
+      "039": "Intratracheal",
+      "040": "Intravenous bolus",
+      "041": "Intravenous drip",
+      "042": "Intravenous (not otherwise specified)",
+      "043": "Intravesical",
+      "044": "Iontophoresis",
+      "045": "Nasal",
+      "046": "Occlusive dressing technique",
+      "047": "Ophthalmic",
+      "048": "Oral",
+      "049": "Oropharingeal",
+      "050": "Other",
+      "051": "Parenteral",
+      "052": "Periarticular",
+      "053": "Perineural",
+      "054": "Rectal",
+      "055": "Respiratory (inhalation)",
+      "056": "Retrobulbar",
+      "057": "Sunconjunctival",
+      "058": "Subcutaneous",
+      "059": "Subdermal",
+      "060": "Sublingual",
+      "061": "Topical",
+      "062": "Transdermal",
+      "063": "Transmammary",
+      "064": "Transplacental",
+      "065": "Unknown",
+      "066": "Urethral",
+      "067": "Vaginal"
+    }
+  },
+  "rejections": {
+    "non_latin_alias": {
+      "search": "patient.drug.medicinalproduct:\"泰瑞沙\"",
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "BAD_REQUEST",
+          "message": "Search not supported: patient.drug.medicinalproduct:&quot;泰瑞沙&quot;"
+        }
+      }
+    },
+    "latin_with_diacritic": {
+      "search": "patient.drug.medicinalproduct:\"tagrissö\"",
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "BAD_REQUEST",
+          "message": "Search not supported: patient.drug.medicinalproduct:&quot;tagrissö&quot;"
+        }
+      }
+    },
+    "route_name_instead_of_code": {
+      "search": "(patient.drug.openfda.generic_name:\"osimertinib\") AND (patient.drug.drugadministrationroute:\"oral\")",
+      "status": 404,
+      "body": {
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "No matches found!"
+        }
+      }
+    }
+  },
+  "osimertinib_counts": {
+    "note": "meta.results.total for each search, the filters of brief adr-001 applied one at a time",
+    "name": {
+      "search": "patient.drug.openfda.generic_name:\"osimertinib\"",
+      "total": 31866
+    },
+    "name+role": {
+      "search": "(patient.drug.openfda.generic_name:\"osimertinib\") AND (patient.drug.drugcharacterization:1)",
+      "total": 31832
+    },
+    "name+route_name": {
+      "search": "(patient.drug.openfda.generic_name:\"osimertinib\") AND (patient.drug.drugadministrationroute:\"oral\")",
+      "total": 0
+    },
+    "name+route_code": {
+      "search": "(patient.drug.openfda.generic_name:\"osimertinib\") AND (patient.drug.drugadministrationroute:\"048\")",
+      "total": 22809
+    },
+    "name+target_window": {
+      "search": "(patient.drug.openfda.generic_name:\"osimertinib\") AND (receivedate:[20230101 TO 20251231])",
+      "total": 13541
+    },
+    "background_window": {
+      "search": "receivedate:[20160101 TO 20251231]",
+      "total": 13840535
+    }
+  }
+}

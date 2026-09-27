@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from safety_agent.analysis.models import AnalysisResult
-from safety_agent.analysis.pipeline import AnalysisPipeline
+from safety_agent.analysis.pipeline import AnalysisPipeline, explain_empty_scope
 from safety_agent.analysis.runner import write_artifacts
 from safety_agent.core.config import PROJECT_ROOT, Settings
 from safety_agent.core.exceptions import (
@@ -35,11 +35,11 @@ from safety_agent.openfda.client import OpenFDAClient
 from safety_agent.openfda.queries import (
     DRUG_FIELD_MEDICINALPRODUCT,
     DRUG_FIELD_OPENFDA_GENERIC,
-    drug_clause,
+    LiveDrugScope,
+    characterization_roles,
     date_range_clause,
+    openfda_search_name,
     reaction_clause,
-    route_clause,
-    suspect_only_clause,
 )
 from safety_agent.signals import (
     DEFAULT_MGPS_PRIOR,
@@ -79,30 +79,6 @@ class SignalComputationResult:
     statistics_version: str = "gps-v2"
     gps_prior_fitted: bool = False
     gps_prior_id: str | None = None
-
-
-def _scoped_drug_search(
-    drug_name: str,
-    drug_field: str,
-    ps_only: bool,
-    *,
-    aliases: tuple[str, ...] = (),
-    routes: tuple[str, ...] = (),
-    date_from: date | str | None = None,
-    date_to: date | str | None = None,
-) -> str:
-    """Drug clause + suspect filter (same construction as the pipeline)."""
-    names = (drug_name, *aliases) if drug_field == DRUG_FIELD_MEDICINALPRODUCT else (drug_name,)
-    clauses = [drug_clause(name, field=drug_field) for name in dict.fromkeys(names)]
-    base = clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
-    if ps_only:
-        base = f"({base}) AND ({suspect_only_clause()})"
-    if routes:
-        route_search = " OR ".join(route_clause(route) for route in routes)
-        base = f"({base}) AND ({route_search})"
-    if date_from is not None or date_to is not None:
-        base = f"({base}) AND ({date_range_clause(date_from, date_to)})"
-    return base
 
 
 class ServiceContext:
@@ -442,15 +418,20 @@ class ServiceContext:
                 ),
             )
 
-        drug_search = _scoped_drug_search(
-            drug_norm.normalized,
-            drug_field,
-            ps_only,
+        if openfda_search_name(drug_norm.normalized) is None:
+            raise NormalizationError(
+                f"药品名无法归一为 FAERS 可检索的拉丁字符名称: {drug}"
+            )
+        live_scope = LiveDrugScope(
+            drug_name=drug_norm.normalized,
             aliases=self.drug_aliases,
+            role_codes=self.suspect_roles if ps_only else None,
             routes=self.drug_routes,
             date_from=self.study_date_from,
             date_to=self.study_date_to,
         )
+        requested_field = drug_field
+        drug_search = live_scope.search(drug_field)
         background_search = (
             date_range_clause(self.background_date_from, self.background_date_to)
             if self.background_date_from is not None or self.background_date_to is not None
@@ -471,21 +452,19 @@ class ServiceContext:
                 drug_norm.normalized,
             )
             drug_field = DRUG_FIELD_MEDICINALPRODUCT
-            drug_search = _scoped_drug_search(
-                drug_norm.normalized,
-                drug_field,
-                ps_only,
-                aliases=self.drug_aliases,
-                routes=self.drug_routes,
-                date_from=self.study_date_from,
-                date_to=self.study_date_to,
-            )
+            drug_search = live_scope.search(drug_field)
             try:
                 drug_total = await self.openfda.count_total(drug_search)
             except NoResults:
                 drug_total = 0
         if drug_total == 0:
-            raise NoDataError(f"FAERS 中未检索到 {drug_norm.normalized} 的任何报告")
+            raise NoDataError(
+                await explain_empty_scope(
+                    lambda search: _count_or_zero(self.openfda, search),
+                    live_scope,
+                    requested_field,
+                )
+            )
 
         async def one(reaction: str) -> dict:
             clause = reaction_clause(reaction)
@@ -524,9 +503,15 @@ class ServiceContext:
             drug_field_used=drug_field,
             data_source="openfda_live",
             suspect_binding=(
-                "report_contains_suspect_approximation" if ps_only else "target_name_only"
+                "report_contains_suspect_approximation"
+                if live_scope.characterization
+                else "target_name_only"
             ),
-            suspect_roles=["PS", "SS"] if ps_only else ["PS", "SS", "C", "I"],
+            suspect_roles=(
+                characterization_roles(live_scope.characterization)
+                if live_scope.characterization
+                else ["PS", "SS", "C", "I"]
+            ),
             administration_routes=list(self.drug_routes),
             snapshot_id=None,
             study_date_from=(

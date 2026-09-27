@@ -15,10 +15,12 @@ here would turn into ``%2B`` and search for a literal ``+AND+`` token).
 from __future__ import annotations
 
 import math
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date
 
 from safety_agent.core.exceptions import SafetyAgentError
+from safety_agent.normalize.routes import resolve_routes
 
 #: Fully qualified drug/event.json field paths (openFDA FAERS schema).
 FIELD_DRUG = "patient.drug.medicinalproduct"
@@ -112,9 +114,134 @@ def suspect_only_clause() -> str:
     return f"{FIELD_DRUG_CHARACTERIZATION}:1"
 
 
+#: FAERS ROLE_COD -> openFDA drugcharacterization. PS and SS share code 1.
+_ROLE_CHARACTERIZATION = {"PS": "1", "SS": "1", "C": "2", "I": "3"}
+_CHARACTERIZATION_ROLES = {"1": ("PS", "SS"), "2": ("C",), "3": ("I",)}
+
+
+def characterization_codes(role_codes: frozenset[str] | set[str]) -> tuple[str, ...]:
+    """drugcharacterization codes covering the requested FAERS roles."""
+    unknown = {role.upper() for role in role_codes} - set(_ROLE_CHARACTERIZATION)
+    if not role_codes or unknown:
+        raise SafetyAgentError(
+            f"invalid FAERS role codes {sorted(role_codes)}; expected PS, SS, C or I"
+        )
+    return tuple(sorted({_ROLE_CHARACTERIZATION[role.upper()] for role in role_codes}))
+
+
+def role_filter_codes(role_codes: frozenset[str] | set[str]) -> tuple[str, ...]:
+    """Codes to filter on for the requested roles; () when they are all four,
+    since every drug entry then qualifies and there is nothing to filter."""
+    codes = characterization_codes(role_codes)
+    return () if len(codes) == len(_CHARACTERIZATION_ROLES) else codes
+
+
+def characterization_roles(codes: tuple[str, ...]) -> list[str]:
+    """The FAERS roles a drugcharacterization filter actually selects."""
+    return [role for code in codes for role in _CHARACTERIZATION_ROLES[code]]
+
+
+def characterization_clause(codes: tuple[str, ...]) -> str:
+    clauses = [f"{FIELD_DRUG_CHARACTERIZATION}:{code}" for code in codes]
+    return clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
+
+
 def route_clause(route_code: str) -> str:
     """ICH E2B route code on a drug entry (for example 048=oral)."""
     return quoted_term(FIELD_DRUG_ROUTE, route_code)
+
+
+def openfda_search_name(name: str) -> str | None:
+    """The form of a drug name openFDA can search, or None.
+
+    openFDA answers HTTP 400 "Search not supported" to any non-ASCII term
+    (verified 2026-09-27 on "泰瑞沙" and on "tagrissö"), and FAERS stores
+    product names in Latin script. A Latin name with diacritics is folded to
+    ASCII; a name in another script (CJK, Cyrillic, Greek) has no searchable
+    form and returns None — it stays in the request for the reader, never in
+    a query.
+    """
+    decomposed = unicodedata.normalize("NFKD", " ".join(name.split()))
+    folded = "".join(char for char in decomposed if not unicodedata.combining(char))
+    if not folded.strip() or not folded.isascii():
+        return None
+    return folded
+
+
+@dataclass(frozen=True)
+class LiveDrugScope:
+    """The target-drug predicate as live openFDA can express it.
+
+    One construction for every live query (pipeline and signal endpoint), so
+    the drug marginal, the joint counts and the overview aggregations share
+    one report set. Report-level only: openFDA flattens ``patient.drug[]``,
+    so name, role and route may match three different drug entries.
+
+    ``role_codes`` None means no role filter. ``routes`` are the requested
+    route names or codes; they are resolved to ICH E2B codes here, because
+    openFDA stores codes and a route name matches nothing.
+    """
+
+    drug_name: str
+    aliases: tuple[str, ...] = ()
+    role_codes: frozenset[str] | None = None
+    routes: tuple[str, ...] = ()
+    date_from: date | str | None = None
+    date_to: date | str | None = None
+
+    @property
+    def characterization(self) -> tuple[str, ...]:
+        """drugcharacterization codes to filter on; () = no role filter."""
+        return () if self.role_codes is None else role_filter_codes(self.role_codes)
+
+    @property
+    def route_codes(self) -> tuple[str, ...]:
+        try:
+            return resolve_routes(self.routes)
+        except ValueError as exc:
+            raise SafetyAgentError(str(exc)) from exc
+
+    def names(self, field: str) -> tuple[str, ...]:
+        """Searchable names for ``field``; aliases ride medicinalproduct only."""
+        requested = (
+            (self.drug_name, *self.aliases)
+            if field == DRUG_FIELD_MEDICINALPRODUCT
+            else (self.drug_name,)
+        )
+        forms = (openfda_search_name(name) for name in requested)
+        return tuple(dict.fromkeys(form for form in forms if form))
+
+    @property
+    def unsearchable_aliases(self) -> tuple[str, ...]:
+        return tuple(name for name in self.aliases if openfda_search_name(name) is None)
+
+    def name_clause(self, field: str) -> str:
+        names = self.names(field)
+        if not names:
+            raise SafetyAgentError(
+                f"drug name {self.drug_name!r} has no Latin-script form openFDA can search"
+            )
+        clauses = [drug_clause(name, field=field) for name in names]
+        return clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
+
+    def filters(self) -> list[tuple[str, str]]:
+        """(filter id, clause) in application order: role, route, date."""
+        steps: list[tuple[str, str]] = []
+        if self.characterization:
+            steps.append(("role", characterization_clause(self.characterization)))
+        if self.routes:
+            steps.append(
+                ("route", " OR ".join(route_clause(code) for code in self.route_codes))
+            )
+        if self.date_from is not None or self.date_to is not None:
+            steps.append(("date", date_range_clause(self.date_from, self.date_to)))
+        return steps
+
+    def search(self, field: str) -> str:
+        base = self.name_clause(field)
+        for _, clause in self.filters():
+            base = f"({base}) AND ({clause})"
+        return base
 
 
 def reaction_clause(reaction_pt: str, *, exact: bool = False) -> str:

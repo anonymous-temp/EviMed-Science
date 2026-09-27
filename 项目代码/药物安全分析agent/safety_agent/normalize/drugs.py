@@ -255,8 +255,10 @@ async def _upgrade_cjk_suggestion(
     """
     if client is None:
         return suggestion, 0.5, "llm-fallback"
-    from safety_agent.openfda.queries import drug_clause
+    from safety_agent.openfda.queries import drug_clause, openfda_search_name
 
+    if openfda_search_name(suggestion) is None:
+        return None
     try:
         total = await client.count_total(drug_clause(suggestion))
     except NoResults:
@@ -280,11 +282,14 @@ async def _validate_with_openfda(
     openFDA rejected every candidate. Network/server failures degrade to
     "no validation" with a warning instead of raising.
     """
-    from safety_agent.openfda.queries import drug_clause
+    from safety_agent.openfda.queries import drug_clause, openfda_search_name
 
     if not hasattr(client, "count_total") or not hasattr(client, "search_labels"):
         raise TypeError("client must implement the OpenFDAClient interface")
-    for candidate in list(candidates)[:5]:
+    # A non-Latin candidate is never sent: openFDA answers 400 to it, and the
+    # 400 used to end validation for every candidate after it.
+    candidates_to_check = [c for c in candidates if openfda_search_name(c.term) is not None]
+    for candidate in candidates_to_check[:5]:
         try:
             total = await client.count_total(drug_clause(candidate.term))
         except NoResults:
@@ -298,7 +303,7 @@ async def _validate_with_openfda(
             candidate.source = candidate.source + "+openfda"
             return candidate.term, boosted, candidate.source
     # Rule guesses found nothing: ask the label endpoint for the generic name.
-    probe = candidates[0].term if candidates else ""
+    probe = candidates_to_check[0].term if candidates_to_check else ""
     if probe:
         try:
             labels = await client.search_labels(drug=probe, limit=3)

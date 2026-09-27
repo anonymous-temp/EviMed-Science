@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from safety_agent.analysis.models import CaseOverview, CountBucket
+from safety_agent.normalize.routes import route_match_forms
 
 _VALID_ROLES = frozenset({"PS", "SS", "C", "I"})
 
@@ -177,6 +178,9 @@ class DrugScope:
         if not roles or not roles <= _VALID_ROLES:
             raise ValueError(f"invalid FAERS role codes: {sorted(roles)}")
         routes = tuple(dict.fromkeys(_term(route) for route in self.routes if _term(route)))
+        # A route the vocabulary does not hold is refused here, with the
+        # accepted forms, rather than matching nothing downstream.
+        route_forms = frozenset(form for route in routes for form in route_match_forms(route))
         start, end = _date(self.date_from), _date(self.date_to)
         if start and end and start > end:
             raise ValueError("DrugScope date_from must not be after date_to")
@@ -203,6 +207,7 @@ class DrugScope:
         object.__setattr__(self, "names", normalized)
         object.__setattr__(self, "role_codes", roles)
         object.__setattr__(self, "routes", routes)
+        object.__setattr__(self, "_route_forms", route_forms)
         object.__setattr__(self, "date_from", start)
         object.__setattr__(self, "date_to", end)
         object.__setattr__(self, "background_date_from", background_start)
@@ -211,6 +216,15 @@ class DrugScope:
     @property
     def name_set(self) -> frozenset[str]:
         return frozenset(self.names)
+
+    @property
+    def route_match_forms(self) -> frozenset[str]:
+        """Stored route values that satisfy the requested routes.
+
+        A snapshot built from the quarterly ASCII files holds the label
+        ("Oral"); one built from openFDA holds the ICH E2B code ("048").
+        """
+        return self._route_forms  # type: ignore[attr-defined]
 
     def contains_date(self, value: date) -> bool:
         """Compatibility alias for the target-drug/overview date range."""
@@ -236,7 +250,7 @@ class DrugScope:
 
     def matches_drug(self, drug: DrugEntry) -> bool:
         route_matches = not self.routes or (
-            drug.route is not None and _term(drug.route) in frozenset(self.routes)
+            drug.route is not None and _term(drug.route) in self.route_match_forms
         )
         return (
             drug.role_code in self.role_codes

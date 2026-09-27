@@ -185,6 +185,24 @@ drug 对象上同时匹配规范药名、`ROLE_COD` 与可选给药途径;目标
 
 只收录 FAERS 报告里出现的 PT 字符串,不含 MedDRA 编码与层级。
 
+### 范围控制进入 openFDA 的形式(2026-09-27)
+
+2026-09-27 生产 adr-001(奥希替尼)两次失败:别名「泰瑞沙」进入查询,openFDA 对任何
+非 ASCII 词都回 HTTP 400;去掉它后,`administrationRoutes: ["ORAL"]` 变成
+`drugadministrationroute:"oral"`,而 openFDA 存的是 ICH E2B 途径代码("048"),
+31,866 份报告被这一个过滤清空,报告却写成「FAERS 中未检索到任何报告」。现在
+(一处实现:`openfda/queries.py` 的 `LiveDrugScope`,管线与 `/signals` 共用):
+
+- 药名/别名只有拉丁字符形式才进查询(变音符折叠为 ASCII);非拉丁别名保留在
+  `result.json` 的 `scope` 与报告说明里,归一后仍非拉丁的药名以 `NormalizationError` 拒绝;
+- 给药途径按 `normalize/routes.py` 的闭合词表解析为途径代码(openFDA 字段规范原表,
+  代码、名称、去括号名称与少量同义词如 `IV`、`口服`),词表外的途径在范围校验时即以
+  列出可接受形式的错误拒绝;冻结快照同时匹配标签文本与代码;
+- `suspectRoles` 映射到 `drugcharacterization`(PS/SS→1,C→2,I→3;四种全选即不过滤),
+  结果里的 `suspect_roles` 是该过滤实际选中的角色;
+- 过滤后为 0 而药名本身有报告时,错误信息逐步列出药名 → 角色 → 途径 → 时间窗的计数,
+  指出降为 0 的一步,不再说「没有任何报告」。
+
 ### P3 信号统计
 ROR/PRR 及 95%CI、χ²(Yates 可选)、crude IC + BCPNN IC025、GPS
 EBGM/EB05(DuMouchel 1999 双伽马混合先验);EBGM 按 `exp(E[log λ])` 计算,
