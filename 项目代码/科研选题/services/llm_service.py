@@ -715,6 +715,7 @@ class LLMService:
 5. **生成3–5条PubMed子查询**：可变化字段和同义词，但每条都必须保留用户明确给出的所有核心概念
 
 **【严格约束】pico_entities 只能包含用户明确提供的概念的标准英文术语，不得引入用户未提及的概念、相关技术、上位概念或联想扩展词。**
+**输入中描述要做什么的措辞（识别/寻找/评估研究问题、空白、机会、选题等）是研究意图，只体现在 research_stage_intent，不是要检索的概念，不进入 pico_entities、concept_groups 或 sub_queries。**
 
 ## 输出格式（JSON）
 {{
@@ -733,6 +734,10 @@ class LLMService:
   "study_design_hint": "rct|cohort|meta|mechanism|unknown",
   "confidence": 0.0,
   "detected_domain": "该研究所属的医学领域，如肿瘤学、心血管、肾脏病学等",
+  "concept_groups": [
+    ["概念A的英文写法1", "写法2", "写法3"],
+    ["概念B的英文写法1", "写法2"]
+  ],
   "sub_queries": [
     "子查询1：最精准，包含所有核心概念（主题词 AND 干预/机制/暴露 AND 结局），使用[Title/Abstract]字段",
     "子查询2：核心查询，包含主要2个概念 AND 组合，含同义词OR扩展，使用[Title/Abstract]字段",
@@ -746,12 +751,19 @@ class LLMService:
 - 每条子查询必须是有效的 PubMed 布尔检索式（使用 AND/OR/NOT）
 - 字段标记：普通词用 [Title/Abstract]，标准化MeSH主题词用 [MeSH Terms]
 - 同一概念的多个同义词之间用 OR 连接，不同概念之间用 AND 连接
+- 检索词同样用短写法（1–2 个词）；三个词以上的长短语会让 PubMed 几乎检索不到
 - 每条子查询的括号要闭合完整
 - 示例格式：((diabetes mellitus[Title/Abstract] OR type 2 diabetes[Title/Abstract]) AND (gut microbiota[Title/Abstract] OR intestinal flora[Title/Abstract]))
 
+## concept_groups 规则（检索后按它筛选相关文献）
+- 每组是一篇相关文献必须涉及的一个核心概念；文献须在题名、摘要、关键词或 MeSH 中出现每一组里至少一个写法才会被纳入
+- 用户的几个说法若指同一件事，或一个是另一个的具体表现（如某种具体行为与它所属的上位行为），放进同一组，不要拆成几组
+- 只有相关文献必须同时涉及的概念才各自成组，通常 1–3 组；每条 sub_query 用 AND 连接全部概念组，组内写法用 OR 连接
+- 每组给 4–10 个英文写法：标准术语、同义词、缩写、英美拼写变体；写法要短（1–2 个词，题名摘要里常见的说法，三个词以上的长短语几乎匹配不到），且至少有一个单词写法；不要放 patients、adults、study 这类泛词
+
 **重要：根据用户实际提供的PICO要素数量调整子查询策略**
 - 若用户只提供了1个要素（如只有P）：5条子查询全部围绕该要素展开，分别使用：①精准MeSH主题词 ②Title/Abstract自由词+同义词 ③相关上位概念宽泛检索 ④相关下位/细分概念检索 ⑤该要素的英文缩写/别名检索。**绝对不得在查询中引入用户未提供的I/C/O要素**
-- 若用户提供了2个或更多要素：每条子查询均必须用AND保留所有显式要素；只允许改变同义词、MeSH/自由词字段或研究设计限定，不得生成单概念宽泛查询
+- 若用户提供了2个或更多要素：每条子查询均必须用AND保留全部概念组；只允许改变同义词、MeSH/自由词字段或研究设计限定，不得生成单概念宽泛查询
 
 注意：
 - logical_structure使用标准布尔逻辑符号：AND, OR, NOT
@@ -794,6 +806,19 @@ class LLMService:
             if isinstance(q, str) and len(q.strip()) > 10
         ]
         parsed['sub_queries'] = valid_sub_queries
+
+        # The model's statement of which concepts a relevant paper must
+        # address; malformed entries are dropped, never guessed at.
+        raw_groups = parsed.get('concept_groups')
+        parsed['concept_groups'] = [
+            terms
+            for terms in (
+                [term.strip() for term in group if isinstance(term, str) and term.strip()]
+                for group in (raw_groups if isinstance(raw_groups, list) else [])
+                if isinstance(group, list)
+            )
+            if terms
+        ]
 
         return parsed
 
@@ -839,6 +864,31 @@ class LLMService:
 
         # 返回原词
         return [entity]
+
+    @staticmethod
+    def concept_groups_query(concept_groups: List[List[str]]) -> str:
+        """One PubMed query composed from the concept groups themselves.
+
+        AND across groups, OR within a group, each form a quoted
+        [Title/Abstract] phrase: the query retrieves by exactly the structure
+        the relevance filter then applies, so retrieval and filtering cannot
+        disagree about which concepts a paper must address. The model's own
+        sub-queries still run beside it (MeSH variants, design limits).
+        """
+        clauses = []
+        for group in concept_groups or []:
+            forms = []
+            for term in group:
+                cleaned = " ".join(re.sub(r'["()\[\]]', " ", str(term)).split())
+                if cleaned and cleaned.casefold() not in {f.casefold() for f in forms}:
+                    forms.append(cleaned)
+            if forms:
+                clauses.append(
+                    "(" + " OR ".join(f'"{form}"[Title/Abstract]' for form in forms) + ")"
+                )
+        if not clauses:
+            return ""
+        return clauses[0] if len(clauses) == 1 else "(" + " AND ".join(clauses) + ")"
 
     def build_final_queries(
         self,

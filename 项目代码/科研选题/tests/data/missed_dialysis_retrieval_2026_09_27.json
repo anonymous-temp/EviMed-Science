@@ -1,0 +1,880 @@
+{
+ "recorded": "2026-09-27, live PubMed + EviMed internal index, brief ordinary-constrained-cohort",
+ "direction": "Identify actionable questions about missed dialysis sessions and adherence.",
+ "retrieved_total": 688,
+ "legacy_kept_total": 3,
+ "grouped_kept_total": 138,
+ "legacy_query_structure": {
+  "pico_entities": {
+   "population": [
+    "dialysis patients"
+   ],
+   "intervention": [
+    "missed dialysis sessions",
+    "adherence"
+   ],
+   "comparison": [],
+   "outcome": [
+    "missed dialysis sessions",
+    "adherence"
+   ]
+  },
+  "synonyms": {
+   "dialysis patients": [
+    "hemodialysis patients",
+    "renal dialysis patients",
+    "end-stage renal disease patients",
+    "ESRD patients",
+    "dialysis population"
+   ],
+   "missed dialysis sessions": [
+    "missed dialysis treatments",
+    "skipped dialysis sessions",
+    "missed hemodialysis sessions",
+    "dialysis session nonattendance",
+    "missed dialysis appointments"
+   ],
+   "adherence": [
+    "compliance",
+    "treatment adherence",
+    "dialysis adherence",
+    "patient adherence",
+    "adherence to dialysis",
+    "nonadherence",
+    "non-compliance"
+   ]
+  }
+ },
+ "legacy_sub_queries": [
+  "((dialysis patients[Title/Abstract] OR hemodialysis patients[Title/Abstract]) AND (missed dialysis sessions[Title/Abstract] OR adherence[Title/Abstract]))",
+  "((dialysis patients[Title/Abstract] OR hemodialysis patients[Title/Abstract] OR renal dialysis patients[Title/Abstract]) AND (missed dialysis sessions[Title/Abstract] OR skipped dialysis sessions[Title/Abstract] OR adherence[Title/Abstract] OR compliance[Title/Abstract]))",
+  "((\"Dialysis\"[MeSH Terms] OR \"Renal Dialysis\"[MeSH Terms]) AND (\"Patient Compliance\"[MeSH Terms] OR \"Treatment Adherence and Compliance\"[MeSH Terms]))",
+  "((dialysis patients[Title/Abstract] OR ESRD patients[Title/Abstract]) AND (missed dialysis treatments[Title/Abstract] OR nonadherence[Title/Abstract]))",
+  "((dialysis patients[Title/Abstract] OR hemodialysis patients[Title/Abstract]) AND (missed dialysis sessions[Title/Abstract] OR adherence[Title/Abstract] OR compliance[Title/Abstract]))"
+ ],
+ "concept_groups": [
+  [
+   "dialysis",
+   "hemodialysis",
+   "renal dialysis",
+   "dialysis patients",
+   "hemodialysis patients",
+   "dialysis population"
+  ],
+  [
+   "missed dialysis",
+   "missed sessions",
+   "skipped dialysis",
+   "nonattendance",
+   "missed treatments",
+   "dialysis adherence",
+   "dialysis compliance",
+   "nonadherence",
+   "treatment adherence"
+  ]
+ ],
+ "records": [
+  {
+   "id": "pubmed_37269433",
+   "pmid": "37269433",
+   "title": "Chronic kidney disease-associated pruritus (CKD-aP) is associated with worse quality of life and increased healthcare utilization among dialysis patients.",
+   "abstract": "Chronic pruritus significantly impairs hemodialysis patients' health status and quality of life (QOL) and it is associated with higher mortality rate, more frequent hospitalizations, poorer dialysis and medication adherence, and deteriorated mental status. However, pruritus is still underestimated, underdiagnosed, and undertreated in the real-life clinical scenario. We investigated prevalence, clinical characteristics, clinical correlates, severity as well as physical and psychological burden of chronic pruritus among adult hemodialysis patients in a large international real-world cohort. We conducted a retrospective cross-sectional study of patients registered in 152 Fresenius Medical Care (FMC) NephroCare clinics located in Italy, France, Ireland, United Kingdom, and Spain. Demographic and medical data were retrieved from the EuCliD® (European Clinical) database, while information on pruritus and QoL were abstracted from KDQOL™-36 and 5-D Itch questionnaire scores. A total of 6221 patients were included, of which 1238 were from France, 163 Ireland, 1469 Italy, 2633 Spain, and 718 UK. The prevalence of mild-to-severe pruritus was 47.9% (n = 2977 patients). Increased pruritus severity was associated with increased use of antidepressants, antihistamines, and gabapentin. Patients with severe pruritus more likely suffered from diabetes, more frequently missed dialysis sessions, and underwent more hospitalizations due to infections. Both mental and physical QOL scores were progressively lower as the severity of pruritus increased; this association was robust to adjustment for potential confounders. This international real-world analysis confirms that chronic pruritus is a highly prevalent condition among dialysis patients and highlights its considerable burden on several dimensions of patients' life.",
+   "keywords": [
+    "Chronic kidney disease-associated pruritus",
+    "End stage kidney disease",
+    "Health-related quality of life",
+    "International cross-sectional real-world study",
+    "Patient-reported outcomes"
+   ],
+   "mesh_terms": [
+    "Adult",
+    "Humans",
+    "Renal Dialysis",
+    "Quality of Life",
+    "Cross-Sectional Studies",
+    "Retrospective Studies",
+    "Renal Insufficiency, Chronic",
+    "Patient Acceptance of Health Care",
+    "Pruritus"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_40677127",
+   "pmid": "40677127",
+   "title": "Self-Management and Affecting Factors in Dialysis Patients Experiencing the Earthquake in Türkiye.",
+   "abstract": "The present study was conducted to determine self-management and influencing factors in dialysis patients who experienced the earthquake. The study was conducted descriptively with 125 patients receiving dialysis in a city affected by the earthquake in Türkiye. Data were collected with the \"Personal Information Form\" and the \"Chronic Illness Self-Management Scale\" (CISMS). Kolmogorov-Smirnov, Mann Whitney U, Kruskall Wallis, Spearman Correlation tests, Wilcoxon, and Linear Regression were used in the statistical analysis. The study found that 9.6% of the patients were trapped under the rubble in the earthquake, 71.2% lost a relative, 43.8% changed dialysis centers, 36.8% missed dialysis sessions, and 51.2% could not comply with the diet after the earthquake. Women (p < 0.001), those with secondary school or lower educational levels (p < 0.05), those with another chronic disease, and those who lost a relative in the earthquake had lower health care maintenance efficacy (p < 0.05). The treatment adherence of those who adhered to the diet was higher than those who did not (p < 0.05). It was determined that the level of self-stigma of the patients after the earthquake was low, their treatment adherence was high, and there were many variables affecting their self-management.",
+   "keywords": [
+    "Dialysis",
+    "Earthquake",
+    "Hemodialysis",
+    "Nursing",
+    "Self-Management",
+    "Survival",
+    "Türkiye",
+    "Vulnerable Populations"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Earthquakes",
+    "Female",
+    "Male",
+    "Middle Aged",
+    "Self-Management",
+    "Renal Dialysis",
+    "Adult",
+    "Aged",
+    "Turkey"
+   ],
+   "publication_year": 2025
+  },
+  {
+   "id": "pubmed_42647949",
+   "pmid": "42647949",
+   "title": "Unusual Etiology and Presentation for Hyperkalemia-Dialysis Access Recirculation: A Case Report.",
+   "abstract": "Hyperkalemia is a common and potentially life-threatening complication of end-stage renal disease, often producing nonspecific symptoms but profound cardiac effects. While nonadherence and dietary indiscretion are typical precipitants, clinicians must also consider the adequacy and effectiveness of dialysis. We report a patient with end-stage renal disease on thrice-weekly hemodialysis who presented with significant bradycardia and altered mental status. Initial prehospital electrocardiogram (ECG) was suspicious for acute coronary syndrome after automated ECG interpretation suggested anterior ST-segment elevation. In the emergency department, the patient was in a junctional escape rhythm with diffuse peaked T-waves. Serum potassium was 7.8 millimoles per liter with concomitant uremia. Despite administration of potassium-shifting therapies bradycardia persisted, and temporary pacing attempts failed. An epinephrine infusion was initiated while arranging for emergent hemodialysis. Following dialysis, the potassium normalized, cardiac conduction returned to sinus rhythm, and the patient's mental status improved. In the absence of missed dialysis sessions, increased potassium intake, or access site dysfunction, nephrology determined the likely etiology to be dialysis access recirculation from improper cannulation. Dialysis recirculation is an uncommon but important cause of inadequate clearance leading to life-threatening hyperkalemia. Clinicians should consider this mechanism when confronted with otherwise unexplained electrolyte derangements in compliant dialysis patients.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_36_69859203f07b005405ebad78",
+   "pmid": "41598598",
+   "title": "Digitized Acoustic Analysis for Monitoring Hemodialysis Access Dysfunction: Insights from Vascular Imaging and Post-Angioplasty Data.",
+   "abstract": "Background: Hemodialysis access dysfunction can lead to missed treatments and increased mortality. Traditional monitoring methods, such as physical examination and ultrasound, have limitations, emphasizing the need for a more efficient approach. This study investigates the use of digitized acoustic data to identify and monitor vascular access dysfunction. Methods: This prospective study involved patients undergoing hemodialysis with either arteriovenous fistulas (AVF) or arteriovenous grafts (AVG) between June 2023 and February 2025. All patients underwent vascular imaging (either angiography or ultrasound) to confirm the degree of stenosis. Acoustic data were recorded using a standardized procedure at various puncture sites. Pre- and post-angioplasty data were also collected to assess the effects of vascular intervention. The digitized acoustic data were analyzed for changes in relative loudness, peak-to-valley ratios, and frequency distribution. Results: A total of 157 patients with 236 audio recordings (mean age: 67 ± 11 years; 58% male) were included. Significant acoustic differences were found at the arterial puncture and anastomosis sites in AVF patients with dysfunction, particularly in venous site dysfunction, which exhibited a more pronounced reduction in sound volume and an increased peak-to-valley ratio. After angioplasty, acoustic changes were observed in both arterial and venous sites, with values moving toward normal levels. However, no significant acoustic changes were observed in AVG patients. Additionally, frequency distribution ratios showed minimal clinical relevance. Conclusions: Digitized acoustic data, particularly from the arterial puncture and anastomosis sites, can be an effective tool for detecting and monitoring hemodialysis access dysfunction. These findings suggest potential for acoustic analysis in clinical practice, especially when integrated with AI models for better diagnostics.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_4_448_6a61ebf1277b039c775b6d66",
+   "pmid": "42015032",
+   "title": "Study protocol for a prospective, multicenter, single-arm study investigating the impact of the implementation of standardized hyperkalemia management in chronic kidney disease patients.",
+   "abstract": "BACKGROUND: Hyperkalemia (serum potassium > 5.0 mmol/L) is a common and clinically significant complication in patients with chronic kidney disease (CKD), particularly among those treated with renin-angiotensin-aldosterone system inhibitors (RAASi). Although guideline-directed medical therapy recommends proactive hyperkalemia management to enable continued RAASi use, real-world practice remains suboptimal. Key challenges include inadequate potassium monitoring after RAASi initiation or dose escalation, unnecessary RAASi dose reduction or discontinuation following hyperkalemia episodes, and poor long-term treatment adherence. Moreover, evidence regarding the cardio-renal benefits of RAASi optimization supported by structured hyperkalemia management in Chinese CKD populations is limited. This study aims to bridge the gap between Kidney Disease: Improving Global Outcomes (KDIGO) and Chinese CKD guideline recommendations and routine clinical practice through a nationwide quality improvement program (QIP). METHODS: This prospective, multicenter, single-arm study will enroll approximately 1,000 adult Chinese patients with non-dialysis CKD and hyperkalemia across 50 sites. The QIP includes comprehensive and reinforcement training for healthcare professionals (HCPs) based on the KDIGO 2024 guidelines, supported by regular quality audits and feedback. Patient-directed interventions comprise structured education delivered by HCPs and self-learning modules. Participants will receive standardized hyperkalemia management over 96 weeks, including protocolized serum potassium monitoring (every 3 months or monthly for high-risk patients), RAASi dose optimization, and long-term potassium control. The primary endpoint is the proportion of patients achieving RAASi optimization with normokalemia (3.5-5.0 mmol/L) at 48 weeks. Secondary endpoints include sustained potassium control, RAASi optimization over time, medication adherence, hyperkalemia recurrence and severity, cardiorenal outc",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_4_448_6a61ec1ef41d0c4e515ba93f",
+   "pmid": "42168929",
+   "title": "Clinical complications and psychological distress of patients requiring dialysis during the Sudan conflict in Al-Qadarif State: a cross-sectional study.",
+   "abstract": "BACKGROUND\nEnd-stage kidney disease (ESKD) is a growing global health problem with marked disparities in access to kidney replacement therapy, particularly in low- and middle-income countries. Armed conflict disrupts health services and supply chains-leading to missed dialysis sessions, medication shortages, and increased mental-health burden among people requiring dialysis. Our objective was to assess the association between the ongoing conflict in Sudan and dialysis-related clinical complications and psychological distress among patients attending a haemodialysis centre in Al-Qadarif State.\nMETHODS\nThis is a cross-sectional study using a convenience sample of haemodialysis patients attending centres in Al-Qadarif. We collected sociodemographic and clinical data (displacement status, dialysis frequency/duration, comorbidities, self-reported dialysis interruptions), medication access, and a single-item measure of emotional impact. Anxiety was measured using the Generalized Anxiety Disorder-7 (GAD-7) scale. The association with binary clinical outcomes (complication/no complication) was estimated using multivariable logistic regression. The association with the GAD-7 score was estimated using multivariable linear regression.\nRESULTS\nForced relocation and treatment disruption were common among displaced patients (94.8%). Nearly three-quarters of participants reported ≥ 1 medical complication and 84% reported negative effects on emotional well-being. Comorbidity was independently associated with higher odds of dialysis-related complications (adjusted OR 2.53, 95% CI 1.16-5.51, p = 0.019); age, interruption frequency, and interruption duration were not significantly associated with complications in this sample. Low-frequency dialysis was common (70% received two sessions/week; 26% received one session/week). Self-reported psychological distress was associated with age ≥ 40 (OR 3.59, p = 0.032) and difficulty obtaining medications (OR 2.41, p = 0.033). GAD-7 scores clust",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_7_719_6a61ebe31e9e6b7d185b734b",
+   "pmid": "41517738",
+   "title": "Hemodialysis under fire: A cross-sectional study of health and socioeconomic impacts on internally displaced patients during the 2023 Sudan conflict.",
+   "abstract": "End-stage renal disease patients rely on regular hemodialysis. The 2023 Sudan conflict displaced large numbers of patients and disrupted health services. We examined dialysis access, complications, and socioeconomic effects among internally displaced patients in Port Sudan. We conducted a descriptive cross-sectional study of 133 end-stage renal disease patients receiving hemodialysis at Port Sudan Dialysis Center. Trained interviewers collected data on demographics, dialysis frequency before vs during the conflict, missed sessions and barriers, self-reported complications, and employment/finances. Data were analyzed using descriptive statistics and chi-square tests. Participants were 58.7% male; 54.1% were aged 40 to 64 years. A decrease was observed in patients receiving 3 sessions/week (from 17.3 to 4.5%), while an increase was observed in those receiving 1 session/week (from 4.5 to 12.8%; P = .003). More than 70% cited transport costs/availability as major barriers, and over 85% missed at least 1 session during active fighting. Unemployment rose from 18.8% to 71.4% (P < .001). Overall, 73.7% reported clinical complications during the conflict period. The conflict was associated with reduced dialysis access and worsening health and economic conditions. Secured transport, protected continuity of care, and targeted financial support are immediate priorities for displaced dialysis patients.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "pubmed_35061747",
+   "pmid": "35061747",
+   "title": "The experience of urgent dialysis patients with end-stage renal disease: A qualitative study.",
+   "abstract": "Taiwan is among the countries with the highest global prevalence of chronic renal disease. However, when advised to undergo dialysis therapy, patients with end-stage renal disease often hesitate. Attitudes toward medication and Taiwanese cultures are the main reasons for this delay, and delay conditioning requires urgent dialysis. This study aimed to explore the experience of urgent dialysis patients with end-stage renal disease. This study used a purposive sampling strategy with semi-structured interviews leading to in-depth interviews. Patients were recruited from the nephrology ward and hemodialysis center of a northern Taiwanese hospital. All participants were aged over 20 years with end-stage renal disease. Although advised by doctors to undergo dialysis, these patients delayed their treatment and later suffered severe complications. After emergency hospitalization, the patients' condition improved. Data were analyzed by content analysis. Interviews with five participants suffering from end-stage renal disease identified six themes: \"experiencing a sudden jolt,\" \"silent organ brings the most pain,\" \"feeling angry: why me?,\" \"facing a dilemma,\" \"taking risks,\" and \"facing consequences.\" These patients delayed their treatment and later suffered severe complications, even though doctors advised them to undergo dialysis. Health professionals play an important role in communication and coordination, assisting patients in coping with their situation. The analysis of the reasons for the delay in undergoing dialysis, therefore, should help health professionals provide proper guidance and care to patients who are faced with the decision to accept dialysis treatment.",
+   "keywords": [],
+   "mesh_terms": [
+    "Adult",
+    "Aged",
+    "Female",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Middle Aged",
+    "Renal Dialysis",
+    "Treatment Adherence and Compliance"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35102919",
+   "pmid": "35102919",
+   "title": "Factors Influencing Adherence to Hemodialysis Sessions among Patients with End-Stage Renal Disease in Makkah City.",
+   "abstract": "Adherence to hemodialysis (HD) treatment remains a challenging task for patients suffering from end-stage renal disease (ESRD). Interventions to improve adherence need to identify factors influencing such behavior among ESRD patients. The objective of the study is to identify factors influencing adherence to HD among ESRD patients. A cross-sectional survey research was conducted in three HD centers at three major governmental hospitals in Makkah city, Saudi Arabia. The Andersen Behavioral Model was used as the analytic framework, and the variables were categorized into predisposing, enabling, and need factors. Frequency distribution and percentages were employed to characterize the participants, and hierarchical logistic regression analysis was employed to determine the factors influencing adherence to HD sessions among ESRD patients in Makkah. Three hundred and sixty-one patients have completed the survey questionnaire and participated in this study. 55.96% of the participants were adherent to HD sessions. The factors, marital status, belief in the importance of following dialysis schedule, using personal transportation, days of dialysis, having a busy lifestyle, being advised by medical professionals about the importance of not missing dialysis treatment, and frequency of advice from medical professionals about the importance of staying for the entire dialysis time were significantly associated with adherence to HD sessions. Nonadherence to dialysis is still a major challenge among ESRD patients, and a representative sample is needed to inform policy- and decision-making related to improving adherence to dialysis sessions in Saudi Arabia.",
+   "keywords": [],
+   "mesh_terms": [
+    "Adult",
+    "Cross-Sectional Studies",
+    "Female",
+    "Hospitals, Public",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Marital Status",
+    "Middle Aged",
+    "Renal Dialysis"
+   ],
+   "publication_year": 2021
+  },
+  {
+   "id": "pubmed_35130871",
+   "pmid": "35130871",
+   "title": "Factors related to treatment adherence behaviors among old-age hemodialysis patients in Hamadan, Iran: the application of the extended theory of planned behavior during Covid-19 pandemic.",
+   "abstract": "This study aimed to identify the factors related to treatment adherence behaviors among old-age hemodialysis patients in Hamadan based on the Extended Theory of Planned Behavior (ETPB) during the covid-19 pandemic. This cross-sectional study was conducted from January to March 2021 in Hamadan, Iran. 191 hemodialysis patients were recruited who were referred to hemodialysis centers via the census method. Data were collected by a questionnaire containing items on socio-demographic information, End-Stage Renal Disease Adherence (ESRD-Adherence) Questionnaire, and ETPB constructs scale. Data analysis was performed using descriptive statistics and structural equation modeling. The mean (SD) age of participants was 62.49 (10.66). Also, the mean (SD) hemodialysis vintage/Month of them was 36.56 (43.34). Moreover, Treatment Adherence Behaviors are associated with education level, sex, and marital status (p < 0.001). Besides, Perceive Behavior Control (β = 0.414, t-value = 3.810) associated with intention. Also, intention (β = 0.158, t-value = 1.976) was associated to adherence behaviors. No significant associations were observed between positive attitudes, subjective norms, a perceived threat with intention, and adherence behaviors. The model explained about 54% of the variance of adherence behaviors. Finally, the goodness of fit index of 0.78, indicating the model good fit. The present study demonstrates that some of the ETPB constructs such as perceived behavior control and intention are useful to improve adherence among the oldest hemodialysis patients. Also. This framework is revealed alongside the theory of planned behavior (TPB) applicable in the treatment adherence of old-age hemodialysis patients.",
+   "keywords": [
+    "Adherence",
+    "Aging",
+    "COVID-19",
+    "Chronic Kidney Disease",
+    "Theory of Planned Behavior"
+   ],
+   "mesh_terms": [
+    "Age Factors",
+    "Aged",
+    "Aged, 80 and over",
+    "COVID-19",
+    "Cross-Sectional Studies",
+    "Female",
+    "Humans",
+    "Iran",
+    "Kidney Failure, Chronic",
+    "Male"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35138627",
+   "pmid": "35138627",
+   "title": "Sucroferric oxyhydroxide for hyperphosphatemia: a review of real-world evidence.",
+   "abstract": "Hyperphosphatemia is a common complication in dialysis-dependent patients with chronic kidney disease. Most dialysis-dependent patients need oral phosphate binder therapy to control serum phosphorus concentrations. Most phosphate binders have a high daily pill burden, which may reduce treatment adherence and impair phosphorus control. Sucroferric oxyhydroxide is a potent iron-based phosphate binder approved for use in dialysis-dependent patients in 2013. A randomized controlled trial of sucroferric oxyhydroxide demonstrated its efficacy for reduction of serum phosphorus with a lower pill burden than sevelamer carbonate. Clinical trials carefully select patients, monitor adherence, and routinely titrate medications to a protocol-defined goal. Consequently, trials may not reflect real-world use of medications. Since its approval, we and others have performed retrospective and prospective analyses of sucroferric oxyhydroxide in real-world clinical practice in > 6400 hemodialysis and approximately 500 peritoneal dialysis patients in the USA and Europe. Consistent with the clinical trial data, real-world observational studies have demonstrated that sucroferric oxyhydroxide can effectively reduce serum phosphorus with a lower daily pill burden than most other phosphate binders. These studies have also shown sucroferric oxyhydroxide provides effective serum phosphorus control in different treatment settings, including as monotherapy in phosphate binder-naïve patients, in patients switching from other phosphate binders, or when used in combination with other phosphate binders. These observational studies indicate a favorable safety and tolerability profile, and minimal, if any, systemic iron absorption. This article reviews the key results from these observational studies of sucroferric oxyhydroxide and evaluates its role in the management of hyperphosphatemia in clinical practice.",
+   "keywords": [
+    "Chronic kidney disease",
+    "Hemodialysis",
+    "Peritoneal dialysis",
+    "Phosphate binder",
+    "Phosphorus"
+   ],
+   "mesh_terms": [
+    "Drug Combinations",
+    "Ferric Compounds",
+    "Humans",
+    "Hyperphosphatemia",
+    "Iron",
+    "Phosphates",
+    "Phosphorus",
+    "Prospective Studies",
+    "Randomized Controlled Trials as Topic",
+    "Renal Dialysis"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35180236",
+   "pmid": "35180236",
+   "title": "Study protocol: Effectiveness of patient centered pharmacist care in improving medication adherence, clinical parameters and quality of life among hemodialysis patients.",
+   "abstract": "Patients requiring hemodialysis (HD) often have several chronic comorbidities, which necessitate the use of several medications and hence put them at high risk of polypharmacy. Medication-related problems (MRPs) among HD patients are a serious issue as they can increase morbidity and nonadherence with medications. To overcome this issue, a unique pharmacy practice model including medication review (MR) and motivational interviewing (MI) is needed to improve medication adherence, by reducing MRPs and optimizing therapeutic outcomes. The present study aims to assess the effectiveness of MR and MI in improving medication adherence, quality of life (QOL) and clinical outcomes among end-stage renal disease (ESRD) patients who are on dialysis. This pre-post study will be conducted prospectively among patients with ESRD who have been on dialysis at the Hemodialysis Unit, Hospital Kuala Lumpur and the Hemodialysis Affiliated Centers of the University Malaya Medical Centre, from August 2020 till August 2021. Medication adherence will be assessed using the General Medication Adherence Scale (GMAS), whilst patients' HRQOL will be assessed using the Kidney Disease Quality of Life Short Form 36 (KDQOL-36). Clinical parameters such as blood glucose level, calcium, phosphate, hemoglobin and serum low-density lipoprotein (LDL) levels will be obtained from medical records. A total of 70 patients will be recruited. We hypothesize that the implementation of pharmacy-based MR and MI may expect an increase in medication adherence scores and increase in HRQOL scores from baseline as well as achieving the clinical lab parameters within the desired range. This would indicate a need for a pharmacist to be involved in the multidisciplinary team to achieve a positive impact on medication adherence among hemodialysis patients. Ethical approval has been obtained from the National Medical Research and Ethics Committee NMRR: 20-1135-54435 and Medical Research Ethics Committee, University Malaya M",
+   "keywords": [],
+   "mesh_terms": [
+    "Adolescent",
+    "Adult",
+    "Aged",
+    "Aged, 80 and over",
+    "Female",
+    "Follow-Up Studies",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Medication Adherence"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35247960",
+   "pmid": "35247960",
+   "title": "Peer mentorship to improve outcomes in patients on hemodialysis (PEER-HD): a randomized controlled trial protocol.",
+   "abstract": "Patients receiving in-center hemodialysis experience disproportionate morbidity and incur high healthcare-related costs. Much of this cost stems from potentially avoidable hospitalizations. Peer mentorship has been used effectively to improve outcomes for patients with complex chronic diseases. We propose testing the efficacy of peer mentorship on hospitalization rates among patients receiving hemodialysis. This is a multicenter parallel group randomized controlled pragmatic trial of patients treated at hemodialysis facilities in Bronx, NY and Nashville, TN. The study has two phases. Phase 1 will enroll and train 16 hemodialysis patients (10 in Bronx, NY and 6 in Nashville TN) to be mentors using a program focused on enhancing self-efficacy, dialysis self-management and autonomy-supportive communication skills. Phase 2 will enroll 200 high risk adults receiving hemodialysis (140 in Bronx, NY and 60 in Nashville, TN), half of whom will be randomized to intervention and half to usual care. Intervention participants are assigned to weekly telephone calls with trained mentors (see Phase 1) for a 3-month period. The primary outcome of Phase 1 will be engagement of mentors with training and change in knowledge scores and autonomy skills from pre- to post-training. The primary outcome of Phase 2 will be the composite count of ED visits and hospitalizations at the end of study follow-up in patient participants assigned to intervention as compared to those assigned to usual care. Secondary outcomes for Phase 2 include the change over the trial period in validated survey scores measuring perception of social support and self-efficacy, and dialysis adherence metrics, among intervention participants as compared to usual care participants. The PEER-HD study will test the feasibility and efficacy of a pragmatic peer-mentorship program designed for patients receiving hemodialysis on ED visit and hospitalization rates. If effective, peer-mentorship holds promise as a scalable patie",
+   "keywords": [
+    "Clinical trial",
+    "Hemodialysis patients",
+    "Hospitalization",
+    "Peer mentorship",
+    "Self-efficacy",
+    "Self-management"
+   ],
+   "mesh_terms": [
+    "Adult",
+    "Diabetes Mellitus",
+    "Female",
+    "Humans",
+    "Kidney Diseases",
+    "Male",
+    "Mentors",
+    "Multicenter Studies as Topic",
+    "Pragmatic Clinical Trials as Topic",
+    "Randomized Controlled Trials as Topic"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35290293",
+   "pmid": "35290293",
+   "title": "Development of a Predictive Nomogram for Estimating Medication Nonadherence in Hemodialysis Patients.",
+   "abstract": "BACKGROUND Medication compliance in hemodialysis patients affects the therapeutic effect of treatment and patient survival. Therefore, we aimed to explore the influencing factors of medication adherence in hemodialysis patients and develop a nomogram model to predict medication adherence. MATERIAL AND METHODS Data from questionnaires on medication adherence in hemodialysis patients were collected in Chengde from May 2020 to December 2020. The least absolute selection operator (LASSO) regression model and multivariable logistic regression analysis were used to analyze the risk factors for medication adherence in hemodialysis patients, and then a nomogram model was established. The bootstrap method was applied for internal validation. The concordance index (C-index), area under the receiver operating characteristic (ROC) curve (AUC), decision curve analysis (DCA), calibration curve, net reclassification improvement (NRI) index, and integrated discrimination improvement (IDI) index were used to evaluate the degree of differentiation and accuracy of the nomogram model, and clinical impact was used to investigate the potential clinical value of the nomogram model. RESULTS In total, 206 patients were included in this study, with a rate of medication nonadherence of 41.75%. Eight predictors were identified to build the nomogram model. The C-index, AUC, DCA, calibration curve, NRI, and IDI showed that the model had good discrimination and accuracy. The clinical impact plot showed that the nomogram of medication adherence in hemodialysis patients had clinical application value. CONCLUSIONS We developed and validated a nomogram model that is intuitive to apply for predicting medication adherence in hemodialysis patients.",
+   "keywords": [],
+   "mesh_terms": [
+    "Aged",
+    "Decision Support Techniques",
+    "Female",
+    "Follow-Up Studies",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Middle Aged",
+    "Nomograms",
+    "Renal Dialysis"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35532708",
+   "pmid": "35532708",
+   "title": "Impact of patient counseling on treatment adherence behavior and quality of life in maintenance hemodialysis patients.",
+   "abstract": "Life in end-stage renal disease (ESRD) is miserable; food and fluid restrictions are mandatory due to impaired renal function. Patient involvement forms a key role in the management of ESRD. Hence, a direct impact of patient counseling on treatment adherence and quality of life (QOL) could be established, which forms the basis of this study. We conducted a prospective interventional study of 10 months, where the ESRD-Adherence Questionnaire and Kidney Disease QOL (KDQOL) data were used to study the effect of patient counseling. A total of 121 patients enrolled in the study with mean age of 62.14 ± 11.41 years. The adherence factors indicated that 97% were adherent to dialysis sessions, followed by 67.77% toward diet and 60.33% toward fluid. On assessing the influence of counseling on QOL and adherence to various factors affecting ESRD, a positive correlation could be observed, which indicates the impact of pharmacist intervention in improving the QOL and patient compliance, thus the need for periodic counseling was established as an effective way to improve health-related QOL and awareness in ESRD.",
+   "keywords": [],
+   "mesh_terms": [
+    "Aged",
+    "Counseling",
+    "Female",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Middle Aged",
+    "Prospective Studies",
+    "Quality of Life",
+    "Renal Dialysis"
+   ],
+   "publication_year": 2021
+  },
+  {
+   "id": "pubmed_35690405",
+   "pmid": "35690405",
+   "title": "From Home Dialysis Access to Home Dialysis Quality.",
+   "abstract": "The number and percentage of patients dialyzing at home has steadily increased during the past decade, and federal policy initiatives have driven interest to a new high. However, the mere utilization of home dialysis does not ensure better outcomes for patients and care partners. Although public reporting systems for dialysis quality are mature and robust, the incorporation of home dialysis quality in those systems is immature; the advent of the End-Stage Renal Disease Treatment Choices payment model brings this problem into sharp relief. The home dialysis modalities present both common and unique targets for quality measurement. For both modalities, therapy duration (or its inverse, technique failure) is a potential target. For peritoneal dialysis, peritonitis, catheter complications, and residual kidney function are additional targets; for home hemodialysis, vascular access infections, dialysis adequacy, and treatment adherence are targets. Patient-reported experience measures are also important; this domain is a long-standing disparity, as in-facility hemodialysis patients have been routinely surveyed for several years. The statistical aspect of quality measurement in home dialysis requires some adaptation, as the typical home dialysis program is small, thus presenting a threat to reliability; pooling programs may be necessary. Ultimately, promoting high-quality home dialysis will likely increase utilization of home dialysis.",
+   "keywords": [
+    "Home hemodialysis",
+    "Infection",
+    "Patient experience",
+    "Peritoneal dialysis",
+    "Technique failure"
+   ],
+   "mesh_terms": [
+    "Hemodialysis, Home",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Peritoneal Dialysis",
+    "Renal Dialysis",
+    "Reproducibility of Results"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35819042",
+   "pmid": "35819042",
+   "title": "[Tolvaptan in ADPKD patients at the University of Padova Nephrology Unit: impact on quality of life, efficacy and safety].",
+   "abstract": "Autosomal dominant polycystic kidney disease (ADPKD) is responsible of the 10% of the dialysis patients. Tolvaptan is a consolidate option for treatment of ADPKD patients; it slows renal deterioration rate and cysts' growth, although its acquaretic effects often impact on quality of life (QoL) and treatment adherence. Few studies have documented the tolvaptan long term efficacy and safeness profiles and, mostly, the impact of treatment with tolvaptan on patients' QoL. Our study aimed to investigate in 13 ADPKD patients of our cohort the differences in terms of QoL before and after the start of treatment via a questionnaire based on SF-36 and PSQI tests, integrated with other original questions. In addition we have also examined the tolvaptan long term efficacy and safeness profiles. The results of our study show that tolvaptan does not significantly reduce patients QoL notwithstanding its expected acquaretic effects, the only reported side effects. Finally, the average annual renal deterioration rate was lower in patients treated with tolvaptan than in the others. Relevant limits of our study are the small number of selected patients and the relative short study duration. However, on one hand, the results of our study provide further information to the few data available in literature; on the other hand, they may serve as a useful working hypothesis for further studies with a larger number of patients enrolled and an extended study duration. They would demonstrate the absence of significant impact of tolvaptan on patients' QoL.",
+   "keywords": [
+    "ADPKD",
+    "QoL",
+    "tolvaptan"
+   ],
+   "mesh_terms": [
+    "Antidiuretic Hormone Receptor Antagonists",
+    "Humans",
+    "Nephrology",
+    "Polycystic Kidney, Autosomal Dominant",
+    "Quality of Life",
+    "Tolvaptan"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35845340",
+   "pmid": "35845340",
+   "title": "Association of the Comprehensive ESRD Care Model with Treatment Adherence.",
+   "abstract": "Poor adherence to scheduled dialysis treatments is common and can cause adverse clinical and economic outcomes. In 2015, the Centers for Medicare and Medicaid Innovation launched the Comprehensive ESRD Care (CEC) Model, a novel modification of the Accountable Care Organization framework. Many model participants reported efforts to increase dialysis adherence and promptly reschedule missed treatments. With Medicare databases covering 2014-2019, we used difference-in-differences models to compare treatment adherence among patients aligned to 1037 CEC facilities relative to those aligned to matched comparison facilities, while accounting for their differences at baseline. Using dates of service, we identified patients who typically received three weekly treatments and the days when treatments typically occurred. Skipped treatments were defined as days when the patient was not hospitalized but did not receive an expected treatment, and rescheduled treatments as days when a patient who had skipped their previous treatment received an additional treatment before their next expected treatment date. Patients in the CEC Model had higher odds of attending as-scheduled sessions relative to the comparison group, although the effect was only marginally significant (OR, 1.02; 95% CI, 1.00 to 1.04, P=0.08). Effects were stronger among females (OR, 1.03; 95% CI, 1.00 to 1.06, P=0.06) than males (OR, 1.01; 95% CI, 0.98 to 1.04, P=0.49), and among those aged <70 years (OR, 1.02; 95% CI, 1.00 to 1.05, P=0.04) than those aged ≥70 years (OR, 1.00; 95% CI, 0.96 to 1.04, P=0.96). The CEC was associated with higher odds of rescheduled sessions (OR, 1.09; 95% CI, 1.05 to 1.14, P<0.001). Effects were significant for both sexes, but were larger among males (OR, 1.11; 95% CI, 1.05 to 1.18, P<0.001) than females (OR, 1.07; 95% CI, 1.02 to 1.13, P=0.01), and effects were significant among those <70 years (OR, 1.12; 95% CI, 1.07 to 1.17, P<0.001), but not those ≥70 years (OR, 0.99; 95% CI, 0.92 t",
+   "keywords": [
+    "ESKD",
+    "ESKD patients",
+    "basic science",
+    "comprehensive health care",
+    "dialysis",
+    "dialysis treatment adherence",
+    "skipped treatment",
+    "treatment adherence"
+   ],
+   "mesh_terms": [
+    "Aged",
+    "Female",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Medicaid",
+    "Medicare",
+    "Renal Dialysis",
+    "Treatment Adherence and Compliance",
+    "United States"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35932699",
+   "pmid": "35932699",
+   "title": "Investigation of physiological and psychological effects of robotic cat and betta fish therapies in hemodialysis patients: A randomized controlled study.",
+   "abstract": "This randomized controlled study was conducted to investigate the physiological and psychological effects of pet therapy in hemodialysis patients. Pet therapy has both physiological and psychological effects on individuals with chronic diseases. However, to the best of our knowledge, no studies have examined the physiological and psychological effects of pet treatment in hemodialysis patients worldwide. A randomized controlled study. The study was completed with 18 robotic cats, 18 Betta fish, and 18 control group patients. The data were collected at XXX State Hospital between May and September 2021 using data collection tools. Robotic pet treatment was applied to the robotic cat group for 20 min a week for two months during hemodialysis. The Betta fish group was allowed to keep Betta fish at home for two months, and they were followed for another two months. The data were evaluated in the Statistical Package for Social Sciences 23.0 package program. The study was registered on Clinical Trials (NCT05339711). During robotic cat therapy, patients' loneliness and dialysis symptoms decreased, and happiness and treatment adherence to the end-stage renal disease (ESRD) increased; In the post-test follow-up, in the first measurement, the treatment adherence to the ESRD decreased, the loneliness and dialysis symptoms increased, the happiness did not change; In the second measurement of the post-test, happiness, and treatment adherence to ESRD decreased, loneliness and dialysis symptoms increased. During Betta fish therapy, patients' body mass index, happiness, and treatment adherence to ESRD increased, loneliness and dialysis symptoms decreased; in the first measurement, and loneliness, dialysis symptoms, body mass index, and treatment adherence to the ESRD increased; In the second measurement, loneliness, dialysis symptoms increased, body mass index and happiness decreased. The study revealed that Robotic cat and Betta fish therapies had positive physiological and psycholo",
+   "keywords": [
+    "Adherence",
+    "Happiness",
+    "Hemodialysis",
+    "Loneliness",
+    "Pet therapy",
+    "Symptom"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Robotic Surgical Procedures",
+    "Renal Dialysis",
+    "Kidney Failure, Chronic",
+    "Research Design",
+    "Happiness"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35935305",
+   "pmid": "35935305",
+   "title": "Effect of Self-Determination Theory on Knowledge, Treatment Adherence, and Self-Management of Patients with Maintenance Hemodialysis.",
+   "abstract": "Our aim of this study was to investigate the effect of self-determination theory on awareness of relevant knowledge, treatment compliance, and self-management level in maintenance hemodialysis (MHD) patients. A total of 90 patients who received MHD treatment in our hospital from April 2018 to June 2020 were selected and randomly divided into the intervention group and the routine group with 45 cases in each group. Both groups were given basic hemodialysis patient management measures, and the intervention group was given self-determination theory to manage patients on this basis. The awareness rate of hemodialysis patient-related knowledge, patient treatment compliance, patient self-management scores, and quality of life scores were compared between the two groups before intervention and 6 months after intervention. After intervention, the awareness rate of dialysis principle, reasonable diet, internal fistula protection, and complication prevention knowledge in the intervention group was higher t (P < 0.05); before intervention, there was no significant difference in the scores of all dimensions of compliance between the two groups (P > 0.05); after intervention, the dietary compliance, fluid intake compliance, dialysis regimen compliance, and total score of compliance in the intervention group were higher than those in the conventional group (P < 0.05). After intervention, the total scores of problem solving, partnership, emotional processing, self-care activities, and self-management in the intervention group were higher than those in the conventional group, (P < 0.05). After intervention, the physical domain, psychological domain, social relationship domain, and total scores of quality of life in the intervention group were higher than those in the conventional group (P < 0.05). Self-determination theory management is effective in improving the awareness of hemodialysis-related knowledge, treatment compliance, self-management level, and quality of life in MHD pat",
+   "keywords": [],
+   "mesh_terms": [
+    "Humans",
+    "Patient Compliance",
+    "Quality of Life",
+    "Renal Dialysis",
+    "Self-Management",
+    "Treatment Adherence and Compliance"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35945856",
+   "pmid": "35945856",
+   "title": "Adherence to Treatment among Patients With End-Stage Renal Disease Undergoing Hemodialysis In Selected Centers In Nepal.",
+   "abstract": "Hemodialysis remains a commonly available treatment option for many patients with end-stage renal disease. In addition to regular hemodialysis, these patients require regular use of medicines, follow fluid restriction and dietary modification. Hence, adherence to treatment remains a major factor to improve survival and quality of life among these patients. Therefore, this study was carried out to identify the adherence to treatment among patients undergoing hemodialysis. A cross-sectional study was conducted among 160 patients undergoing hemodialysis at three centers of Bagmati province of Nepal from July to December 2020. We used End-Stage Renal Disease Adherence Questionnaire (ESRD-AQ) to record the adherence scores in different domains of treatment adherence. The scores were compared with different sociodemographic variables using nonparametric tests. Out of a total score of 1200, the overall obtained mean score was 1084.07±125.58. The percentage of the respondents adhering to dialysis, medicines, fluid, and diet was 91.9%, 76.3%, 48.9%, and 43.0% respectively. Male patients scored significantly higher score in the diet. And the married patients scored higher in adherence to fluid. Patients with middle socio-economic status scored significantly higher score in adherence to hemodialysis treatment. More than half of the respondents were non adherent to fluid and diet. Periodic motivation by health care professional and dietary counseling by dietitians might be helpful to improve the adherence to treatment.",
+   "keywords": [
+    "Adherence; ESRD-AQ; hemodialysis; treatment."
+   ],
+   "mesh_terms": [
+    "Cross-Sectional Studies",
+    "Humans",
+    "Kidney Failure, Chronic",
+    "Male",
+    "Nepal",
+    "Patient Compliance",
+    "Quality of Life",
+    "Renal Dialysis"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_35999929",
+   "pmid": "35999929",
+   "title": "Predictors of Adherence to Treatment in Hemodialysis Patients: A Structural Equation Modeling.",
+   "abstract": "Background: Non-compliance to the treatment is a major problem in hemodialysis patients. This study aimed to determine factors predicting adherence to treatment in hemodialysis patients in selected cities of Khuzestan province, Iran. Methods: This cross-sectional study was conducted on 500 patients undergoing hemodialysis in Ahvaz, Shush, Shushtar, and Dezful cities. The data collection tools were ESRD-AQ, perceived health, perceived social support, Beck Depression, self-efficacy, and demographic and clinical factors questionnaires. Data were analyzed using descriptive statistics, t-test, ANOVA, and Pearson's correlation coefficient. Structural equation modeling (SEM) was employed to analyze the relationship between various exogenous and endogenous or mediating variables. Results: The results showed that all predicting variables of perceived social support, depression, self-efficacy, and perceived health had been associated with the variable of adherence to treatment. Accordingly, there was a reverse correlation between social support and depression (p< 0.001, r= -0.94), as well as depression and self-efficacy (p< 0.001, r= -0.87). There was a direct correlation between self-efficacy and perceived health (p< 0.001, r= 0.79), perceived health and adherence to treatment (p< 0.001, r= 0.72). Fitness indices also indicate the adequacy of the proposed model (X2/df= 4.94, CD=0.937, SRMR=0.076, TLI= 0.870, CFI= 0.873, RMSEA= 0.071). Conclusion: The results showed that high social support, low level of depression, high perceived self-efficacy, and high perceived health predicted better compliance with the treatment in hemodialysis patients. The proposed model can be used as a framework to improve adherence to treatment regimens in hemodialysis patients.",
+   "keywords": [
+    "Depression",
+    "Dialysis",
+    "Health",
+    "Kidney Failure",
+    "Self-Efficacy",
+    "Social Support",
+    "Treatment Adherence And Compliance"
+   ],
+   "mesh_terms": [],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_36141929",
+   "pmid": "36141929",
+   "title": "Effect of Treatment Adherence Improvement Program in Hemodialysis Patients: A Systematic Review and Meta-Analysis.",
+   "abstract": "Herein, we performed a meta-analysis evaluating the effects of treatment adherence enhancement programs on treatment adherence and secondary outcomes for hemodialysis patients. Twenty-five Korean and international articles published prior to 31 March 2022 were selected following the PRISMA and Cochrane Systematic Review guidelines. We calculated summary effect sizes, conducted homogeneity and heterogeneity testing, constructed a funnel plot, and performed Egger's regression test, Begg's test, trim-and-fill method, subgroup analyses, and univariate meta-regression. The overall effect of treatment adherence enhancement programs for hemodialysis patients was statistically significant (Hedges' g = 1.10, 95% CI: 0.77, 1.43). On performing subgroup analysis to determine the cause of effect size heterogeneity, statistically significant moderating effects were found for a range of input variables (Asian countries, study centers, sample size, study design, intervention types, number of sessions, quality assessment scores, funding, and evidence-based interventions). On univariate meta-regression, larger synthesized effect sizes were found for a range of study characteristics (Asian populations, single-center studies, studies with <70 participants, quasi-experimental studies, educational interventions, studies with >12 sessions, studies with quality assessment scores above the mean, unfunded studies, and non-theory-based interventions). Our results provide evidence-based information for enhancing program efficacy when designing treatment adherence enhancement programs for hemodialysis patients.",
+   "keywords": [
+    "hemodialysis",
+    "meta-analysis",
+    "systematic review",
+    "treatment adherence and compliance"
+   ],
+   "mesh_terms": [
+    "Asia",
+    "Humans",
+    "Renal Dialysis",
+    "Research Design",
+    "Treatment Adherence and Compliance"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_36280551",
+   "pmid": "36280551",
+   "title": "[Use of the TestObs mobile application for the evaluation of therapeutic adherence in chronic hemodialysis patients: Technological monitoring model of treatment adherence and determining factors].",
+   "abstract": "Non-adherence behaviors are very common in chronic hemodialysis patients, it is estimated that only one patient out of two complies with medical prescriptions, these behaviors are associated with a higher risk of morbidity and adverse events as well as increased expenses for health systems. The aim of our study was to assess adherence to long-term prescribed medications in chronic hemodialysis patients, using a mobile application named TestObs, as well as to determine the main factors influencing medication adherence. We conducted a prospective descriptive study, between January and June 2019. We developed a mobile application named TestObs, downloadable on playstore for android devices, which assesses with the Girerd questionnaire, the adherence to the main medications taken by chronic hemodialysis patients. We included adult patients, with a duration of dialysis of more than 6 months, all patients who downloaded TestObs, tested their adherence to their medication by answering the questionnaire. We created a web-based platform, where data was collected from the application and then analyzed and tabulated. Regarding the statistical analysis, the normal distribution of the variables was studied by the Kolmogorov-Smirnov test, the analysis of the qualitative variables used the Pearson's Chi2 and Fisher's statistical test, the Hosmer Lemeshow test was used to examine the quality of the final logistic regression model. We collected 90 adult chronic hemodialysis patients, 51 of them (56%) were selected to enter the study. We found good compliance in 46.15% of patients, minor noncompliance in 32.87%, and noncompliance in 20.98%. In multivariate analysis, the factors influencing adherence were the presence of other comorbidities (diabetes and vision problems) and the number of pills per day. In this study, we report treatment adherence problems in 53.85% of patients, our results are close to the data reported in hemodialysis patients in the literature, different factors in",
+   "keywords": [
+    "Chronic hemodialysis patients",
+    "Compliance",
+    "Girerd questionnaire",
+    "Hémodialysé chronique",
+    "Observance",
+    "Questionnaire de Girerd",
+    "Technology assessment",
+    "TestObs",
+    "mHealth",
+    "Évaluation technologique"
+   ],
+   "mesh_terms": [
+    "Adult",
+    "Humans",
+    "Mobile Applications",
+    "Medication Adherence",
+    "Renal Dialysis",
+    "Surveys and Questionnaires",
+    "Telemedicine"
+   ],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_36624540",
+   "pmid": "36624540",
+   "title": "The effect of positive thinking training on hope and adherence to treatment in hemodialysis patients: a randomized controlled trial.",
+   "abstract": "Patients undergoing hemodialysis are exposed to psychological problems, such as despair, which in turn can be a trigger for them to abandon the treatment process. This study aimed to determine the effect of positive thinking training on hope and adherence to treatment in hemodialysis patients. This randomized controlled trial was performed on 80 hemodialysis patients referred to two hemodialysis centers in Shiraz, Iran. They were randomly divided into an intervention and a control group. Eight sessions of positive thinking skills training carried out individually on the patients' bedsides. The primary and secondary outcomes were hope and adherence to treatment, respectively. The data were collected using Snyder Hope Questionnaire, End-Stage Renal Disease Adherence Questionnaire, laboratory tests, and weight measurements. Data were analyzed by Chi-square and Paired and Independent T-test using SPSS software version 18. After the intervention, the mean score of hope was significantly higher in the intervention group (42.1 ± 6.1) than in the control group (38.7 ± 6.5) (p = 0.024). Moreover, after the intervention, the mean score of adherence to treatment was significantly higher in the intervention group (1070.2 ± 80.1) compared to the control group (1018.4 ± 105.3) (p = 0.019). In addition, blood urea nitrogen, phosphate and inter-dialytic weight gain were lower in the intervention group compared to the control group after the intervention. The findings showed that positive thinking interventions could lead to improvement in hope and adherence to treatment in hemodialysis patients. Positive thinking training could be used in caring of hemodialysis patients to improve their hope and adherence to treatment. Trial registration RCT Registry: Iranian Registry of Clinical Trials; RCT registration number: IRCT20180915041044N1; Registration date: 19/12/2018.",
+   "keywords": [
+    "Education",
+    "Hemodialysis units, Hospital",
+    "Psychology, Positive",
+    "Renal dialysis",
+    "Treatment adherence and compliance"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Iran",
+    "Optimism",
+    "Renal Dialysis",
+    "Registries",
+    "Thinking"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_36726495",
+   "pmid": "36726495",
+   "title": "The relationship between hemodialysis patients' treatment adherence, procrastination, and difficulty in emotion regulation: A cross-sectional study in southeast Iran.",
+   "abstract": "End-stage renal disease is a life-threatening condition in which patients require dialysis or kidney transplant. These patients must adhere to the treatment regimen because treatment non-adherence affects their quality of life and health. We conducted this study to predict hemodialysis patients' treatment adherence based on procrastination and difficulty in emotion regulation. We conducted this descriptive correlational study on 218 hemodialysis patients with chronic kidney disease. We used purposive sampling to select participants from six dialysis centers in Kerman, Sirjan, and Rafsanjan. The measuring tools included the end-stage renal disease adherence questionnaire, general procrastination scale, decisional procrastination scale, and difficulty in emotion regulation scale. We used the correlation coefficient, regression analysis, and SPSS18 to analyze data. Our study indicated that among the dimensions of treatment adherence, medication use had a significant, weak, and inverse relationship with general and decisional procrastination. We also found a significant, weak, and inverse relationship between attendance and general procrastination (p < 0.05 and p < 0.01). But there is no significant relationship between treatment adherence, general procrastination, and decisional procrastination (p > 0.05). Multivariate regression analysis revealed a relationship between age, the cause of kidney failure, and treatment adherence (p = 0.01 and p = 0.02). Treatment non-adherence causes problems and complications in hemodialysis Patients, and disrupts their course of treatment. Therefore, it is necessary to identify the factors influencing non-adherence of patients undergoing hemodialysis and improve their treatment adherence, and thus their quality of life.",
+   "keywords": [
+    "cross-sectional study",
+    "difficulty in emotion regulation",
+    "hemodialysis",
+    "procrastination",
+    "treatment adherence"
+   ],
+   "mesh_terms": [],
+   "publication_year": 2022
+  },
+  {
+   "id": "pubmed_37071662",
+   "pmid": "37071662",
+   "title": "Inclement Weather and Risk of Missing Scheduled Hemodialysis Appointments among Patients with Kidney Failure.",
+   "abstract": "Nonadherence to hemodialysis appointments could potentially result in health complications that can influence morbidity and mortality. We examined the association between different types of inclement weather and hemodialysis appointment adherence. We analyzed health records of 60,135 patients with kidney failure who received in-center hemodialysis treatment at Fresenius Kidney Care clinics across the Northeastern US counties during 2001-2019. County-level daily meteorological data on rainfall, hurricane and tropical storm events, snowfall, snow depth, and wind speed were extracted using National Oceanic and Atmosphere Agency data sources. A time-stratified case-crossover study design with conditional Poisson regression was used to estimate the effect of inclement weather exposures within the Northeastern US region. We applied a distributed lag nonlinear model framework to evaluate the delayed effect of inclement weather for up to 1 week. We observed positive associations between inclement weather and missed appointment (rainfall, hurricane and tropical storm, snowfall, snow depth, and wind advisory) when compared with noninclement weather days. The risk of missed appointments was most pronounced during the day of inclement weather (lag 0) for rainfall (incidence rate ratio [RR], 1.03 per 10-mm rainfall; 95% confidence interval [CI], 1.02 to 1.03) and snowfall (RR, 1.02; 95% CI, 1.01 to 1.02). Over 7 days (lag 0-6), hurricane and tropical storm exposures were associated with a 55% higher risk of missed appointments (RR, 1.55; 95% CI, 1.22 to 1.98). Similarly, 7-day cumulative exposure to sustained wind advisories was associated with 29% higher risk (RR, 1.29; 95% CI, 1.25 to 1.31), while wind gusts advisories showed a 34% higher risk (RR, 1.34; 95% CI, 1.29 to 1.39) of missed appointment. Inclement weather was associated with higher risk of missed hemodialysis appointments within the Northeastern United States. Furthermore, the association between inclement weather a",
+   "keywords": [],
+   "mesh_terms": [
+    "Humans",
+    "Renal Dialysis",
+    "Female",
+    "Male",
+    "Weather",
+    "Middle Aged",
+    "Aged",
+    "Appointments and Schedules",
+    "No-Show Patients",
+    "Adult"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_37227800",
+   "pmid": "37227800",
+   "title": "The relationship between illness perceptions and fluid-control adherence among Chinese hemodialysis patients: a cross-sectional study.",
+   "abstract": "Fluid-control adherence was important for hemodialysis (HD) patients, and while significant correlations between treatment adherence and illness perceptions have been found, there is limited research that explored the relationship between illness perceptions and fluid-control adherence. We sought to assess illness perceptions and fluid-control adherence and to explore the relationship between them among Chinese hemodialysis patients. A cross-sectional study of 253 Chinese HD patients was conducted. We recorded sociodemographic and disease characteristics, Revised Illness Perception Questionnaire (IPQ-R) responses, Fluid Control in Hemodialysis Patients Scale (FCHPS) scores and the interdialytic weight gain (IDWG). The total FCHPS score of hemodialysis patients was of a moderate level, and 45.85% hemodialysis patients' IDWG exceeded 3.0 kg. Regression analysis revealed that sex, academic level, marital status, treatment control dimension and causal (physical) factors of illness perceptions explained 12.7% variance in the total FCHPS score. Age, normalized whole-body urea clearance (Kt/V), dry weight (DW) residual urine volume (mL/24 h) and consequence dimension of illness perceptions explained 29.0% variance in IDWG. About mediating effect analysis, positive indirect effects on IDWG were found for identity, consequences and emotional representations through the attitude dimension of FCHPS, and negative indirect effects on IDWG were found for treatment control and illness coherence through the attitude dimension of FCHPS. The results demonstrated that some sociodemographic and clinical characteristics and illness perceptions were associated with fluid-control adherence, and the patient's attitude toward fluid control is an important mediator between illness perceptions and IDWG, implying that attitude can be a focus of intervention programs based on illness perceptions to improve Chinese HD patients' fluid-control adherence.",
+   "keywords": [
+    "Fluid-control adherence",
+    "hemodialysis",
+    "illness perceptions"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Cross-Sectional Studies",
+    "East Asian People",
+    "Renal Dialysis",
+    "Regression Analysis",
+    "Weight Gain"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_37242175",
+   "pmid": "37242175",
+   "title": "Digital Healthy Diet Literacy and Fear of COVID-19 as Associated with Treatment Adherence and Its Subscales among Hemodialysis Patients: A Multi-Hospital Study.",
+   "abstract": "Treatment adherence (TA) is a critical issue and is under-investigated in hemodialysis patients. A multi-center study was conducted from July 2020 to March 2021 on 972 hemodialysis patients in eight hospitals in Vietnam to explore the factors associated with TA during the COVID-19 pandemic. Data were collected, including socio-demographics, an End-Stage Renal Disease Adherence Questionnaire (ESRD-AQ), 12-item short-form health literacy questionnaire (HLS-SF12), 4-item digital healthy diet literacy scale (DDL), 10-item hemodialysis dietary knowledge scale (HDK), 7-item fear of COVID-19 scale (FCoV-19S), and suspected COVID-19 symptoms (S-COVID19-S). Bivariate and multivariate linear regression models were used to explore the associations. Higher DDL scores were associated with higher TA scores (regression coefficient, B, 1.35; 95% confidence interval, 95%CI, 0.59, 2.12; p = 0.001). Higher FCoV-19S scores were associated with lower TA scores (B, -1.78; 95%CI, -3.33, -0.24; p = 0.023). In addition, patients aged 60-85 (B, 24.85; 95%CI, 6.61, 43.11; p = 0.008) with \"very or fairly easy\" medication payment ability (B, 27.92; 95%CI, 5.89, 44.95; p = 0.013) had higher TA scores. Patients who underwent hemodialysis for ≥5 years had a lower TA score than those who received <5 years of hemodialysis (B, -52.87; 95%CI, -70.46, -35.28; p < 0.001). These findings suggested that DDL and FCoV-19S, among other factors, should be considered in future interventions to improve TA in hemodialysis patients.",
+   "keywords": [
+    "COVID-19",
+    "diet",
+    "digital healthy diet literacy",
+    "fear",
+    "fluid",
+    "health literacy",
+    "hemodialysis",
+    "medication",
+    "physical activity",
+    "treatment adherence"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "COVID-19",
+    "Diet, Healthy",
+    "Pandemics",
+    "Renal Dialysis",
+    "Health Literacy",
+    "Treatment Adherence and Compliance",
+    "Fear"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_37259694",
+   "pmid": "37259694",
+   "title": "Stroke and its correlates among patients on maintenance hemodialysis in Cameroon.",
+   "abstract": "End-stage kidney disease is an independent risk factor for stroke; however, the relationship between hemodialysis and stroke in Sub-Saharan Africa has not been established. To evaluate the incidence, associated factors, and clinical outcome of stroke among patients undergoing maintenance hemodialysis in Cameroon. A hospital-based retrospective study using data from the medical files of 1060 patients on maintenance hemodialysis (given twice a week) was conducted. Patients with stroke prior to starting hemodialysis were excluded. Socio-demographic data, comorbidities, dialysis parameters, and data concerning the diagnosis of stroke were retrieved and analyzed. The dialysis vintage (duration of time on dialysis) averaged 11.4 ± 9.2 months. The incidence of stroke was 6.1 events per 1000 patient-years, with hemorrhagic stroke being most common (66%). Eighty percent of strokes occurred before the 30th month of dialysis. Sixty percent of strokes occurred within 24 h of a dialysis session. Predictive factors for stroke were diabetes mellitus (p = 0.026), heart failure (p = 0.045), poor dialysis compliance (p = 0.001), and short vintage (p = 0.001). The overall mortality rate was 52% and was higher for hemorrhagic stroke (60%). The leading causes of death were multiple organ failure and sepsis. The incidence of stroke is high among hemodialysis patients in Cameroon and hemorrhagic stroke is the commonest type. Diabetes and heart failure triple the risk of stroke. Mortality in patients who suffered a stroke was high.",
+   "keywords": [
+    "Cameroon",
+    "incidence",
+    "maintenance hemodialysis",
+    "outcome",
+    "stroke"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Renal Dialysis",
+    "Retrospective Studies",
+    "Hemorrhagic Stroke",
+    "Cameroon",
+    "Kidney Failure, Chronic",
+    "Stroke",
+    "Risk Factors",
+    "Heart Failure"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_37316774",
+   "pmid": "37316774",
+   "title": "Determinants of medication adherence in hemodialysis patients: a cross-sectional study based on capability-opportunity-motivation and behavior model.",
+   "abstract": "Medication adherence is a key component of successful dialysis in end-stage renal disease (ESRD). The aim of this study was to use the Capability-Opportunity-Motivation and Behavior (COM-B) model in order to identify the most important determinants of medication adherence among ESRD patients. This research was a cross-sectional design that was conducted in two steps in 2021. In the first step, COM-B components of patients undergoing hemodialysis (HD) therapy were extracted through literature review. The second step was a cross-sectional study among 260 ESRD patients referred to the dialysis unit from Kermanshah, in the west of Iran. Data was collected using a written questionnaire by interviews. The data was analyzed in SPSS version 16 software. The mean age of respondents was 50.52 years [95% CI: 48.71, 52.33], ranged from 20 to 75 years. The mean score of medication adherence was 11.95 [95% CI: 11.64, 12.26], ranged from 4 to 20. Medication adherence is higher among patients with higher education (P = 0.009) and those who were employed (P < 0.001) and was significantly related to income (r = 0.176), while it was inversely and significantly related to the medication duration (r=-0.250). Motivation (Beta: 0.373), self-efficacy (Beta: 0.244), and knowledge (Beta: 0.116) are stronger determinants of medication adherence. COM-B model can be proposed as an integrated framework in predicting medication adherence among ESRD patients. Our findings provide theory-based recommendations that can help future clinical and research decision-making for the development, implementation, and evaluation of treatment adherence interventions in Iranian ESRD patients. The use of COM-B model can provide a comprehensive explanation about medication adherence in ESRD patients. Future research should be focus on increasing motivation, self-efficacy and knowledge of Iranian ESRD patients in order to increasing medication adherence.",
+   "keywords": [
+    "Hemodialysis",
+    "Kidney patients",
+    "Medication adherence",
+    "Motivation"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Young Adult",
+    "Adult",
+    "Middle Aged",
+    "Aged",
+    "Renal Dialysis",
+    "Motivation",
+    "Cross-Sectional Studies",
+    "Iran",
+    "Kidney Failure, Chronic"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_37386428",
+   "pmid": "37386428",
+   "title": "Comparing the effects of mHealth app use and face-to-face training on the clinical and laboratory parameters of dietary and fluid intake adherence in hemodialysis patients: a randomized clinical trial.",
+   "abstract": "Numerous factors are likely to result in poor treatment adherence, which is one of the important factors contributing to increased complications and the low efficacy of hemodialysis (HD), particularly inadequate knowledge of patients. This study aimed to compare the effects of a mobile health (mHealth) app (the Di Care app) use and face-to-face training on the clinical and laboratory parameters of dietary and fluid intake adherence in patients undergoing HD. This single-blinded, two-stage/two-group randomized clinical trial was fulfilled in 2021-22 in Iran. Seventy HD patients were recruited, using the convenience sampling method, and were then randomized into two groups: mHealth (n = 35) and face-to-face training (n = 35). ​ The patients in both groups received the same educational materials via the Di Care app and face-to-face training for one month. Before and 12 weeks after the intervention, the mean interdialytic weight gain (IDWG), potassium (K), phosphorus (P), total cholesterol (TC), triglyceride (TG), albumin (AL), and ferritin (FER) levels were measured and compared. The data were analyzed using the SPSS via descriptive statistics (mean, SD, frequency, and percentage) and analytical tests (independent-samples t-test, paired-samples t-test, Wilcoxon signed-rank test, Mann-Whitney U test, Chi-square test, and Fisher's exact test). ​Prior to the intervention, the mean IDWG and the K, P, TC, TG, AL, and FER levels, were not significantly different in both groups (p > 0.05). The mean IDWG (p < 0.0001), and the K (p = 0.001), P (p = 0.003), TC/TG (p < 0.0001), and FER (p = 0.038) levels in the HD patients in the mHealth group decreased. ​As well, the mean IDWG (p < 0.0001), and the K (p < 0.0001) and AL (p < 0.0001) levels showed a descending trend in the face-to-face group. The fall in the mean IDWG (p = 0.001) and the TG level (p = 0.034) in the patients in the mHealth group was significantly greater than that in the face-to-face group. The Di Care app use and",
+   "keywords": [
+    "Education",
+    "Hemodialysis",
+    "Telemedicine",
+    "Treatment adherence",
+    "mHealth"
+   ],
+   "mesh_terms": [
+    "Humans",
+    "Iran",
+    "Mobile Applications",
+    "Diet",
+    "Albumins",
+    "Renal Dialysis",
+    "Telemedicine",
+    "Triglycerides"
+   ],
+   "publication_year": 2023
+  },
+  {
+   "id": "pubmed_37662812",
+   "pmid": "37662812",
+   "title": "Depression in maintenance hemodialysis patients: What do we need to know?",
+   "abstract": "Chronic kidney disease (CKD) is now recognized as a major public health problem in the world. The global prevalence of CKD is estimated at 13.4% (11.7-15.1%), with an estimated 490.2 to 7.083 million patients with End stage renal disease requiring renal replacement therapy. Hemodialysis is the main treatment for End stage renal disease patients because of its high safety and efficiency. The survival time of these patients was significantly prolonged, but many psychological problems followed. Depression is a type of mood disorder caused by a variety of causes, often manifested as disproportionate depression and loss of interest, sometimes accompanied by anxiety, agitation, even hallucinations, delusions and other psychotic symptoms. Depression has become the most common mental disorder in maintenance hemodialysis (MHD) patients according to the meta-analysis. In recent years, depression has seriously affected the quality of life and prognosis of MHD patients from dietary, sleep, treatment adherence, energy and other dimensions. This article reviews the epidemiology, etiology, diagnosis and treatment of depression in MHD patients.",
+   "keywords": [
+    "Cause",
+    "Depression",
+    "Diagnosis",
+    "Hemodialysis",
+    "Treatment"
+   ],
+   "mesh_terms": [],
+   "publication_year": 2023
+  },
+  {
+   "id": "internal_0_26_6985971df07b005405ed9f69",
+   "pmid": "41633026",
+   "title": "Fluid infusion during postpartum hemorrhage: a secondary analysis of the Obstetric Bleeding Study (OBS) Plus prospective observational study.",
+   "abstract": "INTRODUCTION\nOptimal fluid resuscitation strategies in PPH are unknown. This planned secondary analysis describes fluid resuscitation during OBS Plus, a study designed to characterise PPH coagulopathy. The hypothesis was that the volume of fluid resuscitation equalled the volume of blood loss. Primary outcome was the ratio of clear fluid infused: blood loss.\nMETHODS\nPatients recruited into the OBS Plus study with available fluid infusion data and measured blood loss ≥ 1000 mL were included. Clinical management was guided by a PPH care bundle incorporating bedside testing of coagulation. Fluid resuscitation was at the discretion of the clinical team. Infusions commenced 1 h before to 1 h after PPH were analysed.\nRESULTS\nBetween 2017 and 2019, 495 patients with PPH ≥ 1000 mL were recruited. 67/495 (13.5%) were excluded for missing data. Clear fluid infusions were crystalloid, 426/428 (99.5%) and colloid, 39/428 (9.1%). Blood product transfusions were red blood cells, 40/428 (9.4%); fresh frozen plasma 3/428 (0.7%); platelets 5/428 (1.1%). Overall median ratio clear fluids: blood loss was 858:1000 mL with blood products contributing to resuscitation volumes in massive PPH (≥ 2500 mL). Fluid volumes ≥ 3500 mL were only infused in massive PPH. No patients required renal replacement therapy or respiratory support for fluid overload.\nDISCUSSION\nInappropriate clear fluid resuscitation may cause fluid overload or renal injury. In this report, no patient required respiratory or renal support and median fluid resuscitation volume was approximately equal to blood loss. The incidence of coagulopathy in OBS Plus should be interpreted in this context.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_32_699a70f04e2d9f48f95b13d9",
+   "pmid": "41717721",
+   "title": "Impact of Dialysis on Complication Rates Following Surgical Fracture Fixation in the Hand and Wrist.",
+   "abstract": "BACKGROUND\nPatients with end-stage renal disease (ESRD) requiring dialysis are at increased risk for postoperative complications due to immune dysfunction, impaired healing, and vascular fragility. While dialysis has been studied in various surgical contexts, limited data exist on outcomes following hand fracture fixation. This study evaluates complication rates in dialysis-dependent versus nondialysis patients undergoing surgical fixation of distal radius, metacarpal, and phalangeal fractures.\nMETHODS\nA retrospective cohort analysis was performed using the PearlDiver Mariner database to identify adults who underwent open reduction and internal fixation (ORIF) for distal radius, metacarpal, or phalangeal fractures. Patients were stratified by dialysis status. Complications, including infection, hematoma, delayed healing, and revision, were assessed at 30 days, 90 days, and 1 year. Rates were compared between groups, with subgroup and univariate logistic regression analyses conducted to evaluate associations between dialysis and outcomes..\nRESULTS\nDialysis-dependent patients had significantly higher complication rates. For distal radius ORIF, complication rates were 16.72% in dialysis patients versus 5.3% in controls (P < .001), with infection rates of 12.67% versus 3.63% (P < .001). Metacarpal ORIF showed a complication rate of 21.77% versus 10.48% (P = .016), largely due to infection (16.94% vs 4.03%, P = .001). Phalanx ORIF showed no difference in overall complications, but infection was more common in dialysis patients (17.65% vs 0%, P = .001). Regression confirmed increased complication odds in dialysis patients.\nCONCLUSIONS\nDialysis-dependent patients undergoing hand fracture fixation face significantly higher complication rates, primarily due to infection, highlighting the need for specialized perioperative management.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_32_6a61ebdfb1c7ffbd7b5b9b77",
+   "pmid": "42467426",
+   "title": "Prevalence of protein-energy wasting among non-dialytic and dialytic chronic kidney disease patients in Africa: a systematic review and meta-analysis.",
+   "abstract": "BACKGROUND\nProtein-energy wasting (PEW) is a frequent and prognostically adverse complication of chronic kidney disease (CKD). Despite its clinical importance, African populations have been underrepresented in prior systematic reviews. This study aimed to estimate the pooled prevalence of PEW among patients with CKD in Africa.\nMETHODS\nPubMed, AJOL, and EMBASE were systematically searched for relevant studies published between 1980 and 2025. Meta-analytic techniques were used to estimate the pooled prevalence of PEW among African CKD populations. The study protocol was registered on PROSPERO (CRD420251032894).\nRESULTS\nTwenty-five articles comprising 2822 participants across 14 African countries met the inclusion criteria. The mean age of the participants was 49.7 ± 5.2 years. Thirteen studies (52.0%) were from North Africa, 19 studies (76.0%) had high methodological quality, and 17 studies (68.0%) used Subjective Global Assessment (SGA) for PEW assessment. The overall pooled prevalence of PEW among patients with CKD was 47.0% (95% confidence interval: 39.0%-56.0%; n = 25 studies; I2 = 95.5%, P < .001). The prevalence of PEW was significantly higher in the haemodialysis patients compared with non-dialysis CKD patients (52.0% vs 34.0%; P < .001). The pooled prevalence of PEW in studies that used the International Society of Renal Nutrition and Metabolism criteria was 32.0%; Malnutrition Inflammatory Score was 49.0%, SGA was 42.0%; and SGA adaptation was 76.0%. There was a significant difference in the pooled PEW prevalence across diagnostic criteria (P < .001) and African regions (P < .001).\nCONCLUSION\nPEW is highly prevalent among African patients with CKD. Region-specific guidelines and multidisciplinary nutritional interventions are urgently needed to address this burden.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_36_69859203f07b005405ebacd0",
+   "pmid": "41598433",
+   "title": "Uremic Pruritus in Hemodialysis: Mechanisms, Burden, and Emerging Therapies.",
+   "abstract": "Background/Objectives: Uremic pruritus is a common complication in patients with end-stage kidney disease undergoing maintenance hemodialysis. Despite its high prevalence and substantial impact on sleep, psychological well-being, and overall quality of life, its pathophysiology remains multifactorial and incompletely understood. This narrative review summarizes contemporary evidence (2015-2025) on therapeutic strategies for uremic pruritus, with an emphasis on emerging treatments and evolving mechanistic insights. Methods: A PubMed search was conducted for original clinical studies published between 1 January 2015, and 31 October 2025, evaluating treatments for uremic pruritus in adult hemodialysis patients. Eligible study designs included randomized controlled trials and observational interventional studies. Non-English articles, pediatric studies, peritoneal dialysis studies, reviews, case reports, and studies of mixed-etiology pruritus were excluded. Earlier literature was reviewed to contextualize epidemiology and pathophysiology. Results: The review identifies multiple interacting mechanisms-including uremic toxins, immune dysregulation, mineral abnormalities, xerosis, neuropathic changes, and dysregulated opioid signaling-contributing to itch generation. Topical therapies, especially emollients and humectants, consistently improved symptoms with excellent safety profiles. Optimization of dialysis adequacy and membrane selection showed benefit in selected patients. Among systemic therapies, gabapentinoids demonstrated the most robust efficacy but required cautious dosing. Sertraline, nalbuphine, and difelikefalin showed significant antipruritic effects in controlled trials. Emerging therapies, including AST-120, omega-3 fatty acids, and the biologic dupilumab, demonstrated promising but preliminary results. Conclusions: Management of uremic pruritus requires a multifaceted, individualized approach integrating skin-directed therapies, dialysis optimization, and ",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_36_69859203f07b005405ebacfc",
+   "pmid": "41598477",
+   "title": "The Spectrum of Motor Disorders in Patients with Chronic Kidney Disease: Pathogenic Mechanisms, Clinical Manifestations, and Therapeutic Strategies.",
+   "abstract": "Motor disorders are increasingly recognized as a significant complication of chronic kidney disease (CKD), yet they remain underdiagnosed, undertreated, and often overlooked in clinical practice. Patients with CKD experience a broad spectrum of motor disturbances, including restless legs syndrome, myoclonus, flapping tremor, periodic limb movements in sleep, Parkinsonism, and peripheral neuropathy. These disorders arise from complex and often overlapping mechanisms such as uremic neurotoxicity, vascular injury, electrolyte and hormonal imbalances, or inflammatory processes, reflecting the systemic impact of impaired renal function on the central and peripheral nervous systems. The presence of motor disorders in CKD is associated with substantial clinical consequences for quality of life, contributing to impaired mobility, persistent insomnia, daytime fatigue, higher fall risk, and diminished independence. Moreover, these disturbances have been linked to increased cardiovascular morbidity and mortality, further exacerbating the already high burden of disease in this population. Current management approaches focus on optimizing kidney function through dialysis or transplantation, pharmacological therapies such as dopaminergic agents, gabapentinoids, and iron supplementation, as well as non-pharmacological interventions including structured exercise programs and sleep hygiene measures. Despite these strategies, robust evidence on long-term outcomes, comparative effectiveness, and optimal treatment algorithms remains limited. Greater recognition of the clinical impact of motor disorders in CKD, combined with targeted research efforts, is urgently needed to improve patient-centered outcomes and guide evidence-based care.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_36_69bcba003e66051bd5852b18",
+   "pmid": "41827270",
+   "title": "Endovascular Creation of Native Arteriovenous Fistulas for Hemodialysis: A Percutaneous, Vessel-Sparing Strategy for Vascular Access.",
+   "abstract": "Surgically created native arteriovenous fistulas (AVFs) remain the preferred vascular access for chronic hemodialysis, yet they are limited by substantial early failure and progressive consumption of venous capital. Endovascular arteriovenous fistulas (endoAVFs, also referred to as percutaneous AVFs) have become a catheter-based alternative to surgical AVF (sAVF). We conduct an updated narrative, practice-oriented review of the literature on endoAVF creation, and we qualitatively synthesize evidence. Two devices are currently available in contemporary clinical practice: a dual 4 Fr-catheter, fluoroscopy-guided radiofrequency system (WavelinQ) and a single 6 Fr-catheter, ultrasound-guided thermal resistance system (Ellipsys). Across prospective studies and real-world series, endoAVF creation is consistently reported to have high technical success, with low major complication and infection rates. Clinical usability can often be achieved within weeks when ultrasound-based surveillance and protocol-driven maturation assistance are implemented; however, adjunctive procedures are frequently required and should be anticipated in program planning and informed consent. Observational comparisons and pooled analyses indicate broadly comparable functional outcomes versus surgery in selected cohorts, while estimates of primary patency and maintenance burden vary substantially across studies. Overall, endoAVFs represent a feasible, minimally invasive, vessel-sparing option that can be integrated into multidisciplinary access pathways in anatomically suitable candidates and experienced centers, complementing rather than replacing surgical strategies within a distal-first plan. Recent society practice guidance further emphasizes standardized mapping, expectation setting, troubleshooting algorithms for non-maturation, and dialysis-unit cannulation training to support consistent implementation. Pragmatic comparative studies and long-term registries using standardized endpoints, paire",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_48_6a703211ade734d7c8dff171",
+   "pmid": "42535935",
+   "title": "Imipenem and relebactam pharmacokinetics in peritoneal fluid: microdialysis reveals infection-independent penetration.",
+   "abstract": "Imipenem/relebactam is a promising therapy for complicated intra-abdominal infections caused by carbapenem-resistant Enterobacterales species. However, data on tissue-site pharmacokinetics are limited. We evaluated the peritoneal penetration of imipenem and relebactam in healthy and infected rats by using microdialysis. The animals received a single intravenous infusion of imipenem (45 mg/kg) and relebactam (22.5 mg/kg), and unbound concentrations were dynamically monitored in the plasma and peritoneal fluid. Imipenem exposure in the peritoneal fluid was consistently lower than that in the plasma, with peritoneal fluid-to-plasma AUC ratios of 0.29 in the control group and 0.27 in the infection group. In contrast, relebactam demonstrated nearly equivalent concentrations in both compartments, with ratios of 0.81 and 0.86, respectively. Both agents reached peak levels at 30 min, and the semi-logarithmic curves showed rapid equilibrium without delay. The partition coefficients estimated by two-compartment modeling for imipenem (0.333-0.342) and relebactam (0.679-0.816) were consistent with non-compartmental results. Infection increased the distribution volume and clearance of relebactam but did not significantly alter peritoneal permeability for either drug. These findings provide the first description of the penetration of relebactam into peritoneal fluid. Subsequent pharmacodynamic target attainment (PTA) analysis showed that under the latest EUCAST PK/PD criteria, PTA values dropped markedly to an MIC of 1 mg/L, indicating a substantially reduced probability of achieving adequate peritoneal exposure. These results highlight the need for dosing strategies to ensure sufficient peritoneal drug concentration to maintain antimicrobial efficacy.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_72_698599e8f07b005405ee903f",
+   "pmid": "41573720",
+   "title": "Association between vancomycin therapeutic drug monitoring and improved clinical outcomes in critically ill patients receiving renal replacement therapy: a retrospective cohort study.",
+   "abstract": "Introduction\nVancomycin is commonly prescribed for serious infections in critically ill patients. A substantial proportion of these individuals present with renal impairment or develop acute kidney injury (AKI), and some may require renal replacement therapy (RRT). Different RRT modalities can substantially affect vancomycin pharmacokinetics, thereby posing challenges for individualized dosing. Although therapeutic drug monitoring (TDM) is recommended by clinical guidelines to optimize drug exposure, its association with mortality among critically ill patients undergoing RRT has not been well characterized.\nMethods\nThis retrospective study used the MIMIC-IV database to identify adults with an initial ICU admission who received RRT within the first week and intravenous vancomycin during the ICU stay. Patients were classified into TDM and non-TDM groups according to whether TDM was performed. The primary outcome was 30-day all-cause mortality. To control for confounding, baseline characteristics were balanced using inverse probability of treatment weighting (IPTW) based on propensity scores. Associations between TDM and mortality were assessed using IPTW-weighted Cox regression, with results compared to unweighted Cox models. Subgroup analyses stratified by clinical characteristics and RRT modalities were performed to explore effect heterogeneity. Sensitivity analyses addressing missing cumulative vancomycin dose were conducted using random forest imputation, complete-case analysis, and the missing-indicator method.\nResults\nA total of 2,085 patients were included, with 1,556 in the TDM group and 529 in the non-TDM group. 30-day mortality was significantly lower in the TDM group (38.9% vs. 48.8%, P < 0.001). Multivariable Cox regression analyses, both before and after IPTW adjustment, demonstrated a consistent association between TDM and reduced mortality risk (hazard ratio [HR] 0.457-0.478, all P < 0.001). Kaplan-Meier analysis further confirmed higher survival in the",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_81_6a61ebbd1c15b80ca75b873b",
+   "pmid": "41938563",
+   "title": "Venous blood gas kinetics and acid-base correction during incremental intermittent hemodialysis in dogs with advanced renal failure.",
+   "abstract": "Background and Aim\nAcid-base disturbances, particularly metabolic acidosis, are common in dogs with advanced renal failure and contribute substantially to morbidity and prognosis. Intermittent hemodialysis (IHD) is increasingly used when conventional therapy fails; however, physiological monitoring parameters for incremental intermittent hemodialysis (i-IHD) in dogs remain poorly defined. Venous blood gas (VBG) analysis offers a safer and more practical alternative to arterial sampling, yet its utility during i-IHD has not been systematically evaluated. This study aimed to characterize longitudinal changes in VBG and hemato-biochemical parameters before and after consecutive i-IHD sessions in dogs with renal failure.\nMaterials and Methods\nIn this prospective observational study, 45 client-owned dogs with severe azotemia (serum creatinine >5 mg/dL) due to acute kidney injury (AKI) stage IV-V or chronic kidney disease (CKD) stage IV were enrolled. All dogs underwent three consecutive i-IHD sessions with stepwise increases in treatment intensity. Venous blood samples were collected immediately before and after each session for VBG analysis, including pH, bicarbonate (HCO3 -), total carbon dioxide (TCO2), partial pressures of carbon dioxide (pCO2) and oxygen (pO2), base excess, anion gap, and cerebral oxygen saturation, along with hemato-biochemical profiling. Dialysis adequacy was assessed using Kt/V, urea reduction ratio, and creatinine reduction ratio. Pre- and post-dialysis values were compared using paired statistical analyses.\nResults\nDogs exhibited mild-to-moderate metabolic acidosis before i-IHD. Across all sessions, i-IHD produced a consistent and significant correction of acid-base imbalance, evidenced by normalization of pH and marked increases in HCO3 - and TCO2 (p < 0.01). A modest but significant rise in pCO2 accompanied bicarbonate repletion, while the anion gap remained within the lower borderline range, indicating non-anion gap metabolic acidosis. Signi",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_0_98_69b3ad4d2b360e70a1ab1a4b",
+   "pmid": "41815360",
+   "title": "Impact of Oral Health Status on the Quality of Life of Patients With Chronic Kidney Disease: An Observational Study.",
+   "abstract": "Objective\nTo evaluate the impact of oral health on the quality of life of patients with chronic kidney disease (CKD) before kidney transplantation.\nMethods\nThis is an observational, cross-sectional, analytical, and descriptive study involving patients with CKD prior to kidney transplantation. Patients underwent oral health assessment and responded to the Oral Health Impact Profile (OHIP-14), in addition to other data being collected.\nResults\nMost patients had a high rate of decayed and missing teeth, with a mean DMFT of 15.33 ± 9.37. Periodontal alterations (altered CPI) were present in 42.5% of the sample. Regarding awareness, 68.8% were uninformed about the need for dental care before transplantation. The overall OHRQoL was generally positive (median OHIP-14 = 1.00; IQR = 5.00). However, significant differences were found between OHIP-14 domains (p < 0.001), with impacts concentrated in psychological disability and physical pain. Worse OHRQoL scores were significantly associated with lower educational level (p = 0.020) and being on renal replacement therapy (p = 0.030).\nConclusion\nPatients awaiting kidney transplantation present a high burden of oral disease but maintain a paradoxically positive perception of their oral health-related quality of life. This perception is primarily impaired by physical pain and psychological factors, such as embarrassment. The findings highlight the need for early and systematic inclusion of dental care in the multidisciplinary management of CKD, prioritizing patients with lower education and those on dialysis to mitigate clinical risks and improve psychosocial well-being.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_10_1010_6a61f5e86d0133703b00983a",
+   "pmid": null,
+   "title": "Assessment of Adequacy of Haemodialysis in Patients on Maintenance Haemodialysis: A Descriptive Observational Study",
+   "abstract": "Background: Haemodialysis (HD) is the most common form of Renal Replacement Therapy (RRT) used for End Stage Renal Disease (ESRD). The adequacy of haemodialysis, assessed through Kt/V and Urea Reduction Ratio (URR), is a critical determinant of patient morbidity and mortality, yet many Indian centres fail to achieve recommended targets. Objective: To assess the adequacy of haemodialysis in patients on maintenance haemodialysis using Kt/V and URR, and to study haemoglobin levels, blood pressure control, and intradialytic complications in this population. Methods: A hospital-based descriptive observational study was conducted over one year. Thirty-five End Stage Renal Disease patients on maintenance haemodialysis for more than six months were enrolled, and 420 dialysis sessions were monitored. Pre- and post-dialysis blood urea, haemoglobin, and blood pressure were recorded monthly. Kt/V was calculated using the Daugirdas second-generation formula, and URR was calculated from pre- and post-dialysis blood urea nitrogen values. Results: The mean age of participants was 55.63 ± 15.06 years, with 65.71% males. Diabetes mellitus (54.28%) and hypertension (48.57%) were the leading causes of ESRD. The mean Kt/V across all sessions was 1.118 ± 0.20, with only 144 (34.29%) sessions achieving the target Kt/V ≥1.2. The mean URR was 59.93 ± 7.08%, with only 106 (25.24%) sessions reaching the target URR ≥65%. Both targets were simultaneously met in only 105 (25%) sessions. Mean haemoglobin was 10.86 ± 1.92 g/dL. Intradialytic hypotension occurred in 37.14% and muscle cramps in 31.42% of participants. Kt/V and URR showed a strong positive correlation (r = 0.935, p = 0.0001). Conclusion: A majority of haemodialysis sessions in this cohort were inadequate by recommended standards, highlighting the need for stricter monitoring, patient education, and adherence to prescribed dialysis duration to reduce morbidity in ESRD patients.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_10_1058_6a7032cadbc8b2d735dfa50b",
+   "pmid": null,
+   "title": "Changes in the Quality of Life of Patients Undergoing Hemodialysis: A Longitudinal Study",
+   "abstract": "Objective: To investigate changes in the quality of life of patients undergoing hemodialysis. Material and Methods: A longitudinal cohort study was conducted with 226 patients undergoing hemodialysis at two hospitals in Campina Grande, Paraíba, Brazil. Patients were clinically examined for dental caries experience (number of decayed, missing, and filled teeth-DMFT) and asked to complete a socioeconomic and demographic questionnaire. The Short Form Health Survey (SF-36) and Oral Health Impact Profile-14 (OHIP-14) questionnaires were used to assess general health-related quality of life (HRQoL) and oral health-related quality of life (OHRQoL), respectively. After 3 years, patients were contacted again to participate in the research. The Wilcoxon test was used to compare OHIP-14 and SF-36 scores between the initial and final assessments. Results: The comparison of the SF-36 and OHIP-14 scores obtained at the beginning and end of the study revealed statistically significant differences in all dimensions of both questionnaires. Conclusion: The OHRQoL of patients undergoing hemodialysis worsened after 3 years of follow-up; HRQoL improved regarding pain, vitality, limitations by social aspects, limitations by emotional aspects, and worsened regarding functional capacity and limitations by physical aspects.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_10_1075_6a7031e655d5772d0adfe65a",
+   "pmid": "42496582",
+   "title": "Montelukast Versus Gabapentin for Uremic Pruritus in Twice-Weekly Hemodialysis Patients: A 52-Week Prospective Non-Randomized Open-Label Comparative Study.",
+   "abstract": "BACKGROUND\nUremic pruritus (UP) remains a common and distressing complication in patients with end-stage renal disease (ESRD) receiving maintenance hemodialysis. The burden is particularly pronounced in low- and middle-income countries where twice-weekly hemodialysis is frequently practiced because of resource limitations. Gabapentin is widely used for the treatment of uremic pruritus; however, its use is often limited by central nervous system adverse effects and poor tolerability in older dialysis populations. Montelukast, a leukotriene receptor antagonist with anti-inflammatory properties, has been proposed as a potential alternative therapy. This study aimed to evaluate the comparative efficacy and safety of montelukast versus gabapentin for the treatment of uremic pruritus in patients receiving twice-weekly hemodialysis, with extended follow-up over 52 weeks.\nMETHODS\nThis prospective, open-label, non-randomized comparative study enrolled 195 adult patients with refractory uremic pruritus receiving twice-weekly hemodialysis. Participants were allocated to receive either montelukast or gabapentin based on predefined clinical and demographic criteria, including physician discretion and patient-specific factors. Clinical follow-up was conducted at 2, 4, 8, 12, 24, and 52 weeks. Pruritus severity was assessed using the Visual Analogue Scale (VAS). The primary outcome was change in Visual Analogue Scale score from baseline. Secondary outcomes included adverse events, treatment tolerability, need for dose escalation, and treatment discontinuation.\nRESULTS\nA total of 176 patients completed the 52-week follow-up (montelukast, n = 91; gabapentin, n = 85). Baseline pruritus severity was comparable between the montelukast and gabapentin groups (mean VAS score 7.26 ± 1.56 vs. 7.41 ± 1.67, p = 0.54). Both treatments produced significant reductions in Visual Analogue Scale scores from baseline throughout the 52-week follow-up (p < 0.001 for both groups). Dose escalation was r",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_10_1089_6a61f82f7b437edae97553be",
+   "pmid": null,
+   "title": "IP74-02 PREDICTORS OF PHASE-BASED COSTS OF BLADDER CANCER CARE IN A UNIVERSAL HEALTHCARE SYSTEM",
+   "abstract": "INTRODUCTION AND OBJECTIVES: – Existing phase-based cost studies do not include contemporary patients, omit important cost drivers, and lack the granularity to examine sociodemographic, comorbidity, and time-related predictors of cost. We report the net costs and predictors of per-patient cost for bladder cancer (BCa) in a universal healthcare system.METHODS: – We used population and registry data housed at the Institute for Clinical Evaluative Sciences (ICES) that capture 96% of cancer diagnoses in Ontario, Canada. BCa phases were divided into diagnosis, non-muscle invasive (NMIBC), muscle invasive (MIBC), metastatic, and end-of-life patients. Costs of BCa captured inpatient, ambulatory, outpatient, and emergency care, physician and non-physician billings, laboratory, cancer and dialysis clinics, chemotherapy and drug benefit costs, mental health, long term, complex and continuing care, and home care services. Net costs were calculated by subtracting baseline comorbidity costs from propensity-score matched (1:5) population controls. A GEE linear regression model to predict net phase-based costs was used to estimate the impact of age, sex, rurality, income, comorbidity, and time-trends, with p<0.05 indicating statistical significance.RESULTS: – 29, 230 BCa patients were diagnosed and followed longitudinally in ICES data from 2003 to present. Net per-patient costs and relevant cost drivers for each phase are reported inTable 1. NMIBC patients who were older (+$28.07 every 30-days, per year of age, p<0.01), female (+$356.85 every 30-days, p<0.01), lower income quintile (p<0.01), and who were treated in the most recent era (+$1057.18 every 30-days, post-2020, p<0.01) were more expensive. Younger (+$20.45 every 30-days, per year of age, p=0.03), female (+$643.02 every 30-days, p=0.01), and lower income quintile (p<0.01) patients who were treated in the most recent era (+$1857.12 every 30-days, post-2020, p<0.01) were associated with the highest MIBC costs. For metastati",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  },
+  {
+   "id": "internal_10_1098_6a61ebc965076b3ec85b84ed",
+   "pmid": "42167629",
+   "title": "How to determine when data incompleteness compromises the correct training of data-enhanced mechanical models of haemodialysis? A data quality criterion.",
+   "abstract": "OBJECTIVE\nHemodialysis is essential for managing end-stage renal disease, with rising patient numbers increasing the need for individualized treatment. To support this, hybrid models-integrating mechanistic frameworks with data-driven calibration-have increasingly replaced purely mechanistic or statistical approaches. These models rely on complete, high-quality clinical data; however, incomplete values-particularly hematological data-are common and may compromise model reliability. In this study, we evaluated the impact of incomplete data acquired during dialysis on the training and predictive performance of hybrid models, aiming to develop a method for identifying when session data can no longer be considered suitable for model calibration.\nMETHODS\nWe developed an approach to handle missing data, used available complete sessions to simulate realistic scenarios of data acquisition loss, and assessed its impact. Based on the extent of missing data, 386 dialysis sessions from 52 patients were classified into three categories of completeness corresponding to different training robustness. The impact of less robust training on predictive ability was then evaluated.\nRESULTS AND CONCLUSIONS\nThe outcome of this process is a method to identify the sessions in which the lack of data impedes proper training of the model. A quality criterion is proposed to assess the robustness of the model training. Based on this, the prediction is deemed either reliable or flagged for caution. In such cases, the clinician is advised to repeat a training session to ensure a robust patient-specific prediction. The same approach applies to all the hybrid models describing the patient-specific response to dialysis.",
+   "keywords": [],
+   "mesh_terms": [],
+   "publication_year": 2026
+  }
+ ]
+}

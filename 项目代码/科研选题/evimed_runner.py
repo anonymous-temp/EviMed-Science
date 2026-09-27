@@ -73,10 +73,16 @@ def _module_ledger(completed, evidence_records) -> dict:
         else:
             modules[module_id] = _module("failed", reason or status, fatal=True)
 
-    modules["evidenceRetrieval"] = (
-        _module("ok") if evidence_records
-        else _module("failed", "no literature records were retrieved", fatal=True)
-    )
+    diagnostics = getattr(getattr(completed, "blueprint", None), "search_diagnostics", None)
+    if not evidence_records:
+        modules["evidenceRetrieval"] = _module(
+            "failed", "no literature records were retrieved", fatal=True
+        )
+    elif getattr(diagnostics, "status", "") == "low_recall":
+        # A thin evidence base is delivered, and marked, not hidden.
+        modules["evidenceRetrieval"] = _module("degraded", diagnostics.diagnosis)
+    else:
+        modules["evidenceRetrieval"] = _module("ok")
     return modules
 
 

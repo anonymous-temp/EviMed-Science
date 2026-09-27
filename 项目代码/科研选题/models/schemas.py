@@ -203,6 +203,11 @@ class ExecutionPlan(BaseModel):
     module_scores: Dict[str, float] = Field(default_factory=dict)  # 各模块得分
 
 
+#: Fewer included records than this is a thin evidence base: the analysis
+#: still runs and the report says so (diagnosis status "low_recall").
+LOW_RECALL_BELOW = 5
+
+
 class SearchDiagnostics(BaseModel):
     """检索诊断信息"""
     status: str  # "success", "low_recall", "no_results", "error"

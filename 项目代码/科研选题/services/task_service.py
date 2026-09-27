@@ -13,7 +13,7 @@ from datetime import datetime
 from models.schemas import (
     AnalysisTask, TaskStatus, StandardizedInput, AnalysisPhase,
     ExecutionPlan, ModuleOutput, EvidenceStats, AnalysisBlueprint,
-    ChartInfo, SearchDiagnostics
+    ChartInfo, SearchDiagnostics, LOW_RECALL_BELOW
 )
 from core.input_processor import InputPreprocessor, InputValidationError
 from core.research_context import validate_research_context
@@ -157,6 +157,7 @@ class TaskService:
 
             # Step 5: 去重
             evidence_records = await self.pubmed_service.deduplicate_records(evidence_records)
+            retrieved_count = len(evidence_records)
             evidence_records = self._filter_relevant_records(
                 evidence_records,
                 query_structure,
@@ -166,7 +167,8 @@ class TaskService:
 
             # Step 6: 检索诊断与降级判断
             search_diagnostics = self._diagnose_search_results(
-                evidence_records, sub_queries, query_structure
+                evidence_records, sub_queries, query_structure,
+                retrieved_count=retrieved_count,
             )
             logger.info(f"检索诊断: {search_diagnostics.status}, 共{search_diagnostics.retrieved_count}篇")
 
@@ -270,6 +272,10 @@ class TaskService:
                 llm_synonyms=llm_synonyms
             )
             logger.info(f"[检索] 使用机械拼接的 {len(sub_queries)} 个子查询")
+        groups_query = llm_service.concept_groups_query(query_structure.get('concept_groups') or [])
+        if groups_query and groups_query not in sub_queries:
+            sub_queries = [*sub_queries, groups_query]
+            logger.info("[检索] 追加按概念组组成的子查询: %s", groups_query)
 
         current_year = datetime.now().year
         pubmed_records = await self.pubmed_service.search_with_subqueries(
@@ -313,17 +319,37 @@ class TaskService:
         )
         return any(phrase in abstract for phrase in strong_population_phrases)
 
+    _GENERIC_TERMS = frozenset({"adult", "adults", "human", "humans", "patient", "patients"})
+
     @classmethod
-    def _filter_relevant_records(
-        cls,
-        records: List,
-        query_structure: Dict,
-        raw_query: str = "",
-    ) -> List:
-        """Keep records that satisfy every explicit population/intervention anchor."""
+    def _required_concept_groups(cls, query_structure: Dict) -> List[set]:
+        """The concepts a relevant record must address, one set of forms each.
+
+        Which of the user's phrases are one concept and which are separate is
+        a reading of the question, so the query-understanding model states it
+        in ``concept_groups``. Treating every PICO entity as its own required
+        concept split "missed dialysis sessions and adherence" into two
+        concepts every paper had to name verbatim: production kept 2 records
+        on 2026-09-27, and the same-day replay kept 3 of 688 retrieved. The
+        per-entity construction remains only for a structure without groups.
+        """
+        generic_terms = cls._GENERIC_TERMS
+        declared = []
+        for group in query_structure.get("concept_groups") or []:
+            if not isinstance(group, list):
+                continue
+            forms = {
+                cls._normalized_evidence_text(term)
+                for term in group
+                if isinstance(term, str)
+            } - generic_terms - {""}
+            if forms:
+                declared.append(forms)
+        if declared:
+            return declared
+
         pico = query_structure.get("pico_entities") or {}
         synonyms = query_structure.get("synonyms") or {}
-        generic_terms = {"adult", "adults", "human", "humans", "patient", "patients"}
         synonym_lookup = {
             cls._normalized_evidence_text(key): value
             for key, value in synonyms.items()
@@ -341,6 +367,17 @@ class TaskService:
                     if candidate and candidate not in generic_terms:
                         candidates.add(candidate)
                 required_groups.append(candidates)
+        return required_groups
+
+    @classmethod
+    def _filter_relevant_records(
+        cls,
+        records: List,
+        query_structure: Dict,
+        raw_query: str = "",
+    ) -> List:
+        """Keep records that address every required concept group."""
+        required_groups = cls._required_concept_groups(query_structure)
 
         relevant = []
         normalized_query = cls._normalized_evidence_text(raw_query)
@@ -370,19 +407,39 @@ class TaskService:
         )
         return relevant
 
+    @classmethod
+    def _describe_concept_groups(cls, query_structure: Dict) -> str:
+        """「a / b / c」 × 「d / e」: what the relevance filter required."""
+        return " × ".join(
+            "「" + " / ".join(sorted(group)[:4]) + "」"
+            for group in cls._required_concept_groups(query_structure)
+        )
+
     def _diagnose_search_results(
         self,
         records: List,
         sub_queries: List[str],
-        query_structure: Dict
+        query_structure: Dict,
+        retrieved_count: Optional[int] = None,
     ) -> SearchDiagnostics:
         """
         检索结果诊断 - 分析检索质量并给出建议
+
+        ``retrieved_count`` is the de-duplicated count before the relevance
+        filter. A thin result then says whether retrieval found little or the
+        filter kept little: production reported "仅检索到2篇" for a brief whose
+        replay retrieved 688 records, of which the filter kept 3.
 
         Returns:
             SearchDiagnostics with status, diagnosis, and suggestions
         """
         count = len(records)
+        concepts = self._describe_concept_groups(query_structure)
+        filtered_from = (
+            f"检索到{retrieved_count}篇文献，按核心概念{concepts}筛选后"
+            if retrieved_count and concepts
+            else ""
+        )
         pico = query_structure.get('pico_entities', {})
 
         # 提取用户的核心检索词用于建议
@@ -408,26 +465,33 @@ class TaskService:
             return SearchDiagnostics(
                 status="no_results",
                 retrieved_count=0,
-                diagnosis="未检索到相关文献。可能原因：检索词过于具体、术语拼写有误、或该领域文献极少。",
+                diagnosis=(
+                    f"{filtered_from}没有文献同时涉及全部核心概念，无法生成分析。"
+                    if filtered_from
+                    else "未检索到相关文献。可能原因：检索词过于具体、术语拼写有误、或该领域文献极少。"
+                ),
                 suggestions=suggestions,
                 can_proceed=False
             )
 
-        elif count < 5:
+        elif count < LOW_RECALL_BELOW:
             suggestions = [
-                f"当前仅检索到{count}篇文献，分析结果可能不够全面",
+                f"当前仅纳入{count}篇文献，分析结果可能不够全面",
                 "建议放宽检索条件以获取更多文献",
             ]
             if o_terms:
                 suggestions.append(f"尝试去掉结局指标限定（{', '.join(o_terms[:2])}）")
-            suggestions.append("可以继续分析，但报告将标注'证据基础薄弱'")
+            suggestions.append("分析照常进行，报告开头标注'证据基础薄弱'")
 
             return SearchDiagnostics(
                 status="low_recall",
                 retrieved_count=count,
-                diagnosis=f"仅检索到{count}篇相关文献，证据基础较薄弱。系统将执行简化分析。",
+                diagnosis=(
+                    f"{filtered_from or ''}仅纳入{count}篇相关文献，证据基础薄弱；"
+                    f"报告基于这{count}篇生成，并在开头标注证据不足。"
+                ),
                 suggestions=suggestions,
-                can_proceed=True  # 允许继续但会降级
+                can_proceed=True
             )
 
         elif count < 20:
@@ -472,7 +536,15 @@ class TaskService:
             planned_modules=execution_plan.enabled_modules,
             module_descriptions=module_descriptions,
             estimated_time_seconds=execution_plan.resource_estimate.get("estimated_time_seconds", 300),
-            can_proceed=evidence_stats.evidence_count >= 5,
+            # The diagnosis is the one decision. This used to be
+            # evidence_count >= 5, which failed every 1-4-record job the
+            # diagnosis had just cleared for a thin-evidence report, so the job
+            # ended with no report and a note saying analysis would continue.
+            can_proceed=(
+                search_diagnostics.can_proceed
+                if search_diagnostics is not None
+                else evidence_stats.evidence_count > 0
+            ),
             search_diagnostics=search_diagnostics
         )
 
