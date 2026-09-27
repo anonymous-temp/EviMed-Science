@@ -871,6 +871,51 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(request.call_args.kwargs.get("credential_profile"), "semantic-scholar")
         self.assertEqual(result["data"]["credentialMode"], "managed")
 
+    def test_the_gateway_says_which_tier_served_semantic_scholar_and_the_result_repeats_it(self):
+        # With no key configured the gateway sends the request to the anonymous
+        # public tier (audit I1-3) and says so in `x-evimed-credential-mode`;
+        # the result used to report `managed` for every gateway call.
+        def answered(mode):
+            class Headers:
+                @staticmethod
+                def get_content_type():
+                    return "application/json"
+
+                @staticmethod
+                def get(name, default=None):
+                    return mode if name.lower() == "x-evimed-credential-mode" else default
+
+            class Response:
+                headers = Headers()
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+                @staticmethod
+                def read(_limit):
+                    return b'{"data": [{"paperId": "paper-1", "title": "Observed paper"}]}'
+
+            return Response()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            token_file = pathlib.Path(temporary) / "model-gateway.token"
+            token_file.write_text("runtime-token\n", encoding="utf-8")
+            environment = {
+                "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
+                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token_file),
+            }
+            with mock.patch.dict(os.environ, environment, clear=True):
+                for mode, expected in (("anonymous", "keyless-public"), ("managed", "managed"), (None, "managed")):
+                    with self.subTest(mode=mode):
+                        with mock.patch.object(sources._OPENER, "open", return_value=answered(mode)):
+                            result = sources.biomedical_search({"source": "semantic-scholar", "query": "TP53", "limit": 1})
+                        self.assertEqual(result["data"]["credentialMode"], expected)
+                        self.assertEqual(len(result["data"]["items"]), 1)
+                        self.assertEqual(any("rate limits" in warning for warning in result["warnings"]), expected == "keyless-public")
+
     def test_other_credentialed_connectors_still_fail_closed(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             for profile in ("core", "umls", "omim", "addgene", "biogrid", "opengwas"):

@@ -996,6 +996,13 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         return;
       }
       let upstream;
+      /**
+       * How the credential profile was served, told back to the runtime so a
+       * connector can say which tier answered (`x-evimed-credential-mode`):
+       * `managed` with a key, `anonymous` on a keyless source's public tier.
+       * @type {"managed" | "anonymous" | null}
+       */
+      let credentialMode = null;
       try {
         const upstreamHeaders = {
           accept: request.accept.join(", "),
@@ -1023,6 +1030,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
               `No ${request.credentialProfile} credential is configured for this deployment or this account; one can be added under 设置 → 数据源.`,
             );
           }
+          credentialMode = anonymous ? "anonymous" : "managed";
           if (anonymous) {
             // The upstream's public tier: nothing injected, its shared rate
             // limit applies (a 429 comes back as rate_limited, by name).
@@ -1084,6 +1092,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         "content-type": contentType,
         "content-length": String(buffer.length),
         "cache-control": "no-store",
+        ...(credentialMode ? { "x-evimed-credential-mode": credentialMode } : {}),
       });
       res.end(buffer);
     } catch (error) {

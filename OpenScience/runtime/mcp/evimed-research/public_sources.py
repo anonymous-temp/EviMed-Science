@@ -345,12 +345,19 @@ def open_access_pdf_bytes(doi, max_bytes, timeout_seconds=60):
 
 def _get_json_value(
     url, allow_not_found=False, accepted=("application/json", "text/json"), method="GET", json_body=None,
-    credential_profile=None, strict_json=True,
+    credential_profile=None, strict_json=True, served=None,
 ):
+    """`served`, when a dict, receives how the gateway served a credential
+    profile (`credentialMode`: "managed" or "anonymous", its
+    `x-evimed-credential-mode` header), or nothing when it did not say."""
     try:
         with _open_remote(
             url, accepted, method=method, json_body=json_body, credential_profile=credential_profile,
         ) as response:
+            if served is not None:
+                mode = str(response.headers.get("x-evimed-credential-mode") or "").strip()
+                if mode in ("managed", "anonymous"):
+                    served["credentialMode"] = mode
             content_type = response.headers.get_content_type()
             if content_type not in accepted:
                 raise PublicSourceError(
@@ -3666,22 +3673,28 @@ def _keyless_public_active(profile):
     return _direct_credential(profile) is None
 
 
-def _credentialed_json(url, profile):
+def _credentialed_json(url, profile, served=None):
     if _keyless_public_active(profile):
         params = _keyless_public_params(profile)
         if params:
             url = "%s%s%s" % (url, "&" if "?" in url else "?", urllib.parse.urlencode(params))
         return _get_json_value(url)
-    return _get_json_value(url, credential_profile=profile)
+    return _get_json_value(url, credential_profile=profile, served=served)
 
 
 def _semantic_scholar(query, limit):
-    credential_mode = "keyless-public" if _keyless_public_active("semantic-scholar") else "managed"
     url = _url("https://api.semanticscholar.org/graph/v1", "paper/search", {
         "query": query, "limit": limit,
         "fields": "paperId,title,url,year,authors,externalIds,abstract,openAccessPdf",
     })
-    records = _list(_dict(_credentialed_json(url, "semantic-scholar")).get("data"))
+    served = {}
+    records = _list(_dict(_credentialed_json(url, "semantic-scholar", served)).get("data"))
+    # Through the gateway with no key configured, the request went to the
+    # anonymous public tier: the gateway says so, and so does the result —
+    # it used to report `managed` for every gateway call (audit I1-3).
+    credential_mode = ("keyless-public"
+                       if _keyless_public_active("semantic-scholar") or served.get("credentialMode") == "anonymous"
+                       else "managed")
     items, sources = [], []
     for value in records[:limit]:
         record = _dict(value)

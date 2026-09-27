@@ -537,8 +537,11 @@ test("a keyless source with no key goes upstream anonymously; a configured key i
     seen.length = 0;
     const answer = await gatewayRequest(base, request);
     assert.equal(answer.status, status);
-    if (status === 200) assert.deepEqual(seen, [{ url: request.url, key }]);
-    else {
+    if (status === 200) {
+      assert.deepEqual(seen, [{ url: request.url, key }]);
+      // The runtime is told which tier answered, so it can say so.
+      assert.equal(answer.headers.get("x-evimed-credential-mode"), key ? "managed" : "anonymous");
+    } else {
       assert.equal((await answer.json()).error.code, "public_source_semantic_scholar_credential_missing");
       assert.deepEqual(seen, []);
     }
