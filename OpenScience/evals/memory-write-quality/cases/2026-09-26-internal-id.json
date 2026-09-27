@@ -1,0 +1,20 @@
+{
+  "id": "2026-09-26-internal-id",
+  "class": "internal-id",
+  "observedIn": "production, account cdss-access, GEO project 信尔美; platform audit 2026-09-26 M §1.2 row 「平台词汇和运行记账不进记忆」 (one of 51 records carried an internal id; the audit quotes it truncated)",
+  "written": [
+    { "kind": "project_fact", "scope": "project", "verbatimFragment": "ge_c4de7529" }
+  ],
+  "whyItIsWrong": "An id the GEO module mints for its own rows means nothing to the researcher and nothing to a later question; it is the run's bookkeeping, stored as knowledge.",
+  "expected": "No written value or summary carries the internal id; the fact it points at is stated in research terms, or nothing is written.",
+  "decidable": true,
+  "replay": {
+    "reconstructed": true,
+    "projectId": "geo-eval",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "第 1 批的纠错材料写到哪一步了？" },
+      { "id": "a1", "role": "assistant", "text": "纠错材料 ge_c4de7529 已写成草稿：BMI 门槛与妊娠前停药时间两处说法需要按说明书更正。" }
+    ]
+  },
+  "expect": { "noTextContains": ["ge_c4de7529"] }
+}

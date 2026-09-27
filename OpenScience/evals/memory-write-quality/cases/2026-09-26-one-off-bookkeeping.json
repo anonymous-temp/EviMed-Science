@@ -1,0 +1,23 @@
+{
+  "id": "2026-09-26-one-off-bookkeeping",
+  "class": "one-off-bookkeeping",
+  "observedIn": "production, account cdss-access (GEO project 信尔美 and 疳证 Meta); platform audit 2026-09-26 M §1.2 row 「平台词汇和运行记账不进记忆」",
+  "written": [
+    { "kind": "project_fact", "scope": "project", "summary": "本轮检索日期为 2026-09-22" },
+    { "kind": "project_fact", "scope": "project", "summary": "Kimi 哺乳期错误复测快照已更新" },
+    { "kind": "project_fact", "scope": "project", "summary": "安全状态均为 clear" },
+    { "kind": "project_fact", "scope": "project", "summary": "Cochrane 子集…属工具能力缺口" }
+  ],
+  "whyItIsWrong": "Each is true of one run on one day — when it searched, which snapshot it refreshed, what a status field read, what a tool could not do — and none is a standing condition of the research. Recalled next week they are stale, and the last one is the platform observing its own tools.",
+  "expected": "Nothing is written from these sentences; what a run did on a day belongs to that run's own record, not to memory.",
+  "decidable": false,
+  "replay": {
+    "reconstructed": true,
+    "projectId": "geo-eval",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "复测一下各家对哺乳期用药的回答。" },
+      { "id": "a1", "role": "assistant", "text": "本轮检索日期为 2026-09-22。Kimi 哺乳期错误复测快照已更新，五篇的安全状态均为 clear。Cochrane 子集这次检索不到，属工具能力缺口。" }
+    ]
+  },
+  "judge": "Is any written record a fact about one run (its date, its snapshot, a status value, a tool's limits) rather than about the research? Any such record is a failure."
+}

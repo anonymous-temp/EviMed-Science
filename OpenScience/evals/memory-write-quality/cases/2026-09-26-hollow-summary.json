@@ -1,0 +1,22 @@
+{
+  "id": "2026-09-26-hollow-summary",
+  "class": "hollow-summary",
+  "observedIn": "production, account cdss-access, GEO project 信尔美; platform audit 2026-09-26 M §1.2 row 「摘要要有内容」, M-shots/text-11-search-open-geo-product.txt",
+  "written": [
+    { "kind": "project_fact", "scope": "project", "summary": "GLORY-1 试验的注册号、剂量、人群与文献标识。" },
+    { "kind": "project_fact", "scope": "project", "summary": "GLORY-2 试验的剂量、人群与文献标识。" },
+    { "kind": "project_fact", "scope": "project", "summary": "第 1 批五篇的层级、答句与安全状态。" }
+  ],
+  "whyItIsWrong": "The summary is the one sentence the memory page shows and recall hands the model, and these name which fields the value holds instead of stating any of them; the reader learns nothing from the row.",
+  "expected": "Each summary states the fact itself (the registration number, the dose, the population), or the record is not written.",
+  "decidable": false,
+  "replay": {
+    "reconstructed": true,
+    "projectId": "geo-eval",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "把 GLORY-1 的关键信息整理一下，后面写文章要用。" },
+      { "id": "a1", "role": "assistant", "text": "GLORY-1 是玛仕度肽在中国成人超重或肥胖人群中的 3 期试验；注册号以试验登记页为准（此处为评测占位：NCT-PLACEHOLDER-1）；剂量为每周一次皮下注射，分两个剂量组；人群为 BMI≥28，或 BMI≥24 且伴至少一种合并症的成人。" }
+    ]
+  },
+  "judge": "Does each written summary state a fact a reader can use without opening the row? A list of field names (「注册号、剂量、人群与文献标识」) is a no."
+}

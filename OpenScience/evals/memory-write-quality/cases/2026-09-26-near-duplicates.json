@@ -1,0 +1,23 @@
+{
+  "id": "2026-09-26-near-duplicates",
+  "class": "near-duplicates",
+  "observedIn": "production, account cdss-access, GEO project 信尔美; platform audit 2026-09-26 M §1.2 row 「重复」, M-shots/text-11-search-open-geo-product.txt",
+  "written": [
+    { "kind": "follow_up", "scope": "project", "key": "project.geo.label_verification_basis" },
+    { "kind": "follow_up", "scope": "project", "key": "project.geo.label_official_original_replacement" },
+    { "kind": "follow_up", "scope": "project", "key": "project.geo.label_verification_source", "summary": "说明书核对口径为转载页，待官方原件替换引用并升版。" }
+  ],
+  "whyItIsWrong": "Three keys hold one fact — the label was checked against a reprint and the official original is still to come — so it is shown three times and counted as three observations of nothing.",
+  "expected": "One record holds the fact; a restatement lands on the existing key.",
+  "decidable": true,
+  "replay": {
+    "reconstructed": true,
+    "projectId": "geo-eval",
+    "existingKeys": [{ "scope": "project", "kind": "follow_up", "key": "project.geo.label_verification_basis" }],
+    "messages": [
+      { "id": "u1", "role": "user", "text": "说明书那一块现在是什么情况？" },
+      { "id": "a1", "role": "assistant", "text": "说明书目前核对的是转载页，不是官方原件。等拿到官方原件，要替换引用并把文章升版。引用来源也要改成官方原件。" }
+    ]
+  },
+  "expect": { "atMostRecords": 1 }
+}

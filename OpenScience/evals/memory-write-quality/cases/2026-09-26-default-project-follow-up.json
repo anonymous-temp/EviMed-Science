@@ -1,0 +1,29 @@
+{
+  "id": "2026-09-26-default-project-follow-up",
+  "class": "default-project-follow-up",
+  "observedIn": "production, account cdss-access, project default (「我的研究」); platform audit 2026-09-26 M §1.2 row 「默认项目不写项目类事实」, M-shots/text-02-项目.txt",
+  "written": [
+    { "kind": "follow_up", "scope": "project", "scopeId": "default", "summary": "待设计的注册双盲试验方案：以经验证量表评估症状学终点，附12个月安全性随访，MACE终点需数千例。" },
+    { "kind": "follow_up", "scope": "project", "scopeId": "default", "summary": "待开展的制剂可比性研究方向：以国家药品标准为基线建立批次间指纹图谱与临床结局关联样本库，需先解决合规问题。" },
+    { "kind": "follow_up", "scope": "project", "scopeId": "default", "summary": "待开展的方法学研究方向：分离盲法缺失与效应量膨胀的关系，比较已注册与未注册CDP试验的效应。" },
+    { "kind": "follow_up", "scope": "project", "scopeId": "default", "summary": "后续治愈研究终点设计需加入 HBsAg 来源特异性标志物。" },
+    { "kind": "follow_up", "scope": "project", "scopeId": "default", "summary": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。" }
+  ],
+  "whyItIsWrong": "The catch-all project has no single subject, and each row is a direction the assistant floated in one answer, now filed as the researcher's own to-do list under 「我的研究」.",
+  "expected": "No project_fact, decision or follow_up is written in the catch-all project, in any scope.",
+  "decidable": true,
+  "replay": {
+    "reconstructed": true,
+    "projectId": "default",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "CRMA-1001 的证据链还缺什么？" },
+      { "id": "a1", "role": "assistant", "text": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。后续治愈研究终点设计需加入 HBsAg 来源特异性标志物。" }
+    ],
+    "incidentCandidates": [
+      { "scope": "project", "kind": "follow_up", "key": "project.follow_up.crma_offtreatment", "origin": "system",
+        "value": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。", "summary": "CRMA-1001 证据链缺少停药后随访数据，是待补的断点。",
+        "sourceRef": "a1", "evidenceQuote": "CRMA-1001 证据链缺少停药后随访数据" }
+    ]
+  },
+  "expect": { "noRecordOfKinds": ["project_fact", "decision", "follow_up"] }
+}

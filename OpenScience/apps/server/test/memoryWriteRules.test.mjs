@@ -111,6 +111,53 @@ test("the catch-all project never gets a fact about itself, and a real project s
   assert.equal(inNamed.extracted, 1);
 });
 
+// Production, 2026-09-26 (audit M-9): 「我的研究」 held five follow_up rows,
+// each a research direction the assistant had floated in one answer, filed as
+// the researcher's to-do list. `evals/memory-write-quality` keeps the verbatims.
+test("the catch-all project gets no decision and no follow-up either, in any scope, and a real project still does", async () => {
+  const candidates = [
+    { scope: "project", kind: "follow_up", key: "project.follow_up.methods_study", origin: "system",
+      value: "待开展的方法学研究方向：分离盲法缺失与效应量膨胀的关系", summary: "待开展的方法学研究方向" },
+    { scope: "session", kind: "follow_up", key: "session.follow_up.cure_endpoint", origin: "system",
+      value: "后续治愈研究终点设计需加入 HBsAg 来源特异性标志物", summary: "治愈终点待补标志物" },
+    { scope: "project", kind: "decision", key: "project.decision.design", origin: "system",
+      value: "决定采用注册双盲试验设计", summary: "试验设计" },
+  ];
+  const conversation = [message("u1", "CRMA-1001 的证据链还缺什么？"), message("a1", "待开展的方法学研究方向：分离盲法缺失与效应量膨胀的关系。", "assistant")];
+  /** Every candidate cites the assistant's reply, the way the five rows did. */
+  const assistantCited = (store) => new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const sources = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
+      const reply = sources.find((source) => source.role === "assistant");
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        candidates: candidates.map((candidate) => ({ importance: 0.6, sensitive: false,
+          sourceRef: reply.sourceRef, evidenceQuote: reply.text.slice(0, 10), ...candidate })),
+      }) } }] });
+    },
+  });
+
+  const inDefault = await assistantCited(new StoreDouble()).recordRun(project("default"), run(), conversation);
+  assert.equal(inDefault.extracted, 0);
+  assert.equal(inDefault.rejectionReasons.filter((reason) => /catch-all project, which has no single subject/.test(reason)).length, 3,
+    inDefault.rejectionReasons.join(" | "));
+
+  const inNamed = await assistantCited(new StoreDouble()).recordRun(project("crma-1001"), run(), conversation);
+  assert.equal(inNamed.extracted, 3, inNamed.rejectionReasons.join(" | "));
+});
+
+test("the extraction instructions say what the catch-all project is, so the model is not refused blind", async () => {
+  /** @type {string} */ let instructions = "";
+  const intelligence = new MemoryIntelligence(config, new StoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      instructions = JSON.parse(String(init.body)).messages[0].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  await intelligence.recordRun(project("default"), run(), [message("u1", "房颤抗凝该怎么选？")]);
+  assert.match(instructions, /"default" is the catch-all/);
+  assert.match(instructions, /no project_fact, decision or follow_up there/);
+});
+
 test("one conversation leaves one 「做过的研究」 summary, keyed by the conversation", async () => {
   const store = new StoreDouble();
   const intelligence = extractor(store, []);

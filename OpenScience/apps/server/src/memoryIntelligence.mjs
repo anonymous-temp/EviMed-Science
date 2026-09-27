@@ -338,6 +338,17 @@ function candidateScopeId(candidate, project, run) {
  */
 const CATCH_ALL_PROJECT_ID = "default";
 
+/**
+ * The kinds that are about one project's subject, which the catch-all project
+ * does not have. `project_fact` alone was refused there until 2026-09-26, and
+ * the account's 「我的研究」 then held five `follow_up` rows — research
+ * directions the assistant had floated in one answer, filed as the
+ * researcher's own to-do list (audit, M-9). A decision or an open question
+ * belongs to a subject exactly as a fact does, and the conversation that
+ * raised it can still say so in its own words next time.
+ */
+const PROJECT_SUBJECT_KINDS = new Set(["project_fact", "decision", "follow_up"]);
+
 function validateCandidate(candidate, sourceMap, project, run, rejections = null) {
   const reject = (reason) => {
     if (rejections) rejections.push(reason);
@@ -403,8 +414,10 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   // the machinery stays with the extraction instructions (principle 5).
   const bookkeeping = runBookkeepingIn(`${value}\n${summary}`);
   if (bookkeeping.length) return reject(`"${key}" is the run's own bookkeeping (${bookkeeping.slice(0, 3).join(", ")})`);
-  if (kind === "project_fact" && candidateScopeId({ scope }, project, run) === CATCH_ALL_PROJECT_ID) {
-    return reject(`"${key}" is a fact about the catch-all project, which has no single subject`);
+  // Any scope: a session-scoped follow-up in the catch-all project is the same
+  // to-do with a narrower address, and a user-scoped one would be worse.
+  if (PROJECT_SUBJECT_KINDS.has(kind) && project?.id === CATCH_ALL_PROJECT_ID) {
+    return reject(`"${key}" is a ${kind} about the catch-all project, which has no single subject`);
   }
   const sensitive = Boolean(candidate.sensitive) || sensitivePattern.test(`${value}\n${summary}\n${quote}`);
   const checkpoint = checkpointReason(kind, `${value}\n${summary}`);
@@ -1161,7 +1174,7 @@ export class MemoryIntelligence {
                 // so here is the difference between a candidate being stored and
                 // being silently dropped for a mismatch the model could not see.
                 "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on, preference is how they want work done, behavior is how they habitually work.",
-                "project_fact and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one; it must cite the user message that said so.",
+                "project_fact and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". The project whose id is \"default\" is the catch-all every account starts in and has no single subject: record no project_fact, decision or follow_up there, and never file a direction the assistant proposed as the researcher's own to-do. correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one; it must cite the user message that said so.",
                 "Allowed origins: explicit, inferred, system. explicit and inferred must cite a user message; system must cite an assistant or tool source and is only for project facts, decisions and follow-ups.",
                 // The write-side half of the 2026-09-20 ruling. 「项目档案」 held
                 // sixteen rows on production and all sixteen were the report's
