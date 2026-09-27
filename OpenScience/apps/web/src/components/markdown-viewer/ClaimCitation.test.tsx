@@ -17,7 +17,7 @@ describe("a report sentence opens what it rests on", () => {
     render(<MarkdownViewer variant="document" claims={claims}>{report}</MarkdownViewer>);
     // A citation that points at a claim the matrix does not hold is itself
     // something to check, so the sentence is flagged.
-    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条主张，其中有未核对上的引文）" });
+    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条结论，其中有未核对上的引文）" });
     await userEvent.click(citation);
     expect(await screen.findByText("MIMIC-IV 是单一机构常规诊疗数据的公开衍生数据库。")).toBeInTheDocument();
     expect(screen.getByText("“In this paper we describe the public release of MIMIC-IV”")).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe("a report sentence opens what it rests on", () => {
     expect(source).toHaveAttribute("href", "https://europepmc.org/articles/PMC9810617");
     // The checker's bookkeeping — access level, source kind, claim id — stays off the popover.
     expect(screen.queryByText(/全文|直接证据|把握度/)).toBeNull();
-    expect(screen.getByText("证据矩阵里没有这条主张（CLM-404）。")).toBeInTheDocument();
+    expect(screen.getByText("证据矩阵里没有这条结论（CLM-404）。")).toBeInTheDocument();
   });
 
   it("marks the sentence whose quotation was not found, and says what was found for each claim", async () => {
@@ -33,7 +33,7 @@ describe("a report sentence opens what it rests on", () => {
     // claim by claim instead (2026-09-17).
     const statuses = new Map([["CLM-001", "verified"], ["CLM-404", "quote_not_found"]]);
     render(<MarkdownViewer variant="document" claims={claims} claimStatuses={statuses}>{report}</MarkdownViewer>);
-    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条主张，其中有未核对上的引文）" });
+    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条结论，其中有未核对上的引文）" });
     expect(citation).toHaveTextContent("依据 ⚠");
     await userEvent.click(citation);
     expect(await screen.findByLabelText("引文已在保存的原文中核对")).toHaveTextContent("✓");
@@ -41,7 +41,7 @@ describe("a report sentence opens what it rests on", () => {
 
   it("a sentence whose every quotation was found is not flagged, and an unknown status is never read as verified", async () => {
     render(<MarkdownViewer variant="document" claims={claims} claimStatuses={new Map([["CLM-001", "some_future_status"]])}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
-    const citation = screen.getByRole("button", { name: "查看这句话的依据（1 条主张）" });
+    const citation = screen.getByRole("button", { name: "查看这句话的依据（1 条结论）" });
     expect(citation).toHaveTextContent(/^依据$/);
     await userEvent.click(citation);
     expect(await screen.findByText("MIMIC-IV 是单一机构常规诊疗数据的公开衍生数据库。")).toBeInTheDocument();

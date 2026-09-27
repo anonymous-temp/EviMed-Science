@@ -33,15 +33,18 @@ const STYLES: Record<Variant, Record<string, string>> = {
     td: "border border-border px-3 py-1.5",
     img: "my-2 max-w-full rounded-input",
   },
-  // A delivered report (appendix D §8.4). It used to be warm editorial paper
-  // with a terracotta accent and fixed hexes — the old brand, frozen into the
-  // one surface researchers read longest, and white in dark mode. It reads
-  // from the tokens now: prose 16/1.75 in the shared sans (Chinese body text
-  // is never serif — Windows falls to bitmap SimSun), serif only on the two
-  // top headings, links in the link colour so a citation never looks like
-  // the primary button, and no colour for decoration at all — hierarchy is
-  // type and space. The measure (≤ 680 px, ~42 characters) is the caller's.
-  // A long URL or identifier breaks rather than widening a phone's page.
+  // A delivered report (spec §21.10). It used to be warm editorial paper with
+  // a terracotta accent and fixed hexes — the old brand, frozen into the one
+  // surface researchers read longest, and white in dark mode. It reads from
+  // the tokens now: prose 16/1.75 in the shared sans (Chinese body text is
+  // never serif — Windows falls to bitmap SimSun); the serif on the document
+  // title alone, through the `doc-title` rung that carries its own family
+  // (spec §3.4 — this comment used to say "the two top headings" while
+  // neither wore it, audit F-G8); sections at 18 / 600, sub-sections 16 and
+  // 14; links in the link colour so a citation never looks like the primary
+  // button, and no colour for decoration — hierarchy is type and space. The
+  // measure (≤ 640 px, 40 characters) is the caller's. A long URL or
+  // identifier breaks rather than widening a phone's page.
   document: {
     root: "break-words text-body text-text [text-wrap:pretty] selection:bg-accent-soft",
     p: "my-4 first:mt-0 last:mb-0",
@@ -50,10 +53,10 @@ const STYLES: Record<Variant, Record<string, string>> = {
     pre: "my-5 overflow-x-auto rounded-input bg-surface-2 p-4 font-mono text-ui leading-6 ring-1 ring-border [&_code]:bg-transparent [&_code]:p-0",
     ul: "my-4 ml-5 list-disc space-y-2 marker:text-muted",
     ol: "my-4 ml-5 list-decimal space-y-2 marker:text-muted",
-    h1: "mb-4 mt-10 text-display font-semibold text-text [text-wrap:balance] first:mt-0",
-    h2: "mb-3 mt-10 text-title font-semibold text-text [text-wrap:balance] first:mt-0",
-    h3: "mb-2 mt-8 text-body font-semibold text-text first:mt-0",
-    h4: "mb-2 mt-6 text-ui font-semibold text-muted first:mt-0",
+    h1: "mb-4 mt-10 text-doc-title font-semibold text-text [text-wrap:balance] first:mt-0",
+    h2: "mb-2 mt-8 text-section font-semibold text-text [text-wrap:balance] first:mt-0",
+    h3: "mb-2 mt-6 text-body font-semibold text-text first:mt-0",
+    h4: "mb-2 mt-6 text-ui font-semibold text-text-2 first:mt-0",
     blockquote: "my-5 border-l-[3px] border-strong pl-4 text-muted [&_p]:my-1.5",
     hr: "my-10 border-border",
     // Below `md` a table scrolls sideways in its own box with its first column

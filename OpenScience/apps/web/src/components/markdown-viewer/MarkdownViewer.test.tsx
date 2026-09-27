@@ -13,6 +13,23 @@ beforeEach(() => {
   });
 });
 
+// Spec §3.4 and §21.10, audit F-G8: a report's title is the one place in it
+// set in the serif — through the `doc-title` rung, which carries the family —
+// and its sections are 18 / 600 in the sans.
+describe("MarkdownViewer report headings", () => {
+  it("sets the document title on the serif rung and the sections in the sans", () => {
+    render(<MarkdownViewer variant="document">{"# 阿司匹林一级预防\n\n## 主要结果\n\n### 亚组\n\n#### 说明"}</MarkdownViewer>);
+    const title = screen.getByRole("heading", { level: 1, name: "阿司匹林一级预防" });
+    expect(title).toHaveClass("text-doc-title", "font-semibold");
+    expect(screen.getByRole("heading", { level: 2 })).toHaveClass("text-section", "font-semibold");
+    expect(screen.getByRole("heading", { level: 3 })).toHaveClass("text-body");
+    expect(screen.getByRole("heading", { level: 4 })).toHaveClass("text-ui", "text-text-2");
+    // No heading names the serif itself: the rung is the only way in.
+    for (const heading of screen.getAllByRole("heading")) expect(heading.className).not.toMatch(/font-serif/);
+    for (const level of [2, 3, 4]) expect(screen.getByRole("heading", { level }).className).not.toMatch(/text-(doc-title|wordmark|hero)/);
+  });
+});
+
 describe("MarkdownViewer code blocks", () => {
   it("highlights a fenced block whose language highlight.js knows", () => {
     const { container } = render(

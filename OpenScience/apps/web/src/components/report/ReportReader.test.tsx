@@ -80,9 +80,9 @@ describe("ReportReader", () => {
 
   it("marks each sentence ✓ or ⚠, and says which quotation to check", async () => {
     renderReader();
-    const ok = await screen.findByRole("button", { name: "查看这句话的依据（1 条主张，引文均已核对）" });
+    const ok = await screen.findByRole("button", { name: "查看这句话的依据（1 条结论，引文均已核对）" });
     expect(ok).toHaveTextContent("依据 ✓");
-    const check = screen.getByRole("button", { name: "查看这句话的依据（1 条主张，其中有未核对上的引文）" });
+    const check = screen.getByRole("button", { name: "查看这句话的依据（1 条结论，其中有未核对上的引文）" });
     expect(check).toHaveTextContent("依据 ⚠");
     await userEvent.click(check);
     const guidance = await screen.findByText(/这段引文没有在保存的原文中找到：请打开原文核对措辞与数字。/);

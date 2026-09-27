@@ -122,7 +122,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
       {ids.map((id) => {
         const claim = claims.get(id);
         if (!claim) {
-          return <li key={id} className="text-ui text-verify-pending">证据矩阵里没有这条主张（{id}）。</li>;
+          return <li key={id} className="text-ui text-verify-pending">证据矩阵里没有这条结论（{id}）。</li>;
         }
         const sources = claimSources(claim);
         const verified = reading?.verified?.get(id);
@@ -200,7 +200,7 @@ export function ClaimCitation({ ids, claims, statuses, reading }: {
     && ids.some((id) => statusOf(id) === "verified");
   const safety = ids.some((id) => reading?.safety?.has(id));
   const mark = attention ? "依据 ⚠" : allVerified ? "依据 ✓" : "依据";
-  const label = `查看这句话的依据（${ids.length} 条主张${attention ? "，其中有未核对上的引文" : allVerified ? "，引文均已核对" : ""}${safety ? "，涉及临床安全" : ""}）`;
+  const label = `查看这句话的依据（${ids.length} 条结论${attention ? "，其中有未核对上的引文" : allVerified ? "，引文均已核对" : ""}${safety ? "，涉及临床安全" : ""}）`;
   const tone = attention ? "text-verify-pending" : allVerified ? "text-verify-ok" : "text-link";
 
   if (reading?.print) {
