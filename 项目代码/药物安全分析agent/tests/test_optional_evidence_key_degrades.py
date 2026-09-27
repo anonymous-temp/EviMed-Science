@@ -24,15 +24,16 @@ def test_a_readable_key_file_still_enables_enrichment(tmp_path: Path) -> None:
 
 
 def test_an_insecure_key_file_is_still_refused(tmp_path: Path) -> None:
-    # A group-readable credential is an operator error, not a missing optional
-    # feature, so it must keep failing loudly.
+    # A credential others can read is an operator error, not a missing
+    # optional feature, so it must keep failing loudly. (Group read is the
+    # host's shared-key arrangement and is allowed.)
     key_file = tmp_path / "evimed.api-key"
     key_file.write_text("unsafe-test-key\n", encoding="utf-8")
-    key_file.chmod(0o640)
+    key_file.chmod(0o644)
     settings = Settings(evimed_evidence_search_key_file=key_file)
     try:
         settings.resolved_evimed_evidence_search_key
     except ValueError as error:
-        assert "owner-only" in str(error)
+        assert "readable by others" in str(error)
     else:
         raise AssertionError("an insecure credential file must not be accepted")

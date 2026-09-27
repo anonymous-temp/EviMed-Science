@@ -38,16 +38,33 @@ def test_client_loads_api_key_from_owner_only_file(tmp_path):
 
 
 @pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX permission contract")
-def test_client_rejects_group_readable_api_key_file(tmp_path):
+def test_client_rejects_a_key_file_others_can_read(tmp_path):
     secret = tmp_path / "evimed.api-key"
     secret.write_text("unsafe-test-key\n", encoding="utf-8")
-    secret.chmod(0o640)
-    settings = Settings(
-        _env_file=None,
-        evimed_evidence_search_url=BASE,
-        evimed_evidence_search_key_file=secret,
-    )
-    with pytest.raises(ValueError, match="owner-only"):
+    for mode in (0o644, 0o604, 0o660):
+        secret.chmod(mode)
+        settings = Settings(
+            _env_file=None,
+            evimed_evidence_search_url=BASE,
+            evimed_evidence_search_key_file=secret,
+        )
+        with pytest.raises(ValueError, match="readable by others or writable by its group"):
+            EviMedEvidenceClient.from_settings(settings)
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX permission contract")
+def test_client_accepts_the_hosts_group_readable_shared_key(tmp_path):
+    # The production key is 0440: shared with the knowledge-source plugin by
+    # group, as the control plane allows. Owner-only refused every job.
+    secret = tmp_path / "evimed.api-key"
+    secret.write_text("shared-test-key\n", encoding="utf-8")
+    for mode in (0o440, 0o640, 0o400, 0o600):
+        secret.chmod(mode)
+        settings = Settings(
+            _env_file=None,
+            evimed_evidence_search_url=BASE,
+            evimed_evidence_search_key_file=secret,
+        )
         EviMedEvidenceClient.from_settings(settings)
 
 

@@ -152,7 +152,14 @@ class Settings(BaseSettings):
 
 
 def _read_private_secret(path: Path, *, max_bytes: int = 4096) -> str:
-    """Read one owner-only credential from a regular, non-symlink file."""
+    """Read one private credential from a regular, non-symlink file.
+
+    Group read is allowed and nothing else: on the production host this key
+    file is shared with the knowledge-source plugin through its group (0440),
+    exactly as the control plane allows for it (`allowGroupRead`, 0o037). An
+    owner-only rule here refused every drug-safety job on 2026-09-27 with
+    "must use owner-only permissions" while the web read the same file.
+    """
     candidate = path.expanduser()
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     descriptor: int | None = None
@@ -163,8 +170,8 @@ def _read_private_secret(path: Path, *, max_bytes: int = 4096) -> str:
             raise ValueError("EviMed evidence API key file must be a regular file")
         if metadata.st_size <= 0 or metadata.st_size > max_bytes:
             raise ValueError("EviMed evidence API key file has an invalid size")
-        if os.name != "nt" and metadata.st_mode & 0o077:
-            raise ValueError("EviMed evidence API key file must use owner-only permissions")
+        if os.name != "nt" and metadata.st_mode & 0o037:
+            raise ValueError("EviMed evidence API key file must not be readable by others or writable by its group")
         payload = os.read(descriptor, max_bytes + 1)
     except OSError as error:
         raise CredentialFileUnavailable("EviMed evidence API key file is unavailable") from error
