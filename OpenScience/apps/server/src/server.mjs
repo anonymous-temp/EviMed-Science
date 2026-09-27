@@ -2830,6 +2830,12 @@ export function createWebApiApp(overrides = {}) {
                 companionSkills: selected.companionSkills,
               },
             });
+            // What the episode was handed, in its ledger entry as a chat run's
+            // is (2026-09-26 audit, M-8): the memory file and the usage
+            // counter proved the recall happened while the ledger said nothing.
+            if (prepared.memories.length > 0) {
+              await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
+            }
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
@@ -3123,6 +3129,10 @@ export function createWebApiApp(overrides = {}) {
           routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
             skill: selected.skill, companionSkills: selected.companionSkills },
         });
+        // Recorded like a chat run's recall, for the reason the episode's is.
+        if (prepared.memories.length > 0) {
+          await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
+        }
         const marker = interactive ? null : issueModelGatewayBudgetMarker({
           secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id, runId: dispatchId, ...budget.scope,
         });

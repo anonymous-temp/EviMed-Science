@@ -1789,6 +1789,57 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
     dispatchId: "geo-x-a1", reason: "geo:x", brief }), { status: 503, code: "geo_unavailable" });
 });
 
+// The 2026-09-26 audit (M-8): a GEO run and an autopilot episode recall
+// memories at dispatch, exactly as a chat run does, and only the chat paths
+// wrote what was recalled into the run ledger. `memory.md` and the usage
+// counter proved the recall happened; the ledger — the one record a support
+// question or the 「依据」 panel reads — said nothing.
+test("a GEO run and an autopilot episode record what they recalled in the run ledger, as a chat run does", async (t) => {
+  const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID], autopilotEnabled: true,
+    modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  await app.geo.worker.close();
+  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  const recalled = [{ id: "record:pref-1", content: "结论先行，再列证据。", memoryType: "structured", kind: "preference", scope: "user",
+    updatedAt: "2026-09-25T00:00:00Z" }];
+  app.memorySubstrate.recall = async () => recalled;
+  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
+  app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-recall", kernel: "dsh" });
+  app.runtimeManager.dispatchPrompt = async () => ({ accepted: true });
+  app.autopilotService.markEpisodeDispatched = async () => ({});
+  /** @type {{ runId: string, patch: any }[]} */
+  const learned = [];
+  app.agentRuns.recordLearning = async (/** @type {any} */ _project, /** @type {string} */ runId, /** @type {any} */ patch) => {
+    learned.push({ runId, patch });
+    return null;
+  };
+  let runs = 0;
+  app.agentRuns.dispatch = async (/** @type {any} */ _scoped, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
+    runs += 1;
+    await sendPrompt({ sessionId: input.sessionId }, { id: `run-recall-${runs}`, kernelRequestIds: [] });
+    return { id: `run-recall-${runs}`, status: "running" };
+  };
+
+  await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
+    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 1 步（证据）" });
+  await app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
+    episodeId: EPISODE_ID, dispatchId: "episode-recall", taskType: "literature-sentinel", budgetCny: 2,
+    prompt: "追踪心衰领域的新证据。" });
+
+  const expected = [{ id: "record:pref-1", type: "structured", kind: "preference", scope: "user", updatedAt: "2026-09-25T00:00:00Z" }];
+  assert.deepEqual(learned, [
+    { runId: "run-recall-1", patch: { recalledMemories: expected } },
+    { runId: "run-recall-2", patch: { recalledMemories: expected } },
+  ]);
+
+  // Nothing recalled, nothing written: an empty list is not a recall.
+  app.memorySubstrate.recall = async () => [];
+  learned.length = 0;
+  await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
+    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 2 步" });
+  assert.deepEqual(learned, []);
+});
+
 test("循证 GEO off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const off = await composedApp(t);
