@@ -348,7 +348,8 @@ async function connectStage(base, imageId, args, marker) {
     const asked = Date.now();
     const dispatched = await jsonFetch(`${base}/api/agent-runs/dispatch`, {
       method: "POST", headers: { "Content-Type": "application/json", ...scoped },
-      body: JSON.stringify({ sessionId, dispatchId: `bringup-${marker}-answer`, text: "用两句话说明：阿司匹林抑制血小板聚集的机制是什么？" }),
+      // A bring-up is the platform checking itself: never a lesson, never an inbox item.
+      body: JSON.stringify({ sessionId, dispatchId: `bringup-${marker}-answer`, text: "用两句话说明：阿司匹林抑制血小板聚集的机制是什么？", automated: true }),
     }, 202);
     const answered = await waitForRun(base, dispatched?.data?.id, scoped, 10 * 60_000);
     fact(stage, "conversation", `${answered.status} in ${Math.round((Date.now() - asked) / 1000)} s${answered.errorCode ? ` (${answered.errorCode})` : ""}`);

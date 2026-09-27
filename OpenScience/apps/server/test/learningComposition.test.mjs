@@ -283,3 +283,45 @@ test("a terminal write in flight is waited for before the store it writes into g
   assert.ok(store > 0 && store < wait,
     "the run store must stop producing terminal hooks before the drain, or the drain proves nothing");
 });
+
+/* ---------------------------------------------------------- audit 2026-09-26 */
+
+test("a project deletion hands its lessons to the learning project and is audited where it outlives the project", () => {
+  // L-G1, L-G11: the method, its revisions and the waiting lessons went with
+  // the project; the audit line went into the directory being removed.
+  const handler = serverSource.slice(serverSource.indexOf('if (!action && req.method === "DELETE") {'),
+    serverSource.indexOf('if (pathname.startsWith("/api/commands/") && req.method === "POST")'));
+  assert.ok(handler.length > 500, "the deletion handler moved; this test now checks nothing");
+  assert.match(handler, /await ensureLearningProject\(store, user\)/);
+  assert.match(handler, /beforeDelete: async \(client\) => \{[\s\S]*preserveProjectLessons\(\{ client, userId: user\.id, project, learningProject, runs: lessonRuns \}\)/,
+    "inside the deletion's own transaction, before the project row goes");
+  assert.match(handler, /securityAudit\(config, "project\.delete", "completed"/);
+  assert.doesNotMatch(handler, /await audit\(\{ config, user, project \}, "project\.delete"/, "not into the project being removed");
+});
+
+test("the worker reads a moved lesson's run from the copy kept for it, and the hourly pass runs in the learning project", () => {
+  const worker = serverSource.slice(serverSource.indexOf("learningWorker = new LearningWorker({"), serverSource.indexOf("maintain: async () => {"));
+  assert.match(worker, /project\.id === LEARNING_PROJECT_ID \? archivedLessonRun\(project, runId\) : null/);
+  const schedule = serverSource.slice(serverSource.indexOf("const scheduleConsolidation = async () => {"), serverSource.indexOf("consolidationScheduleRun = maintenanceMutation(schedule)"));
+  assert.doesNotMatch(schedule, /project_id IS NOT NULL/, "every method is the account's, so a filter on its project finds none");
+  assert.match(schedule, /projectId: LEARNING_PROJECT_ID/);
+  assert.match(schedule, /await ensureLearningProject\(store, user\);/);
+});
+
+test("a stop reads the bounded run it releases, and the counters reach the metrics page", () => {
+  // L-G6: a bounded run's finish released its runtime before writing the
+  // transcript, so every one of them recorded `history_unavailable`.
+  const hook = serverSource.slice(serverSource.indexOf("onRuntimeStopping: async (project) => {"), serverSource.indexOf("onRuntimeStop: (project, status) => {"));
+  assert.match(hook, /runsToReadBeforeStop\(await agentRuns\.list\(project\), \{\s*boundedRunId: runtimeManager\.boundedRuntimeScope\(project\)\?\.runId \?\? null,/);
+  // L-G5: the ledger's counts and the process counters, on the operator page
+  // and beside the method list.
+  assert.match(serverSource, /learning: \{ enabled: Boolean\(learningWorker\), counters: learningMetrics \}/);
+  assert.match(serverSource, /learningMetricFamilies\(Boolean\(learning\?\.enabled\), learningLedger, learning\?\.counters \?\? null\)/);
+  assert.match(serverSource, /runtimeManager\.learningMetrics = learningMetrics;/);
+  assert.match(serverSource, /learningMetrics\.observeRun\(\{ loaded: derived\.methodsLoaded\.length, invoked: derived\.methodsInvoked\.length \}\)/);
+  assert.match(serverSource, /summary: productDatabase && config\.learningEnabled \? \(userId\) => learningSummary\(productDatabase, userId\) : null/);
+  // L-G7: a run's attributions are read against the methods its runtime carried.
+  assert.match(serverSource, /const family = learnedMethodFamilyForRuntime\(\{ projectId: String\(project\.id\), boundedRunId: run\.automated === true \? run\.dispatchId \?\? null : null \}\);/);
+  // L-G3: the correction memories a lesson names reach its input.
+  assert.match(serverSource, /readCorrections: researchMemory\.configured/);
+});

@@ -16,7 +16,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, isResearcherRun, readRunStateProjection, runNotice } from "./agentRuns.mjs";
-import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript } from "./runTranscripts.mjs";
+import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
@@ -27,6 +27,9 @@ import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
+import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
+import { archivedLessonRun, ensureLearningProject, preserveProjectLessons } from "./learningPreservation.mjs";
+import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
 import { CONNECTOR_CREDENTIAL_IDS, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
@@ -778,6 +781,41 @@ export function automatedRun(run) {
     || Boolean(verificationEpisodeId(run?.dispatchId));
 }
 
+/**
+ * The open calls of an account's month — reserved and not yet settled, or
+ * never reported (`uncertain`) — without the platform's own background ones.
+ *
+ * Money is never read from these fields (`cost` is settled spend only), but
+ * the page states their count, and a learning step's cut stream is not a call
+ * the researcher made. Rounded to the ledger's own money scale.
+ * @param {any} summary @param {any} background the same summary, narrowed to the background purposes
+ */
+export function accountOpenUsage(summary, background) {
+  const less = (/** @type {string} */ field) => Math.max(0, Number(summary?.[field] ?? 0) - Number(background?.[field] ?? 0));
+  const money = (/** @type {string} */ field) => Math.round(less(field) * 1e6) / 1e6;
+  return {
+    reservedCalls: less("reservedCalls"),
+    uncertainCalls: less("uncertainCalls"),
+    reservedCost: money("reservedCost"),
+    uncertainCost: money("uncertainCost"),
+  };
+}
+
+/**
+ * The request header a harness marks its dispatches with, equivalent to
+ * `automated: true` in the dispatch body: a probe, an audit, an acceptance or
+ * an evaluation driver says "this run is the platform checking itself", so
+ * nothing learns from it and nobody is notified of it.
+ */
+export const AUTOMATED_REQUEST_HEADER = "x-evimed-automated";
+
+/** @param {{headers?: Record<string, string | string[] | undefined>}} req @returns {boolean} */
+export function automatedRequest(req) {
+  const value = req?.headers?.[AUTOMATED_REQUEST_HEADER];
+  const first = Array.isArray(value) ? value[0] : value;
+  return ["1", "true"].includes(String(first ?? "").trim().toLowerCase());
+}
+
 function normalizeClientAddress(value) {
   if (typeof value !== "string") return null;
   const candidate = value.trim();
@@ -948,10 +986,16 @@ export function createWebApiApp(overrides = {}) {
         return (await freezeLearningBaseline({ learning: learningService, capsules: capsuleService, userId, projectId })).baselineDigest;
       } })
     : null;
+  // The loop's own counters (learningMetrics.mjs): the ones nothing durable
+  // records, counted as launches and runs happen; the rest are read from the
+  // ledger when asked.
+  const learningMetrics = new LearningMetrics();
   const learningRoutes = createLearningRoutes({
     store, service: learningService, maxJsonBytes: config.maxJsonBytes,
     evaluationUsers: config.learningEvaluationUsers,
     trialTtlMs: config.learningTrialTtlMs,
+    // Whether the loop is turning for this account, beside its list (§13).
+    summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId) : null,
   });
   // Terminal-hook writes still in flight.
   //
@@ -986,8 +1030,15 @@ export function createWebApiApp(overrides = {}) {
     const projection = await agentRuns.runWorkflowProjection(project, run);
     if (!projection) return;
     // The whole library: a researcher's methods follow them across projects
-    // (`selectLearnedMethods`), so a use is attributed wherever it happens.
-    const approved = await learningService.approvedMethods(project.userId);
+    // (`selectLearnedMethods`), so a use is attributed wherever it happens —
+    // of the kind of work this run's runtime carried (L-G7), so a research
+    // method a GEO run was never given is not counted as passed over by it.
+    // A dispatch id says what the runtime was reserved for only when the
+    // platform chose it (an automated dispatch, the GEO orchestrator's among
+    // them); a researcher's client may name its own.
+    const family = learnedMethodFamilyForRuntime({ projectId: String(project.id), boundedRunId: run.automated === true ? run.dispatchId ?? null : null });
+    const approved = family === null ? [] : (await learningService.approvedMethods(project.userId))
+      .filter((/** @type {any} */ document) => methodFamily(document?.payload?.provenance?.capabilityId) === family);
     /** @type {any[]} */
     const accountWide = [];
     // The candidates this project is mounting under trial, which are the whole
@@ -1023,6 +1074,7 @@ export function createWebApiApp(overrides = {}) {
       });
     }
     const derived = runMethodObservations({ run, projection, methods, sessions });
+    learningMetrics.observeRun({ loaded: derived.methodsLoaded.length, invoked: derived.methodsInvoked.length });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
       // A run that carried an unproven method has to say so on its own row.
       // Without it a reader of the ledger cannot tell a measured arm from an
@@ -1767,7 +1819,13 @@ export function createWebApiApp(overrides = {}) {
       if (!agentRuns) return;
       let running = [];
       try {
-        running = (await agentRuns.list(project)).filter((run) => run.status === "running");
+        // Every run still going, and the bounded run this runtime was reserved
+        // for while its transcript is unwritten: its own finish hook releases
+        // the runtime before it writes the conversation down (L-G6).
+        running = runsToReadBeforeStop(await agentRuns.list(project), {
+          boundedRunId: runtimeManager.boundedRuntimeScope(project)?.runId ?? null,
+          captured: (runId) => preStopTranscripts.has(runId),
+        });
       } catch {
         return;
       }
@@ -1838,6 +1896,8 @@ export function createWebApiApp(overrides = {}) {
   // anywhere, and the counters that decide whether one may be approved could
   // never move, because moving them requires the method to have been in a run.
   runtimeManager.learningService = learningService;
+  // And what each launch mounted of it, for the loop's counters.
+  runtimeManager.learningMetrics = learningMetrics;
   if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
   const pluginApplyWorker = pluginService ? new PluginApplyWorker({
     service: pluginService, runtime: runtimeManager,
@@ -2437,6 +2497,14 @@ export function createWebApiApp(overrides = {}) {
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
       learning: learningService, jobs: productJobs, notifications: notificationService,
+      // The correction memories a lesson names, in the researcher's own words
+      // (quoted and checked when they were written), so they open the input.
+      // A sensitive one stays out, as a sensitive message stays out of an excerpt.
+      readCorrections: researchMemory.configured
+        ? async (userId, recordIds) => (await researchMemory.recordSummaries(userId, recordIds))
+          .filter((/** @type {any} */ record) => !record.sensitive)
+          .map((/** @type {any} */ record) => ({ recordId: String(record.id), key: record.key ?? null, text: String(record.summary || record.value || "") }))
+        : null,
     });
     const consolidation = new MethodConsolidation({
       dispatch: dispatchLearningRun,
@@ -2514,7 +2582,11 @@ export function createWebApiApp(overrides = {}) {
       resolveRun: async (project, job) => {
         if (!project) return null;
         const runId = String(job.payload?.runId ?? "");
-        return (await agentRuns.list(project)).find((run) => run.id === runId) ?? null;
+        const listed = (await agentRuns.list(project)).find((run) => run.id === runId) ?? null;
+        if (listed) return listed;
+        // A lesson whose project was deleted while it waited: it moved to the
+        // learning project with a copy of its run (learningPreservation.mjs).
+        return project.id === LEARNING_PROJECT_ID ? archivedLessonRun(project, runId) : null;
       },
       // Transcript retention, which `config.transcriptRetentionDays` promised
       // and nothing delivered: `pruneRunTranscripts` had no caller, so the knob
@@ -3502,6 +3574,7 @@ export function createWebApiApp(overrides = {}) {
           frontier,
           review,
           geo,
+          learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
         });
         return;
       }
@@ -4007,6 +4080,12 @@ export function createWebApiApp(overrides = {}) {
         if (body.automated != null && typeof body.automated !== "boolean") {
           throw new HttpError(400, "invalid_agent_run", "automated must be a boolean.");
         }
+        // The same statement as a request header (`AUTOMATED_REQUEST_HEADER`),
+        // for a probe, audit or acceptance driver that sets it once for every
+        // request rather than in each body. An automated run is never a lesson
+        // (learningTriggers.mjs): on 2026-09-26 both methods production had
+        // learnt came from the acceptance account's own traffic (L-G3).
+        const automated = body.automated === true || automatedRequest(req);
         const text = assertString(body.text, "text", { max: config.maxJsonBytes });
         if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
         // `episode-<32 hex>-v<n>` is how the completion fold recognizes an
@@ -4114,7 +4193,7 @@ export function createWebApiApp(overrides = {}) {
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
-          ...(body.automated === true ? { automated: true } : {}),
+          ...(automated ? { automated: true } : {}),
           ...(estimate ? { estimatedMinutes: estimate } : {}),
           question: text,
           effectiveAgentId: effectiveAgent?.agentId ?? null,
@@ -4331,6 +4410,11 @@ export function createWebApiApp(overrides = {}) {
           const summary = await usageLedger.summary(user.id, { since });
           sendJson(res, 200, { data: {
             ...summary,
+            // The calls still open or never reported are the researcher's
+            // own: the learning loop's are the platform's background work,
+            // and 118 of its calls on 2026-09-21 that never settled read as
+            // 「另有 118 次调用未回报用量」 on their page (audit L-G9).
+            ...accountOpenUsage(summary, await usageLedger.summary(user.id, { since, purposes: ["learning"] })),
             calls: summary.settledCalls,
             cost: summary.actualCost,
             promptTokens: summary.cacheHitTokens + summary.cacheMissTokens,
@@ -4537,7 +4621,16 @@ export function createWebApiApp(overrides = {}) {
             throw new HttpError(409, "project_busy", "Project has queued or running tasks.");
           }
           await runtimeManager.stop(project);
-          await audit({ config, user, project }, "project.delete", "completed", { target: project.id });
+          // Where the learning loop's lessons from this project go instead of
+          // down with it (learningPreservation.mjs): the account's learning
+          // project, made now if the account never learnt anything yet, and
+          // the ledger the waiting lessons' runs are read from. Before the
+          // transaction, because making a project is its own.
+          const learningProject = learningService && productDatabase && !isInternalProject(project.id)
+            ? await ensureLearningProject(store, user) : null;
+          const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
+          /** @type {{moved: number, preserved: string[]}} */
+          let lessons = { moved: 0, preserved: [] };
           // Derived copies go first, and go with the record they were derived
           // from. Awaited and not swallowed: an index that still answers with a
           // deleted project's memories is a copy of deleted data, so a failure
@@ -4570,7 +4663,21 @@ export function createWebApiApp(overrides = {}) {
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
               if (client) geoScreenshots = (await deleteGeoProjectRows(client, user.id, project.id)).screenshots;
+              // The learning jobs filed under it move to the learning project,
+              // with what the waiting ones need to still be learnt (L-G1).
+              // Learned methods are the account's and are not touched at all.
+              if (client && learningProject) {
+                lessons = await preserveProjectLessons({ client, userId: user.id, project, learningProject, runs: lessonRuns });
+              }
             },
+          });
+          // The audit line outlives the project. It used to be written into
+          // the project's own `.openscience/audit.jsonl` a moment before that
+          // directory was removed, so nobody could tell who deleted what, or
+          // when (audit 2026-09-26, L-G11).
+          await securityAudit(config, "project.delete", "completed", {
+            userId: user.id,
+            detail: `project=${project.id} learning_jobs_moved=${lessons.moved} lesson_inputs_kept=${lessons.preserved.length}`,
           });
           // The screenshots only those rows referenced, once the deletion has committed.
           await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
@@ -5050,35 +5157,41 @@ export function createWebApiApp(overrides = {}) {
    *
    * Per researcher rather than per project, since a researcher's methods follow
    * them across projects (`selectLearnedMethods`): `sleep` reads the whole
-   * library. The job is filed under the project whose method changed last,
-   * which is where its model steps run.
+   * library. The job is filed under the account's learning project, which is
+   * where its model steps run (`learningRuntime.dispatch`). It used to be filed
+   * under the project whose method changed last, and read only methods that
+   * had a project — every method is the account's since 2026-09-27, and that
+   * read would have found none (L-G1).
    */
   const scheduleConsolidation = async () => {
     if (!learningService || !productJobs || !config.learningEnabled || consolidationScheduleRun) {
       return consolidationScheduleRun;
     }
     const schedule = async () => {
-      // Researchers holding at least one method that is not already retired,
-      // each with the project whose method changed last. A library of nothing
-      // has nothing to consolidate, and enqueueing for it would put a job on
-      // every account in the deployment every hour.
-      const result = await productDatabase.query(`SELECT DISTINCT ON (user_id) user_id,project_id FROM evimed_product.documents
-        WHERE kind='method' AND deleted_at IS NULL AND project_id IS NOT NULL
+      // Researchers holding at least one learned method that is not already
+      // retired. A library of nothing has nothing to consolidate, and
+      // enqueueing for it would put a job on every account in the deployment
+      // every hour.
+      const result = await productDatabase.query(`SELECT DISTINCT user_id FROM evimed_product.documents
+        WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType'='learned-method'
           AND payload->>'status' IS DISTINCT FROM 'retired'
-        ORDER BY user_id,updated_at DESC LIMIT 200`);
+        ORDER BY user_id LIMIT 200`);
       const interval = Math.max(60_000, Number(config.learningConsolidationIntervalMs) || 3_600_000);
       const period = Math.floor(Date.now() / interval);
       const date = new Date(period * interval).toISOString();
       for (const row of result.rows) {
         try {
+          const user = await store.userById(row.user_id);
+          if (!user) continue;
+          await ensureLearningProject(store, user);
           await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
             // One pass per researcher per interval however often this timer fires.
             idempotencyKey: `consolidate:sleep:${interval}:${period}`,
-            projectId: row.project_id,
+            projectId: LEARNING_PROJECT_ID,
           });
         } catch (error) {
           await securityAudit(config, "learning.consolidate.enqueue", "failed", {
-            userId: row.user_id, projectId: row.project_id,
+            userId: row.user_id,
             code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
           });
         }
@@ -6144,7 +6257,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, learning = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -6392,6 +6505,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The method-learning loop: the library, the lessons by trigger and result,
+  // uses, the day's spend, and what launches mounted (learningMetrics.mjs, §13).
+  const learningLedger = learning?.enabled && productDatabase ? await learningLedgerCounts(productDatabase).catch(() => null) : null;
+  for (const family of learningMetricFamilies(Boolean(learning?.enabled), learningLedger, learning?.counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // Refusals by model provider and status; 402 is an exhausted balance and
   // pages (providerRefusals.mjs, alert ModelProviderBalanceExhausted).
   const refusals = providerRefusalMetricFamily();

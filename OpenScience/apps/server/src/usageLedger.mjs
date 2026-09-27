@@ -531,12 +531,20 @@ export class UsageLedger {
     return { reconciled, remaining: Number(rest.rows[0]?.remaining ?? 0), failedAccounts };
   }
 
-  /** @param {string} userId @param {{since?:Date}} options */
-  async summary(userId, { since = new Date(0) } = {}) {
+  /**
+   * `purposes`, when given, narrows the summary to those purposes — how a
+   * caller separates the platform's own background calls from the rest.
+   * @param {string} userId @param {{since?:Date, purposes?: readonly string[] | null}} options */
+  async summary(userId, { since = new Date(0), purposes = null } = {}) {
     const at = instant(since, "summary start");
+    const only = purposes == null ? null : [...purposes].map((purpose) => {
+      if (!isUsagePurpose(purpose)) throw new HttpError(400, "usage_payload_invalid", "Invalid usage purpose.");
+      return purpose;
+    });
     await migrateUsageLedger(this.database);
     const result = await this.database.query(`WITH filtered AS MATERIALIZED (
         SELECT * FROM evimed_usage.model_requests WHERE user_id=$1 AND created_at >= $2
+          AND ($3::text[] IS NULL OR purpose = ANY($3::text[]))
       ), models AS (
         SELECT model,count(*)::integer AS calls,coalesce(sum(actual_cost),0) AS cost
         FROM filtered WHERE status='settled' GROUP BY model
@@ -556,7 +564,7 @@ export class UsageLedger {
       coalesce((SELECT jsonb_agg(jsonb_build_object('model',model,'calls',calls,'cost',cost)
         ORDER BY cost DESC,model) FROM models),'[]'::jsonb) AS by_model,
       coalesce(array_agg(DISTINCT price_version) FILTER (WHERE price_version IS NOT NULL),ARRAY[]::text[]) AS price_versions
-      FROM filtered`, [productId(userId, "user"), at]);
+      FROM filtered`, [productId(userId, "user"), at, only]);
     const row = result.rows[0];
     return {
       since: at, totalCalls: row.total_calls, reservedCalls: row.reserved_calls, settledCalls: row.settled_calls,
