@@ -6,8 +6,8 @@
  * differ only by port, and explicitly rejects the obvious alternative — a
  * `frame.evimed.com` subdomain — because that only works if the login cookie is
  * widened to `.evimed.com`, which hands the Science session to every other
- * subdomain of the platform. A later "just use a subdomain, it's simpler" has to fail
- * something rather than merely contradict a document.
+ * subdomain of the platform. A later "just use a subdomain, it's simpler" has
+ * to fail something rather than merely contradict a document.
  *
  * `runtimeUiOrigins` already enforced this, for its own reasons and before the
  * fusion existed. This file is what ties the rule to the decision.

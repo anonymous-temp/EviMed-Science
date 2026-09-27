@@ -57,7 +57,8 @@ export function createEvimedAuthRoutes({ store, service, maxJsonBytes, audit, on
 
     if (url.pathname === EVIMED_SESSION_PATH) {
       // A body is optional — an empty one reads as `{}` — because the
-      // credential may be the cookie the browser attached instead.
+      // credential may be the platform's session cookie, which the browser
+      // attached instead.
       const body = await readJson(req, maxJsonBytes);
       try {
         const session = await service.createSession(req, res, body);

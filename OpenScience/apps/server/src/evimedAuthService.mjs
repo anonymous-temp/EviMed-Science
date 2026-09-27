@@ -19,11 +19,11 @@ import { HttpError, clearSessionCookie, parseCookies } from "./security.mjs";
  *   runtime container ever receives it; what the runtime gets is a session of
  *   ours, as always. The cache below is keyed by a hash of the credential, not
  *   by the credential.
- * - **The shell can hand it over two ways, and needs both across the
- *   migration.** The shell may put the credential in the request
- *   body, or the browser may attach the platform's session cookie to this
- *   same-origin request itself. The body is preferred when present because it is the
- *   explicit one.
+ * - **The shell can hand it over two ways, and both are accepted.** In the
+ *   request body (`token`), when the shell holds the credential itself; or as
+ *   the platform's own session cookie, which the browser attaches to this
+ *   same-origin request without the page reading it. The body is preferred
+ *   when present because it is the explicit one.
  * - **An identity is whoever EviMed says the credential belongs to.** The
  *   business code is checked, not only the HTTP status: EviMed answers HTTP 200
  *   with `code: 401` in the body for an expired token, so a status-only check
@@ -48,11 +48,10 @@ export const EVIMED_SESSION_PATH = "/api/auth/evimed/session";
 export const EVIMED_LOGOUT_PATH = "/api/auth/evimed/logout";
 
 /**
- * EviMed's own session cookie, on `.evimed.com` with path `/` — so a
- * same-origin call from the shell (plan §9.9 puts Science behind
- * `www.evimed.com/api/*`) carries it without the page having to read it. The
- * name is a fact of the shell rather than a deployment choice, so it is written
- * here instead of becoming a fifth configuration key.
+ * The platform's own session cookie, which a same-origin call from the shell
+ * (plan §9.9 serves Science under the platform's hostname) carries. The name is
+ * a fact of the shell rather than a deployment choice, so it is written here
+ * instead of becoming a fifth configuration key.
  */
 const EVIMED_CREDENTIAL_COOKIE = "name1";
 
