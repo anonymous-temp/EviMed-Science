@@ -12,7 +12,7 @@
  * or MCP appears in any string this module produces.
  */
 
-import { MCP_TOOL_PREFIX, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
+import { MCP_TOOL_PREFIX, RETIRED_SOCKET_TOOL_NAMES, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
 import { contractKindLabel } from './contractKinds.mjs'
 import { frontierLabel } from './frontierVocabulary.mjs'
 import { GEO_READ_WHAT_LABELS_ZH, GEO_WRITE_WHAT_LABELS_ZH } from './geoVocabulary.mjs'
@@ -182,7 +182,8 @@ const SOCKET_NARRATION = Object.freeze({
     if (!data || !record?.ok) return '整理参考文献与编号'
     return `整理参考文献：${Number(data.references) || 0} 条${data.renumbered ? '，已按出现顺序重新编号' : ''}`
   },
-  [SOCKET_TOOL_NAMES.completeRun]: (args) => (args?.partial ? '以部分交付结束' : '结束运行'),
+  // Retired 2026-09-20; transcripts recorded before then still carry it.
+  [RETIRED_SOCKET_TOOL_NAMES.completeRun]: (args) => (args?.partial ? '以部分交付结束' : '结束运行'),
   [SOCKET_TOOL_NAMES.capsuleRecall]: (args, result) => withCount(`回忆胶囊：「${excerpt(args?.query)}」`, result),
   [SOCKET_TOOL_NAMES.capsuleNote]: (args) => `记到胶囊：${excerpt(args?.content, 32)}`,
   [SOCKET_TOOL_NAMES.screenBatch]: (args, result) => withCount('批量筛选文献', result),

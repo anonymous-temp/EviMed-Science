@@ -154,7 +154,6 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
   // nothing more.
   claimUpsert: 'evimed_claim_upsert',
   renderReport: 'evimed_render_report',
-  completeRun: 'evimed_complete_run',
   capsuleRecall: 'evimed_capsule_recall',
   capsuleNote: 'evimed_capsule_note',
   screenBatch: 'evimed_screen_batch',
@@ -165,6 +164,19 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
 /** Flat list of socket tool names. */
 /** @type {readonly string[]} */
 export const SOCKET_TOOL_NAME_LIST = Object.freeze(Object.values(SOCKET_TOOL_NAMES))
+
+/**
+ * Socket tools no plugin registers any more, kept for the transcripts that
+ * still carry their calls. `evimed_complete_run` was deleted on 2026-09-20: a
+ * conversation turn ending is the run ending, and nothing the model calls may
+ * be able to refuse it. Named here so a run recorded before then still reads
+ * as 「结束运行」 in its narration and as a delivery step in its phases; kept
+ * out of `SOCKET_TOOL_NAME_LIST`, so it is not a tool a skill may call, a
+ * tool the ledger credits, or a name the vocabulary claims is mounted.
+ */
+export const RETIRED_SOCKET_TOOL_NAMES = Object.freeze({
+  completeRun: 'evimed_complete_run',
+})
 
 /**
  * The research tools the root session sees; every other `mcp__evimed__*` tool

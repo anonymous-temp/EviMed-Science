@@ -13,6 +13,8 @@ import {
   MAX_DELEGATION_DEPTH,
   MCP_TOOL_BASE_NAMES,
   MCP_TOOL_NAMES,
+  MOUNTED_TOOL_NAMES,
+  RETIRED_SOCKET_TOOL_NAMES,
   RUN_EVENT_TYPES,
   SOCKET_TOOL_NAME_LIST,
   canTransition,
@@ -23,6 +25,7 @@ import {
   layeredIssues,
   mcpToolBaseName,
   narrateToolCall,
+  phaseOfToolCall,
   resolveContractKind,
   runGate,
   runPhase,
@@ -94,7 +97,16 @@ test("EviMed tool names cover both worlds", () => {
   // submission. Twelve since `evimed_await`: delegation stopped waiting inside
   // its own call, and the parent collects here. Fourteen since the two claim
   // tools: a claim written and judged at a time, and the numbering rendered.
-  assert.equal(SOCKET_TOOL_NAME_LIST.length, 14);
+  // Thirteen since `evimed_complete_run` left (2026-09-20): no plugin
+  // registers it, so the vocabulary does not claim it is mounted.
+  assert.equal(SOCKET_TOOL_NAME_LIST.length, 13);
+  assert.ok(!SOCKET_TOOL_NAME_LIST.includes("evimed_complete_run"));
+  assert.ok(!MOUNTED_TOOL_NAMES.includes("evimed_complete_run"), "a skill telling a run to call it would degrade the run");
+  assert.ok(!isEviMedToolName("evimed_complete_run"));
+  // A transcript recorded before it left still reads as it did.
+  assert.equal(RETIRED_SOCKET_TOOL_NAMES.completeRun, "evimed_complete_run");
+  assert.deepEqual(narrateToolCall("evimed_complete_run", { partial: true }), { text: "以部分交付结束", known: true });
+  assert.equal(phaseOfToolCall("evimed_complete_run"), "deliver");
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_claim_upsert"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_render_report"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_await"));

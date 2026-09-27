@@ -13,7 +13,7 @@
  * progress tab count the same calls the same way.
  */
 
-import { SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
+import { RETIRED_SOCKET_TOOL_NAMES, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
 import { DELIVERABLES_DIR } from './workspaceLayout.mjs'
 
 /** The phases, in the order a deep run usually passes through them.
@@ -54,7 +54,7 @@ const FULLTEXT_TOOLS = new Set(['open_access_full_text', 'web_read'])
 /** @type {ReadonlySet<string>} */
 const CLAIM_TOOLS = new Set(['evimed_claim_upsert', 'evimed_package_check', 'locate_quote'])
 /** @type {ReadonlySet<string>} */
-const DELIVER_TOOLS = new Set([SOCKET_TOOL_NAMES.submitDeliverable, SOCKET_TOOL_NAMES.completeRun])
+const DELIVER_TOOLS = new Set([SOCKET_TOOL_NAMES.submitDeliverable, RETIRED_SOCKET_TOOL_NAMES.completeRun])
 /** @type {ReadonlySet<string>} */
 const WRITE_TOOLS = new Set(['write', 'edit', 'fs_write', 'fs_edit'])
 
