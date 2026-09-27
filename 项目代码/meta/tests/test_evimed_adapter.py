@@ -255,3 +255,64 @@ def test_boolean_time_claims_and_invalid_key_files_fail_closed(tmp_path, monkeyp
     unavailable = _post(client, {"action": "capabilities"})
     assert unavailable.status_code == 200
     assert unavailable.json()["error"]["code"] == "meta_model_config_unavailable"
+
+
+def test_a_running_job_advances_while_metaagent_works(tmp_path, monkeypatch) -> None:
+    """Written only at start and at the end, a job hours into retrieval looked
+    exactly like one whose worker had died (the research-topic incident of
+    2026-09-27 was the same shape): the state advances while the engine works."""
+    client, workspace = _fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(evimed_adapter, "_HEARTBEAT_SECONDS", 0.05)
+
+    class Worker:
+        pid = 12347
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(evimed_adapter.subprocess, "Popen", lambda command, **kwargs: Worker())
+    job_id = _post(client, {"action": "start", "topic": "Heartbeat topic"}).json()["data"]["jobId"]
+    state_file = workspace / "meta-analysis-runs" / ".jobs" / f"{job_id}.json"
+    observed = {}
+
+    def working_run(command, **kwargs):
+        output_root = Path(command[command.index("--output-dir") + 1])
+        project = output_root / "working-project"
+        project.mkdir(parents=True)
+        (project / "step_manifest.json").write_text(json.dumps({
+            "schema_version": 1,
+            "pipeline_steps": ["protocol", "search_query", "search", "ta_screening"],
+            "steps": {"protocol": {"status": "complete"}, "search_query": {"status": "complete"}},
+        }), encoding="utf-8")
+        first = json.loads(state_file.read_text(encoding="utf-8"))
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            if state["updatedAt"] != first["updatedAt"] and state.get("progress"):
+                observed["state"] = state
+                break
+            time.sleep(0.02)
+        observed["status"] = _post(client, {"action": "status", "jobId": job_id}).json()
+        (project / "package").mkdir()
+        (project / "package" / "release_decision.json").write_text(
+            json.dumps({"status": "ready", "next_actions": []}), encoding="utf-8"
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(evimed_adapter.subprocess, "run", working_run)
+    assert evimed_adapter.run_job(str(state_file)) == 0
+
+    assert "state" in observed, "updatedAt stayed at the worker's start while MetaAgent worked"
+    assert observed["state"]["progress"] == {"stage": "search", "percent": 50}
+    data = observed["status"]["data"]
+    assert data["jobStatus"] == "running"
+    assert data["progress"] == {"stage": "search", "percent": 50}
+    assert 0 <= data["secondsSinceUpdate"] <= 5
+    assert isinstance(data["elapsedSeconds"], int) and "heartbeatSeconds" in data
+
+    terminal = json.loads(state_file.read_text(encoding="utf-8"))
+    time.sleep(0.2)
+    assert json.loads(state_file.read_text(encoding="utf-8")) == terminal, "a beat after the terminal write"
+    assert terminal["status"] == "succeeded"
+    finished = _post(client, {"action": "status", "jobId": job_id}).json()
+    assert isinstance(finished["data"]["elapsedSeconds"], int)

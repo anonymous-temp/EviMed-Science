@@ -16,10 +16,12 @@ import secrets
 import stat
 import subprocess
 import sys
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from fastapi import APIRouter, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -38,6 +40,11 @@ _WORKERS: dict[str, subprocess.Popen] = {}
 #: Upper bound on a status poll's bounded wait, in seconds.
 MAX_STATUS_WAIT_SECONDS = 60
 _STATUS_POLL_INTERVAL_SECONDS = 1.0
+#: How often a running job's state is rewritten while MetaAgent works. A poller
+#: tells a slow job from a dead one by `updatedAt`; written only at start and at
+#: the end, a job hours into retrieval looked exactly like one whose worker died.
+_HEARTBEAT_SECONDS = 30.0
+_MANIFEST_LIMIT = 256 * 1024
 
 #: The engine's terminal release vocabulary (new_meta/core/release_contract.py).
 #: The adapter reports these values verbatim; anything else is named as unknown
@@ -233,6 +240,133 @@ def _read_state(path: Path) -> dict[str, Any]:
         return value
     finally:
         os.close(descriptor)
+
+
+def _moment(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None else None
+
+
+def _seconds_since(value: Any, now: datetime) -> int | None:
+    moment = _moment(value)
+    return None if moment is None else max(0, int((now - moment).total_seconds()))
+
+
+def _liveness(state: dict[str, Any]) -> dict[str, Any]:
+    """What a poller needs to tell a slow job from a dead one."""
+    now = datetime.now(timezone.utc)
+    facts: dict[str, Any] = {
+        "updatedAt": state.get("updatedAt"),
+        "heartbeatSeconds": int(_HEARTBEAT_SECONDS),
+    }
+    for key, moment in (("secondsSinceUpdate", "updatedAt"), ("elapsedSeconds", "createdAt")):
+        seconds = _seconds_since(state.get(moment), now)
+        if seconds is not None:
+            facts[key] = seconds
+    if isinstance(state.get("progress"), dict):
+        facts["progress"] = state["progress"]
+    return facts
+
+
+def _step_manifest(path: Path) -> dict[str, Any] | None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError:
+        return None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= _MANIFEST_LIMIT:
+            return None
+        value = json.loads(os.read(descriptor, _MANIFEST_LIMIT + 1).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        # Written in place by the pipeline, so a read can meet half a file.
+        return None
+    finally:
+        os.close(descriptor)
+    return value if isinstance(value, dict) else None
+
+
+def _engine_progress(output_root: Path) -> dict[str, Any] | None:
+    """Where MetaAgent is, from the step manifest its pipeline keeps: the first
+    step not yet complete, and the share of steps that are."""
+    try:
+        projects = sorted(
+            (entry for entry in output_root.iterdir() if entry.is_dir() and not entry.is_symlink()),
+            key=lambda entry: entry.stat().st_mtime_ns,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    for project in projects:
+        manifest = _step_manifest(project / "step_manifest.json")
+        if manifest is None:
+            continue
+        steps, records = manifest.get("pipeline_steps"), manifest.get("steps")
+        if (
+            not isinstance(steps, list)
+            or not steps
+            or not all(isinstance(step, str) and step.isidentifier() for step in steps)
+            or not isinstance(records, dict)
+        ):
+            return None
+        done = [
+            step for step in steps
+            if isinstance(records.get(step), dict) and records[step].get("status") == "complete"
+        ]
+        pending = next((step for step in steps if step not in done), steps[-1])
+        return {"stage": pending, "percent": int(100 * len(done) / len(steps))}
+    return None
+
+
+@contextmanager
+def _heartbeat(state_path: Path, state: dict[str, Any], output_root: Path, log_path: Path) -> Iterator[None]:
+    """Advance a running job's `updatedAt` while MetaAgent works.
+
+    The state keeps one writer at a time: the worker writes before this starts
+    and after it has stopped, and a status poll writes only for a worker that is
+    gone. Each beat still re-reads first and stops as soon as the state on disk
+    is not this worker's running job, so a beat does not revive a job someone
+    else has ended. A beat that cannot be written stops the heartbeat and
+    says why in the job log; MetaAgent goes on and the job ends as it would have.
+    """
+    stop = threading.Event()
+    pid = os.getpid()
+
+    def beat() -> None:
+        while not stop.wait(_HEARTBEAT_SECONDS):
+            try:
+                current = _read_state(state_path)
+                if current.get("status") != "running" or current.get("workerPid") != pid:
+                    return
+                state["updatedAt"] = _now()
+                elapsed = _seconds_since(state.get("createdAt"), datetime.now(timezone.utc))
+                if elapsed is not None:
+                    state["elapsedSeconds"] = elapsed
+                progress = _engine_progress(output_root)
+                if progress is not None:
+                    state["progress"] = progress
+                _atomic_json(state_path, state)
+            except Exception as error:  # noqa: BLE001 — MetaAgent keeps running; the log says why the state stopped advancing
+                try:
+                    descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                    with os.fdopen(descriptor, "ab", buffering=0) as log:
+                        log.write(f"\nheartbeat stopped: {type(error).__name__}: {error}\n".encode("utf-8"))
+                except OSError:
+                    pass
+                return
+
+    thread = threading.Thread(target=beat, name="evimed-job-heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join()
 
 
 def _job_paths(workspace: Path, job_id: str) -> tuple[Path, Path]:
@@ -474,7 +608,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return {
             "status": "warning",
             "summary": f"MetaAgent job {job_id} is {job_status}.",
-            "data": {"jobId": job_id, "jobStatus": job_status, "updatedAt": state.get("updatedAt")},
+            "data": {"jobId": job_id, "jobStatus": job_status, **_liveness(state)},
             "sources": [_source(job_id)],
             "warnings": ["The synthesis is not complete; do not draw final conclusions."],
             "next_actions": ["Poll this job again after additional processing time."],
@@ -503,12 +637,15 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     if release_status not in RELEASE_STATUSES and release_status != "unknown":
         # Report what the engine wrote rather than folding it into one of ours.
         release_status = f"unrecognized:{release_status}"
+    finished = _moment(state.get("finishedAt"))
+    elapsed = _seconds_since(state.get("createdAt"), finished) if finished else None
     result: dict[str, Any] = {
         "status": "success" if release_status == "ready" else "warning",
         "summary": f"MetaAgent job {job_id} completed with release status {release_status}.",
         "data": {
             "jobId": job_id,
             "jobStatus": "succeeded",
+            **({"elapsedSeconds": elapsed} if elapsed is not None else {}),
             "releaseStatus": release_status,
             # The engine's own vocabulary, so a consumer can check its
             # expectations against the set the engine can actually produce.
@@ -705,15 +842,16 @@ def run_job(state_file: str) -> int:
         0o600,
     )
     with os.fdopen(log_descriptor, "ab", buffering=0) as log:
-        completed = subprocess.run(
-            command,
-            cwd=str(Path(__file__).resolve().parents[1]),
-            env=dict(os.environ),
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        with _heartbeat(state_path, state, output_root, log_path):
+            completed = subprocess.run(
+                command,
+                cwd=str(Path(__file__).resolve().parents[1]),
+                env=dict(os.environ),
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
     projects = sorted(
         (entry for entry in output_root.iterdir() if entry.is_dir()),
         key=lambda entry: entry.stat().st_mtime_ns,
