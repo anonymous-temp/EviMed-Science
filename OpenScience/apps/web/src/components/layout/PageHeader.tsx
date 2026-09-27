@@ -3,7 +3,8 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { cn } from "@/lib/cn";
 
 /**
- * A page's header: one line. The title on the left — 20 px, 600 — optionally
+ * A page's header: one line. The title on the left — 24 px, 600, the `title`
+ * rung (spec §6.6; the comment said 20, appendix E #24) — optionally
  * followed by a grey count or update time; on the right the page's one primary
  * action and at most two icon buttons or a search box.
  *

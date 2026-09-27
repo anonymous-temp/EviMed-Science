@@ -1,11 +1,13 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { Loader2, PanelLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isChatPath } from "@/lib/runLocation";
 import { isMacPlatform } from "@/lib/platform";
+import { isEmbeddedShell } from "@/app/layout/embed";
 import { SessionFrameHost } from "@/app/layout/SessionFrameHost";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { IconButton } from "@/components/ui/IconButton";
 import { ShortcutHelp } from "@/components/ui/ShortcutHelp";
 import { Toaster } from "@/components/ui/Toaster";
 import { useProjectStore } from "@/lib/projects";
@@ -15,8 +17,14 @@ import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
   const currentProjectId = useProjectStore((state) => state.currentId);
-  const onChat = isChatPath(useLocation().pathname);
+  const location = useLocation();
+  const onChat = isChatPath(location.pathname);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+  // Inside the EviMed Vue shell (`?embed=1`): the content area and nothing
+  // else — the host draws the sidebar. Decided once, from the entry address,
+  // because a link inside an embedded page drops the query string.
+  const [embedded] = useState(() => isEmbeddedShell(location.search));
+  const mainRef = useRef<HTMLElement>(null);
 
   // Below `lg` the sidebar is a drawer over the content, not a column beside
   // it, so it starts closed: at 390 px it kept its full width and left the
@@ -28,8 +36,10 @@ export function AppShell() {
     }
   }, []);
 
-  // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip.
+  // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip. An
+  // embedded shell has no sidebar to toggle, and the key is the host's.
   useEffect(() => {
+    if (embedded) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
@@ -38,7 +48,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [embedded]);
 
   useEffect(() => {
     const clearSession = () => {
@@ -84,31 +94,52 @@ export function AppShell() {
   return (
     // `h-dvh`, not `h-screen`: on a phone `100vh` is the viewport without the
     // browser's own toolbars, so the last row of every page sat under them.
-    <div className="flex h-dvh w-screen overflow-hidden bg-bg text-text">
-      <Sidebar />
-      {/* The drawer's backdrop. Only below `lg`, where the sidebar overlays the
-          content instead of sitting beside it. */}
-      {!sidebarCollapsed && (
-        <button
-          type="button"
-          aria-label="关闭侧边栏"
-          onClick={() => setSidebarCollapsed(true)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-        />
+    <div className="flex h-dvh w-screen overflow-hidden bg-bg text-text" data-embedded={embedded || undefined}>
+      {/* The first thing Tab reaches on every page (spec §10.3, appendix E
+          #3): invisible until focused, then top-left on the skip tier, above
+          everything. It moves focus rather than the address — a `#main` hash
+          would be a navigation the router has to hear about. Not when
+          embedded: there is no sidebar to skip, and the host has its own. */}
+      {!embedded && (
+        <a
+          href="#main"
+          onClick={(event) => {
+            event.preventDefault();
+            mainRef.current?.focus();
+          }}
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-skip focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-ui focus:text-text focus:shadow-e2"
+        >
+          跳到主要内容
+        </a>
       )}
-      <main className="flex min-w-0 flex-1 flex-col">
-        {sidebarCollapsed && (
-          <div className="flex h-12 shrink-0 items-center pl-2">
+      {!embedded && (
+        <>
+          {/* The drawer's backdrop, below `lg` only, where the sidebar overlays
+              the content. On the drawer tier and before the sidebar in the
+              document, so the sidebar paints above it. */}
+          {!sidebarCollapsed && (
             <button
-              onClick={() => setSidebarCollapsed(false)}
-              aria-label="展开侧边栏"
+              type="button"
+              aria-label="关闭侧边栏"
+              onClick={() => setSidebarCollapsed(true)}
+              className="fixed inset-0 z-drawer bg-scrim lg:hidden"
+            />
+          )}
+          <Sidebar />
+        </>
+      )}
+      <main id="main" ref={mainRef} tabIndex={-1} className="flex min-w-0 flex-1 flex-col focus:outline-none">
+        {!embedded && sidebarCollapsed && (
+          <div className="flex h-12 shrink-0 items-center pl-2">
+            {/* The chrome's 36 px icon button: below `lg` this is the only
+                way off a page a phone was sent to. */}
+            <IconButton
+              icon={PanelLeft}
+              label="展开侧边栏"
               title={`展开侧边栏 (${isMac ? "⌘B" : "Ctrl+B"})`}
-              // 32 px, the chrome's icon target: below `lg` this is the only
-              // way off a page a phone was sent to.
-              className="fade-in grid h-8 w-8 place-items-center rounded-input text-text hover:bg-surface-2"
-            >
-              <PanelLeft size={16} aria-hidden="true" />
-            </button>
+              onClick={() => setSidebarCollapsed(false)}
+              className="fade-in text-text"
+            />
           </div>
         )}
         <div className="relative min-h-0 flex-1">
@@ -134,19 +165,21 @@ export function AppShell() {
           </div>
         </div>
       </main>
-      <ShortcutHelp />
+      {/* The shortcut sheet lists the sidebar's keys; an embedded shell has no
+          sidebar, and its host owns the keyboard. */}
+      {!embedded && <ShortcutHelp />}
       <Toaster />
     </div>
   );
 }
 
-/** What a route chunk's arrival looks like. Content-shaped rather than a
- *  spinner, so the page does not jump when it lands. */
+/** What a route chunk's arrival looks like. Status text is 正在 + a verb and no
+ *  ellipsis (spec §13.7, appendix E #26). */
 function RouteFallback() {
   return (
-    <div className="flex h-full items-center justify-center bg-bg text-muted" role="status" aria-live="polite">
+    <div className="flex h-full items-center justify-center bg-bg text-text-3" role="status" aria-live="polite">
       <Loader2 size={20} className="animate-spin" aria-hidden="true" />
-      <span className="ml-2 text-ui">正在载入…</span>
+      <span className="ml-2 text-ui">正在载入</span>
     </div>
   );
 }

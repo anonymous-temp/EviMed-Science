@@ -92,6 +92,45 @@ describe("AppShell hosted authentication gate", () => {
     expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
   });
 
+  // Spec §10.3, appendix E #3: the first thing Tab reaches is a way past the
+  // sidebar, and it lands focus on the page's main region.
+  it("opens with a skip link that moves focus to the main region", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    renderRoute("/app/settings");
+    await screen.findByText("账户");
+
+    const skip = screen.getByRole("link", { name: "跳到主要内容" });
+    expect(skip).toHaveClass("sr-only", "focus:not-sr-only", "focus:z-skip");
+    // The first focusable element in the shell.
+    const focusable = document.querySelectorAll("a[href], button, [tabindex]:not([tabindex='-1'])");
+    expect(focusable[0]).toBe(skip);
+    fireEvent.click(skip);
+    expect(document.getElementById("main")).toHaveFocus();
+    expect(screen.getByText("Sidebar")).toBeInTheDocument();
+  });
+
+  // Audit F-G6: the EviMed Vue shell mounts a Science page with ?embed=1 and
+  // draws its own sidebar around it.
+  it("renders only the content area when embedded, and keeps it that way after a link drops the query", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    const router = renderRoute("/app/settings?embed=1");
+    expect(await screen.findByText("账户")).toBeInTheDocument();
+    expect(screen.queryByText("Sidebar")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "跳到主要内容" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开侧边栏" })).not.toBeInTheDocument();
+
+    await router.navigate("/app/chat");
+    expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Sidebar")).not.toBeInTheDocument();
+  });
+
+  it("is an ordinary shell with embed=0 or no flag", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    renderRoute("/app/settings?embed=0");
+    expect(await screen.findByText("账户")).toBeInTheDocument();
+    expect(screen.getByText("Sidebar")).toBeInTheDocument();
+  });
+
   // Logging out has to drop the previous account's projects from this tab.
   // Leaving them behind is how the next person to log in on a shared machine
   // sees a project list that is not theirs.
