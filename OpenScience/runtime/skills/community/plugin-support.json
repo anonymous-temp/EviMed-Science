@@ -3,15 +3,19 @@
   "kernel": "@deepseek-ai/dsh@0.1.5-rc.2",
   "management": "immutable-release",
   "nativePlugins": [
+    "evimed-runtime-ui",
+    "evimed-plugin-probe",
     "evimed-seam-probe",
     "evimed-evidence-store",
+    "evimed-web",
     "evimed-guidance",
     "evimed-run-policy",
     "evimed-evidence",
     "evimed-capsule",
     "evimed-screening",
     "evimed-review",
-    "evimed-citation-bridge"
+    "evimed-citation-bridge",
+    "evimed-compaction"
   ],
   "communitySkills": [
     "dsh-ppt@0db836e8251a10bf93f26e702534ab9d8b2a1818",
