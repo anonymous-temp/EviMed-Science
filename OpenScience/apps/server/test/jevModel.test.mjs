@@ -223,6 +223,26 @@ test("nothing is reserved or sent without a key, a pin, or room in Jev's two cei
   assert.equal(ledger.calls.length, 0);
 });
 
+test("an uncertain Jev call carries its bound: the input it was reserved at, output being free", async () => {
+  // Audit I3-9 follow-up: the uncertain rows carried no estimate at all.
+  /** @type {any[]} */
+  const calls = [];
+  const ledger = {
+    async reserveModel(/** @type {any} */ input) { calls.push(["reserve", input.estimatedCost]); return { id: input.id }; },
+    async settleModel() { calls.push(["settle"]); },
+    async markUncertain(/** @type {string} */ _u, /** @type {string} */ _id, /** @type {string} */ code, /** @type {any} */ options = {}) { calls.push(["uncertain", code, options.estimatedCost ?? null]); },
+    async release(/** @type {string} */ _u, /** @type {string} */ _id, /** @type {string} */ code) { calls.push(["release", code]); },
+  };
+  const { fetchImpl } = wire(new Response("overloaded", { status: 503 }), Response.json({ model: "jev-1.13.0" }));
+  await assert.rejects(callJev({ config, usageLedger: ledger, fetchImpl, retryDelayMs: 0 }, call));
+  const reserved = calls[0][1];
+  assert.ok(reserved > 0);
+  assert.deepEqual(calls.filter((entry) => entry[0] === "uncertain"), [
+    ["uncertain", "provider_response_incomplete", reserved],
+    ["uncertain", "response_usage_missing", reserved],
+  ]);
+});
+
 test("the key reaches the Authorization header and nothing else", async () => {
   const echoing = [
     Response.json({ detail: { error_type: "authentication_error", message: `Invalid API key ${KEY}` } }, { status: 403 }),

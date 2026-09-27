@@ -188,6 +188,15 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
     throw new JevError("usage_ledger_unavailable", "Durable usage accounting is unavailable.");
   }
   let reservation = null;
+  /**
+   * What an uncertain Jev call is booked at (usageLedger.mjs `OPEN_COST_VALUE`):
+   * the bound every metered client gives — its input as the reservation priced
+   * it, plus the output it saw — and Jev's output is free, so the bound is the
+   * input estimate. Written out rather than left to the reservation fallback,
+   * so the row says it was bounded, not unknown.
+   * @type {number | null}
+   */
+  let uncertainCost = null;
   if (usageLedger) {
     // Output is free, so the ceiling is the input estimate at the input rate.
     const estimate = priceUsage({ resourceType: "model", model: call.model, cacheMiss: call.estimatedTokens, output: 0, peak: isPeak(at) });
@@ -202,6 +211,7 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
       runLimit: 0,
       now: at,
     });
+    uncertainCost = estimate.cost;
   }
   const controller = new AbortController();
   const timeoutMs = Math.max(1_000, Number(call.timeoutMs ?? config.reviewJevTimeoutMs ?? 15_000));
@@ -251,7 +261,7 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
           actualCost: price.cost, priced: price.priced, providerRequestId: null,
         });
       } else {
-        await usageLedger.markUncertain(call.userId, reservation.id, "response_usage_missing", {});
+        await usageLedger.markUncertain(call.userId, reservation.id, "response_usage_missing", { estimatedCost: uncertainCost });
       }
       reservation = null;
     }
@@ -272,7 +282,7 @@ async function askOnce({ config, usageLedger, fetchImpl }, call) {
     call.signal?.removeEventListener?.("abort", onOuterAbort);
     if (usageLedger && reservation) {
       try {
-        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus });
+        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus, estimatedCost: uncertainCost });
       } catch {
         process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
       }

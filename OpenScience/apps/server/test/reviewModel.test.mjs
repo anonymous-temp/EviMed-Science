@@ -167,3 +167,55 @@ test("a call that outlives its timeout is stopped and named", async () => {
   await assert.rejects(callReviewModel({ config, fetchImpl: hanging }, { ...call, timeoutMs: 1_000 }),
     (error) => error instanceof ReviewModelError && error.code === "review_model_timeout");
 });
+
+test("an uncertain reviewer call is booked at its prompt and the output that arrived, never its reservation's ceiling", async () => {
+  // Audit I3-9 follow-up: the reviewer booked uncertain rows with no estimate,
+  // so each held its full ceiling — the thinking budget and the answer at the
+  // output rate — in the account's spend windows.
+  const booked = () => {
+    /** @type {any[]} */
+    const calls = [];
+    return {
+      calls,
+      async reserveModel(/** @type {any} */ input) { calls.push(["reserve", input.estimatedCost]); return { id: input.id }; },
+      async settleModel() { calls.push(["settle"]); },
+      async markUncertain(/** @type {string} */ _u, /** @type {string} */ _id, /** @type {string} */ code, /** @type {any} */ options = {}) { calls.push(["uncertain", code, options.estimatedCost ?? null]); },
+      async release(/** @type {string} */ _u, /** @type {string} */ _id, /** @type {string} */ code) { calls.push(["release", code]); },
+    };
+  };
+  const event = (/** @type {any} */ delta) => `data: ${JSON.stringify({ id: "chatcmpl-test", model: "qwen3.8-max-0902", choices: [{ index: 0, delta }] })}\n\n`;
+  /** One chunk per read, then the connection drops (or closes). @param {string[]} chunks @param {boolean} fail */
+  const stream = (chunks, fail) => {
+    const queue = [...chunks];
+    return new Response(new ReadableStream({
+      pull(controller) {
+        const next = queue.shift();
+        if (next !== undefined) controller.enqueue(new TextEncoder().encode(next));
+        else if (fail) controller.error(new TypeError("terminated"));
+        else controller.close();
+      },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } });
+  };
+  const run = async (/** @type {any} */ fetchImpl, extra = {}) => {
+    const ledger = booked();
+    await callReviewModel({ config, usageLedger: ledger, fetchImpl }, { ...call, ...extra }).catch(() => null);
+    return { reserved: ledger.calls[0][1], last: ledger.calls.at(-1) };
+  };
+
+  // A 5xx before any output: the prompt, nothing more.
+  const refused = await run(async () => new Response("{}", { status: 503 }));
+  assert.equal(refused.last[0], "uncertain");
+  const prompt = refused.last[2];
+  assert.ok(prompt > 0 && prompt < refused.reserved, `the prompt (${prompt}) is below the ceiling (${refused.reserved})`);
+  // Lost after three events of output (one of them reasoning): the prompt and three tokens at ¥36/M.
+  const lost = await run(async () => stream([event({ reasoning_content: "想" }), event({ content: "{\"fi" }), event({ content: "ndings\"" })], true));
+  assert.deepEqual(lost.last.slice(0, 2), ["uncertain", "provider_response_incomplete"]);
+  assert.ok(Math.abs(lost.last[2] - (prompt + 3 * 36 / 1_000_000)) < 1e-9, `${lost.last[2]}`);
+  // Finished without a usage count: the same bound, under its own code.
+  const uncounted = await run(async () => stream([event({ content: "{\"findings\":[]}" }), "data: [DONE]\n\n"], false));
+  assert.deepEqual(uncounted.last.slice(0, 2), ["uncertain", "response_usage_missing"]);
+  assert.ok(Math.abs(uncounted.last[2] - (prompt + 36 / 1_000_000)) < 1e-9, `${uncounted.last[2]}`);
+  // Answered and then cut before any output: the prompt alone.
+  const silent = await run(async () => stream([], true));
+  assert.deepEqual(silent.last, ["uncertain", "provider_response_incomplete", prompt]);
+});

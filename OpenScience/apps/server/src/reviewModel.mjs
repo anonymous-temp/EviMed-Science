@@ -31,7 +31,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { REFERENCE_PRICE_LIST, isPeak, priceUsage } from "@evimed/domain";
-import { estimateModelReservation } from "./modelGateway.mjs";
+import { estimateModelReservation, uncertainCallCost } from "./modelGateway.mjs";
 import { PAYMENT_REQUIRED, recordProviderRefusal } from "./providerRefusals.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 
@@ -113,10 +113,12 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     throw new ReviewModelError("usage_ledger_unavailable", "Durable usage accounting is unavailable.");
   }
   let reservation = null;
+  /** @type {ReturnType<typeof estimateModelReservation> | null} */
+  let estimate = null;
   if (usageLedger) {
     // The estimate counts the thinking budget as output: reasoning bills as
     // completion tokens, and a reservation below the ceiling is not a ceiling.
-    const estimate = estimateModelReservation({ ...body, max_tokens: body.max_tokens + (body.thinking_budget ?? 0) }, config, at);
+    estimate = estimateModelReservation({ ...body, max_tokens: body.max_tokens + (body.thinking_budget ?? 0) }, config, at);
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
       runId: call.runId ?? null, purpose: "review",
@@ -144,6 +146,15 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
   let dispatched = false;
   /** The status of an answer that came back without output, 0 while none has. */
   let refusedStatus = 0;
+  /**
+   * Stream events that carried output (answer or reasoning), counted as a
+   * token each — the bound an uncertain call is booked at (usageLedger.mjs
+   * `OPEN_COST_VALUE`, modelGateway.mjs `uncertainCallCost`). Null until the
+   * stream began: a call lost before its first byte may have been generated
+   * whole, and then the reservation is the bound.
+   * @type {number | null}
+   */
+  let streamedEvents = null;
   try {
     let response;
     try {
@@ -172,6 +183,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
       recordProviderRefusal("dashscope", providerCode === ARREARS ? PAYMENT_REQUIRED : response.status);
       throw failureFor(response.status, providerCode);
     }
+    streamedEvents = 0;
     let content = "";
     let reasoningChars = 0;
     /** Why the provider stopped: `stop`, or `length` at the output ceiling. @type {string | null} */
@@ -202,6 +214,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
           if (event?.usage) usage = event.usage;
           if (event?.choices?.[0]?.finish_reason) finish = String(event.choices[0].finish_reason);
           const delta = event?.choices?.[0]?.delta ?? {};
+          if (typeof delta.content === "string" || typeof delta.reasoning_content === "string") streamedEvents += 1;
           if (typeof delta.content === "string") content += delta.content;
           if (typeof delta.reasoning_content === "string") reasoningChars += delta.reasoning_content.length;
           if (content.length > MAX_ANSWER_CHARS) throw new ReviewModelError("review_model_response_invalid", "The reviewer's answer was too long.");
@@ -230,7 +243,9 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
           actualCost: price.cost, priced: price.priced, providerRequestId: requestId,
         });
       } else {
-        await usageLedger.markUncertain(call.userId, reservation.id, "response_usage_missing", { providerRequestId: requestId });
+        await usageLedger.markUncertain(call.userId, reservation.id, "response_usage_missing", {
+          providerRequestId: requestId, estimatedCost: uncertainCallCost(estimate, body.model, at, streamedEvents),
+        });
       }
       reservation = null;
     }
@@ -250,7 +265,13 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     call.signal?.removeEventListener?.("abort", onOuterAbort);
     if (usageLedger && reservation) {
       try {
-        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, { dispatched, status: refusedStatus });
+        // Refused before output: its prompt. Lost mid-stream: its prompt and
+        // the output that arrived. Lost before the stream began: unknown, so
+        // the reservation (null).
+        await closeUnsettledReservation(usageLedger, call.userId, reservation.id, {
+          dispatched, status: refusedStatus,
+          estimatedCost: uncertainCallCost(estimate, body.model, at, refusedStatus ? 0 : streamedEvents),
+        });
       } catch {
         process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
       }
