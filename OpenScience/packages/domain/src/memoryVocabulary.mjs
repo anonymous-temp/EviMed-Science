@@ -67,6 +67,15 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-specialist', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
   { tag: 'evimed-autopilot-episode', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
   { tag: 'evimed-autopilot-verification', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
+  // A platform dispatch's own tag, written whether or not a budget marker
+  // rides along (2026-09-26 audit, M-2: a GEO brief sent into a runtime that
+  // happened to be open carried no marker and was stored as the researcher's
+  // words). `apps/server/test/platformDispatchTags.test.mjs` walks every
+  // dispatch site and holds each to a tag like these or to a named reason.
+  { tag: 'evimed-source-understanding', role: 'injected', emitters: ['apps/server/src/sourceUnderstandingRuntime.mjs'] },
+  // The delivery gate's repair round, sent back into the researcher's own
+  // conversation: the gate's words, never theirs.
+  { tag: 'evimed-repair', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
   { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },

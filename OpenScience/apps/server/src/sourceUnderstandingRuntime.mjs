@@ -265,8 +265,11 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
                 userId: job.userId, projectId: home.id, runId: dispatchId, ...budget.scope });
               promptAttempted = true;
               return runtimeManager.dispatchPrompt(scoped, session.id, {
-                // The question first, the marker last (see learningRuntime).
-                text: `${repairText || question}\n\n${marker}`, system: prepared.system,
+                // The question first, the markers last (see learningRuntime).
+                // Its own tag as well as the budget marker: the brief is the
+                // platform's, and saying so must not depend on a marker that
+                // exists for the budget (2026-09-26 audit, M-2).
+                text: `${repairText || question}\n\n<evimed-source-understanding>${dispatchId}</evimed-source-understanding>\n${marker}`, system: prepared.system,
                 agent: selected.runtimeAgent, strictContext: true, model: `deepseek/${config.deepseekModel}`,
                 runId: dispatchedRun.id, allowBounded: true, requestId: dispatchedRun.kernelRequestIds?.at(-1),
               });

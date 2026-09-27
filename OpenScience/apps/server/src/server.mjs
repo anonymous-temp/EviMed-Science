@@ -3321,7 +3321,11 @@ export function createWebApiApp(overrides = {}) {
       effectiveRuntimeAgent: route.effectiveRuntimeAgent ?? null,
       effectiveRouteReason: route.effectiveRouteReason ?? null,
     }, async (session, dispatchedRun, repairText = null) => {
-      const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
+      // A repair round is the gate's words in the researcher's conversation,
+      // so it carries the gate's tag (see the chat route).
+      const promptText = typeof repairText === "string" && repairText.trim()
+        ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
+        : text;
       let memories = [];
       try {
         memories = await memorySubstrate.recall(user.id, text, { projectId: project.id, sessionId: session.sessionId });
@@ -4211,7 +4215,13 @@ export function createWebApiApp(overrides = {}) {
           effectiveRuntimeAgent: effectiveAgent?.runtimeAgent ?? null,
           effectiveRouteReason: effectiveAgent?.reason ?? null,
         }, async (session, dispatchedRun, repairText = null) => {
-          const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
+          // A repair round sends the delivery gate's findings into the
+          // researcher's own conversation, in the slot they type into. Tagged,
+          // so memory extraction never reads the gate's words as theirs — the
+          // class of the GEO brief stored as 「你说的」 (2026-09-26 audit, M-2).
+          const promptText = typeof repairText === "string" && repairText.trim()
+            ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
+            : text;
           let memories = [];
           try {
             memories = await memorySubstrate.recall(ctx.user.id, text, {

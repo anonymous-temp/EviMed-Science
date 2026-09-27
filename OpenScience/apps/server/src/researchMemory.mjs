@@ -62,6 +62,9 @@ export { MEMORY_EVIDENCE_LIMIT, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_REVISION_LI
  */
 export const REVISION_ACTORS = Object.freeze(["extraction", "user", "system"]);
 
+/** The weight an origin carries, as extraction sets it (`memoryIntelligence.mjs`). */
+const ORIGIN_CONFIDENCE = Object.freeze({ manual: 1, explicit: 1, inferred: 0.6, system: 0.8 });
+
 /** @param {string} field */
 function invalid(field) {
   return new HttpError(400, "memory_payload_invalid", `${field} is invalid.`);
@@ -1068,6 +1071,53 @@ export class ResearchMemoryStore {
           ...(replaced ? { replaced: { id: replaced.id, summary: boundedText(replaced.summary || replaced.value, 200) } } : {}),
         };
       });
+  }
+
+  /**
+   * Say who a record's words came from, correcting what extraction wrote.
+   *
+   * Written for one incident class (2026-09-26 audit, M-2): a GEO step's
+   * dispatch brief reached the user slot untagged and its product line was
+   * stored as the researcher's own words (`explicit`). Whose words a record
+   * holds is its provenance (principle 18), so the correction is a revision
+   * like any other change — by the platform, with the reason — and the value,
+   * the summary and the evidence are left exactly as they were. The operator
+   * script `scripts/ops/correct-memory-origin.mjs` is its caller.
+   *
+   * @param {string} userId @param {string} id
+   * @param {{ origin: string, reason: string, expectedVersion?: number }} change
+   */
+  async correctOrigin(userId, id, { origin, reason, expectedVersion = 0 }) {
+    const owner = assertUserId(userId);
+    const recordId = assertRecordId(id);
+    const next = enumValue(origin, MEMORY_ORIGINS, "origin");
+    const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
+    if (!auditReason) throw invalid("reason");
+    const expected = Math.max(0, Number(expectedVersion) || 0);
+    return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
+      const found = await client.query("SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id=$2 FOR UPDATE", [owner, recordId]);
+      if (found.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      const current = publicRecord(found.rows[0]);
+      if (expected > 0 && expected !== current.version) throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
+      if (current.origin === next) return { record: current, changed: false };
+      const now = await transactionInstant(client);
+      // Only the user's own word sets a confirmation time; a record that turns
+      // out not to be their word never had one.
+      const confirmedAt = next === "explicit" || next === "manual" ? current.lastConfirmedAt : null;
+      const updated = await client.query(`UPDATE evimed_memory.records SET origin=$3,confidence=$4,last_confirmed_at=$5,
+        revisions=$6::jsonb,version=version+1,updated_at=$7 WHERE user_id=$1 AND id=$2 RETURNING *`,
+      [owner, recordId, next, ORIGIN_CONFIDENCE[/** @type {keyof typeof ORIGIN_CONFIDENCE} */ (next)] ?? current.confidence, confirmedAt,
+        JSON.stringify(appendRevision(current.revisions, {
+          version: current.version, value: current.value, summary: current.summary, status: current.status,
+          changedAt: now, reason: boundedText(`origin ${current.origin} -> ${next}: ${auditReason}`, MEMORY_REASON_LIMIT),
+          ...revisionActor("system", null),
+          ...(current.supersededBy ? { supersededBy: current.supersededBy, invalidSince: current.invalidSince } : {}),
+        })), now]);
+      const record = publicRecord(updated.rows[0]);
+      await this.#enqueueRecordIndex(client, owner, record);
+      return { record, changed: true };
+    });
   }
 
   /** @param {string} userId @param {string} id */

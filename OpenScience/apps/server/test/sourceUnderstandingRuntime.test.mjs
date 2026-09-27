@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, utimes, w
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { carriesPlatformContext } from "@evimed/domain";
 import { UNCAPPED_CNY } from "../src/boundedRunBudget.mjs";
 import { createSourceUnderstandingRuntime, sourceUnderstandingBudget, sourceRunProject } from "../src/sourceUnderstandingRuntime.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
@@ -89,6 +90,10 @@ async function fixture(t) {
         assert.equal(args.allowBounded, true);
         assert.equal(args.model, "deepseek/deepseek-v4-pro");
         assert.ok(!args.text.includes(input.text));
+        // The brief is the platform's, and says so by its own tag — not only
+        // by the budget marker (2026-09-26 audit, M-2).
+        assert.match(args.text, new RegExp(`<evimed-source-understanding>${request.dispatchId}</evimed-source-understanding>`));
+        assert.equal(carriesPlatformContext(args.text.replace(/<evimed-budget-scope>[^<]*<\/evimed-budget-scope>/, "")), true);
         return { accepted: true };
       },
       boundedRuntimeScope: () => state.scope,
