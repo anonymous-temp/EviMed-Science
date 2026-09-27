@@ -1292,6 +1292,10 @@ services:
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
       CACHE_DIR: /tmp/openfda-cache
+      # The engine's openFDA client (safety_agent.core.config) reads it; the
+      # same host variable the gateway reads, so one key lifts both from the
+      # anonymous 1,000 requests a day. Empty means anonymous, as before.
+      OPENFDA_API_KEY: ${OPEN_SCIENCE_OPENFDA_API_KEY:-}
       EVIMED_EVIDENCE_SEARCH_URL: ${EVIMED_EVIDENCE_SEARCH_URL:-https://www.evimed.com/api-evimed/medicine-api/ai-api}
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
     volumes:
