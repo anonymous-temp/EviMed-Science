@@ -165,29 +165,41 @@ function log(event, fields = {}, error = false) {
   (error ? process.stderr : process.stdout).write(`${JSON.stringify(row)}\n`);
 }
 
-// backup-archive.mjs writes this one line when it recorded links a run made
-// inside its own workspace instead of refusing the backup over them.
+// backup-archive.mjs writes these lines when it recorded, instead of refusing
+// the backup over them, links a run made inside its own workspace and the
+// other entries there an archive cannot carry (special files, unreadable
+// files, a hard link's other names, names that are not UTF-8).
 const linkNotePrefix = "backup note: workspace symbolic links recorded, not followed: ";
+const omittedNotePrefix = "backup note: workspace entries left out of the archive: ";
 
-/** The count and first names from the writer's note; none is `{ count: 0 }`.
- *  A note that does not parse is reported as an unknown count, not as zero. */
-function recordedWorkspaceLinks(stderr) {
-  const line = String(stderr ?? "").split(/\r?\n/).find((row) => row.startsWith(linkNotePrefix));
-  if (!line) return { count: 0, paths: [] };
+/** The count, first names and (for omissions) counts by kind from one of the
+ *  writer's notes; none is `{ count: 0 }`. A note that does not parse is
+ *  reported as an unknown count, not as zero. */
+function backupNote(stderr, prefix) {
+  const line = String(stderr ?? "").split(/\r?\n/).find((row) => row.startsWith(prefix));
+  if (!line) return { count: 0, paths: [], kinds: {} };
   try {
-    const note = JSON.parse(line.slice(linkNotePrefix.length));
+    const note = JSON.parse(line.slice(prefix.length));
+    const kinds = note?.kinds ?? {};
     if (Number.isSafeInteger(note?.count) && note.count > 0 && Array.isArray(note.paths)
-      && note.paths.every((entry) => typeof entry === "string")) {
-      return { count: note.count, paths: note.paths.slice(0, 5).map((entry) => entry.slice(0, 512)) };
+      && note.paths.every((entry) => typeof entry === "string")
+      && kinds && typeof kinds === "object" && !Array.isArray(kinds)
+      && Object.values(kinds).every((value) => Number.isSafeInteger(value) && value > 0)) {
+      return {
+        count: note.count,
+        paths: note.paths.slice(0, 5).map((entry) => entry.slice(0, 512)),
+        kinds: Object.fromEntries(Object.entries(kinds).slice(0, 16).map(([kind, value]) => [kind.slice(0, 64), value])),
+      };
     }
   } catch {}
-  return { count: null, paths: [] };
+  return { count: null, paths: [], kinds: {} };
 }
 
 async function runCycle(config, previous) {
   const attemptAt = new Date().toISOString();
   const backup = await runProcess("bash", [backupScript, config.dataDir, config.backupDir]);
-  const links = recordedWorkspaceLinks(backup.stderr);
+  const links = backupNote(backup.stderr, linkNotePrefix);
+  const omitted = backupNote(backup.stderr, omittedNotePrefix);
   const archive = path.resolve(backup.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "");
   if (path.dirname(archive) !== config.backupDir || !archivePattern.test(path.basename(archive))) {
     throw new Error("Backup command returned an invalid encrypted archive path.");
@@ -248,6 +260,12 @@ async function runCycle(config, previous) {
     // manifest, never followed, never restored. A notice, not a health state.
     lastLinksRecorded: links.count,
     lastLinksSample: links.paths,
+    // The other entries a run made there that the archive left out, by kind
+    // (`hardlink-dropped`, `unreadable` and `non-utf8-name` are bytes this
+    // archive does not hold under any name). A notice, not a health state.
+    lastOmittedRecorded: omitted.count,
+    lastOmittedKinds: omitted.kinds,
+    lastOmittedSample: omitted.paths,
   };
   await writeState(config.stateFile, state);
   log("backup.completed", {
@@ -257,6 +275,8 @@ async function runCycle(config, previous) {
     offsite,
     linksRecorded: links.count,
     ...(links.paths.length ? { linksSample: links.paths } : {}),
+    omittedRecorded: omitted.count,
+    ...(omitted.count ? { omittedKinds: omitted.kinds, omittedSample: omitted.paths } : {}),
   });
   return state;
 }

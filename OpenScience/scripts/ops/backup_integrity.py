@@ -31,9 +31,21 @@ def valid_member_name(name):
 
 
 def is_workspace_link_path(name):
-    """Where the writer records a run's link instead of refusing the backup."""
+    """Strictly below a workspace: where the writer records what a run made
+    (a link, a special file, an unreadable file, a hard link, a non-UTF-8
+    name) instead of refusing the backup."""
     parts = name.split("/")
     return len(parts) > 5 and parts[0] == "users" and parts[2] == "projects" and parts[4] == "workspace"
+
+
+def workspace_of(name):
+    return "/".join(name.split("/")[:5])
+
+
+OMITTED_KINDS = frozenset((
+    "fifo", "socket", "character-device", "block-device", "unreadable", "hardlink", "hardlink-dropped",
+    "non-utf8-name",
+))
 
 
 def identity(metadata):
@@ -80,7 +92,7 @@ def read_manifest(root_fd):
     try:
         descriptor = os.open(MANIFEST_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
     except FileNotFoundError:
-        return None, 0
+        return None, 0, 0
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > MAX_MANIFEST_BYTES:
@@ -142,12 +154,58 @@ def read_manifest(root_fd):
                 or len(target.encode("utf-8", "replace")) > MAX_LINK_TARGET_BYTES):
             raise IntegrityError("backup_inventory_invalid")
         recorded.add(name)
-    return expected, len(recorded)
+    # Everything else a run made in its workspace that the archive left out:
+    # special files, unreadable files, the other names of a hard-linked file
+    # (`of` names the one archived) and names that are not UTF-8 (by parent
+    # and raw bytes). None is a member, none is restored.
+    omitted = manifest.get("omitted", [])
+    if not isinstance(omitted, list) or len(entries) + len(links) + len(omitted) > MAX_MANIFEST_ENTRIES:
+        raise IntegrityError("backup_inventory_invalid")
+    keys = set()
+    for record in omitted:
+        if not isinstance(record, dict) or record.get("kind") not in OMITTED_KINDS:
+            raise IntegrityError("backup_inventory_invalid")
+        kind = record["kind"]
+        if kind == "non-utf8-name":
+            parent = record.get("parent")
+            name_hex = record.get("nameHex")
+            if (set(record) != {"parent", "kind", "nameHex"} or not valid_member_name(parent)
+                    or not is_workspace_link_path(f"{parent}/-")
+                    or expected.get(parent, {}).get("type") != "directory"
+                    or not isinstance(name_hex, str) or not re.fullmatch("(?:[0-9a-f]{2}){1,255}", name_hex)):
+                raise IntegrityError("backup_inventory_invalid")
+            raw = bytes.fromhex(name_hex)
+            if b"/" in raw or b"\x00" in raw:
+                raise IntegrityError("backup_inventory_invalid")
+            try:
+                raw.decode("utf-8")
+            except UnicodeDecodeError:
+                pass
+            else:
+                raise IntegrityError("backup_inventory_invalid")
+            key = (parent, name_hex)
+        else:
+            name = record.get("path")
+            if (set(record) != ({"path", "kind", "of"} if kind == "hardlink" else {"path", "kind"})
+                    or not valid_member_name(name) or not is_workspace_link_path(name)
+                    or name in expected or name in recorded
+                    or expected.get(posixpath.dirname(name), {}).get("type") != "directory"):
+                raise IntegrityError("backup_inventory_invalid")
+            if kind == "hardlink":
+                of = record["of"]
+                if (not isinstance(of, str) or expected.get(of, {}).get("type") != "file"
+                        or workspace_of(of) != workspace_of(name)):
+                    raise IntegrityError("backup_inventory_invalid")
+            key = name
+        if key in keys:
+            raise IntegrityError("backup_inventory_invalid")
+        keys.add(key)
+    return expected, len(recorded), len(keys)
 
 
 def verify_tree(root_fd, *, remove_manifest=True):
     """Walk pinned directories without following links, then compare exact bytes."""
-    expected, links = read_manifest(root_fd)
+    expected, links, omitted = read_manifest(root_fd)
     seen = set()
     files = 0
     directories = 0
@@ -229,6 +287,8 @@ def verify_tree(root_fd, *, remove_manifest=True):
                "files": files, "directories": directories}
     if links:
         receipt["links"] = links
+    if omitted:
+        receipt["omitted"] = omitted
     return receipt
 
 
@@ -281,6 +341,8 @@ def main(arguments):
     finally:
         os.close(root)
     links = f"; {receipt['links']} workspace link(s) recorded in the archive manifest, not restored" if receipt.get("links") else ""
+    if receipt.get("omitted"):
+        links += f"; {receipt['omitted']} other workspace entr(ies) recorded in the archive manifest, not restored"
     print(f"restore verification: {receipt['verification']} ({receipt['files']} files{links})", file=sys.stderr)
 
 

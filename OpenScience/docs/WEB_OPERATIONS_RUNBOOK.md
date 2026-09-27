@@ -546,8 +546,18 @@ not sufficient containment for those events.
   `users/*/projects/*/workspace/` — the data root, a user or project root, the
   workspace directory itself, the native session journals. Those are paths a
   link could use to point the backup out of the tenant tree, so find what made
-  it before removing it, then `docker restart` the backup container for an
-  immediate cycle
+  it before removing it. The same goes for the rest of the class inside a
+  workspace — a FIFO, socket or device node, an unreadable file or directory,
+  a name that is not UTF-8, a hard-linked file: recorded in the manifest's
+  `omitted` list and left out (`lastOmittedRecorded`, `lastOmittedKinds`,
+  `lastOmittedSample`; `omittedRecorded` on `backup.completed`), never a failed
+  backup. `hardlink-dropped`, `unreadable` and `non-utf8-name` are bytes the
+  archive does not hold; if a tenant needs them backed up, fix the permission,
+  rename, or copy the file (`cp`, not `ln`). Outside a workspace they still
+  refuse the backup, with `Refusing to back up a non-file data entry`,
+  `…a hard-linked data file outside a workspace`, `…a data entry whose name is
+  not UTF-8`, or the permission error. Then `docker restart` the backup
+  container for an immediate cycle
   (after `OPEN_SCIENCE_BACKUP_MAX_FAILURES` failures it otherwise waits a full
   interval). The site keeps serving meanwhile: web does not wait on the
   backup's health.

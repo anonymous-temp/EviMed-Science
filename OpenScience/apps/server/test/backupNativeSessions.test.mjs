@@ -117,12 +117,14 @@ for (const ancestor of [`${native}/dsh-home/sessions`, "users/u/projects/p/works
     const marker = path.join(root, "swapped");
     for (const [name, command] of [["tar", "EVIMED_TEST_REAL_TAR"], ["node", "EVIMED_TEST_REAL_NODE"]]) {
       const wrapper = path.join(bin, name);
+      // After the inventory: backup-archive.mjs is both the inventory
+      // (`inventory` as its first argument) and the archive writer.
       await writeFile(wrapper, `#!/usr/bin/env bash
 set -euo pipefail
 for argument in "$@"; do
   case "$argument" in
     -czf|*/backup-archive.mjs)
-      if [ ! -e "$EVIMED_TEST_SWAP_MARKER" ]; then
+      if [ "\${2:-}" != inventory ] && [ ! -e "$EVIMED_TEST_SWAP_MARKER" ]; then
         mv "$EVIMED_TEST_SWAP_TARGET" "$EVIMED_TEST_SWAP_TARGET.saved"
         ln -s "$EVIMED_TEST_OUTSIDE" "$EVIMED_TEST_SWAP_TARGET"
         touch "$EVIMED_TEST_SWAP_MARKER"

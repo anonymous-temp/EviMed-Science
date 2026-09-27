@@ -1196,16 +1196,35 @@ and restore drills are managed outside the service container; then set
 `OPEN_SCIENCE_RESTORE_DRILL_ACK=true`.
 
 The backup script never follows a symbolic link. A link a run made strictly
-inside its own workspace (`users/*/projects/*/workspace/…` — the only tree a
-run can write) is recorded rather than refused: its path and target text go
+inside its own workspace (`users/*/projects/*/workspace/…`, the tree a run
+works in) is recorded rather than refused: its path and target text go
 into the archive's integrity manifest (`links`), the backup prints one
 `backup note: workspace symbolic links recorded, not followed: {"count":…,"paths":[…]}`
 line, and the scheduler state carries `lastLinksRecorded` and
 `lastLinksSample`. The link is not an archive member and is never restored;
 whatever it names inside the tree is archived under its own name. A link
 anywhere else — the data root, a user or project root, the workspace directory
-itself, the native session journals — still refuses the whole backup. The
-script writes both a `.tar.gz` archive and a `.sha256` checksum sidecar. When
+itself, the native session journals — still refuses the whole backup.
+
+The other entries a run can make there that an archive cannot carry are
+recorded the same way, in the manifest's `omitted` list, and left out: a FIFO,
+socket or device node (`fifo`, `socket`, `character-device`, `block-device`);
+a file or directory the backup may not read (`unreadable`); a name that is not
+UTF-8, such as an unzipped GBK archive leaves (`non-utf8-name`, by parent and
+the name's bytes in hex; a directory's whole subtree is left out); and a
+hard-linked file. A hard-linked file whose every name is inside one workspace
+is that workspace's bytes: it is archived once, under the first of its names,
+and each other name is recorded as `hardlink` with `of` naming it. One with a
+name anywhere else — another project, the runtime's package cache — is not
+archived at all, and each of its workspace names is recorded as
+`hardlink-dropped`. The backup prints one
+`backup note: workspace entries left out of the archive: {"count":…,"kinds":{…},"contentNotArchived":…,"paths":[…]}`
+line — `contentNotArchived` counts the `unreadable`, `hardlink-dropped` and
+`non-utf8-name` records, whose bytes the archive holds under no name — and the
+scheduler state carries `lastOmittedRecorded`, `lastOmittedKinds` and
+`lastOmittedSample`. Outside a workspace each of these still refuses the
+backup (a socket there is skipped, as it always was). The script writes both a
+`.tar.gz` archive and a `.sha256` checksum sidecar. When
 `OPEN_SCIENCE_BACKUP_RETENTION_DAYS` is set, it also prunes local
 `open-science-data-*.tar.gz` and `open-science-data-*.tar.gz.enc` archives older
 than that many days, plus their checksum sidecars. The pruner refuses
@@ -1303,10 +1322,10 @@ scripts/ops/restore-data.sh BACKUP_ARCHIVE /var/lib/open-science
 The restore script verifies the checksum when present, decrypts encrypted
 archives only after checksum verification, and rejects archive entries with
 absolute paths, traversal segments, or symbolic links. It verifies the recorded
-workspace links as records and creates none of them (the restore receipt and
-the drill report how many); to recreate an alias by hand, read them from the
-decrypted archive with
-`tar -xOzf archive.tar.gz .open-science-backup-manifest.json | jq .links`. These scripts are a
+workspace links and omitted entries as records and creates none of them (the
+restore receipt and the drill report how many); to recreate an alias or a
+hard link's other name by hand, read them from the decrypted archive with
+`tar -xOzf archive.tar.gz .open-science-backup-manifest.json | jq '.links, .omitted'`. These scripts are a
 file-volume recovery path for controlled deployments; production operators
 still need to enable the off-host workflow (or an equivalent platform backup),
 passphrase custody, and access controls appropriate to their data policy.

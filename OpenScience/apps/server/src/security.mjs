@@ -549,7 +549,7 @@ async function descriptorRealPath(handle) {
   return link.slice(0, -deletedDescriptorSuffix.length);
 }
 
-async function assertHandleWithinRoot(rootDir, handle) {
+async function assertHandleWithinRoot(rootDir, handle, { allowHardLinks = false } = {}) {
   const stat = await handle.stat();
   if (process.platform === "linux") {
     const root = await fs.realpath(path.resolve(rootDir));
@@ -562,8 +562,10 @@ async function assertHandleWithinRoot(rootDir, handle) {
   // link inside the workspace resolves cleanly while the content belongs to a
   // file outside it. Containment is a property of the inode, not of the path we
   // happened to open it through, and a workspace has no legitimate hardlinks.
-  // Directories are exempt — their nlink counts subdirectories.
-  if (stat.isFile() && stat.nlink > 1) {
+  // Directories are exempt — their nlink counts subdirectories. The one caller
+  // that may pass `allowHardLinks` is the backup writer, and only for a file
+  // whose every name it walked inside one workspace (backup-archive.mjs).
+  if (stat.isFile() && stat.nlink > 1 && !allowHardLinks) {
     throw new HttpError(403, "path_forbidden", "hard-linked files are not allowed in hosted workspaces.");
   }
   return stat;
@@ -617,7 +619,7 @@ export async function openScopedDirectoryNoFollow(rootDir, targetPath, { create 
 export async function openScopedFileNoFollow(
   rootDir,
   file,
-  { flags = fsConstants.O_RDONLY, mode = 0o600, createParent = false } = {},
+  { flags = fsConstants.O_RDONLY, mode = 0o600, createParent = false, allowHardLinks = false } = {},
 ) {
   const { root, target } = scopedParts(rootDir, file);
   if (target === root) throw new HttpError(400, "not_a_file", "path is not a file.");
@@ -625,7 +627,7 @@ export async function openScopedFileNoFollow(
   let handle;
   try {
     handle = await openNoFollow(path.join(parent.path, path.basename(target)), flags, mode);
-    const stat = await assertHandleWithinRoot(root, handle);
+    const stat = await assertHandleWithinRoot(root, handle, { allowHardLinks });
     // Every caller here wants a regular file. A device node, socket or FIFO
     // reaching a reader would either block it or feed it something that is not
     // workspace content, so refuse it once here rather than in each caller.

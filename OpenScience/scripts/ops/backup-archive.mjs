@@ -1,7 +1,16 @@
 #!/usr/bin/env node
-// Stream the inventoried customer files through verified open descriptors.
+// Inventory the customer files, then stream them through verified open descriptors.
+//
+//   backup-archive.mjs inventory ROOT MANIFEST [STRICT=true]
+//   backup-archive.mjs ROOT MANIFEST OUTPUT [STRICT=false]
+//
+// One inventory for both modes (backup-data.sh used to carry a second one of
+// its own, and every rule had to be written twice): strict opens, hashes and
+// re-checks every entry; not strict records what lstat sees, and the writer
+// re-verifies identity when it opens each entry.
 import { createHash } from "node:crypto";
-import { lstat, open, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { access, lstat, open, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -12,7 +21,7 @@ import { openScopedDirectoryNoFollow, openScopedFileNoFollow } from "../../apps/
 const arguments_ = process.argv.slice(2);
 const inventoryMode = arguments_[0] === "inventory";
 const [rootArgument, manifestPath, outputPath, strictArgument = "false"] = inventoryMode
-  ? [arguments_[1], arguments_[2], undefined, "true"] : arguments_;
+  ? [arguments_[1], arguments_[2], undefined, arguments_[3] ?? "true"] : arguments_;
 const root = path.resolve(rootArgument);
 const strict = strictArgument === "true";
 const octalMaximum = 0o77777777777;
@@ -23,8 +32,9 @@ const maximumManifestBytes = 64 * 1024 * 1024;
 const maximumManifestEntries = 1_000_000;
 // Linux caps a link's target at PATH_MAX; anything longer is not a link record.
 const maximumLinkTargetBytes = 4096;
-// backup-scheduler.mjs reads this one line into its state; keep them in step.
+// backup-scheduler.mjs reads these lines into its state; keep them in step.
 const linkNotePrefix = "backup note: workspace symbolic links recorded, not followed: ";
+const omittedNotePrefix = "backup note: workspace entries left out of the archive: ";
 let outputCreated = false;
 
 // A run may `ln -s` inside its own workspace, and twice one did (2026-09-26: a
@@ -39,8 +49,35 @@ let outputCreated = false;
 // root, the workspace directory itself, the native session journals) a link
 // is still refused: those are the paths a link could use to point the backup
 // out of the tenant's tree.
-function isWorkspaceLinkPath(parts) {
+//
+// The same holds for everything else a run can make there that an archive
+// cannot carry (2026-09-27, found sweeping the class): a FIFO, socket or
+// device node; a file the backup may not read; a name that is not UTF-8; a
+// file with a second name. Each is recorded in the manifest's `omitted` list
+// and left out, instead of failing every tenant's backup; outside a workspace
+// each is still refused (a socket there is still skipped, as it always was).
+function isBelowWorkspace(parts) {
   return parts.length > 5 && parts[0] === "users" && parts[2] === "projects" && parts[4] === "workspace";
+}
+
+function workspaceOf(relative) {
+  return relative.split("/").slice(0, 5).join("/");
+}
+
+const omittedKinds = new Set([
+  "fifo", "socket", "character-device", "block-device", "unreadable", "hardlink", "hardlink-dropped", "non-utf8-name",
+]);
+// Kinds whose bytes are in the archive under no name at all. A `hardlink`
+// record's bytes are archived under the name it is `of`; a special file has none.
+const contentNotArchivedKinds = new Set(["unreadable", "hardlink-dropped", "non-utf8-name"]);
+const unreadableCodes = new Set(["EACCES", "EPERM"]);
+
+function specialKind(metadata) {
+  if (metadata.isFIFO()) return "fifo";
+  if (metadata.isSocket()) return "socket";
+  if (metadata.isCharacterDevice()) return "character-device";
+  if (metadata.isBlockDevice()) return "block-device";
+  return null;
 }
 
 async function linkTarget(full) {
@@ -58,6 +95,22 @@ function managedRuntimeDecision(parts) {
   const included = suffix.slice(0, managedRuntimeIncludedTree.length)
     .every((part, index) => managedRuntimeIncludedTree[index] === part);
   return { managed: true, included };
+}
+
+/** Paths the backup never looks at, decided from the path alone. */
+function excludedFromBackup(parts) {
+  // The platform's own background projects (learning, document
+  // understanding, the paired evaluation's cells) are scratch: what they
+  // produce is kept in the product database, and the store rebuilds their
+  // trees on first use. Their files change whenever that work is running —
+  // most of the time once it runs around the clock — and one changed file
+  // failed the whole strict backup (2026-09-21, every cycle for hours).
+  if (parts.length === 4 && parts[0] === "users" && parts[2] === "projects" && isInternalProject(parts[3])) return true;
+  if (!managedRuntimeDecision(parts).included) return true;
+  // Control sockets live outside the workspaces and are skipped by name. Inside
+  // one a name is the tenant's to choose, and the entry's type decides.
+  const name = parts.at(-1) ?? "";
+  return !isBelowWorkspace(parts) && (name === ".runtime-sockets" || name.endsWith(".sock"));
 }
 
 function metadataFields(metadata) {
@@ -94,39 +147,127 @@ async function digestHandle(handle, size) {
 
 async function createInventory() {
   const entries = [];
+  const omitted = [];
+  // Hard-linked files below a workspace, by inode, until the walk is over:
+  // only then is it known whether every name the inode has was walked.
+  const hardLinked = new Map();
+  const omit = (record) => {
+    omitted.push(record);
+    return false;
+  };
+  // Below a workspace a read the tenant's own permissions refuse is recorded;
+  // anywhere else it fails the backup, as it always did.
+  const unreadable = (parts, relative, error) => {
+    if (isBelowWorkspace(parts) && unreadableCodes.has(error?.code)) return omit({ path: relative, kind: "unreadable" });
+    throw error;
+  };
+
+  async function childNames(full, parts, relative) {
+    const names = [];
+    // As bytes: a name that is not UTF-8 decodes to one that does not exist,
+    // and the lstat of that decoded name failed the whole backup.
+    for (const raw of await readdir(full, { encoding: "buffer" })) {
+      const name = raw.toString("utf8");
+      if (Buffer.from(name, "utf8").equals(raw)) {
+        names.push(name);
+        continue;
+      }
+      const childParts = [...parts, name];
+      if (excludedFromBackup(childParts)) continue;
+      if (!isBelowWorkspace(childParts)) {
+        throw new Error(`Refusing to back up a data entry whose name is not UTF-8: ${full}/<${raw.toString("hex")}>`);
+      }
+      omit({ parent: relative, kind: "non-utf8-name", nameHex: raw.toString("hex") });
+    }
+    return names.sort();
+  }
+
+  async function inventoryFile({ relative, parts, full, metadata }, hardLinks = null) {
+    const linked = hardLinks ? { hardLinks } : {};
+    if (!strict) {
+      // The writer opens it. Below a workspace, whether it can is asked now so
+      // an unreadable file is a record; anywhere else the writer's own open
+      // still fails the backup (exit 2, with the permission diagnostic).
+      if (isBelowWorkspace(parts)) {
+        try {
+          await access(full, fsConstants.R_OK);
+        } catch (error) {
+          return unreadable(parts, relative, error);
+        }
+      }
+      entries.push({ path: relative, type: "file", ...metadataFields(metadata), ...linked });
+      return true;
+    }
+    let opened;
+    try {
+      opened = await openScopedFileNoFollow(root, full, { allowHardLinks: Boolean(hardLinks) });
+    } catch (error) {
+      return unreadable(parts, relative, error);
+    }
+    try {
+      const before = await opened.handle.stat({ bigint: true });
+      const size = Number(before.size);
+      if (!Number.isSafeInteger(size) || size < 0) throw new Error("Backup source is too large for an exact size.");
+      const sha256 = await digestHandle(opened.handle, size);
+      const after = await opened.handle.stat({ bigint: true });
+      if (!completeIdentityMatches(after, { ...metadataFields(before) })
+        || (hardLinks && String(before.nlink) !== hardLinks)) {
+        throw new Error("Backup source identity changed during inventory.");
+      }
+      entries.push({ path: relative, type: "file", ...metadataFields(before), sha256, ...linked });
+      return true;
+    } finally {
+      await opened.handle.close();
+    }
+  }
+
   async function collect(relative) {
     if (relative === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
     const parts = relative ? relative.split("/") : [];
-    // The platform's own background projects (learning, document
-    // understanding, the paired evaluation's cells) are scratch: what they
-    // produce is kept in the product database, and the store rebuilds their
-    // trees on first use. Their files change whenever that work is running —
-    // most of the time once it runs around the clock — and one changed file
-    // failed the whole strict backup (2026-09-21, every cycle for hours).
-    if (parts.length === 4 && parts[0] === "users" && parts[2] === "projects" && isInternalProject(parts[3])) return false;
+    if (excludedFromBackup(parts)) return false;
     const decision = managedRuntimeDecision(parts);
-    if (!decision.included) return false;
-    const name = parts.at(-1) ?? "";
-    if (name === ".runtime-sockets" || name.endsWith(".sock")) return false;
+    const below = isBelowWorkspace(parts);
     const full = path.join(root, relative);
-    const pathMetadata = await lstat(full, { bigint: true });
+    let pathMetadata;
+    try {
+      pathMetadata = await lstat(full, { bigint: true });
+    } catch (error) {
+      return unreadable(parts, relative, error);
+    }
     if (pathMetadata.isSymbolicLink()) {
-      if (!isWorkspaceLinkPath(parts)) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
+      if (!below) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
       entries.push({ path: relative, type: "link", ...metadataFields(pathMetadata), target: await linkTarget(full) });
       return true;
     }
-    if (pathMetadata.isSocket()) return false;
+    const special = specialKind(pathMetadata);
+    if (special) {
+      if (below) return omit({ path: relative, kind: special });
+      if (special === "socket") return false;
+      throw new Error(`Refusing to back up a non-file data entry: ${full}`);
+    }
     if (pathMetadata.isDirectory()) {
-      const opened = await openScopedDirectoryNoFollow(root, full);
+      let opened = null;
       try {
-        const before = await opened.handle.stat({ bigint: true });
+        let before = pathMetadata;
+        let names;
+        try {
+          if (strict) {
+            opened = await openScopedDirectoryNoFollow(root, full);
+            before = await opened.handle.stat({ bigint: true });
+          }
+          names = await childNames(full, parts, relative);
+        } catch (error) {
+          return unreadable(parts, relative, error);
+        }
         let retained = false;
-        for (const child of (await readdir(full)).sort()) {
+        for (const child of names) {
           if (await collect(relative ? `${relative}/${child}` : child)) retained = true;
         }
-        const after = await opened.handle.stat({ bigint: true });
-        if (!completeIdentityMatches(after, { ...metadataFields(before) })) {
-          throw new Error("Backup source identity changed during inventory.");
+        if (opened) {
+          const after = await opened.handle.stat({ bigint: true });
+          if (!completeIdentityMatches(after, { ...metadataFields(before) })) {
+            throw new Error("Backup source identity changed during inventory.");
+          }
         }
         if (decision.managed && parts.length < managedRuntimePrefix.length + managedRuntimeIncludedTree.length && !retained) {
           return false;
@@ -134,48 +275,96 @@ async function createInventory() {
         entries.push({ path: relative || ".", type: "directory", ...metadataFields(before) });
         return true;
       } finally {
-        await opened.handle.close();
+        await opened?.handle.close();
       }
     }
     if (!pathMetadata.isFile()) throw new Error(`Refusing to back up a non-file data entry: ${full}`);
-    const opened = await openScopedFileNoFollow(root, full);
-    try {
-      const before = await opened.handle.stat({ bigint: true });
-      const size = Number(before.size);
-      if (!Number.isSafeInteger(size) || size < 0) throw new Error("Backup source is too large for an exact size.");
-      const sha256 = await digestHandle(opened.handle, size);
-      const after = await opened.handle.stat({ bigint: true });
-      if (!completeIdentityMatches(after, { ...metadataFields(before) })) {
-        throw new Error("Backup source identity changed during inventory.");
-      }
-      entries.push({ path: relative, type: "file", ...metadataFields(before), sha256 });
+    const file = { relative, parts, full, metadata: pathMetadata };
+    if (pathMetadata.nlink > 1n) {
+      if (!below) throw new Error(`Refusing to back up a hard-linked data file outside a workspace: ${full}`);
+      const key = `${pathMetadata.dev}:${pathMetadata.ino}`;
+      hardLinked.set(key, [...(hardLinked.get(key) ?? []), file]);
       return true;
-    } finally {
-      await opened.handle.close();
+    }
+    return inventoryFile(file);
+  }
+
+  await collect("");
+  // A hard-linked file is archived once, under the first of its names, when
+  // every name the inode has was walked in one workspace: then its bytes are
+  // that workspace's and nobody else's, and its other names are recorded as
+  // aliases of the first. A name the walk did not reach may be anywhere on
+  // the volume — another tenant's tree, the runtime's package cache — so such
+  // an inode is not archived at all, and each of its names here says so.
+  for (const names of hardLinked.values()) {
+    const [first, ...others] = names;
+    const contained = names.every(({ metadata }) => metadata.nlink === BigInt(names.length))
+      && new Set(names.map(({ relative }) => workspaceOf(relative))).size === 1;
+    const archived = contained && await inventoryFile(first, String(first.metadata.nlink));
+    if (!contained) omit({ path: first.relative, kind: "hardlink-dropped" });
+    for (const other of others) {
+      omit(archived ? { path: other.relative, kind: "hardlink", of: first.relative } : { path: other.relative, kind: "hardlink-dropped" });
     }
   }
-  await collect("");
-  await writeFile(manifestPath, JSON.stringify(entries), { mode: 0o600 });
+  await writeFile(manifestPath, JSON.stringify({ entries, omitted }), { mode: 0o600 });
+}
+
+function validPathParts(value) {
+  const text = typeof value === "string" ? value : "";
+  const parts = text.split("/");
+  if (!text || text.includes("\0") || path.isAbsolute(text)
+    || (text !== "." && parts.some(part => !part || part === "." || part === ".."))) {
+    throw new Error("Invalid backup inventory entry.");
+  }
+  if (parts[0] === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
+  return parts;
 }
 
 function validateEntry(entry) {
-  const parts = String(entry?.path ?? "").split("/");
-  if (!entry || !["file", "directory", "link"].includes(entry.type) || !entry.path || entry.path.includes("\0")
-    || path.isAbsolute(entry.path) || (entry.path !== "." && parts.some(part => !part || part === "." || part === ".."))
+  if (!entry || !["file", "directory", "link"].includes(entry.type)
     || ![entry.dev, entry.ino, entry.size, entry.mtimeNs, entry.mode, entry.uid, entry.gid]
       .every(value => typeof value === "string" && /^\d+$/.test(value))) {
     throw new Error("Invalid backup inventory entry.");
   }
-  if (parts[0] === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
-  if (entry.type === "link" && (!isWorkspaceLinkPath(parts) || typeof entry.target !== "string" || !entry.target
+  const parts = validPathParts(entry.path);
+  if (entry.type === "link" && (!isBelowWorkspace(parts) || typeof entry.target !== "string" || !entry.target
     || entry.target.includes("\0") || Buffer.byteLength(entry.target) > maximumLinkTargetBytes)) {
     throw new Error("Invalid backup inventory link entry.");
+  }
+  if (entry.hardLinks !== undefined && (entry.type !== "file" || !isBelowWorkspace(parts)
+    || typeof entry.hardLinks !== "string" || !/^\d+$/.test(entry.hardLinks) || BigInt(entry.hardLinks) < 2n)) {
+    throw new Error("Invalid backup inventory entry.");
   }
   if (strict && (!(typeof entry.ctimeNs === "string" && /^\d+$/.test(entry.ctimeNs))
     || !(typeof entry.nlink === "string" && /^\d+$/.test(entry.nlink))
     || (entry.type === "file" && !(typeof entry.sha256 === "string" && /^[a-f0-9]{64}$/.test(entry.sha256))))) {
     throw new Error("Invalid strict backup inventory entry.");
   }
+}
+
+function validateOmitted(record) {
+  if (!record || !omittedKinds.has(record.kind)) throw new Error("Invalid backup inventory record.");
+  if (record.kind === "non-utf8-name") {
+    const parts = validPathParts(record.parent);
+    if (!isBelowWorkspace([...parts, "-"]) || typeof record.nameHex !== "string"
+      || !/^(?:[0-9a-f]{2}){1,255}$/.test(record.nameHex)) {
+      throw new Error("Invalid backup inventory record.");
+    }
+    return;
+  }
+  const parts = validPathParts(record.path);
+  if (!isBelowWorkspace(parts) || (record.kind === "hardlink"
+    && (typeof record.of !== "string" || workspaceOf(record.of) !== workspaceOf(record.path)))) {
+    throw new Error("Invalid backup inventory record.");
+  }
+}
+
+function recordKey(record) {
+  return record.kind === "non-utf8-name" ? `${record.parent}/\u0000${record.nameHex}` : record.path;
+}
+
+function recordLabel(record) {
+  return record.kind === "non-utf8-name" ? `${record.parent}/<non-utf8 ${record.nameHex}>` : record.path;
 }
 
 /** Whether a recorded link is still the link the inventory read. It is never
@@ -193,12 +382,14 @@ async function linkUnchanged(entry) {
 async function openEntry(entry) {
   const full = path.join(root, entry.path);
   const opened = entry.type === "directory"
-    ? await openScopedDirectoryNoFollow(root, full) : await openScopedFileNoFollow(root, full);
+    ? await openScopedDirectoryNoFollow(root, full)
+    : await openScopedFileNoFollow(root, full, { allowHardLinks: entry.hardLinks !== undefined });
   try {
     const metadata = await opened.handle.stat({ bigint: true });
     if ((strict ? !completeIdentityMatches(metadata, entry)
       : String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino
         || String(metadata.mode) !== entry.mode || String(metadata.uid) !== entry.uid || String(metadata.gid) !== entry.gid)
+      || (entry.hardLinks !== undefined && String(metadata.nlink) !== entry.hardLinks)
       || (entry.type === "directory" ? !metadata.isDirectory() : !metadata.isFile())) {
       throw new Error("Backup source identity changed after inventory.");
     }
@@ -277,20 +468,27 @@ function* headers(entry, metadata, index) {
 }
 
 async function createArchive() {
-  const entries = JSON.parse(await readFile(manifestPath, "utf8"));
-  if (!Array.isArray(entries) || !entries.length) throw new Error("Backup inventory is empty.");
+  const inventory = JSON.parse(await readFile(manifestPath, "utf8"));
+  const entries = inventory?.entries;
+  const omittedRecords = inventory?.omitted;
+  if (!Array.isArray(entries) || !Array.isArray(omittedRecords)) throw new Error("Invalid backup inventory.");
+  if (!entries.length) throw new Error("Backup inventory is empty.");
   entries.forEach(validateEntry);
+  omittedRecords.forEach(validateOmitted);
   const rootEntry = entries.find(entry => entry.path === "." && entry.type === "directory");
-  if (!rootEntry || entries.length > maximumManifestEntries || new Set(entries.map(entry => entry.path)).size !== entries.length) {
+  const keys = [...entries.map(entry => entry.path), ...omittedRecords.map(recordKey)];
+  if (!rootEntry || keys.length > maximumManifestEntries || new Set(keys).size !== keys.length) {
     throw new Error("Invalid or oversized backup inventory.");
   }
   const archivedEntries = [];
+  const archivedFiles = new Set();
   let manifestBytes = Buffer.byteLength(integrityManifestPrefix) + 2;
   const recordArchived = (entry) => {
     const serialized = JSON.stringify(entry);
     manifestBytes += Buffer.byteLength(serialized) + (archivedEntries.length ? 1 : 0);
     if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
     archivedEntries.push(serialized);
+    if (entry.type === "file") archivedFiles.add(entry.path);
   };
   const recordedLinks = [];
   const recordLink = (entry) => {
@@ -299,6 +497,9 @@ async function createArchive() {
     if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
     recordedLinks.push({ path: entry.path, serialized });
   };
+  // The inventory's records, plus files that became unreadable after it.
+  const demoted = [];
+  let records = [];
   const directories = entries.filter(entry => entry.type === "directory");
   const verifyEntries = async (items) => {
     for (const entry of items) {
@@ -321,7 +522,20 @@ async function createArchive() {
         recordLink(entry);
         continue;
       }
-      const { handle, metadata } = await openEntry(entry);
+      let opened;
+      try {
+        opened = await openEntry(entry);
+      } catch (error) {
+        // Readable when inventoried and refused now: the tenant changed its
+        // own permissions under the backup. Recorded, and a changed source.
+        if (entry.type === "file" && isBelowWorkspace(entry.path.split("/")) && unreadableCodes.has(error?.code)) {
+          changed++;
+          demoted.push({ path: entry.path, kind: "unreadable" });
+          continue;
+        }
+        throw error;
+      }
+      const { handle, metadata } = opened;
       try {
         yield* headers(entry, metadata, index);
         if (entry.type === "directory") {
@@ -341,7 +555,8 @@ async function createArchive() {
         if (written !== size) throw new Error("Backup source changed during its bounded read.");
         const sha256 = contentDigest.digest("hex");
         const after = await handle.stat({ bigint: true });
-        if (after.nlink > 1n) throw new Error("Backup source became hard-linked while being read.");
+        // A name added while it was read may be anywhere on the volume.
+        if (after.nlink > BigInt(entry.hardLinks ?? 1)) throw new Error("Backup source became hard-linked while being read.");
         if (String(metadata.size) !== entry.size || String(metadata.mtimeNs) !== entry.mtimeNs
           || after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs || after.nlink === 0n
           || (strict && (sha256 !== entry.sha256 || !completeIdentityMatches(after, entry)))) changed++;
@@ -353,11 +568,19 @@ async function createArchive() {
     }
     // No archive is accepted after a directory substitution, even if a file
     // descriptor safely retained the original bytes while its name moved.
-    await verifyEntries(strict ? entries : directories);
-    // Only when there are links, so an archive without any is byte-for-byte
-    // the format every earlier reader already verifies.
+    const demotedPaths = new Set(demoted.map(record => record.path));
+    await verifyEntries(strict ? entries.filter(entry => !demotedPaths.has(entry.path)) : directories);
+    // An alias whose first name was not archived after all has no bytes here.
+    records = [...omittedRecords.map(record => (record.kind === "hardlink" && !archivedFiles.has(record.of)
+      ? { path: record.path, kind: "hardlink-dropped" } : record)), ...demoted];
+    const omitted = records.map(record => JSON.stringify(record));
+    manifestBytes += omitted.length ? Buffer.byteLength(`,"omitted":[${omitted.join(",")}]`) : 0;
+    if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
+    // Each list only when it has members, so an archive without any is
+    // byte-for-byte the format every earlier reader already verifies.
     const links = recordedLinks.length ? `,"links":[${recordedLinks.map(link => link.serialized).join(",")}]` : "";
-    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]${links}}`, "utf8");
+    const omittedList = omitted.length ? `,"omitted":[${omitted.join(",")}]` : "";
+    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]${links}${omittedList}}`, "utf8");
     yield* headers({ path: integrityManifestName, type: "file" }, {
       size: BigInt(integrityManifest.length), mode: 0o600n, mtimeNs: 0n,
       uid: BigInt(rootEntry.uid), gid: BigInt(rootEntry.gid),
@@ -374,10 +597,22 @@ async function createArchive() {
     await output.close();
   }
   for (let index = 0; index < changed; index++) process.stderr.write("backup archive: file changed as we read it\n");
-  // One bounded line, however many links: how many, and the first few by name.
+  // One bounded line each, however many: how many, and the first few by name.
   if (recordedLinks.length) {
     const note = { count: recordedLinks.length, paths: recordedLinks.slice(0, 5).map(link => link.path) };
     process.stderr.write(`${linkNotePrefix}${JSON.stringify(note)}\n`);
+  }
+  if (records.length) {
+    const kinds = {};
+    for (const record of records) kinds[record.kind] = (kinds[record.kind] ?? 0) + 1;
+    const note = {
+      count: records.length,
+      kinds,
+      // Said outright: these are entries whose bytes this archive does not hold.
+      contentNotArchived: records.filter(record => contentNotArchivedKinds.has(record.kind)).length,
+      paths: records.slice(0, 5).map(recordLabel),
+    };
+    process.stderr.write(`${omittedNotePrefix}${JSON.stringify(note)}\n`);
   }
   process.exitCode = changed ? 1 : 0;
 }

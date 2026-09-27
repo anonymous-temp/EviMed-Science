@@ -55,7 +55,9 @@ fi
 # Complete verification compares every restored path and byte with the embedded
 # inventory, not with a deployment-specific file-count guess. A legacy restore
 # is still available, but its shape cannot certify completeness for the scheduler.
-# Workspace links the backup recorded are verified as records and restored as
+# Workspace links, and the other workspace entries the backup left out
+# (special files, unreadable files, a hard link's other names, non-UTF-8
+# names), are verified as records and restored as
 # nothing: the check above still fails on any link the restore produced.
 node - "$receipt" "$ARCHIVE" <<'NODE'
 const fs = require('node:fs');
@@ -66,6 +68,7 @@ if (report.verification !== 'inventory-v1') {
   process.exitCode = 1;
 } else {
   const links = report.links ? `, ${report.links} workspace link(s) recorded, not restored` : '';
-  console.log(`restore drill ok: ${process.argv[3]} (users/ present, ${report.files} files, inventory-v1${links})`);
+  const omitted = report.omitted ? `, ${report.omitted} other workspace entr(ies) recorded, not restored` : '';
+  console.log(`restore drill ok: ${process.argv[3]} (users/ present, ${report.files} files, inventory-v1${links}${omitted})`);
 }
 NODE

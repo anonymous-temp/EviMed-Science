@@ -38,74 +38,11 @@ trap cleanup EXIT
 # caches and control endpoints) is regenerated and must stay out of backups.
 # An explicit manifest names only included entries and their inode identities.
 # The archive writer reopens them through scoped, no-follow file descriptors;
-# it never asks tar to resolve these paths again after the inventory.
-if [ "$strict_backup" = true ]; then
-  if ! node "$SCRIPT_DIR/backup-archive.mjs" inventory "$DATA_DIR" "$manifest"; then
-    echo "Backup file inventory failed." >&2
-    exit 1
-  fi
-elif ! node - "$DATA_DIR" "$manifest" "$SCRIPT_DIR/../../apps/server/src/internalProjects.mjs" <<'NODE'
-const fs = require('node:fs');
-const path = require('node:path');
-const { pathToFileURL } = require('node:url');
-const root = path.resolve(process.argv[2]);
-const entries = [];
-// One rule for both inventories (`backup-archive.mjs` reads the same module):
-// the platform's own background projects are scratch the store rebuilds, and
-// their continuous writes failed every backup on 2026-09-21.
-let isInternalProject = () => false;
-
-function collect(relative) {
-  if (relative === '.open-science-backup-manifest.json') {
-    throw new Error('Refusing a reserved backup manifest path in customer data.');
-  }
-  const parts = relative.split('/');
-  if (parts.length === 4 && parts[0] === 'users' && parts[2] === 'projects' && isInternalProject(parts[3])) return false;
-  const managedRuntime = parts.length >= 6 && parts[0] === 'users' && parts[2] === 'projects'
-    && parts[4] === 'runtime' && parts[5] === 'container-runtime';
-  if (managedRuntime && ((parts.length >= 7 && parts[6] !== 'dsh-home')
-    || (parts.length >= 8 && parts[7] !== 'sessions'))) return false;
-  const name = parts.at(-1);
-  if (name === '.runtime-sockets' || name.endsWith('.sock')) return false;
-  const full = path.join(root, relative);
-  const metadata = fs.lstatSync(full, { bigint: true });
-  if (metadata.isSymbolicLink()) {
-    // The same rule as `backup-archive.mjs`: a link a run made below its own
-    // workspace is recorded (path and target text), never followed; a link
-    // anywhere else still refuses the backup.
-    const workspaceLink = parts.length > 5 && parts[0] === 'users' && parts[2] === 'projects' && parts[4] === 'workspace';
-    if (!workspaceLink) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
-    entries.push({ path: relative, type: 'link', target: fs.readlinkSync(full, { encoding: 'buffer' }).toString('utf8'),
-      dev: String(metadata.dev), ino: String(metadata.ino), size: String(metadata.size), mtimeNs: String(metadata.mtimeNs),
-      mode: String(metadata.mode), uid: String(metadata.uid), gid: String(metadata.gid) });
-    return true;
-  }
-  if (metadata.isSocket()) return false;
-  if (metadata.isDirectory()) {
-    let retained = false;
-    for (const child of fs.readdirSync(full).sort()) {
-      if (collect(relative ? `${relative}/${child}` : child)) retained = true;
-    }
-    if (managedRuntime && parts.length < 8 && !retained) return false;
-  } else if (!metadata.isFile()) {
-    throw new Error(`Refusing to back up a non-file data entry: ${full}`);
-  }
-  entries.push({ path: relative || '.', type: metadata.isDirectory() ? 'directory' : 'file',
-    dev: String(metadata.dev), ino: String(metadata.ino), size: String(metadata.size), mtimeNs: String(metadata.mtimeNs),
-    mode: String(metadata.mode), uid: String(metadata.uid), gid: String(metadata.gid) });
-  return true;
-}
-
-import(pathToFileURL(process.argv[4]).href).then((module) => {
-  isInternalProject = module.isInternalProject;
-  collect('');
-  fs.writeFileSync(process.argv[3], JSON.stringify(entries), { mode: 0o600 });
-}).catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
-NODE
-then
+# it never asks tar to resolve these paths again after the inventory. One
+# inventory for both modes (`backup-archive.mjs`): strict also opens and
+# hashes every file. It records, rather than refuses, what a run can make in
+# its own workspace that an archive cannot carry or must not follow.
+if ! node "$SCRIPT_DIR/backup-archive.mjs" inventory "$DATA_DIR" "$manifest" "$strict_backup"; then
   echo "Backup file inventory failed." >&2
   exit 1
 fi
