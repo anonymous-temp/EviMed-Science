@@ -1010,7 +1010,10 @@ services:
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
     healthcheck:
-      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      # `serving`: without an OpenGWAS JWT this engine reports ready=false
+      # (nothing remote can run) and must still be healthy, or web — which
+      # waits on it — would not start. An older adapter answers only `ready`.
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('serving', value.get('ready')) else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3

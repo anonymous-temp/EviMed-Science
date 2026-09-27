@@ -247,6 +247,9 @@ def test_legacy_remote_text_request_still_reaches_the_same_fixed_runner(
     tmp_path, monkeypatch
 ):
     service, client, secret, workspace = setup_mr(tmp_path, monkeypatch)
+    # Remote text selection reads OpenGWAS, so it is admitted only with a
+    # token (test_mr_opengwas_readiness.py holds the refusal without one).
+    monkeypatch.setenv("OPENGWAS_JWT", "deployment-opengwas-token")
     state, job_id = queue_job(service, client, secret, monkeypatch, local=False)
     assert service.run_job(str(state)) == 0
     output = workspace / "mendelian-randomization-runs" / job_id / "output"

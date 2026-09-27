@@ -6,6 +6,8 @@ reviewed implementation without importing an agent, an R engine, or a model.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import copy
 import csv
 import hashlib
@@ -15,7 +17,9 @@ import math
 import os
 import re
 import stat
+import time
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -174,6 +178,81 @@ def require_remote_access(request: dict[str, Any], token_available: bool) -> Non
             "Without an OpenGWAS credential, each analyzed exposure needs "
             "supplied preclumped instruments and provenance.",
         )
+
+
+def _jwt_expiry(token: str) -> float | None:
+    """The ``exp`` claim of a JWT, read without verifying it; None when unreadable."""
+    parts = token.split(".")
+    if len(parts) != 3 or not parts[1]:
+        return None
+    try:
+        payload = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
+        claims = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeError, binascii.Error):
+        return None
+    expiry = claims.get("exp") if isinstance(claims, dict) else None
+    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not math.isfinite(expiry):
+        return None
+    return float(expiry)
+
+
+def opengwas_credential_state(token: str | None, *, now: float | None = None) -> dict[str, Any]:
+    """Whether an OpenGWAS JWT can be used, decided without calling OpenGWAS.
+
+    OpenGWAS has required a JWT since 1 May 2024 and issues it for 14 days, so
+    an absent token and an expired one are the same outage. A token whose
+    claims cannot be read is reported usable with no expiry: only OpenGWAS can
+    judge it, and a health check must not call a third party. The token itself
+    is never part of the answer.
+    """
+    value = (token or "").strip()
+    if not value:
+        return {"ready": False, "reason": "opengwas_token_missing", "expiresAt": None}
+    expiry = _jwt_expiry(value)
+    expires_at = (
+        datetime.fromtimestamp(expiry, timezone.utc).isoformat().replace("+00:00", "Z")
+        if expiry is not None
+        else None
+    )
+    if expiry is not None and expiry <= (time.time() if now is None else now):
+        return {"ready": False, "reason": "opengwas_token_expired", "expiresAt": expires_at}
+    return {"ready": True, "reason": None, "expiresAt": expires_at}
+
+
+def require_admission_credential(request: dict[str, Any], credential: dict[str, Any]) -> None:
+    """Refuse at admission a job that could only fail for want of OpenGWAS.
+
+    Legacy text requests select their instruments from OpenGWAS, and a declared
+    OpenGWAS source reads it; both need a usable credential. Two local files
+    with declared preclumped instruments need none. Before this, a job without
+    a token was accepted, queued, and failed minutes later inside the engine.
+    """
+    if credential.get("ready"):
+        return
+    local = validate_request(request)
+    if local and not any(
+        request[f"{role}Source"]["type"] == "opengwas" for role in ("exposure", "outcome")
+    ):
+        # Local files only: the existing rule names what is missing (supplied
+        # preclumped instruments), which is the researcher's to correct.
+        require_remote_access(request, False)
+        return
+    expired = credential.get("reason") == "opengwas_token_expired"
+    raise MRInputError(
+        "mr_input_remote_auth_required",
+        (
+            f"blocked: OpenGWAS token expired ({credential.get('expiresAt')}). "
+            if expired
+            else "blocked: OpenGWAS token missing. "
+        )
+        + (
+            "This analysis reads an OpenGWAS source, "
+            if local
+            else "This analysis selects its instruments from OpenGWAS by trait name, "
+        )
+        + "and neither this deployment nor this researcher has a usable OpenGWAS JWT. "
+        "Two uploaded GWAS files with declared preclumped instruments run without one.",
+    )
 
 
 def _identity(info: os.stat_result, *, directory: bool = False) -> dict[str, int]:

@@ -102,7 +102,11 @@ LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
 
 VOLUME ["/data"]
 EXPOSE 8025
+# `serving`, not `ready`: a specialist whose third-party credential is missing
+# (the MR engine without an OpenGWAS JWT) reports ready=false and stays a
+# healthy container, because the web service waits on this one being healthy.
+# An adapter older than the field answers only `ready`.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"
+  CMD python -c "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('serving', value.get('ready')) else 1)"
 
 CMD ["uvicorn", "evimed_specialist_adapter.service:app", "--host", "0.0.0.0", "--port", "8025", "--no-access-log"]

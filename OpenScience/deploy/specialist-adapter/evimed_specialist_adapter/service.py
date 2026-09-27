@@ -262,11 +262,17 @@ def _read_json(path: Path) -> dict[str, Any]:
         os.close(descriptor)
 
 
-def _error(code: str, message: str, retryable: bool = False) -> dict[str, Any]:
+def _error(
+    code: str,
+    message: str,
+    retryable: bool = False,
+    next_actions: list[str] | None = None,
+) -> dict[str, Any]:
     return {
         "status": "error",
         "summary": message,
-        "next_actions": ["Correct the reported specialist precondition before retrying."],
+        "next_actions": next_actions
+        or ["Correct the reported specialist precondition before retrying."],
         "error": {
             "code": code,
             "message": message,
@@ -488,6 +494,28 @@ def _job_credentials(workload_token: str | None) -> dict[str, str]:
     return resolved
 
 
+_OPENGWAS_NEXT_ACTIONS = [
+    "Tell the researcher OpenGWAS is blocked: a token is saved under 账户→连接器 "
+    "(issued at api.opengwas.io, valid 14 days) or set by the operator as "
+    "OPEN_SCIENCE_OPENGWAS_JWT.",
+    "Without a token, only two uploaded GWAS files with declared preclumped "
+    "instruments and provenance can run; do not retry a remote request.",
+]
+
+
+def _opengwas_state(job_credentials: dict[str, str] | None = None) -> dict[str, Any]:
+    """OpenGWAS readiness for one caller: their own token first, else the deployment's.
+
+    The same precedence the worker applies (`_child_environment`), so admission
+    and execution judge the same token. Nothing here calls OpenGWAS.
+    """
+    own = (job_credentials or {}).get(f"{_JOB_ENV_PREFIX}OPENGWAS_JWT", "")
+    deployment = os.getenv("OPENGWAS_JWT", "")
+    state = _mr_inputs().opengwas_credential_state(own or deployment)
+    source = "account" if own else ("deployment" if deployment.strip() else "none")
+    return {**state, "source": source}
+
+
 def _start(
     arguments: dict[str, Any],
     workspace: Path,
@@ -502,6 +530,22 @@ def _start(
         )
     spec = _spec()
     request = {key: arguments[key] for key in spec["inputs"] if key in arguments}
+    if _kind() == "mendelian-randomization":
+        # A job that can only fail for want of OpenGWAS is refused here, by
+        # name, instead of being queued to fail inside the engine.
+        helper = _mr_inputs()
+        try:
+            helper.require_admission_credential(request, _opengwas_state(job_credentials))
+        except helper.MRInputError as error:
+            return _error(
+                error.code,
+                str(error),
+                next_actions=(
+                    _OPENGWAS_NEXT_ACTIONS
+                    if error.code == "mr_input_remote_auth_required"
+                    else None
+                ),
+            )
     if _kind() == "peer-review":
         try:
             request["manuscript"] = str(
@@ -779,7 +823,12 @@ def call(
                 "DeepSeek V4.1 Flash or the specialist credential boundary is unavailable.",
                 True,
             )
-        return {
+        opengwas = (
+            _opengwas_state(job_credentials)
+            if _kind() == "mendelian-randomization"
+            else None
+        )
+        result = {
             "status": "success",
             "summary": f"{_spec()['label']} is configured for managed EviMed SaaS execution.",
             "data": {
@@ -792,9 +841,24 @@ def call(
                     in {"research-topic-selection", "mendelian-randomization"}
                     else {}
                 ),
+                **({"opengwas": opengwas} if opengwas is not None else {}),
             },
             "sources": [_source("service")],
         }
+        if opengwas is not None and not opengwas["ready"]:
+            # The capability's own first step reads this: remote data and
+            # online clumping are blocked, two preclumped local files are not.
+            result.update(
+                status="warning",
+                warnings=[
+                    "blocked: OpenGWAS token "
+                    + ("expired" if opengwas["reason"] == "opengwas_token_expired" else "missing")
+                    + " — remote GWAS selection, OpenGWAS sources and online LD clumping "
+                    "cannot run for this researcher."
+                ],
+                next_actions=_OPENGWAS_NEXT_ACTIONS,
+            )
+        return result
     if action == "start":
         return _start(arguments, workspace, job_credentials, owner)
     deadline = time.monotonic() + int(arguments.get("waitSeconds", 0))
@@ -1138,11 +1202,29 @@ def _create_app() -> FastAPI:
 
     @instance.get("/health")
     def health() -> dict[str, Any]:
-        ready = _model_ready()
+        # `serving`: the process, its model and its credential boundary are up
+        # — what the container healthcheck reads, so a missing third-party
+        # token never stops the web service that depends on this container.
+        # `ready`: it can run the analysis it advertises. The MR engine reported
+        # ready for weeks with no OpenGWAS JWT at all, while every remote
+        # request it accepted could only fail.
+        serving = _model_ready()
+        opengwas = None
+        if _kind() == "mendelian-randomization" and serving:
+            opengwas = {
+                **_opengwas_state(),
+                # A researcher's own token (账户→连接器) still unlocks their jobs.
+                "perAccountCredentials": bool(
+                    os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
+                ),
+            }
+        ready = serving and (opengwas is None or opengwas["ready"])
         return {
             "status": "ok" if ready else "degraded",
             "ready": ready,
+            "serving": serving,
             "specialist": _kind(),
+            **({"opengwas": opengwas} if opengwas is not None else {}),
             **({"auditReceiptsReady": audit_receipt.ready()} if _kind() == "mendelian-randomization" else {}),
             **(
                 {"acceptedStartInputs": _accepted_start_inputs()}
@@ -1166,9 +1248,11 @@ def _create_app() -> FastAPI:
             ).startswith("mr_input_"):
                 return _error(exc.code, str(exc))
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # `capabilities` resolves them too, so it answers for this researcher:
+        # their own OpenGWAS token, not only the deployment's, decides it.
         job_credentials = (
             _job_credentials(bearer.credentials if bearer is not None else None)
-            if validated.get("action") == "start"
+            if validated.get("action") in {"start", "capabilities"}
             else None
         )
         return call(

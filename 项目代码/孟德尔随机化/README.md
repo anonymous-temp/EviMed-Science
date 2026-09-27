@@ -64,6 +64,18 @@ The original request, input bindings and source evidence are immutable; ordinary
 status reads the same protected record. Account/project deletion removes this
 metadata with the existing project tree.
 
+Hosted OpenGWAS readiness (`opengwas_credential_state` and
+`require_admission_credential` in `evimed_local_inputs.py`, used by the
+adapter): a missing JWT, or one whose `exp` claim has passed, makes the
+adapter's `/health` report `ready: false` with an `opengwas` block while
+`serving` stays true (the container healthcheck reads `serving`). `capabilities`
+returns a warning naming the block, and `start` refuses legacy remote text and
+any OpenGWAS source with `mr_input_remote_auth_required` ("blocked: OpenGWAS
+token missing") before a job exists. The researcher's own token (resolved from
+the control plane) is judged before the deployment's, the same precedence the
+worker applies. Two local files with declared preclumped instruments need no
+token.
+
 ## Portable local analysis replay
 
 Paired local inputs with a declared-preclumped exposure produce an explicit
