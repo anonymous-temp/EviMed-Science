@@ -958,8 +958,14 @@ export class MemoryIntelligence {
       }
     }
     // After the candidates, so a request to forget wins over the same fact
-    // being observed again in the conversation that asked for it.
-    const forgotten = await this.#forget(project, run, forgetRequests ?? [], known, sources, rejections);
+    // being observed again in the conversation that asked for it. Never from
+    // an outside agent's episode (`holdForOwner`): a turn it labels as the
+    // user's is its claim, and forgetting changes a memory in force.
+    if (holdForOwner && forgetRequests?.length) {
+      rejections.push(...forgetRequests.slice(0, 12).map((/** @type {any} */ request) =>
+        `forget "${String(request?.key ?? "")}": an outside agent's episode cannot forget a memory`));
+    }
+    const forgotten = holdForOwner ? [] : await this.#forget(project, run, forgetRequests ?? [], known, sources, rejections);
     // No inbox item for what was simply written (plan 2026-09-23 §5.8): the
     // memory page and the conversation's own prompt (`/api/memory/changes`)
     // show it where the researcher is, and a 「刚记住了 N 条」 line per run was

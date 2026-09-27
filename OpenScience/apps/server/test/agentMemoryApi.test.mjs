@@ -208,7 +208,7 @@ test("what an episode yields waits for the account owner, and a memory already i
         origin: "explicit", importance: 0.7, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: user.text },
       { scope: "user", kind: "preference", key: "preference.output_language", value: "回答请用英文", summary: "英文回答",
         origin: "explicit", importance: 0.7, sensitive: false, sourceRef: user.sourceRef, evidenceQuote: user.text },
-    ] }) } }] });
+    ], forget: [{ key: "preference.output_language", sourceRef: user.sourceRef, evidenceQuote: user.text }] }) } }] });
   };
   const memoryIntelligence = new MemoryIntelligence({
     deepseekProviderEnabled: true, deepseekApiKey: "unit-test-key", deepseekBaseUrl: "https://api.deepseek.com",
@@ -224,7 +224,7 @@ test("what an episode yields waits for the account owner, and a memory already i
   assert.equal(byKey("preference.herb_count").status, "pending", "a proposal, not a memory in force");
   assert.equal(byKey("preference.herb_count").lastConfirmedAt, null, "and nobody has confirmed it");
   assert.equal(byKey("preference.output_language").value, "回答请用中文", "the owner's memory in force is not rewritten");
-  assert.equal(byKey("preference.output_language").status, "active");
+  assert.equal(byKey("preference.output_language").status, "active", "nor forgotten: an outside turn asking to forget is its claim");
   const summaries = [...records.values()].filter((record) => record.kind === "run_summary");
   assert.equal(summaries.length, 1);
   assert.equal(summaries[0].status, "pending", "the episode's own summary is held too: every record an episode writes is pending");
