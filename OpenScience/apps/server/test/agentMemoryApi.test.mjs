@@ -368,7 +368,7 @@ test("a limit the capsule half cannot serve is served, not refused", async () =>
 test("each request schema in the description is exactly the fields its route accepts", async () => {
   const { AGENT_MEMORY_REQUEST_FIELDS } = await import("../src/agentMemoryRoutes.mjs");
   const schemas = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 }).components.schemas;
-  const described = { recall: "RecallRequest", note: "NoteRequest", episodes: "EpisodeRequest" };
+  const described = { recall: "RecallRequest", note: "NoteRequest", episodes: "EpisodeRequest", observations: "ObservationRequest" };
   assert.deepEqual(Object.keys(described).sort(), Object.keys(AGENT_MEMORY_REQUEST_FIELDS).sort(), "every body the routes read is described");
   for (const [operation, schema] of Object.entries(described)) {
     assert.deepEqual(Object.keys(schemas[schema].properties).sort(), [...AGENT_MEMORY_REQUEST_FIELDS[operation]].sort(), operation);
@@ -432,6 +432,33 @@ test("the dashboard is a read, the acts on it need memory.manage, and a key with
   assert.deepEqual([audited[1], audited[2], audited[3].target, audited[3].keyId], ["agent-memory.memory.record.confirm", "completed", "r2", "agk_1"]);
   await manager.routes(request(`${AGENT_MEMORY_PATH}/settings`, { learningPaused: true }, "evk_good", "PUT"), response());
   assert.deepEqual(manager.calls.find((entry) => entry[0] === "updateSettings")[2], { learningPaused: true });
+});
+
+test("an observation needs memory.observe, is refused before any account is made, and lands in the subject's account", async () => {
+  const body = { syndrome: "脾胃气虚证", changes: [{ type: "replace", from: "党参", to: "太子参" }] };
+  const writer = fixture({ subjects: true, scopes: ["memory.read", "memory.write", "memory.manage"] });
+  await assert.rejects(
+    () => writer.routes(request(`${AGENT_MEMORY_PATH}/observations`, body, "evk_good", "POST", { "x-subject": "doc-7" }), response()),
+    (error) => error.status === 403 && error.code === "agent_key_scope_denied",
+  );
+  assert.ok(!writer.calls.some((entry) => entry[0] === "subjectAccount"));
+  const observed = [];
+  const routes = createAgentMemoryRoutes({
+    config, store: { async userById(id) { return { id }; }, async requireProject(user, id) { observed.push(["requireProject", user.id, id]); return { id }; } },
+    apiKeys: {
+      async resolve() { return { userId: "u1", keyId: "agk_1", projectId: null, scopes: ["memory.observe"], subjects: true }; },
+      async subjectAccount(_owner, subject) { return { userId: subjectIdOf(subject), created: true }; },
+    },
+    observations: { async observe(user, observation) { observed.push(["observe", user.id, observation.syndrome]); return { recorded: true, habits: [] }; } },
+  });
+  const res = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/observations`, body, "evk_good", "POST", { "x-subject": "doc-7" }), res);
+  assert.equal(res.captured.status, 202);
+  assert.deepEqual(observed, [["requireProject", subjectIdOf("doc-7"), "default"], ["observe", subjectIdOf("doc-7"), "脾胃气虚证"]]);
+  await assert.rejects(
+    () => routes(request(`${AGENT_MEMORY_PATH}/observations`, { ...body, dose: "15g" }, "evk_good", "POST", { "x-subject": "doc-7" }), response()),
+    (error) => error.status === 400 && error.code === "agent_observation_invalid",
+  );
 });
 
 test("forgetting one person is an integration key's act on a named subject, and deletes that subject's account only", async () => {

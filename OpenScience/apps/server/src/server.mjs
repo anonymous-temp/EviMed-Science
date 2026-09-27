@@ -63,6 +63,7 @@ import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
+import { AgentObservations, HabitWriter } from "./agentMemoryObservations.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -1655,6 +1656,12 @@ export function createWebApiApp(overrides = {}) {
     documents: productDocuments,
     feedbackEvents,
     deleteSubject: (ownerId, subjectAccountId) => deleteAgentSubjects(ownerId, subjectAccountId),
+    // Prescription edits counted into habits, worded once through the model
+    // gateway and written to the same method ledger the learning loop uses.
+    observations: productDatabase && learningService ? new AgentObservations({
+      database: productDatabase, learning: learningService, researchMemory,
+      writer: new HabitWriter(config, { usageLedger, fetchImpl: overrides.habitWriterFetch ?? globalThis.fetch }),
+    }) : null,
     audit: (event, status, details) => securityAudit(config, event, status, details),
   });
   const specialistClassifier = new SpecialistClassifier(config, {

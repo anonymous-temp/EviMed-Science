@@ -36,7 +36,8 @@ Keys belong to an account and are managed with that account's browser session
 | `DELETE /api/agent-keys/<id>` | Revokes it. |
 
 - **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.write` (note,
-  episodes) and `memory.manage` (the dashboard's acts — see below). Give a key
+  episodes), `memory.manage` (the dashboard's acts) and `memory.observe`
+  (prescription edits) — see below. Give a key
   only what its agent needs.
 - **Project binding:** a key created with `projectId` can read and write that
   project (and account-level memory) and nothing else; an unbound key may name
@@ -97,6 +98,24 @@ come from that person's own clicks; it is never a default.
 | `POST /methods/{id}/retire` · `/restore` `{ "expectedRevision" }`, `/rollback` `{ "expectedRevision", "targetRevision" }` | `memory.manage` | Stop a habit, take the stop back (the last version in force), or go back to a named version. |
 | `POST /notes/{id}/confirm` · `/reject` `{ "expectedRevision" }` | `memory.manage` | A proposed note, confirmed or rejected. |
 | `DELETE /subject` | `memory.manage` | Integration keys, with `X-Subject`: forget that person entirely — their account and everything in it, the recall index first. |
+
+### Habits from prescription edits
+
+`POST /observations` (scope **`memory.observe`**) is the learning signal of a
+prescription-review step: `{ "observationId"?, "syndrome", "lineage"?, "changes":
+[{ "type": "replace", "from", "to" } | { "type": "add" | "remove", "herb" }] }`.
+Names only: a herb name cannot carry a digit and an unknown field is refused,
+so a dose or a patient field has nowhere to go. The platform counts, in code,
+each change across the doctor's last 30 edits under that syndrome; a change
+seen at least 3 times and in at least half of them becomes a habit — worded
+once through the model gateway (metered as `learning`; a line that states a
+number or does not name the herbs is replaced by a fixed sentence), written to
+the method ledger, in effect at once and returned by `recall`. A habit whose
+share falls below a quarter over enough later edits is retired with the reason
+said. Changes naming a toxic herb (附子, 川乌, 草乌, 马钱子, 细辛, 朱砂, 雄黄,
+雷公藤 and the regulated toxic items) are never learned from and are counted
+for the dashboard's `neverLearned` line. No runtime is involved, and a doctor
+who paused learning is not observed.
 
 Every act leaves an audit line naming the key and the account (never the
 subject's own identifier). Nothing on the dashboard is stored twice: it is

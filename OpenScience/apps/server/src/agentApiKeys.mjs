@@ -52,8 +52,10 @@ const migrations = new WeakMap();
  * `memory.manage` is the person's own dashboard: confirming, editing,
  * forgetting and undoing memories, stopping and restoring methods, the
  * switches. A key carries it only when its holder's requests come from that
- * person's own clicks, and it is never a default. */
-export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.write", "memory.manage"]);
+ * person's own clicks, and it is never a default. `memory.observe` posts what
+ * a person actually did — a prescription edit — which the platform counts
+ * into habits that take effect (agentMemoryObservations.mjs). */
+export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.write", "memory.manage", "memory.observe"]);
 
 const KEY_PREFIX = "evk_";
 const PREFIX_LENGTH = KEY_PREFIX.length + 8;

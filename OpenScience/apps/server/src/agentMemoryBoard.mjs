@@ -161,15 +161,18 @@ function habitRow(document, nowMs, basis) {
 
 /**
  * The whole dashboard for one account: its switches, what is in force, what
- * waits for the person, what was forgotten, the habits, and what changed.
+ * waits for the person, what was forgotten, the habits and what they were
+ * counted from, what was never learned, and what changed.
  *
- * @param {{ researchMemory: any, learning?: any, capsules?: any, habitBasis?: ((userId: string) => Promise<Map<string, any>>) | null, now?: () => Date }} services
+ * @param {{ researchMemory: any, learning?: any, capsules?: any,
+ *   observations?: { basis: (userId: string) => Promise<Map<string, any>>, neverLearned: (userId: string) => Promise<any[]> } | null,
+ *   now?: () => Date }} services
  * @param {{ id: string } | null} user null: a subject with no memory yet — an empty dashboard
  */
-export async function memoryBoard({ researchMemory, learning = null, capsules = null, habitBasis = null, now = () => new Date() }, user) {
+export async function memoryBoard({ researchMemory, learning = null, capsules = null, observations = null, now = () => new Date() }, user) {
   const nowMs = now().getTime();
   if (!user) {
-    return { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], recentChanges: [] };
+    return { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
   }
   const settings = await researchMemory.settings(user.id);
   const all = (await researchMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }))
@@ -196,7 +199,11 @@ export async function memoryBoard({ researchMemory, learning = null, capsules = 
     }
   }
 
-  const basis = habitBasis ? await habitBasis(user.id).catch(() => new Map()) : new Map();
+  // What a habit learned from edits was counted from, and what was never
+  // learned from (「不学习」). Unreadable, the dashboard shows the habits
+  // without their counts rather than failing.
+  const basis = observations ? await observations.basis(user.id).catch(() => new Map()) : new Map();
+  const never = observations ? await observations.neverLearned(user.id).catch(() => []) : [];
   const methods = learning ? ((await learning.listMethods(user.id, { limit: 50 })).items ?? []) : [];
   const habits = methods.filter((/** @type {any} */ document) => document.payload?.status !== "candidate")
     .map((/** @type {any} */ document) => habitRow(document, nowMs, basis));
@@ -230,6 +237,7 @@ export async function memoryBoard({ researchMemory, learning = null, capsules = 
     pending,
     forgotten: all.filter((/** @type {any} */ record) => record.status === "archived").slice(0, 20).map(row),
     habits,
+    neverLearned: never,
     recentChanges: [...recordChanges, ...habitChanges]
       .sort((left, right) => String(right.at).localeCompare(String(left.at))).slice(0, 20),
   };

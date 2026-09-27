@@ -108,7 +108,9 @@ test("a habit is new for fourteen days, says it was learned from prescription ed
     },
   };
   const basis = new Map([["m0", { observed: 9, related: 12 }]]);
-  const board = await memoryBoard({ researchMemory: memoryDouble([]), learning, habitBasis: async () => basis, now: () => NOW }, { id: "u1" });
+  const observations = { basis: async () => basis, neverLearned: async () => [{ herb: "附子", count: 3 }] };
+  const board = await memoryBoard({ researchMemory: memoryDouble([]), learning, observations, now: () => NOW }, { id: "u1" });
+  assert.deepEqual(board.neverLearned, [{ herb: "附子", count: 3 }], "「不学习」: what was seen and never learned from");
   assert.deepEqual(board.habits.map((habit) => [habit.id, habit.status, habit.isNew]), [["m0", "approved", true], ["m1", "retired", false]]);
   assert.equal(board.habits[0].source, "observed");
   assert.equal(board.habits[0].sourceLabel, "从改方学习");
@@ -121,7 +123,7 @@ test("a habit is new for fourteen days, says it was learned from prescription ed
 
 test("a subject with no memory yet reads an empty dashboard and nothing is created", async () => {
   const board = await memoryBoard({ researchMemory: { settings() { throw new Error("must not read"); } } }, null);
-  assert.deepEqual(board, { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], recentChanges: [] });
+  assert.deepEqual(board, { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] });
 });
 
 test("confirming makes a proposal the person's own, forgetting archives it, and each act is remembered for the extractor", async () => {

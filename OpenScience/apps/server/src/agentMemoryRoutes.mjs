@@ -1,6 +1,7 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, recallForAgent } from "./agentMemoryRecall.mjs";
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
+import { OBSERVATION_FIELDS, readObservation } from "./agentMemoryObservations.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
@@ -55,7 +56,7 @@ const MAX_TRACKED_KEYS = 10_000;
  *  holds the OpenAPI description's paths to exactly this list. */
 export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
   "POST /recall", "POST /note", "GET /records", "POST /episodes",
-  "GET /dashboard", "PUT /settings",
+  "POST /observations", "GET /dashboard", "PUT /settings",
   "PATCH /records/{id}", "POST /records/{id}/confirm", "POST /records/{id}/forget", "POST /records/{id}/restore", "POST /records/{id}/undo",
   "GET /methods/{id}", "POST /methods/{id}/retire", "POST /methods/{id}/restore", "POST /methods/{id}/rollback",
   "POST /notes/{id}/confirm", "POST /notes/{id}/reject",
@@ -68,6 +69,7 @@ export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
   recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
+  observations: OBSERVATION_FIELDS,
 });
 
 /** @param {any} value @param {string} label @param {number} max */
@@ -92,7 +94,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, documents?: any, feedbackEvents?: any,
+ *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, documents?: any, feedbackEvents?: any, observations?: any,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -100,7 +102,7 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null,
-  documents = null, feedbackEvents = null, deleteSubject = null, audit = null,
+  documents = null, feedbackEvents = null, observations = null, deleteSubject = null, audit = null,
 }) {
   const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
@@ -364,7 +366,21 @@ export function createAgentMemoryRoutes({
       requireScope("memory.read");
       if (!researchMemory?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       const user = await accountFor({ create: false });
-      sendJson(res, 200, { data: await memoryBoard({ researchMemory, learning, capsules, habitBasis: null }, user) });
+      sendJson(res, 200, { data: await memoryBoard({ researchMemory, learning, capsules, observations }, user) });
+      return true;
+    }
+
+    // One prescription edit, counted into habits (agentMemoryObservations.mjs).
+    if (action === "observations" && method === "POST") {
+      requireScope("memory.observe");
+      if (!observations) throw new HttpError(503, "product_state_unavailable", "Observations are unavailable.");
+      const observation = readObservation(body);
+      const user = /** @type {any} */ (await accountFor({ create: true }));
+      // The wording pass is metered to the account's one project.
+      await store.requireProject(user, "default");
+      const outcome = await observations.observe(user, observation);
+      if (outcome.habits.length) await trail("observation.habits", user, { changes: outcome.habits.map((/** @type {any} */ habit) => `${habit.change}:${habit.id}`).join(",") });
+      sendJson(res, 202, { data: outcome });
       return true;
     }
 

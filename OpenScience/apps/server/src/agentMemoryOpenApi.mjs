@@ -3,6 +3,7 @@ import { AGENT_KEY_SCOPES, AGENT_SUBJECT_PATTERN } from "./agentApiKeys.mjs";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES } from "./agentMemoryRecall.mjs";
 import { MAX_MOUNTED_CAPSULE_METHODS, MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { BOARD_NEW_DAYS, BOARD_RECENT_DAYS, BOARD_SOURCES } from "./agentMemoryBoard.mjs";
+import { HABIT_MIN_OCCURRENCES, HABIT_MIN_SHARE, HABIT_WINDOW, NEVER_LEARNED_HERBS, OBSERVATION_CHANGE_TYPES } from "./agentMemoryObservations.mjs";
 
 /**
  * The agent-memory API, described.
@@ -173,6 +174,30 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             },
           },
         },
+        ObservationRequest: {
+          type: "object", required: ["syndrome", "changes"], additionalProperties: false,
+          description: "One prescription edit: the candidate formula and the one the doctor sent, as the difference between them. Names only — no dose and no patient field has anywhere to go.",
+          properties: {
+            observationId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", description: "The integrator's id for this edit; the same id posted twice is one edit." },
+            syndrome: { type: "string", minLength: 1, maxLength: 64, description: "The syndrome (证候) the formula was for. No digits." },
+            lineage: { type: "string", minLength: 1, maxLength: 64, description: "The lineage (诊疗思路) chosen, when one was." },
+            stage: { type: "string", enum: ["M04"], default: "M04" },
+            changes: {
+              type: "array", minItems: 1, maxItems: 30,
+              items: {
+                oneOf: [
+                  { type: "object", required: ["type", "from", "to"], additionalProperties: false,
+                    properties: { type: { const: "replace" }, from: { $ref: "#/components/schemas/Herb" }, to: { $ref: "#/components/schemas/Herb" } } },
+                  ...OBSERVATION_CHANGE_TYPES.filter((type) => type !== "replace").map((type) => ({
+                    type: "object", required: ["type", "herb"], additionalProperties: false,
+                    properties: { type: { const: type }, herb: { $ref: "#/components/schemas/Herb" } },
+                  })),
+                ],
+              },
+            },
+          },
+        },
+        Herb: { type: "string", pattern: "^[\\p{Script=Han}A-Za-z·（）()]{1,24}$", description: "A herb's name: letters, no digits — a dose is never observed." },
         ExpectedVersion: {
           type: "object", required: ["expectedVersion"], additionalProperties: false,
           properties: { expectedVersion: { type: "integer", minimum: 1, description: "The record's `version` as read; a stale one is `409 memory_conflict`." } },
@@ -347,6 +372,22 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           responses: {
             202: { description: "Extraction ran. Every record it wrote is `pending`, so `activated` is zero on this path by construction; `pending` counts them and `rejected` counts what the extractor or the hold refused." },
             400: errorResponse("Malformed request."),
+            ...common,
+          },
+        },
+      },
+      "/observations": {
+        post: {
+          summary: "Observe one prescription edit",
+          description: [
+            `The learning signal: what the doctor changed in a candidate formula. It is counted in code across the doctor's most recent ${HABIT_WINDOW} edits under the same syndrome; a change seen at least ${HABIT_MIN_OCCURRENCES} times and in at least ${Math.round(HABIT_MIN_SHARE * 100)}% of them becomes a habit — worded once through the platform's model gateway, written to the method ledger, in effect at once and returned by recall — and a habit whose share falls below half that over enough later edits is retired. The counts are recomputed when the dashboard reads them, never typed into prose.`,
+            `A change naming a toxic herb (${NEVER_LEARNED_HERBS.join("、")}) is recorded for the dashboard's 「不学习」 line and never learned from. A doctor who paused learning is not observed.`,
+          ].join(" "),
+          security: [{ agentApiKey: ["memory.observe"] }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ObservationRequest" }),
+          responses: {
+            202: { description: "`recorded`, or why not (`paused`, `duplicate`); `neverLearned`; and `habits` — each learned, retired, or failed to be written (the observation stands either way)." },
+            400: errorResponse("Malformed request, a dose, or a patient field (`agent_observation_invalid`)."),
             ...common,
           },
         },
