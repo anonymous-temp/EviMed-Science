@@ -1054,6 +1054,20 @@ export function loadConfig(overrides = {}) {
     sessionsFile:
       overrides.sessionsFile ?? process.env.OPEN_SCIENCE_SESSIONS_FILE ?? path.join(dataDir, ".openscience", "sessions.json"),
     sessionTtlMs: Number(overrides.sessionTtlMs ?? process.env.OPEN_SCIENCE_SESSION_TTL_MS ?? defaultSessionTtlMs),
+    // How often the web process deletes expired sign-ins from the PostgreSQL
+    // session store, and how many at most per pass (store.mjs
+    // `purgeExpiredSessions`; counted as open_science_auth_sessions_purged_total).
+    // An expired row is never accepted, so these bound the table, not access:
+    // hourly passes of a thousand clear a backlog the size production had
+    // (1,362 on 2026-09-27) in two hours and outpace a deployment that signs
+    // in a few dozen times a day by far, while each pass stays one short
+    // indexed delete. The interval is floored at a minute where it is armed.
+    authSessionPurgeIntervalMs: Number(
+      overrides.authSessionPurgeIntervalMs ?? process.env.OPEN_SCIENCE_AUTH_SESSION_PURGE_INTERVAL_MS ?? 3_600_000,
+    ),
+    authSessionPurgeBatch: Number(
+      overrides.authSessionPurgeBatch ?? process.env.OPEN_SCIENCE_AUTH_SESSION_PURGE_BATCH ?? 1_000,
+    ),
     bootstrapUser: overrides.bootstrapUser ?? process.env.OPEN_SCIENCE_BOOTSTRAP_USER ?? "",
     bootstrapPassword: bootstrapSecret.value,
     bootstrapPasswordSource: bootstrapSecret.source,

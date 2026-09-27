@@ -44,10 +44,10 @@ import { memoryPlugin, pluginEntry, pluginSource } from "./helpers/frontierFixtu
 const oneLine = (text) => String(text).replace(/\s+/g, " ").trim();
 
 /**
- * The four pieces of recurring work `startRecurringWork` arms, each named by
+ * The five pieces of recurring work `startRecurringWork` arms, each named by
  * something only that piece of work does.
  *
- * Three are identified by the statement they send to the database, which is the
+ * Four are identified by the statement they send to the database, which is the
  * strongest evidence available offline: the sweep did not merely get called, it
  * reached its table. Capsule cleanup has no SQL of its own -- it walks the
  * identity store on disk -- so it is identified by a pass-through spy on the one
@@ -81,6 +81,15 @@ const RECURRING_SWEEPS = [
     intervalMs: 60_000,
     startupRuns: 1,
     statement: /SELECT user_id,id FROM evimed_usage\.model_requests WHERE status='reserved'/,
+  },
+  {
+    // Nothing else ever deleted an expired sign-in from the PostgreSQL store
+    // (store.mjs `purgeExpiredSessions`).
+    key: "sessionPurge",
+    name: "expired sign-in purge",
+    intervalMs: 3_600_000,
+    startupRuns: 1,
+    statement: /^DELETE FROM evimed_control\.auth_sessions WHERE id_hash IN/,
   },
 ];
 
@@ -149,6 +158,8 @@ class FakePool extends EventEmitter {
     this.lease = null;
     /** CNY already settled in the rolling window, as the admission check reads it. */
     this.daySpendCny = 0;
+    /** Expired rows of `evimed_control.auth_sessions`, as the purge deletes them. */
+    this.expiredSessions = 0;
   }
 
   count(pattern) {
@@ -304,6 +315,11 @@ class FakePool extends EventEmitter {
     // than the guard bypassed.
     if (/^SELECT csrf_token FROM evimed_control\.auth_sessions/.test(sql)) {
       return { rows: [{ csrf_token: "composition-csrf" }], rowCount: 1 };
+    }
+    if (/^DELETE FROM evimed_control\.auth_sessions WHERE id_hash IN/.test(sql)) {
+      const deleted = Math.min(Number(values[0]), this.expiredSessions);
+      this.expiredSessions -= deleted;
+      return { rows: [], rowCount: deleted };
     }
     if (/^SELECT s\.user_id, s\.csrf_token/.test(sql)) {
       const now = Date.now();
@@ -673,6 +689,30 @@ test("a maintenance pause clears every recurring timer and reopening re-arms the
     assert.ok(candidates.length > 0, `${sweep.name} was not re-armed after maintenance reopened`);
     assert.ok(candidates.some((entry) => entry.delay === sweep.intervalMs),
       `${sweep.name} was re-armed at the wrong cadence: ${candidates.map((entry) => entry.delay).join()} != ${sweep.intervalMs}`);
+  }
+});
+
+test("the operator's metrics count the sign-ins the purge deleted and the model requests booked uncertain", async (t) => {
+  const fixture = await composedApp(t, { operatorMetricsToken: "composition-metrics-token" });
+  // The hourly pass, fired for real against three expired rows.
+  fixture.pool.expiredSessions = 3;
+  const purge = live(fixture.armed).find((entry) => entry.delay === 3_600_000
+    && String(entry.callback).includes("purgeExpiredSessions"));
+  assert.ok(purge, "no hourly interval drives the purge");
+  purge.callback();
+  assert.ok(await waitFor(() => fixture.pool.expiredSessions === 0), "the purge never reached the table");
+  await waitFor(() => fixture.app.store.expiredSessionsPurged === 3);
+
+  const { port } = fixture.app.server.address();
+  const response = await fetch(`http://127.0.0.1:${port}/api/ops/metrics`, {
+    headers: { Authorization: "Bearer composition-metrics-token" },
+  });
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  assert.match(text, /^open_science_auth_sessions_purged_total 3$/m);
+  assert.match(text, /^# TYPE open_science_auth_sessions_purged_total counter$/m);
+  for (const code of ["provider_response_incomplete", "response_usage_missing", "reservation_expired", "other"]) {
+    assert.match(text, new RegExp(`^open_science_usage_uncertain_total\\{code="${code}"\\} \\d+$`, "m"), code);
   }
 });
 

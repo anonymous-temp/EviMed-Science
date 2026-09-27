@@ -925,6 +925,8 @@ export class PostgresStore extends InMemoryStore {
     super(config);
     this.database = new ControlPlaneDatabase(config, { pool: options.databasePool });
     this.stateStoreKind = "postgres";
+    /** Expired sign-ins this process has deleted (`open_science_auth_sessions_purged_total`). */
+    this.expiredSessionsPurged = 0;
   }
 
   async readiness() {
@@ -973,13 +975,44 @@ export class PostgresStore extends InMemoryStore {
 
   async saveUsers() {}
 
+  // No cleanup here: nothing on this store calls it (see `purgeExpiredSessions`).
   async loadSessions() {
     await this.database.migrate();
-    await this.database.query(`DELETE FROM ${CONTROL_PLANE_SCHEMA}.auth_sessions WHERE expires_at <= now()`);
     this.sessionsLoaded = true;
   }
 
   async saveSessions() {}
+
+  /**
+   * Delete one bounded batch of expired sign-ins, oldest first.
+   *
+   * Hidden knowledge: this store kept every session row it ever wrote. The
+   * cleanup it had sat in `loadSessions`, and nothing calls that here — the
+   * file store's callers of it (`ensureSessionUser`, `assertCsrf`,
+   * `createSession`, `logout`, `deleteUser`) are all overridden below with
+   * queries of their own. A row went only when its own cookie came back after
+   * expiry, and a browser drops that cookie at the same moment (its Max-Age is
+   * the session's TTL), so it never did. Production held 1,454 rows on
+   * 2026-09-27, 1,362 of them expired, the oldest from 2026-07-29. Every read
+   * filters `expires_at > now()`, so an expired row was never accepted: this
+   * is housekeeping, run by the web process on a timer.
+   *
+   * One statement through `auth_sessions_expires_at_idx`, `limit` rows at most,
+   * so a backlog is worked off over passes rather than in one long delete.
+   * @param {{ limit?: number }} [options]
+   * @returns {Promise<number>} rows deleted
+   */
+  async purgeExpiredSessions({ limit = 1_000 } = {}) {
+    const batch = Math.max(1, Math.min(10_000, Math.floor(Number(limit)) || 1_000));
+    const result = await this.database.query(
+      `DELETE FROM ${CONTROL_PLANE_SCHEMA}.auth_sessions WHERE id_hash IN (
+         SELECT id_hash FROM ${CONTROL_PLANE_SCHEMA}.auth_sessions WHERE expires_at <= now() ORDER BY expires_at LIMIT $1)`,
+      [batch],
+    );
+    const deleted = Number(result.rowCount ?? 0);
+    this.expiredSessionsPurged += deleted;
+    return deleted;
+  }
 
   async ensureSessionUser(req, res, { allowDevAuth = true } = {}) {
     const device = deviceSessionOf(req);

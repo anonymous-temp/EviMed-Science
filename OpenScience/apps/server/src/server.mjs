@@ -5118,6 +5118,25 @@ export function createWebApiApp(overrides = {}) {
     return usageReconcileRun;
   };
 
+  let sessionPurgeTimer = null;
+  let sessionPurgeRun = null;
+  // Expired sign-ins in the PostgreSQL session store: nothing else ever
+  // deleted them (store.mjs `purgeExpiredSessions` says why). One bounded
+  // batch per pass; the file store prunes its own on every load and save.
+  const sessionPurger = "purgeExpiredSessions" in store ? store : null;
+  const purgeExpiredSessions = () => {
+    if (!sessionPurger) return Promise.resolve(null);
+    if (sessionPurgeRun) return sessionPurgeRun;
+    sessionPurgeRun = maintenanceMutation(() => sessionPurger.purgeExpiredSessions({ limit: config.authSessionPurgeBatch }))
+      .catch((error) => {
+        if (error?.code === "maintenance_active") return null;
+        process.stderr.write(`expired session purge failed: ${typeof error?.code === "string" ? error.code : "auth_session_purge_failed"}\n`);
+        return null;
+      })
+      .finally(() => { sessionPurgeRun = null; });
+    return sessionPurgeRun;
+  };
+
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
     for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
@@ -5134,12 +5153,14 @@ export function createWebApiApp(overrides = {}) {
     if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
     if (usageReconcileTimer) clearInterval(usageReconcileTimer);
+    if (sessionPurgeTimer) clearInterval(sessionPurgeTimer);
     if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
     capsuleCleanupTimer = null;
     autopilotScheduleTimer = null;
     consolidationScheduleTimer = null;
     notificationTimer = null;
     usageReconcileTimer = null;
+    sessionPurgeTimer = null;
     idleRuntimeSweepTimer = null;
   };
 
@@ -5189,6 +5210,13 @@ export function createWebApiApp(overrides = {}) {
       if (usageLedger && !usageReconcileTimer) {
         usageReconcileTimer = setInterval(() => { void reconcileUsageReservations(); }, 60_000);
         usageReconcileTimer.unref();
+      }
+      await purgeExpiredSessions();
+      if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
+      if (sessionPurger && !sessionPurgeTimer) {
+        sessionPurgeTimer = setInterval(() => { void purgeExpiredSessions(); },
+          Math.max(60_000, Number(config.authSessionPurgeIntervalMs) || 3_600_000));
+        sessionPurgeTimer.unref();
       }
       // Reclaiming runtimes nobody is using.
       //
@@ -5325,8 +5353,10 @@ export function createWebApiApp(overrides = {}) {
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       if (usageReconcileTimer) clearInterval(usageReconcileTimer);
+      if (sessionPurgeTimer) clearInterval(sessionPurgeTimer);
       if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
       await usageReconcileRun;
+      await sessionPurgeRun;
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
@@ -6366,6 +6396,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();
   addMetric(lines, uncertain.name, uncertain.help, uncertain.type, uncertain.series);
+  // Expired sign-ins the PostgreSQL session store deleted (store.mjs
+  // `purgeExpiredSessions`); the file store prunes its own and has no series.
+  if (typeof store.purgeExpiredSessions === "function") {
+    addMetric(lines, "open_science_auth_sessions_purged_total",
+      "Expired sign-ins this process deleted from the PostgreSQL session store. Flat while sign-ins expire means the purge is not running.",
+      "counter", { value: Number(store.expiredSessionsPurged) || 0 });
+  }
 
   return `${lines.join("\n")}\n`;
 }

@@ -229,6 +229,48 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
   }
 });
 
+test("expired sign-ins are purged oldest first in bounded batches, and a live one keeps working", {
+  skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  // Nothing deleted an expired row before (store.mjs `purgeExpiredSessions`):
+  // production held 1,362 of them on 2026-09-27, the oldest from 2026-07-29.
+  assertTestDatabase(databaseUrl);
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-session-purge-"));
+  let app;
+  try {
+    app = await start(dataDir);
+    const alice = await login(app.base, "alice", "correct horse battery staple");
+    assert.equal(alice.response.status, 200);
+    for (let day = 1; day <= 5; day += 1) {
+      await admin.query(`INSERT INTO evimed_control.auth_sessions(id_hash, user_id, csrf_token, created_at, expires_at)
+        VALUES ($1, 'alice', 'expired-csrf', now() - interval '40 days', now() - ($2::integer * interval '1 day'))`,
+      [String(day).repeat(64), day]);
+    }
+    const expired = async () => (await admin.query(
+      "SELECT id_hash FROM evimed_control.auth_sessions WHERE expires_at <= now() ORDER BY expires_at",
+    )).rows.map((row) => row.id_hash[0]);
+    assert.deepEqual(await expired(), ["5", "4", "3", "2", "1"]);
+
+    assert.equal(await app.app.store.purgeExpiredSessions({ limit: 2 }), 2);
+    assert.deepEqual(await expired(), ["3", "2", "1"], "the oldest go first");
+    assert.equal(await app.app.store.purgeExpiredSessions({ limit: 10 }), 3);
+    assert.equal(await app.app.store.purgeExpiredSessions({ limit: 10 }), 0);
+    assert.equal(app.app.store.expiredSessionsPurged, 5);
+
+    const me = await fetch(`${app.base}/api/me`, { headers: { Cookie: alice.cookie } });
+    assert.equal(me.status, 200, "a live sign-in is never touched");
+    const left = await admin.query("SELECT count(*)::integer AS count FROM evimed_control.auth_sessions");
+    assert.equal(left.rows[0].count, 1);
+  } finally {
+    await app?.app.close();
+    await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+    await admin.end();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("the configured bootstrap account is created even when other accounts already exist", {
   skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
