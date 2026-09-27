@@ -589,6 +589,37 @@ not sufficient containment for those events.
   Readiness does not read this receipt: an outage of the plugin database
   degrades 「前沿动态」, not the platform, and the unit's own failure is what
   `systemctl --failed` shows.
+- The retired usememos store still has tables in the `public` schema of the
+  platform database (twelve on 2026-09-26, carried into every nightly backup,
+  read by nothing) and credential files under `shared/secrets`. Retire them
+  once research memory's import is accepted:
+
+  ```bash
+  cd /srv/evimed-science/current/OpenScience
+  sudo python3 scripts/ops/retire-usememos-tables.py            # dry run: tables and row counts
+  sudo python3 scripts/ops/retire-usememos-tables.py --apply    # archive, verify, drop
+  ```
+
+  It refuses unless every table in `public` is one usememos (or the EviMed
+  import beside it) created, printing any other name (`--also NAME` admits one
+  after a look); dumps exactly those tables, encrypts the dump with the backup
+  passphrase and decrypts it back before dropping anything; and drops them in
+  one statement without CASCADE. The archive stays in
+  `shared/backups/usememos-retired/` (0700; archive 0600, with its `.sha256`),
+  outside the thirty-day rotation. Then the credential files, once nothing
+  names them:
+
+  ```bash
+  sudo ls -l /srv/evimed-science/shared/secrets/memos-*
+  sudo grep -l 'memos-' /srv/evimed-science/current/OpenScience/deploy/web/.env \
+    /srv/evimed-science/shared/ops-source-*/compose.builtin.override.yml   # must print nothing
+  sudo shred -u /srv/evimed-science/shared/secrets/memos-*
+  ```
+
+  and the orphaned `web_evimed-memos-*` volumes the compose file lists
+  (`docker volume ls -q | grep '^web_evimed-memos-'`, then `docker volume rm`).
+  The `memos-api-docker` container belongs to another project (`memos-dev`) on
+  this shared host: leave it.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,
