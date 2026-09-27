@@ -103,6 +103,7 @@ function RailMark({ state }: { state: RailState }) {
   return (
     <span
       aria-hidden="true"
+      data-status-mark=""
       className={cn(
         "relative z-10 block h-3.5 w-3.5 rounded-full",
         state === "done" && "bg-accent",

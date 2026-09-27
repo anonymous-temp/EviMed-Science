@@ -82,7 +82,7 @@ function measureControls(controls) {
     if (attribute) return attribute[2] === undefined ? attribute[1] in el.attributes : el.attributes[attribute[1]] === attribute[2];
     return el.tag === part;
   };
-  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", icon = false, style = {} }) => {
+  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", icon = false, style = {}, statusMark = false }) => {
     const el = {
       tag, text, attributes: {}, tagName: tag.toUpperCase(), id: "", style: { ...base, ...style },
       children: [], childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
@@ -92,7 +92,7 @@ function measureControls(controls) {
       matches: (selector) => selector.split(",").some((part) => matchesOne(el, part.trim())),
       querySelector: (selector) => el.children.find((child) => child.matches(selector)) ?? null,
       getAttribute: (name) => el.attributes[name] ?? null,
-      closest: () => null,
+      closest: (selector) => (statusMark && selector === "[data-status-mark]" ? el : null),
     };
     if (icon) el.children.push(make({ tag: "svg", height: 16 }));
     if (icon) el.children[0].attributes["aria-hidden"] = "true";
@@ -149,6 +149,23 @@ test("a text control that wraps is one kind of control, and a control with a hei
   assert.deepEqual(measured.controlLooks["text+8 14px/400 r0px"], { count: 2, example: "button: 一个很长的资料标题" });
   // An inline link stays what it was.
   assert.equal(measureControls([{ tag: "a", text: "原文", height: 44, style: { display: "inline" } }]).controlLooks["inline 14px/400 r0px"].count, 1);
+});
+
+test("a status ring drawn by code is a mark, not a kind of border", () => {
+  // Spec §7.2: 「焦点环和进度轨的状态环不是描边」. A progress-rail step and a
+  // next-step dot say so with data-status-mark; three of GEO's eight border
+  // kinds were these rings (2026-09-27 walk). A ring without the mark counts.
+  const ring = (width, color, mark) => ({
+    tag: "span", height: 14, width: 14, statusMark: mark,
+    style: Object.fromEntries(["Top", "Right", "Bottom", "Left"].flatMap((side) => [
+      [`border${side}Width`, width], [`border${side}Style`, "solid"], [`border${side}Color`, color],
+    ])),
+  });
+  const card = ring("1px", "rgb(228, 232, 236)", false);
+  const marked = measureControls([card, ring("2px", "rgb(10, 93, 193)", true), ring("1px", "rgb(133, 142, 151)", true)]);
+  assert.equal(marked.borderKinds, 1);
+  const unmarked = measureControls([card, ring("2px", "rgb(10, 93, 193)", false)]);
+  assert.equal(unmarked.borderKinds, 2);
 });
 
 test("a visually hidden control is not a kind of control on the page", () => {

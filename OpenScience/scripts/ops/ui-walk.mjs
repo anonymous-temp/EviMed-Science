@@ -287,7 +287,10 @@ export function measure([leakSources, backOfficeSources]) {
   // taken with it): distinct control looks, text colours and borders.
   const all = [...document.querySelectorAll("body *")].filter(visible);
   const borders = [];
-  for (const el of all) {
+  // A status ring drawn by code — a progress-rail step, a next-step dot — is
+  // a mark, not a stroke (spec §7.2: 「焦点环和进度轨的状态环不是描边」); the
+  // component says so with `data-status-mark`, and its ring is not a border.
+  for (const el of all.filter((node) => !node.closest("[data-status-mark]"))) {
     const cs = getComputedStyle(el);
     const sides = ["Top", "Right", "Bottom", "Left"].filter((side) => parseFloat(cs[`border${side}Width`]) > 0
       && cs[`border${side}Style`] !== "none" && cs[`border${side}Color`] !== "rgba(0, 0, 0, 0)");

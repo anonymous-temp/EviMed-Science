@@ -309,6 +309,7 @@ function NextRow({ step }: { step: NextStep }) {
     >
       <span
         aria-hidden="true"
+        data-status-mark=""
         className={step.state === "done" ? "h-2 w-2 shrink-0 rounded-full bg-accent"
           : step.state === "active" ? "h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running"
             : step.state === "held" ? "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-border-control"
