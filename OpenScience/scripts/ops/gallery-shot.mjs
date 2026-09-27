@@ -9,8 +9,20 @@
  * picture in it rather than a surprise three pages later.
  *
  *   OPEN_SCIENCE_PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core \
- *   node scripts/ops/gallery-shot.mjs --url http://localhost:5199 --out gallery.png
- *   node scripts/ops/gallery-shot.mjs --url ... --check    # diff against the reference
+ *   node scripts/ops/gallery-shot.mjs --url http://localhost:5199              # record the light reference
+ *   node scripts/ops/gallery-shot.mjs --url ... --theme dark                   # record the dark reference
+ *   node scripts/ops/gallery-shot.mjs --url ... [--theme dark] --check         # diff against the reference
+ *
+ * Each theme has its own reference (`gallery.png`, `gallery.dark.png`): a dark
+ * check against the light image differs by 99.6% and proves nothing (audit
+ * F-G9). The page is drawn with reduced motion, which stops every loop — the
+ * running dot's pulse, a spinner — so the photograph is the same every time,
+ * and after the web fonts have loaded, so the first run is not a fallback font.
+ *
+ * CI serves the page with `vite preview` from a build made with
+ * `VITE_EVIMED_GALLERY=1`, the one production build that registers the route
+ * (`.github/workflows/web.yml`, job `gallery`), on Ubuntu 24.04 with
+ * fonts-noto-cjk — the same system faces the references were recorded with.
  *
  * Playwright is not a dependency of this repository — it would pull a browser
  * download into every install and into the runtime image rebuild. The walk
@@ -32,8 +44,17 @@ const arg = (name, fallback) => {
 
 const base = String(arg('url', 'http://localhost:5199')).replace(/\/+$/, '')
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const out = path.resolve(repoRoot, String(arg('out', 'apps/web/src/test/__screenshots__/gallery.png')))
 const theme = String(arg('theme', 'light'))
+if (theme !== 'light' && theme !== 'dark') {
+  console.error(`gallery: --theme is light or dark, not "${theme}"`)
+  process.exit(2)
+}
+const out = path.resolve(
+  repoRoot,
+  String(arg('out', `apps/web/src/test/__screenshots__/gallery${theme === 'dark' ? '.dark' : ''}.png`)),
+)
+// Chromium's largest capture is 16384 device px; at 2× that is 8192 CSS px.
+const MAX_HEIGHT = 8000
 const checking = process.argv.includes('--check')
 const chromium = process.env.OPEN_SCIENCE_WALK_CHROMIUM
 
@@ -58,15 +79,21 @@ const browser = await browserType.launch({
   args: ['--no-sandbox', '--font-render-hinting=none'],
 })
 try {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 1200 }, deviceScaleFactor: 2 })
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 1200 },
+    deviceScaleFactor: 2,
+    colorScheme: theme,
+    // Loops stop and layers arrive without travel: one photograph, every time.
+    reducedMotion: 'reduce',
+  })
   const page = await context.newPage()
   /** @type {string[]} */
   const consoleErrors = []
   page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 200)) })
   await page.goto(`${base}/__gallery`, { waitUntil: 'networkidle', timeout: 60_000 })
-  await page.emulateMedia({ colorScheme: theme === 'dark' ? 'dark' : 'light' })
   await page.evaluate((scheme) => document.documentElement.setAttribute('data-theme', scheme), theme)
   await page.waitForSelector('[data-gallery-row]')
+  await page.evaluate(() => document.fonts.ready)
 
   const rows = await page.$$eval('[data-gallery-row]', (nodes) => nodes.map((node) => node.getAttribute('data-gallery-row')))
   if (rows.length === 0) throw new Error('the gallery rendered no rows')
@@ -76,7 +103,11 @@ try {
     const scroller = document.querySelector('[data-gallery-row]')?.closest('div[class*="overflow-y-auto"]')
     return Math.ceil((scroller?.scrollHeight ?? document.body.scrollHeight) + 48)
   })
-  await page.setViewportSize({ width: 1280, height: Math.min(height, 8000) })
+  if (height > MAX_HEIGHT) {
+    // Cropping would photograph a gallery without its last rows and pass.
+    throw new Error(`the gallery is ${height} px tall, over the ${MAX_HEIGHT} px a 2× capture can hold — split it`)
+  }
+  await page.setViewportSize({ width: 1280, height })
   await page.waitForTimeout(400)
   await mkdir(path.dirname(out), { recursive: true })
   const shot = checking ? `${out}.actual.png` : out

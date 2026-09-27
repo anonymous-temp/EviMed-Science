@@ -161,6 +161,77 @@ jobs:
       - name: Build hosted frontend
         run: CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/web build
 
+  # The component gallery, photographed in both themes and diffed against the
+  # checked-in references (fusion plan §6.3, audit F-G9): changing a
+  # component's look is a review with a picture in it, and a change nobody
+  # re-recorded is a red check rather than a surprise three pages later.
+  #
+  # Same OS image and font package the references were recorded with
+  # (Ubuntu 24.04, fonts-noto-cjk — the Chinese faces are system fonts by
+  # design), and the same pinned playwright-core, installed outside the
+  # lockfile: a browser download does not belong in every install or in the
+  # runtime image. The page is a production build that registers /__gallery
+  # (`VITE_EVIMED_GALLERY=1`, never deployed), served by `vite preview`.
+  gallery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_CORE_VERSION: 1.58.2
+      GALLERY_URL: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the fonts the references were recorded with
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          cache-dependency-path: OpenScience/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the pinned headless browser
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-package-lock "playwright-core@${PLAYWRIGHT_CORE_VERSION}"
+          node "$RUNNER_TEMP/playwright/node_modules/playwright-core/cli.js" install --with-deps chromium
+
+      - name: Build and serve the gallery
+        run: |
+          CI=true VITE_EVIMED_GALLERY=1 VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/web exec vite build --outDir dist-gallery
+          nohup pnpm --filter @ai4s/web exec vite preview --outDir dist-gallery --host 127.0.0.1 --port 4173 --strictPort > "$RUNNER_TEMP/gallery-preview.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fsS -o /dev/null "$GALLERY_URL/__gallery" && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/gallery-preview.log"
+          exit 1
+
+      - name: Compare the gallery with its references
+        env:
+          OPEN_SCIENCE_PLAYWRIGHT_CORE: ${{ runner.temp }}/playwright/node_modules/playwright-core
+        run: |
+          pnpm gallery:check --url "$GALLERY_URL"
+          pnpm gallery:check --url "$GALLERY_URL" --theme dark
+
+      - name: Keep the photographs that did not match
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-${{ github.sha }}
+          path: OpenScience/apps/web/src/test/__screenshots__/*.actual.png
+          if-no-files-found: ignore
+
   docker-hosted:
     runs-on: ubuntu-24.04
     needs: web

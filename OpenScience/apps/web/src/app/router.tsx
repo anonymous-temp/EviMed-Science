@@ -110,8 +110,12 @@ export const routes: RouteObject[] = [
   // and outside a session. CI screenshots it and diffs the result, which is how
   // changing a component's look becomes a review with a picture in it. Under
   // `/app` it would have needed a login and drawn the sidebar around itself —
-  // neither of which is the thing being compared. Not in a production build.
-  ...(import.meta.env.PROD ? [] : [{ path: "/__gallery", element: <GalleryPage />, errorElement: <RouteError /> }]),
+  // neither of which is the thing being compared. Not in a production build —
+  // except the one CI builds for the comparison (`VITE_EVIMED_GALLERY=1`,
+  // served by `vite preview`), which is never deployed.
+  ...(import.meta.env.PROD && import.meta.env.VITE_EVIMED_GALLERY !== "1"
+    ? []
+    : [{ path: "/__gallery", element: <GalleryPage />, errorElement: <RouteError /> }]),
   { path: "/", element: <Navigate to="/app/chat" replace /> },
   // The paths this shell used before it had a prefix. They were linked to from
   // runs, from notification mail and from people's bookmarks, and a redirect
