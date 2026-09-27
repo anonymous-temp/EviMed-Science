@@ -1211,13 +1211,20 @@ def _create_app() -> FastAPI:
         serving = _model_ready()
         opengwas = None
         if _kind() == "mendelian-randomization" and serving:
-            opengwas = {
-                **_opengwas_state(),
-                # A researcher's own token (账户→连接器) still unlocks their jobs.
-                "perAccountCredentials": bool(
-                    os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
-                ),
-            }
+            try:
+                state = _opengwas_state()
+            except MRInputSupportUnavailable:
+                # The reviewed helper is part of the engine: unloadable, it is
+                # not serving, and /health says so instead of answering 500.
+                serving, state = False, None
+            if state is not None:
+                opengwas = {
+                    **state,
+                    # A researcher's own token (账户→连接器) still unlocks their jobs.
+                    "perAccountCredentials": bool(
+                        os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
+                    ),
+                }
         ready = serving and (opengwas is None or opengwas["ready"])
         return {
             "status": "ok" if ready else "degraded",

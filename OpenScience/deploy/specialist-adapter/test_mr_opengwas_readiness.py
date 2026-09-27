@@ -89,6 +89,18 @@ def test_health_is_ready_with_a_live_token_and_names_an_expired_one(tmp_path, mo
     assert health["opengwas"]["reason"] == "opengwas_token_expired"
 
 
+def test_an_unloadable_helper_reports_not_serving_instead_of_failing(tmp_path, monkeypatch):
+    service, client, _, _ = setup_mr(tmp_path, monkeypatch)
+
+    def unavailable(*_args):
+        raise service.MRInputSupportUnavailable("Managed MR input support is unavailable.")
+
+    monkeypatch.setattr(service, "_opengwas_state", unavailable)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert (response.json()["serving"], response.json()["ready"]) == (False, False)
+
+
 def test_other_specialists_report_serving_equal_to_ready(tmp_path, monkeypatch):
     from test_service import _load_service
 
