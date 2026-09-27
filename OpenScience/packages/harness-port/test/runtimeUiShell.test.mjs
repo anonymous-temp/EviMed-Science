@@ -147,7 +147,13 @@ test('a page the control plane served is branded whether or not it is embedded',
   const icon = f.target.document.head.children.find((/** @type {any} */ node) => node.attributes?.rel === 'icon');
   assert.ok(icon, "the document's icon is replaced, not left as the kernel's whale");
   assert.equal(icon.attributes.href, EVIMED_FAVICON);
-  assert.match(EVIMED_FAVICON, /^data:image\/svg\+xml,.*%2300756b/, 'the icon carries the brand teal');
+  // The EviMed molecule in brand blue (spec §3.2); the retired teal plus is gone.
+  assert.match(EVIMED_FAVICON, /^data:image\/svg\+xml,.*fill='%230a5dc1'/, 'the icon carries the brand blue');
+  assert.match(EVIMED_FAVICON, /d='M25\.90815,23\.256664C/, 'the icon is the molecule mark');
+  assert.doesNotMatch(EVIMED_FAVICON, /00756b|63c5b9/i, 'the retired teal is gone');
+  // Well-formed once decoded: one svg with one path.
+  const decoded = decodeURIComponent(EVIMED_FAVICON.slice('data:image/svg+xml,'.length));
+  assert.match(decoded, /^<svg xmlns='http:\/\/www\.w3\.org\/2000\/svg' viewBox='0 0 32 32'><path [^<>]+\/><\/svg>$/);
 });
 
 test('unloading the body removes its stylesheet', () => {

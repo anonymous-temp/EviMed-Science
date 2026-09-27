@@ -10,8 +10,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
-import { apply, BODY, evimedThemeTokens, THEME_LAYER_SOURCE } from '../src/runtimeUiTheme.mjs';
+import { apply, BODY, evimedFontFaces, evimedThemeTokens, THEME_LAYER_SOURCE } from '../src/runtimeUiTheme.mjs';
 import { fakeCtx, fakeTarget, kitFor } from './helpers/frameFakes.mjs';
+import { CJK_PUNCT_FACES } from '@evimed/design-tokens'
+import { cjkPunctFontFaceCss } from '@evimed/design-tokens/css'
 import { kernelThemeTokens } from '@evimed/design-tokens/kernel'
 
 /** @param {string} hex */
@@ -249,6 +251,41 @@ test('a refused preference is logged, not thrown into the bridge', () => {
   apply(ctx, {}, target, undefined, kit);
   kit.hub.deliver('theme', { preference: 'dark', resolved: 'dark' });
   assert.ok(target.warnings.some((/** @type {any[]} */ entry) => String(entry[0]).includes('preference not applied')));
+});
+
+test('the frame loads the punctuation face its font stack names first (tokens 2.1)', () => {
+  // The layer's stack begins with "EviMed CJK Punct"; the frame is another
+  // document, so without the face's own rule the name was skipped there and
+  // Chinese quotes fell to Inter's Latin shapes.
+  assert.match(value('--dsw-font-family', 'light'), /^"EviMed CJK Punct", Inter,/);
+  const faces = evimedFontFaces(FRAME_VOCABULARY);
+  assert.equal(faces, cjkPunctFontFaceCss().trim(), 'the frame reads the token package, not a copy');
+  for (const face of CJK_PUNCT_FACES) assert.ok(faces.includes(`font-family: "${face.family}";\n  font-weight: ${face.weight};`), `${face.family} ${face.weight}`);
+  assert.doesNotMatch(faces, /url\(/, 'the face is the reader\'s own font; the frame fetches nothing');
+
+  const ctx = fakeCtx();
+  ctx.theme = themeRuntime(ctx);
+  const target = fakeTarget();
+  apply(ctx, {}, target, undefined, kitFor(ctx, target));
+  const styles = target.document.head.children.filter((/** @type {any} */ node) => node.tag === 'style' && 'data-evimed-fonts' in node.attributes);
+  assert.equal(styles.length, 1);
+  assert.equal(styles[0].textContent, faces);
+  ctx.dispose();
+  assert.equal(target.document.head.children.length, 0, 'the face outlived the body');
+});
+
+test('the font faces taken from the vocabulary are local @font-face rules and nothing else', () => {
+  assert.equal(evimedFontFaces({}), '');
+  assert.equal(evimedFontFaces({ fontFaces: 42 }), '');
+  const hostile = '@font-face { font-family: "X"; src: url(https://evil.example/x.woff2); }\nbody { display: none }\n@font-face { font-family: "Y"; src: local("Y"); }';
+  assert.equal(evimedFontFaces({ fontFaces: hostile }), '@font-face { font-family: "Y"; src: local("Y"); }');
+  // Without a face to load, no element is added.
+  const ctx = fakeCtx();
+  ctx.theme = themeRuntime(ctx);
+  const target = fakeTarget();
+  const kit = kitFor(ctx, target);
+  apply(ctx, {}, target, undefined, { ...kit, vocabulary: { ...kit.vocabulary, fontFaces: '' } });
+  assert.equal(target.document.head.children.length, 0);
 });
 
 test('outside a frame, or without a theme service, the body does nothing', () => {

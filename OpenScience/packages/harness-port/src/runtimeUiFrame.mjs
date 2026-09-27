@@ -27,6 +27,7 @@
 
 import { ANSWER_EVIDENCE_GRADE_LABELS_ZH } from '@evimed/domain/answer-evidence-grade';
 import { STUDY_TYPE_BADGES } from '@evimed/design-tokens';
+import { cjkPunctFontFaceCss } from '@evimed/design-tokens/css';
 import { kernelThemeTokens } from '@evimed/design-tokens/kernel';
 
 import {
@@ -91,6 +92,10 @@ export const FRAME_VOCABULARY = Object.freeze({
   // table. Two hand-kept copies of a palette is how the shell and the frame
   // came to disagree about the sidebar's grey.
   themeTokens: kernelThemeTokens(),
+  // The punctuation face the font stack in `themeTokens` names first
+  // (tokens 2.1): the frame is another document, so without its `@font-face`
+  // the name was skipped and Chinese quotes fell to Inter's Latin shapes.
+  fontFaces: cjkPunctFontFaceCss(),
   phases: RUN_ACTIVITY_PHASES,
   phaseLabels: RUN_ACTIVITY_PHASE_LABELS_ZH,
   sourceTypes: EVIDENCE_SOURCE_TYPES,

@@ -1,5 +1,5 @@
 /**
- * The frame's palette and type: direction A (「循证青」, evidence teal), laid
+ * The frame's palette and type: 循证蓝 and the shell's font stack, laid
  * over the kernel's own theme through its documented override.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client (`dsh-client-ui-theme`
@@ -27,7 +27,7 @@
  *  - The send button's glyph is a hard-coded `#fff` on
  *    `--dsw-alias-button-info-fill`, so that fill must carry white in BOTH
  *    schemes — upstream's blue carried it at 4.23:1 (light) and 2.7:1 (dark).
- *    It is the brand's 700 step in both, 5.59:1.
+ *    It is the brand's 600 step in both, 6.27:1.
  *  - The layer is memory-only: the presenter re-applies the composed snapshot on
  *    every `theme/change`, and a layer lives exactly as long as the theme
  *    runtime that holds it. So the body registers it in an effect (released on
@@ -60,7 +60,7 @@ export const THEME_LAYER_SOURCE = '@evimed/dsh-socket';
 /**
  * The override layer's table, as the build inlined it.
  *
- * The values are `packages/domain/src/designTokens.mjs` — the one module the
+ * The values are `@evimed/design-tokens` (`kernelThemeTokens`) — the one table the
  * shell's stylesheet and Tailwind theme are generated from — carried here as
  * data in the frame's vocabulary, because a body may import nothing. This
  * function is the read, not the decision: it used to be a second copy of the
@@ -74,6 +74,24 @@ export function evimedThemeTokens(vocabulary) {
   return tokens && typeof tokens === 'object' ? tokens : {};
 }
 
+/**
+ * The `@font-face` rules the layer's font stack depends on, as the build
+ * inlined them (tokens 2.1: "EviMed CJK Punct", Chinese quotes and ellipses
+ * from the reader's own Chinese face). `--dsw-font-family` names the face
+ * first; a document without the rule skips the name, and the frame is its own
+ * document. Only `@font-face` rules over `local()` sources are accepted — the
+ * frame fetches nothing on the vocabulary's say-so.
+ *
+ * @param {any} [vocabulary] the frame kit's build-time table
+ * @returns {string}
+ */
+export function evimedFontFaces(vocabulary) {
+  const css = vocabulary && vocabulary.fontFaces;
+  if (typeof css !== 'string' || !css.trim()) return '';
+  const rules = css.match(/@font-face\s*\{[^{}]*\}/g) ?? [];
+  return rules.filter((rule) => !/url\(/i.test(rule)).join('\n');
+}
+
 
 /**
  * @param {any} ctx Native Cordis client context.
@@ -85,6 +103,18 @@ export function evimedThemeTokens(vocabulary) {
 export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
   if (!kit || !kit.ours) return;
   const tokens = evimedThemeTokens(kit.vocabulary);
+  // The punctuation face first, so the stack the layer below names resolves
+  // from the first paint. A `<style>` in the frame's head, the way the shell
+  // body carries its stylesheet, removed with the body.
+  const faces = evimedFontFaces(kit.vocabulary);
+  const doc = target.document;
+  if (faces && doc && typeof doc.createElement === 'function' && doc.head) {
+    const style = doc.createElement('style');
+    style.setAttribute('data-evimed-fonts', '');
+    style.textContent = faces;
+    doc.head.appendChild(style);
+    ctx.effect(() => () => { style.remove(); }, 'evimed-theme: font faces');
+  }
   const source = '@evimed/dsh-socket';
   const probe = '--dsw-static-deepseek-500';
   kit.withServices(['theme'], (/** @type {any} */ scope) => {
@@ -124,4 +154,4 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'theme', inject, parts: Object.freeze([evimedThemeTokens, apply]) });
+export const BODY = Object.freeze({ name: 'theme', inject, parts: Object.freeze([evimedThemeTokens, evimedFontFaces, apply]) });

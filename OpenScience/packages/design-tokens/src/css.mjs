@@ -193,6 +193,16 @@ function fontFaces() {
 }
 
 /**
+ * The punctuation face alone, as a stylesheet: for a document that takes the
+ * font stack but not this file — the kernel frame, whose theme body injects it
+ * so `--dsw-font-family`'s first name resolves there too.
+ * @returns {string}
+ */
+export function cjkPunctFontFaceCss() {
+  return `${fontFaces().join('\n')}\n`
+}
+
+/**
  * Rules the table owns: the serif bound to the rungs that may wear it, the
  * English stack, and the reduced-motion values.
  * @returns {string[]}
