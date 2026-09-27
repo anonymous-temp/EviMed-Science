@@ -108,6 +108,12 @@ test("EviMed tool names cover both worlds", () => {
   assert.deepEqual(narrateToolCall("evimed_complete_run", { partial: true }), { text: "以部分交付结束", known: true });
   assert.equal(phaseOfToolCall("evimed_complete_run"), "deliver");
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_claim_upsert"));
+  // The conversation narrates it in the reader's word, 结论; 主张 is the
+  // gate's and is retired on screen (spec §12.4).
+  assert.equal(narrateToolCall("evimed_claim_upsert", {}).text, "登记一条结论");
+  assert.equal(narrateToolCall("evimed_claim_upsert", { claim: { claimId: "CLM-001" } }, {
+    ok: true, data: { claimId: "CLM-001", status: "verified", totals: { verified: 1, total: 2 } },
+  }).text, "登记结论 CLM-001：已核实（已核实 1/2）");
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_render_report"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_await"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_revise_deliverable"));

@@ -134,9 +134,9 @@ describe("证据", () => {
     expect(await screen.findByText("信达生物制药（苏州）有限公司")).toBeInTheDocument();
     expect(screen.getByText("司美格鲁肽、替尔泊肽")).toBeInTheDocument();
     expect(screen.getByText("处方药")).toBeInTheDocument();
-    expect(screen.getByText("2 条主张")).toBeInTheDocument();
+    expect(screen.getByText("2 条结论")).toBeInTheDocument();
     expect(screen.queryByText("已撤下的旧说法。")).not.toBeInTheDocument();
-    expect(screen.getByText("说明书 · 玛仕度肽注射液说明书（国家药监局 2025） · 成人 · 9月22日核验")).toBeInTheDocument();
+    expect(screen.getByText("说明书 · 玛仕度肽注射液说明书（国家药监局 2025） · 成人 · 9月22日核对")).toBeInTheDocument();
     expect(screen.getByText(/证据等级 A/)).toBeInTheDocument();
     expect(screen.getByText("说明书内")).toBeInTheDocument();
   });

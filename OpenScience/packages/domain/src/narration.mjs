@@ -172,9 +172,9 @@ const SOCKET_NARRATION = Object.freeze({
     const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
     const data = record?.data
     const id = excerpt(data?.claimId ?? args?.claim?.claimId, 16)
-    if (!data || !record?.ok) return id ? `登记主张 ${id}` : '登记一条主张'
+    if (!data || !record?.ok) return id ? `登记结论 ${id}` : '登记一条结论'
     const totals = data.totals && typeof data.totals === 'object' ? `（已核实 ${Number(data.totals.verified) || 0}/${Number(data.totals.total) || 0}）` : ''
-    return `登记主张 ${id}：${data.status === 'verified' ? '已核实' : '待核实'}${totals}`
+    return `登记结论 ${id}：${data.status === 'verified' ? '已核实' : '待核实'}${totals}`
   },
   [SOCKET_TOOL_NAMES.renderReport]: (args, result) => {
     const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null

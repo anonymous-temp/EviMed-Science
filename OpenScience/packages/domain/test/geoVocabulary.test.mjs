@@ -72,6 +72,9 @@ test("every word a reader can meet has a Chinese label, and no label names a wor
   for (const [words, labels] of pairs) {
     assert.deepEqual(Object.keys(labels).sort(), [...words].sort());
     for (const word of words) assert.ok(labels[word]?.trim(), word);
+    // A reader sees these (the conversation narrates `geo_read` / `geo_write`
+    // with them): the spec's word is 结论, and 主张 is retired (§12.4).
+    for (const word of words) assert.doesNotMatch(labels[word], /主张/, `${word}: ${labels[word]}`);
   }
 });
 

@@ -184,7 +184,7 @@ export const GEO_STEP_WORK: Readonly<Record<GeoStepKey, string>> = Object.freeze
  * the step will produce, never how the system works.
  */
 export const GEO_STEP_EMPTY: Readonly<Record<GeoStepKey, string>> = Object.freeze({
-  evidence: "还没有整理这个产品的说明书、证据和主张。",
+  evidence: "还没有整理这个产品的说明书、证据和结论。",
   journey: "还没有画出患者和医生从起疑到用药的旅程。",
   questions: "还没有列出要问 AI 的问题。",
   diagnosis: "还没有问过各家 AI 怎么回答这个产品。",
@@ -200,7 +200,7 @@ export const GEO_STEP_EMPTY: Readonly<Record<GeoStepKey, string>> = Object.freez
  * for is usually waiting for the one before it, not being worked on.
  */
 export const GEO_STEP_WAITING: Readonly<Record<GeoStepKey, string>> = Object.freeze({
-  evidence: "马上开始整理说明书、证据和主张。",
+  evidence: "马上开始整理说明书、证据和结论。",
   journey: "证据整理好后开始画旅程。",
   questions: "证据整理好后开始列问题。",
   diagnosis: "问题定下来后开始问各家 AI，结果一般在第二天上午前出来。",

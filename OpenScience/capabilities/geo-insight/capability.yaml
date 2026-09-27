@@ -94,7 +94,7 @@ starterPrompts:
 display:
   title: "循证 GEO"
   category: "写作与传播"
-  description: "核验产品与说明书，建主张库，画患者旅程并锁定测量问句。"
+  description: "核对产品与说明书，建结论库，画患者旅程并锁定测量问句。"
   listed: false
   starterPrompts:
   - "为信尔美（玛仕度肽注射液）做一套完整的循证 GEO 方案。"
@@ -105,7 +105,7 @@ display:
     min: 30
     max: 120
   outputs:
-  - "产品身份与主张库"
+  - "产品身份与结论库"
   - "患者旅程与就医节点"
   - "四池问题地图与测量问句"
   knownLimits:

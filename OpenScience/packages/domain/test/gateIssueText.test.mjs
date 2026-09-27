@@ -25,6 +25,8 @@ function assertReaderTitle(title, where) {
   assert.ok(typeof title === "string" && CJK.test(title), `${where} has no Chinese title: ${JSON.stringify(title)}`);
   assert.ok([...title].length <= 20, `${where}'s title is longer than twenty characters: ${title}`);
   assert.doesNotMatch(title, /[a-z]{4,}/, `${where}'s title carries an English word: ${title}`);
+  // The gate's own word for a claim is not the reader's: 结论 (spec §12.4).
+  assert.doesNotMatch(title, /主张/, `${where}'s title says the retired 主张: ${title}`);
 }
 
 test("every check id the domain can raise has a Chinese title of its own", () => {
@@ -97,13 +99,13 @@ test("a finding is described by its identity and parameters, never by its senten
     check: "claim-numeric-support",
     severity: "advice",
     title: "数值未出现在引文中",
-    detail: "证据矩阵第 53 条主张",
+    detail: "证据矩阵第 53 条结论",
   });
 
   const quote = describeGateIssue({ code: "specialist_evidence_traceability_failed", check: "claim-quote-verbatim", severity: "required", claimId: "CLM-007", file: "deliverables/review/clinical-evidence-report.md", line: 41, text: "MUST FIX — …" });
   assert.equal(quote.severity, "must-fix");
   assert.equal(quote.title, "引文在所引来源中找不到原句");
-  assert.equal(quote.detail, "主张 CLM-007，clinical-evidence-report.md 第 41 行");
+  assert.equal(quote.detail, "结论 CLM-007，clinical-evidence-report.md 第 41 行");
 
   // A safety-tier check is safety for the reader, whatever the run was told.
   for (const [check, tier] of Object.entries(CLINICAL_CHECK_TIERS)) {

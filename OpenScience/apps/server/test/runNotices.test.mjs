@@ -25,7 +25,7 @@ test("a sentence from an older ledger is read by the prefix it was written with,
   assert.equal(safety.severity, "safety");
   assert.equal(safety.title, "涉及临床安全，请核对");
   assert.equal(mustFix.severity, "must-fix");
-  assert.equal(mustFix.detail, "证据矩阵第 4 条主张", "the matrix index is a format, and it names the claim");
+  assert.equal(mustFix.detail, "证据矩阵第 4 条结论", "the matrix index is a format, and it names the claim");
   assert.equal(stall.code, "run_stall_observed");
   assert.equal(stall.title, "一段时间没有可观测的进展");
   assert.equal(english.code, "run_report_rewritten");
@@ -89,7 +89,7 @@ test("an old ledger with string notices and a new one with structured notices re
   assert.equal(old.qualityNotices[0].severity, "must-fix");
   assert.equal(old.qualityNotices[0].title, "有一处依据需要核对", "an old sentence without its check gets the severity's title");
   assert.equal(fresh.qualityNotices[0].title, "引文在所引来源中找不到原句", "a new one is titled by its check");
-  assert.equal(fresh.qualityNotices[0].detail, "证据矩阵第 1 条主张");
+  assert.equal(fresh.qualityNotices[0].detail, "证据矩阵第 1 条结论");
   assert.equal(fresh.qualityNotices[1].code, "memory_pending");
   assert.equal(fresh.qualityNotices[1].detail, "记忆已记录但暂缓生效 1 条。");
   for (const notice of [...old.qualityNotices, ...fresh.qualityNotices]) {
@@ -104,7 +104,7 @@ test("the run side's degraded lines are titled by the template they were written
   const cases = [
     ["root research-tool narrowing failed: tools.restrict is not a function", "run_root_tools_unnarrowed", "根任务未能收窄研究工具"],
     ["root research-tool narrowing found no research tools registered at session start", "run_root_tools_unnarrowed", "根任务未能收窄研究工具"],
-    ["root claim-tool narrowing failed: boom", "run_root_claim_tools_unnarrowed", "根任务未能收窄主张工具"],
+    ["root claim-tool narrowing failed: boom", "run_root_claim_tools_unnarrowed", "根任务未能收窄结论工具"],
     ["method section clinical-evidence-synthesis/appraisal not registered: duplicate", "run_method_sections_unregistered", "方法说明未注册，改读技能文件"],
     ["method sections for d1 were not registered; the child can read them from the skill files", "run_method_sections_unregistered", "方法说明未注册，改读技能文件"],
     ["child guidance not installed: agent/pre-step unavailable", "run_child_guidance_missing", "子任务指引没有装上"],

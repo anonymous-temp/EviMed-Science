@@ -25,6 +25,7 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["待你复核", "the verdict says what is true (some conclusions were not matched word for word), not what a person owes"],
   ["待人工复核", "same"],
   ["自证未通过", "same"],
+  ["主张", "the gate's word for a claim; a reader sees 结论 (spec §12.4), 循证 GEO's evidence tab included"],
   ["改线", "a tool is chosen before the conversation, not switched after a dispatch"],
   ["按哪条线处理", "same"],
   // The memory page's banned words (build spec 2026-09-21 §10.6): each is the

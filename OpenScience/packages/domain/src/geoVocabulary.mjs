@@ -61,7 +61,7 @@ export const GEO_COVERAGE_DAYS_MAX = 365
 export const GEO_RX_CLASSES = frozen(['rx', 'otc'])
 export const GEO_IDENTITY_STATUSES = frozen(['confirmed', 'ambiguous', 'unknown'])
 
-/** Claims (主张库). */
+/** Claims (结论库; spec §12.4 retired 主张 on screen). */
 export const GEO_CLAIM_SOURCE_KINDS = frozen(['label', 'guideline', 'trial', 'review', 'literature', 'regulator', 'other'])
 export const GEO_CLAIM_STATUSES = frozen(['active', 'expired', 'retired'])
 
@@ -203,11 +203,11 @@ export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_q
   'articles', 'placement_plan', 'step'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
-  project: '项目概况', claims: '主张库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
+  project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', monitoring: '监测',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
-  product: '产品身份', claims: '主张库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
+  product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
   sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', step: '进度',
 })
 /** The export runs 「⋯」 offers. */

@@ -92,8 +92,8 @@ function Claims({ claims }: { claims: GeoClaim[] }) {
   const shown = kind === "all" ? claims : claims.filter((claim) => claim.sourceKind === kind);
 
   return (
-    <section aria-label="主张" className="mt-6">
-      <FilterRow summary={`${claims.length} 条主张`}>
+    <section aria-label="结论" className="mt-6">
+      <FilterRow summary={`${claims.length} 条结论`}>
         <FilterChips label="出处类型" options={options} value={kind} onChange={setKind} />
       </FilterRow>
       <List divided className="mt-3">
@@ -144,7 +144,7 @@ export function readableSourceRef(ref: string | null | undefined): string | null
   return value;
 }
 
-/** “说明书 · 国家药监局 2025 · 证据等级 A · 成人 · 9月22日核验” */
+/** “说明书 · 国家药监局 2025 · 证据等级 A · 成人 · 9月22日核对” */
 function ClaimMeta({ claim }: { claim: GeoClaim }) {
   const verified = monthDay(claim.verifiedAt);
   const parts = [
@@ -152,7 +152,7 @@ function ClaimMeta({ claim }: { claim: GeoClaim }) {
     claim.sourceLabel || readableSourceRef(claim.sourceRef),
     claim.evidenceLevel ? `证据等级 ${claim.evidenceLevel}` : null,
     claim.population || null,
-    verified ? `${verified}核验` : null,
+    verified ? `${verified}核对` : null,
   ].filter((part): part is string => !!part);
   return <span>{parts.join(" · ")}</span>;
 }

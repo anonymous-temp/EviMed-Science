@@ -181,7 +181,7 @@ export function TabSection({
   );
 }
 
-/** The grey summary at the right end of a tab's filter row: “38 条主张”. */
+/** The grey summary at the right end of a tab's filter row: “38 条结论”. */
 export function RowSummary({ children }: { children: ReactNode }) {
   return <span className="text-caption tabular-nums text-text-3">{children}</span>;
 }

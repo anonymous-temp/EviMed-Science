@@ -61,27 +61,27 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'practical-section': '缺少临床实践要点章节',
   'deep-research-sections': '报告缺少规定的学术章节',
   'reference-list-order': '参考文献应在实践要点之后',
-  'visible-claim-marker': '正文暴露了内部主张编号',
+  'visible-claim-marker': '正文暴露了内部结论编号',
   'operational-failure-prose': '报告写入了检索失败过程',
   'runtime-leakage': '报告写入了检索或工具过程',
-  'claim-marker-format': '主张标记格式不正确',
+  'claim-marker-format': '结论标记格式不正确',
   'internal-api-citation': '引用了内部接口地址',
   'exclusive-safety': '把有限建议写成了绝对安全',
   'matrix-present': '缺少证据矩阵',
   'matrix-schema': '证据矩阵结构不符合要求',
-  'claim-schema': '主张条目字段不完整',
-  'derived-claim-inputs': '推导结论未列明依据主张',
-  'claim-access-level': '主张未注明原文阅读深度',
-  'claim-reference-number': '主张的文献编号无法对应',
-  'claim-support-quote': '主张缺少原文引文',
+  'claim-schema': '结论条目字段不完整',
+  'derived-claim-inputs': '推导结论未列明所依据的结论',
+  'claim-access-level': '结论未注明原文阅读深度',
+  'claim-reference-number': '结论的文献编号无法对应',
+  'claim-support-quote': '结论缺少原文引文',
   'claim-emergency-support': '急救建议未见于所引原文',
   'claim-numeric-support': '数值未出现在引文中',
   'claim-artifact-path': '引文的来源文件未被保存',
   'claim-quote-verbatim': '引文在所引来源中找不到原句',
   'claim-source-url': '来源链接无效',
-  'report-claim-unresolved': '报告引用的主张不在矩阵中',
-  'matrix-claim-uncited': '矩阵主张未在报告中引用',
-  'derived-claim-grounding': '推导所依据的主张不存在',
+  'report-claim-unresolved': '报告引用的结论不在矩阵中',
+  'matrix-claim-uncited': '矩阵结论未在报告中引用',
+  'derived-claim-grounding': '推导所依据的结论不存在',
   'derived-report-label': '推导结果未标注〔推导〕',
   'report-number-unanchored': '报告数值缺少引用出处',
   'report-number-unsupported': '报告数值未见于所引证据',
@@ -91,7 +91,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'reference-list-duplication': '同一文献被重复编号',
   'reference-number-unresolved': '引用编号缺少文献条目',
   'claim-reference-identity': '引用编号指向了另一篇来源',
-  'claim-inline-citation': '主张未配正文编号引用',
+  'claim-inline-citation': '结论未配正文编号引用',
   'advisory-notes': '写作层面的改进建议',
   // A claim's structured appraisal (`appraisalStructure.mjs`, S6 2026-09-18):
   // advice, every one.
@@ -138,8 +138,8 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'grant-requirement-coverage': '申报要求未全部覆盖',
   'geo-measurement': '可见度测量记录不完整',
   'geo-probe-host': '正文含探测主机信息',
-  'geo-claim-source': '主张缺少可核对的原文出处',
-  'geo-claim-schema': '主张库要素不完整',
+  'geo-claim-source': '结论缺少可核对的原文出处',
+  'geo-claim-schema': '结论库要素不完整',
   'geo-question-map': '问题地图需要核对',
   'geo-data-type': '数字的数据类型标注有误',
   'geo-strategy-shape': '信源与目标结构不完整',
@@ -182,9 +182,9 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   geo_denominator_overstated: '可见度测量的分母偏大',
   geo_probe_host_in_prose: '正文含探测主机信息',
   geo_claim_quote_not_found: '引文在所引来源中找不到原句',
-  geo_claim_unbound: '主张缺少引文或出处',
-  geo_claim_unverified: '主张引文未能核对原文',
-  geo_claim_library_notice: '主张库的改进建议',
+  geo_claim_unbound: '结论缺少引文或出处',
+  geo_claim_unverified: '结论引文未能核对原文',
+  geo_claim_library_notice: '结论库的改进建议',
   geo_real_phrasing_unsourced: '真实问法缺少来源',
   geo_question_map_notice: '问题地图的改进建议',
   geo_data_type_mislabelled: '数字的数据类型标注有误',
@@ -196,14 +196,14 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   topic_portfolio_invalid: '选题组合需要补充',
   topic_portfolio_notice: '选题组合的改进建议',
   manuscript_scratch_file_delivered: '交付了修改前的草稿文件',
-  manuscript_claims_unreadable: '主张文件无法解析',
-  manuscript_claim_unresolved: '正文主张不在主张表中',
-  manuscript_claim_uncited: '主张未在正文中引用',
+  manuscript_claims_unreadable: '结论文件无法解析',
+  manuscript_claim_unresolved: '正文结论不在结论表中',
+  manuscript_claim_uncited: '结论未在正文中引用',
   manuscript_derived_unmarked: '推导结果未标注〔推导〕',
   manuscript_ledger_schema: '引文台账结构有误',
   manuscript_citation_unresolved: '正文引用没有对应文献',
   manuscript_reference_uncited: '文献未在正文中引用',
-  manuscript_claim_unledgered: '主张未收入引文台账',
+  manuscript_claim_unledgered: '结论未收入引文台账',
   manuscript_backstage_in_section: '正文夹杂修改说明',
   // Run-side tool refusals a run can surface as notices.
   deliverable_unknown: '计划中没有这件交付物',
@@ -232,7 +232,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   delegation_handle_unknown: '子任务句柄不存在',
   children_running: '还有子任务在运行',
   claim_matrix_unsupported: '这件交付物没有证据矩阵',
-  claim_invalid: '主张格式不正确',
+  claim_invalid: '结论格式不正确',
   matrix_unreadable: '证据矩阵无法读取',
   report_missing: '报告还没有写出',
   capsule_unavailable: '方法胶囊暂不可用',
@@ -285,7 +285,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   // The run side's own "degraded" lines, by the template each is written
   // with (`runSideDegradedNotice` in the control plane).
   run_root_tools_unnarrowed: '根任务未能收窄研究工具',
-  run_root_claim_tools_unnarrowed: '根任务未能收窄主张工具',
+  run_root_claim_tools_unnarrowed: '根任务未能收窄结论工具',
   run_method_sections_unregistered: '方法说明未注册，改读技能文件',
   run_child_guidance_missing: '子任务指引没有装上',
   run_compaction_forced: '请求过大，已先压缩上下文',
@@ -407,8 +407,8 @@ export function gateIssueDetail(issue) {
   const refs = gateIssueRefs(issue?.message ?? issue?.text)
   const parts = []
   const claimId = typeof issue?.claimId === 'string' && issue.claimId ? issue.claimId : refs.claimId
-  if (claimId) parts.push(`主张 ${claimId}`)
-  else if (Number.isSafeInteger(refs.claimIndex)) parts.push(`证据矩阵第 ${Number(refs.claimIndex) + 1} 条主张`)
+  if (claimId) parts.push(`结论 ${claimId}`)
+  else if (Number.isSafeInteger(refs.claimIndex)) parts.push(`证据矩阵第 ${Number(refs.claimIndex) + 1} 条结论`)
   const file = fileName(issue?.file ?? issue?.path)
   const line = Number.isSafeInteger(issue?.line) && Number(issue?.line) > 0 ? Number(issue?.line) : refs.line
   if (file && line) parts.push(`${file} 第 ${line} 行`)
