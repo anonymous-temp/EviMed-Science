@@ -61,6 +61,23 @@ test("a release whose kernel profile changed builds the runtime in full, through
   }
 });
 
+test("an engine delta re-pins the adapter manifest for the package it ships", async () => {
+  // 2026-09-27: the MR engine compares the adapter package with the manifest
+  // the full build pinned at /adapter/adapter-evidence.json before it admits a
+  // job. A delta that copied a changed package over the base image's manifest
+  // left every MR start refused with audit_adapter_manifest_changed.
+  const text = await code("host-engine-delta.sh");
+  const packageCopy = text.indexOf("COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter /adapter/evimed_specialist_adapter");
+  const inputsCopy = text.indexOf("COPY OpenScience/deploy/specialist-adapter/Dockerfile OpenScience/deploy/specialist-adapter/Dockerfile.evidence OpenScience/deploy/specialist-adapter/requirements.txt /adapter/");
+  const repin = text.indexOf("RUN rm -f /adapter/adapter-evidence.json && python -m evimed_specialist_adapter.audit_receipt --write-adapter-manifest /adapter/adapter-evidence.json");
+  assert.ok(packageCopy > 0, "the delta copies the adapter package");
+  assert.ok(inputsCopy > packageCopy, "the deployment inputs the manifest names are copied with it");
+  assert.ok(repin > inputsCopy, "the manifest is written after both, from what the image now holds");
+  // The same command the full build pins it with.
+  const full = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile"), "utf8");
+  assert.match(full, /^RUN python -m evimed_specialist_adapter\.audit_receipt --write-adapter-manifest \/adapter\/adapter-evidence\.json$/m);
+});
+
 test("the delta build replaces every skill tree the preset mounts from the source it is built from", async () => {
   // 2026-09-26 (platform audit I2-4): Dockerfile.delta copied the curated
   // skills and the GEO pack but not core, community or office, so the preset

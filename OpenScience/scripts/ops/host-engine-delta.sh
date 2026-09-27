@@ -74,6 +74,12 @@ while IFS='|' read -r service variable fallback agent extra; do
     printf 'FROM %s\n' "$base"
     if [ "$agent" != "-" ]; then printf 'COPY %s /agent\n' "$agent"; fi
     printf 'COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter /adapter/evimed_specialist_adapter\n'
+    # Re-pin the adapter manifest for the package this delta ships, as the full
+    # build does: the MR engine compares the two before admitting a job, and a
+    # changed package under the base image's manifest refuses every MR start
+    # with audit_adapter_manifest_changed.
+    printf 'COPY OpenScience/deploy/specialist-adapter/Dockerfile OpenScience/deploy/specialist-adapter/Dockerfile.evidence OpenScience/deploy/specialist-adapter/requirements.txt /adapter/\n'
+    printf 'RUN rm -f /adapter/adapter-evidence.json && python -m evimed_specialist_adapter.audit_receipt --write-adapter-manifest /adapter/adapter-evidence.json\n'
     if [ -n "$extra" ]; then printf '%s\n' "$extra"; fi
   } > "/tmp/engine-delta-${service}.Dockerfile"
   docker build -q -f "/tmp/engine-delta-${service}.Dockerfile" -t "$target" . > /dev/null
