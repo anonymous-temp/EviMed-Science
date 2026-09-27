@@ -35,8 +35,9 @@ Keys belong to an account and are managed with that account's browser session
 | `POST /api/agent-keys` `{ "name", "scopes", "projectId"?, "expiresInDays"?, "subjects"? }` | Creates a key and returns its secret **once**; it is stored as a digest. `subjects: true` makes it an integration key (below). |
 | `DELETE /api/agent-keys/<id>` | Revokes it. |
 
-- **Scopes:** `memory.read` (recall, list records) and `memory.write` (note,
-  episodes). Give a key only what its agent needs.
+- **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.write` (note,
+  episodes) and `memory.manage` (the dashboard's acts — see below). Give a key
+  only what its agent needs.
 - **Project binding:** a key created with `projectId` can read and write that
   project (and account-level memory) and nothing else; an unbound key may name
   any project of its own account.
@@ -77,6 +78,30 @@ per key per minute (`429 agent_memory_rate_limited` beyond that).
 | `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it. |
 | `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists structured records, filtered (comma-separated values; `pageSize` up to 200, default 50). **Active records only** unless `status` asks for others: a pending record is a proposal nobody has agreed to. |
 | `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns) for the platform's own extractor to read. Every candidate must quote the conversation exactly, and **every record it writes is `pending`** until the account owner confirms it (`activated` is always 0). It may add evidence to a memory already in force; a candidate that would change or replace one is refused. |
+
+### The dashboard
+
+For an integrator that draws the person's own memory page — the TCM CDSS's
+「记忆胶囊看板」 — one read and the acts a person takes on it. The acts need a key
+carrying **`memory.manage`**, which a key should hold only when its requests
+come from that person's own clicks; it is never a default.
+
+| Call | Scope | What it does |
+|---|---|---|
+| `GET /dashboard` | `memory.read` | The switches; what is in force, each with `source` (`self` 本人设置, `observed` 从改方学习, `learned`, `inferred`, `research`, `capsule` 来自胶囊), `basis` (依据次数: observations, runs, conversations), `usage` (使用情况), the last quotes and versions, and `wasTrue` (「曾经如此」); `pending` — what waits for the person: records held for them and notes an outside agent proposed; `forgotten`; `habits` (learned methods, `isNew` for 14 days); `recentChanges` (最近变化, 30 days) with the act that takes each back. |
+| `PUT /settings` `{ "learningPaused"?, "recallPaused"? }` | `memory.manage` | The switches (功能开关). |
+| `POST /records/{id}/confirm` `{ "expectedVersion" }` | `memory.manage` | A proposal becomes the person's own statement. |
+| `PATCH /records/{id}` `{ "expectedVersion", "summary"?, "value"? }` | `memory.manage` | The person's edit. |
+| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (restorable, and remembered so the extractor does not write it back), restore, or undo the last change. |
+| `GET /methods/{id}` | `memory.read` | One habit and its versions — text changes only, earlier texts marked `wasTrue`. |
+| `POST /methods/{id}/retire` · `/restore` `{ "expectedRevision" }`, `/rollback` `{ "expectedRevision", "targetRevision" }` | `memory.manage` | Stop a habit, take the stop back (the last version in force), or go back to a named version. |
+| `POST /notes/{id}/confirm` · `/reject` `{ "expectedRevision" }` | `memory.manage` | A proposed note, confirmed or rejected. |
+| `DELETE /subject` | `memory.manage` | Integration keys, with `X-Subject`: forget that person entirely — their account and everything in it, the recall index first. |
+
+Every act leaves an audit line naming the key and the account (never the
+subject's own identifier). Nothing on the dashboard is stored twice: it is
+derived when read from the records, their evidence and revisions, the usage
+counter and the method ledger.
 
 What an agent can never do through either door: activate a memory, reach a
 project its key is not bound to, or outrun the researcher's own switches. If

@@ -2,6 +2,7 @@ import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_KEY_SCOPES, AGENT_SUBJECT_PATTERN } from "./agentApiKeys.mjs";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES } from "./agentMemoryRecall.mjs";
 import { MAX_MOUNTED_CAPSULE_METHODS, MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
+import { BOARD_NEW_DAYS, BOARD_RECENT_DAYS, BOARD_SOURCES } from "./agentMemoryBoard.mjs";
 
 /**
  * The agent-memory API, described.
@@ -48,6 +49,11 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
     429: errorResponse(`More than ${rateLimitPerMinute} operations in one minute for this key.`),
     503: errorResponse("The API is not enabled in this deployment, or memory storage is unavailable."),
   };
+  /** @param {string} description */
+  const pathId = (description) => ({ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 200 }, description });
+  const recordId = pathId("A record id from the dashboard.");
+  const methodId = pathId("A method id from the dashboard, URL-encoded (it holds colons).");
+  const noteId = pathId("A note id from the dashboard's `pending`.");
   const document = {
     openapi: "3.1.0",
     info: {
@@ -58,7 +64,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "",
         "Two rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
-        "1. Nothing you write becomes an active memory. Every record extracted from an episode stays `pending`, and a note stays an unconfirmed candidate, until the account owner confirms it. An episode may add evidence to a memory that is already in force; it never changes, replaces or re-activates one. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
+        "1. Nothing you write becomes an active memory. Every record extracted from an episode stays `pending`, and a note stays an unconfirmed candidate, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. An episode may add evidence to a memory that is already in force; it never changes, replaces or re-activates one. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
@@ -167,6 +173,94 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             },
           },
         },
+        ExpectedVersion: {
+          type: "object", required: ["expectedVersion"], additionalProperties: false,
+          properties: { expectedVersion: { type: "integer", minimum: 1, description: "The record's `version` as read; a stale one is `409 memory_conflict`." } },
+        },
+        RecordEdit: {
+          type: "object", required: ["expectedVersion"], additionalProperties: false,
+          properties: {
+            expectedVersion: { type: "integer", minimum: 1 },
+            summary: { type: "string", minLength: 1, maxLength: 2000 },
+            value: { type: "string", minLength: 1, maxLength: 100000 },
+          },
+        },
+        ExpectedRevision: {
+          type: "object", required: ["expectedRevision"], additionalProperties: false,
+          properties: { expectedRevision: { type: "integer", minimum: 1, description: "The method's or note's `revision` as read." } },
+        },
+        MethodRollback: {
+          type: "object", required: ["expectedRevision", "targetRevision"], additionalProperties: false,
+          properties: {
+            expectedRevision: { type: "integer", minimum: 1 },
+            targetRevision: { type: "integer", minimum: 1, description: "A revision from `GET /methods/{id}`." },
+          },
+        },
+        Settings: {
+          type: "object", additionalProperties: false,
+          properties: {
+            learningPaused: { type: "boolean", description: "Nothing new is learned: no episode, observation or run writes a memory." },
+            recallPaused: { type: "boolean", description: "Nothing is recalled into an answer." },
+          },
+        },
+        Source: {
+          type: "string", enum: Object.keys(BOARD_SOURCES),
+          description: `Where a memory came from: ${Object.entries(BOARD_SOURCES).map(([code, label]) => `\`${code}\` ${label}`).join("；")}.`,
+        },
+        BoardRecord: {
+          type: "object",
+          properties: {
+            id: { type: "string" }, kind: { type: "string" }, scope: { type: "string" },
+            summary: { type: "string" }, value: { type: "string" },
+            status: { type: "string", enum: ["active", "pending", "archived"] },
+            version: { type: "integer" },
+            source: { $ref: "#/components/schemas/Source" }, sourceLabel: { type: "string" },
+            basis: { type: "object", description: "How it is known, counted from its own evidence (依据次数): observations, separate runs, separate conversations.",
+              properties: { kind: { type: ["string", "null"] }, observations: { type: "integer" }, runs: { type: "integer" }, conversations: { type: "integer" } } },
+            usage: { type: "object", description: "How often it was handed to an answer, and when last (使用情况).",
+              properties: { count: { type: "integer" }, lastUsedAt: { type: ["string", "null"] } } },
+            quotes: { type: "array", items: { type: "object", additionalProperties: true }, description: "The last three pieces of evidence, word for word." },
+            history: { type: "array", items: { type: "object", additionalProperties: true }, description: "The last five revisions, newest first, each with who changed it." },
+            wasTrue: { type: "array", items: { type: "object", additionalProperties: true }, description: "「曾经如此」: earlier values and replaced records, each with when it held (`from`, `until`)." },
+          },
+        },
+        BoardHabit: {
+          type: "object",
+          properties: {
+            id: { type: "string" }, title: { type: "string" }, summary: { type: "string" },
+            status: { type: "string", enum: ["approved", "retired"] }, statusReason: { type: ["string", "null"] },
+            since: { type: ["string", "null"] }, isNew: { type: "boolean", description: `Effective for ${BOARD_NEW_DAYS} days or less (「新」).` },
+            source: { $ref: "#/components/schemas/Source" }, sourceLabel: { type: "string" },
+            basis: { type: ["object", "null"], additionalProperties: true, description: "For a habit learned from prescription edits: what it was counted from." },
+            usage: { type: "object", additionalProperties: true }, revision: { type: "integer" },
+          },
+        },
+        BoardChange: {
+          type: "object",
+          description: "One line of 「最近变化」, with the act that takes it back: POST `undo.path` with `undo.expectedVersion` or `undo.expectedRevision`.",
+          properties: {
+            type: { type: "string", enum: ["record", "habit"] }, change: { type: "string" }, summary: { type: "string" }, at: { type: "string" },
+            undo: { type: "object", properties: { action: { type: "string", enum: ["undo", "retire", "restore"] }, path: { type: "string" },
+              expectedVersion: { type: "integer" }, expectedRevision: { type: "integer" } } },
+          },
+        },
+        Dashboard: {
+          type: "object",
+          properties: {
+            data: {
+              type: "object",
+              properties: {
+                switches: { $ref: "#/components/schemas/Settings" },
+                records: { type: "array", items: { $ref: "#/components/schemas/BoardRecord" }, description: "What is in force." },
+                pending: { type: "array", items: { type: "object", additionalProperties: true },
+                  description: "What waits for the person: records held for them (`type: record`, confirm with POST /records/{id}/confirm) and notes an outside agent proposed (`type: note`, POST /notes/{id}/confirm or /reject)." },
+                forgotten: { type: "array", items: { $ref: "#/components/schemas/BoardRecord" }, description: "Forgotten, restorable." },
+                habits: { type: "array", items: { $ref: "#/components/schemas/BoardHabit" } },
+                recentChanges: { type: "array", items: { $ref: "#/components/schemas/BoardChange" }, description: `What changed by itself in the last ${BOARD_RECENT_DAYS} days, newest first.` },
+              },
+            },
+          },
+        },
         EpisodeRequest: {
           type: "object",
           required: ["messages"],
@@ -255,6 +349,137 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             400: errorResponse("Malformed request."),
             ...common,
           },
+        },
+      },
+      "/dashboard": {
+        get: {
+          summary: "The memory dashboard",
+          description: "Everything a person's own memory page shows, in one read: the switches, what is in force with where each came from (`source`), how established it is (`basis`) and how often it was used (`usage`), 「曾经如此」 (`wasTrue`), what waits for them, what they forgot, their habits, and 「最近变化」 with the act that takes each back. Derived when read from the record store and the method ledger; nothing here is stored twice. A subject with no memory yet reads an empty dashboard.",
+          security: [{ agentApiKey: ["memory.read"] }],
+          responses: { 200: { description: "The dashboard.", content: { "application/json": { schema: { $ref: "#/components/schemas/Dashboard" } } } }, ...common },
+        },
+      },
+      "/settings": {
+        put: {
+          summary: "Turn learning or recall on or off",
+          description: "The dashboard's switches (功能开关). Pausing deletes nothing.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/Settings" }),
+          responses: { 200: { description: "The switches as they now are." }, ...common },
+        },
+      },
+      "/records/{id}": {
+        patch: {
+          summary: "Edit a memory",
+          description: "The person's own edit: the memory becomes theirs (`source: self`), and a proposal they edit is in force.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [recordId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/RecordEdit" }),
+          responses: { 200: { description: "The record as edited." }, 404: errorResponse("No such memory."), 409: errorResponse("It changed since it was read."), ...common },
+        },
+      },
+      "/records/{id}/confirm": {
+        post: {
+          summary: "Confirm a proposal",
+          description: "A record waiting for its owner (`pending`) is put in force as the person's own statement.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [recordId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
+          responses: { 200: { description: "The record, in force." }, 404: errorResponse("No such memory."), 409: errorResponse("Not pending, or changed since it was read."), ...common },
+        },
+      },
+      "/records/{id}/forget": {
+        post: {
+          summary: "Forget a memory",
+          description: "Out of every answer from now on, kept restorable, and remembered as rejected so the next extraction does not write it back.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [recordId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
+          responses: { 200: { description: "The record, forgotten." }, 404: errorResponse("No such memory."), 409: errorResponse("Already forgotten, or changed since it was read."), ...common },
+        },
+      },
+      "/records/{id}/restore": {
+        post: {
+          summary: "Restore a forgotten memory",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [recordId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
+          responses: { 200: { description: "The record, in force again." }, 404: errorResponse("No such memory."), 409: errorResponse("Not forgotten, or changed since it was read."), ...common },
+        },
+      },
+      "/records/{id}/undo": {
+        post: {
+          summary: "Undo the last change to a memory",
+          description: "The previous state saved forward, or — for a memory whose only change was its writing — its removal, remembered as rejected. The act 「最近变化」 offers on a record line.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [recordId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
+          responses: { 200: { description: "The record as it now is, or null when the undo removed it." }, 404: errorResponse("No such memory."), 409: errorResponse("It changed since it was read."), ...common },
+        },
+      },
+      "/methods/{id}": {
+        get: {
+          summary: "One habit and its versions",
+          description: "The method's text and each revision whose text, line or status differs from the one before — a counter update is not a version. An earlier text is marked `wasTrue` (「曾经如此」).",
+          security: [{ agentApiKey: ["memory.read"] }],
+          parameters: [methodId],
+          responses: { 200: { description: "The method and its versions, newest first." }, 404: errorResponse("No such method."), ...common },
+        },
+      },
+      "/methods/{id}/retire": {
+        post: {
+          summary: "Stop a habit (停用)",
+          description: "It leaves every later recall and run; restorable.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [methodId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedRevision" }),
+          responses: { 200: { description: "The method, retired." }, 404: errorResponse("No such method."), 409: errorResponse("It changed since it was read."), ...common },
+        },
+      },
+      "/methods/{id}/restore": {
+        post: {
+          summary: "Take a stop back",
+          description: "The latest revision in which the method was in force, saved forward.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [methodId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedRevision" }),
+          responses: { 200: { description: "The method, in force again." }, 404: errorResponse("No such method."), 409: errorResponse("Not retired, never in force, or changed since it was read."), ...common },
+        },
+      },
+      "/methods/{id}/rollback": {
+        post: {
+          summary: "Go back to an earlier version (回到上一版)",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [methodId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MethodRollback" }),
+          responses: { 200: { description: "The method at that version, saved forward." }, 404: errorResponse("No such method or revision."), 409: errorResponse("It changed since it was read."), ...common },
+        },
+      },
+      "/notes/{id}/confirm": {
+        post: {
+          summary: "Confirm a proposed note",
+          description: "A note an outside agent proposed (`POST /note`) is put in force.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [noteId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedRevision" }),
+          responses: { 200: { description: "The note, in force." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
+        },
+      },
+      "/notes/{id}/reject": {
+        post: {
+          summary: "Reject a proposed note",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          parameters: [noteId],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedRevision" }),
+          responses: { 200: { description: "The note, retired." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
+        },
+      },
+      "/subject": {
+        delete: {
+          summary: "Forget one person entirely",
+          description: "An integration key only, naming the person in X-Subject: their account and everything in it is deleted the way an account is — the recall index first, then the records. `deleted` is false when there was nothing to delete.",
+          security: [{ agentApiKey: ["memory.manage"] }],
+          responses: { 200: { description: "Whether anything was deleted." }, ...common },
         },
       },
     },

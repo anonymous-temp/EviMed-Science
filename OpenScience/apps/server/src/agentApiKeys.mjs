@@ -48,8 +48,12 @@ const migrations = new WeakMap();
 
 /** What a key may do. Closed on purpose: a scope a caller can invent is not a
  * scope. `memory.read` recalls and lists; `memory.write` proposes — and what it
- * proposes is still pending, which is the external API's own rule. */
-export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.write"]);
+ * proposes is still pending, which is the external API's own rule.
+ * `memory.manage` is the person's own dashboard: confirming, editing,
+ * forgetting and undoing memories, stopping and restoring methods, the
+ * switches. A key carries it only when its holder's requests come from that
+ * person's own clicks, and it is never a default. */
+export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.write", "memory.manage"]);
 
 const KEY_PREFIX = "evk_";
 const PREFIX_LENGTH = KEY_PREFIX.length + 8;
@@ -349,14 +353,18 @@ export class AgentApiKeyStore {
  * the list is read from the mapping, and a row that is not one is skipped
  * rather than trusted.
  *
+ * `only` names one of them: the integrator forgetting one person
+ * (`DELETE /api/agent-memory/v1/subject`), by the same path.
+ *
  * @param {{ apiKeys: AgentApiKeyStore | null, store: any, memorySubstrate: any, memoryIndexing?: any, capsuleTransfers?: any }} services
- * @param {string} ownerId
+ * @param {string} ownerId @param {{ only?: string | null }} [options]
  * @returns {Promise<number>} how many accounts were deleted
  */
-export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, memoryIndexing = null, capsuleTransfers = null }, ownerId) {
+export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, memoryIndexing = null, capsuleTransfers = null }, ownerId, { only = null } = {}) {
   if (!apiKeys) return 0;
   let deleted = 0;
   for (const { userId, accountCreatedAt } of await apiKeys.subjectAccounts(ownerId)) {
+    if (only !== null && userId !== only) continue;
     const subject = await store.userById(userId);
     if (!subject || subject.authType !== "subject") continue;
     await memorySubstrate.forgetUser(userId);

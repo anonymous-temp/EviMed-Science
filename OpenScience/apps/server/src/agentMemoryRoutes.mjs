@@ -1,5 +1,6 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, recallForAgent } from "./agentMemoryRecall.mjs";
+import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
@@ -50,6 +51,17 @@ export const AGENT_MEMORY_PATH = "/api/agent-memory/v1";
 const RATE_LIMIT_PER_MINUTE = 120;
 const MAX_TRACKED_KEYS = 10_000;
 
+/** Every operation this surface serves, as the root lists them. A contract test
+ *  holds the OpenAPI description's paths to exactly this list. */
+export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
+  "POST /recall", "POST /note", "GET /records", "POST /episodes",
+  "GET /dashboard", "PUT /settings",
+  "PATCH /records/{id}", "POST /records/{id}/confirm", "POST /records/{id}/forget", "POST /records/{id}/restore", "POST /records/{id}/undo",
+  "GET /methods/{id}", "POST /methods/{id}/retire", "POST /methods/{id}/restore", "POST /methods/{id}/rollback",
+  "POST /notes/{id}/confirm", "POST /notes/{id}/reject",
+  "DELETE /subject",
+]);
+
 /** The fields each request body may carry, by operation. A contract test holds
  *  the OpenAPI description's request schemas to exactly these lists. */
 export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
@@ -80,11 +92,16 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, audit?: ((event: any) => void) | null,
+ *   memoryIntelligence: any, memorySubstrate?: any, learning?: any, documents?: any, feedbackEvents?: any,
+ *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
+ *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null }) {
+export function createAgentMemoryRoutes({
+  config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null, learning = null,
+  documents = null, feedbackEvents = null, deleteSubject = null, audit = null,
+}) {
   const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
@@ -178,7 +195,24 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
 
     const action = url.pathname.slice(AGENT_MEMORY_PATH.length).replace(/^\//, "");
     const method = req.method ?? "GET";
-    const body = method === "POST" ? await readJson(req, Math.min(config.maxJsonBytes ?? 1_048_576, 256 * 1024)) : null;
+    const body = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req, Math.min(config.maxJsonBytes ?? 1_048_576, 256 * 1024)) : null;
+    /** The dashboard's acts leave an audit line: which key, which account,
+     *  what. Never the subject's own identifier — the account id is its digest.
+     *  @param {string} event @param {any} user @param {Record<string, unknown>} [details] */
+    const trail = async (event, user, details = {}) => {
+      if (audit) await audit(`agent-memory.${event}`, "completed", { keyId: identity.keyId, userId: user?.id ?? null, ...details });
+    };
+    /** `records/<id>/<act>` and the like: the id and the act, or null. @param {string} prefix */
+    const target = (prefix) => {
+      const match = new RegExp(`^${prefix}/([^/]+)(?:/([a-z]+))?$`).exec(action);
+      if (!match) return null;
+      let id;
+      try { id = decodeURIComponent(match[1]); } catch { throw new HttpError(400, "agent_memory_payload_invalid", "Invalid identifier."); }
+      if (!id || id.length > 200 || [...id].some((character) => character.charCodeAt(0) < 32)) {
+        throw new HttpError(400, "agent_memory_payload_invalid", "Invalid identifier.");
+      }
+      return { id, act: match[2] ?? "" };
+    };
 
     if (action === "recall" && method === "POST") {
       requireScope("memory.read");
@@ -325,6 +359,79 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
       return true;
     }
 
+    // The dashboard (agentMemoryBoard.mjs): one read, and the person's acts.
+    if (action === "dashboard" && method === "GET") {
+      requireScope("memory.read");
+      if (!researchMemory?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
+      const user = await accountFor({ create: false });
+      sendJson(res, 200, { data: await memoryBoard({ researchMemory, learning, capsules, habitBasis: null }, user) });
+      return true;
+    }
+
+    if (action === "settings" && method === "PUT") {
+      requireScope("memory.manage");
+      const input = fields(body, ["learningPaused", "recallPaused"]);
+      const user = /** @type {any} */ (await accountFor({ create: true }));
+      const settings = await researchMemory.updateSettings(user.id, input);
+      await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
+      sendJson(res, 200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
+      return true;
+    }
+
+    const record = target("records");
+    if (record && ((method === "POST" && ["confirm", "forget", "restore", "undo"].includes(record.act)) || (method === "PATCH" && !record.act))) {
+      requireScope("memory.manage");
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      const act = record.act || "edit";
+      const outcome = await recordAction({ researchMemory, feedbackEvents }, user, record.id, act, body);
+      await trail(outcome.event, user, { target: record.id });
+      sendJson(res, 200, { data: outcome.record });
+      return true;
+    }
+
+    const habit = target("methods");
+    if (habit && method === "GET" && !habit.act) {
+      requireScope("memory.read");
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
+      sendJson(res, 200, { data: await methodDetail({ learning, documents }, user, habit.id) });
+      return true;
+    }
+    if (habit && method === "POST" && ["retire", "restore", "rollback"].includes(habit.act)) {
+      requireScope("memory.manage");
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
+      const changed = await methodAction({ learning, documents }, user, habit.id, habit.act, body);
+      await trail(`method.${habit.act}`, user, { target: habit.id });
+      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null } });
+      return true;
+    }
+
+    const note = target("notes");
+    if (note && method === "POST" && ["confirm", "reject"].includes(note.act)) {
+      requireScope("memory.manage");
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, "note_not_found", "No such proposed note.");
+      const changed = await noteAction({ capsules }, user, note.id, note.act, body);
+      await trail(`note.${note.act}`, user, { target: note.id });
+      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null } });
+      return true;
+    }
+
+    // Forget one person entirely: their account and everything in it, the way
+    // an account is deleted. Only for a subject, and only by its institution.
+    if (action === "subject" && method === "DELETE") {
+      requireScope("memory.manage");
+      if (!subject) throw new HttpError(400, "agent_subject_required", "Name the subject to forget in X-Subject.");
+      if (!deleteSubject) throw new HttpError(503, "product_state_unavailable", "Subject deletion is unavailable.");
+      const user = await accountFor({ create: false });
+      const deleted = user ? await deleteSubject(keyAccount.id, user.id) : 0;
+      await trail("subject.delete", user, { deleted });
+      sendJson(res, 200, { data: { deleted: deleted > 0 } });
+      return true;
+    }
+
     if (action === "" && method === "GET") {
       // What this key can do, from the key. An integrator's first call.
       sendJson(res, 200, { data: {
@@ -335,7 +442,7 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         subjects: identity.subjects === true,
         speaksFor: subject ? "subject" : "account",
         rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
-        endpoints: ["POST /recall", "POST /note", "GET /records", "POST /episodes"],
+        endpoints: AGENT_MEMORY_ENDPOINTS,
         notes: [
           "Every episode-derived record stays pending, and every note an unconfirmed candidate, until the account owner confirms it; an episode never changes a memory already in force.",
           "A key bound to a project cannot read or write outside it.",

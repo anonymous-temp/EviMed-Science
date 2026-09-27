@@ -1168,10 +1168,11 @@ export function createWebApiApp(overrides = {}) {
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind
-   *  it, deleted the way an account is (`deleteSubjectAccounts`).
-   *  @param {string} ownerId */
-  const deleteAgentSubjects = (ownerId) => deleteSubjectAccounts(
-    { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService }, ownerId);
+   *  it — all of them, or `only` one — deleted the way an account is
+   *  (`deleteSubjectAccounts`).
+   *  @param {string} ownerId @param {string | null} [only] */
+  const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
+    { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService }, ownerId, { only });
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
   const documentParser = new DocumentParserClient({
@@ -1649,6 +1650,12 @@ export function createWebApiApp(overrides = {}) {
     config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence, memorySubstrate,
     // The methods recall returns: the account's own learned library.
     learning: learningService,
+    // The dashboard: a method's revisions, the rejections the extractor must
+    // respect, forgetting one person, and the audit line each act leaves.
+    documents: productDocuments,
+    feedbackEvents,
+    deleteSubject: (ownerId, subjectAccountId) => deleteAgentSubjects(ownerId, subjectAccountId),
+    audit: (event, status, details) => securityAudit(config, event, status, details),
   });
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,

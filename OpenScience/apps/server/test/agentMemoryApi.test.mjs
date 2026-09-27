@@ -40,6 +40,10 @@ function request(path, body = undefined, token = "evk_good", method = body === u
   };
 }
 
+/** The double's account id for a subject: opaque, like the real digest, so a
+ *  test can tell whether the identifier itself travelled anywhere. */
+const subjectIdOf = (subject) => `subj_${Buffer.from(subject, "utf8").toString("hex")}`;
+
 function fixture(overrides = {}) {
   const calls = [];
   const apiKeys = {
@@ -50,10 +54,10 @@ function fixture(overrides = {}) {
         scopes: overrides.scopes ?? [...AGENT_KEY_SCOPES], subjects: overrides.subjects ?? false,
       };
     },
-    async subjectAccount(ownerId, subject) { calls.push(["subjectAccount", ownerId, subject]); return { userId: `subj_${subject}`, created: true }; },
+    async subjectAccount(ownerId, subject) { calls.push(["subjectAccount", ownerId, subject]); return { userId: subjectIdOf(subject), created: true }; },
     async findSubjectAccount(ownerId, subject) {
       calls.push(["findSubjectAccount", ownerId, subject]);
-      return (overrides.knownSubjects ?? []).includes(subject) ? `subj_${subject}` : null;
+      return (overrides.knownSubjects ?? []).includes(subject) ? subjectIdOf(subject) : null;
     },
   };
   const store = {
@@ -74,7 +78,18 @@ function fixture(overrides = {}) {
     async note(userId, projectId, input) { calls.push(["note", userId, projectId, input]); return { id: "entry_1", ...input }; },
   };
   const researchMemory = {
-    async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return []; },
+    configured: true,
+    async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return overrides.records ?? []; },
+    async settings(userId) { calls.push(["settings", userId]); return { learningPaused: false, recallPaused: false }; },
+    async updateSettings(userId, input) { calls.push(["updateSettings", userId, input]); return { learningPaused: Boolean(input.learningPaused), recallPaused: Boolean(input.recallPaused) }; },
+    async recordUsage() { return {}; },
+    async recentChanges() { return []; },
+    async getRecord(userId, id) {
+      const found = (overrides.records ?? []).find((item) => item.id === id);
+      if (!found) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      return found;
+    },
+    async upsertRecord(userId, next, _evidence, options) { calls.push(["upsertRecord", userId, next, options]); return { ...next, version: next.version + 1 }; },
   };
   const memoryIntelligence = {
     async recordRun(project, run, messages, options) {
@@ -85,6 +100,8 @@ function fixture(overrides = {}) {
   const routes = createAgentMemoryRoutes({
     config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules,
     memoryIntelligence: overrides.memoryIntelligence ?? memoryIntelligence, memorySubstrate: overrides.memorySubstrate ?? null,
+    deleteSubject: async (ownerId, subjectAccountId) => { calls.push(["deleteSubject", ownerId, subjectAccountId]); return 1; },
+    audit: async (event, status, details) => { calls.push(["audit", event, status, details]); },
   });
   return { routes, calls };
 }
@@ -234,7 +251,7 @@ test("the description is built from the vocabularies the handlers validate again
   assert.equal(document.openapi, "3.1.0");
   // Reachable without a key: the schema is not a secret, and an integrator
   // reads it before they have one.
-  assert.deepEqual(Object.keys(document.paths).sort(), ["/", "/episodes", "/note", "/recall", "/records"]);
+  assert.ok(["/", "/episodes", "/note", "/recall", "/records", "/dashboard"].every((path) => Object.hasOwn(document.paths, path)));
   const { CAPSULE_FACT_KINDS } = await import("@evimed/domain");
   assert.deepEqual(document.components.schemas.FactKind.enum, [...CAPSULE_FACT_KINDS]);
   assert.match(document.components.securitySchemes.agentApiKey.description, new RegExp(AGENT_KEY_SCOPES[0]));
@@ -268,10 +285,10 @@ test("an integration key speaks for the doctor it names, and every read and writ
   await routes(request(`${AGENT_MEMORY_PATH}/records`, undefined, "evk_good", "GET", as("doc-7")), response());
   await routes(request(`${AGENT_MEMORY_PATH}/note`, { factKind: "preference", content: "药味不超过 12 味" }, "evk_good", "POST", as("doc-7")), response());
   await routes(request(`${AGENT_MEMORY_PATH}/episodes`, { messages: [{ role: "user", text: "我一般开 12 味以内。" }] }, "evk_good", "POST", as("doc-7")), response());
-  assert.equal(calls.find((entry) => entry[0] === "recall")[1], "subj_doc-7");
-  assert.equal(calls.find((entry) => entry[0] === "listRecords")[1], "subj_doc-7");
+  assert.equal(calls.find((entry) => entry[0] === "recall")[1], subjectIdOf("doc-7"));
+  assert.equal(calls.find((entry) => entry[0] === "listRecords")[1], subjectIdOf("doc-7"));
   const note = calls.find((entry) => entry[0] === "note");
-  assert.deepEqual([note[1], note[2]], ["subj_doc-7", "default"], "a subject's note lands in its one project");
+  assert.deepEqual([note[1], note[2]], [subjectIdOf("doc-7"), "default"], "a subject's note lands in its one project");
   assert.equal(calls.find((entry) => entry[0] === "recordRun")[1], "default", "and so does an episode that names none");
   // Only writes make an account; the reads found the one that exists.
   assert.deepEqual(calls.filter((entry) => entry[0] === "subjectAccount").map((entry) => entry[1]), ["u1", "u1"]);
@@ -370,4 +387,68 @@ test("the description names the subject header on every operation, with the patt
       assert.match(operation.responses[400].description, /agent_key_subject_unsupported/, `${method} ${path}`);
     }
   }
+});
+
+test("every operation the root lists is described, and nothing is described that the root does not list", async () => {
+  const { AGENT_MEMORY_ENDPOINTS } = await import("../src/agentMemoryRoutes.mjs");
+  const document = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 });
+  const described = Object.entries(document.paths).flatMap(([path, operations]) => Object.keys(operations).map((method) => `${method.toUpperCase()} ${path}`))
+    .filter((operation) => operation !== "GET /").sort();
+  assert.deepEqual(described, [...AGENT_MEMORY_ENDPOINTS].sort());
+  // Each one is served: a request of that method and path reaches a handler
+  // (it may be refused for its body or its id, never with "no such operation").
+  const { routes } = fixture({ subjects: true, knownSubjects: ["doc-7"] });
+  for (const operation of AGENT_MEMORY_ENDPOINTS) {
+    const [method, path] = operation.split(" ");
+    const url = `${AGENT_MEMORY_PATH}${path.replace("{id}", "x1")}`;
+    const outcome = await routes(request(url, method === "GET" || method === "DELETE" ? undefined : {}, "evk_good", method, { "x-subject": "doc-7" }), response())
+      .then(() => "served", (error) => error.code);
+    assert.notEqual(outcome, "not_found", operation);
+  }
+});
+
+test("the dashboard is a read, the acts on it need memory.manage, and a key without it touches nothing", async () => {
+  const records = [{ id: "r2", kind: "preference", scope: "user", key: "k", value: "v", summary: "s", origin: "inferred", status: "pending", version: 1, revisions: [], evidence: [], provenance: { basis: "inferred" } }];
+  const readOnly = fixture({ scopes: ["memory.read", "memory.write"], records });
+  const board = response();
+  await readOnly.routes(request(`${AGENT_MEMORY_PATH}/dashboard`), board);
+  assert.deepEqual(board.captured.body.data.pending.map((item) => item.id), ["r2"]);
+  for (const [method, path, body] of [["POST", "/records/r2/confirm", { expectedVersion: 1 }], ["PATCH", "/records/r2", { expectedVersion: 1, summary: "x" }],
+    ["PUT", "/settings", { recallPaused: true }], ["POST", "/methods/m1/retire", { expectedRevision: 1 }], ["POST", "/notes/n1/confirm", { expectedRevision: 1 }]]) {
+    await assert.rejects(
+      () => readOnly.routes(request(`${AGENT_MEMORY_PATH}${path}`, body, "evk_good", method), response()),
+      (error) => error.status === 403 && error.code === "agent_key_scope_denied",
+      `${method} ${path}`,
+    );
+  }
+  assert.ok(!readOnly.calls.some((entry) => ["upsertRecord", "updateSettings"].includes(entry[0])));
+
+  const manager = fixture({ records });
+  const confirmed = response();
+  await manager.routes(request(`${AGENT_MEMORY_PATH}/records/r2/confirm`, { expectedVersion: 1 }), confirmed);
+  const write = manager.calls.find((entry) => entry[0] === "upsertRecord");
+  assert.deepEqual([write[2].status, write[2].origin], ["active", "explicit"]);
+  const audited = manager.calls.find((entry) => entry[0] === "audit");
+  assert.deepEqual([audited[1], audited[2], audited[3].target, audited[3].keyId], ["agent-memory.memory.record.confirm", "completed", "r2", "agk_1"]);
+  await manager.routes(request(`${AGENT_MEMORY_PATH}/settings`, { learningPaused: true }, "evk_good", "PUT"), response());
+  assert.deepEqual(manager.calls.find((entry) => entry[0] === "updateSettings")[2], { learningPaused: true });
+});
+
+test("forgetting one person is an integration key's act on a named subject, and deletes that subject's account only", async () => {
+  const plain = fixture();
+  await assert.rejects(
+    () => plain.routes(request(`${AGENT_MEMORY_PATH}/subject`, undefined, "evk_good", "DELETE"), response()),
+    (error) => error.status === 400 && error.code === "agent_subject_required",
+  );
+  const integration = fixture({ subjects: true, knownSubjects: ["doc-7"] });
+  const res = response();
+  await integration.routes(request(`${AGENT_MEMORY_PATH}/subject`, undefined, "evk_good", "DELETE", { "x-subject": "doc-7" }), res);
+  assert.deepEqual(integration.calls.find((entry) => entry[0] === "deleteSubject"), ["deleteSubject", "u1", subjectIdOf("doc-7")]);
+  assert.equal(res.captured.body.data.deleted, true);
+  const unknown = response();
+  await integration.routes(request(`${AGENT_MEMORY_PATH}/subject`, undefined, "evk_good", "DELETE", { "x-subject": "doc-never" }), unknown);
+  assert.equal(unknown.captured.body.data.deleted, false, "nothing to delete, nothing created to delete it");
+  assert.ok(!integration.calls.some((entry) => entry[0] === "subjectAccount"));
+  const audit = integration.calls.filter((entry) => entry[0] === "audit").map((entry) => JSON.stringify(entry));
+  assert.ok(audit.length > 0 && audit.every((line) => !line.includes("doc-7")), "the HIS identifier never reaches an audit line");
 });
