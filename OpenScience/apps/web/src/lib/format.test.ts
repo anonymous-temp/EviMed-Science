@@ -7,6 +7,7 @@ import {
   formatDateTime,
   formatDay,
   formatDose,
+  formatDuration,
   formatNumber,
   formatPercent,
   formatPValue,
@@ -46,6 +47,37 @@ describe("formatRelativeTime (spec §14.4)", () => {
   it("never writes a negative age for a clock slightly ahead", () => {
     expect(formatRelativeTime(new Date(now.getTime() + 90_000), now)).toBe("16:01");
     expect(formatRelativeTime("", now)).toBe("");
+  });
+});
+
+describe("formatDuration (spec §14.4 rule 5)", () => {
+  const s = 1_000;
+  const min = 60 * s;
+  const h = 60 * min;
+  const d = 24 * h;
+  it("writes the spec's own examples", () => {
+    expect(formatDuration(45 * s)).toBe("45 秒");
+    expect(formatDuration(2 * min + 30 * s)).toBe("2 分 30 秒");
+    expect(formatDuration(25 * min)).toBe("25 分钟");
+    expect(formatDuration(h + 5 * min)).toBe("1 小时 5 分");
+    expect(formatDuration(3 * d)).toBe("3 天");
+  });
+  it("uses at most two units: seconds only under an hour, minutes only under a day", () => {
+    expect(formatDuration(h + 5 * min + 40 * s)).toBe("1 小时 6 分");
+    expect(formatDuration(2 * h)).toBe("2 小时");
+    expect(formatDuration(d + 5 * h + 20 * min)).toBe("1 天 5 小时");
+    expect(formatDuration(59 * min + 59 * s)).toBe("59 分 59 秒");
+  });
+  it("carries a rounding into the next unit instead of writing 60 秒 or 60 分", () => {
+    expect(formatDuration(59.6 * s)).toBe("1 分钟");
+    expect(formatDuration(h - 0.4 * s)).toBe("1 小时");
+    expect(formatDuration(d - 20 * s)).toBe("1 天");
+    expect(formatDuration(0)).toBe("0 秒");
+  });
+  it("is empty for a value that is not a duration", () => {
+    expect(formatDuration(-1)).toBe("");
+    expect(formatDuration(Number.NaN)).toBe("");
+    expect(formatDuration(null)).toBe("");
   });
 });
 

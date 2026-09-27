@@ -56,18 +56,33 @@ export function formatCny(value: number | null | undefined): string {
 }
 
 /**
- * A duration in the words a list uses: 45 秒 / 12 分钟 / 1 小时 5 分. Empty for
- * a value that is not a duration.
+ * A duration in at most two units (spec §14.4 rule 5): 45 秒, 2 分 30 秒,
+ * 25 分钟, 1 小时 5 分, 3 天, 1 天 5 小时. The larger unit takes the smaller
+ * one beside it and nothing below that, so seconds are shown only under an
+ * hour and minutes only under a day; the value is rounded to the smaller unit
+ * shown. A whole number of the larger unit is written alone — 分钟 when
+ * minutes stand by themselves, 分 when seconds follow. Empty for a value that
+ * is not a duration.
  */
 export function formatDuration(ms: number | null | undefined): string {
   if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "";
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3_600) {
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
+  }
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
+  if (minutes < 24 * 60) {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
+  }
+  const hours = Math.round(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const rest = hours % 24;
+  return rest ? `${days} 天 ${rest} 小时` : `${days} 天`;
 }
 
 /**
