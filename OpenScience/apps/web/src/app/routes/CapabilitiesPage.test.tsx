@@ -179,7 +179,7 @@ describe("CapabilitiesPage", () => {
     const safety = within(pharmacy).getByRole("button", { name: "用“药品安全性分析”开始一次对话" });
     // The whole sentence, never cut to 「…」 by the card.
     expect(safety).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
-    expect(safety).toHaveTextContent("约 20–40 分钟");
+    expect(safety).toHaveTextContent("约 20～40 分钟");
     expect(safety.innerHTML).not.toMatch(/truncate|line-clamp/);
     // What a tool needs from the researcher is the composer's to say, not the card's.
     expect(card("论文审稿")).not.toHaveTextContent("需要你的资料");

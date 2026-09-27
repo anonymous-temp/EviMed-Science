@@ -27,13 +27,13 @@ function categoryRank(name: string): number {
 }
 
 /**
- * How long a tool usually takes: 「约 30–70 分钟」. This page is the one place a
+ * How long a tool usually takes: 「约 30～70 分钟」. This page is the one place a
  * duration is shown — it is useful while choosing a tool, and the conversation
  * no longer repeats it on the tool's chip (plan §5.3).
  */
 function durationText([min, max]: [number, number]): string | null {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) return null;
-  return min >= max ? `约 ${max} 分钟` : `约 ${min}–${max} 分钟`;
+  return min >= max ? `约 ${max} 分钟` : `约 ${min}～${max} 分钟`;
 }
 
 /**

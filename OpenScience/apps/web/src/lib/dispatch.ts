@@ -90,7 +90,7 @@ export interface RouteLine {
   /** 「临床证据深度分析」, or 「普通问答」 for the answer line. */
   label: string;
   answerLine: boolean;
-  /** 「通常 15–30 分钟」, or null when neither the run nor the catalogue says. */
+  /** 「通常 15～30 分钟」, or null when neither the run nor the catalogue says. */
   minutes: string | null;
   /** The control plane's own Chinese sentence for why (contract C3), or null. */
   reason: string | null;
@@ -124,7 +124,7 @@ export function minutesText(range: { min: number; max: number } | null | undefin
   const min = Math.max(0, Math.round(range.min));
   const max = Math.max(min, Math.round(range.max));
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) return null;
-  return min === max ? `通常约 ${max} 分钟` : `通常 ${min}–${max} 分钟`;
+  return min === max ? `通常约 ${max} 分钟` : `通常 ${min}～${max} 分钟`;
 }
 
 /**

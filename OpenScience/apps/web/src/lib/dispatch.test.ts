@@ -127,16 +127,16 @@ describe("routeLineOf", () => {
       agentId: "clinical-evidence-synthesis",
       label: "临床证据深度分析",
       answerLine: false,
-      minutes: "通常 15–30 分钟",
+      minutes: "通常 15～30 分钟",
       reason: "题面是一个需要逐条核验文献的临床问题",
     });
   });
 
   it("falls back to the capability's display figure, then the catalogue's, and says nothing without one", () => {
-    // clinical-evidence-synthesis's display block says 30–70.
-    expect(routeLineOf(run()).minutes).toBe("通常 30–70 分钟");
+    // clinical-evidence-synthesis's display block says 30～70.
+    expect(routeLineOf(run()).minutes).toBe("通常 30～70 分钟");
     const unknown = { effectiveAgentId: "not-in-the-table", agentId: "not-in-the-table" };
-    expect(routeLineOf(run(unknown), [{ ...catalog[0], id: "not-in-the-table" }]).minutes).toBe("通常 15–30 分钟");
+    expect(routeLineOf(run(unknown), [{ ...catalog[0], id: "not-in-the-table" }]).minutes).toBe("通常 15～30 分钟");
     expect(routeLineOf(run(unknown)).minutes).toBeNull();
   });
 
@@ -155,7 +155,7 @@ describe("routeLineOf", () => {
 
 describe("minutesText", () => {
   it("renders a range, a single figure, and nothing for a missing or empty one", () => {
-    expect(minutesText({ min: 15, max: 30 })).toBe("通常 15–30 分钟");
+    expect(minutesText({ min: 15, max: 30 })).toBe("通常 15～30 分钟");
     expect(minutesText({ min: 5, max: 5 })).toBe("通常约 5 分钟");
     expect(minutesText(null)).toBeNull();
     expect(minutesText({ min: 0, max: 0 })).toBeNull();
