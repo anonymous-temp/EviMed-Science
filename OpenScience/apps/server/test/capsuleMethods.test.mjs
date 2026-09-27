@@ -243,7 +243,7 @@ test("an assistant's note and a received entry no model verdict covered are cont
 });
 
 test("a received entry the scan held for a toxic herb's dose above its bound is context, never mounted", async () => {
-  const { project, directory } = await scratchProject();
+  const { project } = await scratchProject();
   try {
     const capsules = fakeCapsules({
       accountItems: [{ capsuleId: "capsule-a", mode: "guest" }],

@@ -122,9 +122,9 @@ export function capsuleCardSummary(entries) {
 export function capsuleChangelog(before, after) {
   const earlier = new Set(before);
   const later = new Set(after);
-  const added = [...later].filter((digest) => !earlier.has(digest)).length;
-  const removed = [...earlier].filter((digest) => !later.has(digest)).length;
-  const kept = [...later].filter((digest) => earlier.has(digest)).length;
+  const added = [...later].filter((sha) => !earlier.has(sha)).length;
+  const removed = [...earlier].filter((sha) => !later.has(sha)).length;
+  const kept = [...later].filter((sha) => earlier.has(sha)).length;
   const parts = [...(added ? [`新增 ${added} 条`] : []), ...(removed ? [`移除 ${removed} 条`] : []), ...(kept ? [`保留 ${kept} 条`] : [])];
   return { added, removed, kept, text: parts.join("、") || "内容未变" };
 }
