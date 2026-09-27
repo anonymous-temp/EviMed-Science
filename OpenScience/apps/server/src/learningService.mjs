@@ -244,6 +244,12 @@ export class LearningService {
    * anywhere unless the control plane decided it here. A method pinning a
    * digest nobody has is a reuse reference pointing at text that does not
    * exist, and it fails silently at mount time.
+   *
+   * Every saved revision counts, not only the current one: a lesson learned
+   * against an earlier body of a method it reuses still names text the ledger
+   * holds. Reading only the current digest refused the restore of
+   * `pre-submission-freeze-check` (lost with its project on 09-23), which
+   * pins `claim-verdict-audit` as it was before its amendment of 09-22.
    * @param {string} userId
    * @returns {Promise<(dependency: {name: string, digest: string}) => boolean>}
    */
@@ -256,6 +262,9 @@ export class LearningService {
       if (!name) continue;
       const known = digests.get(name) ?? new Set();
       known.add(document.payload?.contentDigest);
+      for (const saved of await this.#savedRevisions(userId, document.id)) {
+        if (saved?.payload?.contentDigest) known.add(saved.payload.contentDigest);
+      }
       digests.set(name, known);
     }
     return (dependency) => Boolean(digests.get(dependency.name)?.has(dependency.digest));

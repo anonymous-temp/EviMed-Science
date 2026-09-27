@@ -161,6 +161,31 @@ test("a pinned dependency nobody holds is refused, which the contract cannot see
   );
 });
 
+test("a pinned dependency on an earlier body of a method still resolves; one nobody ever held does not", async () => {
+  const { learning } = service();
+  const reused = await create(learning, { frontmatter: frontmatter({ name: "other-method" }) });
+  const earlier = reused.payload.contentDigest;
+  await learning.amendMethod("u1", reused.id, {
+    expectedRevision: reused.revision,
+    frontmatter: frontmatter({ name: "other-method" }),
+    body: `${BODY}\n\nOne more sentence.`,
+  });
+  // The lesson was learned against the method as it was: its digest is in
+  // the ledger's history though no longer current (the 09-23 restore).
+  const dependent = await create(learning, {
+    frontmatter: frontmatter({ metadata: { ...frontmatter().metadata, depends_on: `other-method@${earlier}` } }),
+    body: `${BODY}\n\n[reuse method: other-method | when: always | provides: the other thing]`,
+  });
+  assert.equal(dependent.payload.status, "approved");
+  await assert.rejects(
+    () => create(learning, {
+      frontmatter: frontmatter({ name: "third-method", metadata: { ...frontmatter().metadata, depends_on: `other-method@sha256:${"e".repeat(64)}` } }),
+      body: `${BODY}\n\n[reuse method: other-method | when: always | provides: the other thing]`,
+    }),
+    (error) => error.code === "method_invalid" && /method_depends_on_unresolved/.test(error.message),
+  );
+});
+
 test("amending the body resets everything measured about the old one", async () => {
   const { learning } = service();
   const created = await create(learning);
