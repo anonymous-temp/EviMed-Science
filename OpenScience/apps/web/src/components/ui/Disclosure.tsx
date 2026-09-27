@@ -26,7 +26,7 @@ export function Disclosure({
     <details className={cn("group", className)} open={defaultOpen || undefined}>
       <summary
         className={cn(
-          "flex min-h-6 cursor-pointer list-none items-center gap-1 rounded text-ui text-muted hover:text-text [&::-webkit-details-marker]:hidden",
+          "flex min-h-sm cursor-pointer list-none items-center gap-1 rounded text-ui text-muted hover:text-text [&::-webkit-details-marker]:hidden",
           summaryClassName,
         )}
       >
