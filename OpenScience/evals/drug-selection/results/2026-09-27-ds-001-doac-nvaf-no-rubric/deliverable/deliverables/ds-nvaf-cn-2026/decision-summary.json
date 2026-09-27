@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "assessmentType": "drug_selection",
+  "deliverableId": "ds-nvaf-cn-2026",
+  "generatedAt": "2026-09-27T07:32:48Z",
+  "scope": {
+    "candidateDrugs": [
+      "阿哌沙班（apixaban）",
+      "利伐沙班（rivaroxaban）",
+      "达比加群酯（dabigatran etexilate）"
+    ],
+    "indication": "非瓣膜性心房颤动患者的卒中与体循环栓塞预防",
+    "population": "成人非瓣膜性房颤住院及门诊患者，含 ≥80 岁与肌酐清除率 30–50 mL/min 亚组",
+    "jurisdiction": "中国（NMPA）",
+    "careSetting": "三级综合医院心内科",
+    "decisionDate": "2026-10-15",
+    "comparisonPerspective": "三级综合医院药事管理与药物治疗学委员会视角；价格口径按 2026-10 可得价格（本轮未取得）",
+    "declaredDomains": [
+      "pharmaceutical_properties",
+      "effectiveness",
+      "safety",
+      "economics",
+      "appropriateness",
+      "accessibility",
+      "innovation",
+      "other"
+    ]
+  },
+  "compiler": {
+    "available": false,
+    "attemptedAction": "compile",
+    "failureReason": "drug_selection_evaluation adapter unreachable: retrieve returned adapter_unavailable (timeout) and subsequent calls returned adapter_circuit_open; compile was therefore not attempted",
+    "ranking": "withheld",
+    "rankingWithheldReasons": [
+      "no approved institutional scoring rubric supplied (selectionDomains, scoringRubric, scoringPolicyVersion are missing user inputs)",
+      "scoring prerequisite for economics incomplete: currency, price date, dosage basis, treatment duration, jurisdiction and perspective all missing",
+      "the deterministic compiler could not be reached, so no compiler-endorsed coverage, comparability or sensitivity result exists"
+    ],
+    "minimumInputsToRank": [
+      "approved scoring rubric text",
+      "rubric or policy version identifier",
+      "per-domain weights and direction",
+      "missing-data rule"
+    ]
+  },
+  "scorecard": {
+    "file": "selection-scorecard.csv",
+    "rowCount": 24,
+    "headerRowIsFirstLine": true,
+    "candidateCount": 3,
+    "domainCount": 8,
+    "numericScoringFields": "all empty (no approved rubric)"
+  },
+  "statusCounts": {
+    "favorable": 8,
+    "neutral": 8,
+    "not_assessed": 6,
+    "unclear": 2,
+    "unfavorable": 0
+  },
+  "statusCountsPerCandidate": {
+    "阿哌沙班（apixaban）": {
+      "neutral": 3,
+      "favorable": 2,
+      "not_assessed": 2,
+      "unclear": 1
+    },
+    "利伐沙班（rivaroxaban）": {
+      "favorable": 3,
+      "neutral": 3,
+      "not_assessed": 2
+    },
+    "达比加群酯（dabigatran etexilate）": {
+      "favorable": 3,
+      "unclear": 1,
+      "not_assessed": 2,
+      "neutral": 2
+    }
+  },
+  "leaveOneDomainOutSensitivity": {
+    "pharmaceutical_properties": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "effectiveness": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "safety": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "economics": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "appropriateness": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "accessibility": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "innovation": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    },
+    "other": {
+      "candidates_with_changed_status": [],
+      "conclusion_changes": false,
+      "basis": "status-level comparison across the candidate x domain grid; computed locally because the compiler was unavailable"
+    }
+  },
+  "evidenceGapIds": [
+    "GAP-01",
+    "GAP-02",
+    "GAP-03",
+    "GAP-04",
+    "GAP-05",
+    "GAP-06",
+    "GAP-07",
+    "GAP-08",
+    "GAP-09"
+  ],
+  "humanReview": {
+    "required": true,
+    "flag": "human_review_required",
+    "statement": "This is one committee input. The authorized pharmacy and therapeutics process remains the final decision maker; no procurement, reimbursement or patient-level treatment decision is made here."
+  },
+  "audit": {
+    "evidenceSnapshotSha256": "3fc451166bc769413feac2ca60febe8a2a678ce7c4ca0a6d803417c6974b6d81",
+    "domainAssessmentsSha256": "6885e78dd4cce72fb207e2b2926255b9f2ac5b79c3b41c2a5e6e209ba3ea9338",
+    "scorecardSha256": "4c32bc85000532bf0acbc2fdd21a7ab4faad5985f647f1a11d956014bdccb0ec",
+    "hashAlgorithm": "sha256"
+  }
+}

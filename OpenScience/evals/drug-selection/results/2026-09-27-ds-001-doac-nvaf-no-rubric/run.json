@@ -1,0 +1,43 @@
+{
+  "capability": "drug-selection",
+  "brief": "ds-001-doac-nvaf-no-rubric",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-drug-selection",
+  "session": "acc-drug-selection-mujhdstc",
+  "runId": "run_d94fd19ee5a6ee3dedd020117963aaf8",
+  "agentVersion": "2.2.0",
+  "dispatchedAt": "2026-09-27T07:33:36Z",
+  "prompt": "candidateDrugs: [\"阿哌沙班（apixaban）\",\"利伐沙班（rivaroxaban）\",\"达比加群酯（dabigatran etexilate）\"]\nindication: 非瓣膜性心房颤动患者的卒中与体循环栓塞预防\npopulation: 成人非瓣膜性房颤住院及门诊患者，含 ≥80 岁与肌酐清除率 30–50 mL/min 亚组\njurisdiction: 中国（NMPA）\ncareSetting: 三级综合医院心内科\ndecisionDate: 2026-10-15",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/ds-nvaf-cn-2026/build_number_ledger.py",
+      "deliverables/ds-nvaf-cn-2026/build_outputs.py",
+      "deliverables/ds-nvaf-cn-2026/check_traceability.py",
+      "deliverables/ds-nvaf-cn-2026/compare_protected.py",
+      "deliverables/ds-nvaf-cn-2026/decision-summary.json",
+      "deliverables/ds-nvaf-cn-2026/domain-assessments.json",
+      "deliverables/ds-nvaf-cn-2026/drug-selection-report.md",
+      "deliverables/ds-nvaf-cn-2026/evidence-snapshot.json",
+      "deliverables/ds-nvaf-cn-2026/revision-notes.md",
+      "deliverables/ds-nvaf-cn-2026/selection-scorecard.csv"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「ds-nvaf-cn-2026」有 22 条审查发现（已修 20，不改并说明 0，未回应 0，其余 2 条建议未处理）。",
+        "text": "独立审查：交付物「ds-nvaf-cn-2026」有 22 条审查发现（已修 20，不改并说明 0，未回应 0，其余 2 条建议未处理）。"
+      }
+    ],
+    "effectiveAgentId": "drug-selection",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1256217,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

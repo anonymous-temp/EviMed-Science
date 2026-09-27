@@ -324,10 +324,14 @@ class RealLedgerTests(unittest.TestCase):
         # and geo-proposal, none of them run yet: eleven never run. The
         # 2026-09-26 platform audit read the production run ledger: geo-insight
         # had two failed attempts that day, so it moved to failed — ten never
-        # run, four failed.
-        self.assertEqual(statuses.count("not-run"), 10)
-        self.assertEqual(statuses.count("accepted"), 7)
-        self.assertEqual(statuses.count("failed"), 4)
+        # run, four failed. On 2026-09-27 the battery ran again once bound
+        # sessions could see their capability tools from the first request:
+        # drug-selection, peer-review and research-topic-selection accepted,
+        # comprehensive-drug-evaluation failed (delivered unverified, citing
+        # sources its snapshot does not hold) — six never run, five failed.
+        self.assertEqual(statuses.count("not-run"), 6)
+        self.assertEqual(statuses.count("accepted"), 10)
+        self.assertEqual(statuses.count("failed"), 5)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -365,7 +369,12 @@ class RealLedgerTests(unittest.TestCase):
         # showed the gate had accepted an errored skill call as a load. It is
         # back on the strength of a 2026-09-10 run whose transcript shows the
         # delegation and the injected skills; see its note.
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis", "research-grant-development"])
+        # drug-selection, peer-review and research-topic-selection joined on
+        # 2026-09-27, each one dispatch through `capability-acceptance` on a
+        # clean project, read before the row changed; peer-review's package
+        # reviews an unpublished manuscript and is kept outside the repository,
+        # so its evidence is the PROGRESS.md entry.
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "manuscript-support", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

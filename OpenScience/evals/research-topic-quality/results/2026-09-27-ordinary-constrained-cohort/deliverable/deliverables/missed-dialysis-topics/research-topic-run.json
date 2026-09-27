@@ -1,0 +1,184 @@
+{
+ "jobId": "topic-20260927132630-8ccbf68d5210",
+ "status": "succeeded",
+ "artifacts": [
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/research-topic-report.md",
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/research-topic-run.json",
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/evidence-records.json",
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/evidence-stats.json",
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/module-outputs.json",
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/research-portfolio.json",
+  "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/result.json"
+ ],
+ "schemaVersion": 1,
+ "kind": "research-topic-run-receipt",
+ "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+ "specialistJob": {
+  "jobId": "topic-20260927132630-8ccbf68d5210",
+  "status": "succeeded",
+  "startedAt": "2026-09-27T13:26:31Z",
+  "terminalObservedAt": "2026-09-27T13:34:12Z",
+  "elapsedSeconds": 461,
+  "polling": "polled with waitSeconds 5-45; progress stages observed: M5_BREAKTHROUGH_OPPORTUNITY (66%), M6_RESEARCH_AGENDA (83%), report generation (100%); updatedAt advanced at every poll until terminal",
+  "artifactsReturned": [
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/research-topic-report.md",
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/research-topic-run.json",
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/evidence-records.json",
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/evidence-stats.json",
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/module-outputs.json",
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/research-portfolio.json",
+   "research-topic-runs/topic-20260927132630-8ccbf68d5210/output/result.json"
+  ],
+  "artifactsPreservedVerbatimInDeliverable": [
+   "specialist-output/evidence-records.json",
+   "specialist-output/research-portfolio.json",
+   "specialist-output/research-topic-report-specialist-scan.md",
+   "specialist-output/evidence-stats.json"
+  ],
+  "resultSummary": {
+   "status": "succeeded",
+   "degraded": false,
+   "evidenceCount": 16,
+   "modules": [
+    "M1_PROBLEM_LANDSCAPE",
+    "M2_RESEARCH_ECOSYSTEM",
+    "M3_EVIDENCE_SYSTEM",
+    "M4_SCIENTIFIC_CONTRADICTION",
+    "M5_BREAKTHROUGH_OPPORTUNITY",
+    "M6_RESEARCH_AGENDA",
+    "evidenceRetrieval"
+   ],
+   "candidatesReturned": [
+    "R1",
+    "R2",
+    "R3"
+   ]
+  },
+  "roleOfJobOutput": "First-pass map only. The agenda in research-topic-report.md is this run's judgement after the evidence expansion below; where the two disagree the report says so in section 3 and research-portfolio.json carries the reconciliation."
+ },
+ "evidenceExpansion": {
+  "runDate": "2026-09-27",
+  "channelsUsed": [
+   {
+    "channel": "pubmed",
+    "tool": "literature_search / biomedical_source_search(pubmed)",
+    "status": "answered"
+   },
+   {
+    "channel": "europe-pmc",
+    "tool": "biomedical_source_search(europe-pmc)",
+    "status": "answered"
+   },
+   {
+    "channel": "europe-pmc-fulltext",
+    "tool": "open_access_full_text",
+    "status": "answered",
+    "fullTextsPreserved": [
+     ".evimed-sources/PMC12342063",
+     ".evimed-sources/PMC7380335",
+     ".evimed-sources/PMC4393476",
+     ".evimed-sources/PMC8431045",
+     ".evimed-sources/PMC13348120"
+    ]
+   },
+   {
+    "channel": "openalex",
+    "tool": "biomedical_source_search(openalex)",
+    "status": "answered"
+   },
+   {
+    "channel": "crossref",
+    "tool": "biomedical_source_search(crossref)",
+    "status": "answered"
+   },
+   {
+    "channel": "trial-registry",
+    "tool": "clinical_trial_search",
+    "status": "answered",
+    "registrationsScreened": 11
+   },
+   {
+    "channel": "guideline",
+    "tool": "guideline_search",
+    "status": "answered",
+    "recordsScreened": 25
+   },
+   {
+    "channel": "open-web",
+    "tool": "web_search",
+    "status": "answered",
+    "usedFor": "leads only; no claim rests on an unreviewed page"
+   },
+   {
+    "channel": "bibliometrics",
+    "tool": "bibliometric_analysis",
+    "status": "see bibliometricJob"
+   },
+   {
+    "channel": "europe-pmc-preprints",
+    "tool": "biomedical_source_search(europe-pmc, SRC:PPR)",
+    "status": "returned no records for the query shape used"
+   },
+   {
+    "channel": "semantic-scholar",
+    "tool": "biomedical_source_search(semantic-scholar)",
+    "status": "unavailable",
+    "detail": "HTTP 429 (rate-limited without a key); retried once, not retried further"
+   }
+  ],
+  "chineseLanguageSearch": {
+   "tool": "literature_search(language=zh)",
+   "status": "answered",
+   "note": "returned mostly cross-sectional adherence-factor studies with unusable detail for a local audit; two retained in the evidence map"
+  },
+  "localDataInspected": false,
+  "localDataNote": "The brief describes records; it does not grant access to them. Every field statement in the report is written as something to verify.",
+  "recordsRetained": 50,
+  "recordsWithPublicationStatusActive": 35
+ },
+ "bibliometricJob": {
+  "jobId": "bibliometric-20260927132901-f0f959cd8b91",
+  "status": "succeeded (degraded)",
+  "elapsedSeconds": 163,
+  "degradedReasons": [
+   "formal MeSH strategy returned zero records; the run fell back to the raw topic (formal_query_zero_results)",
+   "openalex unavailable (api_key_missing) and semantic_scholar rate-limited; citation coverage observed for 31 of 32 records from a single internal source"
+  ],
+  "recordsRetrieved": 32,
+  "role": "Recorded as a degraded channel. No publication-shape figure from this run is used in the report; because 32 records are much narrower than the topic as searched, using them would misstate the field's size.",
+  "artifactsPath": "bibliometric-analysis-runs/bibliometric-20260927132901-f0f959cd8b91/output/"
+ },
+ "deliverableFiles": [
+  ".evimed-sources/PMC12342063",
+  ".evimed-sources/PMC13348120",
+  ".evimed-sources/PMC4393476",
+  ".evimed-sources/PMC7380335",
+  ".evimed-sources/PMC8431045",
+  "evidence-map.md",
+  "evidence-records.json",
+  "research-portfolio.json",
+  "research-topic-report.md",
+  "research-topic-run.json",
+  "revision-notes.md",
+  "specialist-output/evidence-records.json",
+  "specialist-output/evidence-stats.json",
+  "specialist-output/research-portfolio.json",
+  "specialist-output/research-topic-report-specialist-scan.md",
+  "build script kept outside the deliverable: /workspace/build_companions_missed_dialysis_topics.py"
+ ],
+ "citationIntegrity": {
+  "everyReportIdentifierPresentInEvidenceMap": true,
+  "evidenceMapRowsWithIdentifierAndUrl": true,
+  "unresolvedIdentifiers": []
+ },
+ "researchContext": {
+  "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+  "population": "Adults receiving maintenance hemodialysis",
+  "studySetting": "Community hospital",
+  "resourceConstraints": [
+   "Six months",
+   "No new recruitment",
+   "One part-time analyst"
+  ]
+ }
+}

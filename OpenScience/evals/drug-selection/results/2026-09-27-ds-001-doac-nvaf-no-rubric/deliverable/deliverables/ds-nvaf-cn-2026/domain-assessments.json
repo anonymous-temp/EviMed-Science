@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "evidence-snapshot.json",
+  "scoringPolicy": {
+    "policyVersion": null,
+    "policyVersionStatus": "NOT_SUPPLIED",
+    "rubricSupplied": false,
+    "rubricStatus": "本院未提供已批准的量化评分细则（条目定义、量表、权重、方向、缺失值规则、版本号）",
+    "consequence": "按能力要求，不得自行发明量表或默认等权。因此本文件的 domainAssessments 只记录状态（status）与依据（evidenceIds、rationale），不写任何数值分（score / weight / scaleMin / scaleMax / direction / scoreOrigin / ruleVersion 一律缺省），并保留定量排序。",
+    "missingDataRule": "缺失、冲突或未评估一律记为未评估（not_assessed / unclear），永不折算为 0 分。",
+    "comparableOnlyWhen": "经济学仅当币种、价格日期、剂量基准、疗程、辖区、视角齐备时方可比较；本轮六项前置条件均未取得。"
+  },
+  "domainDefinitions": {
+    "pharmaceutical_properties": "剂型、规格、给药频次、说明书覆盖范围、肾功能/年龄给药规则的可核验程度",
+    "effectiveness": "非瓣膜性房颤患者中预防卒中与体循环栓塞的相对效果",
+    "safety": "大出血、颅内出血、胃肠道出血及年龄/肾功能相关出血风险",
+    "economics": "价格、疗程费用、预算影响与成本效果",
+    "appropriateness": "在本辖区说明书写明的适应症与人群（含 ≥80 岁、CrCl 30–50 mL/min）内的适配程度",
+    "accessibility": "上市许可、医保与院内目录、供应与依从性",
+    "innovation": "作用机制与治疗学地位的新颖度",
+    "other": "头对头比较证据缺失等其他影响遴选的要素"
+  },
+  "domainAssessments": [
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "pharmaceutical_properties",
+      "status": "neutral",
+      "evidenceIds": [
+        "LBL-APX-01",
+        "LBL-APX-02",
+        "LBL-APX-03"
+      ],
+      "rationale": "中国说明书索引条目所示规格为 2.5mg*60片，用法用量段落写明『每次2.5mg，每日两次口服』，但该段落所述的首次服药时间、疗程（髋 32–38 天、膝 10–14 天）属骨科 VTE 预防；老年用药段仅有『无需调整剂量』，非瓣膜性房颤所用的年龄/体重/肌酐减量规则未见于所读段落。所读 3 条索引记录的适应症预览均为髋/膝关节置换术后 VTE 预防。药品属性可用，但本适应症的说明书覆盖无法核验。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "pharmaceutical_properties",
+      "status": "favorable",
+      "evidenceIds": [
+        "LBL-RIV-01",
+        "LBL-RIV-02",
+        "RCT-ROCKET"
+      ],
+      "rationale": "所读中国说明书条目（拜瑞妥）适应症段落逐字包含『用于具有一种或多种危险因素……的非瓣膜性房颤成年患者，以降低卒中和全身性栓塞的风险』，为该适应症提供中国批准的文本依据；注意事项段落进一步区分适应症给出肾功能阈值（非瓣膜性房颤避免用于 CrCl<15mL/min，而骨科预防为 CrCl<30mL/min），老年用药段为『对老年患者（＞65岁）无需调整剂量』。给药频次为每日一次：所读条目规格为 2.5mg、用法用量段落所述为骨科适应症的 10mg 每日一次，非瓣膜性房颤对应的 20mg/15mg 剂量段落未逐字读取，该频次与剂量由关键随机试验方案（每日 20mg）支持。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "pharmaceutical_properties",
+      "status": "favorable",
+      "evidenceIds": [
+        "LBL-DAB-01",
+        "LBL-DAB-02"
+      ],
+      "rationale": "所读中国说明书条目的适应症段落逐字载明『预防存在以下一个或多个危险因素的成人非瓣膜性房颤患者(NVAF)的卒中和体循环栓塞(SEE)』，并列出 ≥75 岁、≥65 岁合并糖尿病/冠心病/高血压等危险因素；用法用量段落在同一段落内给出减量规则（出血风险因素存在时可减为 110mg 每日两次）、肾功能分层（CrCl<30mL/min 不推荐，30–50mL/min 无需调整剂量但至少每年评估一次肾功能）与高龄规则（80 岁及以上为 220mg/日）。三种候选药中，只有该药在本轮所读说明书里同时具备本适应症与两个目标亚组的明文给药规则。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "effectiveness",
+      "status": "favorable",
+      "evidenceIds": [
+        "RCT-ARISTOTLE",
+        "ASIA-META",
+        "MA-APX-RIV",
+        "MA-DOAC-NET"
+      ],
+      "rationale": "关键随机试验（18,201 例，中位随访 1.8 年，阿哌沙班 5mg 每日两次对华法林）的摘要显示主要终点由 1.60%/年降至 1.27%/年（HR 0.79，95%CI 0.66–0.95；非劣效 P<0.001，优效 P=0.01），全因死亡 HR 0.89（0.80–0.99）。亚洲人群真实世界荟萃分析（12 项研究，441,450 例）中阿哌沙班对华法林的缺血性卒中 HR 0.70（0.62–0.78）。阿哌沙班对利伐沙班的观察性荟萃分析（10 项真实世界研究）卒中/体循环栓塞 HR 0.88（0.81–0.95）。间接比较荟萃分析（36 项研究）在卒中/体循环栓塞上未发现各 DOAC 间显著差异（证据质量 very low 至 moderate）。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "effectiveness",
+      "status": "favorable",
+      "evidenceIds": [
+        "RCT-ROCKET",
+        "ASIA-META",
+        "MA-APX-RIV",
+        "MA-DOAC-NET",
+        "REN-ROCKET",
+        "REN-JROCKET"
+      ],
+      "rationale": "关键随机试验（14,264 例，利伐沙班每日 20mg，CrCl 30–49mL/min 减为 15mg）中主要终点在按方案人群中为 1.7%/年对 2.2%/年（HR 0.79，95%CI 0.66–0.96，非劣效 P<0.001）；意向治疗分析为 2.1%/年对 2.4%/年（HR 0.88，0.74–1.03；优效 P=0.12，即未达优效）。亚洲人群荟萃分析中缺血性卒中 HR 0.79（0.74–0.85）。对该药与阿哌沙班直接比较的观察性荟萃分析显示卒中/体循环栓塞方向不利于利伐沙班（HR 0.88 对阿哌沙班），且间接比较荟萃分析未发现各 DOAC 在卒中/体循环栓塞上的显著差异。 日本 J-ROCKET AF 对中度肾功能不全者用更低日剂量（10mg 每日一次），报告主要疗效终点 2.77%/年 对华法林 3.34%/年、HR 0.82（0.25–2.69），肾功能与该药疗效之间无显著交互（交互 P=0.279）。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "effectiveness",
+      "status": "favorable",
+      "evidenceIds": [
+        "RCT-RELY",
+        "AGE-RELY",
+        "ASIA-META",
+        "MA-DOAC-NET",
+        "CN-DAB-ELDERLY"
+      ],
+      "rationale": "关键随机试验（18,113 例）中主要终点为华法林 1.69%/年、达比加群 110mg 每日两次 1.53%/年（RR 0.91，0.74–1.11，非劣效 P<0.001）、150mg 每日两次 1.11%/年（RR 0.66，0.53–0.82，优效 P<0.001）。按年龄分层的分析显示，两个剂量在卒中预防上的获益在各年龄组一致（交互 P 均不显著）。亚洲人群荟萃分析中 110/150mg 合并的缺血性卒中 HR 0.78（0.65–0.94）。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "safety",
+      "status": "favorable",
+      "evidenceIds": [
+        "RCT-ARISTOTLE",
+        "AGE-ARISTOTLE",
+        "MA-APX-RIV",
+        "MA-DOAC-NET",
+        "J-ELD-AF"
+      ],
+      "rationale": "关键随机试验中大出血为 2.13%/年对华法林 3.09%/年（HR 0.69，0.60–0.80），出血性卒中 0.24% 对 0.47%（HR 0.51，0.35–0.75）。年龄分层分析显示各年龄组大出血、总出血与颅内出血均少于华法林（交互 P 均 >0.11），≥80 岁亚组占 13% 且结论一致；该分析同时记载剂量减为 2.5mg 每日两次的标准为满足年龄 ≥80 岁、体重 ≤60kg、肌酐 ≥133μmol/L 中至少两项。与非瓣膜性房颤真实世界观察性荟萃分析相比，阿哌沙班大出血（HR 0.62，0.56–0.69）与胃肠道出血（HR 0.57，0.50–0.64）均低于利伐沙班。高龄日本注册研究提示，在按减量指征用药的 ≥75 岁人群中，谷浓度偏高与因出血住院相关（HR 12.12，95%CI 1.56–94.22），置信区间极宽，仅作提示。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "safety",
+      "status": "neutral",
+      "evidenceIds": [
+        "RCT-ROCKET",
+        "AGE-ROCKET",
+        "REN-ROCKET",
+        "MA-APX-RIV",
+        "RCT-ELDERLY-3ARM"
+      ],
+      "rationale": "关键随机试验中大出血与临床相关非大出血为 14.9%/年对华法林 14.5%/年（HR 1.03，0.96–1.11），颅内出血（0.5% 对 0.7%，P=0.02）与致死性出血（0.2% 对 0.5%，P=0.003）少于华法林。年龄分层分析中 ≥75 岁占 44%，该组卒中与大出血发生率均高于年轻组，但利伐沙班相对华法林的效应不随年龄改变。CrCl 30–49mL/min 亚组（20.7%）主要安全性终点 17.82 对 18.28/100 患者年（P=0.76）。与非瓣膜性房颤观察性荟萃分析相比，其大出血与胃肠道出血风险高于阿哌沙班；180 例三臂回顾性研究（利伐沙班 61 例、达比加群 62 例、华法林 57 例）报告三组出血发生率差异无统计学意义（P=0.052），该研究为单中心回顾性、样本小，仅作方向性参考。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "safety",
+      "status": "unclear",
+      "evidenceIds": [
+        "RCT-RELY",
+        "AGE-RELY",
+        "CN-DAB-ELDERLY",
+        "CN-DAB-REAL",
+        "PK-ELDERLY-JP"
+      ],
+      "rationale": "关键随机试验中大出血为 110mg 每日两次 2.71%/年（对华法林 3.36%/年，P=0.003）与 150mg 每日两次 3.11%/年（P=0.31），出血性卒中两个剂量均显著低于华法林。但按年龄分层分析发现年龄与治疗对颅外大出血存在高度显著交互（交互 P<0.001）：年轻患者中两个剂量均低于华法林（150mg HR 0.78，0.62–0.97；110mg HR 0.72，0.57–0.90），而 ≥80 岁者 110mg 高于华法林（HR 1.50，1.03–2.18）、150mg 更高（HR 1.68，1.18–2.41）。针对 ≥80 岁中国人群的观察性研究报告缺血性卒中 1.4%/年对华法林 6.9%/年；该摘要所印风险比 0.22 落在其置信区间 0.23–0.67 之外，属来源自身不一致，故只取绝对率、不引用该风险比；加拿大老年队列报告颅内出血更少（HR 0.60，0.47–0.76）、胃肠道出血更多（HR 1.30，1.14–1.50）。高龄人群中出血风险随年龄的分化使该维度在本亚组内无法给出与其他两药方向一致的判断。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "economics",
+      "status": "not_assessed",
+      "evidenceIds": [],
+      "rationale": "未取得该药任何中国境内价格记录、集采中选价或医保支付口径，也未检索到中国辖区药物经济学评价；经济学比较所需的币种、价格日期、剂量基准、疗程、辖区、视角六项前置条件全部缺失。按规则不引境外价格或境外成本效果比替代。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "economics",
+      "status": "not_assessed",
+      "evidenceIds": [],
+      "rationale": "同阿哌沙班：未取得该药任何中国境内价格记录，经济学前置条件全部缺失，不做费用或预算影响比较。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "economics",
+      "status": "not_assessed",
+      "evidenceIds": [],
+      "rationale": "同前两个候选药：未取得中国境内价格记录；已检索到的成本效果研究分别为美国、日本、葡萄牙、泰国与系统性综述，均非中国辖区，不能用于本院判断。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "appropriateness",
+      "status": "unclear",
+      "evidenceIds": [
+        "LBL-APX-01",
+        "AGE-ARISTOTLE",
+        "APPROP-80",
+        "CN-DUE-APX",
+        "GDL-CN-AF-2023",
+        "PK-ELDERLY-JP"
+      ],
+      "rationale": "本轮所读中国说明书索引条目均不含非瓣膜性房颤适应症；湖北某三甲医院 544 份病历的药物利用评价明确写道『目前我国国家药品监督管理局仅批准用于接受髋关节或膝关节择期置换术的成年患者预防静脉血栓栓塞症』，该院 2021 年非瓣膜性房颤用药 20 例（3.7%）属超说明书应用，并以 ARISTOTLE 为依据判定为有循证支持的拓展应用；同一研究记录 18 例（3.3%）用法用量不适宜（17 例日剂量偏小）。ARISTOTLE 年龄分层分析给出了以年龄 ≥80 岁、体重 ≤60kg、肌酐 ≥133μmol/L 中两项为条件的 2.5mg 每日两次减量规则，但该规则能否作为中国处方依据取决于上述适应症问题。≥80 岁与 CrCl 30–50mL/min 两个目标亚组的中国说明书用药条件无法核验。日本一项 110 例老年房颤患者的血药浓度研究显示，减量方案的血药浓度变异小于标准剂量，且肾功能损害很可能不是浓度偏高的唯一决定因素 [PK-ELDERLY-JP]。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "appropriateness",
+      "status": "favorable",
+      "evidenceIds": [
+        "LBL-RIV-01",
+        "RCT-ROCKET",
+        "AGE-ROCKET",
+        "REN-ROCKET",
+        "APPROP-80",
+        "PK-ELDERLY-JP"
+      ],
+      "rationale": "适应症在册，且说明书注意事项段落按适应症给出肾功能阈值。问题在于剂量段落：逐字读取的用法用量段落属骨科适应症（10mg 每日一次），非瓣膜性房颤的剂量规则未在说明书中核验，只能由随机试验方案间接支持（20mg 每日一次；CrCl 30–49mL/min 为 15mg，该亚组 20.7%）。≥80 岁亚组无专门随机试验；≥75 岁亚组占试验人群 44%。法国单中心 703 例（阿哌沙班 371、达比加群 92、利伐沙班 240，均 ≥80 岁）报告 39% 剂量不适宜，其中 34% 为剂量不足、5% 为过量，利伐沙班 40%、阿哌沙班 39% 剂量不足——这类比例来自境外单中心单年处方，只能提示本院需建立剂量核对流程。日本一项 110 例老年房颤患者的血药浓度研究显示，减量方案的血药浓度变异小于标准剂量，且肾功能损害很可能不是浓度偏高的唯一决定因素 [PK-ELDERLY-JP]。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "appropriateness",
+      "status": "favorable",
+      "evidenceIds": [
+        "LBL-DAB-01",
+        "AGE-RELY",
+        "CN-DAB-ELDERLY",
+        "OCTO-KOR",
+        "APPROP-80",
+        "PK-ELDERLY-JP"
+      ],
+      "rationale": "三个候选药中唯一在说明书内同时写明本适应症、≥80 岁给药规则（220mg/日，即 110mg 每日两次）与 CrCl 30–50mL/min 规则（无需调整剂量，至少每年评估一次肾功能；CrCl<30mL/min 不推荐）者。这些明文规则与随机试验的年龄分层结论方向一致：≥80 岁者 110mg 每日两次的大出血与华法林相近，而 150mg 更高。真实世界证据为观察性：≥80 岁中国患者（571 例）中 129 例使用 110mg 每日两次；韩国 80 岁以上队列（687 例，其中达比加群 141 例）中 85.6% 使用减量。日本一项 110 例老年房颤患者的血药浓度研究显示，减量方案的血药浓度变异小于标准剂量，且肾功能损害很可能不是浓度偏高的唯一决定因素 [PK-ELDERLY-JP]。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "accessibility",
+      "status": "not_assessed",
+      "evidenceIds": [],
+      "rationale": "未取得医保目录、院内目录、供应或采购记录，也没有可归档的中国处方结构或停药率原文，可及性无法评估。该药在本次所读的中国说明书条目中不含本适应症，属可及性以外的准入问题，记在 appropriateness 维度。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "accessibility",
+      "status": "not_assessed",
+      "evidenceIds": [],
+      "rationale": "未取得医保目录、院内目录、供应或采购记录，也没有可归档的中国处方结构或停药率原文，可及性无法评估。以未取得的证据推断该药的可及性或供应状况不成立。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "accessibility",
+      "status": "not_assessed",
+      "evidenceIds": [],
+      "rationale": "未取得医保目录、院内目录、供应或采购记录，也没有可归档的中国处方结构或停药率原文，可及性无法评估。其说明书要求用药前计算肌酐清除率并每年评估肾功能（见 pharmaceutical_properties），属准入后管理负担，不在本维度记分。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "innovation",
+      "status": "neutral",
+      "evidenceIds": [
+        "RCT-ARISTOTLE",
+        "MA-DOAC-NET"
+      ],
+      "rationale": "直接口服 Xa 因子抑制剂，与另外两个候选药同属非维生素 K 拮抗剂口服抗凝药类别；关键试验证实其相对华法林的优效性与更少出血。在本适应症下不构成机制或治疗学地位上的新类别。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "innovation",
+      "status": "neutral",
+      "evidenceIds": [
+        "RCT-ROCKET"
+      ],
+      "rationale": "同属直接口服 Xa 因子抑制剂，每日一次给药；相对华法林为非劣效，未显示优效。机制层面无独立新颖性。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "innovation",
+      "status": "neutral",
+      "evidenceIds": [
+        "RCT-RELY"
+      ],
+      "rationale": "直接凝血酶抑制剂，作用靶点与两个 Xa 因子抑制剂不同，但同属非维生素 K 拮抗剂口服抗凝药；150mg 每日两次相对华法林显示优效。靶点差异不改变其在本次比较中的治疗学地位。"
+    },
+    {
+      "candidate": "阿哌沙班（apixaban）",
+      "domain": "other",
+      "status": "neutral",
+      "evidenceIds": [
+        "MA-DOAC-NET",
+        "MA-APX-RIV"
+      ],
+      "rationale": "三个候选药之间没有头对头随机对照试验；相对效果与安全性的比较依赖间接比较与观察性研究（观察性荟萃分析的卒中/体循环栓塞比较 I²=70.2%，异质性较高；间接比较的证据质量为 very low 至 moderate）。此外，其中国说明书适应症问题需要药事会在遴选中单独处理。"
+    },
+    {
+      "candidate": "利伐沙班（rivaroxaban）",
+      "domain": "other",
+      "status": "neutral",
+      "evidenceIds": [
+        "MA-DOAC-NET",
+        "MA-APX-RIV"
+      ],
+      "rationale": "同属无头对头随机证据的情形；观察性荟萃分析提示其大出血与胃肠道出血高于阿哌沙班，但该结论来自回顾性研究，存在残余混杂，不能等同于随机证据。"
+    },
+    {
+      "candidate": "达比加群酯（dabigatran etexilate）",
+      "domain": "other",
+      "status": "neutral",
+      "evidenceIds": [
+        "MA-DOAC-NET",
+        "AGE-RELY"
+      ],
+      "rationale": "同属无头对头随机证据的情形；其年龄相关的颅外大出血交互效应（交互 P<0.001）使 ≥80 岁亚组的净获益判断依赖剂量选择，需要在药事会层面单独讨论。"
+    }
+  ]
+}

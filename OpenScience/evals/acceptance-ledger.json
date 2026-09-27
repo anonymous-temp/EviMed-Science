@@ -27,16 +27,17 @@
       "briefCount": 4,
       "realDelivery": {
         "status": "accepted",
-        "evidence": "PROGRESS.md@2026-09-04 09:50",
-        "at": "2026-09-04T09:50:00",
+        "evidence": "evals/adr-analysis/results/2026-09-27-adr-001-osimertinib-cardiac/run.json",
+        "at": "2026-09-27T12:16:47Z",
         "surface": "http-api"
       },
       "relatedEvidence": [
         "scripts/ops/hosted-production-e2e.mjs",
         "evals/specialist-smoke/results/evimed_drug_safety_analysis.json",
-        "PROGRESS.md@2026-07-21 06:13"
+        "PROGRESS.md@2026-07-21 06:13",
+        "PROGRESS.md@2026-09-04 09:50"
       ],
-      "note": "The hosted production e2e dispatches this capability over /api/agent-runs/dispatch on every deploy and refuses unless the run ends succeeded with safety-report.md and signals.csv tracked in the ledger; the 2026-09-04 release recorded it passing with zero notices. It is the only capability with a delivery that repeats. Four briefs are now written under evals/adr-analysis and none has been run: the deploy path exercises one aspirin dispatch, not the four ways this capability is asked to be wrong."
+      "note": "The hosted production e2e dispatches this capability over /api/agent-runs/dispatch on every deploy and refuses unless the run ends succeeded with safety-report.md and signals.csv tracked in the ledger; the 2026-09-04 release recorded it passing with zero notices. It is the only capability with a delivery that repeats. Four briefs are written under evals/adr-analysis; the deploy path exercises one aspirin dispatch, not the four ways this capability is asked to be wrong. 2026-09-27 production acceptance (release evimed-d89615b264d8-1, brief adr-001, osimertinib cardiac events): the first brief run; every drug-safety engine job succeeded and the package was delivered and verified (safety-report.md, signals.csv, label-evidence.md). Advice only: eight report numbers the review could not trace to a job output, and 33 review findings of which 9 were fixed and 10 left unanswered. The same day's earlier attempts failed in the engine itself (an owner-only key rule refusing the shared 0440 key, and an openFDA query built from a CJK alias), both fixed before this run."
     },
     {
       "id": "bibliometric-analysis",
@@ -83,15 +84,15 @@
       "evalHarness": "evals/comprehensive-drug-evaluation",
       "briefCount": 3,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "failed",
+        "evidence": "evals/comprehensive-drug-evaluation/results/2026-09-27-cde-001-dapagliflozin-ckd/run.json",
+        "at": "2026-09-27T07:29:57Z",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/drug-evidence-quality/benchmark_cases.json"
       ],
-      "note": "Three briefs written on 2026-09-27 under evals/comprehensive-drug-evaluation (dapagliflozin in CKD, semaglutide product scope, upadacitinib scored without prices). The drug-evidence benchmark's comprehensiveCase stays related evidence: it grades the deterministic assessment compiler, not a delivered package. No delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run, and no research session was ever bound to it."
+      "note": "Three briefs written on 2026-09-27 under evals/comprehensive-drug-evaluation (dapagliflozin in CKD, semaglutide product scope, upadacitinib scored without prices). The drug-evidence benchmark's comprehensiveCase stays related evidence: it grades the deterministic assessment compiler, not a delivered package. No delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run, and no research session was ever bound to it. 2026-09-27 production acceptance (release evimed-fa87c23940ce-1, brief cde-001): the first run that reached the capability's own comprehensive_drug_evaluation tool. It delivered with verification unverified and two must-fix findings: the report cites https://www.nmpa.gov.cn/ and doi:10.1016/j.kint.2023.10.018, neither of which is in evidence-snapshot.json. The independent review found no issue. Recorded as failed, not accepted: this ledger reads accepted as a delivery the gate verified, and a report citing sources its own snapshot does not hold is the defect the gate exists for. The earlier run of the same day (evimed-cab15710868b-1) delivered without the tool, because a bound session saw its capability tools only from its second request."
     },
     {
       "id": "dataset-research-scoping",
@@ -116,15 +117,15 @@
       "evalHarness": "evals/drug-selection",
       "briefCount": 3,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/drug-selection/results/2026-09-27-ds-001-doac-nvaf-no-rubric/run.json",
+        "at": "2026-09-27T07:33:38Z",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/drug-evidence-quality/benchmark_cases.json"
       ],
-      "note": "Three briefs written on 2026-09-27 under evals/drug-selection (DOACs without a rubric, the JAK atopic-dermatitis paper replay, statins with mixed procurement prices). The benchmark's selectionCase stays related evidence. No delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run; one research session was bound to it on 2026-09-24 and nothing was dispatched."
+      "note": "Three briefs written on 2026-09-27 under evals/drug-selection (DOACs without a rubric, the JAK atopic-dermatitis paper replay, statins with mixed procurement prices). The benchmark's selectionCase stays related evidence. No delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run; one research session was bound to it on 2026-09-24 and nothing was dispatched. 2026-09-27 production acceptance (release evimed-fa87c23940ce-1, brief ds-001): accepted, 10 artifacts, called drug_selection_evaluation; review findings 2 fixed."
     },
     {
       "id": "evidence-appraisal",
@@ -311,16 +312,16 @@
       "evalHarness": "evals/peer-review",
       "briefCount": 4,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "PROGRESS.md@2026-09-27 06:37",
+        "at": "2026-09-27T06:37:20Z",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/specialist-smoke/results/evimed_peer_review.json",
         "PROGRESS.md@2026-07-21 06:13"
       ],
-      "note": "The managed review engine has a succeeded harness job and was part of the 2026-07-21 six-specialist content acceptance under the retired kernel. No capability delivery on record. Four briefs are now written under evals/peer-review and none has been run. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run in production; the engine container was healthy and never called."
+      "note": "The managed review engine has a succeeded harness job and was part of the 2026-07-21 six-specialist content acceptance under the retired kernel. No capability delivery on record. Four briefs are now written under evals/peer-review and none has been run. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run in production; the engine container was healthy and never called. 2026-09-27 production acceptance (release evimed-c07742d02485-1): a real 34-page systematic-review manuscript rather than a written brief, delivered and accepted; the run called peer_review 14 times with one managed review job succeeded (PRISMA 2020 plus the universal rubric) and reconciled the engine's findings with its own recalculation. The manuscript is unpublished, so the package and run record are kept outside this public repository and the evidence is the PROGRESS.md entry."
     },
     {
       "id": "research-grant-development",
@@ -344,17 +345,17 @@
       "evalHarness": "evals/research-topic-quality",
       "briefCount": 3,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/research-topic-quality/results/2026-09-27-ordinary-constrained-cohort/run.json",
+        "at": "2026-09-27T13:46:23Z",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/specialist-smoke/results/evimed_research_topic_selection.json",
         "evals/research-topic-quality/test_preflight.py",
         "PROGRESS.md@2026-07-21 06:13"
       ],
-      "note": "Three briefs plus a preflight test, and a succeeded managed engine job on the harness surface. No capability delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run in production; the engine container was healthy and never called."
+      "note": "Three briefs plus a preflight test, and a succeeded managed engine job on the harness surface. No capability delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run in production; the engine container was healthy and never called. 2026-09-27 production acceptance (release evimed-51f880520360-1, brief ordinary-constrained-cohort, missed dialysis sessions): delivered and verified, 6 artifacts; the engine job ran 461 s and its updatedAt advanced at every poll, and the package keeps the engine's three candidates and 16 evidence records. Advice only: 37 independent-review findings of which 35 went unanswered, and eight report numbers not traceable to a job output. Five earlier attempts that day delivered packages that did not carry the engine's result: the first issued no engine job, because a bound session saw its capability tools only from its second request; in the other four the engine job failed or was given up on while its defects were being fixed (an unpinned openai dependency that failed every job within seconds, and a long job that published no progress and was read as dead). Those packages are kept outside this repository."
     },
     {
       "id": "source-understanding",

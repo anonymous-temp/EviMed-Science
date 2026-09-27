@@ -25,10 +25,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-04",
+        "lastRunAt": "2026-09-27",
         "runs": 1,
         "delivered": 1,
-        "typicalMinutes": 22
+        "typicalMinutes": 23
       }
     },
     "bibliometric-analysis": {
@@ -109,8 +109,8 @@
         "只有在你提供量表时才计分。"
       ],
       "evaluation": {
-        "lastStatus": "not-run",
-        "lastRunAt": null,
+        "lastStatus": "failed",
+        "lastRunAt": "2026-09-27",
         "runs": 1,
         "delivered": 1,
         "typicalMinutes": 21
@@ -161,8 +161,8 @@
         "只在候选药品的数据可比时给出排名；数据不齐时只给分维度比较。"
       ],
       "evaluation": {
-        "lastStatus": "not-run",
-        "lastRunAt": null,
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-27",
         "runs": 1,
         "delivered": 1,
         "typicalMinutes": 21
@@ -435,8 +435,8 @@
         "按报告规范清单逐项审查；学科前沿与创新性的判断仍需同行专家。"
       ],
       "evaluation": {
-        "lastStatus": "not-run",
-        "lastRunAt": null
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-27"
       }
     },
     "research-grant-development": {
@@ -487,11 +487,11 @@
         "可执行性按公开证据判断；你所在机构的资源、病例量与伦理条件需要你在问题里说明。"
       ],
       "evaluation": {
-        "lastStatus": "not-run",
-        "lastRunAt": null,
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-27",
         "runs": 1,
         "delivered": 1,
-        "typicalMinutes": 29
+        "typicalMinutes": 20
       }
     }
   }

@@ -1,0 +1,64 @@
+{
+  "capability": "comprehensive-drug-evaluation",
+  "brief": "cde-001-dapagliflozin-ckd",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-comprehensive-drug-evaluation",
+  "session": "acc-comprehensive-drug-e-mujh8uhp",
+  "runId": "run_7715573f318a04b7ff7638d6ec3a1c2e",
+  "agentVersion": "2.3.0",
+  "dispatchedAt": "2026-09-27T07:29:56Z",
+  "prompt": "drug: 达格列净（dapagliflozin）\nindication: 慢性肾脏病（伴或不伴 2 型糖尿病）\ncomparator: 标准治疗（最大耐受剂量的 ACEI 或 ARB）\npopulation: eGFR 25–75 mL/min/1.73m²、伴白蛋白尿的成人慢性肾脏病患者\njurisdiction: 中国（NMPA；国家医保药品目录）\noutcomes: [\"肾脏复合终点（eGFR 持续下降、终末期肾病、肾性或心血管死亡）\",\"全因死亡\",\"安全性：酮症酸中毒、容量不足、生殖器感染、急性肾损伤\"]\ncareSetting: 三级医院肾内科门诊\ntimeHorizon: 3 年\ndecisionDate: 2026-06-30\nevaluationDomains: [\"effectiveness\",\"safety\",\"applicability\",\"economics\"]",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": "unverified",
+    "artifacts": [
+      "build_snapshot.py",
+      "build_summary.py",
+      "deliverables/dapagliflozin-ckd-evaluation/comprehensive-evaluation-report.md",
+      "deliverables/dapagliflozin-ckd-evaluation/evaluation-summary.json",
+      "deliverables/dapagliflozin-ckd-evaluation/evidence-snapshot.json",
+      "deliverables/dapagliflozin-ckd-evaluation/evidence-table.csv",
+      "deliverables/dapagliflozin-ckd-evaluation/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「dapagliflozin-ckd-evaluation」没有发现需要处理的问题。",
+        "text": "独立审查：交付物「dapagliflozin-ckd-evaluation」没有发现需要处理的问题。"
+      },
+      {
+        "code": "specialist_cited_source_unrecorded",
+        "severity": "must-fix",
+        "title": "引用来源未记入证据快照",
+        "text": "The report cites https://www.nmpa.gov.cn/, which is absent from evidence-snapshot.json. Record the source there as retrieved, or drop the claim that rests on it."
+      },
+      {
+        "code": "specialist_cited_source_unrecorded",
+        "severity": "must-fix",
+        "title": "引用来源未记入证据快照",
+        "text": "The report cites https://doi.org/10.1016/j.kint.2023.10.018, which is absent from evidence-snapshot.json. Record the source there as retrieved, or drop the claim that rests on it."
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「FARXIGA dapagliflozin tablets label」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「dapagliflozin chronic kidney disease DAP…」——这次检索没有找到可用来源。"
+      }
+    ],
+    "effectiveAgentId": "comprehensive-drug-evaluation",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1262184,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

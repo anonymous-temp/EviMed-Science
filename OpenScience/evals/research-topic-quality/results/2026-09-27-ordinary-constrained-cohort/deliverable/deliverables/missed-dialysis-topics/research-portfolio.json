@@ -1,0 +1,425 @@
+{
+ "schemaVersion": "1.0.0",
+ "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+ "researchContext": {
+  "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+  "population": "Adults receiving maintenance hemodialysis",
+  "studySetting": "Community hospital",
+  "resourceConstraints": [
+   "Six months",
+   "No new recruitment",
+   "One part-time analyst"
+  ]
+ },
+ "reconciliation": {
+  "method": "The managed specialist job's three candidates were kept with their candidateIds and evidence ids, marked reframed, and re-pointed at the report's questions where they survived. Nine candidates were added from this run's evidence expansion. The specialist job's own files are preserved verbatim in specialist-output/.",
+  "specialistJobId": "topic-20260927132630-8ccbf68d5210",
+  "specialistJobStatus": "succeeded",
+  "reframed": {
+   "R1": "no longer a candidate question; became the data-readiness audit",
+   "R2": [
+    "Q3",
+    "Q5"
+   ],
+   "R3": [
+    "Q4"
+   ]
+  },
+  "agendaDelta": "The first-pass scan did not surface the transport, weather, day-of-week or rescheduling comparators; the wider search added them and reorganised the agenda around the fields the described records can actually carry."
+ },
+ "candidates": [
+  {
+   "candidateId": "R1",
+   "title": "Feasibility audit of a psychosocial-physiological mediation chain in single-centre hemodialysis records (first-pass specialist candidate, reframed)",
+   "sourceOpportunityId": "BOM1",
+   "sourceEvidenceIds": [
+    "pubmed_39704368",
+    "pubmed_42410327",
+    "pubmed_39348206",
+    "pubmed_37269433"
+   ],
+   "sourceEvidencePmids": [
+    "39704368",
+    "42410327",
+    "39348206",
+    "37269433"
+   ],
+   "supportLevel": "indirect",
+   "status": "reframed",
+   "reframedInto": [],
+   "lineage": "Specialist job candidate R1 (psychosocial-physiological mediation chain).",
+   "reconciliationNote": "Reframed after evidence expansion: the variables the mediation chain needs (psychological scales, laboratory markers) are outside the supplied data description and recruitment is not allowed, so it is now the field-availability audit in section 5 of the report rather than a candidate question. The width of its evidence set (six records, one of them a case report) is also why it did not survive as a question.",
+   "hypothesis": "Not testable as stated: whether missed-session dates, psychological measures, laboratory values and acute-decompensation outcomes can be extracted and linked in the existing records.",
+   "studyDesign": {
+    "type": "Retrospective record-availability audit",
+    "rationale": "With no recruitment and no biospecimens, variable availability must be established before any mediation model is proposed."
+   },
+   "estimand": "Proportion of records in which each required variable is present, extractable and linkable.",
+   "dataRequirements": "Existing attendance and transport records; psychological measures, laboratory values and outcome dates must be verified as present or absent.",
+   "falsification": "If the psychological or physiological variables are absent or unlinkable, the mediation chain cannot be tested.",
+   "feasibility": "Low as a mediation analysis; high as an audit, and the audit is what the report recommends.",
+   "noveltyBasis": "The cited records study associations between psychological or clinical factors and missed sessions; none establishes that the required variables coexist and link in a single centre's records.",
+   "gaps": [],
+   "notes": [
+    "Psychological and laboratory variables are not part of the supplied data description.",
+    "One specialist evidence item in this set is a case report and cannot carry a population-level claim."
+   ]
+  },
+  {
+   "candidateId": "R2",
+   "title": "Standardising a missed-session exposure phenotype from attendance and transport records (first-pass specialist candidate, reframed)",
+   "sourceOpportunityId": "BOM2",
+   "sourceEvidenceIds": [
+    "pubmed_35243306",
+    "pubmed_40051030",
+    "pubmed_35845340",
+    "pubmed_37071662"
+   ],
+   "sourceEvidencePmids": [
+    "35243306",
+    "40051030",
+    "35845340",
+    "37071662"
+   ],
+   "supportLevel": "indirect",
+   "status": "reframed",
+   "reframedInto": [
+    "Q3",
+    "Q5"
+   ],
+   "lineage": "Specialist job candidate R2 (missed-session exposure-phenotype standardisation).",
+   "reconciliationNote": "Partly occupied: a 113-patient study already recasts attendance as missed minutes with three categories (PMID 35243306), so phenotype construction alone is not new. What survives is transferred into Q3 (definitional sensitivity) and Q5 (trajectories with transport and reason covariates).",
+   "hypothesis": "Whether an explicit comparison of competing definitions of a missed session changes the measured rate and the ranking of patients.",
+   "studyDesign": {
+    "type": "Definitions comparison plus descriptive pattern description",
+    "rationale": "Cheapest question that changes the meaning of every later number."
+   },
+   "estimand": "Missed-session rate under each of six pre-specified definitions and the spread between them.",
+   "dataRequirements": "Session-level attendance, non-attendance reasons, shortening, make-up sessions, transport (fields A-F of the report's section 5).",
+   "falsification": "Definitions agree within 10 percent relative, making definitional sensitivity locally irrelevant.",
+   "feasibility": "High; no outcome linkage required.",
+   "noveltyBasis": "Published rates vary by more than an order of magnitude and reviewers attribute the spread to definitions, but no retrieved study compares definitions inside one cohort (PMID 41003269, crossref_10.1371/journal.pone.0089001); the closest dialysis-specific work fixes a single missed-minutes metric (PMID 35243306).",
+   "gaps": [],
+   "notes": [
+    "Reason fields may be too incomplete to support the excuse-based definitions."
+   ]
+  },
+  {
+   "candidateId": "R3",
+   "title": "Target trial emulation of make-up sessions after a missed treatment (first-pass specialist candidate, retained and sharpened)",
+   "sourceOpportunityId": "BOM3",
+   "sourceEvidenceIds": [
+    "pubmed_35845340",
+    "pubmed_37071662",
+    "pubmed_42719390",
+    "pubmed_40051030"
+   ],
+   "sourceEvidencePmids": [
+    "35845340",
+    "37071662",
+    "42719390",
+    "40051030"
+   ],
+   "supportLevel": "indirect",
+   "status": "reframed",
+   "reframedInto": [
+    "Q4"
+   ],
+   "lineage": "Specialist job candidate R3 (target trial emulation of rescheduling).",
+   "reconciliationNote": "Retained as Q4, with the closest completed work added from this run's expansion (PMID 32734224 and its editorial, DOI 10.1016/j.xkme.2020.01.004), which the first-pass scan had not surfaced.",
+   "hypothesis": "Whether delivering a make-up session attenuates the short-term risk carried by a missed session.",
+   "studyDesign": {
+    "type": "Target trial emulation with a negative-control outcome",
+    "rationale": "Make-up delivery is a strategy, not a patient trait; time-varying confounding by acute illness has to be modelled explicitly."
+   },
+   "estimand": "Per-protocol risk difference and risk ratio for acute care contact at 7 and 30 days.",
+   "dataRequirements": "Make-up linkage, outcome dates, time-varying confounders (fields A, B, C, G).",
+   "falsification": "No difference between strategies, or attenuation to the null under the negative-control check.",
+   "feasibility": "Moderate; gated by outcome linkage and make-up documentation.",
+   "noveltyBasis": "Occupied at national scale as a matched-cohort analysis (PMID 32734224); left is a strategy-form estimand in a capacity-constrained single centre.",
+   "gaps": [],
+   "notes": [
+    "Make-up sessions may not be linked to the missed session in the records.",
+    "Ongoing registrations screened (NCT05003115, NCT05735743, NCT06978127) target adherence interventions, not make-up scheduling; no registered trial of make-up delivery was identified."
+   ]
+  },
+  {
+   "candidateId": "Q1",
+   "title": "Does the position of a missed session within the week modify short-term acute care contact?",
+   "sourceOpportunityId": "EVX-Q1",
+   "sourceEvidenceIds": [
+    "pubmed_32517695",
+    "pubmed_42719390",
+    "europepmc_PMC4393476"
+   ],
+   "sourceEvidencePmids": [
+    "32517695",
+    "42719390",
+    "22869324"
+   ],
+   "supportLevel": "direct",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Does the position of a missed session within the week modify short-term acute care contact?",
+   "studyDesign": {
+    "type": "Within-patient comparison of event rates after a missed first-of-week versus later session, with attended windows as reference."
+   },
+   "estimand": "Rate ratio of acute care contact per 100 patient-weeks by missed-session position.",
+   "dataRequirements": "Session dates with prescribed weekly pattern; emergency-department and admission dates; death dates.",
+   "falsification": "No difference by session position, or the difference disappears once the scheduled interdialytic interval is modelled.",
+   "feasibility": "Moderate; collapses to a process-outcome study if outcome linkage is absent.",
+   "noveltyBasis": "Occupied but not in this setting: the ARO European cohort answered the day-of-week question at 9,397 patients and 3.8 million sessions (PMID 32517695). The axis left is a single community hospital where the transport mode of the missed trip is observable, so the day-of-week effect can be examined for local transport mediation.",
+   "gaps": [],
+   "notes": [
+    "Outcome linkage must be verified before this question is opened."
+   ]
+  },
+  {
+   "candidateId": "Q2",
+   "title": "Which transport arrangements predict missed sessions locally, and does the local ranking match the published one?",
+   "sourceOpportunityId": "EVX-Q2",
+   "sourceEvidenceIds": [
+    "europepmc_PMC12342063",
+    "pubmed_35449011",
+    "pubmed_40861382"
+   ],
+   "sourceEvidencePmids": [
+    "40512563",
+    "35449011",
+    "40861382"
+   ],
+   "supportLevel": "direct",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Which transport arrangements predict missed sessions locally, and does the local ranking match the published one?",
+   "studyDesign": {
+    "type": "Patient-month log-linear model with the log of expected sessions as offset and patient-clustered errors."
+   },
+   "estimand": "Adjusted incidence rate ratio of missed sessions per 100 expected sessions, by transport mode.",
+   "dataRequirements": "Transport mode per patient (stronger: per trip), whether arranged by the hospital, distance or travel time if held; session-level attendance.",
+   "falsification": "No mode-specific difference, or the difference disappears after adjustment for vintage and comorbidity, or the local ranking reverses the published one.",
+   "feasibility": "High if transport mode is recorded per patient; the trip-level version needs field-level verification.",
+   "noveltyBasis": "Occupied at national scale, not locally: the comparator is a 115,982-patient US cohort with mode-specific aIRRs of 1.15-1.31 for missed treatments (PMID 40512563). The axes left are the local transport system and repeated trip-level exposure rather than a single assessment.",
+   "gaps": [],
+   "notes": [
+    "If only a binary hospital-arranged flag survives verification, Q2 becomes a two-group comparison and must be reported as such."
+   ]
+  },
+  {
+   "candidateId": "Q3",
+   "title": "How much does the centre's own missed-session rate move when the definition changes?",
+   "sourceOpportunityId": "EVX-Q3",
+   "sourceEvidenceIds": [
+    "europepmc_PMC12342063",
+    "europepmc_PMC4393476",
+    "pubmed_41003269",
+    "europepmc_PMC8431045"
+   ],
+   "sourceEvidencePmids": [
+    "40512563",
+    "22869324",
+    "41003269",
+    "34444183"
+   ],
+   "supportLevel": "direct",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "How much does the centre's own missed-session rate move when the definition changes?",
+   "studyDesign": {
+    "type": "Descriptive comparison of six pre-specified definitions with exact confidence intervals and patient-level rank correlation."
+   },
+   "estimand": "Missed-session rate under each definition and the spread between the highest and lowest.",
+   "dataRequirements": "Session-level attendance, reasons, shortening, make-up linkage (no outcome linkage needed).",
+   "falsification": "Definitions agree within 10 percent relative; definitional sensitivity is then locally unimportant.",
+   "feasibility": "High; the natural first analysis and the cheapest.",
+   "noveltyBasis": "No direct answer identified in this search: published rates span 0.6 percent of sessions to about 60 percent of patients depending on domain and definition (PMID 41003269; crossref_10.1371/journal.pone.0089001; crossref_10.1371/journal.pone.0041362), and the closest dialysis-specific study fixes one missed-minutes metric (PMID 35243306). The axis left is a head-to-head definitions comparison inside one cohort. Bounded scope: unpublished local audits would not be found by this search.",
+   "gaps": [],
+   "notes": [
+    "Rate comparisons across centres are unsafe until the local definition is fixed."
+   ]
+  },
+  {
+   "candidateId": "Q4",
+   "title": "Does attending a make-up session offset the risk carried by a missed session?",
+   "sourceOpportunityId": "EVX-Q4",
+   "sourceEvidenceIds": [
+    "pubmed_32734224",
+    "crossref_10.1016/j.xkme.2020.01.004",
+    "pubmed_35845340"
+   ],
+   "sourceEvidencePmids": [
+    "32734224",
+    "35845340"
+   ],
+   "supportLevel": "direct",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Does attending a make-up session offset the risk carried by a missed session?",
+   "studyDesign": {
+    "type": "Target trial emulation of two make-up strategies from the index miss, with time-varying confounder adjustment and a negative-control outcome."
+   },
+   "estimand": "Per-protocol risk difference and risk ratio for emergency-department attendance or admission at 7 and 30 days.",
+   "dataRequirements": "Make-up linkage, documented reason, outcome dates.",
+   "falsification": "No difference between strategies, or attenuation to the null under the negative-control check.",
+   "feasibility": "Moderate; gated by make-up documentation and outcome linkage.",
+   "noveltyBasis": "Occupied in a US Medicare cohort as a matched analysis (missed 2.09-fold and rescheduled 1.68-fold higher 7-day hospitalisation; PMID 32734224), with an editorial framing the operational question (crossref_10.1016/j.xkme.2020.01.004). Left: whether the attenuation reproduces in a capacity-constrained single centre under a strategy-form estimand.",
+   "gaps": [],
+   "notes": [
+    "Confounding by indication is the main threat; the negative-control check is a bias probe, not a fix."
+   ]
+  },
+  {
+   "candidateId": "Q5",
+   "title": "Are there distinguishable attendance trajectories, and do they differ by transport and documented reason?",
+   "sourceOpportunityId": "EVX-Q5",
+   "sourceEvidenceIds": [
+    "pubmed_35243306",
+    "pubmed_24748809",
+    "pubmed_39912818"
+   ],
+   "sourceEvidencePmids": [
+    "35243306",
+    "24748809",
+    "39912818"
+   ],
+   "supportLevel": "indirect",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Are there distinguishable attendance trajectories, and do they differ by transport and documented reason?",
+   "studyDesign": {
+    "type": "Group-based trajectory modelling of monthly missed-session counts with two- to five-class solutions compared by BIC and a minimum group-size rule; membership described against exposures."
+   },
+   "estimand": "Posterior group proportions and adjusted odds of group membership.",
+   "dataRequirements": "At least 12 months of session-level attendance, reasons, shortening, transport, baseline covariates.",
+   "falsification": "A one-class solution preferred by BIC; groups that fail a split-half replication; groups that differ in nothing observable.",
+   "feasibility": "Low to moderate: published trajectory precedents use thousands of patients (3,249 in PMID 24748809; 15,667 in PMID 39912818), so a 150-250 patient cohort should attempt at most two or three classes and treat this as exploratory.",
+   "noveltyBasis": "Method occupied, population and setting not: dialysis attendance has been categorised descriptively in 113 patients (PMID 35243306) rather than modelled, and trajectory modelling is routine in medication adherence (PMID 24748809). The axis left is trajectory estimation with transport and documented-reason covariates in a community-hospital cohort.",
+   "gaps": [],
+   "notes": [
+    "A negative result would be uninformative at this sample size; run only if the class solution is stable."
+   ]
+  },
+  {
+   "candidateId": "Q6",
+   "title": "Do missed sessions cluster immediately before acute care contact?",
+   "sourceOpportunityId": "EVX-Q6",
+   "sourceEvidenceIds": [
+    "pubmed_37071662",
+    "pubmed_32517695",
+    "pubmed_32734224"
+   ],
+   "sourceEvidencePmids": [
+    "37071662",
+    "32517695",
+    "32734224"
+   ],
+   "supportLevel": "indirect",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Do missed sessions cluster immediately before acute care contact?",
+   "studyDesign": {
+    "type": "Self-controlled case series or time-stratified case-crossover with conditional Poisson regression and a distributed-lag structure up to seven days."
+   },
+   "estimand": "Incidence rate ratio for event days versus control days within the same patient.",
+   "dataRequirements": "Session dates and outcome dates with exact timing; event counts are the binding constraint.",
+   "falsification": "Exposure frequency does not differ between hazard and control windows, or the estimate is unstable across control-window choices.",
+   "feasibility": "Low at this centre: the derived projection in the report suggests 25-52 admission-linked events per year, which is not enough to support the design.",
+   "noveltyBasis": "Not identified as answered in this setting, but the design precedent is adjacent: weather and missed appointments were studied with exactly this design in 60,135 patients (PMID 37071662), while missed sessions as a trigger were studied with fixed-window cohort (PMID 32517695) and matched-cohort (PMID 32734224) designs.",
+   "gaps": [],
+   "notes": [
+    "Needs a much longer record period or a larger centre than the one described."
+   ]
+  },
+  {
+   "candidateId": "Q7",
+   "title": "Which documented reasons for missing a session predict whether the patient returns for the next scheduled session?",
+   "sourceOpportunityId": "EVX-Q7",
+   "sourceEvidenceIds": [
+    "pubmed_42410327",
+    "pubmed_40051030",
+    "pubmed_39704368"
+   ],
+   "sourceEvidencePmids": [
+    "42410327",
+    "40051030",
+    "39704368"
+   ],
+   "supportLevel": "direct",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Which documented reasons for missing a session predict whether the patient returns for the next scheduled session?",
+   "studyDesign": {
+    "type": "Session-level analysis with patient-clustered models and reason category as a fixed effect."
+   },
+   "estimand": "Adjusted risk difference in next-session attendance by reason category, and the proportion of misses with no recorded reason.",
+   "dataRequirements": "Session-level attendance with reasons, make-up linkage, and the wording actually used by staff.",
+   "falsification": "Next-session attendance does not differ by reason category; or reasons are too incomplete to categorise, which is itself the prerequisite finding.",
+   "feasibility": "High; uses only the records already held and needs no linkage.",
+   "noveltyBasis": "No direct answer identified in this search: the closest works catalogue reasons at patient level (PMID 42410327) and patient-level predictors of non-attendance (PMID 40051030). The axis left is prospective actionability, which a nurse-recall pathway would require. Bounded scope: quality-improvement audits of this shape are rarely published, so this is an absence within the search, not across the field.",
+   "gaps": [],
+   "notes": [
+    "Reason taxonomies must be derived from local wording rather than imposed from published categories."
+   ]
+  },
+  {
+   "candidateId": "Q8",
+   "title": "Do holiday and calendar periods carry a local attendance penalty?",
+   "sourceOpportunityId": "EVX-Q8",
+   "sourceEvidenceIds": [
+    "pubmed_37071662",
+    "pubmed_32517695"
+   ],
+   "sourceEvidencePmids": [
+    "37071662",
+    "32517695"
+   ],
+   "supportLevel": "indirect",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Do holiday and calendar periods carry a local attendance penalty?",
+   "studyDesign": {
+    "type": "Interrupted time series or Poisson regression on daily or weekly counts with harmonic seasonality terms, a pre-specified impact model and explicit autocorrelation handling."
+   },
+   "estimand": "Rate ratio per holiday week and the proportion of those misses later made up.",
+   "dataRequirements": "Session-level attendance, make-up linkage, and an internally derived holiday calendar (no external linkage).",
+   "falsification": "No holiday-period excess after seasonality is modelled, or an excess fully explained by reduced make-up capacity in the same weeks.",
+   "feasibility": "Moderate; the design is well documented but seasonal modelling needs care with autocorrelation (PMID 33055094).",
+   "noveltyBasis": "Partly occupied and the honest statement is that most of it is answered: weather (PMID 37071662) and day of week (PMID 32517695) are settled, and a calendar-linked behaviour (Ramadan fasting, crossref_10.1111/hdi.12369) has been described. What is left is only the internal holiday-period audit, which is nearly free once the dataset exists. Priority is low.",
+   "gaps": [],
+   "notes": [
+    "Excluded from the recommended sequence unless weeks 15-18 remain free."
+   ]
+  },
+  {
+   "candidateId": "Q9",
+   "title": "Can a simple, pre-specified recall rule identify patients who would otherwise miss the next session, and what would it cost in nurse time?",
+   "sourceOpportunityId": "EVX-Q9",
+   "sourceEvidenceIds": [
+    "pubmed_41023004",
+    "pubmed_41203234",
+    "pubmed_35449011"
+   ],
+   "sourceEvidencePmids": [
+    "41023004",
+    "41203234",
+    "35449011"
+   ],
+   "supportLevel": "direct",
+   "status": "added",
+   "lineage": "This run's evidence expansion (subject, method, comparator and absence axes).",
+   "hypothesis": "Can a simple, pre-specified recall rule identify patients who would otherwise miss the next session, and what would it cost in nurse time?",
+   "studyDesign": {
+    "type": "Retrospective evaluation of a rule fixed before the data are examined, reporting operating characteristics and expected contact volume; not a learned model at this sample size."
+   },
+   "estimand": "Sensitivity, specificity, positive predictive value and number needed to contact per missed session flagged.",
+   "dataRequirements": "Previous four weeks of missed sessions, shortening and late arrival, current transport mode.",
+   "falsification": "Positive predictive value no better than the base rate of missing a session, or performance not reproduced in a later period of the same records.",
+   "feasibility": "High for the retrospective evaluation; any claim about the effect of recalling patients needs a different design.",
+   "noveltyBasis": "The prediction target is occupied in an industry abstract but not in accessible peer-reviewed form: a conference abstract reports a no-show model built on 1.55 million weekly records from 172,854 patients (AUC 0.87; pilot sensitivity 0.57, specificity 0.95) with no public identifier, and the follow-on messaging study is published (crossref_10.1038/s41598-017-03184-z) and registered (NCT02970201). What is left is the operational question of contact volume and precision in a small unit; the abstract's performance figures are not transferable and were not used as a benchmark.",
+   "gaps": [],
+   "notes": [
+    "Registry overlap was checked against six registrations (NCT02970201, NCT05003115, NCT05735743, NCT03595748, NCT06978127, NCT03978806); none tests a recall rule in a single centre."
+   ]
+  }
+ ]
+}

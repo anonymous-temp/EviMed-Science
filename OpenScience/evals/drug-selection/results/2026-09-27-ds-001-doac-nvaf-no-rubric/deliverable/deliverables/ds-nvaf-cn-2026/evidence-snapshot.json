@@ -1,0 +1,841 @@
+{
+  "schemaVersion": 1,
+  "snapshotId": "EVSNAP-ds-nvaf-cn-2026-r1",
+  "frozenAt": "2026-09-27T07:30:00Z",
+  "assessmentType": "drug_selection",
+  "scope": {
+    "candidateDrugs": [
+      "阿哌沙班（apixaban）",
+      "利伐沙班（rivaroxaban）",
+      "达比加群酯（dabigatran etexilate）"
+    ],
+    "indication": "非瓣膜性心房颤动患者的卒中与体循环栓塞预防",
+    "population": "成人非瓣膜性房颤住院及门诊患者，含 ≥80 岁与肌酐清除率 30–50 mL/min 亚组",
+    "jurisdiction": "中国（NMPA）",
+    "careSetting": "三级综合医院心内科",
+    "decisionDate": "2026-10-15",
+    "comparisonPerspective": "三级综合医院药事管理与药物治疗学委员会视角；价格口径按 2026-10 可得价格（本轮未取得）",
+    "declaredDomains": [
+      "pharmaceutical_properties",
+      "effectiveness",
+      "safety",
+      "economics",
+      "appropriateness",
+      "accessibility",
+      "innovation",
+      "other"
+    ]
+  },
+  "retrieval": {
+    "adapterStatus": {
+      "drug_selection_evaluation": {
+        "requirements": "available",
+        "retrieve": "unavailable_after_retries (adapter_circuit_open / adapter_unavailable)",
+        "compile": "not_attempted_adapter_unavailable"
+      },
+      "drug_label_search": "available",
+      "guideline_search": "available",
+      "literature_search": "available",
+      "termNormalization": "drug_term_normalize returned the input unchanged for all three INN terms (vocabulary unresolved)"
+    },
+    "queries": [
+      {
+        "id": "Q01",
+        "tool": "drug_selection_evaluation",
+        "action": "requirements",
+        "args": {
+          "candidateDrugs": [
+            "阿哌沙班",
+            "利伐沙班",
+            "达比加群酯"
+          ],
+          "indication": "非瓣膜性心房颤动患者的卒中与体循环栓塞预防"
+        },
+        "result": "ready_with_declared_gaps; missingUserInputs = population, jurisdiction, selectionDomains, scoringRubric, scoringPolicyVersion, decisionDate"
+      },
+      {
+        "id": "Q02",
+        "tool": "drug_selection_evaluation",
+        "action": "retrieve",
+        "result": "failed (timed out, then circuit open) after repeated attempts"
+      },
+      {
+        "id": "Q03",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "阿哌沙班",
+          "limit": 10
+        },
+        "result": "10 index records (all VTE prophylaxis for hip/knee replacement)"
+      },
+      {
+        "id": "Q04",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "阿哌沙班片",
+          "limit": 3
+        },
+        "result": "3 index records, same indication preview"
+      },
+      {
+        "id": "Q05",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "Eliquis",
+          "limit": 5
+        },
+        "result": "error: public source returned HTTP 400"
+      },
+      {
+        "id": "Q06",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "apixaban",
+          "jurisdiction": "US",
+          "limit": 3
+        },
+        "result": "not executed (adapter unavailable)"
+      },
+      {
+        "id": "Q07",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "利伐沙班",
+          "limit": 10
+        },
+        "result": "10 index records"
+      },
+      {
+        "id": "Q08",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "拜瑞妥",
+          "limit": 5
+        },
+        "result": "5 originator index records"
+      },
+      {
+        "id": "Q09",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "达比加群酯",
+          "limit": 10
+        },
+        "result": "10 index records (NVAF indication present)"
+      },
+      {
+        "id": "Q10",
+        "tool": "drug_label_search",
+        "args": {
+          "drug": "泰毕全",
+          "limit": 5
+        },
+        "result": "2 originator index records"
+      },
+      {
+        "id": "Q11",
+        "tool": "drug_label_search",
+        "args": {
+          "labelId": "label:国药准字H20193301",
+          "sections": [
+            "indications",
+            "specification",
+            "dosage",
+            "contraindications",
+            "precautions",
+            "geriatric"
+          ]
+        },
+        "result": "sections read verbatim"
+      },
+      {
+        "id": "Q12",
+        "tool": "drug_label_search",
+        "args": {
+          "labelId": "label:国药准字HJ20200024",
+          "sections": [
+            "indications",
+            "specification",
+            "dosage",
+            "contraindications",
+            "precautions",
+            "geriatric"
+          ]
+        },
+        "result": "sections read verbatim"
+      },
+      {
+        "id": "Q13",
+        "tool": "drug_label_search",
+        "args": {
+          "labelId": "label:国药准字HJ20170137",
+          "sections": [
+            "indications",
+            "specification",
+            "dosage",
+            "contraindications",
+            "precautions"
+          ]
+        },
+        "result": "sections read verbatim"
+      },
+      {
+        "id": "Q14",
+        "tool": "guideline_search",
+        "args": {
+          "query": "心房颤动 抗凝 非维生素K拮抗剂口服抗凝药 卒中预防 中国指南",
+          "language": "zh",
+          "limit": 10
+        },
+        "result": "10 guideline candidates, 9 with preserved text; 心房颤动诊断和治疗中国指南 (2023) retained"
+      },
+      {
+        "id": "Q15",
+        "tool": "literature_search",
+        "args": {
+          "query": "apixaban rivaroxaban dabigatran nonvalvular atrial fibrillation stroke prevention network meta-analysis",
+          "limit": 15
+        },
+        "result": "15 records retained (systematic reviews / meta-analyses)"
+      },
+      {
+        "id": "Q16",
+        "tool": "literature_search",
+        "args": {
+          "query": "apixaban elderly patients atrial fibrillation age 80 ARISTOTLE subgroup",
+          "limit": 10
+        },
+        "result": "10 records retained"
+      },
+      {
+        "id": "Q17",
+        "tool": "literature_search",
+        "args": {
+          "query": "rivaroxaban renal impairment moderate creatinine clearance atrial fibrillation ROCKET AF subgroup",
+          "limit": 10
+        },
+        "result": "10 records retained"
+      },
+      {
+        "id": "Q18",
+        "tool": "literature_search",
+        "args": {
+          "query": "dabigatran elderly patients atrial fibrillation RE-LY age 75 subgroup analysis",
+          "limit": 8
+        },
+        "result": "8 records retained"
+      },
+      {
+        "id": "Q19",
+        "tool": "literature_search",
+        "args": {
+          "query": "non-vitamin K antagonist oral anticoagulants cost-effectiveness China atrial fibrillation",
+          "limit": 8
+        },
+        "result": "8 records retained; 0 China-jurisdiction economic evaluations"
+      },
+      {
+        "id": "Q20",
+        "tool": "literature_search",
+        "args": {
+          "query": "dabigatran renal impairment creatinine clearance 30-50 atrial fibrillation dose",
+          "limit": 8
+        },
+        "result": "8 records retained; none addressed the AF CrCl 30–50 mL/min dosing question"
+      },
+      {
+        "id": "Q21",
+        "tool": "literature_search",
+        "args": {
+          "query": "中国 非瓣膜性心房颤动 新型口服抗凝药 成本效果 药物经济学 华法林",
+          "language": "zh",
+          "limit": 10
+        },
+        "result": "10 records retained; none was an economic evaluation"
+      },
+      {
+        "id": "Q22",
+        "tool": "literature_search",
+        "args": {
+          "pmids": [
+            "19717844",
+            "21870978",
+            "23013026",
+            "23013027"
+          ]
+        },
+        "result": "2 of 4 relevant (RE-LY, ARISTOTLE); the other two PMIDs were unrelated records and were discarded"
+      },
+      {
+        "id": "Q23",
+        "tool": "literature_search",
+        "args": {
+          "pmids": [
+            "21870978",
+            "21830957",
+            "21870979",
+            "20299623"
+          ]
+        },
+        "result": "3 of 4 relevant (ARISTOTLE, ROCKET-AF, HAS-BLED); 1 unrelated record discarded"
+      },
+      {
+        "id": "Q24",
+        "tool": "web_read",
+        "args": {
+          "url": "https://www.nmpa.gov.cn/datasearch/home-index.html"
+        },
+        "result": "error: JavaScript challenge; no page read or preserved"
+      },
+      {
+        "id": "Q25",
+        "tool": "local_artifact_read",
+        "args": {
+          "path": ".evimed-sources/web-pages/9da6c041ad2b6a17/.../page.md"
+        },
+        "result": "Chinese AF guideline landing page, 2,045 bytes; index page only"
+      },
+      {
+        "id": "Q26",
+        "tool": "local_artifact_read",
+        "args": {
+          "path": ".evimed-sources/web-pages/39206328a1b4c6ed/.../page.md"
+        },
+        "result": "apixaban drug-utilization-evaluation article, 26,721 bytes; read"
+      },
+      {
+        "id": "Q27",
+        "tool": "local_artifact_read",
+        "args": {
+          "path": ".evimed-sources/evimed-guidelines/46ccdfba7dee4c19/.../guideline.md"
+        },
+        "result": "2023 Chinese AF guideline, 76,485 bytes; searched. Narrative mentions of apixaban/dabigatran present; NOAC dose-adjustment tables not carried by the preserved text"
+      },
+      {
+        "id": "Q28",
+        "tool": "literature_search",
+        "args": {
+          "pmids": [
+            "24561548",
+            "24895454",
+            "28213368",
+            "21873708",
+            "23229461",
+            "26392326",
+            "33968307",
+            "34949473",
+            "33993379",
+            "24455237",
+            "32451850",
+            "34486094",
+            "30845196",
+            "26354766",
+            "30216091",
+            "39248072"
+          ]
+        },
+        "result": "16 abstracts preserved locally as quotable sources; these preserved texts are the basis of checks/source-numbers.json"
+      },
+      {
+        "id": "Q29",
+        "tool": "literature_search",
+        "args": {
+          "query": "非瓣膜性心房颤动应用新型口服抗凝药依从性分析 高贝贝 / 新型口服抗凝剂与华法林在非瓣膜性心房颤动患者中的应用分析 梁飒"
+        },
+        "result": "the two Chinese records retrieved earlier in the session were not re-retrievable in this state; no preserved full text or abstract exists for them locally, so they were removed from the snapshot and are cited nowhere in the report"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "LBL-APX-01",
+      "type": "label",
+      "title": "阿哌沙班片（四川科伦药业股份有限公司）",
+      "identifier": "国药准字H20193301",
+      "sectionIds": [
+        "label:国药准字H20193301#indications",
+        "label:国药准字H20193301#dosage",
+        "label:国药准字H20193301#contraindications",
+        "label:国药准字H20193301#precautions",
+        "label:国药准字H20193301#geriatric",
+        "label:国药准字H20193301#specification"
+      ],
+      "url": "https://www.315jiage.cn/mn449973.aspx",
+      "source": "evimed-drug-label-index (drug-labels-cb075ba6a4db)",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:15:19Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "sections read verbatim",
+      "version": "9e5b8c44a440d68779b29de2222a6ed61bd301ae665f41407f4febff78813637",
+      "snapshotNote": "index snapshot www.315jiage.cn, exported 2025-12-17"
+    },
+    {
+      "id": "LBL-APX-02",
+      "type": "label",
+      "title": "阿哌沙班片（南京正科医药股份有限公司）",
+      "identifier": "国药准字H20213768",
+      "url": "https://www.315jiage.cn/mn403437.aspx",
+      "source": "evimed-drug-label-index",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:13:12Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "index record only (title + indications preview)",
+      "version": "867c38ab55e9af13b4dab744ec6926d16df0b8a19efe2056cd57e3b54741ac53"
+    },
+    {
+      "id": "LBL-APX-03",
+      "type": "label",
+      "title": "阿哌沙班片（浙江华海药业股份有限公司）",
+      "identifier": "国药准字H20223258",
+      "url": "https://www.315jiage.cn/mn500879.aspx",
+      "source": "evimed-drug-label-index",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:13:12Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "index record only (title + indications preview)",
+      "version": "0885552015cb085f30c6b524d6caa3ce5af62283a68fb1231a0d737c472a6d20"
+    },
+    {
+      "id": "LBL-RIV-01",
+      "type": "label",
+      "title": "利伐沙班片（德国Bayer AG，拜瑞妥/Xarelto）",
+      "identifier": "国药准字HJ20200024",
+      "sectionIds": [
+        "label:国药准字HJ20200024#indications",
+        "label:国药准字HJ20200024#specification",
+        "label:国药准字HJ20200024#dosage",
+        "label:国药准字HJ20200024#contraindications",
+        "label:国药准字HJ20200024#precautions",
+        "label:国药准字HJ20200024#geriatric"
+      ],
+      "url": "https://www.315jiage.cn/mn352411.aspx",
+      "source": "evimed-drug-label-index",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:15:19Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "sections read verbatim",
+      "version": "d4555fcc618a02a9a011989b6e0898849fff1416c0b44576030d1d06ad7800f4"
+    },
+    {
+      "id": "LBL-RIV-02",
+      "type": "label",
+      "title": "利伐沙班片（天方药业有限公司）",
+      "identifier": "国药准字H20223691",
+      "url": "https://www.315jiage.cn/mn567122.aspx",
+      "source": "evimed-drug-label-index",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:13:12Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "index record only (title + indications preview)",
+      "version": "5cb2df1398992282bb465e8c3ffc63838a47c4fb38dad4a06290a357118086d8"
+    },
+    {
+      "id": "LBL-DAB-01",
+      "type": "label",
+      "title": "达比加群酯胶囊（德国Boehringer Ingelheim Pharma GmbH & Co. KG，泰毕全/Pradaxa）",
+      "identifier": "国药准字HJ20170137",
+      "sectionIds": [
+        "label:国药准字HJ20170137#indications",
+        "label:国药准字HJ20170137#specification",
+        "label:国药准字HJ20170137#dosage",
+        "label:国药准字HJ20170137#contraindications",
+        "label:国药准字HJ20170137#precautions"
+      ],
+      "url": "https://www.315jiage.cn/mn427374.aspx",
+      "source": "evimed-drug-label-index",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:15:19Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "sections read verbatim",
+      "version": "96c44d3290a45a128c61435fe33d850398c1d040c4329b8e73c6893473238210"
+    },
+    {
+      "id": "LBL-DAB-02",
+      "type": "label",
+      "title": "达比加群酯胶囊（成都倍特药业股份有限公司）",
+      "identifier": "国药准字H20213234",
+      "url": "https://www.315jiage.cn/mn413630.aspx",
+      "source": "evimed-drug-label-index",
+      "jurisdiction": "China (NMPA)",
+      "retrievedAt": "2026-09-27T07:13:12Z",
+      "evidenceAccess": "regulatory_record",
+      "readLevel": "index record only (title + indications preview)",
+      "version": "c755633abc221a694afab78d08e23db5df593590a3b8274a890f5765f561c64b"
+    },
+    {
+      "id": "RCT-RELY",
+      "type": "rct",
+      "title": "Dabigatran versus warfarin in patients with atrial fibrillation (RE-LY)",
+      "identifier": "PMID:19717844",
+      "doi": "10.1056/NEJMoa0905561",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19717844/",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-27T07:15:30Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read"
+    },
+    {
+      "id": "RCT-ARISTOTLE",
+      "type": "rct",
+      "title": "Apixaban versus warfarin in patients with atrial fibrillation (ARISTOTLE)",
+      "identifier": "PMID:21870978",
+      "doi": "10.1056/NEJMoa1107039",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21870978/",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-27T07:14:46Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read"
+    },
+    {
+      "id": "RCT-ROCKET",
+      "type": "rct",
+      "title": "Rivaroxaban versus warfarin in nonvalvular atrial fibrillation (ROCKET AF)",
+      "identifier": "PMID:21830957",
+      "doi": "10.1056/NEJMoa1009638",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21830957/",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-27T07:14:46Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read"
+    },
+    {
+      "id": "AGE-ARISTOTLE",
+      "type": "rct-subgroup",
+      "title": "Efficacy and safety of apixaban compared with warfarin according to age for stroke prevention in atrial fibrillation: observations from the ARISTOTLE trial",
+      "identifier": "PMID:24561548",
+      "doi": "10.1093/eurheartj/eht529",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/24561548/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:33Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID24561548"
+    },
+    {
+      "id": "AGE-ROCKET",
+      "type": "rct-subgroup",
+      "title": "Efficacy and safety of rivaroxaban compared with warfarin among elderly patients with nonvalvular atrial fibrillation in ROCKET AF",
+      "identifier": "PMID:24895454",
+      "doi": "10.1161/CIRCULATIONAHA.113.004922",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/24895454/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:36Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID24895454"
+    },
+    {
+      "id": "AGE-RELY",
+      "type": "rct-subgroup",
+      "title": "Effects of dabigatran according to age in atrial fibrillation",
+      "identifier": "PMID:28213368",
+      "doi": "10.1136/heartjnl-2016-310555",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28213368/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:44Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID28213368"
+    },
+    {
+      "id": "REN-ROCKET",
+      "type": "rct-subgroup",
+      "title": "Prevention of stroke and systemic embolism with rivaroxaban compared with warfarin in patients with non-valvular atrial fibrillation and moderate renal impairment",
+      "identifier": "PMID:21873708",
+      "doi": "10.1093/eurheartj/ehr342",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21873708/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:36Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID21873708"
+    },
+    {
+      "id": "REN-JROCKET",
+      "type": "rct-subgroup",
+      "title": "Safety and efficacy of adjusted dose of rivaroxaban in Japanese patients with non-valvular atrial fibrillation: subanalysis of J-ROCKET AF for patients with moderate renal impairment",
+      "identifier": "PMID:23229461",
+      "doi": "10.1253/circj.CJ-12-0899",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/23229461/",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-27T07:15:36Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactPath": ".evimed-sources/pubmed/PMID23229461/33096d4f5130ce266f8040ca7fb39ee7bd14db09dd7e49b8f2bcb97687427519/abstract.md"
+    },
+    {
+      "id": "CN-DAB-ELDERLY",
+      "type": "observational",
+      "title": "Stroke prevention using dabigatran in elderly Chinese patients with atrial fibrillation",
+      "identifier": "PMID:26392326",
+      "doi": "10.1016/j.hrthm.2015.06.001",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26392326/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:44Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID26392326"
+    },
+    {
+      "id": "ASIA-META",
+      "type": "systematic-review",
+      "title": "Dabigatran, rivaroxaban, and apixaban are superior to warfarin in Asian patients with non-valvular atrial fibrillation: an updated meta-analysis",
+      "identifier": "PMID:33968307",
+      "doi": "10.4330/wjc.v13.i4.82",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33968307/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:14:34Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID33968307"
+    },
+    {
+      "id": "MA-APX-RIV",
+      "type": "systematic-review",
+      "title": "Meta-analysis comparing apixaban versus rivaroxaban for management of patients with nonvalvular atrial fibrillation",
+      "identifier": "PMID:34949473",
+      "doi": "10.1016/j.amjcard.2021.10.022",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34949473/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:14:34Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID34949473"
+    },
+    {
+      "id": "MA-DOAC-NET",
+      "type": "systematic-review",
+      "title": "Comparative effectiveness and safety of direct acting oral anticoagulants in nonvalvular atrial fibrillation for stroke prevention: a systematic review and meta-analysis",
+      "identifier": "PMID:33993379",
+      "doi": "10.1007/s10654-021-00753-5",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33993379/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:33Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID33993379"
+    },
+    {
+      "id": "MA-ASIAN-3",
+      "type": "systematic-review",
+      "title": "Dabigatran, rivaroxaban, or apixaban versus warfarin in patients with nonvalvular atrial fibrillation: a systematic review and meta-analysis of subgroups",
+      "identifier": "PMID:24455237",
+      "doi": "10.1155/2013/640723",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/24455237/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:14:34Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID24455237"
+    },
+    {
+      "id": "J-ELD-AF",
+      "type": "observational",
+      "title": "Clinical implications of assessment of apixaban levels in elderly atrial fibrillation patients: J-ELD AF registry sub-cohort analysis",
+      "identifier": "PMID:32451850",
+      "doi": "10.1007/s00228-020-02896-y",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32451850/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:33Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID32451850"
+    },
+    {
+      "id": "APPROP-80",
+      "type": "observational",
+      "title": "Direct oral anticoagulants and non-valvular atrial fibrillation: compliance with dose level guidelines in patients aged 80 years and over",
+      "identifier": "PMID:34486094",
+      "doi": "10.1007/s40266-021-00894-y",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34486094/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:33Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID34486094"
+    },
+    {
+      "id": "OCTO-KOR",
+      "type": "observational",
+      "title": "Effectiveness and safety of non-vitamin K antagonist oral anticoagulants in octogenarian patients with non-valvular atrial fibrillation",
+      "identifier": "PMID:30845196",
+      "doi": "10.1371/journal.pone.0211765",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30845196/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:48Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID30845196"
+    },
+    {
+      "id": "CN-DAB-REAL",
+      "type": "observational",
+      "title": "Dabigatran use in elderly patients with atrial fibrillation",
+      "identifier": "PMID:26354766",
+      "doi": "10.1160/TH15-03-0242",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26354766/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:44Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID26354766"
+    },
+    {
+      "id": "PK-ELDERLY-JP",
+      "type": "observational",
+      "title": "Pharmacokinetics of anticoagulants apixaban, dabigatran, edoxaban and rivaroxaban in elderly Japanese patients with atrial fibrillation treated in one general hospital",
+      "identifier": "PMID:30216091",
+      "doi": "10.1080/00498254.2018.1514471",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30216091/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:33Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID30216091"
+    },
+    {
+      "id": "RCT-ELDERLY-3ARM",
+      "type": "observational",
+      "title": "Application value and safety analysis of warfarin, rivaroxaban, and dabigatran ester in elderly patients with atrial fibrillation",
+      "identifier": "PMID:39248072",
+      "doi": "10.1002/clc.24324",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39248072/",
+      "source": "evimed-literature",
+      "retrievedAt": "2026-09-27T07:15:44Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID39248072"
+    },
+    {
+      "id": "CN-DUE-APX",
+      "type": "journal-article",
+      "title": "某三甲医院阿哌沙班药物利用评价标准的建立与实践",
+      "identifier": "doi:10.3870/j.issn.1004-0781.2023.10.025",
+      "url": "https://www.yydbzz.com/article/2023/1004-0781/1004-0781-42-10-1561.shtml",
+      "source": "web-page",
+      "retrievedAt": "2026-09-27T07:17:00Z",
+      "evidenceAccess": "full_text",
+      "readLevel": "full text read from local preserved capture (sha256 39206328a1b4c6ed62d4850b27546643c6c2477d27ddb8f7379f9e985c6d2f79)"
+    },
+    {
+      "id": "GDL-CN-AF-2023",
+      "type": "guideline",
+      "title": "心房颤动诊断和治疗中国指南",
+      "publisher": "中华医学会心血管病学分会",
+      "year": "2023",
+      "url": "https://csc.cma.org.cn/art/2023/6/21/art_619_51441.html",
+      "source": "evimed-guideline",
+      "retrievedAt": "2026-09-27T07:14:31Z",
+      "evidenceAccess": "full_text",
+      "readLevel": "preserved full text searched (76,485 bytes); NOAC dose-adjustment tables not carried by the preserved text"
+    },
+    {
+      "id": "GDL-CN-AF-2015",
+      "type": "guideline",
+      "title": "2015 中国心房颤动患者卒中防治指导规范",
+      "publisher": "国家卫生计生委脑卒中防治工程委员会",
+      "year": "2015",
+      "source": "evimed-guideline",
+      "retrievedAt": "2026-09-27T07:14:31Z",
+      "evidenceAccess": "full_text",
+      "readLevel": "preserved full text partially read",
+      "note": "no public resolvable URL recovered; not cited in the report body"
+    },
+    {
+      "id": "SCORE-HASBLED",
+      "type": "observational",
+      "title": "A novel user-friendly score (HAS-BLED) to assess 1-year risk of major bleeding in patients with atrial fibrillation: the Euro Heart Survey",
+      "identifier": "PMID:20299623",
+      "doi": "10.1378/chest.10-0134",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/20299623/",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-27T07:14:46Z",
+      "evidenceAccess": "abstract",
+      "readLevel": "abstract read",
+      "artifactId": ".evimed-sources/pubmed/PMID20299623"
+    }
+  ],
+  "evidenceGaps": [
+    {
+      "id": "GAP-01",
+      "domain": "pharmaceutical_properties",
+      "candidate": "阿哌沙班",
+      "gap": "中国（NMPA）说明书索引中，阿哌沙班片的适应症段落只含『髋关节或膝关节择期置换术的成年患者，预防静脉血栓栓塞事件(VTE)』；本轮未取得任何载有非瓣膜性房颤适应症的中国说明书。",
+      "consequence": "阿哌沙班在本适应症下是否属中国批准适应症，本轮无法确认；其给药方案、肾功能与高龄减量标准不能从中国说明书核验。"
+    },
+    {
+      "id": "GAP-02",
+      "domain": "pharmaceutical_properties",
+      "candidate": "利伐沙班",
+      "gap": "所读拜瑞妥说明书条目规格为 2.5mg*14片，其用法用量段落只覆盖骨科 VTE 预防（10 mg 每日一次）；非瓣膜性房颤适应症段落存在，但对应的 20 mg/15 mg 给药段落本轮未逐字读取。",
+      "consequence": "非瓣膜性房颤的利伐沙班中国说明书剂量只能由随机试验方案（20 mg 每日一次，CrCl 30–49 mL/min 减为 15 mg）间接支持。"
+    },
+    {
+      "id": "GAP-03",
+      "domain": "all",
+      "candidate": "all",
+      "gap": "NMPA 数据查询页对本部署返回 JavaScript 质询，未读取；无法用监管原始库核验上述说明书快照的时效性。",
+      "consequence": "全部说明书证据的版本时效需在药事会前用现行批准说明书复核。"
+    },
+    {
+      "id": "GAP-04",
+      "domain": "appropriateness",
+      "candidate": "all",
+      "gap": "《心房颤动诊断和治疗中国指南》（2023）的保存文本未携带 NOAC 剂量调整表（表 11）与肾功能剂量图（图 2）的表格内容。",
+      "consequence": "中国指南层面的剂量调整推荐未能逐字核验，本报告不引用该表的具体数值。"
+    },
+    {
+      "id": "GAP-05",
+      "domain": "economics",
+      "candidate": "all",
+      "gap": "本轮未取得中国境内任何候选药的价格记录、集采中选价或医保支付口径；也未检索到中国辖区的药物经济学评价（两次检索均返回 0 条经济学评价）。",
+      "consequence": "经济学维度无法进行候选药间比较；不得以境外价格或境外 ICER 代替。"
+    },
+    {
+      "id": "GAP-06",
+      "domain": "accessibility",
+      "candidate": "all",
+      "gap": "未取得医保目录、医院目录、可及性或供应相关记录。",
+      "consequence": "可及性维度只能依据上市许可与依从性研究间接讨论，不能给出采购或报销判断。"
+    },
+    {
+      "id": "GAP-07",
+      "domain": "effectiveness",
+      "candidate": "阿哌沙班",
+      "gap": "阿哌沙班在中国（NMPA）适应症差异使其在本适应症下的中国境内有效性证据链缺少说明书一环；且未检索到中国人群头对头随机比较。",
+      "consequence": "阿哌沙班的有效性结论主要来自国际随机试验与非中国人群真实世界研究，外推需标注。"
+    },
+    {
+      "id": "GAP-08",
+      "domain": "other",
+      "gap": "本轮未检索到针对三个候选药之间、在中国三级医院场景下的头对头随机对照试验。",
+      "consequence": "候选药间比较只能依靠间接比较与观察性研究，存在残余混杂与选择偏倚。"
+    },
+    {
+      "id": "GAP-09",
+      "domain": "accessibility",
+      "candidate": "all",
+      "gap": "中国境内的处方结构、停药率与依从性数据本轮未能保留可归档的原文或摘要。",
+      "consequence": "可及性维度整体保留为未评估；不以致敬式引用或推断替代。"
+    }
+  ],
+  "notes": [
+    "Indexed label copies are snapshots; a label may have been revised since the snapshot was exported (2025-12-17).",
+    "Bibliographic metadata or an abstract does not establish a study's full design, outcome definitions, or certainty; claims in the report are worded to the level actually read.",
+    "A failed or empty search is recorded as an evidence gap, never as a zero score or as evidence against a candidate."
+  ],
+  "removedSources": [
+    {
+      "id": "CN-ADHERENCE",
+      "title": "非瓣膜性心房颤动应用新型口服抗凝药依从性分析",
+      "url": "https://www.sinomed.ac.cn/zh/detail.do?ui=2020333295",
+      "reason": "record retrieved earlier in the session, but no preserved artifact for it could be produced in this state; without a preserved text its numbers cannot be resolved, so it was removed from the snapshot and from the report"
+    },
+    {
+      "id": "CN-PRACTICE-SURVEY",
+      "title": "新型口服抗凝剂与华法林在非瓣膜性心房颤动患者中的应用分析",
+      "url": "https://chkdx.cnki.net/kcms/detail/detail.aspx?FileName=YNBZ201708004&DbName=CHKJ2017",
+      "reason": "same as CN-ADHERENCE"
+    }
+  ]
+}
