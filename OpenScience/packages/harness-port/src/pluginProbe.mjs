@@ -39,16 +39,48 @@ export async function pluginRuntimeBusy(ctx) {
   return false
 }
 
+/**
+ * A probe failure that says which check failed and why, not only that one did.
+ *
+ * The code stays the first word, so every reader matching on it still matches;
+ * what follows is the reason, bounded and on one line. The reasons are the
+ * probe's own findings and the citation tools' own error text, which the
+ * managed transport already reduces to its codes (no address, no token).
+ * The first production apply (2026-09-27) failed with nothing recorded but a
+ * bare code, which could not tell a token the runtime could not read from a
+ * gateway it could not reach from a source that said no.
+ * @param {string} code @param {string} [reason]
+ */
+function probeFailure(code, reason = '') {
+  // eslint-disable-next-line no-control-regex
+  const detail = String(reason).replace(/[\u0000-\u001f\u007f]+/gu, ' ').trim().slice(0, 240)
+  return new Error(detail ? `${code}: ${detail}` : code)
+}
+
+/** The failed checks a `cite_health` result reports, as one line.
+ * @param {any} health */
+function failedHealthChecks(health) {
+  const checks = Array.isArray(health?.checks) ? health.checks : []
+  const failed = checks.filter((/** @type {any} */ check) => check?.ok !== true)
+    .map((/** @type {any} */ check) => `${String(check?.name ?? 'check')} ${String(check?.detail ?? '')}`.trim())
+  return failed.length ? `cite_health: ${failed.join('; ')}` : 'cite_health did not report ok'
+}
+
 /** Read the metadata provided in that same Agent scope, then its real registry.
  * @param {any} ctx @param {any} agent */
 export async function verifyCitationAgent(ctx, agent) {
   const { scopeChainOf } = await loadHarnessModule('@deepseek-ai/dsh-scope')
   const config = scopeChainOf(agent).map((/** @type {object} */ scope) => citationConfigurations.get(scope)).find(Boolean)
-  if (!config || config.binaryVersion !== '0.3.2' || !Number.isSafeInteger(config.timeoutMs)
+  if (!config) throw probeFailure('citation_probe_config_invalid', 'no citation configuration registered in this agent scope')
+  if (config.binaryVersion !== '0.3.2' || !Number.isSafeInteger(config.timeoutMs)
     || config.timeoutMs < 2000 || config.timeoutMs > 15000 || !Number.isSafeInteger(config.revision)
-    || config.revision < 0 || typeof config.enabled !== 'boolean') throw new Error('citation_probe_config_invalid')
+    || config.revision < 0 || typeof config.enabled !== 'boolean') {
+    throw probeFailure('citation_probe_config_invalid', `binaryVersion=${config.binaryVersion} timeoutMs=${config.timeoutMs} revision=${config.revision} enabled=${config.enabled}`)
+  }
   const tools = CITATION_TOOLS.filter(name => Boolean(ctx.tools.get(name, agent)))
-  if (tools.length !== (config.enabled ? CITATION_TOOLS.length : 0)) throw new Error('citation_probe_registrations_invalid')
+  if (tools.length !== (config.enabled ? CITATION_TOOLS.length : 0)) {
+    throw probeFailure('citation_probe_registrations_invalid', `enabled=${config.enabled}, registered ${tools.length ? tools.join(',') : 'none'}`)
+  }
   if (config.enabled) {
     const [{ Context }, { ToolRuntime }, { SystemPrompt }] = await Promise.all([
       loadHarnessModule('@deepseek-ai/cordis'), loadHarnessModule('@deepseek-ai/dsh-tools'),
@@ -66,13 +98,15 @@ export async function verifyCitationAgent(ctx, agent) {
         const execute = async (/** @type {string} */ name, /** @type {any} */ args) => {
           const result = await pipeline.execute({ agent, callId: `evimed-plugin-${name}-${Date.now()}`, name,
             arguments: args, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
-          if (result.isError) throw new Error('citation_probe_gateway_failed')
+          if (result.isError) throw probeFailure('citation_probe_gateway_failed', `${name}: ${result.error?.message ?? 'failed'}`)
           return result.value
         }
         const health = await execute('cite_health', {})
-        if (health?.ok !== true) throw new Error('citation_probe_gateway_failed')
+        if (health?.ok !== true) throw probeFailure('citation_probe_gateway_failed', failedHealthChecks(health))
         const lookup = await execute('cite_lookup', { doi: DOI })
-        if (!Array.isArray(lookup?.works) || !lookup.works.some((/** @type {any} */ work) => work.doi === DOI)) throw new Error('citation_probe_lookup_failed')
+        if (!Array.isArray(lookup?.works) || !lookup.works.some((/** @type {any} */ work) => work.doi === DOI)) {
+          throw probeFailure('citation_probe_lookup_failed', `cite_lookup returned ${Array.isArray(lookup?.works) ? `${lookup.works.length} work(s) without ${DOI}` : 'no works'}`)
+        }
       })
     } finally { await isolated.fiber.dispose() }
   }
@@ -92,7 +126,7 @@ export async function registerPluginProbe(ctx) {
     }
     async status() { return { busy: await pluginRuntimeBusy(ctx) } }
     async verify() {
-      if (await pluginRuntimeBusy(ctx)) throw new Error('citation_probe_runtime_busy')
+      if (await pluginRuntimeBusy(ctx)) throw probeFailure('citation_probe_runtime_busy', 'an agent is running, has queued input or is in maintenance')
       const { Context } = await loadHarnessModule('@deepseek-ai/cordis')
       const workspace = await mkdtemp(path.join(tmpdir(), 'evimed-plugin-check-'))
       try {

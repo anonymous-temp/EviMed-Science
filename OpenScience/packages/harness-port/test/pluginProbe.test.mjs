@@ -39,6 +39,43 @@ test('proof observes actual agent registrations and executes only fixed health a
   assert.equal(calls.length,2)
 })
 
+test('a failed proof says which check failed and why, with the tools\' own reason', async () => {
+  // The first production apply (2026-09-27) failed with nothing recorded; a
+  // bare `citation_probe_gateway_failed` could not tell a token the runtime
+  // could not read from a gateway it could not reach from a source that said no.
+  const { defineTool } = await loadHarnessModule('@deepseek-ai/dsh-tools')
+  const names = ['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health']
+  /** @param {Record<string, () => any>} behaviour */
+  const probe = async (behaviour) => {
+    const agent = { runMaintenance: async (/** @type {any} */ operation) => operation(AbortSignal.timeout(1000)) }
+    const definitions = new Map(names.map(name => [name, defineTool({
+      name, description: name, parameters: name === 'cite_lookup' ? { doi: { type: 'string', required: true } } : {},
+      output: { schema: { type: 'object', additionalProperties: true }, render: () => [] },
+      execute: async () => (behaviour[name] ?? (() => ({ ok: true })))(),
+    })]))
+    await registerCitationConfiguration({ agent, effect: (/** @type {any} */ install) => install() },
+      { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+    return verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => definitions.get(name) } }, agent)
+  }
+  await assert.rejects(probe({ cite_health: () => ({ ok: false, checks: [{ name: 'Crossref API', ok: false, detail: 'citation_gateway_token_unavailable' }, { name: '请求配置', ok: true }] }) }),
+    { message: 'citation_probe_gateway_failed: cite_health: Crossref API citation_gateway_token_unavailable' })
+  await assert.rejects(probe({ cite_health: () => { throw new Error('citation_gateway_unavailable') } }),
+    (/** @type {any} */ error) => /^citation_probe_gateway_failed: cite_health: /.test(error.message) && error.message.includes('citation_gateway_unavailable'))
+  await assert.rejects(probe({ cite_lookup: () => ({ works: [{ doi: '10.1/other' }] }) }),
+    { message: 'citation_probe_lookup_failed: cite_lookup returned 1 work(s) without 10.1038/nphys1170' })
+  // A reason is one bounded line, whatever the tool said.
+  await assert.rejects(probe({ cite_health: () => ({ ok: false, checks: [{ name: 'Crossref API', ok: false, detail: `line\nbreak ${'x'.repeat(500)}` }] }) }),
+    (/** @type {any} */ error) => !/\n/.test(error.message) && error.message.length <= 'citation_probe_gateway_failed: '.length + 240)
+  // And the registrations a proof found, when they are not the ones it needs.
+  const agent = { runMaintenance: async () => {} }
+  await registerCitationConfiguration({ agent, effect: (/** @type {any} */ install) => install() },
+    { revision: 1, enabled: true, timeoutMs: 4000, binaryVersion: '0.3.2' })
+  await assert.rejects(verifyCitationAgent({ tools: { get: (/** @type {string} */ name) => name === 'cite_health' ? {} : undefined } }, agent),
+    { message: 'citation_probe_registrations_invalid: enabled=true, registered cite_health' })
+  await assert.rejects(verifyCitationAgent({ tools: { get: () => undefined } }, { runMaintenance: async () => {} }),
+    { message: 'citation_probe_config_invalid: no citation configuration registered in this agent scope' })
+})
+
 test('the isolated native pipeline still validates registered input and output schemas', async () => {
   const { defineTool } = await loadHarnessModule('@deepseek-ai/dsh-tools')
   for (const invalid of ['input', 'output']) {
