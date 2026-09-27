@@ -31,6 +31,10 @@ For an open-domain request that asks for a drug-safety analysis or structured
 pharmacovigilance report, call `mcp__evimed__drug_safety_analysis` with
 `action=capabilities`, then start the managed job with the drug and optional
 reaction terms. Record its job id and poll with `waitSeconds=45` until terminal.
+The job alone can take most of this capability's 20–40 minutes. Keep polling
+while `updatedAt` advances (every 30 s); treat the job as failed only on a
+terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+the state you observed either way.
 When the user or protocol declares aliases, exact FAERS role codes,
 administration routes, a target study window, or a wider background window,
 pass them as `drugAliases`, `suspectRoles`, `administrationRoutes`,

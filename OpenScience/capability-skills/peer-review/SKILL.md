@@ -14,7 +14,10 @@ The review is decision support for authors and editors, not a journal decision.
 
 1. Confirm the workspace-relative manuscript and its likely article type. Call
    `mcp__evimed__peer_review` with `action=capabilities`, then start and poll the job
-   with `waitSeconds=45` until terminal.
+   with `waitSeconds=45` until terminal. The job alone can take most of this
+   capability's 20–120 minutes. Keep polling while `updatedAt` advances (every
+   30 s); treat the job as failed only on a terminal failure or when `updatedAt`
+   has not moved for 10 minutes, and record the state you observed either way.
 2. Preserve the selected reporting rubrics and every evidence location. Separate
    confirmed defects from uncertain findings caused by parsing or retrieval
    limits. Never claim that a missing item is absent when the relevant section,

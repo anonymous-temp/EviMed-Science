@@ -1870,9 +1870,12 @@ test("a capability's two skill copies never drift apart by more than their known
   // side): the landmark-tracing section in clinical-evidence-synthesis (+23)
   // and its paragraph in the three drug-evaluation skills (+6 each), and the
   // "Method priors" section in the four engine skills (+10 each).
+  // Raised on 2026-09-27, same direction: the six skills that poll a managed
+  // engine job say how long it may run and when a job whose `updatedAt` stopped
+  // advancing counts as failed (+4 each; +1 for the unwrapped MR paragraph).
   const knownDivergence = {
-    "adr-analysis": 28,
-    "bibliometric-analysis": 28,
+    "adr-analysis": 32,
+    "bibliometric-analysis": 32,
     "clinical-evidence-synthesis": 246,
     "comprehensive-drug-evaluation": 24,
     "dataset-research-scoping": 41,
@@ -1881,13 +1884,13 @@ test("a capability's two skill copies never drift apart by more than their known
     // revision-notes lines into the retained copy; none was removed, and the
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
-    "mendelian-randomization": 10,
-    "meta-analysis": 28,
+    "mendelian-randomization": 11,
+    "meta-analysis": 32,
     "off-label-analysis": 24,
-    "peer-review": 18,
+    "peer-review": 22,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are
     // DSH-only; the retained kernel copy is not edited.
-    "research-topic-selection": 50,
+    "research-topic-selection": 54,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

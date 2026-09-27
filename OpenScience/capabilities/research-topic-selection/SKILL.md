@@ -34,6 +34,10 @@ highly that the wider search shows was answered in 2024 is a finding.
    that do not materially change the direction.
 2. Call `mcp__evimed__research_topic_selection` with `action=capabilities`, start the
    job, record the job id, and poll with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 20–90 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
    Keep `researchDirection` as the original retrieval direction. Pass supplied
    context separately as `availableData` (string, at most 4000 characters),
    `population` and `studySetting` (strings, at most 1000 characters each), and

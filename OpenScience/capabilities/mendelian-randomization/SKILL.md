@@ -16,6 +16,7 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
 1. Call `mcp__evimed__mendelian_randomization` with `action=capabilities`. Report missing R, model or Python runtime explicitly. Missing OpenGWAS credentials blocks remote data and online LD clumping; it does not block two supplied local files with declared preclumped instruments.
 2. Start the job with the normalized exposure, outcome, language, direction and the explicit source objects below when using uploaded files.
    Record the job id and poll it with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 30–180 minutes. Keep polling while `updatedAt` advances (every 30 s); treat the job as failed only on a terminal failure or when `updatedAt` has not moved for 10 minutes, and record the state you observed either way.
 3. Do not invent SNPs, instrument counts, F statistics, effect estimates,
    heterogeneity, pleiotropy, Steiger direction, or sensitivity results. Those
    values must come from the deterministic MR engines and their files.

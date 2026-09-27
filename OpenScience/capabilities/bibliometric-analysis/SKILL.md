@@ -16,6 +16,10 @@ It does not estimate clinical efficacy, treatment effects, or evidence certainty
    biomedical concepts over a long natural-language conclusion.
 2. Call `mcp__evimed__bibliometric_analysis` with `action=capabilities`, then start the
    managed job and poll its job id with `waitSeconds=45` until terminal.
+   The job alone can take most of this capability's 20–120 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
 3. Preserve the exact query, retrieval date, database, record count, cleaning
    rules, and network construction settings. Report failed optional modules as
    failed; do not silently describe missing charts or networks as completed.

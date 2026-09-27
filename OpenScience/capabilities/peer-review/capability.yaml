@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: peer-review
-version: 1.0.1
+version: 1.0.2
 title: 论文同行评审
 category: 研究质量
 description: 按研究类型匹配报告规范，对上传论文的方法学、统计学、完整性和证据位置进行审查，并给出可执行的修改建议。

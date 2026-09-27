@@ -41,6 +41,10 @@ full text.
 3. Poll with `action=status`, that job id, and `waitSeconds=45`. A queued or
    running response is not a completed review. Do not manufacture interim study counts,
    effects, GRADE ratings, figures, or conclusions.
+   The job alone can take most of this capability's 30–180 minutes. Keep polling
+   while `updatedAt` advances (every 30 s); treat the job as failed only on a
+   terminal failure or when `updatedAt` has not moved for 10 minutes, and record
+   the state you observed either way.
 4. At the terminal response, preserve the exact `releaseStatus`, artifact paths,
    warnings, blockers, and next actions. `blocked` means the package is not
    submission-ready. `ready_with_warnings` means the warnings still require
