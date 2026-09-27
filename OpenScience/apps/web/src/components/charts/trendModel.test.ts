@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHART_STROKES } from "@evimed/design-tokens";
+import { decalOption } from "./echartsBase";
 import { heatStep } from "./HeatGrid";
 import { chartOption, ruleLabelPlaces } from "./TrendChart";
 import { MAX_RIVALS, OWN_COLOR, RIVAL_COLORS, rivalColor, trendModel } from "./trendModel";
@@ -114,6 +115,25 @@ describe("a trend's labels and lines (E8)", () => {
     expect(option.series.find((series) => series.name === "诺和盈")!.lineStyle!.width).toBe(CHART_STROKES.other);
     const target = option.series.find((series) => series.name === "信尔美")!.markLine!.data.find((rule) => rule.yAxis === 65)!;
     expect(target.lineStyle.width).toBe(1);
+  });
+
+  it("under patterns keeps ours solid with circles and gives each rival its own dash and marker (spec §32.13 rule 4)", () => {
+    const option = chartOption(trendModel({
+      labels,
+      own: { name: "信尔美", values: [44, 50, 61] },
+      rivals: [{ name: "诺和盈", values: [70, 71, 72] }, { name: "司美", values: [30, 32, 35] }],
+      band: 3,
+    }), format);
+    type Drawn = Series & { symbol?: string; silent?: boolean; lineStyle?: { type?: unknown; width?: number; opacity?: number } };
+    const series = (decalOption(option, true) as unknown as { series: Drawn[] }).series;
+    const byName = (name: string) => series.find((entry) => entry.name === name)!;
+    expect([byName("信尔美").lineStyle?.type, byName("信尔美").symbol]).toEqual(["solid", "circle"]);
+    expect([byName("诺和盈").lineStyle?.type, byName("诺和盈").symbol]).toEqual(["dashed", "rect"]);
+    expect([byName("司美").lineStyle?.type, byName("司美").symbol]).toEqual(["dotted", "triangle"]);
+    // The band's two helper lines draw no stroke and take no pattern.
+    expect(series.filter((entry) => entry.silent).every((entry) => entry.lineStyle?.type === undefined && entry.symbol === "none")).toBe(true);
+    // The weights are still the token table's.
+    expect(byName("信尔美").lineStyle?.width).toBe(CHART_STROKES.own);
   });
 });
 

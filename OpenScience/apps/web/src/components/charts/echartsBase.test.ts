@@ -1,9 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BarChart } from "echarts/charts";
+import { BarChart, LineChart } from "echarts/charts";
 import { GridComponent } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
 import {
+  LINE_PATTERNS,
+  PATTERN_MARKER,
   decalOption,
   echarts,
   motionOption,
@@ -112,7 +114,7 @@ function fakeContrastQueries() {
 /** Draws an option the way the app registers ECharts, but to an SVG string: jsdom has no canvas. */
 function drawn(option: Parameters<typeof decalOption>[0]): string {
   registerCharts();
-  echarts.use([BarChart, GridComponent, SVGRenderer]);
+  echarts.use([BarChart, LineChart, GridComponent, SVGRenderer]);
   const chart = echarts.init(null, null, { renderer: "svg", ssr: true, width: 400, height: 240 });
   chart.setOption(option);
   const svg = chart.renderToSVGString();
@@ -135,6 +137,38 @@ describe("patterns as well as colour (spec §32.13 rule 4)", () => {
     const own = decalOption({ ...bars, aria: { label: { enabled: true } } }, true) as { aria: { label: { enabled: boolean } } };
     expect(own.aria.label.enabled).toBe(true);
     expect(decalOption(bars, false)).toBe(bars);
+  });
+
+  it("gives each line its own dash and marker shape, and leaves the band's invisible floor and the bars alone", () => {
+    const lines = {
+      animation: false,
+      xAxis: { type: "category", data: ["9/1", "9/8", "9/15"] },
+      yAxis: { type: "value" },
+      series: [
+        { type: "line", silent: true, stack: "band", symbol: "none", lineStyle: { opacity: 0 }, data: [1, 1, 1] },
+        { type: "line", name: "信尔美", symbol: "circle", symbolSize: 5, lineStyle: { width: 2.5 }, data: [44, 50, 61] },
+        { type: "line", name: "诺和盈", symbol: "none", lineStyle: { width: 1.5 }, data: [70, 71, 72] },
+        { type: "line", name: "司美", symbol: "none", data: [30, 32, 35] },
+        { type: "bar", name: "投放", data: [1, 2, 3] },
+      ],
+    };
+    type Drawn = { symbol?: string; showSymbol?: boolean; symbolSize?: number; lineStyle?: { type?: unknown; width?: number; opacity?: number } };
+    const series = (decalOption(lines, true) as { series: Drawn[] }).series;
+    expect(series[0]).toBe(lines.series[0]);
+    expect(series.slice(1, 4).map((entry) => [entry.lineStyle?.type, entry.symbol])).toEqual(
+      LINE_PATTERNS.slice(0, 3).map((pattern) => [pattern.type, pattern.symbol]),
+    );
+    expect(new Set(series.slice(1, 4).map((entry) => String(entry.lineStyle?.type))).size).toBe(3);
+    expect(series.slice(1, 4).every((entry) => entry.showSymbol && entry.symbolSize === PATTERN_MARKER)).toBe(true);
+    // What a line already set stays: its weight.
+    expect(series[1]!.lineStyle?.width).toBe(2.5);
+    expect(series[4]).toBe(lines.series[4]);
+    // Off, the option is as written.
+    expect(decalOption(lines, false)).toBe(lines);
+    // Drawn, the dashes are really there.
+    const dashes = (svg: string) => (svg.match(/stroke-dasharray/g) ?? []).length;
+    expect(dashes(drawn(lines))).toBe(0);
+    expect(dashes(drawn(decalOption(lines, true)))).toBeGreaterThanOrEqual(2);
   });
 
   it("draws a pattern on every series once it is on, and none before", () => {

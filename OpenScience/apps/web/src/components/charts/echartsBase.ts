@@ -3,6 +3,7 @@ import * as echarts from "echarts/core";
 import { AriaComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsCoreOption } from "echarts/core";
+import { CHART_STROKES } from "@evimed/design-tokens";
 import theme from "@evimed/design-tokens/echarts-theme.json";
 import { useColorScheme } from "@/lib/colorScheme";
 
@@ -30,9 +31,10 @@ import { useColorScheme } from "@/lib/colorScheme";
  * Colour is not the only thing that tells series apart (spec §32.13 rule 4):
  * a reader who asked for more contrast (`prefers-contrast: more`) or runs a
  * Windows contrast theme (`forced-colors: active`) gets ECharts' decal
- * patterns on every filled mark, and a chart that has three or more
- * categories with no direct label asks for them always (`useEChart(option,
- * { decal: true })`). A chart already on screen follows the setting too.
+ * patterns on every filled mark and a dash and a marker shape of its own on
+ * every line, and a chart that has three or more categories with no direct
+ * label asks for them always (`useEChart(option, { decal: true })`). A chart
+ * already on screen follows the setting too.
  *
  * In a test environment there is no 2D context, and a chart that cannot be
  * painted simply is not: the component's own DOM — its heading, its legend
@@ -113,8 +115,54 @@ export function useContrastSetting(): boolean {
 }
 
 /**
- * An option with decal patterns on its filled marks (spec §32.13 rule 4):
- * ECharts' `aria.decal`, which needs `aria.enabled`. ECharts' own generated
+ * The dash and the marker each line takes once patterns are on (spec §32.13
+ * rule 4: “折线换线型与标记形状”), in series order: the first line solid with
+ * circles — which is why a chart puts its own line first — then dashed with
+ * squares, dotted with triangles, and on. A seventh line starts over; a chart
+ * with that many lines needs direct labels anyway.
+ */
+export const LINE_PATTERNS = Object.freeze([
+  { type: "solid", symbol: "circle" },
+  { type: "dashed", symbol: "rect" },
+  { type: "dotted", symbol: "triangle" },
+  { type: [8, 3, 2, 3], symbol: "diamond" },
+  { type: [12, 4], symbol: "emptyCircle" },
+  { type: [2, 4], symbol: "emptyRect" },
+] as const);
+
+/** A marker shape reads as its shape a little larger than a plain dot (`CHART_STROKES.marker`, 5). */
+export const PATTERN_MARKER = CHART_STROKES.marker + 2;
+
+type LineSeries = { type?: unknown; silent?: unknown; symbolSize?: unknown; lineStyle?: { opacity?: unknown; type?: unknown } };
+
+/**
+ * A line a reader sees. The invisible floor of a stacked band (`silent`, no
+ * stroke) is drawn only to lift the band, and takes no pattern.
+ */
+function drawnLine(entry: unknown): entry is LineSeries {
+  if (!entry || typeof entry !== "object") return false;
+  const series = entry as LineSeries;
+  return series.type === "line" && series.silent !== true && series.lineStyle?.opacity !== 0;
+}
+
+/** Each drawn line its own dash and marker (`LINE_PATTERNS`), in order; every other series as written. */
+function patternedLines(series: unknown): unknown {
+  let next = 0;
+  const pattern = (entry: unknown) => {
+    if (!drawnLine(entry)) return entry;
+    const { type, symbol } = LINE_PATTERNS[next % LINE_PATTERNS.length]!;
+    next += 1;
+    const size = typeof entry.symbolSize === "number" ? Math.max(entry.symbolSize, PATTERN_MARKER) : PATTERN_MARKER;
+    return { ...entry, symbol, showSymbol: true, symbolSize: size, lineStyle: { ...entry.lineStyle, type } };
+  };
+  return Array.isArray(series) ? series.map(pattern) : pattern(series);
+}
+
+/**
+ * An option drawn so colour is not the only thing that tells series apart
+ * (spec §32.13 rule 4): ECharts' decal patterns on its filled marks —
+ * `aria.decal`, which needs `aria.enabled` — and on its lines a dash and a
+ * marker shape of their own (`LINE_PATTERNS`). ECharts' own generated
  * description is left off unless the option asks for it — it would replace
  * the chart host's accessible name, which is the conclusion the chart shows.
  */
@@ -124,6 +172,7 @@ export function decalOption(option: EChartsCoreOption, on: boolean): EChartsCore
   return {
     ...option,
     aria: { ...aria, enabled: true, label: { enabled: false, ...aria.label }, decal: { ...aria.decal, show: true } },
+    ...(option.series === undefined ? {} : { series: patternedLines(option.series) }),
   } as EChartsCoreOption;
 }
 

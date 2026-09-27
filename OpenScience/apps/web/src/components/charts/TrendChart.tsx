@@ -29,6 +29,12 @@ echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent]);
  *
  * Line weights are the token table's (`CHART_STROKES`): ours 2.5, every other
  * line 1.5; a reference rule is a 1 px dash.
+ *
+ * Every line is told apart by its label at its end, not by colour alone; for
+ * a reader who asked for more contrast, `useEChart` also gives each line a
+ * dash and a marker shape of its own (spec §32.13 rule 4, `LINE_PATTERNS`).
+ * Ours is the first line in the option so it keeps the solid stroke and the
+ * circles; the drawing order is the series' `z`, not their order.
  */
 export function TrendChart({
   input,
@@ -152,19 +158,8 @@ export function chartOption(model: TrendModel, format: (value: number) => string
         { type: "line", stack: "band", silent: true, symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, data: lower, z: 1 },
         { type: "line", stack: "band", silent: true, symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: resolvedColor(BAND_COLOR) }, data: width, z: 1 },
       ] : []),
-      ...model.rivals.map((line) => ({
-        type: "line" as const,
-        name: line.name,
-        symbol: "none" as const,
-        connectNulls: false,
-        lineStyle: { color: resolvedColor(line.color), width: CHART_STROKES.other },
-        itemStyle: { color: resolvedColor(line.color) },
-        // Directly labelled at the line's end: a legend a reader has to look
-        // up is what makes a five-line chart unreadable.
-        endLabel: { show: true, formatter: line.name, color: resolvedColor(line.color), distance: 4 },
-        data: line.values,
-        z: 2,
-      })),
+      // Ours before the rivals: under patterns the first line is the solid
+      // one with circles (`LINE_PATTERNS`). `z` still draws it on top.
       {
         type: "line",
         name: model.own.name,
@@ -192,6 +187,19 @@ export function chartOption(model: TrendModel, format: (value: number) => string
         markLine: markLines.length === 0 ? undefined : { silent: true, symbol: "none", data: markLines },
         z: 3,
       },
+      ...model.rivals.map((line) => ({
+        type: "line" as const,
+        name: line.name,
+        symbol: "none" as const,
+        connectNulls: false,
+        lineStyle: { color: resolvedColor(line.color), width: CHART_STROKES.other },
+        itemStyle: { color: resolvedColor(line.color) },
+        // Directly labelled at the line's end: a legend a reader has to look
+        // up is what makes a five-line chart unreadable.
+        endLabel: { show: true, formatter: line.name, color: resolvedColor(line.color), distance: 4 },
+        data: line.values,
+        z: 2,
+      })),
     ],
   };
 }
