@@ -151,8 +151,9 @@ export function StatBand({
 /**
  * The measure under a composite index: how far along we are, where the target
  * sits, and where the leading rival stands — the one picture that answers
- * 「61 算好还是不好」 without a second chart (appendix E §4.1: a bullet, never
- * a gauge, because a gauge can only carry one value).
+ * “61 算好还是不好” without a second chart (appendix E §4.1: a bullet, never
+ * a gauge, because a gauge can only carry one value). Its fills are the data,
+ * so it keeps them in a Windows contrast theme (spec §10.9 rule 6).
  */
 export function BulletBar({
   value,
@@ -186,6 +187,7 @@ export function BulletBar({
           has(target) ? targetLabel ?? `目标 ${Math.round(target)}` : null,
           has(rival) ? rivalLabel ?? `对手 ${Math.round(rival)}` : null,
         ].filter(Boolean).join("，")}
+        data-forced-colors="preserve"
         className="relative h-2 rounded-full bg-surface-2"
       >
         <span className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: share(value) }} />

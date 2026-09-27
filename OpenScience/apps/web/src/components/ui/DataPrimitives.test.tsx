@@ -8,6 +8,8 @@ import { Delta, deltaSense } from "./Delta";
 import { ProgressRail } from "./ProgressRail";
 import { SeverityBadge } from "./SeverityBadge";
 import { BulletBar, StatBand, StatTile } from "./StatTile";
+import { HeatGrid } from "@/components/charts/HeatGrid";
+import { ShareBar } from "@/components/charts/ShareBar";
 
 /**
  * The data-page primitives. They are the reference implementation the Vue side
@@ -250,4 +252,60 @@ describe("ProgressRail", () => {
     expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric-lg");
   });
 
+});
+
+describe("colour that is the data keeps it in a Windows contrast theme (spec §10.9 rule 6)", () => {
+  // The theme drops every fill and background; a legend swatch, a bar and a
+  // heat cell drawn with one would be left as nothing. The token layer's
+  // forced-colours block exempts `[data-forced-colors="preserve"]`, and these
+  // are the elements that have to carry it.
+  const preserved = (element: Element | null) => element?.closest("[data-forced-colors='preserve']") ?? null;
+
+  it("marks a legend swatch, and not the name beside it", () => {
+    const { container } = render(<LegendMark series="own" color="var(--chart-own)">信尔美</LegendMark>);
+    expect(container.querySelector("[data-legend-mark='own']")).toHaveAttribute("data-forced-colors", "preserve");
+    expect(preserved(screen.getByText("信尔美"))).toBeNull();
+  });
+
+  it("marks an inline bar, its track and its fill", () => {
+    const { container } = render(<InlineBar value={15} max={31} tone="own" label="信尔美 提及率" />);
+    const bar = container.querySelector("[data-bar-tone='own']");
+    expect(bar).toHaveAttribute("data-forced-colors", "preserve");
+    expect(preserved(bar?.firstElementChild ?? null)).toBe(bar);
+  });
+
+  it("marks a bullet bar with its target and its rival", () => {
+    const { container } = render(<BulletBar value={61} target={70} rival={55} label="综合可见度" />);
+    const bar = screen.getByRole("img", { name: /综合可见度 61/ });
+    expect(bar).toHaveAttribute("data-forced-colors", "preserve");
+    expect(preserved(container.querySelector("[data-bullet-target]"))).toBe(bar);
+    expect(preserved(container.querySelector("[data-bullet-rival]"))).toBe(bar);
+  });
+
+  it("marks a share bar and each of its legend swatches", () => {
+    const { container } = render(
+      <ShareBar label="提及份额" segments={[
+        { key: "ours", label: "信尔美", value: 48, tone: "own" },
+        { key: "rival", label: "诺和盈", value: 30, tone: "rival-1" },
+      ]} />,
+    );
+    expect(container.querySelector("[data-share-bar]")).toHaveAttribute("data-forced-colors", "preserve");
+    const swatches = [...container.querySelectorAll("li > span[aria-hidden='true']")];
+    expect(swatches).toHaveLength(2);
+    for (const swatch of swatches) expect(swatch).toHaveAttribute("data-forced-colors", "preserve");
+  });
+
+  it("marks a heat grid's ramp and every measured cell, and leaves an unmeasured one to the theme", () => {
+    const { container } = render(
+      <HeatGrid
+        label="引擎 × 问题组"
+        columns={[{ key: "a", header: "病因" }, { key: "b", header: "用药" }]}
+        rows={[{ key: "kimi", header: "Kimi", cells: [{ value: 10, text: "10" }, { value: null, text: "—" }] }]}
+        legend={{ low: "低", high: "高" }}
+      />,
+    );
+    expect(container.querySelector("[data-heat-step]")).toHaveAttribute("data-forced-colors", "preserve");
+    expect(screen.getByText("—")).not.toHaveAttribute("data-forced-colors");
+    expect(preserved(container.querySelector("span.bg-heat-0"))).not.toBeNull();
+  });
 });

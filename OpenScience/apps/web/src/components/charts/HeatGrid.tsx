@@ -10,7 +10,9 @@ import { cn } from "@/lib/cn";
  * The number stays printed in its cell: colour is the shape of the matrix,
  * the number is the fact. What was measured and what was not are different
  * things and are drawn differently — an engine that dropped out gets a hatched
- * row and the reason in words, never a zero and never a silent absence.
+ * row and the reason in words, never a zero and never a silent absence. The
+ * ramp and the cells keep their colours in a Windows contrast theme (spec
+ * §10.9 rule 6); their text colours are the ones contrast was measured for.
  */
 
 /** The six steps of the single-hue ramp, coldest first. */
@@ -70,7 +72,7 @@ export function HeatGrid({
       {legend && (
         <div className="mb-2 flex items-center justify-end gap-1.5 text-meta text-text-3">
           {legend.low}
-          <span aria-hidden="true" className="flex gap-0.5">
+          <span aria-hidden="true" data-forced-colors="preserve" className="flex gap-0.5">
             {STEPS.map((step) => <span key={step} className={cn("h-2.5 w-3.5 rounded-tag", step)} />)}
           </span>
           {legend.high}
@@ -102,6 +104,7 @@ export function HeatGrid({
                       key={columns[index]?.key ?? index}
                       title={cell.hint}
                       data-heat-step={step ?? undefined}
+                      data-forced-colors={step === null ? undefined : "preserve"}
                       className={cn(
                         "h-8 rounded text-center text-compact tabular-nums",
                         step === null ? "bg-surface-1 text-text-3" : `${STEPS[step]} ${STEP_TEXT[step]}`,

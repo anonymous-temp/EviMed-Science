@@ -83,7 +83,9 @@ export function ChartCard({
  * One entry of a chart's legend: the mark in the series' own colour, then its
  * name. The colour is a CSS custom property from the data palette, so a rival
  * can never pick up the brand by accident — `LegendMark` takes the role, not
- * a colour.
+ * a colour. The mark's colour is the data, so it keeps it in a Windows
+ * contrast theme (`data-forced-colors="preserve"`, spec §10.9 rule 6); the
+ * name beside it takes the theme's colours like any text.
  */
 export function LegendMark({
   color,
@@ -103,6 +105,7 @@ export function LegendMark({
       <span
         aria-hidden="true"
         data-legend-mark={series}
+        data-forced-colors="preserve"
         className={cn("inline-block shrink-0", shape === "band" ? "h-2.5 w-4 rounded-tag" : "h-0.5 w-4 rounded-full")}
         style={shape === "dash"
           ? { backgroundImage: `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)` }

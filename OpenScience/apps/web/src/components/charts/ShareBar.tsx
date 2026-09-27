@@ -11,6 +11,8 @@ import { cn } from "@/lib/cn";
  * The tones are the data palette's closed set: ours is the brand, rivals are
  * greys in rank order, and the severity steps are the only red. A segment
  * worth less than a readable sliver still shows, so “1 次” does not vanish.
+ * The bar and its legend swatches keep their colours in a Windows contrast
+ * theme (spec §10.9 rule 6): there the segments are told apart by nothing else.
  */
 
 export type ShareTone = "own" | "rival-1" | "rival-2" | "rival-3" | "quiet" | "s3" | "s2" | "s1";
@@ -56,6 +58,7 @@ export function ShareBar({
       <div
         role="img"
         data-share-bar=""
+        data-forced-colors="preserve"
         aria-label={`${label}：${drawn.map((segment) => `${segment.label} ${format(segment.value)}`).join("，")}`}
         className="flex h-2 w-full gap-px overflow-hidden rounded-full bg-surface-2"
       >
@@ -73,7 +76,7 @@ export function ShareBar({
         <ul className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           {drawn.map((segment) => (
             <li key={segment.key} className="inline-flex items-center gap-1.5 text-caption text-text-2">
-              <span aria-hidden="true" className={cn("h-2 w-2 shrink-0 rounded-tag", TONE_CLASSES[segment.tone])} />
+              <span aria-hidden="true" data-forced-colors="preserve" className={cn("h-2 w-2 shrink-0 rounded-tag", TONE_CLASSES[segment.tone])} />
               {segment.label}
               <span className="tabular-nums text-text">{format(segment.value)}</span>
             </li>

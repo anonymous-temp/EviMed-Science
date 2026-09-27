@@ -96,7 +96,7 @@ function BudgetLine({
       <Figure label="每天最多" value={yuan(budget.dailyCny)} />
       <div className="flex min-w-40 flex-1 items-center gap-3">
         {/* Money against the budget: spent solid, reserved the quiet step after it. */}
-        <div aria-hidden="true" className="relative h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-2">
+        <div aria-hidden="true" data-forced-colors="preserve" className="relative h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-surface-2">
           <span className="absolute inset-y-0 left-0 bg-accent" style={{ width: share(spent) }} />
           <span className="absolute inset-y-0 bg-border-control" style={{ left: share(spent), width: share(reserved) }} />
         </div>

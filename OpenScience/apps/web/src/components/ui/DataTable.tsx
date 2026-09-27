@@ -159,7 +159,9 @@ export function DataTable<T>({
  * A number's length inside a table row. `tone="own"` is the brand and
  * everything else is a neutral grey, which is the whole rule of a comparison
  * chart on this product: a reader must be able to find their own product
- * without reading a legend.
+ * without reading a legend. The bar keeps its colours in a Windows contrast
+ * theme (spec §10.9 rule 6): the theme drops fills, and a bar with no fill is
+ * no bar.
  */
 export function InlineBar({
   value,
@@ -178,7 +180,7 @@ export function InlineBar({
   }
   const width = `${Math.max(2, Math.min(100, (value / max) * 100))}%`;
   return (
-    <span role="img" aria-label={label} data-bar-tone={tone} className="block h-2 w-full rounded-full bg-surface-2">
+    <span role="img" aria-label={label} data-bar-tone={tone} data-forced-colors="preserve" className="block h-2 w-full rounded-full bg-surface-2">
       <span
         className={cn("block h-2 rounded-full", tone === "own" ? "bg-accent" : tone === "rival" ? "bg-text-graphic" : "bg-border-control")}
         style={{ width }}
