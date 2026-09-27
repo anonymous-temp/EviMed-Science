@@ -43,7 +43,7 @@ describe("the write prompt on the next visit", () => {
     await waitFor(() => expect(toasts.success).toHaveBeenCalled());
     expect(client.fetchMemoryChanges).toHaveBeenCalledWith({ since: "2026-09-19T00:00:00.000Z" });
     const [message, options] = toasts.success.mock.calls[0];
-    expect(message).toBe("刚记住了 3 条：「证据先用表格」「队列 500 人」 等 3 条");
+    expect(message).toBe("刚记住了 3 条：“证据先用表格”“队列 500 人” 等 3 条");
     expect(options.action.label).toBe("撤销");
     // No modal, no confirmation: the action is the undo.
     await options.action.onClick();
@@ -61,6 +61,6 @@ describe("the write prompt on the next visit", () => {
   });
 
   it("names two and counts the rest", () => {
-    expect(writePromptMessage([change("a", "甲")])).toBe("刚记住了 1 条：「甲」");
+    expect(writePromptMessage([change("a", "甲")])).toBe("刚记住了 1 条：“甲”");
   });
 });

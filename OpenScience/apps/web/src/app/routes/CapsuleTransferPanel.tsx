@@ -194,14 +194,14 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
             ...(upgrading ? {} : { title: importTitle.trim() }) });
           if (mounted.current) {
             setPreview(null); setArchive(""); setImportPassword("");
-            setNotice(upgrading ? `已更新“${result.payload.title}”` : `已收下「${result.payload.title}」`); onImported(result);
+            setNotice(upgrading ? `已更新“${result.payload.title}”` : `已收下“${result.payload.title}”`); onImported(result);
           }
         })}>{upgrading ? "更新这个胶囊" : "收下这个胶囊"}</Button>
       </div>}
     </section>
 
-    {capsuleId && <Disclosure summary="导出记录" summaryClassName="font-medium text-text">
-      {loading ? <p role="status" className="text-ui text-text-3">正在读取…</p> : history.length === 0 ? <p className="text-ui text-text-3">还没有导出过。</p> : (
+    {capsuleId && <Disclosure summary="导出记录" summaryClassName="font-semibold text-text">
+      {loading ? <p role="status" className="text-ui text-text-3">正在读取</p> : history.length === 0 ? <p className="text-ui text-text-3">还没有导出过。</p> : (
         <ul className="divide-y divide-border">
           {history.map(snapshot => <li key={snapshot.id} className="space-y-1 py-3">
             <p className="text-ui text-text">

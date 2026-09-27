@@ -181,7 +181,7 @@ export function MemoryRecordRow({
       {rejecting && createPortal(
         <ConfirmDialog
           title="这条推断不对？"
-          body="删除这条推断，之后也不再推断出来；只想暂时不用，请选「忘记」。"
+          body="删除这条推断，之后也不再推断出来；只想暂时不用，请选“忘记”。"
           confirmLabel="删除"
           onConfirm={() => void reject()}
           onCancel={() => setRejecting(false)}

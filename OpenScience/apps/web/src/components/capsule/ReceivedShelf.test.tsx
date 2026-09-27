@@ -73,14 +73,14 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true });
     client.disableCapsule.mockResolvedValue({ disabled: true, lists: 1 });
     shelf();
-    const toggle = await screen.findByRole("switch", { name: "启用「李主任的工作方式」" });
+    const toggle = await screen.findByRole("switch", { name: "启用“李主任的工作方式”" });
     expect(toggle).toHaveAttribute("aria-checked", "false");
     await userEvent.click(toggle);
     expect(client.enableReceivedCapsule).toHaveBeenCalledWith("pack-1");
-    await waitFor(() => expect(screen.getByRole("switch", { name: "启用「李主任的工作方式」" })).toHaveAttribute("aria-checked", "true"));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toHaveAttribute("aria-checked", "true"));
     const [, options] = toasts.success.mock.calls.at(-1)!;
     expect(options.action.label).toBe("撤销");
-    await userEvent.click(screen.getByRole("switch", { name: "启用「李主任的工作方式」" }));
+    await userEvent.click(screen.getByRole("switch", { name: "启用“李主任的工作方式”" }));
     expect(client.disableCapsule).toHaveBeenCalledWith("pack-1");
   });
 

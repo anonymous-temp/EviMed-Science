@@ -70,7 +70,7 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
   };
   const stop = () => run(async () => {
     const stopped = await retireMethod(method, "在记忆页里停用");
-    toast.success(`已停用「${methodTitle(method)}」`, {
+    toast.success(`已停用“${methodTitle(method)}”`, {
       action: {
         label: "撤销",
         onClick: () => void rollbackMethod(stopped, stopped.revision - 1)
@@ -80,7 +80,7 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
   });
   const rollback = () => run(async () => {
     await rollbackMethod(method, method.revision - 1);
-    toast.success(retired ? `已恢复「${methodTitle(method)}」` : `「${methodTitle(method)}」已回到上一版`);
+    toast.success(retired ? `已恢复“${methodTitle(method)}”` : `“${methodTitle(method)}”已回到上一版`);
   });
 
   const openHistory = () => {

@@ -23,9 +23,9 @@ import { describe, expect, it } from "vitest";
  * sentence, not a pattern, and stays with review.
  *
  * `OUT_OF_SCOPE` are areas other engineers were rewriting when the sweep ran
- * (2026-09-27): 循证 GEO and its charts, the memory and knowledge-base pages,
- * and the settings row that imports from a network drive. Remove an entry
- * once its area has been swept.
+ * (2026-09-27): 循证 GEO and its charts, the knowledge-base pages, and the
+ * settings row that imports from a network drive. Remove an entry once its
+ * area has been swept (the memory pages were, the same day).
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 const OUT_OF_SCOPE = [
@@ -33,9 +33,9 @@ const OUT_OF_SCOPE = [
   /^components\/data\//,
   /^components\/charts\//,
   /^app\/routes\/Geo/,
-  /^app\/routes\/(MemoryHubPage|KnowledgePage|SourcesPage|FilesPage|CapsuleTransferPanel)/,
-  /^components\/(sources|memory|capsule)\//,
-  /^lib\/(memoryText|memoryGroups|memoryClient|capsuleText|sourceClient)\.ts$/,
+  /^app\/routes\/(KnowledgePage|SourcesPage|FilesPage)/,
+  /^components\/sources\//,
+  /^lib\/sourceClient\.ts$/,
   /^components\/settings\/ConnectorsSection\.tsx$/,
 ];
 

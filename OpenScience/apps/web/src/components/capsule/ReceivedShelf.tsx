@@ -63,13 +63,13 @@ export function ReceivedShelf() {
   };
   const enable = (pack: ReceivedCapsule) => act(`enable:${pack.id}`, async () => {
     await enableReceivedCapsule(pack.id);
-    toast.success(`已启用「${pack.title}」`, {
+    toast.success(`已启用“${pack.title}”`, {
       action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
     });
   });
   const disable = (pack: ReceivedCapsule) => act(`disable:${pack.id}`, async () => {
     await disableCapsule(pack.id);
-    toast.success(`已停用「${pack.title}」`);
+    toast.success(`已停用“${pack.title}”`);
   });
   const trial = (pack: ReceivedCapsule) => act(`trial:${pack.id}`, async () => {
     // The conversation's id is chosen here so it can be marked as the trial
@@ -122,7 +122,7 @@ export function ReceivedShelf() {
               )}
               trailing={(
                 <Switch
-                  label={`启用「${pack.title}」`}
+                  label={`启用“${pack.title}”`}
                   checked={pack.enabled}
                   disabled={busy !== null}
                   onChange={(next) => void (next ? enable(pack) : disable(pack))}

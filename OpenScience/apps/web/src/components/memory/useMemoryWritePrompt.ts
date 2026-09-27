@@ -8,7 +8,7 @@ const SEEN_KEY = "evimed.memory.seenAt";
 
 /** The write prompt's one line: how many, and the first two in their own words. */
 export function writePromptMessage(changes: readonly MemoryChange[]): string {
-  const named = changes.slice(0, 2).map((change) => `「${change.summary}」`).join("");
+  const named = changes.slice(0, 2).map((change) => `“${change.summary}”`).join("");
   return `刚记住了 ${changes.length} 条：${named}${changes.length > 2 ? ` 等 ${changes.length} 条` : ""}`;
 }
 

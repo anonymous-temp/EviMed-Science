@@ -149,7 +149,7 @@ describe("one memory, as one row", () => {
     await userEvent.click(within(await openMenu()).getByRole("menuitem", { name: "不对" }));
     const dialog = await screen.findByRole("alertdialog", { name: "这条推断不对？" });
     expect(dialog).toHaveTextContent("之后也不再推断出来");
-    expect(dialog).toHaveTextContent("请选「忘记」");
+    expect(dialog).toHaveTextContent("请选“忘记”");
     expect(api.deleteStructuredMemory).not.toHaveBeenCalled();
     await userEvent.click(within(dialog).getByRole("button", { name: "删除" }));
     await waitFor(() => expect(api.deleteStructuredMemory).toHaveBeenCalledWith("mem_1"));
