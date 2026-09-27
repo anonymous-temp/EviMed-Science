@@ -72,6 +72,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-claim-effect', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-correction', role: 'user-wrapper', emitters: ['apps/server/src/server.mjs'] },
+  // A learning step's brief — a distillation or a relations pass — as the
+  // loop dispatches it into the account's learning project (2026-09-27).
+  { tag: 'evimed-learning-step', role: 'injected', emitters: ['apps/server/src/learningRuntime.mjs'] },
   {
     tag: 'evimed-context',
     role: 'injected',

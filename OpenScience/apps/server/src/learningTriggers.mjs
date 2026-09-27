@@ -28,12 +28,25 @@
  *    share). "Same kind" is the capability, a closed vocabulary, never a
  *    judgement about the question.
  *
- * None of this decides whether anything learned takes effect. A distillation
- * writes a candidate; only the nightly pass promotes one, and only on a paired
- * evaluation against the current methods (`methodConsolidation.mjs`). What is
- * bounded here is spend: the worker runs only in the off-peak window and under
- * the learning budget, and a lesson is not queued from a transcript the
- * promotion rule would refuse anyway.
+ * None of this decides whether anything learned takes effect, or what it is.
+ * A distillation proposes; the method ledger decides (`LearningService`): a
+ * new method takes effect at once unless it conflicts with one on file
+ * (`promotionVerdict`, since 2026-09-20), consolidation relates and re-admits
+ * it after every learned revision and on the hourly pass
+ * (`methodConsolidation.mjs`), and it is retired by its own runs — the harm
+ * test over the runs that used it — or by the researcher, never by a paired
+ * evaluation nobody asked for (ruling of 2026-09-21). A lesson whose only
+ * evidence is the platform's own reviewer is kept for the capability handbook
+ * and never becomes the researcher's method (`lessonSignal`).
+ *
+ * What this module still refuses is work that is not the researcher's: an
+ * automated run (an evaluation cell, a probe, an audit or acceptance harness —
+ * `automated`, set by the dispatch body or the `x-evimed-automated` header),
+ * an autopilot episode, the platform's internal capabilities, a trial of
+ * someone else's capsule, a paused account, and a run whose transcript is
+ * incomplete, from which a lesson would be drawn on evidence the run cannot
+ * see. There is no spending window or budget in the default configuration
+ * (owner ruling of 2026-09-21); an operator can still set both.
  *
  * @module learningTriggers
  */
@@ -68,8 +81,10 @@ export function learningTriggersFor({ run, runs, projection = null, memoryResult
   if (run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) return [];
   const agentId = String(run.effectiveAgentId ?? "");
   if (agentId && internalAgent(agentId)) return [];
-  // The promotion rule refuses a candidate distilled from an incomplete
-  // record, so a lesson queued from one would be paid for and then thrown away.
+  // A lesson drawn from an incomplete record rests on evidence the
+  // distillation cannot see, and would take effect the moment it is written.
+  // The transcript is read before the runtime stops (L-G6), so "incomplete"
+  // now means a conversation that really could not be read.
   const ledgerRun = runs.find((item) => item?.id === run.id) ?? run;
   if (ledgerRun.transcript?.completeness !== "complete") return [];
 

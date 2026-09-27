@@ -377,7 +377,14 @@ export function createLearningRuntime({
             return await runtimeManager.dispatchPrompt(scoped, session.id, {
               // The question first: the kernel names a session after the start
               // of its first message. The gateway finds the marker anywhere.
-              text: `${repairText || question}\n\n${marker}`,
+              //
+              // Inside a platform tag (`PLATFORM_CONTEXT_TAGS`): the brief is the
+              // platform's, never the researcher's words, and a reader of the
+              // conversation — memory extraction included — must be able to tell
+              // without knowing which project it is in. An untagged dispatch
+              // brief was stored as something the researcher said once already
+              // (the GEO orchestrator's, audit 2026-09-26 M-2).
+              text: `<evimed-learning-step>\n${repairText || question}\n</evimed-learning-step>\n\n${marker}`,
               system: prepared.system,
               agent: selected.runtimeAgent,
               strictContext: true,
