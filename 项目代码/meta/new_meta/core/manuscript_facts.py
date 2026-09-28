@@ -1828,15 +1828,24 @@ def _study_label(study: ExtractedStudy) -> str:
     return label
 
 
-def _prisma_facts(prisma_data: dict) -> dict[str, int]:
+def _prisma_facts(prisma_data: dict) -> dict[str, Any]:
     ident = prisma_data.get("identification", {})
     screening = prisma_data.get("screening", {})
     eligibility = prisma_data.get("eligibility", {})
     included = prisma_data.get("included", {})
+    not_screened_reasons = ident.get("records_not_screened_reasons")
     return {
         "records_identified": int(ident.get("records_identified") or 0),
         "records_after_dedup": int(ident.get("records_after_dedup") or 0),
         "duplicates_removed": int(ident.get("duplicates_removed") or 0),
+        # Records removed after deduplication and before anyone screened them
+        # (PRISMA 2020 "records removed before screening"), with the ledger's reasons.
+        "records_not_screened": int(ident.get("records_not_screened") or 0),
+        "records_not_screened_reasons": {
+            str(reason): int(count or 0)
+            for reason, count in (not_screened_reasons.items() if isinstance(not_screened_reasons, dict) else [])
+            if int(count or 0) > 0
+        },
         "records_from_database": int(ident.get("records_from_database") or 0),
         "records_from_user_upload": int(ident.get("records_from_user_upload") or 0),
         "title_abstract_screened": int(screening.get("title_abstract_screened") or 0),

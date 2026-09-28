@@ -1212,8 +1212,8 @@ class FallbackReportsMixin:
             )
         elif i2 is not None:
             heterogeneity = (
-                f"异质性较低（I²={self._fmt(i2, 1)}%，Cochran Q={self._fmt(q_stat, 2)}，"
-                f"{self._p_text(q_p)}，tau²={self._fmt(tau2, 3)}）。"
+                f"异质性统计量为I²={self._fmt(i2, 1)}%、Cochran Q={self._fmt(q_stat, 2)}、"
+                f"{self._p_text(q_p)}、tau²={self._fmt(tau2, 3)}。"
             )
         else:
             heterogeneity = "未获得完整异质性统计量。"
@@ -1310,6 +1310,7 @@ class FallbackReportsMixin:
             f"经去重后剩余{records_after_dedup}条"
         )
         title_abstract_screened = self._int(prisma.get("title_abstract_screened")) or records_after_dedup
+        screening_entry_phrase = self._screening_entry_phrase(prisma, dedup_phrase)
         full_text_assessed = self._int(prisma.get("full_text_assessed"))
         studies_included = self._int(prisma.get("studies_included")) or n_primary
         non_primary_retained = max(0, studies_included - n_primary)
@@ -1400,7 +1401,7 @@ class FallbackReportsMixin:
             f"**研究选择：** {compiled_text.get('study_selection') if compiled_active else '纳入符合预设人群、干预、对照和主要结局的随机试验或试验结果行；相关但不满足主要分析条件的记录保留为背景或补充证据。'}",
             f"**数据提取与合成：** {compiled_text.get('abstract_synthesis') if compiled_active else f'从全文报告、注册记录和公开汇总结果中提取结局数据。研究层面{effect_measure}及标准误采用{model_text}逆方差模型进行主要合并；模型选择依据见方法部分。'}",
             f"**主要结局和指标：** {short_outcome}。",
-            f"**结果：** 检索识别{records_identified}条记录，{dedup_phrase}进入题名/摘要筛选，全文评估{full_text_assessed}篇。主要Meta分析纳入{n_primary}项研究、共{total_n:,}名参与者；{study_intervention_text}{non_primary_retained_text}入选试验记录{event_text}。{('预设合成估计为：' + compiled_result_summary) if compiled_active else f'合并效应为{effect_text}（{p_text}）。'} {heterogeneity}",
+            f"**结果：** 检索识别{records_identified}条记录，{screening_entry_phrase}，全文评估{full_text_assessed}篇。主要Meta分析纳入{n_primary}项研究、共{total_n:,}名参与者；{study_intervention_text}{non_primary_retained_text}入选试验记录{event_text}。{('预设合成估计为：' + compiled_result_summary) if compiled_active else f'合并效应为{effect_text}（{p_text}）。'} {heterogeneity}",
             f"**结论和意义：** 在本系统综述和Meta分析中，{('结果方向应结合预设结局编码、效应量、区间和确定性解释' if compiled_active else f'{short_intervention}相较于{short_comparator}可能与较低的{short_outcome_risk_phrase}相关')}；证据确定性评为{certainty}，主要受{abstract_downgrade_text}影响。{warning_text}",
         ])
 
@@ -1451,7 +1452,7 @@ class FallbackReportsMixin:
 
         results = "\n\n".join([
             f"### 检索与筛选结果\n"
-            f"检索共识别{records_identified}条记录，{dedup_phrase}进入题名/摘要筛选；全文评估{full_text_assessed}篇，最终纳入{studies_included}项研究，其中{n_primary}项研究进入主要Meta分析。{non_primary_retained_text}PRISMA流程见{self._figure_reference_label_zh([1]) if figure_numbers else '补充材料'}。",
+            f"检索共识别{records_identified}条记录，{screening_entry_phrase}；全文评估{full_text_assessed}篇，最终纳入{studies_included}项研究，其中{n_primary}项研究进入主要Meta分析。{non_primary_retained_text}PRISMA流程见{self._figure_reference_label_zh([1]) if figure_numbers else '补充材料'}。",
             f"### 纳入研究和主要结局\n"
             f"主要分析纳入的试验合计{total_n:,}名参与者，其中{event_text}。表1列出入选研究和臂水平事件数；表2列出研究层面{effect_measure}、标准误和权重。",
             f"### 主要Meta分析\n" + (
@@ -1554,12 +1555,19 @@ class FallbackReportsMixin:
             discussion = sections_override["discussion"]
             conclusion = sections_override["conclusion"]
 
-        calculation_notes = "\n\n".join([
-            compiled_text.get("calculation") if compiled_active else f"主要计算使用{n_primary}项主要分析研究和{total_n:,}名参与者。臂水平事件计数为干预组{events_i}/{total_i}、对照组{events_c}/{total_c}。",
-            f"研究层面{effect_measure}和标准误用于逆方差加权；合并估计在正文中报告为{effect_text}。",
-            f"{heterogeneity} 表2列出用于计算的研究层面数值，附录2列出相应来源位置。",
-            calculation_scale_text,
-        ])
+        computation_record_notes = (
+            self._computation_record_notes(facts, selected_rows) if compiled_active else []
+        )
+        calculation_notes = "\n\n".join(
+            [*computation_record_notes, "表2列出用于计算的研究层面数值，附录2列出相应来源位置。"]
+            if computation_record_notes else
+            [
+                compiled_text.get("calculation") if compiled_active else f"主要计算使用{n_primary}项主要分析研究和{total_n:,}名参与者。臂水平事件计数为干预组{events_i}/{total_i}、对照组{events_c}/{total_c}。",
+                f"研究层面{effect_measure}和标准误用于逆方差加权；合并估计在正文中报告为{effect_text}。",
+                f"{heterogeneity} 表2列出用于计算的研究层面数值，附录2列出相应来源位置。",
+                calculation_scale_text,
+            ]
+        )
 
         sections = [
             f"# {title}",
@@ -1733,8 +1741,8 @@ class FallbackReportsMixin:
             )
         elif i2 is not None:
             heterogeneity = (
-                f"Heterogeneity was low (I²={self._fmt(i2, 1)}%, Cochran Q={self._fmt(q_stat, 2)}, "
-                f"{self._p_text(q_p)}, tau²={self._fmt(tau2, 3)})."
+                f"Heterogeneity statistics were I²={self._fmt(i2, 1)}%, Cochran Q={self._fmt(q_stat, 2)}, "
+                f"{self._p_text(q_p)}, and tau²={self._fmt(tau2, 3)}."
             )
         else:
             heterogeneity = "Heterogeneity statistics were not available."
@@ -1805,6 +1813,14 @@ class FallbackReportsMixin:
             f"{records_after_dedup} records remained after deduplication"
         )
         title_abstract_screened = self._int(prisma.get("title_abstract_screened")) or records_after_dedup
+        screening_entry_phrase = self._screening_entry_phrase(prisma, dedup_phrase)
+        screening_results_text = self._screening_entry_phrase(
+            prisma,
+            (
+                f"After cross-source deduplication and record consolidation removed {duplicates_removed} records, "
+                f"{records_after_dedup} unique records remained"
+            ),
+        )
         full_text_assessed = self._int(prisma.get("full_text_assessed"))
         studies_included = self._int(prisma.get("studies_included")) or n_primary
         non_primary_retained = max(0, studies_included - n_primary)
@@ -2179,7 +2195,7 @@ class FallbackReportsMixin:
             f"**Study selection:** {compiled_text.get('study_selection') if compiled_active else 'Randomized trials or trial rows matching the prespecified population, intervention, comparator, and primary outcome were eligible for the primary synthesis.'}",
             f"**Data extraction and synthesis:** {compiled_text.get('abstract_synthesis') if compiled_active else f'Outcome data were extracted from full-text or structured source records. Trial-level {effect_measure} estimates and standard errors were pooled with the prespecified {primary_model_text} inverse-variance model.{model_abstract_rationale} Model-selection rationale is reported in Methods.'}",
             f"**Main outcome and measures:** {short_outcome}.",
-            f"**Results:** The search identified {records_identified} records; {dedup_phrase} for title/abstract screening and {full_text_assessed} underwent full-text assessment. {review_inclusion_text}The primary meta-analysis included {n_primary} studies totaling {total_n:,} participants. {study_intervention_text}{non_primary_retained_text} The included trial comparisons recorded {event_text}. The pooled effect was {effect_text} ({p_text}). {heterogeneity}",
+            f"**Results:** The search identified {records_identified} records; {screening_entry_phrase}; {full_text_assessed} underwent full-text assessment. {review_inclusion_text}The primary meta-analysis included {n_primary} studies totaling {total_n:,} participants. {study_intervention_text}{non_primary_retained_text} The included trial comparisons recorded {event_text}. The pooled effect was {effect_text} ({p_text}). {heterogeneity}",
             f"**Conclusions and relevance:** In this systematic review and meta-analysis, {hedged_core_claim}. Certainty was rated {str(certainty).lower()} because of {abstract_downgrade_text}.{warning_text}",
         ])
 
@@ -2241,7 +2257,7 @@ class FallbackReportsMixin:
 
         results = "\n\n".join([
             "### Search and screening\n"
-            f"The search identified {records_identified} records. After cross-source deduplication and record consolidation removed {duplicates_removed} records, {records_after_dedup} unique records remained for screening; {title_abstract_screened} title/abstract records were screened and {full_text_assessed} full-text records were assessed. {review_inclusion_text}The primary meta-analysis included {n_primary} studies with data for the selected primary outcome. {non_primary_retained_text}",
+            f"The search identified {records_identified} records. {screening_results_text}; {full_text_assessed} full-text records were assessed. {review_inclusion_text}The primary meta-analysis included {n_primary} studies with data for the selected primary outcome. {non_primary_retained_text}",
             "### Included studies\n",
             included_studies_table_text,
             "### Primary outcome\n",
@@ -2305,12 +2321,22 @@ class FallbackReportsMixin:
             f"attention to {conclusion_decision_context.removeprefix('while clinical decisions should account for ').rstrip('.')}."
         )
 
-        calculation_notes = "\n\n".join([
-            calculation_first_line,
-            f"Trial-level {effect_measure} estimates and standard errors were used for inverse-variance weighting; the pooled estimate is reported as {effect_text}.",
-            f"{heterogeneity} Table 2 lists the trial-level values used for calculation, and Appendix 2 lists the corresponding report locations.",
-            calculation_scale_context,
-        ])
+        computation_record_notes = (
+            self._computation_record_notes(facts, selected_rows) if compiled_active else []
+        )
+        calculation_notes = "\n\n".join(
+            [
+                *computation_record_notes,
+                "Table 2 lists the trial-level values used for calculation, and Appendix 2 lists the corresponding report locations.",
+            ]
+            if computation_record_notes else
+            [
+                calculation_first_line,
+                f"Trial-level {effect_measure} estimates and standard errors were used for inverse-variance weighting; the pooled estimate is reported as {effect_text}.",
+                f"{heterogeneity} Table 2 lists the trial-level values used for calculation, and Appendix 2 lists the corresponding report locations.",
+                calculation_scale_context,
+            ]
+        )
 
         sections = [
             f"# {title}",

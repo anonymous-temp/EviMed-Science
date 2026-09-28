@@ -892,6 +892,62 @@ class FallbackContentMixin:
                 return raw[:10]
         return date.today().isoformat()
 
+    # Reasons the PRISMA ledger records for records removed before screening
+    # (``PRISMAFlow.set_records_not_screened``); a closed vocabulary set by code.
+    _NOT_SCREENED_REASON_LABELS = {
+        "relevance cap before screening": (
+            "相关性排序超出筛选上限",
+            "ranked beyond the relevance cap for screening",
+        ),
+    }
+
+    def _prisma_records_not_screened(self, prisma: dict | None) -> tuple[int, str]:
+        """Return the ledger's records removed before screening and why (localized)."""
+        prisma = prisma or {}
+        count = self._int(prisma.get("records_not_screened"))
+        if not count:
+            return 0, ""
+        reasons = prisma.get("records_not_screened_reasons")
+        reasons = reasons if isinstance(reasons, dict) else {}
+        labels = []
+        for reason in reasons:
+            zh_label, en_label = self._NOT_SCREENED_REASON_LABELS.get(
+                str(reason),
+                ("在筛选前被移除", "removed before screening"),
+            )
+            labels.append(zh_label if self._zh else en_label)
+        if not labels:
+            labels = ["在筛选前被移除" if self._zh else "removed before screening"]
+        return count, ("、" if self._zh else "; ").join(dict.fromkeys(labels))
+
+    def _screening_entry_phrase(self, prisma: dict | None, dedup_phrase: str) -> str:
+        """Continue a deduplication phrase with the records that entered screening.
+
+        The counts come from the PRISMA ledger: records remaining after
+        deduplication are not all screened when a relevance cap removed some
+        before screening, and the manuscript says so rather than implying the
+        whole deduplicated set was screened.
+        """
+        prisma = prisma or {}
+        dedup = self._int(prisma.get("records_after_dedup"))
+        screened = self._int(prisma.get("title_abstract_screened")) or dedup
+        not_screened, reason = self._prisma_records_not_screened(prisma)
+        if self._zh:
+            if not_screened:
+                return (
+                    f"{dedup_phrase}；其中{not_screened}条因{reason}未进入筛选，"
+                    f"{screened}条进入题名/摘要筛选"
+                )
+            if screened != dedup:
+                return f"{dedup_phrase}；{screened}条进入题名/摘要筛选"
+            return f"{dedup_phrase}进入题名/摘要筛选"
+        if not_screened:
+            return (
+                f"{dedup_phrase}; {not_screened} {reason} and were not screened, "
+                f"and {screened} title/abstract records were screened"
+            )
+        return f"{dedup_phrase}, and {screened} title/abstract records were screened"
+
     def _fallback_prisma_flow_legend(
         self,
         *,
@@ -906,15 +962,19 @@ class FallbackContentMixin:
         full_text = self._int(prisma.get("full_text_assessed"))
         included = self._int(prisma.get("studies_included"))
         quantitative = self._int(n_primary) or self._int(prisma.get("studies_quantitative")) or included
+        not_screened, reason = self._prisma_records_not_screened(prisma)
         if self._zh:
+            not_screened_text = f"其中{not_screened}条因{reason}未进入筛选；" if not_screened else ""
             return (
                 f"图注：PRISMA流程图显示共识别{records}条记录，删除{duplicates}条重复记录后"
-                f"{dedup}条进入去重后记录集；筛选{screened}条题名/摘要记录，全文评估{full_text}篇，"
+                f"{dedup}条进入去重后记录集；{not_screened_text}筛选{screened}条题名/摘要记录，全文评估{full_text}篇，"
                 f"最终纳入{included}项研究，其中{quantitative}项进入定量合成。"
             )
+        not_screened_text = f"{not_screened} records not screened ({reason}), " if not_screened else ""
         return (
             f"Legend: The PRISMA flow diagram shows {records} records identified, {duplicates} duplicates removed, "
-            f"{dedup} records after deduplication, {screened} records screened, {full_text} full-text reports assessed, "
+            f"{dedup} records after deduplication, {not_screened_text}{screened} records screened, "
+            f"{full_text} full-text reports assessed, "
             f"{included} studies included, and {quantitative} studies in the quantitative synthesis."
         )
 
@@ -1060,6 +1120,126 @@ class FallbackContentMixin:
                     legend = "\n\n" + self._fallback_prisma_flow_legend(prisma=prisma, n_primary=n_primary)
                 blocks.append(f"### {caption}\n\n![{caption}](../figures/{filename}){legend}")
         return "\n\n".join(blocks) if blocks else ("未提供可用图表文件。" if self._zh else "No figure files were available.")
+
+    _DESIGN_LABELS = {
+        "parallel_rct": ("平行组随机对照试验", "parallel-group RCT"),
+        "multi_arm_rct": ("多臂随机对照试验", "multi-arm RCT"),
+        "cluster_rct": ("整群随机对照试验", "cluster RCT"),
+        "crossover_rct": ("交叉随机对照试验", "crossover RCT"),
+    }
+
+    def _computation_record_notes(self, facts: dict, selected_rows: list[dict] | None = None) -> list[str]:
+        """Render the calculation appendix from the synthesis engine's own record.
+
+        Every number is read from ``synthesis_result`` (the engine payload the
+        pooled estimate came from) and formatted as elsewhere in the article:
+        study effects and the pooled estimate to two decimals, I² to one,
+        tau² to three. Nothing is recomputed here. Returns no paragraphs when
+        the record is absent, so the caller keeps its generic notes.
+        """
+        synthesis = facts.get("synthesis_result") if isinstance(facts.get("synthesis_result"), dict) else {}
+        payload = synthesis.get("engine_payload") if isinstance(synthesis.get("engine_payload"), dict) else {}
+        estimates = synthesis.get("primary_estimates") if isinstance(synthesis.get("primary_estimates"), list) else []
+        primary = estimates[0] if estimates and isinstance(estimates[0], dict) else {}
+        if not payload or primary.get("estimate") is None:
+            return []
+        zh = self._zh
+        measure = str(primary.get("measure") or payload.get("measure") or "").strip()
+        estimator = str(synthesis.get("estimator") or payload.get("estimator") or "").strip()
+        n_studies = self._int(synthesis.get("n_studies") or payload.get("n_studies"))
+        n_contrasts = self._int(payload.get("n_contrasts"))
+        labels = {
+            str(row.get("study_id") or ""): str(row.get("study_label") or "").strip()
+            for row in (selected_rows or [])
+            if isinstance(row, dict) and row.get("study_id")
+        }
+        design_counts = payload.get("design_counts") if isinstance(payload.get("design_counts"), dict) else {}
+        design_text = ("、" if zh else ", ").join(
+            (f"{self._DESIGN_LABELS.get(str(design), (str(design), str(design)))[0]}{self._int(count)}项"
+             if zh else
+             f"{self._int(count)} {self._DESIGN_LABELS.get(str(design), (str(design), str(design)))[1]}")
+            for design, count in design_counts.items()
+            if self._int(count)
+        )
+        paragraphs: list[str] = []
+        if zh:
+            paragraphs.append(
+                f"主要合并使用{estimator}，基于{n_studies}个独立研究单位"
+                + (f"（{n_contrasts}个对比" + (f"；{design_text}" if design_text else "") + "）" if n_contrasts else "")
+                + "；多臂或相关对比先在研究内合并为一个研究层面估计，再进行研究间合并。"
+            )
+        else:
+            paragraphs.append(
+                f"The primary synthesis used {estimator} on {n_studies} independent study units"
+                + (f" ({n_contrasts} contrasts" + (f"; {design_text}" if design_text else "") + ")" if n_contrasts else "")
+                + "; multi-arm or correlated contrasts were consolidated within study before the between-study synthesis."
+            )
+        study_parts = []
+        for item in payload.get("study_effects") or []:
+            if not isinstance(item, dict) or item.get("analysis_effect") is None:
+                continue
+            label = labels.get(str(item.get("study_id") or "")) or str(item.get("study_id") or "")
+            variance = item.get("variance")
+            study_parts.append(
+                (f"{label} {self._fmt(item.get('analysis_effect'), 2)}（方差{self._fmt(variance, 2)}）"
+                 if zh else
+                 f"{label} {self._fmt(item.get('analysis_effect'), 2)} (variance {self._fmt(variance, 2)})")
+                if variance is not None else
+                f"{label} {self._fmt(item.get('analysis_effect'), 2)}"
+            )
+        if study_parts:
+            paragraphs.append(
+                f"各研究单位的{measure}估计值为：" + "；".join(study_parts) + "；研究间权重见表2。"
+                if zh else
+                f"Study-unit {measure} estimates were: " + "; ".join(study_parts) + "; between-study weights are given in Table 2."
+            )
+        se = payload.get("standard_error_analysis_scale")
+        se_text = (f"标准误{self._fmt(se, 2)}；" if zh else f"standard error {self._fmt(se, 2)}; ") if se is not None else ""
+        pooled = (
+            f"合并效应估计为{measure} {self._fmt(primary.get('estimate'), 2)}（{se_text}95% CI "
+            f"{self._fmt(primary.get('ci_lower'), 2)}至{self._fmt(primary.get('ci_upper'), 2)}）"
+            if zh else
+            f"The pooled estimate was {measure} {self._fmt(primary.get('estimate'), 2)} ({se_text}95% CI "
+            f"{self._fmt(primary.get('ci_lower'), 2)} to {self._fmt(primary.get('ci_upper'), 2)})"
+        )
+        if primary.get("prediction_lower") is not None and primary.get("prediction_upper") is not None:
+            pooled += (
+                f"；95%预测区间为{self._fmt(primary.get('prediction_lower'), 2)}至{self._fmt(primary.get('prediction_upper'), 2)}。"
+                if zh else
+                f"; the 95% prediction interval was {self._fmt(primary.get('prediction_lower'), 2)} to "
+                f"{self._fmt(primary.get('prediction_upper'), 2)}."
+            )
+        else:
+            pooled += "。" if zh else "."
+        paragraphs.append(pooled)
+        heterogeneity = synthesis.get("heterogeneity") if isinstance(synthesis.get("heterogeneity"), dict) else {}
+        het_parts = []
+        if heterogeneity.get("q") is not None:
+            het_parts.append(f"Cochran Q={self._fmt(heterogeneity.get('q'), 2)}")
+        if heterogeneity.get("q_p_value") is not None:
+            het_parts.append(self._p_text(heterogeneity.get("q_p_value")))
+        if heterogeneity.get("i_squared") is not None:
+            het_parts.append(f"I²={self._fmt(heterogeneity.get('i_squared'), 1)}%")
+        if heterogeneity.get("tau_squared") is not None:
+            het_parts.append(f"tau²={self._fmt(heterogeneity.get('tau_squared'), 3)}")
+        if het_parts:
+            paragraphs.append(
+                "异质性统计量为" + "，".join(het_parts) + "。"
+                if zh else
+                "Heterogeneity statistics were " + ", ".join(het_parts) + "."
+            )
+        sensitivity = payload.get("sensitivity") if isinstance(payload.get("sensitivity"), dict) else {}
+        for name, result in sensitivity.items():
+            if not isinstance(result, dict) or result.get("estimate") is None:
+                continue
+            paragraphs.append(
+                f"{name}敏感性分析得到{measure} {self._fmt(result.get('estimate'), 2)}（95% CI "
+                f"{self._fmt(result.get('ci_lower'), 2)}至{self._fmt(result.get('ci_upper'), 2)}）。"
+                if zh else
+                f"The {name} sensitivity analysis gave {measure} {self._fmt(result.get('estimate'), 2)} (95% CI "
+                f"{self._fmt(result.get('ci_lower'), 2)} to {self._fmt(result.get('ci_upper'), 2)})."
+            )
+        return paragraphs
 
     def _compiled_method_article_text(self, facts: dict, *, zh: bool) -> dict[str, str]:
         """Reader-facing method language for compiled synthesis families."""
