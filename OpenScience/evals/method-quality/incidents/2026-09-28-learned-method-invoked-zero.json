@@ -1,0 +1,69 @@
+{
+  "id": "2026-09-28-learned-method-invoked-zero",
+  "observedIn": "production evimed-76962a63df30-1, account cdss-access: evimed_product.documents kind=method (3 approved learned methods), and the persisted transcripts of run_dc51742c48fd1c2287ee93d081351916, run_0dcba4e93985e81942631ca45766068f, run_378ad887d75e5ae41c057df06ed5ada3, run_141b36affb35a359d7a1646b657a4c47",
+  "observed": {
+    "counts": { "loaded": 34, "invoked": 0, "read": 3 },
+    "methodFileOpenedInTranscripts": 0,
+    "learnedBodiesInlined": "every capability run and delegation, 21 KB of the 51 KB method block of run_dc51742c, under the heading 「用户自己的方法（优先于平台默认流程，但不能突破契约）」"
+  },
+  "verbatim": [
+    { "run": "run_dc51742c48fd1c2287ee93d081351916", "seq": 487, "text": "Still, the user's method says \"Treat every notice as an unfixed defect\"." },
+    { "run": "run_dc51742c48fd1c2287ee93d081351916", "seq": 445, "text": "The user's method says keep them; the capability says delete .pre-edit.md." },
+    { "run": "run_dc51742c48fd1c2287ee93d081351916", "seq": 147, "text": "the user's capsule method \"reporting-checklist-addressability\" is about \"when a plan declared a study type with a published item table\". My plan didn't. So skip." },
+    { "run": "run_378ad887d75e5ae41c057df06ed5ada3", "seq": 323, "text": "Per the pre-submission freeze check method: \"Treat every notice as an unfixed defect: repair the artefact, re-run the check, and require the notice list to be empty before submitting.\"" },
+    { "run": "run_0dcba4e93985e81942631ca45766068f", "seq": 227, "text": "Also pre-submission-freeze-check requires pre-edit copies before the final pass, and a preservation comparison between two genuinely different artifacts." },
+    { "run": "run_141b36affb35a359d7a1646b657a4c47", "seq": 231, "text": "The freeze-check method says: enumerate citation marks and reference entries and compare both directions; empty residue required." }
+  ],
+  "whyItIsWrong": "The model worked by the learned methods in every run read, and chose not to where one did not apply, yet the ledger said no method was ever used: `invoked` counts a session opening the method, and a body already inlined in the prompt is never opened. The same inlining presented EviMed's inference as the researcher's own rule ranked above the capability, and the model followed it over the capability where they disagreed.",
+  "caughtBy": "nobody",
+  "fix": "A learned method travels as a card naming its file (packages/socket/src/learnedMethods.mjs) and is opened when it applies; opening it with `read` or a reading shell program is `invoked` (apps/server/src/methodObservations.mjs).",
+  "scenarios": [
+    {
+      "name": "production shape: the body was inlined, the model followed it, nothing was opened",
+      "sessions": [
+        { "sessionId": "root", "tools": [
+          { "tool": "bash", "input": { "command": "cd /workspace/deliverables/d1 && cp report.md report.pre-edit.md && wc -c report.md report.pre-edit.md" } },
+          { "tool": "evimed_package_check", "input": { "deliverableId": "d1" } },
+          { "tool": "evimed_submit_deliverable", "input": { "deliverableId": "d1" } }
+        ] }
+      ],
+      "deliverables": [{ "id": "d1", "status": "accepted", "attempts": 3 }],
+      "mounted": ["pre-submission-freeze-check", "reporting-checklist-addressability"],
+      "expect": { "invoked": [], "observations": { "pre-submission-freeze-check": { "outcome": "repaired", "invoked": false } } },
+      "note": "Carrying a method is not using it. No transcript rule can tell this run's use of an inlined body from its neglect, which is why the body no longer travels inline."
+    },
+    {
+      "name": "card shape: the model opens the method that applies, and only that one",
+      "sessions": [
+        { "sessionId": "root", "tools": [
+          { "tool": "bash", "input": { "command": "wc -l /runtime/capsule-methods/{reporting-checklist-addressability}/SKILL.md" } },
+          { "tool": "read", "input": { "file_path": "/runtime/capsule-methods/{pre-submission-freeze-check}/SKILL.md", "offset": 1, "limit": 200 } },
+          { "tool": "evimed_submit_deliverable", "input": { "deliverableId": "d1" } }
+        ] }
+      ],
+      "deliverables": [{ "id": "d1", "status": "accepted", "attempts": 1 }],
+      "mounted": ["pre-submission-freeze-check", "reporting-checklist-addressability"],
+      "expect": {
+        "invoked": ["pre-submission-freeze-check"],
+        "observations": {
+          "pre-submission-freeze-check": { "outcome": "accepted", "invoked": true },
+          "reporting-checklist-addressability": { "outcome": "accepted", "invoked": false }
+        }
+      },
+      "note": "Counting a line count of a file as a reading would charge a method that did not apply with a run it never shaped."
+    },
+    {
+      "name": "card shape, delegated: the child opens the method through the shell",
+      "sessions": [
+        { "sessionId": "child", "tools": [
+          { "tool": "bash", "input": { "command": "cd /runtime/capsule-methods && sed -n '1,120p' {pre-submission-freeze-check}/SKILL.md" } }
+        ] }
+      ],
+      "delegations": [{ "deliverableId": "d1", "childSessionId": "child", "methods": ["pre-submission-freeze-check"] }],
+      "deliverables": [{ "id": "d1", "status": "submitted", "attempts": 2 }],
+      "mounted": ["pre-submission-freeze-check"],
+      "expect": { "invoked": ["pre-submission-freeze-check"], "observations": { "pre-submission-freeze-check": { "outcome": "rejected", "invoked": true } } }
+    }
+  ],
+  "liveCheck": "After the release, one capability run whose deliverable is submitted: its runs.jsonl `learning` row names pre-submission-freeze-check in methodsInvoked, and reporting-checklist-addressability only when the plan declared a study type. Principle 11: until this is seen on a real DSH + DeepSeek run, the card delivery is a design, not a result."
+}
