@@ -445,6 +445,61 @@ def test_a_retyped_unicode_minus_becomes_the_engines_ascii_minus(tmp_path: Path)
     assert unsupported(text) == 0
 
 
+MA001_PRIMARY_FACTS = {
+    "primary_effect": {
+        "effect_measure": "MD",
+        "pooled_effect": -303.2265806852571,
+        "ci_lower": -504.51984194942247,
+        "ci_upper": -101.93331942109168,
+        "prediction_lower": -2730.381643234127,
+        "prediction_upper": 2123.928481863613,
+    },
+    "studies": [{"effect": -329.69999999999993}, {"effect": -458.0}, {"effect": -112.5}],
+}
+
+
+def test_rounded_primary_numbers_are_written_back_as_the_engine_renders_them(tmp_path: Path) -> None:
+    from new_meta.core.artifact_package import _build_claim_support_audit_review
+    from new_meta.core.manuscript_numbers import rendered_primary_numbers, restore_rendered_primary_numbers
+
+    # Verbatim from the ma-001 run-14 Conclusion, authored from the raw floats.
+    typed = (
+        "在初次单侧全膝关节置换术的成年患者中，围手术期氨甲环酸与安慰剂或不使用氨甲环酸相比，"
+        "合并估计提示围手术期总失血量可能减少（MD -303.2 mL，95% CI -504.5～-101.9 mL）。"
+    )
+    table_row = "| Total blood loss | MD -303.2 (95% CI -504.5 to -101.9) | 极低 |"
+
+    text, restored = restore_rendered_primary_numbers(f"{typed}\n{table_row}\n", MA001_PRIMARY_FACTS)
+
+    assert text.splitlines()[0] == typed.replace("-303.2 mL", "-303.23 mL").replace(
+        "-504.5～-101.9", "-504.52～-101.93"
+    )
+    assert text.splitlines()[1] == table_row
+    assert [item["rendered"] for item in restored] == ["-303.23", "-504.52", "-101.93"]
+    assert restore_rendered_primary_numbers(text, MA001_PRIMARY_FACTS)[1] == []
+    assert rendered_primary_numbers(MA001_PRIMARY_FACTS)["prediction_upper"] == "2123.93"
+    project = Project("rounded numbers", output_dir=tmp_path)
+    project.save_json("manuscript_facts.json", MA001_PRIMARY_FACTS, subdir="manuscript")
+
+    def unsupported(body: str) -> int:
+        project.save_text("draft.md", f"# 标题\n\n## 结论\n\n{body}\n", subdir="manuscript")
+        return _build_claim_support_audit_review(project)["summary"]["unsupported_claims"]
+
+    assert unsupported(typed) == 1
+    assert unsupported(text.splitlines()[0]) == 0
+
+
+def test_a_rounding_that_could_be_another_fact_is_left_alone() -> None:
+    from new_meta.core.manuscript_numbers import restore_rendered_primary_numbers
+
+    facts = {
+        "primary_effect": {"pooled_effect": -112.54, "ci_lower": -200.0, "ci_upper": -20.0},
+        "studies": [{"effect": -112.5}],
+    }
+
+    assert restore_rendered_primary_numbers("Montovanelli 2021为-112.5 mL。", facts) == ("Montovanelli 2021为-112.5 mL。", [])
+
+
 # ── Table 1 shows the row's own numbers, never a fabricated 0/0 ───────────
 
 

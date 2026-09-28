@@ -4,7 +4,10 @@ Runs at save time, after every model pass, on the text that is about to be
 written to ``draft.md``:
 
 0. A negative number typed with a Unicode minus is written with the ASCII
-   minus the engine renders, so it is byte-identical to the computation.
+   minus the engine renders, and a one-decimal rounding of the pooled
+   estimate or its interval bounds is written back as the engine's
+   two-decimal rendering (``new_meta.core.manuscript_numbers``), so prose
+   numbers are byte-identical to the computation.
 1. Cross-references to the manuscript's own tables and figures are generated
    (``new_meta.core.manuscript_cross_references``), never left to the prose.
 2. Overlong interpretive sentences are split where no word changes: a
@@ -25,6 +28,7 @@ from typing import Any
 
 from new_meta.agents.writing.contracts import SentenceSplitRevision
 from new_meta.core.manuscript_cross_references import generate_table_figure_cross_references
+from new_meta.core.manuscript_numbers import restore_rendered_primary_numbers
 from new_meta.core.project import Project
 from new_meta.core.readability import (
     overlong_interpretive_sentences,
@@ -70,11 +74,13 @@ class ReleaseConformanceMixin:
         allow_model: bool = True,
     ) -> tuple[str, dict[str, Any]]:
         text, normalized_signs = normalize_number_signs(manuscript)
+        text, restored_numbers = restore_rendered_primary_numbers(text, facts)
         text, cross_references = generate_table_figure_cross_references(text, facts)
         text, deterministic_splits = split_interpretive_sections(text)
         audit: dict[str, Any] = {
             "schema_version": 1,
             "normalized_minus_signs": normalized_signs,
+            "restored_number_renderings": restored_numbers,
             "generated_cross_references": cross_references,
             "deterministic_sentence_splits": deterministic_splits,
         }

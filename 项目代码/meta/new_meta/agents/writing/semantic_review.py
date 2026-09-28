@@ -11,6 +11,7 @@ from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.core.manuscript_polish import preservation_guard_issues
 from new_meta.core.readability import sentence_length_rule
+from new_meta.core.manuscript_numbers import rendered_primary_numbers
 from new_meta.core.manuscript_text_metrics import (
     main_publication_word_count,
     manuscript_quality_gate,
@@ -122,6 +123,7 @@ class SemanticReviewMixin:
             "endpoint_definition_caveat": endpoint_definition_caveat,
             "claim_strength": self._claim_strength_guidance(facts),
             "primary_effect": primary,
+            "rendered_numbers": rendered_primary_numbers(facts),
             "primary_population": population,
             "prisma": facts.get("prisma") if isinstance(facts.get("prisma"), dict) else {},
             "search": facts.get("search") if isinstance(facts.get("search"), dict) else {},
@@ -204,6 +206,8 @@ class SemanticReviewMixin:
             "Do not return an uncited Introduction, Discussion, or Conclusion when source-backed claims are used. "
             "Keep numeric effect estimates, confidence intervals, study counts, participant counts, certainty ratings, "
             "study names, and clinical direction exactly aligned with structured facts. "
+            "Write the pooled estimate and its confidence and prediction interval bounds exactly as given in "
+            "rendered_numbers (same decimals, ASCII minus sign); never round them. "
             "Discussion and Conclusion must preserve the primary effect estimate, confidence interval, number of "
             "contributing studies, and certainty rating whenever those values are available in structured facts. "
             "Calibrate the final conclusion to the structured GRADE certainty: if certainty is moderate or high, do not "
