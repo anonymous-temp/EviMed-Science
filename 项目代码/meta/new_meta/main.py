@@ -4739,6 +4739,18 @@ def main():
         project.save_checkpoint("extraction")
 
     require_complete_extraction(project, extracted_studies, included_papers)
+    if args.skip_confirm:
+        from new_meta.core.extraction_status import exclude_unresolved_design_studies
+
+        unresolved = exclude_unresolved_design_studies(project, extracted_studies)
+        if unresolved:
+            print(f"  Left out of synthesis (randomized design unresolved): {', '.join(sorted(unresolved))}")
+            extracted_studies = [
+                study for study in extracted_studies
+                if str(study.characteristics.pmid or study.characteristics.study_id or "") not in unresolved
+            ]
+            included_papers = [paper for paper in included_papers if paper_identity(paper) not in unresolved]
+            require_complete_extraction(project, extracted_studies, included_papers)
     extracted_studies = _augment_with_known_source_recovery(
         protocol,
         extracted_studies,

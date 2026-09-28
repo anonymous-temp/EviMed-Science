@@ -383,3 +383,42 @@ def test_actual_protocol_change_still_requires_independent_scope_assessment(tmp_
     monkeypatch.setattr(ResearchPlanner, "check_scope", reject_changed_scope)
     with pytest.raises(ProtocolInputRequired, match="Independent scope assessment required"):
         admit_project_protocol(project, protocol, enforce=True)
+
+
+def test_an_unattended_review_leaves_out_a_study_whose_design_is_unknown(tmp_path):
+    """ma-001 run 5 (2026-09-28): one of eight included TXA trials came out of
+    extraction with every row's design "unknown", and method admission refused
+    the whole review. Unattended, that study is named as a full-text exclusion
+    and admission proceeds on the seven it can execute; interactively the
+    refusal above still stands."""
+    from new_meta.core.extraction_status import UNRESOLVED_DESIGN_CRITERION, exclude_unresolved_design_studies
+
+    protocol = _protocol()
+    project = Project(protocol.research_question, output_dir=tmp_path)
+    approve_synthetic_protocol_scope(project, protocol)
+    admit_project_protocol(project, protocol, enforce=True)
+    resolved = _study("S1", comparative_design="parallel_rct")
+    unresolved = _study("S2", comparative_design="unknown")
+    unresolved.characteristics.pmid = "S2"
+    resolved.characteristics.pmid = "S1"
+    project.save_json("full_text_screening.json", [
+        {"paper": {"pmid": "S1"}, "decision": "include"}, {"paper": {"pmid": "S2"}, "decision": "include"},
+    ], subdir="screening")
+    project.prisma.studies_included = 2
+    _save_studies(project, [resolved, unresolved])
+    with pytest.raises(ProtocolInputRequired):
+        admit_project_protocol(project, protocol, enforce=True)
+
+    assert exclude_unresolved_design_studies(project, [resolved, unresolved]) == {"S2"}
+    screening = {row["paper"]["pmid"]: row for row in project.load_json("full_text_screening.json", subdir="screening")}
+    assert screening["S2"]["decision"] == "exclude"
+    assert screening["S2"]["exclusion_criterion"] == UNRESOLVED_DESIGN_CRITERION
+    assert screening["S1"]["decision"] == "include"
+    kept = project.load_json("all_extractions.json", subdir="extraction")
+    assert [row["characteristics"]["pmid"] for row in kept] == ["S1"]
+    assert project.load_json("prisma_flow.json")["eligibility"]["exclusion_reasons"][UNRESOLVED_DESIGN_CRITERION] == 1
+    plan = admit_project_protocol(project, protocol, enforce=True)
+    assert plan.study_designs == ["parallel_rct"]
+    # Idempotent on resume, and never the whole review.
+    assert exclude_unresolved_design_studies(project, [resolved]) == set()
+    assert exclude_unresolved_design_studies(project, [unresolved]) == set()

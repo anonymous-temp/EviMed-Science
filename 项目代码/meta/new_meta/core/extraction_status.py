@@ -69,37 +69,17 @@ def exclude_unusable_sources(project, failures):
     }
     if not unusable:
         return set()
-    records = project.load_json("full_text_screening.json", subdir="screening") or []
-    moved = 0
-    for record in records:
-        paper = record.get("paper")
-        if not isinstance(paper, dict) or record.get("decision") != "include":
-            continue
-        failure = unusable.get(paper_identity(paper))
-        if failure is None:
-            continue
-        detail = (
-            f"retrieved text is {failure['source_chars']} characters, over the {failure['source_char_limit']}-character "
-            "extraction limit (likely not the article itself)"
-            if failure.get("code") == "extraction_source_context_unavailable" and failure.get("source_chars")
-            else "no usable full text"
-        )
-        record.update({
-            "decision": "exclude",
-            "exclusion_criterion": UNUSABLE_SOURCE_CRITERION,
-            "reason": f"{UNUSABLE_SOURCE_CRITERION}: {detail}. Supply the article to include it.",
-            "unattended_exclusion": {"phase": "extraction", **failure},
-        })
-        moved += 1
-    if moved:
-        project.save_json("full_text_screening.json", records, subdir="screening")
-        prisma = project.prisma
-        prisma.full_text_excluded += moved
-        prisma.studies_included = max(0, prisma.studies_included - moved)
-        prisma.full_text_exclusion_reasons[UNUSABLE_SOURCE_CRITERION] = (
-            prisma.full_text_exclusion_reasons.get(UNUSABLE_SOURCE_CRITERION, 0) + moved
-        )
-        project.save_json("prisma_flow.json", prisma.to_dict())
+
+    def detail(failure):
+        if failure.get("code") == "extraction_source_context_unavailable" and failure.get("source_chars"):
+            return (f"retrieved text is {failure['source_chars']} characters, over the "
+                    f"{failure['source_char_limit']}-character extraction limit (likely not the article itself)")
+        return "no usable full text"
+
+    _record_unattended_exclusions(
+        project, {study_id: (detail(failure), failure) for study_id, failure in unusable.items()},
+        criterion=UNUSABLE_SOURCE_CRITERION, remedy="Supply the article to include it.",
+    )
     project.add_warning(
         "extraction",
         f"{len(unusable)} included stud{'y was' if len(unusable) == 1 else 'ies were'} excluded because the "
@@ -108,6 +88,85 @@ def exclude_unusable_sources(project, failures):
         context={"studies": list(unusable.values())},
     )
     return set(unusable)
+
+
+UNRESOLVED_DESIGN_CRITERION = "Randomized design could not be resolved from the full text"
+
+
+def exclude_unresolved_design_studies(project, studies):
+    """Leave out a study whose randomized design the extraction could not name.
+
+    Unattended runs only (``--skip-confirm``). The design rules keep an
+    unresolved design as "unknown" rather than guess one, and method admission
+    then refuses the whole review: on 2026-09-28 one six-arm TXA trial did
+    that to a brief with seven other resolved trials. Pooling a study whose
+    dependencies are unknown would overstate its precision, so it is not
+    pooled; it is named, with the reason, in the full-text screening record,
+    PRISMA and the pipeline warnings, and the remaining studies go on. Returns
+    the excluded study ids and removes them from ``all_extractions.json``.
+    """
+    from new_meta.core.method_planning import unresolved_design_study_ids
+
+    unresolved = unresolved_design_study_ids(studies)
+    if not unresolved or len(unresolved) == len(studies):
+        # All of them unresolved is the review's own finding, not one study's.
+        return set()
+    _record_unattended_exclusions(
+        project, {study_id: ("comparative design recorded as unknown", {"study_id": study_id})
+                  for study_id in unresolved},
+        criterion=UNRESOLVED_DESIGN_CRITERION,
+        remedy="Adjudicate its design to include it.",
+    )
+    remaining = [study for study in studies if _extracted_study_id(study) not in unresolved]
+    project.save_json("all_extractions.json", remaining, subdir="extraction")
+    status = project.load_json("extraction_status.json", subdir="extraction") or {}
+    data = status.get("data") if isinstance(status.get("data"), dict) else None
+    if data is not None and isinstance(data.get("required_study_ids"), list):
+        data["required_study_ids"] = [item for item in data["required_study_ids"] if item not in unresolved]
+        data["excluded_unresolved_design"] = sorted(unresolved)
+        project.save_json("extraction_status.json", status, subdir="extraction")
+    project.add_warning(
+        "extraction",
+        f"{len(unresolved)} included stud{'y was' if len(unresolved) == 1 else 'ies were'} left out of the "
+        "synthesis because the randomized design could not be resolved from the full text.",
+        code="unresolved_design_excluded",
+        context={"studies": sorted(unresolved)},
+    )
+    return set(unresolved)
+
+
+def _extracted_study_id(study):
+    characteristics = study.characteristics
+    return str(characteristics.pmid or characteristics.study_id or "")
+
+
+def _record_unattended_exclusions(project, excluded, *, criterion, remedy):
+    """Move included studies to the full-text exclusions, with the reason."""
+    records = project.load_json("full_text_screening.json", subdir="screening") or []
+    moved = 0
+    for record in records:
+        paper = record.get("paper")
+        if not isinstance(paper, dict) or record.get("decision") != "include":
+            continue
+        entry = excluded.get(paper_identity(paper))
+        if entry is None:
+            continue
+        detail, context = entry
+        record.update({
+            "decision": "exclude",
+            "exclusion_criterion": criterion,
+            "reason": f"{criterion}: {detail}. {remedy}",
+            "unattended_exclusion": {"phase": "extraction", **context},
+        })
+        moved += 1
+    if moved:
+        project.save_json("full_text_screening.json", records, subdir="screening")
+        prisma = project.prisma
+        prisma.full_text_excluded += moved
+        prisma.studies_included = max(0, prisma.studies_included - moved)
+        prisma.full_text_exclusion_reasons[criterion] = prisma.full_text_exclusion_reasons.get(criterion, 0) + moved
+        project.save_json("prisma_flow.json", prisma.to_dict())
+    return moved
 
 
 def extraction_incomplete(project, failures, *, completed_ids=(), required_ids=()):

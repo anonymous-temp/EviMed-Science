@@ -329,6 +329,18 @@ def _study_execution_designs(study: ExtractedStudy, known_designs: set[str]) -> 
     return designs or {"unknown"}
 
 
+def unresolved_design_study_ids(studies: list[ExtractedStudy]) -> set[str]:
+    """Studies whose extracted rows leave the randomized design unknown."""
+    registry = default_method_registry()
+    known_designs = {design for family in registry.families()
+                     for design in registry.plugin(family).supported_designs} | {"unknown"}
+    return {
+        str(study.characteristics.pmid or study.characteristics.study_id or "")
+        for study in studies
+        if "unknown" in _study_execution_designs(study, known_designs)
+    }
+
+
 def _project_execution_design_spec(
     project: Project, protocol: ResearchProtocol, spec: ReviewDesignSpec, registry: MethodRegistry,
 ) -> ReviewDesignSpec:
