@@ -4655,7 +4655,12 @@ def main():
                 project.clear_downstream("extraction")
                 print_step("8", "Structured Data Extraction (narrative mode)")
                 extractor = DataExtractionAgent(model=model)
-                extracted_studies = extractor.run(papers_for_extraction, parsed_papers, protocol, project)
+                extracted_studies = extractor.run(
+                    papers_for_extraction, parsed_papers, protocol, project, unattended=args.skip_confirm,
+                )
+                papers_for_extraction = [
+                    paper for paper in papers_for_extraction if paper_identity(paper) not in extractor.excluded_ids
+                ]
                 require_complete_extraction(project, extracted_studies, papers_for_extraction)
                 project.save_checkpoint("extraction")
             require_complete_extraction(project, extracted_studies, papers_for_extraction)
@@ -4719,7 +4724,12 @@ def main():
     else:
         print_step("8", "Structured Data Extraction (page-aware)")
         extractor = DataExtractionAgent(model=model)
-        extracted_studies = extractor.run(included_papers, parsed_papers, protocol, project)
+        extracted_studies = extractor.run(
+            included_papers, parsed_papers, protocol, project, unattended=args.skip_confirm,
+        )
+        # An unattended run records a study whose retrieved document cannot be
+        # extracted as a full-text exclusion instead of pausing the review.
+        included_papers = [paper for paper in included_papers if paper_identity(paper) not in extractor.excluded_ids]
         require_complete_extraction(project, extracted_studies, included_papers)
         print(f"Extracted data from {len(extracted_studies)} studies")
         for s in extracted_studies:

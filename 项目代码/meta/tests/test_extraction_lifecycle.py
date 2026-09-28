@@ -171,6 +171,77 @@ def test_overlimit_source_blocks_before_llm_call(tmp_path, monkeypatch):
     llm.assert_not_called()
 
 
+def _screened(project, *ids):
+    project.save_json("full_text_screening.json", [
+        {"paper": {"pmid": study_id, "title": f"Trial {study_id}"}, "decision": "include"} for study_id in ids
+    ], subdir="screening")
+    project.prisma.full_text_assessed = len(ids)
+    project.prisma.studies_included = len(ids)
+
+
+def test_unattended_run_excludes_an_unusable_source_and_extracts_the_rest(tmp_path, monkeypatch):
+    """ma-001 (2026-09-28): the "full text" retrieved for one trial was a
+    77-page thesis, 234,264 characters, and the whole review paused on it. An
+    unattended run records that study as a full-text exclusion, with the
+    reason, and extracts the others; the source is never truncated."""
+    project = Project("unusable source", output_dir=tmp_path)
+    _screened(project, "S1", "S2")
+    agent = DataExtractionAgent()
+    prompts = []
+
+    def llm(prompt, schema, **kwargs):
+        prompts.append(prompt)
+        return StudyCharacteristics() if schema is StudyCharacteristics else OutcomeList(
+            outcomes=[item.model_dump(mode="json") for item in study().outcomes])
+
+    monkeypatch.setattr(agent, "call_llm_structured", llm)
+    monkeypatch.setattr(agent, "_verify_alignment", lambda extracted, *args, **kwargs: extracted)
+    papers = [{"pmid": "S1", "fulltext_source": "pdf"}, {"pmid": "S2", "fulltext_source": "pdf"}]
+    parsed = {"S1": {"full_text": "x" * 128001}, "S2": {"full_text": "S2 full article"}}
+    results = agent.run(papers, parsed, protocol(), project, unattended=True)
+
+    assert [row.characteristics.pmid for row in results] == ["S2"]
+    assert agent.excluded_ids == {"S1"}
+    assert all("x" * 1000 not in prompt for prompt in prompts), "the over-limit source reached the model"
+    screening = {row["paper"]["pmid"]: row for row in project.load_json("full_text_screening.json", subdir="screening")}
+    assert screening["S1"]["decision"] == "exclude"
+    assert screening["S1"]["exclusion_criterion"] == "Full text unusable for extraction"
+    assert "128001 characters" in screening["S1"]["reason"]
+    assert screening["S2"]["decision"] == "include"
+    prisma = project.load_json("prisma_flow.json")
+    assert prisma["eligibility"]["exclusion_reasons"]["Full text unusable for extraction"] == 1
+    assert prisma["included"]["studies_included"] == 1
+    status = project.load_json("extraction_status.json", subdir="extraction")
+    assert status["status"] == "succeeded"
+    assert status["data"]["required_study_ids"] == ["S2"]
+    assert status["data"]["excluded_unusable_sources"] == ["S1"]
+    warnings = project.load_json("pipeline_warnings.json") or []
+    assert any(item.get("code") == "unusable_full_text_excluded" for item in warnings)
+    require_complete_extraction(project, results, [papers[1]])
+
+
+def test_unattended_run_still_stops_on_a_failure_of_the_run_itself(tmp_path, monkeypatch):
+    project = Project("provider failure", output_dir=tmp_path)
+    _screened(project, "S1", "S2")
+    agent = DataExtractionAgent()
+
+    def llm(prompt, schema, **kwargs):
+        if "S2 full article" in prompt:
+            raise ProviderUnavailable("provider down")
+        return StudyCharacteristics() if schema is StudyCharacteristics else OutcomeList(
+            outcomes=[item.model_dump(mode="json") for item in study().outcomes])
+
+    monkeypatch.setattr(agent, "call_llm_structured", llm)
+    papers = [{"pmid": "S1", "fulltext_source": "pdf"}, {"pmid": "S2", "fulltext_source": "pdf"}]
+    parsed = {"S1": {"full_text": "S1 full article"}, "S2": {"full_text": "S2 full article"}}
+    with pytest.raises(ExtractionIncomplete) as caught:
+        agent.run(papers, parsed, protocol(), project, unattended=True)
+    assert caught.value.phase.retryable
+    assert agent.excluded_ids == set()
+    screening = project.load_json("full_text_screening.json", subdir="screening")
+    assert all(row["decision"] == "include" for row in screening)
+
+
 @pytest.mark.parametrize("status, retryable, code", [("failed", True, 75), ("failed", False, 1), ("needs_input", False, 2)])
 def test_cli_incomplete_phase_uses_temporary_failure_or_input_exit_code(tmp_path, status, retryable, code, capsys):
     from new_meta.core.extraction_status import IncompletePhaseError

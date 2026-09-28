@@ -103,11 +103,17 @@ class DataExtractionAgent(BaseAgent):
         parsed_papers: dict[str, dict],
         protocol: ResearchProtocol,
         project: Project,
+        *,
+        unattended: bool = False,
     ) -> list[ExtractedStudy]:
         """Extract structured data from all included papers.
 
-        Returns list of ExtractedStudy with evidence traceability.
+        Returns list of ExtractedStudy with evidence traceability. With
+        ``unattended`` (``--skip-confirm``), a study whose retrieved document
+        cannot be extracted is recorded as a full-text exclusion instead of
+        pausing the whole review; its id is left in ``excluded_ids``.
         """
+        self.excluded_ids: set[str] = set()
         self.log(f"Extracting data from {len(included_papers)} papers...")
 
         def extract_one(paper):
@@ -151,6 +157,15 @@ class DataExtractionAgent(BaseAgent):
                     failures.append(e.failure if isinstance(e, StudyExtractionFailed) else extraction_failure(
                         paper_identity(paper), "study_extraction_failed", retryable=True, error_type=type(e).__name__,
                     ))
+
+        if failures and unattended:
+            from new_meta.core.extraction_status import exclude_unusable_sources
+
+            self.excluded_ids = exclude_unusable_sources(project, failures)
+            failures = [row for row in failures if row["study_id"] not in self.excluded_ids]
+            required_ids -= self.excluded_ids
+            for study_id in sorted(self.excluded_ids):
+                self.log(f"Excluded {study_id}: its retrieved full text cannot be extracted", level="warning")
 
         if failures:
             # Preserve the completed source extractions before raising. They remain
@@ -245,7 +260,9 @@ class DataExtractionAgent(BaseAgent):
         project.save_json("extraction_status.json", PhaseResult(
             run_id=project.base_dir.name, status="succeeded", phase="extraction",
             summary="Extraction completed for every required study.",
-            data={"required_study_ids": [paper_identity(paper) for paper in included_papers]},
+            data={"required_study_ids": [paper_identity(paper) for paper in included_papers
+                                         if paper_identity(paper) not in self.excluded_ids],
+                  **({"excluded_unusable_sources": sorted(self.excluded_ids)} if self.excluded_ids else {})},
         ), subdir="extraction")
         return results
 

@@ -44,6 +44,72 @@ def extraction_failure(study_id, code, *, retryable=False, **context):
     return {"study_id": study_id, "code": code, "retryable": retryable, **context}
 
 
+#: Failures that are a property of the retrieved document, not of the run: its
+#: text is too long to extract whole (on 2026-09-28 the "full text" retrieved
+#: for a TKA trial was a 77-page doctoral thesis), or there is no usable full
+#: text at all. Retrying cannot change them; only another document can.
+UNUSABLE_SOURCE_CODES = frozenset({"extraction_source_context_unavailable", "extraction_source_unavailable"})
+UNUSABLE_SOURCE_CRITERION = "Full text unusable for extraction"
+
+
+def exclude_unusable_sources(project, failures):
+    """Record unusable-source failures as full-text exclusions; return their study ids.
+
+    For an unattended run only (``--skip-confirm``), the same place its other
+    documented fallbacks live. Interactively the phase still pauses so a person
+    can supply the article. A review cannot report data it could not read, so
+    these studies leave the included set the way a study whose full text was
+    never retrieved does: named, with the reason, in the full-text screening
+    record, the PRISMA exclusion reasons and the pipeline warnings. A failure
+    of the run itself (a model call, a schema) is never excluded this way.
+    """
+    unusable = {
+        row["study_id"]: row for row in failures
+        if row.get("code") in UNUSABLE_SOURCE_CODES and not row.get("retryable")
+    }
+    if not unusable:
+        return set()
+    records = project.load_json("full_text_screening.json", subdir="screening") or []
+    moved = 0
+    for record in records:
+        paper = record.get("paper")
+        if not isinstance(paper, dict) or record.get("decision") != "include":
+            continue
+        failure = unusable.get(paper_identity(paper))
+        if failure is None:
+            continue
+        detail = (
+            f"retrieved text is {failure['source_chars']} characters, over the {failure['source_char_limit']}-character "
+            "extraction limit (likely not the article itself)"
+            if failure.get("code") == "extraction_source_context_unavailable" and failure.get("source_chars")
+            else "no usable full text"
+        )
+        record.update({
+            "decision": "exclude",
+            "exclusion_criterion": UNUSABLE_SOURCE_CRITERION,
+            "reason": f"{UNUSABLE_SOURCE_CRITERION}: {detail}. Supply the article to include it.",
+            "unattended_exclusion": {"phase": "extraction", **failure},
+        })
+        moved += 1
+    if moved:
+        project.save_json("full_text_screening.json", records, subdir="screening")
+        prisma = project.prisma
+        prisma.full_text_excluded += moved
+        prisma.studies_included = max(0, prisma.studies_included - moved)
+        prisma.full_text_exclusion_reasons[UNUSABLE_SOURCE_CRITERION] = (
+            prisma.full_text_exclusion_reasons.get(UNUSABLE_SOURCE_CRITERION, 0) + moved
+        )
+        project.save_json("prisma_flow.json", prisma.to_dict())
+    project.add_warning(
+        "extraction",
+        f"{len(unusable)} included stud{'y was' if len(unusable) == 1 else 'ies were'} excluded because the "
+        "retrieved full text could not be extracted; the review reports them as full-text exclusions.",
+        code="unusable_full_text_excluded",
+        context={"studies": list(unusable.values())},
+    )
+    return set(unusable)
+
+
 def extraction_incomplete(project, failures, *, completed_ids=(), required_ids=()):
     """Preserve machine-readable source-level failures and block delivery."""
     system_failed = any(row["code"] in {"structured_extraction_failed", "study_extraction_failed", "extraction_failed"}
