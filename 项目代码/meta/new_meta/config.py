@@ -36,6 +36,16 @@ LLM_MAX_TOKENS_SCREENING = int(os.getenv("LLM_MAX_TOKENS_SCREENING", "8192"))
 LLM_MAX_TOKENS_EXTRACTION = int(os.getenv("LLM_MAX_TOKENS_EXTRACTION", "16384"))
 LLM_MAX_TOKENS_WRITING = int(os.getenv("LLM_MAX_TOKENS_WRITING", "32768"))
 LLM_MAX_TOKENS_GRADE = int(os.getenv("LLM_MAX_TOKENS_GRADE", "8192"))
+# With DeepSeek V4 thinking enabled, max_tokens covers the reasoning as well as
+# the answer, so the per-task budgets above (sized for answers) were eaten by
+# reasoning: on 2026-09-28 the ma-001 planning call hit 8,192 and then 16,384
+# with finish_reason=length, each a full generation thrown away before the
+# retry doubled the budget. Thinking calls start at this floor instead; an
+# unused budget costs nothing.
+LLM_THINKING_MIN_MAX_TOKENS = int(os.getenv("LLM_THINKING_MIN_MAX_TOKENS", "32768"))
+# No retry asks for more than this. A response truncated at the cap is not
+# asked for again: the same prompt at the same budget truncates the same way.
+LLM_MAX_TOKENS_CAP = int(os.getenv("LLM_MAX_TOKENS_CAP", "65536"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "5"))
 LLM_RETRY_MAX_WAIT_SECONDS = float(os.getenv("LLM_RETRY_MAX_WAIT_SECONDS", "16"))

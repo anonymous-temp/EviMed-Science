@@ -27,6 +27,7 @@ from new_meta.config import (
     LLM_JSON_REPAIR_RETRIES,
     LLM_MAX_RETRIES,
     LLM_MAX_TOKENS,
+    LLM_MAX_TOKENS_CAP,
     LLM_MODEL,
     LLM_POOL_TIMEOUT_SECONDS,
     LLM_READ_TIMEOUT_SECONDS,
@@ -35,6 +36,7 @@ from new_meta.config import (
     LLM_SEARCH_STRATEGY,
     LLM_STREAM,
     LLM_TEMPERATURE,
+    LLM_THINKING_MIN_MAX_TOKENS,
     LLM_TRUST_ENV,
     LLM_WRITE_TIMEOUT_SECONDS,
     LLM_USE_RESPONSES_API,
@@ -592,7 +594,29 @@ class LLMClient:
 
     @staticmethod
     def _expanded_max_tokens(max_tokens: int) -> int:
-        return max(int(max_tokens * 2), int(max_tokens) + 1024)
+        """The budget a truncated call is retried with, never above the cap.
+
+        Equal to ``max_tokens`` when the cap is already reached: the caller
+        must then stop, because the same prompt at the same budget truncates
+        the same way.
+        """
+        expanded = max(int(max_tokens * 2), int(max_tokens) + 1024)
+        if LLM_MAX_TOKENS_CAP > 0:
+            expanded = min(expanded, max(int(max_tokens), LLM_MAX_TOKENS_CAP))
+        return expanded
+
+    def _initial_max_tokens(self, max_tokens: int, model: str) -> int:
+        """The first attempt's budget: a thinking call's floor covers its reasoning."""
+        budget = int(max_tokens)
+        if (
+            LLM_THINKING_MIN_MAX_TOKENS > 0
+            and _is_deepseek_v4_chat(self.base_url, model)
+            and self.enable_thinking is not False
+        ):
+            budget = max(budget, LLM_THINKING_MIN_MAX_TOKENS)
+        if LLM_MAX_TOKENS_CAP > 0:
+            budget = min(budget, max(int(max_tokens), LLM_MAX_TOKENS_CAP))
+        return budget
 
     @staticmethod
     def _retry_wait_seconds(attempt: int) -> float:
@@ -705,7 +729,9 @@ class LLMClient:
                 "Do not summarize, omit required fields, or include markdown fences."
             )
             retry_messages[-1] = retry_last
-            expanded_max_tokens = self._expanded_max_tokens(max_tokens or LLM_MAX_TOKENS)
+            expanded_max_tokens = self._expanded_max_tokens(
+                self._initial_max_tokens(max_tokens or LLM_MAX_TOKENS, model or self.model)
+            )
             logger.warning(
                 "Structured LLM response for schema %s looked incomplete; retrying original prompt "
                 "with max_tokens=%s.",
@@ -953,6 +979,7 @@ class LLMClient:
     ) -> str:
         """Call chat completions, optionally using DashScope search as a Responses fallback."""
 
+        max_tokens = self._initial_max_tokens(max_tokens, model)
         kwargs = {
             "model": model,
             "messages": messages,
@@ -999,7 +1026,7 @@ class LLMClient:
                     )
                     if finish_reason == "length":
                         logger.warning("LLM stream stopped because max_tokens=%s was reached.", max_tokens)
-                        if attempt < max_retries - 1:
+                        if attempt < max_retries - 1 and self._expanded_max_tokens(max_tokens) > max_tokens:
                             kwargs["max_tokens"] = self._expanded_max_tokens(int(kwargs["max_tokens"]))
                             max_tokens = int(kwargs["max_tokens"])
                             if self._should_continue_truncated_text(text, response_format):
@@ -1013,7 +1040,7 @@ class LLMClient:
                                 ),
                             )
                             continue
-                        raise LLMOutputError("LLM stream was truncated after retries.")
+                        raise LLMOutputError(f"LLM stream was truncated at max_tokens={max_tokens}; not retried further.")
                     if not text.strip():
                         if attempt < max_retries - 1:
                             self._sleep_before_retry(
@@ -1067,7 +1094,7 @@ class LLMClient:
                     )
                 if finish_reason == "length":
                     logger.warning("LLM response stopped because max_tokens=%s was reached.", max_tokens)
-                    if attempt < max_retries - 1:
+                    if attempt < max_retries - 1 and self._expanded_max_tokens(max_tokens) > max_tokens:
                         kwargs["max_tokens"] = self._expanded_max_tokens(int(kwargs["max_tokens"]))
                         max_tokens = int(kwargs["max_tokens"])
                         if self._should_continue_truncated_text(content, response_format):
@@ -1081,7 +1108,7 @@ class LLMClient:
                             ),
                         )
                         continue
-                    raise LLMOutputError("LLM response was truncated after retries.")
+                    raise LLMOutputError(f"LLM response was truncated at max_tokens={max_tokens}; not retried further.")
                 if not content.strip():
                     if attempt < max_retries - 1:
                         self._sleep_before_retry(
