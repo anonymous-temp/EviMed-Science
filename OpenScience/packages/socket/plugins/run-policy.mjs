@@ -386,6 +386,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         steered: false,
         /** How many times a stopping turn was told children are outstanding. */
         childrenReminders: 0,
+        /** Reviews whose owed answers a stopping turn was already reminded of. */
+        reviewReminded: new Set(),
+        /** Deliverables that spent their one answering submission past the ceiling this turn. */
+        answerSubmissions: new Set(),
         /** Whether the root is inside a turn; a settlement that lands while it
          *  is not is handed to it by waking it. */
         rootActive: false,
@@ -866,6 +870,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             entry.attempts = new Map()
             entry.structuralAttempts = new Map()
           }
+          entry.answerSubmissions = new Set()
         }
       }
       // Every control-plane dispatch commits a new context revision. Reading it
@@ -1005,6 +1010,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
     if (revisionGrant && !grantMatches) entry.revisionSubmissionGrants.delete(id)
     if (attempts < config.deliveryAttemptLimit || grantMatches) return undefined
+    // The answers to a review travel with the next submission, so a review
+    // that arrived with the last allowed one could never be answered: the
+    // reader was shown every finding as ignored. One more submission, once
+    // per deliverable and turn, when it carries answers the review is owed.
+    if (item && owedAnswers(item).length && Array.isArray(call.args?.responses) && call.args.responses.length && !entry.answerSubmissions.has(id)) {
+      entry.answerSubmissions.add(id)
+      return undefined
+    }
     return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。写出的文件会连同未通过的核验项一起交付；把结论写给用户，本轮到此为止。`
   }))
 
@@ -1216,7 +1229,27 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       }
       return
     }
-    if (outstanding.length || entry.steered || !entry.items.length) return
+    if (outstanding.length || !entry.items.length) return
+    // A review's findings are answered with the next submission, and a turn
+    // that ends after the last review leaves every one of them unanswered —
+    // shown to the reader as ignored, however the run dealt with them. The
+    // 2026-09-27 topic run declined 32 of them in revision-notes.md, a file
+    // the review does not read, and ended. Once per review, bounded per turn.
+    const owing = entry.items.filter((/** @type {any} */ item) => owedAnswers(item).length && !entry.reviewReminded.has(String(item.lastReview?.reviewId ?? '')))
+    if (owing.length && entry.reviewReminded.size < REVIEW_REMINDER_LIMIT) {
+      for (const item of owing) entry.reviewReminded.add(String(item.lastReview?.reviewId ?? ''))
+      const lines = owing.map((/** @type {any} */ item) => `「${item.id}」${owedAnswers(item).join('、')}`)
+      const reminder = `<evimed-run>最近一次独立审查还有需回应的发现没有回应：${lines.join('；')}。`
+        + '改了的，重新提交时在 responses 里回 fixed；不改的回 declined 并写一句理由，文件不改也可以直接带 responses 重新提交。'
+        + '写进 revision-notes.md 的回应审查读不到；没有回应的发现会原样列给读者。</evimed-run>'
+      try {
+        steerContext(agent, reminder, name)
+      } catch {
+        diagnostics(sessionId)?.degrade?.('review answers reminder steer failed')
+      }
+      return
+    }
+    if (entry.steered) return
     if (entry.items.every((/** @type {any} */ item) => item.status === 'accepted')) return
     entry.steered = true
     // isolated: evimed_steer_failures_total — a nudge that throws must not turn
@@ -1868,7 +1901,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       description: [
         '提交一件交付物，当场得到裁定：先把引用编号与参考文献表渲染整齐，再跑门禁，再请独立审查（另一家族的模型逐条核对参考文献、数字与论断，发现带编号与原文），三者的结果一次返回。',
         '第一次不通过是常态：按 issues 修好，再提交，直到 ok。契约种类由计划派生，不需要你传。',
-        '审查发现里标了「需回应」的，下次提交时在 responses 里逐条回应：改了回 fixed，不改回 declined 并写一句理由。',
+        '审查发现里标了「需回应」的，下次提交时在 responses 里逐条回应：改了回 fixed，不改回 declined 并写一句理由；审查只读 responses，写进 revision-notes.md 的不算回应。',
         '本轮对话结束前文件都还能改；回执与冻结在本轮结束时才发生。',
       ].join(' '),
       parameters: {
@@ -2325,7 +2358,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (result.ok && 'review' in result) {
       item.lastReview = {
         reviewId: result.review.reviewId,
-        findings: result.review.findings.map((/** @type {any} */ finding) => ({ id: finding.id, kind: finding.kind, answerRequired: Boolean(finding.answerRequired) })),
+        // Answered already when the reviewer carried a decline over from an
+        // earlier pass (the same finding, word for word).
+        findings: result.review.findings.map((/** @type {any} */ finding) => ({ id: finding.id, kind: finding.kind, answerRequired: Boolean(finding.answerRequired), answered: Boolean(finding.response) })),
       }
     }
     return result
@@ -2341,7 +2376,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const answerLastReview = async (item, responses, signal) => {
     if (!config.reviewEnabled || !item.lastReview?.reviewId || !Array.isArray(responses) || !responses.length) return null
     const answered = await answerReview(ctx, config, { reviewId: item.lastReview.reviewId, answers: /** @type {any[]} */ (responses), signal })
-    return answered.ok ? { recorded: answered.recorded, refused: answered.refused } : null
+    if (!answered.ok) return null
+    // What was recorded is no longer owed, even when this submission is not
+    // accepted and so starts no review to replace the last one.
+    const refused = new Set(answered.refused.map((/** @type {any} */ entry) => String(entry?.id ?? '')))
+    const given = new Set(/** @type {any[]} */ (responses).map((entry) => String(entry?.id ?? '')).filter((id) => id && !refused.has(id)))
+    for (const finding of item.lastReview.findings ?? []) if (given.has(finding.id)) finding.answered = true
+    return { recorded: answered.recorded, refused: answered.refused }
   }
 
   /**
@@ -2457,6 +2498,20 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 }
 
 /* ------------------------------------------------------------ small parts */
+
+/** Reviews a run is reminded of owed answers for, in one turn. */
+const REVIEW_REMINDER_LIMIT = 2
+
+/**
+ * The findings of a deliverable's last review that owe an answer and have
+ * none: marked 需回应 by the reviewer, not answered by the run, not carried
+ * over as declined from an earlier pass.
+ * @param {Record<string, any>} item @returns {string[]}
+ */
+function owedAnswers(item) {
+  const findings = Array.isArray(item?.lastReview?.findings) ? item.lastReview.findings : []
+  return findings.filter((/** @type {any} */ finding) => finding?.answerRequired && !finding?.answered).map((/** @type {any} */ finding) => String(finding.id))
+}
 
 /** Ask the control plane to consume the authorization created after its private snapshot.
  * @param {any} ctx @param {Config} config
@@ -2809,6 +2864,8 @@ function resetRunState(entry, runId) {
   entry.lastTurnEnd = null
   entry.steered = false
   entry.childrenReminders = 0
+  entry.reviewReminded = new Set()
+  entry.answerSubmissions = new Set()
   entry.wakeSuppressed = false
   entry.completed = false
   entry.inlineCapabilities = new Set()

@@ -1770,6 +1770,53 @@ test("a submission brings back the gate's verdict and the independent review in 
   }
 });
 
+test("a turn that would end with review findings unanswered is reminded once, and can still answer past the ceiling", async () => {
+  // 2026-09-27, the missed-dialysis topic run: its last submission came back
+  // accepted with review findings, the run declined them in revision-notes.md
+  // — which the review does not read — and ended. The reader was shown 35
+  // findings as unanswered. The answers travel with the next submission, so
+  // the turn is told before it closes, and the submission that carries them
+  // is not refused by a ceiling the review arrived on.
+  const gateway = await reviewGatewayStub(sampleReview);
+  const f = await nativePolicyFixture({ briefId: "review-answers", reviewEnabled: true, revisionAuthorizeUrl: gateway.revisionAuthorizeUrl, deliveryAttemptLimit: 1 });
+  /** @type {any[]} */
+  const steered = [];
+  /** @type {any} */ (f.agent).steer = (/** @type {any} */ message) => steered.push(message);
+  const stopping = async () => {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 1 });
+  };
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
+    const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(submitted.value.ok, true, JSON.stringify(submitted.value));
+    assert.deepEqual(submitted.value.data.review.answerRequired, ["F01"]);
+
+    await stopping();
+    assert.equal(steered.length, 1, "an accepted package with owed answers does not end silently");
+    const reminder = steered[0].content[0].text;
+    assert.match(reminder, /「d1」F01/);
+    assert.match(reminder, /responses/);
+    assert.match(reminder, /revision-notes\.md/, "and it says the notes are not where an answer is read");
+    await stopping();
+    assert.equal(steered.length, 1, "once per review, not on every attempt to close");
+
+    // The ceiling (1) is spent. A submission without answers is refused as
+    // before; one that carries the answers the review is owed goes through,
+    // once.
+    const refused = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(refused.error?.code, "GUARDED");
+    const answering = await f.execute("evimed_submit_deliverable", { deliverableId: "d1", responses: [{ id: "F01", response: "declined", reason: "The figure is quoted from the cited trial." }] });
+    assert.equal(answering.error, undefined, JSON.stringify(answering.content));
+    assert.deepEqual(answering.value.data.responses, { recorded: 1, refused: [] });
+    const again = await f.execute("evimed_submit_deliverable", { deliverableId: "d1", responses: [{ id: "F01", response: "declined", reason: "Still quoted." }] });
+    assert.equal(again.error?.code, "GUARDED", "one answering submission per deliverable and turn");
+  } finally {
+    await gateway.close();
+  }
+});
+
 test("a review that is not there costs the submission nothing but a line saying so", async () => {
   // The control plane with its review module off answers `review_disabled`;
   // the verdict is delivered as it is.
