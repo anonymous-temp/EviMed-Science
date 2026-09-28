@@ -897,6 +897,24 @@ def _filter_evimed_records(records, required_concepts):
     return kept, len(records) - len(kept)
 
 
+def _evimed_empty_warning(label, result):
+    """Why an EviMed search that answered handed back nothing to use.
+
+    Two different facts with two different next steps: every record it
+    returned failed the run's required concepts (loosen or correct them), or
+    it returned none at all (rephrase, or read the fallback). The message used
+    to name the first whether or not any concept had been given -- twelve of
+    the eighteen clinical-trial fallbacks in production between 2026-09-14 and
+    09-28 said "no records matching all required concepts" for calls that
+    carried none, and the platform audit read the fallbacks as the endpoint
+    never serving a run.
+    """
+    excluded = _dict(result.get("data")).get("excludedByRequiredConcepts") or 0
+    if excluded:
+        return "EviMed %s search returned %d records, none matching every required concept." % (label, excluded)
+    return "EviMed %s search returned no records for this query." % label
+
+
 def _filter_evimed_title_records(records, required_concepts):
     concepts = [
         value.strip() for value in required_concepts or []
@@ -1049,7 +1067,7 @@ def _evimed_literature_records(arguments):
     return {
         "status": "warning",
         "summary": "Retrieved %d traceable EviMed literature records." % len(items),
-        "data": {"items": items, "total": data.get("total")},
+        "data": {"items": items, "total": data.get("total"), "excludedByRequiredConcepts": filtered_count + title_filtered_count},
         "sources": sources,
         "warnings": [
             "AI summaries and indexed metadata are discovery aids; verify material claims against the primary record.",
@@ -1184,6 +1202,7 @@ def _evimed_guidelines(arguments):
             "artifactSha256s": artifact_sha256s,
             "items": items,
             "total": data.get("total"),
+            "excludedByRequiredConcepts": filtered_count,
             "keywords": data.get("keywords") if mode == "blocks" else None,
             "enrichedQuery": data.get("enrichedQuery") if mode == "blocks" else None,
             "requestedJurisdiction": arguments.get("jurisdiction"),
@@ -1241,7 +1260,7 @@ def _evimed_trial_records(arguments):
         sources.append(_source(identifier, title, record_url, "evimed-clinical-trial"))
     result = {
         "summary": "Retrieved %d traceable EviMed trial records." % len(items),
-        "data": {"items": items, "total": data.get("total"), "registry": body["registry"]},
+        "data": {"items": items, "total": data.get("total"), "registry": body["registry"], "excludedByRequiredConcepts": filtered_count},
         "sources": sources,
     }
     if filtered_count:
@@ -1428,7 +1447,7 @@ def literature(arguments):
             result = _evimed_literature_records(arguments)
             if result.get("data", {}).get("items") or "pubmed" not in databases:
                 return result
-            evimed_warning = "EviMed literature search returned no records matching all required concepts."
+            evimed_warning = _evimed_empty_warning("literature", result)
         except PublicSourceError as error:
             legacy_error = None
             try:
@@ -1462,7 +1481,7 @@ def guideline(arguments):
         result = _evimed_guidelines(arguments)
         if result.get("data", {}).get("items"):
             return result
-        evimed_warning = "EviMed guideline search returned no records matching all required concepts."
+        evimed_warning = _evimed_empty_warning("guideline", result)
     except PublicSourceError as error:
         evimed_warning = "EviMed guideline search was unavailable: %s" % error
     query = arguments["query"]
@@ -1481,7 +1500,7 @@ def trials(arguments):
         result = _evimed_trial_records(arguments)
         if result.get("data", {}).get("items"):
             return result
-        evimed_warning = "EviMed clinical-trial search returned no records matching all required concepts."
+        evimed_warning = _evimed_empty_warning("clinical-trial", result)
     except PublicSourceError as error:
         evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
     base = _base("EVIMED_CLINICAL_TRIALS_BASE_URL", "https://clinicaltrials.gov/api/v2")

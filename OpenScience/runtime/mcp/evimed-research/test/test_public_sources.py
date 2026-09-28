@@ -938,6 +938,36 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertTrue(any("bibliographic metadata only" in item for item in output["warnings"]))
         self.assertTrue(any("abstract or full text" in item for item in output["next_actions"]))
 
+    def test_an_empty_evimed_answer_says_whether_concepts_or_the_query_emptied_it(self):
+        # Production 2026-09-14..28: twelve clinical-trial fallbacks said "no
+        # records matching all required concepts" for calls that carried none.
+        registry = {"studies": [{"protocolSection": {
+            "identificationModule": {"nctId": "NCT00000002", "briefTitle": "Metformin for PCOS"},
+            "conditionsModule": {"conditions": ["polycystic ovary syndrome"]},
+            "armsInterventionsModule": {"interventions": [{"name": "metformin"}]},
+        }}]}
+        unrelated = [{"title": "Exercise for PCOS", "registrationNo": "ChiCTR1", "conditions": ["polycystic ovary syndrome"],
+                      "interventions": ["exercise"]}]
+        cases = [
+            ({"total": 0, "list": []}, None, "EviMed clinical-trial search returned no records for this query."),
+            ({"total": 1, "list": unrelated}, ["metformin"], "EviMed clinical-trial search returned 1 records, none matching every required concept."),
+        ]
+        for evimed, concepts, expected in cases:
+            arguments = {"query": "metformin polycystic ovary syndrome", "limit": 2}
+            if concepts:
+                arguments["requiredConcepts"] = concepts
+            with mock.patch.object(sources, "_evimed_post", return_value=(evimed, "review/api/clinical-trial")), \
+                 mock.patch.object(sources, "_get_json", return_value=registry):
+                result = sources.trials(arguments)
+            self.assertEqual(result["sources"][0]["source"], "clinicaltrials.gov")
+            self.assertIn(expected, result["warnings"])
+            self.assertFalse(any("matching all required concepts" in warning for warning in result["warnings"]))
+
+        with mock.patch.object(sources, "_evimed_post", return_value=({"total": 0, "list": []}, "review/api/guide")), \
+             mock.patch.object(sources, "_pubmed", return_value={"status": "warning", "data": {"items": []}, "sources": [], "warnings": []}):
+            result = sources.guideline({"query": "obesity", "limit": 2})
+        self.assertIn("EviMed guideline search returned no records for this query.", result["warnings"])
+
     def test_trial_records_preserve_registry_identifiers_and_urls(self):
         payload = {
             "studies": [{
