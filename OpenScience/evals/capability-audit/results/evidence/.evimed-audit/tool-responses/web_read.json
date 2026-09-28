@@ -1,0 +1,166 @@
+{
+  "status": "success",
+  "summary": "Read www.nice.org.uk and preserved it (page 1 of 1).",
+  "data": {
+    "url": "https://www.nice.org.uk/guidance/ng136",
+    "finalUrl": "https://www.nice.org.uk/guidance/ng136",
+    "title": "Overview | Hypertension in adults: diagnosis and management | Guidance | NICE",
+    "site": "www.nice.org.uk",
+    "fetchedAt": "2026-09-28T08:34:03.143Z",
+    "official": true,
+    "rendered": false,
+    "contentType": "html",
+    "mediaType": "text/html",
+    "sha256": "2ff1a22d4cc69b182c1a62e141b9e312f88555a0337ac0c831c3a419d5a81340",
+    "sourceId": "web-page:2ff1a22d4cc69b18",
+    "markdownPath": ".evimed-sources/web-pages/2ff1a22d4cc69b18/e1cc3a4bdeab768dc4b4374ffa433927c9215a092e9efb1cc1ac26db521a255c/page.md",
+    "artifactSha256s": {
+      ".evimed-sources/web-pages/2ff1a22d4cc69b18/e1cc3a4bdeab768dc4b4374ffa433927c9215a092e9efb1cc1ac26db521a255c/page.md": "3ca02fb6a9d9852dbb0b4438ec6a13c5c0ec4a71ebf3e4cd5e1d50412a713f46"
+    },
+    "characters": 4502,
+    "page": 1,
+    "pages": 1,
+    "nextPage": null,
+    "content": "You are here:\n\n- Home\n- NICE Guidance\n- Conditions and diseases\n- Cardiovascular conditions\n- Hypertension\n\n# Hypertension in adults: diagnosis and management\n\n- NICE guideline\n- Reference number: NG136\n- Published: 28 August 2019\n- Last updated: 26 February 2026\n- Guidance\n- Tools and resources\n- Information for the public\n- Evidence\n- History\n\nDownload guidance (PDF)\n\n- Overview\n- Recommendations\n- Recommendations for research\n- Rationale and impact\n- Context\n- Finding more information and committee details\n- Update information\n\n## Overview\n\nThis guideline covers identifying and treating primary hypertension (high blood pressure) in people aged 18 and over, including people with type 2 diabetes. It aims to reduce the risk of cardiovascular problems such as heart attacks and strokes by helping healthcare professionals to diagnose hypertension accurately and treat it effectively.\n\nNICE has also produced a guideline on hypertension in pregnancy.\n\nLast reviewed: 26 February 2026\n\nWe added a new recommendation to offer advice on healthy living to people who have raised blood pressure but have not been diagnosed with hypertension. See update information for more details.\n\nWe are monitoring the ongoing research on the response to antihypertensive drugs in different ethnic groups that may impact recommendations in this guideline. We will check the evidence when published and make a decision whether to update this guideline at this time.\n\nThis guideline updates and replaces NICE guideline CG127. It also updates and replaces the section on blood pressure management in the NICE guideline on type 2 diabetes in adults (NG28).\n\nHow we prioritise updating our guidance\n\nDecisions about updating our guidance are made by NICE’s prioritisation board. For more information on the principles and process see NICE-wide topic prioritisation: the manual.\n\nFor information about individual topics, including any decisions affecting this guideline, see the summary table of prioritisation board decisions.\n\n### Recommendations\n\nThis guideline includes recommendations on:\n\n- diagnosing hypertension\n- starting antihypertensive drug treatment\n- monitoring treatment and blood pressure targets\n- choosing antihypertensive drug treatment (treatment steps 1 to 4)\n- measuring blood pressure\n- assessing cardiovascular risk and target organ damage\n- lifestyle interventions\n\nSee a 2-page visual summary on the recommendations for diagnosing and treating hypertension\n\n### Who is it for?\n\n- Healthcare professionals\n- Commissioners and providers\n- People who have or may have high blood pressure, their families and carers\n\n### Guideline development process\n\nHow we develop NICE guidelines\n\n#### Your responsibility\n\nThe recommendations in this guideline represent the view of NICE, arrived at after careful consideration of the evidence available. When exercising their judgement, professionals and practitioners are expected to take this guideline fully into account, alongside the individual needs, preferences and values of their patients or the people using their service. It is not mandatory to apply the recommendations, and the guideline does not override the responsibility to make decisions appropriate to the circumstances of the individual, in consultation with them and their families and carers or guardian.\n\nAll problems (adverse events) related to a medicine or medical device used for treatment or in a procedure should be reported to the Medicines and Healthcare products Regulatory Agency using the Yellow Card Scheme.\n\nLocal commissioners and providers of healthcare have a responsibility to enable the guideline to be applied when individual professionals and people using services wish to use it. They should do so in the context of local and national priorities for funding and developing services, and in light of their duties to have due regard to the need to eliminate unlawful discrimination, to advance equality of opportunity and to reduce health inequalities. Nothing in this guideline should be interpreted in a way that would be inconsistent with complying with those duties.\n\nCommissioners and providers have a responsibility to promote an environmentally sustainable health and care system and should assess and reduce the environmental impact of implementing NICE recommendations wherever possible.\n\n### Related quality standards\n\nAir pollution: outdoor air quality and health\n\nType 2 diabetes in adults\n\nHypertension in adults\n\nNext page Recommendations\n\nBack to top",
+    "links": [
+      {
+        "text": "Home",
+        "url": "https://www.nice.org.uk/"
+      },
+      {
+        "text": "NICE Guidance",
+        "url": "https://www.nice.org.uk/guidance"
+      },
+      {
+        "text": "Conditions and diseases",
+        "url": "https://www.nice.org.uk/guidance/conditions-and-diseases"
+      },
+      {
+        "text": "Cardiovascular conditions",
+        "url": "https://www.nice.org.uk/guidance/conditions-and-diseases/cardiovascular-conditions"
+      },
+      {
+        "text": "Hypertension",
+        "url": "https://www.nice.org.uk/guidance/conditions-and-diseases/cardiovascular-conditions/hypertension"
+      },
+      {
+        "text": "Guidance",
+        "url": "https://www.nice.org.uk/guidance/ng136"
+      },
+      {
+        "text": "Tools and resources",
+        "url": "https://www.nice.org.uk/guidance/ng136/resources"
+      },
+      {
+        "text": "Information for the public",
+        "url": "https://www.nice.org.uk/guidance/ng136/informationforpublic"
+      },
+      {
+        "text": "Evidence",
+        "url": "https://www.nice.org.uk/guidance/ng136/evidence"
+      },
+      {
+        "text": "History",
+        "url": "https://www.nice.org.uk/guidance/ng136/history"
+      },
+      {
+        "text": "Download guidance (PDF)",
+        "url": "https://www.nice.org.uk/guidance/ng136/resources/hypertension-in-adults-diagnosis-and-management-pdf-66141722710213"
+      },
+      {
+        "text": "Recommendations",
+        "url": "https://www.nice.org.uk/guidance/ng136/chapter/Recommendations"
+      },
+      {
+        "text": "Recommendations for research",
+        "url": "https://www.nice.org.uk/guidance/ng136/chapter/Recommendations-for-research"
+      },
+      {
+        "text": "Rationale and impact",
+        "url": "https://www.nice.org.uk/guidance/ng136/chapter/Rationale-and-impact"
+      },
+      {
+        "text": "Context",
+        "url": "https://www.nice.org.uk/guidance/ng136/chapter/Context"
+      },
+      {
+        "text": "Finding more information and committee details",
+        "url": "https://www.nice.org.uk/guidance/ng136/chapter/Finding-more-information-and-committee-details"
+      },
+      {
+        "text": "Update information",
+        "url": "https://www.nice.org.uk/guidance/ng136/chapter/Update-information"
+      },
+      {
+        "text": "guideline on hypertension in pregnancy",
+        "url": "https://www.nice.org.uk/guidance/ng133"
+      },
+      {
+        "text": "NICE guideline on type 2 diabetes in adults",
+        "url": "https://www.nice.org.uk/guidance/ng28"
+      },
+      {
+        "text": "NICE-wide topic prioritisation: the manual",
+        "url": "https://www.nice.org.uk/process/pmg46"
+      },
+      {
+        "text": "summary table of prioritisation board decisions",
+        "url": "https://www.nice.org.uk/about/what-we-do/prioritising-our-guidance-topics/our-prioritisation-decisions"
+      },
+      {
+        "text": "2-page visual summary on the recommendations for diagnosing and treating hypertension",
+        "url": "https://www.nice.org.uk/guidance/ng136/resources/visual-summary-pdf-6899919517"
+      },
+      {
+        "text": "How we develop NICE guidelines",
+        "url": "https://www.nice.org.uk/about/what-we-do/our-programmes/nice-guidance/nice-guidelines/how-we-develop-nice-guidelines"
+      },
+      {
+        "text": "Yellow Card Scheme",
+        "url": "https://www.gov.uk/report-problem-medicine-medical-device"
+      },
+      {
+        "text": "assess and reduce the environmental impact of implementing NICE recommendations",
+        "url": "https://www.nice.org.uk/about/who-we-are/sustainability"
+      },
+      {
+        "text": "Air pollution: outdoor air quality and health",
+        "url": "https://www.nice.org.uk/guidance/qs181"
+      },
+      {
+        "text": "Type 2 diabetes in adults",
+        "url": "https://www.nice.org.uk/guidance/qs209"
+      },
+      {
+        "text": "Hypertension in adults",
+        "url": "https://www.nice.org.uk/guidance/qs28"
+      }
+    ],
+    "provenance": {
+      "tool": "web_read",
+      "arguments": {
+        "url": "https://www.nice.org.uk/guidance/ng136"
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "web-page:2ff1a22d4cc69b18",
+      "url": "https://www.nice.org.uk/guidance/ng136",
+      "source": "web-page",
+      "retrievedAt": "2026-09-28T08:34:03.143Z",
+      "artifactPath": ".evimed-sources/web-pages/2ff1a22d4cc69b18/e1cc3a4bdeab768dc4b4374ffa433927c9215a092e9efb1cc1ac26db521a255c/page.md",
+      "title": "Overview | Hypertension in adults: diagnosis and management | Guidance | NICE",
+      "sourceType": "guideline"
+    }
+  ],
+  "artifacts": [
+    ".evimed-sources/web-pages/2ff1a22d4cc69b18/e1cc3a4bdeab768dc4b4374ffa433927c9215a092e9efb1cc1ac26db521a255c/page.md"
+  ]
+}

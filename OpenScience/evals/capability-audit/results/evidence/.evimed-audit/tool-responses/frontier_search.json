@@ -1,0 +1,71 @@
+{
+  "status": "success",
+  "summary": "Found 3 item(s) in 前沿动态 (all collected items, last 30d); more match.",
+  "data": {
+    "query": {
+      "q": null,
+      "lane": null,
+      "specialty": null,
+      "window": "30d",
+      "mode": "all",
+      "limit": 3
+    },
+    "searchMode": "list",
+    "asOf": "2026-09-28T08:34Z",
+    "count": 3,
+    "more": true,
+    "items": [
+      {
+        "title": "Helicobacter pylori eradication treatment dispensing in the Irish General Medical Services population from 2012 to 2022: a repeated cross-sectional analysis",
+        "source": "国际临床药学杂志",
+        "sourceType": "期刊",
+        "publishedAt": "2026-09-27T10:31Z",
+        "collectedAt": "2026-09-28T08:28Z",
+        "url": "https://doi.org/10.1007/s11096-026-02229-6",
+        "doi": "10.1007/s11096-026-02229-6",
+        "selected": false
+      },
+      {
+        "title": "研究人员研发智能贴片实现临床级居家心肺检测",
+        "source": "中国科学报",
+        "sourceType": "媒体",
+        "publishedAt": "2026-09-28T07:55Z",
+        "collectedAt": "2026-09-28T08:23Z",
+        "url": "https://news.sciencenet.cn/htmlnews/2026/9/572215.shtm",
+        "flags": [
+          "涉华"
+        ],
+        "selected": false
+      },
+      {
+        "title": "π-HuB计划第四届全球峰会召开",
+        "source": "中国科学报",
+        "sourceType": "媒体",
+        "publishedAt": "2026-09-28T07:57Z",
+        "collectedAt": "2026-09-28T08:23Z",
+        "url": "https://news.sciencenet.cn/htmlnews/2026/9/572216.shtm",
+        "flags": [
+          "涉华"
+        ],
+        "selected": false
+      }
+    ],
+    "provenance": {
+      "tool": "frontier_search",
+      "arguments": {
+        "mode": "all",
+        "limit": 3
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [],
+  "next_actions": [
+    "These are leads: read the original through its url, doi or pmid before relying on an item, and cite that original, never this feed or its digest."
+  ]
+}

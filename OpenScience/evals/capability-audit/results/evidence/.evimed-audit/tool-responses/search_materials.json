@@ -1,0 +1,43 @@
+{
+  "status": "success",
+  "summary": "search_materials returned a result from https://api.materialsproject.org/materials/summary/?_limit=1&formula=Fe2O3.",
+  "data": {
+    "data": [
+      {
+        "material_id": "mp-aaabsevm"
+      }
+    ],
+    "meta": {
+      "api_version": "0.87.3.dev20+g908cf9b24",
+      "time_stamp": "2026-09-28T08:34:27.615111+00:00",
+      "total_doc": 26,
+      "facet": null,
+      "max_limit": 1000,
+      "default_fields": [
+        "material_id"
+      ]
+    },
+    "provenance": {
+      "tool": "search_materials",
+      "arguments": {
+        "formula": "Fe2O3",
+        "limit": 1
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "materials-project",
+      "source": "materials-project",
+      "url": "https://api.materialsproject.org/materials/summary/?_limit=1&formula=Fe2O3",
+      "retrievedAt": "2026-09-28T08:34:27.741522Z",
+      "sourceType": "other"
+    }
+  ]
+}

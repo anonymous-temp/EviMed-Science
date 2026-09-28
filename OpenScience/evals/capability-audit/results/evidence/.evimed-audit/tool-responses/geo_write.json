@@ -1,0 +1,30 @@
+{
+  "status": "warning",
+  "summary": "This conversation is not in a 循证 GEO project, so there is no step to write.",
+  "data": {
+    "what": "step",
+    "code": "geo_no_project",
+    "provenance": {
+      "tool": "geo_write",
+      "arguments": {
+        "what": "step",
+        "data": {
+          "step": "diagnosis",
+          "status": "none"
+        }
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [
+    "This conversation is not in a 循证 GEO project; open the GEO project's conversation to read or write its data."
+  ],
+  "next_actions": [
+    "Go on without the platform's GEO data, or work in the GEO project's own conversation."
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "status": "success",
+  "summary": "get_space_weather_alerts returned a result from https://services.swpc.noaa.gov/products/alerts.json.",
+  "data": {
+    "value": [
+      {
+        "product_id": "EF3A",
+        "issue_datetime": "2026-09-28 05:00:40.090",
+        "message": "Space Weather Message Code: ALTEF3\r\nSerial Number: 3747\r\nIssue Time: 2026 Sep 28 0500 UTC\r\n\r\nCONTINUED ALERT: Electron 2MeV Integral Flux exceeded 1,000pfu\nContinuation of Serial Number: 3746\nBegin Time: 2026 Sep 26 1535 UTC\n\nYesterday Maximum 2MeV Flux: 3060 pfu\nMax time: 2026 Sep 27 1720 UTC"
+      },
+      {
+        "product_id": "EF3A",
+        "issue_datetime": "2026-09-27 05:02:04.940",
+        "message": "Space Weather Message Code: ALTEF3\r\nSerial Number: 3746\r\nIssue Time: 2026 Sep 27 0502 UTC\r\n\r\nCONTINUED ALERT: Electron 2MeV Integral Flux exceeded 1,000pfu\nContinuation of Serial Number: 3745\nBegin Time: 2026 Sep 26 1535 UTC\n\nYesterday Maximum 2MeV Flux: 1260 pfu\nMax time: 2026 Sep 26 1645 UTC"
+      }
+    ],
+    "provenance": {
+      "tool": "get_space_weather_alerts",
+      "arguments": {
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "spaceweather",
+      "source": "spaceweather",
+      "url": "https://services.swpc.noaa.gov/products/alerts.json",
+      "retrievedAt": "2026-09-28T08:34:29.947014Z",
+      "sourceType": "other"
+    }
+  ]
+}

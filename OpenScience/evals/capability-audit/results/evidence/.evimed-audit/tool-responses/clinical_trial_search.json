@@ -1,0 +1,103 @@
+{
+  "status": "success",
+  "summary": "Retrieved 2 traceable EviMed trial records.",
+  "data": {
+    "items": [
+      {
+        "id": "nct01245166",
+        "title": "A Phase III Randomized, Double-blind, Parallel-group Study to Evaluate the Efficacy and Safety of Acarmet (Metformin HCl 500 mg Plus Acarbose 50 mg Tablets) Versus Acarbose Alone in Subjects With Type 2 Diabetes Mellitus",
+        "url": "https://www.clinicaltrials.gov/ct2/show/nct01245166",
+        "status": "unknown status",
+        "registrationDate": "2010-11-19",
+        "phase": "phase 3",
+        "sampleSize": "220",
+        "studyType": "Interventional",
+        "conditions": [
+          "The Objectives of the Study is to Evaluate the Efficacy and Safety of Acarmet (Metformin HCl 500 mg",
+          "Plus Acarbose 50 mg Tablets) Thrice Daily Versus Acarbose 50 mg Thrice Daily Over 16 Weeks in",
+          "Subjects With Type 2 Diabetes Mellitus."
+        ],
+        "interventions": [
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "Acarbose",
+            "description": "Acarbose 50 mg, per orem, thrice daily",
+            "arm_group_label": "Acarbose"
+          },
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "Metformin/Acarbose",
+            "description": "Metformin HCl 500 mg plus Acarbose 50 mg Tablets, per orem, thrice daily",
+            "arm_group_label": "Metformin/Acarbose"
+          }
+        ],
+        "registry": 1,
+        "sourceType": "trial-registration"
+      },
+      {
+        "id": "nct04089280",
+        "title": "Probiotics in Metformin Intolerant Patients With Type 2 Diabetes",
+        "url": "https://www.clinicaltrials.gov/ct2/show/nct04089280",
+        "status": "completed",
+        "registrationDate": "2019-08-27",
+        "phase": "n/a",
+        "sampleSize": "37",
+        "studyType": "Interventional",
+        "conditions": [
+          "Diabetes Mellitus, Type 2",
+          "Metformin Adverse Reaction"
+        ],
+        "interventions": [
+          {
+            "intervention_type": "Dietary Supplement",
+            "intervention_name": "Sanprobi Barrier-multispecies probiotic",
+            "description": "Multi-strain probiotic Sanprobi Barrier (Bifidobacterium lactis W52, Lactobacillus brevis\r\nW63, Lactobacillus casei W56, Lactobacillus lactis W19, Lactobacillus lactis W58,\r\nLactobacillus acidophilus W37, Bifidobacterium bifidum W23, Lactobacillus salivarius W24)\r\nor placebo. Patients will be randomized to one of the two products (\"A\" or \"B\") each\r\ncontaining probiotic/placebo and administered for 12 weeks. After 12 weeks of\r\nsupplementation, the probiotic/placebo product \"A\" or \"B\" will be discontinued and\r\nreintroduced again after next 4 weeks - patients will be switched to the other \"A or B\"\r\ngroup of probiotic/placebo arm. Patients will be administered with 4 capsules per day for\r\n24 weeks (12 weeks for group A probiotic/placebo and 12 weeks for group B\r\nprobiotic/placebo allowing 4 weeks washout between the group assignment).",
+            "arm_group_label": "Sanprobi Barrier-multispecies probiotic"
+          },
+          {
+            "intervention_type": "Other",
+            "intervention_name": "Placebo Comparator",
+            "description": "Carrier material of Sanprobi Barrier-multispecies probiotic product, not containing\r\nbacterial strains,similar appearance as the probiotic",
+            "arm_group_label": "carrier material of Sanprobi Barrier-multispecies probiotic"
+          }
+        ],
+        "registry": 1,
+        "sourceType": "trial-registration"
+      }
+    ],
+    "total": 7018,
+    "registry": 1,
+    "excludedByRequiredConcepts": 0,
+    "provenance": {
+      "tool": "clinical_trial_search",
+      "arguments": {
+        "query": "type 2 diabetes metformin",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "nct01245166",
+      "source": "evimed-clinical-trial",
+      "retrievedAt": "2026-09-28T08:34:41.451481Z",
+      "url": "https://www.clinicaltrials.gov/ct2/show/nct01245166",
+      "title": "A Phase III Randomized, Double-blind, Parallel-group Study to Evaluate the Efficacy and Safety of Acarmet (Metformin HCl 500 mg Plus Acarbose 50 mg Tablets) Versus Acarbose Alone in Subjects With Type 2 Diabetes Mellitus",
+      "sourceType": "trial-registration"
+    },
+    {
+      "id": "nct04089280",
+      "source": "evimed-clinical-trial",
+      "retrievedAt": "2026-09-28T08:34:41.451518Z",
+      "url": "https://www.clinicaltrials.gov/ct2/show/nct04089280",
+      "title": "Probiotics in Metformin Intolerant Patients With Type 2 Diabetes",
+      "sourceType": "trial-registration"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "summary": "Europe PMC full-text retrieval failed.",
+  "next_actions": [
+    "Verify the identifier and open-access status, or stop rather than infer missing full-text facts."
+  ],
+  "error": {
+    "code": "full_text_upstream_unavailable",
+    "message": "Europe PMC full-text retrieval failed.",
+    "retryable": true,
+    "stopReason": "No verified open-access full text was written to the workspace."
+  }
+}

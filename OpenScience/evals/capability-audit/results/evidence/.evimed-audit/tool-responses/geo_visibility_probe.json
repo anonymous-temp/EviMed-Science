@@ -1,0 +1,58 @@
+{
+  "status": "warning",
+  "summary": "4 of 5 vendor(s) ready: doubao, kimi, qianwen, yuanbao.",
+  "data": {
+    "providers": [
+      {
+        "provider": "deepseek",
+        "state": "tab_missing",
+        "ready": false
+      },
+      {
+        "provider": "doubao",
+        "state": "tab_found",
+        "ready": true
+      },
+      {
+        "provider": "kimi",
+        "state": "tab_found",
+        "ready": true
+      },
+      {
+        "provider": "qianwen",
+        "state": "tab_found",
+        "ready": true
+      },
+      {
+        "provider": "yuanbao",
+        "state": "tab_found",
+        "ready": true
+      }
+    ],
+    "ready": [
+      "doubao",
+      "kimi",
+      "qianwen",
+      "yuanbao"
+    ],
+    "provenance": {
+      "tool": "geo_visibility_probe",
+      "arguments": {
+        "op": "providers"
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [
+    "A vendor that is not ready was never asked; that is not evidence the brand is absent from it.",
+    "Not ready: deepseek. These were never asked. Do not record them as vendors that did not mention the brand, and do not put them in a denominator."
+  ],
+  "next_actions": [
+    "Log in to any vendor listed as not ready before starting a batch; a run against an unready vendor produces failures, not findings."
+  ]
+}

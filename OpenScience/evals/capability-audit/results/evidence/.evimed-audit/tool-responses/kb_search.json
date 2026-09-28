@@ -1,0 +1,33 @@
+{
+  "status": "warning",
+  "summary": "This knowledge base has no documents.",
+  "data": {
+    "mode": "empty",
+    "query": "阿司匹林 一级预防 剂量",
+    "library": {
+      "documents": 0,
+      "searchable": 0,
+      "tokens": 0
+    },
+    "hits": [],
+    "waiting": [],
+    "note": "This knowledge base has no documents.",
+    "provenance": {
+      "tool": "kb_search",
+      "arguments": {
+        "query": "阿司匹林 一级预防 剂量",
+        "limit": 3
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [],
+  "next_actions": [
+    "Read any listed document directly at its path, or continue without the knowledge base."
+  ]
+}

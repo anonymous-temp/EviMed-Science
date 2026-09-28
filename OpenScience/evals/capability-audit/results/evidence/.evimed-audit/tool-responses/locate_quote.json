@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "summary": "No preserved source was found for PMC8010506 in this workspace. Pass the exact .evimed-sources/... path the preserving tool returned.",
+  "next_actions": [
+    "Pass the exact .evimed-sources/... path a preserving tool returned, then retry."
+  ],
+  "error": {
+    "code": "quote_source_not_found",
+    "message": "No preserved source was found for PMC8010506 in this workspace. Pass the exact .evimed-sources/... path the preserving tool returned.",
+    "retryable": false,
+    "stopReason": "The quote was not checked."
+  }
+}

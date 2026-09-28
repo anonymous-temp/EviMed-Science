@@ -1,32 +1,36 @@
 {
   "schemaVersion": 3,
-  "probedAt": "2026-07-31T03:03:35.900788Z",
-  "registered": 25,
-  "executionCertified": 25,
-  "unverified": 0,
-  "operational": 25,
-  "errors": 0,
+  "probedAt": "2026-09-28T08:35:09.007814Z",
+  "registered": 40,
+  "notOffered": [
+    "patent_search"
+  ],
+  "executionCertified": 32,
+  "unverified": 8,
+  "operational": 32,
+  "errors": 2,
+  "complete": false,
   "criteria": {
     "ordinaryTool": "A real task call must return success or warning and all declared artifacts must exist and be non-empty.",
     "specialistTool": "A capabilities response never qualifies; a fresh terminal managed job and hashed non-empty artifacts are required. Operational execution and publication readiness are reported separately."
   },
   "results": [
     {
-      "tool": "evimed_health",
+      "tool": "health",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
       "summary": "EviMed Research MCP is ready.",
       "errorCode": null,
-      "elapsedMs": 3,
+      "elapsedMs": 4,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_health.json",
-        "bytes": 6438,
-        "sha256": "2c8df76e9800ca3684f7ff279ea8bdbd052bea1a73457f38704b8691b11005c1"
+        "path": ".evimed-audit/tool-responses/health.json",
+        "bytes": 6511,
+        "sha256": "ae34a520b65e118b3190660bea09dd3865d405f3d8f9f7f71dbac78c548fece6"
       },
       "artifacts": [],
       "artifactError": null,
@@ -35,21 +39,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_data_source_catalog",
+      "tool": "data_source_catalog",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
       "summary": "Matched 64 audited data sources.",
       "errorCode": null,
-      "elapsedMs": 2,
+      "elapsedMs": 5,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_data_source_catalog.json",
-        "bytes": 65256,
-        "sha256": "0cd84bd7aca331d24cc1304b2fa7a7cef79c2eee6c849adb7e434bf5763a21ca"
+        "path": ".evimed-audit/tool-responses/data_source_catalog.json",
+        "bytes": 69155,
+        "sha256": "3a3041ae57a972fa5a5dda133f6776420f190138ab9307cda3133f83e5324cc1"
       },
       "artifacts": [],
       "artifactError": null,
@@ -58,21 +62,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_biomedical_source_search",
+      "tool": "biomedical_source_search",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
       "operational": true,
       "summary": "Retrieved 2 traceable records from pubmed.",
       "errorCode": null,
-      "elapsedMs": 1598,
+      "elapsedMs": 3415,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_biomedical_source_search.json",
-        "bytes": 8107,
-        "sha256": "f059db0237ac9bbbfe7f6f0b09b64737df9c4d762bbaab92f18e17e9fe15ed5d"
+        "path": ".evimed-audit/tool-responses/biomedical_source_search.json",
+        "bytes": 3333,
+        "sha256": "9d138c184d058ab2780521441217c9528153e41f3490da69d2722f765601f555"
       },
       "artifacts": [],
       "artifactError": null,
@@ -81,28 +85,28 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_official_page_fetch",
+      "tool": "web_read",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "Retrieved and preserved an approved official document.",
+      "summary": "Read www.nice.org.uk and preserved it (page 1 of 1).",
       "errorCode": null,
-      "elapsedMs": 1303,
+      "elapsedMs": 3599,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_official_page_fetch.json",
-        "bytes": 3863,
-        "sha256": "7892138d516047db84852f99aa25706b096c3608f5f81388925bde53f9944d0d"
+        "path": ".evimed-audit/tool-responses/web_read.json",
+        "bytes": 10702,
+        "sha256": "674fadb77c8c338c6e477d3b92ceba276060ac303bd0868aaabf22be71af38b4"
       },
       "artifacts": [
         {
           "kind": "md",
-          "path": ".evimed-sources/official-pages/6fe98a389b9cf835/page.md",
-          "bytes": 2699,
-          "sha256": "633a5f5f9c4ae8de00081fe4050ab8932d504561e8ac0a4fda32e4350b2c1e4b"
+          "path": ".evimed-sources/web-pages/2ff1a22d4cc69b18/e1cc3a4bdeab768dc4b4374ffa433927c9215a092e9efb1cc1ac26db521a255c/page.md",
+          "bytes": 4811,
+          "sha256": "3ca02fb6a9d9852dbb0b4438ec6a13c5c0ec4a71ebf3e4cd5e1d50412a713f46"
         }
       ],
       "artifactError": null,
@@ -111,43 +115,99 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_open_access_full_text",
+      "tool": "web_search",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "Retrieved the complete open-access article into the managed workspace.",
+      "summary": "Open-web search returned 2 result(s) for 'systematic review reporting guideline PRISMA 2020'.",
       "errorCode": null,
-      "elapsedMs": 2945,
-      "sourceCount": 1,
+      "elapsedMs": 1397,
+      "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_open_access_full_text.json",
-        "bytes": 1564,
-        "sha256": "26103a79188a14f8e46bf06cdae6114bff6c4b689b926981c93a17bd1fa8467b"
+        "path": ".evimed-audit/tool-responses/web_search.json",
+        "bytes": 2094,
+        "sha256": "fcfa6e443c3a114f18c1d5aa197827ebab38244ed2754b0ac8d2a07eda3f36e7"
       },
-      "artifacts": [
-        {
-          "kind": "md",
-          "path": ".evimed-sources/PMC8010506/fulltext.md",
-          "bytes": 239804,
-          "sha256": "713024eaf1d04c341a76093539f95ad6341f5a3acb4c740f70f55aeb5c387246"
-        },
-        {
-          "kind": "xml",
-          "path": ".evimed-sources/PMC8010506/fulltext.xml",
-          "bytes": 563646,
-          "sha256": "02aac151853ff9d5bb2ace17f90cf3efb70f30d42d158293659c8cdd9c1abb1b"
-        }
-      ],
+      "artifacts": [],
       "artifactError": null,
       "assessmentType": null,
       "automaticDecision": null,
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_term_normalize",
+      "tool": "geo_visibility_probe",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "4 of 5 vendor(s) ready: doubao, kimi, qianwen, yuanbao.",
+      "errorCode": null,
+      "elapsedMs": 1221,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/geo_visibility_probe.json",
+        "bytes": 1519,
+        "sha256": "f4ee97235c042eef26dabe77d3ad89c24d395688338d6253f002c92c84cc661e"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "open_access_full_text",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "error",
+      "operational": false,
+      "summary": "Europe PMC full-text retrieval failed.",
+      "errorCode": "full_text_upstream_unavailable",
+      "elapsedMs": 911,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/open_access_full_text.json",
+        "bytes": 435,
+        "sha256": "b7dd8a75f1ab0e20f12bcd87b592824b415d26ca0eff4c7ca68c6e051f1e5b87"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "locate_quote",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "error",
+      "operational": false,
+      "summary": "No preserved source was found for PMC8010506 in this workspace. Pass the exact .evimed-sources/... path the preserving tool returned.",
+      "errorCode": "quote_source_not_found",
+      "elapsedMs": 0,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/locate_quote.json",
+        "bytes": 564,
+        "sha256": "0147e46e397dd6ec6ef5c17b6f09d550e387d6e4330620080fcd103df410dbc0"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "term_normalize",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
@@ -159,9 +219,9 @@
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_term_normalize.json",
-        "bytes": 684,
-        "sha256": "98df9594d3202bb7469a8250d804f23c1d34f2ce0300a2fa6341af0fb37eae41"
+        "path": ".evimed-audit/tool-responses/term_normalize.json",
+        "bytes": 702,
+        "sha256": "579ec41bd3b3be110a4dec57b089d4987253b4f0cad6169b0122148b5cf2c9a2"
       },
       "artifacts": [],
       "artifactError": null,
@@ -170,21 +230,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_drug_term_normalize",
+      "tool": "drug_term_normalize",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
       "summary": "Normalized the supplied term against the RxNorm vocabulary.",
       "errorCode": null,
-      "elapsedMs": 1627,
+      "elapsedMs": 3042,
       "sourceCount": 0,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_drug_term_normalize.json",
-        "bytes": 5818,
-        "sha256": "104cba6f90d9cc6dc9cd00221bebbcc86bf239f6734dec4ea99cf1b00a3c69fd"
+        "path": ".evimed-audit/tool-responses/drug_term_normalize.json",
+        "bytes": 5851,
+        "sha256": "feecf0fc8ddeb2b50ffaf26a838fa2e038e972dc5f98d8cac9c25af7357a09b4"
       },
       "artifacts": [],
       "artifactError": null,
@@ -193,7 +253,7 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_evidence_deduplicate",
+      "tool": "evidence_deduplicate",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
@@ -205,9 +265,9 @@
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_evidence_deduplicate.json",
-        "bytes": 985,
-        "sha256": "def427b0ba6a38f77b4abb1933fc721b4908ee40379760b4a03677c42aa6358f"
+        "path": ".evimed-audit/tool-responses/evidence_deduplicate.json",
+        "bytes": 1003,
+        "sha256": "91c046ad34785ecc9060f80c90a4cd05f54ba75f7b050e5c67013b1be5cd2ec5"
       },
       "artifacts": [],
       "artifactError": null,
@@ -216,21 +276,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_literature_search",
+      "tool": "literature_search",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
       "operational": true,
       "summary": "Retrieved 2 traceable PubMed records.",
       "errorCode": null,
-      "elapsedMs": 783,
+      "elapsedMs": 2450,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_literature_search.json",
-        "bytes": 3325,
-        "sha256": "552c07529e26ba88d4fca540ba3b6a5f258d16a7fcfc431021a60a2b1eee0deb"
+        "path": ".evimed-audit/tool-responses/literature_search.json",
+        "bytes": 3166,
+        "sha256": "62eb99f3a4d078c8b755f7216a76adc4e8e371f6e6bc9370744f7b42775ba5b1"
       },
       "artifacts": [],
       "artifactError": null,
@@ -239,21 +299,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_guideline_search",
+      "tool": "reference_list",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
       "operational": true,
-      "summary": "Retrieved 2 traceable EviMed guideline candidates.",
+      "summary": "Retrieved 5 traceable records from europe-pmc-references.",
       "errorCode": null,
-      "elapsedMs": 2203,
-      "sourceCount": 2,
+      "elapsedMs": 1505,
+      "sourceCount": 5,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_guideline_search.json",
-        "bytes": 5995,
-        "sha256": "10b46cfc3a7ec5343187cd2b9ae0edf3b7feb9f00fa16022a8cc313b0d3c23da"
+        "path": ".evimed-audit/tool-responses/reference_list.json",
+        "bytes": 6513,
+        "sha256": "d866dd2df892d1dfa1f14988f434067d3175b6f24406d0d4db15c96443cece98"
       },
       "artifacts": [],
       "artifactError": null,
@@ -262,21 +322,57 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_clinical_trial_search",
+      "tool": "guideline_search",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "Retrieved 2 traceable EviMed guideline candidates (2 with preserved text).",
+      "errorCode": null,
+      "elapsedMs": 1521,
+      "sourceCount": 2,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/guideline_search.json",
+        "bytes": 4835,
+        "sha256": "1a565e0f280f31df49218078223dc64bbb4d6b081392270bafaf0255742891bc"
+      },
+      "artifacts": [
+        {
+          "kind": "md",
+          "path": ".evimed-sources/evimed-guidelines/2160946d60faa052/d20a5013e52b3ea553a28fe2c3b12bace38593fce0453261b1837dc32552177f/guideline.md",
+          "bytes": 111268,
+          "sha256": "45bf8cb15222b90d8261a973e5397292d131276dac5e1d09202d6583e41f8ca8"
+        },
+        {
+          "kind": "md",
+          "path": ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/328323c0fd5012ef6d12bc32f11190557d9e7b3535eddf4e8a4abff4bda6c798/guideline.md",
+          "bytes": 15615,
+          "sha256": "241c8635c39fc2876794f16669d703fea449cbadde86b6be6d151764420478ad"
+        }
+      ],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "clinical_trial_search",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
       "summary": "Retrieved 2 traceable EviMed trial records.",
       "errorCode": null,
-      "elapsedMs": 628,
+      "elapsedMs": 585,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_clinical_trial_search.json",
-        "bytes": 4446,
-        "sha256": "a3f9e81f73d9e89ad3315faa7d5e06b870316b9d5fb4cba4ecb3dcf32677ca73"
+        "path": ".evimed-audit/tool-responses/clinical_trial_search.json",
+        "bytes": 4959,
+        "sha256": "2d337b5b3a4ad1c6150097c2ab81c01ffa642e3afe159f8e96c3be4def41e834"
       },
       "artifacts": [],
       "artifactError": null,
@@ -285,44 +381,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_patent_search",
-      "probeType": "executed_tool_call",
-      "operation": "task",
-      "status": "warning",
-      "operational": true,
-      "summary": "Retrieved 2 traceable EviMed patent records.",
-      "errorCode": null,
-      "elapsedMs": 1676,
-      "sourceCount": 2,
-      "workspace": "evals/capability-audit/tool-probe-workspace",
-      "responseReceipt": {
-        "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_patent_search.json",
-        "bytes": 3825,
-        "sha256": "4596f57a87ec47b32c18cfd6e0110797cc6e768da77ae6104a593de6b4c84b81"
-      },
-      "artifacts": [],
-      "artifactError": null,
-      "assessmentType": null,
-      "automaticDecision": null,
-      "humanReviewRequired": null
-    },
-    {
-      "tool": "evimed_pharmacy_reference_search",
+      "tool": "pharmacy_reference_search",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
       "operational": true,
       "summary": "Retrieved 2 private pharmacy reference rows.",
       "errorCode": null,
-      "elapsedMs": 22,
+      "elapsedMs": 4,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_pharmacy_reference_search.json",
-        "bytes": 3376,
-        "sha256": "9477d91ea0274b0a7cac93704000a4d9b6ce5cb2e6e274f09917776f177d4884"
+        "path": ".evimed-audit/tool-responses/pharmacy_reference_search.json",
+        "bytes": 3514,
+        "sha256": "594890f506ea11f38ef94c1d5f55e24d2366c2de2eeaa7874f4e15f8553b1809"
       },
       "artifacts": [],
       "artifactError": null,
@@ -331,21 +404,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_drug_label_search",
+      "tool": "drug_label_search",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
       "operational": true,
       "summary": "Retrieved 1 FDA label records.",
       "errorCode": null,
-      "elapsedMs": 2900,
+      "elapsedMs": 5703,
       "sourceCount": 1,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_drug_label_search.json",
-        "bytes": 8167,
-        "sha256": "5c0158dc3940964ef6391afb4cccd42b2341395fb3ba402c362cf1a972cc65a2"
+        "path": ".evimed-audit/tool-responses/drug_label_search.json",
+        "bytes": 8433,
+        "sha256": "ac650c5d6e60506e2c9fd86107e9e37a5a23fd1954cebf087bbcf1baef525c3c"
       },
       "artifacts": [],
       "artifactError": null,
@@ -354,21 +427,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_adr_case_query",
+      "tool": "adr_case_query",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
       "summary": "Retrieved 2 de-identified FAERS reports.",
       "errorCode": null,
-      "elapsedMs": 1298,
+      "elapsedMs": 9808,
       "sourceCount": 2,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_adr_case_query.json",
-        "bytes": 2178,
-        "sha256": "b7d565e2f19d5db4384aedc0be3b7b7da9550c69872fb8150719981e1a6f6c73"
+        "path": ".evimed-audit/tool-responses/adr_case_query.json",
+        "bytes": 2264,
+        "sha256": "dffeccccac9ad78504388cf45f55b8c2a3aa4cb5a473a7451b9613561e2c5d91"
       },
       "artifacts": [],
       "artifactError": null,
@@ -377,21 +450,21 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_adr_signal_analysis",
+      "tool": "adr_signal_analysis",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "success",
       "operational": true,
       "summary": "Calculated traceable FAERS disproportionality screening metrics.",
       "errorCode": null,
-      "elapsedMs": 5708,
+      "elapsedMs": 12035,
       "sourceCount": 4,
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_adr_signal_analysis.json",
-        "bytes": 2395,
-        "sha256": "64f1095dd8dbe427b40afb2f0662988687e077c537c45f082bc1bb6acaaa2a26"
+        "path": ".evimed-audit/tool-responses/adr_signal_analysis.json",
+        "bytes": 2547,
+        "sha256": "841e1fae2dbe1c61210e4fa78f4b08d02f8dfae93ae7eb16dc13616a74db80f0"
       },
       "artifacts": [],
       "artifactError": null,
@@ -400,7 +473,7 @@
       "humanReviewRequired": null
     },
     {
-      "tool": "evimed_offlabel_evidence_packet",
+      "tool": "offlabel_evidence_packet",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
@@ -412,9 +485,9 @@
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_offlabel_evidence_packet.json",
-        "bytes": 3989,
-        "sha256": "a059aa45e0aca6f18d4cca25c4638af9eaf6a86e0005f88ac65e72b5de2c8bb2"
+        "path": ".evimed-audit/tool-responses/offlabel_evidence_packet.json",
+        "bytes": 4071,
+        "sha256": "4f70ecba44181bcfe48868128d2306adc3c46c05fe6d9a9b2738f838eb0dc266"
       },
       "artifacts": [],
       "artifactError": null,
@@ -423,7 +496,7 @@
       "humanReviewRequired": true
     },
     {
-      "tool": "evimed_comprehensive_drug_evaluation",
+      "tool": "comprehensive_drug_evaluation",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
@@ -435,9 +508,9 @@
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_comprehensive_drug_evaluation.json",
-        "bytes": 3941,
-        "sha256": "7292d73a321f823d93e3aaac3c1b6bdea4505b4de75c09fc69eaa23ebf094fde"
+        "path": ".evimed-audit/tool-responses/comprehensive_drug_evaluation.json",
+        "bytes": 4023,
+        "sha256": "25f9e90f99e30758626e9469936e3b949b404fb5c037e6a958f1acba89e5c626"
       },
       "artifacts": [],
       "artifactError": null,
@@ -446,7 +519,7 @@
       "humanReviewRequired": true
     },
     {
-      "tool": "evimed_drug_selection_evaluation",
+      "tool": "drug_selection_evaluation",
       "probeType": "executed_tool_call",
       "operation": "task",
       "status": "warning",
@@ -458,9 +531,9 @@
       "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
-        "path": ".evimed-audit/tool-responses/evimed_drug_selection_evaluation.json",
-        "bytes": 7744,
-        "sha256": "7176d152d87070597e2550d2aef8b820c1c43a3adf17b82347d7ccd4931d56d0"
+        "path": ".evimed-audit/tool-responses/drug_selection_evaluation.json",
+        "bytes": 7826,
+        "sha256": "19e79d037ddabaa8db83bf66dd7fbac2e4d7bb1108666dddd1a35ea98a6bbb36"
       },
       "artifacts": [],
       "artifactError": null,
@@ -469,694 +542,340 @@
       "humanReviewRequired": true
     },
     {
-      "tool": "evimed_meta_analysis",
-      "probeType": "completed_managed_job",
-      "operation": "start_then_poll_to_terminal",
+      "tool": "meta_analysis",
+      "probeType": "no_completed_job_receipt",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "artifacts": [],
+      "artifactCount": 0
+    },
+    {
+      "tool": "mendelian_randomization",
+      "probeType": "no_completed_job_receipt",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "artifacts": [],
+      "artifactCount": 0
+    },
+    {
+      "tool": "bibliometric_analysis",
+      "probeType": "no_completed_job_receipt",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "artifacts": [],
+      "artifactCount": 0
+    },
+    {
+      "tool": "research_topic_selection",
+      "probeType": "no_completed_job_receipt",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "artifacts": [],
+      "artifactCount": 0
+    },
+    {
+      "tool": "peer_review",
+      "probeType": "no_completed_job_receipt",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "artifacts": [],
+      "artifactCount": 0
+    },
+    {
+      "tool": "drug_safety_analysis",
+      "probeType": "no_completed_job_receipt",
+      "operation": "none",
+      "status": "unverified",
+      "operational": false,
+      "summary": "No fresh terminal managed job with verified artifacts was found.",
+      "artifacts": [],
+      "artifactCount": 0
+    },
+    {
+      "tool": "search_papers",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "search_papers returned a result from https://api.crossref.org/works?query=aspirin+cardiovascular+prevention&rows=2&select=DOI%2Ctitle%2Cauthor%2Cpublished%2CURL%2Ctype.",
+      "errorCode": null,
+      "elapsedMs": 1426,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/search_papers.json",
+        "bytes": 2593,
+        "sha256": "e94b4a75bdc5f0a1a869cdc32206463a0f02182d42d58e802bcc7521a4bd7473"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "search_biomedical_records",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "search_biomedical_records returned a result from https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=2&term=metformin+type+2+diabetes&tool=evimed_research.",
+      "errorCode": null,
+      "elapsedMs": 1072,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/search_biomedical_records.json",
+        "bytes": 2069,
+        "sha256": "a0ecfbb07f14b54c47f1f3fb13cfdc5ce2a0393afa5a28f6636a785e74794b38"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "search_materials",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "search_materials returned a result from https://api.materialsproject.org/materials/summary/?_limit=1&formula=Fe2O3.",
+      "errorCode": null,
+      "elapsedMs": 603,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/search_materials.json",
+        "bytes": 1148,
+        "sha256": "49be0d2031ad9ee019db484fc3dcd7fca379f506891e484fa89bc1fdcc6e6213"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "get_fred_series",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "get_fred_series returned a result from https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP.",
+      "errorCode": null,
+      "elapsedMs": 716,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/get_fred_series.json",
+        "bytes": 891,
+        "sha256": "e4c064d87a8673895704dd431073acc5b489d734dbd2c0afc897f0aaf2cd4994"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "get_space_weather_alerts",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "get_space_weather_alerts returned a result from https://services.swpc.noaa.gov/products/alerts.json.",
+      "errorCode": null,
+      "elapsedMs": 1488,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/get_space_weather_alerts.json",
+        "bytes": 1635,
+        "sha256": "2b574444d2e1094f28bcb60e931e15a88f280220de8858f5012ba142f3d47404"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "get_weather",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "get_weather returned a result from https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&forecast_days=1&current=temperature_2m%2Crelative_humidity_2m%2Cprecipitation%2Cweather_code%2Cwind_speed_10m&daily=temperature_2m_max%2Ctemperature_2m_min%2Cprecipitation_sum.",
+      "errorCode": null,
+      "elapsedMs": 784,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/get_weather.json",
+        "bytes": 2249,
+        "sha256": "fafa4276d167195ab2ef93126bfbbd0881697044a6e8063d5ed019aa64bc0eae"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "get_usgs_water_data",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "success",
+      "operational": true,
+      "summary": "get_usgs_water_data returned a result from https://waterservices.usgs.gov/nwis/iv/?format=json&sites=01646500&period=P1D&siteStatus=all.",
+      "errorCode": null,
+      "elapsedMs": 1584,
+      "sourceCount": 1,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/get_usgs_water_data.json",
+        "bytes": 531500,
+        "sha256": "ea73e1739afaf62acaa18e5643884ceffd40a2c4014534781f3d233d9b11124a"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "kb_search",
+      "probeType": "executed_tool_call",
+      "operation": "task",
       "status": "warning",
       "operational": true,
-      "summary": "A managed specialist task completed, produced verified non-empty diagnostic artifacts, and was blocked by its release gate.",
-      "jobId": "meta-20260731022805-836a11ae8d91",
-      "jobStatus": "blocked",
-      "releaseStatus": "blocked",
-      "publicationReady": false,
-      "executedAt": "2026-07-31T02:59:22.127097Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/cohort-sweep-20260730/workspace",
-      "executionEvidence": {
-        "schemaVersion": 1,
-        "agentSourceSha256": "76f33d53debd79c3b016fbd8f96190489878c87f1e7a6507438404420bc96eb3",
-        "agentSourceFiles": 347,
-        "adapterSha256": "186cf07483f83e5ba02c3762f4839df67fcc30ba97297552fb00231501d2f422",
-        "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
-        "model": "deepseek-v4-pro",
-        "thinking": true,
-        "reasoningEffort": "high"
+      "summary": "This knowledge base has no documents.",
+      "errorCode": null,
+      "elapsedMs": 4,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/kb_search.json",
+        "bytes": 872,
+        "sha256": "f66f9d744f3b2a893a9063e6edaaf3a5adb90038a36111f0bf22404425dfa13a"
       },
-      "artifacts": [
-        {
-          "kind": "manuscript",
-          "path": "meta-analysis-runs/meta-20260731022805-836a11ae8d91/output/20260731_022810_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.md",
-          "bytes": 38492,
-          "sha256": "f2e9974ca3561155f5612495e480a4edfda050ba291d53a60ca3ab794756dbeb"
-        },
-        {
-          "kind": "manuscript_pdf",
-          "path": "meta-analysis-runs/meta-20260731022805-836a11ae8d91/output/20260731_022810_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.pdf",
-          "bytes": 168330,
-          "sha256": "372b8ce0a7998552ac4796c169bc5ad6a4c73cd16f431da8c6776279613a8a99"
-        },
-        {
-          "kind": "manuscript_docx",
-          "path": "meta-analysis-runs/meta-20260731022805-836a11ae8d91/output/20260731_022810_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.docx",
-          "bytes": 176825,
-          "sha256": "100328910cc9d5aab0046159efc836b1e17532e15fa21b3ee4a85891978cc388"
-        },
-        {
-          "kind": "release_decision",
-          "path": "meta-analysis-runs/meta-20260731022805-836a11ae8d91/output/20260731_022810_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/release_decision.json",
-          "bytes": 2938,
-          "sha256": "2b6d308f26ffc11ca471705a13c19c302984dddce847934c4b426a046b6c60b1"
-        },
-        {
-          "kind": "review_package",
-          "path": "meta-analysis-runs/meta-20260731022805-836a11ae8d91/output/20260731_022810_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip",
-          "bytes": 790000,
-          "sha256": "8b2928aeaaefda726faa78c0ef6685a58f70dfa77569515e5a29d584627bad95"
-        }
-      ],
-      "artifactCount": 5
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
     },
     {
-      "tool": "evimed_mendelian_randomization",
-      "probeType": "completed_managed_job",
-      "operation": "start_then_poll_to_terminal",
+      "tool": "frontier_search",
+      "probeType": "executed_tool_call",
+      "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "mr-20260722233537-72683d3aec7f",
-      "jobStatus": "succeeded",
-      "releaseStatus": null,
-      "publicationReady": true,
-      "executedAt": "2026-07-22T16:02:55.463734Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
-      "executionEvidence": {
-        "schemaVersion": 1,
-        "agentSourceSha256": "75f9fb263351a49d55d8cb18990ecea05c2a90c8d1452dcbf904a6b1b306cda2",
-        "agentSourceFiles": 37,
-        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
-        "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
-        "model": "deepseek-v4-pro",
-        "thinking": true,
-        "reasoningEffort": "high"
+      "summary": "Found 3 item(s) in 前沿动态 (all collected items, last 30d); more match.",
+      "errorCode": null,
+      "elapsedMs": 11,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/frontier_search.json",
+        "bytes": 2240,
+        "sha256": "a95be16741f6d52f1cf383c241d0c1c5e04726ff3fb15f88a35591e8cf079515"
       },
-      "artifacts": [
-        {
-          "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/f_statistics.csv",
-          "bytes": 11134,
-          "sha256": "5158f3ec9c22e15d894651288885a8aa1b66e1018e0180fa21ec275315344ec6"
-        },
-        {
-          "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.pdf",
-          "bytes": 19632,
-          "sha256": "8ac129aa6aacf5fb7b5ab704a160a4d468a36999365f7a53875725734464c6cb"
-        },
-        {
-          "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.png",
-          "bytes": 575200,
-          "sha256": "5f86817c8a06da4857a6390dc6445c4da339fa05a59a3f3bc63d374e5f5951f6"
-        },
-        {
-          "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.pdf",
-          "bytes": 13516,
-          "sha256": "50138d6a8a827033559ad5bbcd53140b96d34b0db4c20725564e226c6d7520f8"
-        },
-        {
-          "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.png",
-          "bytes": 154507,
-          "sha256": "a343c6dc525dcad16cab831829762c3c7f08381b686424748029c4e5ac321f35"
-        },
-        {
-          "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/heterogeneity.csv",
-          "bytes": 390,
-          "sha256": "9be962a167104c476dc510273e35c46ad40bc5416493f676688d7b9f4b2953c3"
-        },
-        {
-          "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.pdf",
-          "bytes": 19217,
-          "sha256": "29eb8c2827e3e84599433ddde40cacf610d46e55a3fb84635ffc8b89fe5f7919"
-        },
-        {
-          "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.png",
-          "bytes": 582439,
-          "sha256": "d0e1e85b78de791a43db294ed9a8424894c6431ab26534c801de0e4d31b06d7b"
-        },
-        {
-          "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_results.csv",
-          "bytes": 1327,
-          "sha256": "9caeb85ef824e49edb1a76652ad176810f1f9f95b6ebf654de1f98dddf0bff24"
-        },
-        {
-          "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_summary.json",
-          "bytes": 150,
-          "sha256": "dec675cfed6373e6b164849afb5c2fdae068705de17e1f8caac17b0d893ad744"
-        },
-        {
-          "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mrpresso.csv",
-          "bytes": 88,
-          "sha256": "32a18ec883d47d28739ac090fbe506746d7b653c42acf05bffea0a66fba40f93"
-        },
-        {
-          "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/pleiotropy.csv",
-          "bytes": 250,
-          "sha256": "bff8334c6c36dc6274b00d1e137caf9ad40d87bc008fca508763e58280789d77"
-        },
-        {
-          "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.pdf",
-          "bytes": 18746,
-          "sha256": "0025df54d065ff9a9aea91c34ac6868dbd3616530c12ebb57f4735050783ed83"
-        },
-        {
-          "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.png",
-          "bytes": 284270,
-          "sha256": "3dd99eb8a57c41c78e4d1210d1dcb3ef49a723271f730a6e8139d0b1283267bc"
-        },
-        {
-          "kind": "docx",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.docx",
-          "bytes": 45586,
-          "sha256": "f64afe5ec4deb177baaacc8ecd0350fc726a0f88a7c8152a66bf354b162cd136"
-        },
-        {
-          "kind": "md",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.md",
-          "bytes": 17687,
-          "sha256": "4b791ffe05e13886790bb3f19999162314ede1bb6bb138b594b551906eb8d47f"
-        },
-        {
-          "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.pdf",
-          "bytes": 76128,
-          "sha256": "eca8cfcf0e93ba96ce915506c1ae95f90c5f9605b08915abca2d275cfc4db335"
-        },
-        {
-          "kind": "txt",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.txt",
-          "bytes": 19137,
-          "sha256": "978d6ed045885fef9a4c190369237c1bd7cf3ab2133abffdcca70acb773f1064"
-        },
-        {
-          "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-run.json",
-          "bytes": 6202,
-          "sha256": "c45f1893ad12e513bdbd2aac26ed667a4d1c0dea77cc4bce1be5694a20c055a3"
-        },
-        {
-          "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/request.json",
-          "bytes": 134,
-          "sha256": "1cc4fbe4f55e604c343866c88e131b89f1c70ac94bc9546351768bee4d94052c"
-        },
-        {
-          "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/result.json",
-          "bytes": 1339,
-          "sha256": "6ae38f6591f68f6f1fae0cbbc3ad3ea0d89d93b18d602266bb98fe45abbb0855"
-        }
-      ],
-      "artifactCount": 21
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
     },
     {
-      "tool": "evimed_bibliometric_analysis",
-      "probeType": "completed_managed_job",
-      "operation": "start_then_poll_to_terminal",
-      "status": "success",
+      "tool": "geo_read",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
       "operational": true,
-      "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "bibliometric-20260730135555-97b9521161f5",
-      "jobStatus": "succeeded",
-      "releaseStatus": null,
-      "publicationReady": true,
-      "executedAt": "2026-07-30T13:59:01.632266Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/specialist-sweep-20260730/workspace",
-      "executionEvidence": {
-        "schemaVersion": 1,
-        "agentSourceSha256": "3c0d60e992da2b25f661263ab0da1cf2744314b2c00847882c0a3861affed3c2",
-        "agentSourceFiles": 56,
-        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
-        "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
-        "model": "deepseek-v4-pro",
-        "thinking": true,
-        "reasoningEffort": "high"
+      "summary": "This conversation is not in a 循证 GEO project, so there is no project to read.",
+      "errorCode": null,
+      "elapsedMs": 3,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/geo_read.json",
+        "bytes": 798,
+        "sha256": "0b6ab86ca359ad3917e69ec987df25d43105eacded0b43a1c3dd25ca4feb88f0"
       },
-      "artifacts": [
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/author_collaboration.csv",
-          "bytes": 21797,
-          "sha256": "3c57ad777ec66b75cd45cb5012a258b498d047de444a296f369bec3bd7d4eec4"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/author_network.json",
-          "bytes": 20368,
-          "sha256": "592d93f1d186a2eff205e143da87019e0b9200b7e411d9b7690e7c6a017d6bc8"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/cleaned_records.csv",
-          "bytes": 116917,
-          "sha256": "af303ec6701a19f656650aa0c20a95867f542361cb61ab6992728d035608bdd5"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/country_collaboration.csv",
-          "bytes": 2717,
-          "sha256": "675e95562077884efa8581bf1cd0c8068a91230e7c37591b1216731dbbf162d7"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/country_network.json",
-          "bytes": 5513,
-          "sha256": "d3cb7643f2f52067991e0727653ef13f7fd74ff32b59a69e8d9da394f5631b8b"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/institution_collaboration.csv",
-          "bytes": 39396,
-          "sha256": "17e56f63aff6ef2455da6a0faf4a2fe2299b7c62d6c323154975f373254381ea"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/institution_network.json",
-          "bytes": 15176,
-          "sha256": "edde853ecf94532236c1872932970f57f0844cf7fa38b9a4e589c606a0ad8bff"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/keyword_cooccurrence.csv",
-          "bytes": 131626,
-          "sha256": "8e4fc7ae1cff368afba54f48b2153422b55617ed947828a442f4b48e05c968e8"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/keyword_network.json",
-          "bytes": 106631,
-          "sha256": "4a4889733bf7c2fffb8d733c2230e3e0fde69641aadc0949fad5682ef6dce8cc"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/raw_records.json",
-          "bytes": 892815,
-          "sha256": "52c564a6b652f51b8b5157e365430ab48bde1f46839c6f3a94a5e64cd0323c54"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/data/search_metadata.json",
-          "bytes": 3001,
-          "sha256": "5cbc3d517c621e31c01147d3336c986e3f35753051f0d70bf1e08a3608d5fb42"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/annual_trend.png",
-          "bytes": 54443,
-          "sha256": "6243962361f0b4aba7ed4641971c3bf7312093370f261ac9a221bfd128f2e6ac"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/author_network.png",
-          "bytes": 203494,
-          "sha256": "3ed7065c0fa0b82fe1d07d9244632ad6c8d789430191acaf486cf1e707ceede2"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/burst_terms.png",
-          "bytes": 27831,
-          "sha256": "2f2f469f2838f8ec02c7c39b134cf4a120d6d77978da970618950bed4f82aea3"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/citation_overview.png",
-          "bytes": 87612,
-          "sha256": "34a7c623d0b0c276f8b823bcef683dcaeb04ef42a1a7a637ef55cf16bbd12b1b"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/country_network.png",
-          "bytes": 163420,
-          "sha256": "4122d951ea8b1a208d9f21ce45ab663caacf4889e4ddbf99ab89686809059e21"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/institution_network.png",
-          "bytes": 206265,
-          "sha256": "c2f304a247f1e0598f85e774c6bd2ed8328b3bb5502144523f135b6f46300ed6"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/keyword_network.png",
-          "bytes": 396204,
-          "sha256": "aff547011e517bdc76005c85ae9450d717329fe20ebbb56ca1b9cc0bba2a0646"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/keyword_wordcloud.png",
-          "bytes": 184912,
-          "sha256": "28061289c4a62539788ad0d5f54825be29bde58a49f38d83e3f37ea36f362126"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/timeline_clusters.png",
-          "bytes": 28798,
-          "sha256": "6f64c653b0a53f9e4868d0198df4d688f355cfc528497da424ddcf521edd4ac0"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/top_authors.png",
-          "bytes": 25402,
-          "sha256": "f170d544f831360af1b606e40e0277ba1e9dc6b5c5b518a84c2890c29248dce9"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/top_countries.png",
-          "bytes": 19484,
-          "sha256": "c9342b852cccb5aa63528d9a4330453e93a0219388b911f009acf5b9d76b2495"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/top_institutions.png",
-          "bytes": 40695,
-          "sha256": "5e1fcf65f6b665e583290ade3820ba8e9b70a4a6e06d0866e84acf4267fc8f64"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/top_journals.png",
-          "bytes": 40496,
-          "sha256": "b3e2c4f020b9a2a5d16f9b5ff42bf89dd5abd4519c10f9f047800a3d809f5056"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/figures/top_keywords.png",
-          "bytes": 46588,
-          "sha256": "2044d07718684ffc621229f3c9bd41a331f877ffcc17d436bb4f6eaa3151d566"
-        },
-        {
-          "kind": "md",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/report.md",
-          "bytes": 88266,
-          "sha256": "040584f946002ac1d9fa49aea1f566f493980327bf3852f314c957c5f35fae7f"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/request.json",
-          "bytes": 253,
-          "sha256": "5f2983aafc6099d41d21f29d44bf6e6480e8fcdf60a0fcf1b999c6301dcca6e4"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/result.json",
-          "bytes": 231,
-          "sha256": "1fa501a8e212293925804bfb79ae4c83d6e0f5d2c5c70794cb2a84dfb1c5c122"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/burst_terms.csv",
-          "bytes": 176,
-          "sha256": "3948f1ee1cc5fc2df953a5ce45e41e99620ce46bc221e226965779fc8c33e201"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/cluster_summary.csv",
-          "bytes": 279,
-          "sha256": "1a05a6ee50cbbe93871f12b4613da27d332e57809c07c912ddf70919a7213f04"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/frontier_topics.csv",
-          "bytes": 1983,
-          "sha256": "5bc5ce723b12f2a261b0570b829e8ccf0759ef5c3a71d1583fe939cdee0445b4"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/pub_type_distribution.csv",
-          "bytes": 426,
-          "sha256": "f9d93aa05884deb04789e04e7cb78a8c0aa2af7a066b252d21af2764a3a92140"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/top_authors.csv",
-          "bytes": 351,
-          "sha256": "5ca44a3b35c124efdcf07e8e6dde35c5c8cea4134d298246d7678ae5e7268625"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/top_countries.csv",
-          "bytes": 238,
-          "sha256": "dc0bbcc235adb16fe1d79c5cb0862ff5fdce067be75cd167a816049b6fcc2e9b"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/top_institutions.csv",
-          "bytes": 638,
-          "sha256": "1aa3423fd0c699d04e23eceaceaaec8dad0934cc442d8ad6e0a8714503fa9d70"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/top_journals.csv",
-          "bytes": 836,
-          "sha256": "fefd6bfa53d49cb527ca4c96ca70d8eaacf3d8189f28dcb2e1264df74ccb7f2a"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/top_keywords.csv",
-          "bytes": 565,
-          "sha256": "7f5e63903155966d85cb4b4c96cbf4fdc3554d6b37d7785cce9c64c6faddb22e"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/tables/year_trend.csv",
-          "bytes": 157,
-          "sha256": "6471231e6a74d4dc6c2e1bc6e6558ca229bbf6dde257f70eb9f484b0170f61d6"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/author_map.txt",
-          "bytes": 1305,
-          "sha256": "66002676594c01feb5c242930d733972521d947b21d0c0af3b3e745ed014275b"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/author_network.txt",
-          "bytes": 1139,
-          "sha256": "024ed61ca8ce324d3500ddf67e24f2c47375430e3732a64a61a5f93aac73356b"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/country_map.txt",
-          "bytes": 445,
-          "sha256": "285848b43962a564b2647d1ea0c2c72d82dcc09870f1bbfc68771d9fcc3a6e41"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/country_network.txt",
-          "bytes": 261,
-          "sha256": "00534676123d8256dcfaa6119e048f4dda5cb65bffceb2847af04a115d936cb1"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/institution_map.txt",
-          "bytes": 1200,
-          "sha256": "532fab01b5a8e79d4a0196ad705e4de1f1bd09674676b37b2d6ce4bc807a4efa"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/institution_network.txt",
-          "bytes": 610,
-          "sha256": "07d7db128f9e6db08b41a03fb1a6c884a6e773892a4e30a5d72cd03b80becb14"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/keyword_map.txt",
-          "bytes": 2428,
-          "sha256": "d4c83f8eff7a3ca61e861b1720a4dcd46e90c51b635fc849becad6b59c134277"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260730135555-97b9521161f5/output/vosviewer/keyword_network.txt",
-          "bytes": 7449,
-          "sha256": "30266c7302042b4433f6350875bacf0813b7982c0ab8a230e7ab0e85b544a1e8"
-        }
-      ],
-      "artifactCount": 46
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
     },
     {
-      "tool": "evimed_research_topic_selection",
-      "probeType": "completed_managed_job",
-      "operation": "start_then_poll_to_terminal",
-      "status": "success",
+      "tool": "geo_write",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
       "operational": true,
-      "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "topic-20260722233739-70dee8588977",
-      "jobStatus": "succeeded",
-      "releaseStatus": null,
-      "publicationReady": true,
-      "executedAt": "2026-07-22T15:51:33.096838Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
-      "executionEvidence": {
-        "schemaVersion": 1,
-        "agentSourceSha256": "9e52bb8b3a8fe397cc47eb956c3c0d17ff874d8a42e99f37f9511d244f96ca70",
-        "agentSourceFiles": 34,
-        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
-        "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
-        "model": "deepseek-v4-pro",
-        "thinking": true,
-        "reasoningEffort": "high"
+      "summary": "This conversation is not in a 循证 GEO project, so there is no step to write.",
+      "errorCode": null,
+      "elapsedMs": 3,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/geo_write.json",
+        "bytes": 878,
+        "sha256": "ce698703502cf6dc84f599e14338469a3c23932c7dfb4b387149af4316600197"
       },
-      "artifacts": [
-        {
-          "kind": "json",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/evidence-records.json",
-          "bytes": 65195,
-          "sha256": "eb68832ec9970889a47e76dfc8a29b53b678c69e7e1dbf6e1af1b68ed299abb9"
-        },
-        {
-          "kind": "json",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/evidence-stats.json",
-          "bytes": 1852,
-          "sha256": "4b49abc6d3c7fe81a4dcabdd10757e8fb61c4391f9309a46f847c5b56c0c37a2"
-        },
-        {
-          "kind": "json",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/module-outputs.json",
-          "bytes": 125595,
-          "sha256": "6cf754b2db0b6b88a0388cb2f207f3969198dc016222c692f311209fecd1a8d2"
-        },
-        {
-          "kind": "json",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/request.json",
-          "bytes": 111,
-          "sha256": "1c267f0ee399de477ba076027ace1d4ca01f3080ef07450e0ac8bc0c4c1ec15e"
-        },
-        {
-          "kind": "md",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/research-topic-report.md",
-          "bytes": 40864,
-          "sha256": "9b76f81721d409c3ffa359d60f69e4a991f45f4831f2fb1b96c38810483a6205"
-        },
-        {
-          "kind": "json",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/research-topic-run.json",
-          "bytes": 173721,
-          "sha256": "d55de87282196635c21aba89832993d294b9f04f9e9db71537c6c2290a001ab9"
-        },
-        {
-          "kind": "json",
-          "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/result.json",
-          "bytes": 302,
-          "sha256": "53a944c5423b2a45f5576805496a0fafc9af64fb5fce1629638112ad504728a9"
-        }
-      ],
-      "artifactCount": 7
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
     },
     {
-      "tool": "evimed_peer_review",
-      "probeType": "completed_managed_job",
-      "operation": "start_then_poll_to_terminal",
+      "tool": "social_posts_search",
+      "probeType": "executed_tool_call",
+      "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "review-20260730140229-16bc75fea8b5",
-      "jobStatus": "succeeded",
-      "releaseStatus": null,
-      "publicationReady": true,
-      "executedAt": "2026-07-30T14:14:59.529009Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/specialist-sweep-20260730/workspace",
-      "executionEvidence": {
-        "schemaVersion": 1,
-        "agentSourceSha256": "570bbba83bd82c4f6cda94a796ce586d730516e93ac7a496878aadfa80a05460",
-        "agentSourceFiles": 78,
-        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
-        "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
-        "model": "deepseek-v4-pro",
-        "thinking": true,
-        "reasoningEffort": "high"
+      "summary": "Collected 3 post(s) for \"降糖药\".",
+      "errorCode": null,
+      "elapsedMs": 17932,
+      "sourceCount": 0,
+      "workspace": "evals/capability-audit/tool-probe-workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/social_posts_search.json",
+        "bytes": 6634,
+        "sha256": "733002dd35bbc6a3e8ee1c0bff74683f8e3b42893e9c2d2fce2fcb056549b265"
       },
-      "artifacts": [
-        {
-          "kind": "md",
-          "path": "peer-review-runs/review-20260730140229-16bc75fea8b5/output/peer-review-report.md",
-          "bytes": 20097,
-          "sha256": "29a1858235ca7b28b0b0162872d7fe755f0cfdd00dc2be9d988b05e5c60bb311"
-        },
-        {
-          "kind": "json",
-          "path": "peer-review-runs/review-20260730140229-16bc75fea8b5/output/peer-review-run.json",
-          "bytes": 194441,
-          "sha256": "1842f72b3c7cd2274a52ce3a65b343e622a8c486b1132c11045091f6617082d9"
-        },
-        {
-          "kind": "json",
-          "path": "peer-review-runs/review-20260730140229-16bc75fea8b5/output/request.json",
-          "bytes": 238,
-          "sha256": "4c36bb456ae58884707bc590f7e3fb751fc3975889d02518a746400a4a402e98"
-        },
-        {
-          "kind": "json",
-          "path": "peer-review-runs/review-20260730140229-16bc75fea8b5/output/result.json",
-          "bytes": 287,
-          "sha256": "d439c5ea00140c1ecd1d5da515f75fd3374faa5b41c0ee77a67b1b73f2b64b33"
-        }
-      ],
-      "artifactCount": 4
-    },
-    {
-      "tool": "evimed_drug_safety_analysis",
-      "probeType": "completed_managed_job",
-      "operation": "start_then_poll_to_terminal",
-      "status": "success",
-      "operational": true,
-      "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "safety-20260730141254-c95b0f8978e9",
-      "jobStatus": "succeeded",
-      "releaseStatus": null,
-      "publicationReady": true,
-      "executedAt": "2026-07-30T14:14:16.773012Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/specialist-sweep-20260730/workspace",
-      "executionEvidence": {
-        "schemaVersion": 1,
-        "agentSourceSha256": "3cf9a30ddcd83f438fbf0c7583d25c2c502a91d82e18ea04522dd8087b90c396",
-        "agentSourceFiles": 110,
-        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
-        "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
-        "model": "deepseek-v4-pro",
-        "thinking": true,
-        "reasoningEffort": "high"
-      },
-      "artifacts": [
-        {
-          "kind": "json",
-          "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/request.json",
-          "bytes": 97,
-          "sha256": "e08fb9d8234e97923ceff992b36becbfd79921d3d83d9765159e29e3a3120a9f"
-        },
-        {
-          "kind": "json",
-          "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/result.json",
-          "bytes": 456,
-          "sha256": "b28bc8319e49103a3b000f6c58b637096e7fb1de45b09907363f3e85395dae54"
-        },
-        {
-          "kind": "docx",
-          "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/safety-report.docx",
-          "bytes": 42034,
-          "sha256": "66f4dd973de723dc977e2c2940cc3c82e18ae78ac81954c04366609e7151a132"
-        },
-        {
-          "kind": "md",
-          "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/safety-report.md",
-          "bytes": 13934,
-          "sha256": "b2f92ed1e77c277f2a58f08aea81f4efdae3f8f8da84452143d5750fff925d24"
-        },
-        {
-          "kind": "csv",
-          "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/signals.csv",
-          "bytes": 1930,
-          "sha256": "d8b69889a4d0626282fcb7469e20ff8f9cf6f95e7854f6a4ec907eb2bb51e4a5"
-        }
-      ],
-      "artifactCount": 5
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
     }
   ]
 }

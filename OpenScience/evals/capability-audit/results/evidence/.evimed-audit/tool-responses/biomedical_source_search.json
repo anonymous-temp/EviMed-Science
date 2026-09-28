@@ -1,0 +1,77 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable records from pubmed.",
+  "data": {
+    "source": "pubmed",
+    "items": [
+      {
+        "id": "30158069",
+        "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
+        "description": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+        "publicationTypes": [
+          "Journal Article",
+          "Multicenter Study",
+          "Randomized Controlled Trial",
+          "Research Support, Non-U.S. Gov't"
+        ],
+        "hasAbstract": true,
+        "evidenceLevel": "metadata",
+        "sourceType": "rct"
+      },
+      {
+        "id": "36718966",
+        "title": "Acetylsalicylic Acid (Aspirin) for Primary Prevention of Cardiovascular Events in Patients with Diabetes: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/36718966/",
+        "description": "Acetylsalicylic Acid (Aspirin) for Primary Prevention of Cardiovascular Events in Patients with Diabetes: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+        "publicationTypes": [
+          "Systematic Review",
+          "Meta-Analysis",
+          "Journal Article"
+        ],
+        "hasAbstract": true,
+        "evidenceLevel": "metadata",
+        "sourceType": "meta-analysis"
+      }
+    ],
+    "provenance": {
+      "tool": "biomedical_source_search",
+      "arguments": {
+        "source": "pubmed",
+        "query": "aspirin cardiovascular prevention randomized trial",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "30158069",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-28T08:33:59.554015Z",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
+      "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+      "sourceType": "rct"
+    },
+    {
+      "id": "36718966",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-28T08:33:59.554089Z",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/36718966/",
+      "title": "Acetylsalicylic Acid (Aspirin) for Primary Prevention of Cardiovascular Events in Patients with Diabetes: A Systematic Review and Meta-Analysis of Randomized Controlled Trials.",
+      "sourceType": "meta-analysis"
+    }
+  ],
+  "warnings": [
+    "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation."
+  ],
+  "next_actions": [
+    "Open and verify the cited primary record before using it in a material claim.",
+    "Fetch the abstracts of the records you keep with literature_search pmids=[...]; they are preserved and quotable."
+  ]
+}

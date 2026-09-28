@@ -1,0 +1,53 @@
+{
+  "status": "success",
+  "summary": "search_biomedical_records returned a result from https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=2&term=metformin+type+2+diabetes&tool=evimed_research.",
+  "data": {
+    "header": {
+      "type": "esearch",
+      "version": "0.3"
+    },
+    "esearchresult": {
+      "count": "16716",
+      "retmax": "2",
+      "retstart": "0",
+      "idlist": [
+        "42797348",
+        "42797242"
+      ],
+      "translationset": [
+        {
+          "from": "metformin",
+          "to": "\"metformin\"[Supplementary Concept] OR \"metformin\"[All Fields] OR \"metformin\"[MeSH Terms] OR \"metformine\"[All Fields] OR \"metformin's\"[All Fields] OR \"metformins\"[All Fields]"
+        },
+        {
+          "from": "type 2 diabetes",
+          "to": "\"diabetes mellitus, type 2\"[MeSH Terms] OR \"type 2 diabetes mellitus\"[All Fields] OR \"type 2 diabetes\"[All Fields]"
+        }
+      ],
+      "querytranslation": "(\"metformin\"[Supplementary Concept] OR \"metformin\"[All Fields] OR \"metformin\"[MeSH Terms] OR \"metformine\"[All Fields] OR \"metformin s\"[All Fields] OR \"metformins\"[All Fields]) AND (\"diabetes mellitus, type 2\"[MeSH Terms] OR \"type 2 diabetes mellitus\"[All Fields] OR \"type 2 diabetes\"[All Fields])"
+    },
+    "provenance": {
+      "tool": "search_biomedical_records",
+      "arguments": {
+        "query": "metformin type 2 diabetes",
+        "database": "pubmed",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "biomcp",
+      "source": "biomcp",
+      "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=2&term=metformin+type+2+diabetes&tool=evimed_research",
+      "retrievedAt": "2026-09-28T08:34:27.138280Z",
+      "sourceType": "other"
+    }
+  ]
+}

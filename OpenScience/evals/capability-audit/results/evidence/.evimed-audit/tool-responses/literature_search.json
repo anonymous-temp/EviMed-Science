@@ -1,0 +1,100 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable PubMed records.",
+  "data": {
+    "items": [
+      {
+        "id": "PMID:31196447",
+        "pmid": "31196447",
+        "title": "Aspirin for Primary Prevention of Cardiovascular Events.",
+        "journal": "Journal of the American College of Cardiology",
+        "publicationDate": "2019 Jun 18",
+        "authors": [
+          "Abdelaziz HK",
+          "Saad M",
+          "Pothineni NVK",
+          "Megaly M",
+          "Potluri R",
+          "Saleh M",
+          "Kon DLC",
+          "Roberts DH",
+          "Bhatt DL",
+          "Aronow HD",
+          "Abbott JD",
+          "Mehta JL"
+        ],
+        "doi": "10.1016/j.jacc.2019.03.501",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/31196447/",
+        "publicationTypes": [
+          "Journal Article",
+          "Meta-Analysis",
+          "Systematic Review"
+        ],
+        "hasAbstract": true,
+        "sourceType": "meta-analysis"
+      },
+      {
+        "id": "PMID:31163982",
+        "pmid": "31163982",
+        "title": "Aspirin for Primary Prevention of Cardiovascular Disease.",
+        "journal": "Circulation. Cardiovascular quality and outcomes",
+        "publicationDate": "2019 Jun",
+        "authors": [
+          "Kheiri B",
+          "Barbarawi M",
+          "Bachuwa G",
+          "Shapiro MD"
+        ],
+        "doi": "10.1161/CIRCOUTCOMES.119.005846",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/31163982/",
+        "publicationTypes": [
+          "Journal Article",
+          "Meta-Analysis"
+        ],
+        "hasAbstract": false,
+        "sourceType": "meta-analysis"
+      }
+    ],
+    "provenance": {
+      "tool": "literature_search",
+      "arguments": {
+        "query": "aspirin cardiovascular prevention randomized trial",
+        "limit": 2,
+        "databases": [
+          "pubmed",
+          "crossref"
+        ]
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "PMID:31196447",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-28T08:34:37.838154Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/31196447/",
+      "title": "Aspirin for Primary Prevention of Cardiovascular Events.",
+      "sourceType": "meta-analysis"
+    },
+    {
+      "id": "PMID:31163982",
+      "source": "pubmed",
+      "retrievedAt": "2026-09-28T08:34:37.838185Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/31163982/",
+      "title": "Aspirin for Primary Prevention of Cardiovascular Disease.",
+      "sourceType": "meta-analysis"
+    }
+  ],
+  "warnings": [
+    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
+  ],
+  "next_actions": [
+    "Retrieve and review the abstract or full text before classifying study design or summarizing findings: literature_search with pmids=[...] returns and preserves the abstracts of the PubMed records you keep."
+  ]
+}

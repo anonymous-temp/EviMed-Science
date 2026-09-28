@@ -1,0 +1,74 @@
+{
+  "status": "success",
+  "summary": "get_weather returned a result from https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&forecast_days=1&current=temperature_2m%2Crelative_humidity_2m%2Cprecipitation%2Cweather_code%2Cwind_speed_10m&daily=temperature_2m_max%2Ctemperature_2m_min%2Cprecipitation_sum.",
+  "data": {
+    "latitude": 39.89455,
+    "longitude": 116.35983,
+    "generationtime_ms": 0.19812583923339844,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 47.0,
+    "current_units": {
+      "time": "iso8601",
+      "interval": "seconds",
+      "temperature_2m": "°C",
+      "relative_humidity_2m": "%",
+      "precipitation": "mm",
+      "weather_code": "wmo code",
+      "wind_speed_10m": "km/h"
+    },
+    "current": {
+      "time": "2026-09-28T08:30",
+      "interval": 900,
+      "temperature_2m": 23.7,
+      "relative_humidity_2m": 63,
+      "precipitation": 0.0,
+      "weather_code": 0,
+      "wind_speed_10m": 6.3
+    },
+    "daily_units": {
+      "time": "iso8601",
+      "temperature_2m_max": "°C",
+      "temperature_2m_min": "°C",
+      "precipitation_sum": "mm"
+    },
+    "daily": {
+      "time": [
+        "2026-09-28"
+      ],
+      "temperature_2m_max": [
+        23.8
+      ],
+      "temperature_2m_min": [
+        16.3
+      ],
+      "precipitation_sum": [
+        1.7
+      ]
+    },
+    "provenance": {
+      "tool": "get_weather",
+      "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "forecast_days": 1
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "open-meteo",
+      "source": "open-meteo",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&forecast_days=1&current=temperature_2m%2Crelative_humidity_2m%2Cprecipitation%2Cweather_code%2Cwind_speed_10m&daily=temperature_2m_max%2Ctemperature_2m_min%2Cprecipitation_sum",
+      "retrievedAt": "2026-09-28T08:34:30.732023Z",
+      "sourceType": "other"
+    }
+  ]
+}

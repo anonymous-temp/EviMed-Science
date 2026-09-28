@@ -1,0 +1,80 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable EviMed guideline candidates (2 with preserved text).",
+  "data": {
+    "artifactSha256s": {
+      ".evimed-sources/evimed-guidelines/2160946d60faa052/d20a5013e52b3ea553a28fe2c3b12bace38593fce0453261b1837dc32552177f/guideline.md": "45bf8cb15222b90d8261a973e5397292d131276dac5e1d09202d6583e41f8ca8",
+      ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/328323c0fd5012ef6d12bc32f11190557d9e7b3535eddf4e8a4abff4bda6c798/guideline.md": "241c8635c39fc2876794f16669d703fea449cbadde86b6be6d151764420478ad"
+    },
+    "items": [
+      {
+        "id": "EVIMED-GUIDE:0",
+        "title": "中国高血压临床实践指南",
+        "year": "2024",
+        "publisher": "中华医学会心血管病学分会",
+        "summary": "《中国高血压临床实践指南》由中华医学会心血管病学分会等多家权威机构联合制定，旨在规范高血压的临床诊治，提升我国高血压管理水平。指南采用GRADE分级体系和RIGHT标准，围绕高血压的诊断、评估和治疗等44个临床问题，提供了详尽的循证推荐。指南强调高血压诊断标准为收缩压≥140 mmHg和（或）舒张压≥90 mmHg，并提出高血压前期的界定，鼓励早期干预。指南还详细规定了血压测量方法、家庭血压监测的频率与时点、非药物干预措施、运动建议以及药物治疗的启动时机，特别关注不同危险分层患者的个体化管理。同时，指南推荐使用低钠富钾盐替代普通食盐，并倡导综合生活方式干预，以有效降低血压和心血管风险。",
+        "language": "中文",
+        "publicationDate": "2024-09-18",
+        "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/d20a5013e52b3ea553a28fe2c3b12bace38593fce0453261b1837dc32552177f/guideline.md",
+        "sourceType": "guideline"
+      },
+      {
+        "id": "EVIMED-GUIDE:1",
+        "title": "中国高血压临床实践指南计划书",
+        "year": "2022",
+        "publisher": "中华心血管病杂志",
+        "summary": "为全面提升高血压患者规范化筛查及诊断与治疗水平，实现高血压临床实践标准化，提高中国高血压防控水平，国家心血管病中心、中国医师协会、中国医师协会高血压专业委员会、中华医学会心血管病学分会、海峡两岸医药卫生交流协会高血压专业委员会联合发起制定《中国高血压临床实践指南》，中国医学科学院循证评价与指南研究创新单元、兰州大学健康数据科学研究院、中华医学会杂志社指南与标准研究中心、GRADE兰州大学中心提供了方法学支持。",
+        "language": "中文",
+        "publicationDate": "2022-01-01",
+        "artifactPath": ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/328323c0fd5012ef6d12bc32f11190557d9e7b3535eddf4e8a4abff4bda6c798/guideline.md",
+        "sourceType": "guideline"
+      }
+    ],
+    "total": 2,
+    "excludedByRequiredConcepts": 0,
+    "keywords": null,
+    "enrichedQuery": null,
+    "requestedJurisdiction": null,
+    "provenance": {
+      "tool": "guideline_search",
+      "arguments": {
+        "query": "hypertension clinical practice guideline",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "artifacts": [
+    ".evimed-sources/evimed-guidelines/2160946d60faa052/d20a5013e52b3ea553a28fe2c3b12bace38593fce0453261b1837dc32552177f/guideline.md",
+    ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/328323c0fd5012ef6d12bc32f11190557d9e7b3535eddf4e8a4abff4bda6c798/guideline.md"
+  ],
+  "sources": [
+    {
+      "id": "EVIMED-GUIDE:0",
+      "source": "evimed-guideline",
+      "retrievedAt": "2026-09-28T08:34:40.858415Z",
+      "title": "中国高血压临床实践指南",
+      "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/d20a5013e52b3ea553a28fe2c3b12bace38593fce0453261b1837dc32552177f/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "id": "EVIMED-GUIDE:1",
+      "source": "evimed-guideline",
+      "retrievedAt": "2026-09-28T08:34:40.865634Z",
+      "title": "中国高血压临床实践指南计划书",
+      "artifactPath": ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/328323c0fd5012ef6d12bc32f11190557d9e7b3535eddf4e8a4abff4bda6c798/guideline.md",
+      "sourceType": "guideline"
+    }
+  ],
+  "warnings": [
+    "Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use."
+  ],
+  "next_actions": [
+    "Open the original guideline and verify the relevant recommendation text and version."
+  ]
+}

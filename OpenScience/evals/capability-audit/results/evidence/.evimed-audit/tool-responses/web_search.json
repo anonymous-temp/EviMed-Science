@@ -1,0 +1,54 @@
+{
+  "status": "success",
+  "summary": "Open-web search returned 2 result(s) for 'systematic review reporting guideline PRISMA 2020'.",
+  "data": {
+    "query": "systematic review reporting guideline PRISMA 2020",
+    "categories": [
+      "general"
+    ],
+    "language": null,
+    "timeRange": null,
+    "results": [
+      {
+        "title": "The PRISMA 2020 statement: an updated guideline for reporting ...",
+        "url": "https://www.bmj.com/content/372/bmj.n71",
+        "snippet": "2021/03/29 ... Over the past decade, advances in systematic review methodology and terminology have necessitated an update to the guideline. The PRISMA 2020 ...",
+        "engine": "google cse",
+        "publishedDate": null
+      },
+      {
+        "title": "(译)2021 Matthew Page PRISMA 2020声明:系统综述报告的最新指南",
+        "url": "https://www.douban.com/note/875895458/",
+        "snippet": "豆瓣网",
+        "engine": "bailian",
+        "publishedDate": null
+      }
+    ],
+    "engines": [
+      "bailian",
+      "google cse"
+    ],
+    "unresponsiveEngines": [],
+    "provenance": {
+      "tool": "web_search",
+      "arguments": {
+        "query": "systematic review reporting guideline PRISMA 2020",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [
+    "Open-web results are unreviewed pages, not indexed literature; a claim taken from one needs the primary source before it enters a report.",
+    "Answered by: bailian, google cse. Engine availability is a deployment fact; a thin result set may mean few engines answered, not few pages exist."
+  ],
+  "next_actions": [
+    "Treat every result as an unreviewed page: follow it to the primary record before any claim from it enters a report.",
+    "For anything that is published literature, re-find it through evimed_biomedical_source_search so it carries an identifier."
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 5 traceable records from europe-pmc-references.",
+  "data": {
+    "source": "europe-pmc-references",
+    "items": [
+      {
+        "order": 1,
+        "pmid": "26303835",
+        "source": "MED",
+        "title": "e-Health: a position statement of the European Society of Cardiology.",
+        "authors": "Cowie MR, Bax J, Bruining N, Cleland JG, Koehler F, Malik M, Pinto F, van der Velde E, Vardas P.",
+        "journal": "Eur Heart J",
+        "year": 2015,
+        "type": "JOURNAL ARTICLE",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/26303835/"
+      },
+      {
+        "order": 2,
+        "pmid": "28834628",
+        "source": "MED",
+        "title": "Improving care for patients with acute heart failure: before, during and after hospitalization.",
+        "authors": "Cowie MR, Anker SD, Cleland JGF, Felker GM, Filippatos G, Jaarsma T, Jourdain P, Knight E, Massie B, Ponikowski P, Lopez-Sendon J.",
+        "journal": "ESC Heart Fail",
+        "year": 2014,
+        "type": "JOURNAL ARTICLE",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/28834628/"
+      },
+      {
+        "order": 3,
+        "pmid": "26727047",
+        "source": "MED",
+        "title": "Epidemiology of heart failure: the prevalence of heart failure and ventricular dysfunction in older adults over time. A systematic review.",
+        "authors": "van Riet EE, Hoes AW, Wagenaar KP, Limburg A, Landman MA, Rutten FH.",
+        "journal": "Eur J Heart Fail",
+        "year": 2016,
+        "type": "JOURNAL ARTICLE",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/26727047/"
+      },
+      {
+        "order": 4,
+        "pmid": "28386917",
+        "source": "MED",
+        "title": "Epidemiology and one-year outcomes in patients with chronic heart failure and preserved, mid-range and reduced ejection fraction: an analysis of the ESC Heart Failure Long-Term Registry.",
+        "authors": "Chioncel O, Lainscak M, Seferovic PM, Anker SD, Crespo-Leiro MG, Harjola VP, Parissis J, Laroche C, Piepoli MF, Fonseca C, Mebazaa A, Lund L, Ambrosio GA, Coats AJ, Ferrari R, Ruschitzka F, Maggioni AP, Filippatos G.",
+        "journal": "Eur J Heart Fail",
+        "year": 2017,
+        "type": "JOURNAL ARTICLE",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/28386917/"
+      },
+      {
+        "order": 5,
+        "pmid": "27207191",
+        "source": "MED",
+        "title": "2016 ESC Guidelines for the diagnosis and treatment of acute and chronic heart failure: The Task Force for the diagnosis and treatment of acute and chronic heart failure of the European Society of Cardiology (ESC). Developed with the special contribution of the Heart Failure Association (HFA) of the ESC.",
+        "authors": "Ponikowski P, Voors AA, Anker SD, Bueno H, Cleland JG, Coats AJ, Falk V, Gonzalez-Juanatey JR, Harjola VP, Jankowska EA, Jessup M, Linde C, Nihoyannopoulos P, Parissis JT, Pieske B, Riley JP, Rosano GM, Ruilope LM, Ruschitzka F, Rutten FH, van der Meer P; Authors/Task Force Members; Document Reviewers, Filippatos G, McMurray JJ, Aboyans V, Achenbach S, Agewall S, Al-Attar N, Atherton JJ, Bauersachs J, John Camm A, Carerj S, Ceconi C, Coca A, Elliott P, Erol C, Ezekowitz J, Fernandez-Golfin C, Fitzsimons D, Guazzi M, Guenoun M, Hasenfuss G, Hindricks G, Hoes AW, Iung B, Jaarsma T, Kirchhof P, Knuuti J, Kolh P, Konstantinides S, Lainscak M, Lancellotti P, Lip GY, Maisano F, Mueller C, Petrie MC, Piepoli MF, Priori SG, Torbicki A, Tsutsui H, van Veldhuisen DJ, Windecker S, Yancy C, Zamorano JL.",
+        "journal": "Eur J Heart Fail",
+        "year": 2016,
+        "type": "JOURNAL ARTICLE",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/27207191/"
+      }
+    ],
+    "work": {
+      "source": "MED",
+      "id": "30153985",
+      "direction": "references",
+      "total": 21,
+      "returned": 5
+    },
+    "provenance": {
+      "tool": "reference_list",
+      "arguments": {
+        "identifier": "30153985",
+        "limit": 5
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "26303835",
+      "source": "europe-pmc",
+      "retrievedAt": "2026-09-28T08:34:39.344009Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26303835/",
+      "title": "e-Health: a position statement of the European Society of Cardiology.",
+      "sourceType": "other"
+    },
+    {
+      "id": "28834628",
+      "source": "europe-pmc",
+      "retrievedAt": "2026-09-28T08:34:39.344035Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28834628/",
+      "title": "Improving care for patients with acute heart failure: before, during and after hospitalization.",
+      "sourceType": "other"
+    },
+    {
+      "id": "26727047",
+      "source": "europe-pmc",
+      "retrievedAt": "2026-09-28T08:34:39.344048Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26727047/",
+      "title": "Epidemiology of heart failure: the prevalence of heart failure and ventricular dysfunction in older adults over time. A systematic review.",
+      "sourceType": "other"
+    },
+    {
+      "id": "28386917",
+      "source": "europe-pmc",
+      "retrievedAt": "2026-09-28T08:34:39.344061Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28386917/",
+      "title": "Epidemiology and one-year outcomes in patients with chronic heart failure and preserved, mid-range and reduced ejection fraction: an analysis of the ESC Heart Failure Long-Term Registry.",
+      "sourceType": "other"
+    },
+    {
+      "id": "27207191",
+      "source": "europe-pmc",
+      "retrievedAt": "2026-09-28T08:34:39.344073Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/27207191/",
+      "title": "2016 ESC Guidelines for the diagnosis and treatment of acute and chronic heart failure: The Task Force for the diagnosis and treatment of acute and chronic heart failure of the European Society of Cardiology (ESC). Developed with the special contribution of the Heart Failure Association (HFA) of the ESC.",
+      "sourceType": "other"
+    }
+  ],
+  "warnings": [
+    "Bibliographic metadata from Europe PMC's citation network. A reference list says what a paper cites, not that the cited work supports anything; fetch the abstracts you choose with literature_search pmids."
+  ],
+  "next_actions": [
+    "Open and verify the cited primary record before using it in a material claim."
+  ]
+}

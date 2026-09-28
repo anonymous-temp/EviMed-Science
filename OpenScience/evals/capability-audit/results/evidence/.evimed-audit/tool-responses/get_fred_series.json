@@ -1,0 +1,34 @@
+{
+  "status": "success",
+  "summary": "get_fred_series returned a result from https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP.",
+  "data": {
+    "value": [
+      "observation_date,GDP",
+      "1947-01-01,243.164",
+      "1947-04-01,245.968",
+      "1947-07-01,249.585"
+    ],
+    "provenance": {
+      "tool": "get_fred_series",
+      "arguments": {
+        "series_id": "GDP",
+        "limit": 3
+      },
+      "scope": {
+        "tenantId": "cdss-access",
+        "userId": "cdss-access",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "fred",
+      "source": "fred",
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP",
+      "retrievedAt": "2026-09-28T08:34:28.458363Z",
+      "sourceType": "other"
+    }
+  ]
+}
