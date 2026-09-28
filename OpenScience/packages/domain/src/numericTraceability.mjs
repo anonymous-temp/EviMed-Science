@@ -19,13 +19,22 @@
  * engine wrote and checks the prose against it.
  *
  * Which numbers: the ones stated as results — a number with a statistical
- * label or unit (`conclusoryQuantities`, the gate's own extractor) — on lines
- * that do not cite the literature. A background sentence quoting a published
- * odds ratio with its `[3]` is the literature's number, not the engine's, and
- * counting it would be the false positive that taught `claim-numeric-support`
- * to be ignored (102 notices in 4 runs, 2026-09-17…22). Confidence levels and
- * significance thresholds are removed first: 「95% CI」 and 「P < 0.05」 are
- * conventions, not results.
+ * label or unit (`conclusoryQuantities`, the gate's own extractor) — in
+ * sentences that do not cite the literature. A background sentence quoting a
+ * published odds ratio with its `[3]` is the literature's number, not the
+ * engine's, and counting it would be the false positive that taught
+ * `claim-numeric-support` to be ignored (102 notices in 4 runs,
+ * 2026-09-17…22). Confidence levels and significance thresholds are removed
+ * first: 「95% CI」 and 「P < 0.05」 are conventions, not results.
+ *
+ * The sentence, not the physical line, is what a citation covers. Markdown
+ * wraps a paragraph over lines that render as one, and a report that wraps at
+ * 110 columns puts a sentence's `[3]` on the line after its odds ratio. Read
+ * line by line, the 2026-09-27 topic report's literature figures — each in a
+ * sentence ending with its `[n]` — came back as 32 「数字溯源不到」 findings
+ * the run could only decline, twice. A line is still read whole, and still
+ * exempt when it carries a marker itself; what is new is only that a line
+ * whose every sentence carries one is exempt too.
  *
  * Advice until the ledger says otherwise (principle 4).
  *
@@ -186,6 +195,12 @@ const FENCE = /^\s*(?:```|~~~)/
 const HEADING = /^\s*#/
 /** A numbered citation in prose: the literature's number, not the engine's. */
 const CITATION_MARKER = /\[\d{1,3}(?:\s*[-–,，]\s*\d{1,3})*\]/
+/** The same marker opening a stretch of text: a citation written after the full stop belongs to the sentence before it. */
+const LEADING_CITATION = /^\s*\[\d{1,3}(?:\s*[-–,，]\s*\d{1,3})*\]/
+/** Where a sentence ends: a CJK terminator, or an ASCII one followed by space or the end of the paragraph. */
+const SENTENCE_END = /[。！？]|[.!?](?=\s|$)/g
+/** A line that begins a block of its own — a list item, a table row, a quotation — instead of continuing the paragraph above it. */
+const BLOCK_START = /^\s*(?:[-*+]\s|\d{1,3}[.)]\s|\||>)/
 /** The reference list starts at its heading; nothing after it is a result. */
 const REFERENCE_HEADING = /^\s*#{1,6}\s*(?:参考文献|参考来源|References?|Bibliography)\s*$/i
 /** Conventions, not results: the confidence level and the significance threshold. */
@@ -222,6 +237,7 @@ export function numericTraceFindings({ reportText, outputs, outputLabel = '引�
   if (!outputs.length) return { findings, metrics }
   let fenced = false
   const lines = String(reportText ?? '').split('\n')
+  const cited = citedLines(lines)
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
     if (FENCE.test(line)) {
@@ -230,7 +246,7 @@ export function numericTraceFindings({ reportText, outputs, outputLabel = '引�
     }
     if (fenced) continue
     if (REFERENCE_HEADING.test(line)) break
-    if (HEADING.test(line) || CITATION_MARKER.test(line)) continue
+    if (HEADING.test(line) || cited.has(index)) continue
     let scannable = line
     for (const pattern of CONVENTIONS) scannable = scannable.replace(pattern, ' ')
     /** @type {string[]} */
@@ -264,4 +280,83 @@ export function numericTraceFindings({ reportText, outputs, outputLabel = '引�
     })
   }
   return { findings, metrics }
+}
+
+/**
+ * The lines a citation covers: every line that carries a marker, and every
+ * line each of whose sentences carries one. Sentences are read across the
+ * paragraph's wrapped lines; a paragraph ends at a blank line, a heading, a
+ * fence, or a line that opens a block of its own (a list item, a table row).
+ * @param {readonly string[]} lines @returns {Set<number>}
+ */
+function citedLines(lines) {
+  /** @type {Set<number>} */
+  const cited = new Set()
+  /** @type {number[]} */
+  let block = []
+  const flush = () => {
+    markParagraph(lines, block, cited)
+    block = []
+  }
+  let fenced = false
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (FENCE.test(line)) {
+      flush()
+      fenced = !fenced
+      continue
+    }
+    if (fenced) continue
+    if (!line.trim() || HEADING.test(line)) {
+      flush()
+      continue
+    }
+    if (BLOCK_START.test(line)) flush()
+    block.push(index)
+    // A table row is a paragraph of one: the next row is never its continuation.
+    if (/^\s*\|/.test(line)) flush()
+  }
+  flush()
+  return cited
+}
+
+/**
+ * @param {readonly string[]} lines @param {readonly number[]} block the paragraph's line indexes
+ * @param {Set<number>} cited
+ */
+function markParagraph(lines, block, cited) {
+  if (!block.length) return
+  // The paragraph as it renders: its lines joined by one space, with each
+  // line's span in the joined text kept so a sentence can be mapped back.
+  let text = ''
+  /** @type {[number, number, number][]} */
+  const spans = []
+  for (const index of block) {
+    if (text) text += ' '
+    const start = text.length
+    text += lines[index]
+    spans.push([index, start, text.length])
+  }
+  /** @type {[number, number][]} */
+  const sentences = []
+  let start = 0
+  SENTENCE_END.lastIndex = 0
+  for (const match of text.matchAll(SENTENCE_END)) {
+    const end = (match.index ?? 0) + match[0].length
+    sentences.push([start, end])
+    start = end
+  }
+  if (text.slice(start).trim()) sentences.push([start, text.length])
+  const sentenceCited = sentences.map(([from, to]) => CITATION_MARKER.test(text.slice(from, to)))
+  for (let index = 1; index < sentences.length; index += 1) {
+    if (LEADING_CITATION.test(text.slice(sentences[index][0], sentences[index][1]))) sentenceCited[index - 1] = true
+  }
+  for (const [index, from, to] of spans) {
+    if (CITATION_MARKER.test(lines[index])) {
+      cited.add(index)
+      continue
+    }
+    const touching = sentences.flatMap(([sentenceFrom, sentenceTo], position) => (sentenceFrom < to && sentenceTo > from ? [position] : []))
+    if (touching.length && touching.every((position) => sentenceCited[position])) cited.add(index)
+  }
 }

@@ -52,3 +52,38 @@ test('a number close to an output but not equal to it is a near miss, named as s
 test('nothing to trace against is nothing found, not everything unsupported', () => {
   assert.deepEqual(numericTraceFindings({ reportText: 'OR = 0.88', outputs: [] }).findings, [])
 })
+
+test('a citation covers its sentence across wrapped lines, not only the physical line it sits on', () => {
+  // The 2026-09-27 topic report (evals/research-topic-quality/results/
+  // 2026-09-27-ordinary-constrained-cohort), wrapped at 110 columns: each
+  // literature figure sits in a sentence whose [n] is on the next line, and
+  // read line by line every one came back 「数字溯源不到」.
+  const reportText = [
+    'A 15,340-patient US network cohort found that the odds of missing at least one treatment were higher',
+    'below age 55 (OR 1.33), and higher for Tuesday/Thursday/Saturday schedules (OR 1.33), with misses most',
+    'prevalent on Saturdays (DOI 10.1093/ckj/sfs071 [3]). The European cohort found a hazard ratio for',
+    'mortality of 2.04 (95% CI 1.27–3.29) when the miss was the first session of the week',
+    '(PMID 32517695 [1]).',
+  ].join('\n')
+  assert.deepEqual(numericTraceFindings({ reportText, outputs: [16, 3] }).findings, [])
+})
+
+test('an uncited sentence is still traced, even inside a paragraph that cites elsewhere', () => {
+  const reportText = [
+    'Non-attendance was 0.6–1.4% of sessions in one cohort [1]. One network abstract measured 8.3% of',
+    'sessions missed, with earlier reports at OR 1.7 (Blume 2012).',
+    '',
+    '- A list item stating OR 1.9 without a marker',
+    '- is a block of its own, so it does not borrow this item\'s [4].',
+  ].join('\n')
+  const { findings } = numericTraceFindings({ reportText, outputs: [16] })
+  // Line 1 carries a marker itself; line 2 is only the uncited sentence; the
+  // first list item does not borrow the second item's citation.
+  assert.deepEqual(findings.map((finding) => [finding.line, finding.numbers]), [[2, ['1.7']], [4, ['1.9']]])
+})
+
+test('a citation written after the full stop still covers the sentence before it', () => {
+  const reportText = 'The pooled estimate across six trials\nwas OR 0.63.\n[17] It held in sensitivity analyses.\nA second estimate, OR 0.71, is uncited.'
+  const { findings } = numericTraceFindings({ reportText, outputs: [16] })
+  assert.deepEqual(findings.map((finding) => [finding.line, finding.numbers]), [[4, ['0.71']]])
+})
