@@ -336,7 +336,7 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 12 exports
+// citedSources — 14 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
   EVIDENCE_SNAPSHOT_FILE,
@@ -345,9 +345,11 @@ export {
   SNAPSHOT_RETRIEVED_KEY,
   UNRECORDED_LIMIT,
   auditCitedSources,
+  citationUrlDefects,
   citedHttpUrls,
   normalizedUrl,
   unrecordedCitationMessage,
+  unresolvableCitationHost,
   unretrievedCitationMessage,
   withRetrievedSources,
 } from './src/citedSources.mjs'

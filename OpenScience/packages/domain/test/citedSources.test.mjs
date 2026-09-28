@@ -93,6 +93,24 @@ test('submission writes the platform record into the snapshot and keeps what the
   assert.equal(withRetrievedSources(written.text, rows).changed, false)
 })
 
+test('a link a reader cannot follow is named in the run\'s own gate, where it used to reach only the delivered package', () => {
+  const report = [
+    '# 评价',
+    '来源见内部记录 http://10.0.0.5:8080/record/1 与 https://user:pw@example.org/x。',
+    '公开记录 http://example.org/label 可以打开。',
+  ].join('\n')
+  const files = new Map([['r.md', report]])
+  const declared = runGate({ contractKind: 'drug-evaluation-report', files, expectedOutputs: [{ path: 'r.md', required: true }], checks: ['citationsResolvable'] })
+  const found = declared.issues.filter((entry) => entry.check === 'citations-resolvable').map((entry) => [entry.code, entry.severity, entry.line])
+  assert.deepEqual(found, [
+    ['specialist_citation_invalid', 'required', 2],
+    ['specialist_citation_invalid', 'required', 2],
+    ['citation_plain_http', 'advisory', 3],
+  ])
+  assert.equal(declared.ok, false)
+  assert.equal(runGate({ contractKind: 'drug-evaluation-report', files, expectedOutputs: [{ path: 'r.md', required: true }] }).issues.some((entry) => entry.check === 'citations-resolvable'), false)
+})
+
 test('a snapshot that records nothing and a run that retrieved nothing is empty, not clean', () => {
   const audit = auditCitedSources({ reports: [{ path: 'r.md', text: 'x https://a.example/1' }], snapshotText: '{"sources":[]}' })
   assert.equal(audit.status, 'empty')

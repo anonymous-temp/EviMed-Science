@@ -105,6 +105,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   // The contract registry and the per-kind contract modules.
   'required-output': '缺少必需的交付文件',
   'cited-sources-recorded': '引用来源未记入证据快照',
+  'citations-resolvable': '引用链接读者打不开',
   'deliverable-json-parse': '交付文件不是有效的 JSON',
   'structured-output': '结构化产物格式有误',
   'clinical-content-trigger': '非临床交付物含临床内容',

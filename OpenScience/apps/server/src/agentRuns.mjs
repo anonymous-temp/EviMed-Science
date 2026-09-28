@@ -87,7 +87,7 @@ import {
   NOT_OBJECT_SNAPSHOT_MESSAGE,
   UNRECORDED_LIMIT,
   auditCitedSources,
-  citedHttpUrls,
+  citationUrlDefects,
   unrecordedCitationMessage,
   unretrievedCitationMessage,
 } from "@evimed/domain";
@@ -1946,63 +1946,6 @@ async function deliverableCandidatePaths(project, relative) {
 }
 
 
-// An address nobody outside this deployment can resolve. The named internal
-// route was the instance that got written down; loopback and private addresses
-// are the same defect, and a citation reaches a reader who is not on this
-// network. Generalized rather than listed so a second internal hostname cannot
-// arrive as a second bug.
-function unresolvableCitationHost(url) {
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
-    return true;
-  }
-  if (host === "::1" || host === "0.0.0.0" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host)) {
-    return true;
-  }
-  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!ipv4) return false;
-  const [a, b] = ipv4.slice(1).map(Number);
-  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
-}
-
-// What stops a reader checking a citation, kept apart from what merely looks
-// untidy. A reader follows the link and reads the source: an address that
-// cannot be resolved, or one carrying credentials that must never ship, defeats
-// that and is blocking. A source published over plain HTTP does not — the
-// reader opens it and reads it — so it is a notice on delivered work.
-//
-// Requiring HTTPS as a condition of delivery discarded two complete production
-// reports over one link each: a CQVIP journal record, and
-// http://purl.obolibrary.org/obo/CHEBI_28093, where http:// is the canonical
-// form of the persistent identifier and rewriting it as https would have made
-// the citation less correct. A URL fragment was rejected on the same footing,
-// though #section-3 is how a citation points at the passage it means; that is
-// not a defect at all and is no longer treated as one.
-function citationUrlDefects(text) {
-  const blocking = [];
-  const advisory = [];
-  for (const value of citedHttpUrls(text)) {
-    let url;
-    try {
-      url = new URL(value);
-    } catch {
-      blocking.push(`The citation ${value} is not a resolvable URL, so a reader cannot reach the source it names.`);
-      continue;
-    }
-    if (url.username || url.password) {
-      blocking.push(`The citation for ${url.hostname} carries credentials in the URL; cite the public address of the source instead.`);
-      continue;
-    }
-    if ((url.hostname === "www.evimed.com" && url.pathname.startsWith("/api-evimed/")) || unresolvableCitationHost(url)) {
-      blocking.push(`The citation ${value} points inside this deployment, which a reader outside it cannot open; cite the public source the record came from.`);
-      continue;
-    }
-    if (url.protocol !== "https:") {
-      advisory.push(`The citation ${value} is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one.`);
-    }
-  }
-  return { blocking, advisory };
-}
 
 // Deliverables replaced wholesale after a repair was asked for. Patching with
 // edit keeps everything the issues did not name; replacing the file regenerates

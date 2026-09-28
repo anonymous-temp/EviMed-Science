@@ -19,7 +19,7 @@ import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
-import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
+import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefects, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
 import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
@@ -60,6 +60,11 @@ export const GATE_CHECK_IDS = Object.freeze([
   // source the snapshot or the platform's retrieval record holds. It ran only
   // on the control plane until 2026-09-28, where the run never saw it.
   'cited-sources-recorded',
+  // A manifest's `citationsResolvable`: a link a reader cannot follow (no
+  // valid address, credentials, an address inside this deployment) is
+  // required; one over plain HTTP is a notice. Control plane only until
+  // 2026-09-28.
+  'citations-resolvable',
   // Every report-shaped kind reads its own JSON and CSV now, which nine of them
   // never did: a run receipt of `{ this is not json` and a one-column
   // `signals.csv` both used to pass with zero findings.
@@ -790,8 +795,10 @@ export function runGate(input) {
  */
 function withManifestChecks(verdict, input) {
   const checks = Array.isArray(input.checks) ? input.checks : []
-  if (!checks.includes('citedSourcesRecorded')) return verdict
-  const extra = citedSourceIssues(input)
+  const extra = [
+    ...(checks.includes('citationsResolvable') ? citationAddressIssues(input) : []),
+    ...(checks.includes('citedSourcesRecorded') ? citedSourceIssues(input) : []),
+  ]
   if (!extra.length) return verdict
   const blocked = extra.some((item) => item.severity === 'required')
   return {
@@ -800,6 +807,25 @@ function withManifestChecks(verdict, input) {
     issues: [...verdict.issues, ...extra],
     errorCode: verdict.errorCode ?? (blocked ? 'deliverable_rejected' : null),
   }
+}
+
+/**
+ * Every link in the report prose a reader cannot follow, by file and line,
+ * in the words the control plane uses for the same finding.
+ * @param {GateInput} input @returns {GateIssue[]}
+ */
+function citationAddressIssues(input) {
+  /** @type {GateIssue[]} */
+  const issues = []
+  for (const path of proseFilesOf(input)) {
+    const lines = text(input, path).split('\n')
+    for (let index = 0; index < lines.length; index += 1) {
+      const { blocking, advisory } = citationUrlDefects(lines[index])
+      for (const message of blocking) issues.push(issue('specialist_citation_invalid', `${path} line ${index + 1}: ${message}`, { path, line: index + 1, check: 'citations-resolvable' }))
+      for (const message of advisory) issues.push(issue('citation_plain_http', `${path} line ${index + 1}: ${message}`, { severity: 'advisory', path, line: index + 1, check: 'citations-resolvable' }))
+    }
+  }
+  return issues
 }
 
 /** @param {GateInput} input @returns {GateIssue[]} */
