@@ -98,18 +98,15 @@ export const SOURCES = {
  * ship.
  */
 export const BASELINE_PROVENANCE = {
-  dshVersion: "0.1.5-rc.2",
-  sha256: "50ccdc6eef6368443f87eae058df451cd92a7e30c7a612db12ba05ba0f7dd835",
-  recordedBy: "dsh@0.1.5-rc.2 --profile evimed-runtime --dump-config over a profile seeded on a host with no container runtime (npm --before=2026-09-10T15:57:10.790Z, the image's own pin and seed scripts, the same six `dsh plugin add` arguments deploy/runtime-dsh/install-runtime.sh uses)",
-  // Re-recorded on 2026-09-20 for the two community client bundles the
-  // AgentBay rebuild installs (`@changfenhuang/dsh-annotation@1.4.10` and
-  // `dsh-mermaid@0.4.0`): each adds one row, `dsh-annotation` and
-  // `ui-mermaid`, and nothing else moved. Not from the release image — this
-  // machine has no Docker — so the seeding was calibrated first: run with the
-  // previous four arguments it reproduced the 2026-09-15 image-recorded
-  // baseline (sha256 5b3125e1…e8d0) byte for byte, and a relocated copy of the
-  // new seed composes the same dump. The release image's own `diff -u` against
-  // this file is what would catch a platform-dependent row, and the next image
+  dshVersion: "0.1.7-rc.2",
+  sha256: "07cc99462d5f60d9377766b822d75f9b476b944d22556ca437cc5f22a72efbe3",
+  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config over a profile seeded on a host with no container runtime (npm --before=2026-09-24T15:18:11.337Z, Node 22.22.0, pnpm 11.7.0, the image's own pin and seed scripts, the same six `dsh plugin add` arguments deploy/runtime-dsh/install-runtime.sh uses)",
+  // Recorded on 2026-09-28 for the move to 0.1.7-rc.2: 160 -> 191 rows. Not
+  // from the release image — this machine has no Docker — so the seeding was
+  // calibrated first: the same procedure at 0.1.5-rc.2 reproduced the previous
+  // committed baseline (sha256 50ccdc6e…d835) byte for byte. All 43 invariants
+  // hold on the new composition. The release image's own `diff -u` against
+  // this file is what would catch a platform-dependent row, and its first
   // build is where this hash is confirmed or replaced from the image.
 };
 
@@ -400,6 +397,14 @@ function parseSequence(lines, start, indent) {
       const tail = parseMapping(lines, index + 1, indent + 2);
       items.push(new Map([...head, .../** @type {Map<string, Node>} */ (tail.value)]));
       index = tail.next;
+      continue;
+    }
+    // A list item that is itself a block scalar (`- !!js >-`), which 0.1.7's
+    // `preset-cordis` row writes for a skill directory.
+    if (BLOCK_HEADER.test(rest)) {
+      const block = readBlockScalar(lines, index + 1, columns, rest.startsWith("!!js"));
+      items.push(block.value);
+      index = block.next;
       continue;
     }
     items.push(scalarValue(rest));

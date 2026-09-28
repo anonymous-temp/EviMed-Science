@@ -342,7 +342,12 @@ test("the patch's override rows are collected as host-row references, not lost",
   const hostRows = patchReferences.filter((reference) => reference.kind === "host-row-id").map((reference) => reference.specifier);
   // `web` joined them on 2026-09-15: the row is no longer only disabled
   // underneath, it is configured to name our own provider.
-  assert.deepEqual(hostRows.sort(), ["hmr", "open-in-app", "plugin-package-inventory-deepseek", "session-telemetry-otel", "tool-web", "ui-open-in-app", "web", "web-fetch-http"]);
+  assert.deepEqual(hostRows.sort(), [
+    "account-controller", "agent-preset-registry", "deepseek-account", "hmr", "llm-deepseek-account", "open-in-app",
+    "plugin-manager", "plugin-package-inventory-deepseek", "session-log-deepseek", "session-telemetry-otel",
+    "terminal-controller", "tool-web", "ui-open-in-app", "ui-plugin-manager", "ui-settings-account", "ui-sidebar-terminal",
+    "web", "web-fetch-http",
+  ]);
   assert.ok(collected.hostRowIds.size > 40, `the dumped host composition read as only ${collected.hostRowIds.size} rows`);
 });
 

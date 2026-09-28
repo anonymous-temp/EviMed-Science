@@ -80,8 +80,13 @@ test("every setting the runtime depends on still holds in the composition the im
   // `evimed-web` row, which registers the platform's provider for the kernel's
   // web registry — ours, not upstream's. 160 on 2026-09-20: `dsh-annotation`
   // and `ui-mermaid`, one row each for the two community client bundles the
-  // image installs (rt, plan §3.9).
-  assert.equal(report.counts.baselineRows, 160, "the recorded composition includes the native client, citation bundle, ECO03 plugin probe and the two community client bundles");
+  // image installs (rt, plan §3.9). 191 at 0.1.7-rc.2: the preset declarations
+  // became rows (four upstream, `preset-evimed-universal` and the registry),
+  // and 0.1.7 composes the plugin manager, the config editor, the DeepSeek
+  // account and its controller, the terminal and job controllers, schedules,
+  // PTC, image offload, Office preview, workspace changes and new settings
+  // leaves; `code-runtime`, `workflow-worker-thread` and `agent-presets` left.
+  assert.equal(report.counts.baselineRows, 191, "the recorded composition includes the native client, citation bundle, ECO03 plugin probe and the two community client bundles");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
@@ -134,10 +139,22 @@ test("the invariant list is read out of the composition, not retyped beside it",
   assert.deepEqual(
     fromPatch.map((invariant) => `${invariant.row}.${invariant.key}=${invariant.value}`).sort(),
     [
+      // 0.1.7: the preset the kernel gives a session that names none, now that
+      // a preset is a row and the registry picks among the declared ones.
+      "account-controller.disabled=true",
+      "agent-preset-registry.config.default=evimed-universal",
+      // 0.1.7's DeepSeek account sign-in and its model route: a provider
+      // credential in the runtime, which holds none by design.
+      "deepseek-account.disabled=true",
       "hmr.disabled=true",
+      "llm-deepseek-account.disabled=true",
       "open-in-app.disabled=true",
+      "plugin-manager.disabled=true",
       "plugin-package-inventory-deepseek.disabled=true",
+      // 0.1.7 flipped its default on: the whole session log with every request.
+      "session-log-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",
+      "terminal-controller.disabled=true",
       // Pinned when 0.1.2-alpha.4 flipped `fetch` on by default for custom
       // profiles: an inherited value that changed once can change again, and
       // the two older defences (the tool is absent, the provider is disabled)
@@ -147,6 +164,9 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "tool-web.config.fetch=false",
       "tool-web.config.searchTimeoutMs=60000",
       "ui-open-in-app.disabled=true",
+      "ui-plugin-manager.disabled=true",
+      "ui-settings-account.disabled=true",
+      "ui-sidebar-terminal.disabled=true",
       // Sorted, and `-` sorts before `.`, so the disabled row comes first.
       "web-fetch-http.disabled=true",
       // 2026-09-15: the composition stopped protecting the web row by absence
@@ -447,9 +467,9 @@ test("two identical configurations differ in nothing, and that is asserted rathe
   const document = parseCordisDocument(baselineText);
   assert.deepEqual(diffConfigurations(document, parseCordisDocument(baselineText), []), []);
 
-  const nudged = parseCordisDocument(baselineText.replace("    maxInlineBytes: 50000\n", "    maxInlineBytes: 60000\n"));
+  const nudged = parseCordisDocument(baselineText.replace("    maxInlineTokens: 12500\n", "    maxInlineTokens: 12600\n"));
   assert.deepEqual(diffConfigurations(document, nudged, []), [
-    { row: "spill-policy", key: "config.maxInlineBytes", before: "50000", after: "60000", klass: "upstream-default" },
+    { row: "spill-policy", key: "config.maxInlineTokens", before: "12500", after: "12600", klass: "upstream-default" },
   ]);
 });
 
