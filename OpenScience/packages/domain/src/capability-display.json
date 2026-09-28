@@ -111,9 +111,9 @@
       "evaluation": {
         "lastStatus": "failed",
         "lastRunAt": "2026-09-27",
-        "runs": 1,
-        "delivered": 1,
-        "typicalMinutes": 21
+        "runs": 2,
+        "delivered": 2,
+        "typicalMinutes": 20
       }
     },
     "dataset-research-scoping": {
@@ -277,7 +277,10 @@
       ],
       "evaluation": {
         "lastStatus": "not-run",
-        "lastRunAt": null
+        "lastRunAt": null,
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 14
       }
     },
     "geo-strategy": {
@@ -304,9 +307,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-25",
-        "runs": 1,
-        "delivered": 1,
-        "typicalMinutes": 22
+        "runs": 2,
+        "delivered": 2,
+        "typicalMinutes": 19
       }
     },
     "manuscript-support": {
