@@ -821,7 +821,7 @@ test("web compose includes a buildable runtime image profile with every download
   // escaped regex is invisible to a search for the literal, which is how ten
   // of these sat at a stale version while a sweep reported the tree clean;
   // derived, they cannot be the ones left behind.
-  const dshPin = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8")).dsh.version;
+  const { version: dshPin, cordis: cordisPin } = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8")).dsh;
   const escaped = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   assert.match(compose, /dsh-runtime-image:/);
   assert.match(
@@ -834,7 +834,10 @@ test("web compose includes a buildable runtime image profile with every download
   // fetched archive, so what is version-pinned and what is digest-pinned are
   // different lists now. Both still have to be pinned.
   assert.match(compose, new RegExp(`DSH_VERSION:\\s+\\$\\{OPEN_SCIENCE_DSH_VERSION:-${escaped(dshPin)}\\}`));
-  assert.match(compose, /DSH_CORDIS_VERSION:\s+\$\{OPEN_SCIENCE_DSH_CORDIS_VERSION:-4\.0\.2\}/);
+  // Read from the pin like the kernel above: a literal here is the one copy a
+  // pin move's sweep for the kernel version cannot find, and at 0.1.7 it was
+  // the one left behind.
+  assert.match(compose, new RegExp(`DSH_CORDIS_VERSION:\\s+\\$\\{OPEN_SCIENCE_DSH_CORDIS_VERSION:-${escaped(cordisPin)}\\}`));
   assert.match(compose, /SOCKET_VERSION:\s+\$\{OPEN_SCIENCE_SOCKET_VERSION:-0\.1\.0\}/);
   assert.match(compose, /UV_VERSION:\s+\$\{OPEN_SCIENCE_UV_VERSION:-0\.11\.26\}/);
   for (const name of [
