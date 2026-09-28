@@ -1,0 +1,141 @@
+{
+  "note": "主张库的来源属性：来源名称、保留路径、来源属性与核验时间。主张上的 sourceRef 指向本表。",
+  "sources": [
+    {
+      "sourceRef": "label:国药准字HJ20171237",
+      "sourceRefLabel": "硫酸氢氯吡格雷片（波立维）说明书，赛诺菲，批准文号 国药准字HJ20171237（进口版）",
+      "sourceKind": "label",
+      "sourceLevel": "法定说明书（监管来源）",
+      "jurisdiction": "China (NMPA)",
+      "version": "快照导出 2025-12-17",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/drug-labels/455270100abc83b4/eeaa16ca08012a29d2350512bf587b69c985c0c11e3c81bbfb1ce661d22b638c",
+      "url": "https://www.315jiage.cn/mn385643.aspx"
+    },
+    {
+      "sourceRef": "label:国药准字H20056410",
+      "sourceRefLabel": "硫酸氢氯吡格雷片（波立维）说明书，赛诺菲（杭州）制药有限公司，国药准字H20056410（国产版）",
+      "sourceKind": "label",
+      "sourceLevel": "法定说明书（监管来源）",
+      "jurisdiction": "China (NMPA)",
+      "version": "快照文件日期 2021-05-17",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/drug-labels/222d7584bbf282ac/9c10fb04239ddfb554fbb65266b88ae7f9af5a635d4154c2dda31c49596dd12e",
+      "url": "https://www.yaozs.com/sms7179/"
+    },
+    {
+      "sourceRef": "label:国药准字H20000542",
+      "sourceRefLabel": "硫酸氢氯吡格雷片（泰嘉）说明书，深圳信立泰药业股份有限公司，国药准字H20000542",
+      "sourceKind": "label",
+      "sourceLevel": "法定说明书（监管来源）",
+      "jurisdiction": "China (NMPA)",
+      "version": "快照导出 2025-12-17",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/drug-labels/ba50281757bdb588/fc490f3612721b0284dc6d010d454a404baa8fe1e6dd61b1cc19151dbc610a65",
+      "url": "https://www.315jiage.cn/mn304759.aspx"
+    },
+    {
+      "sourceRef": "label:国药准字HJ20171037",
+      "sourceRefLabel": "替格瑞洛片（倍林达）说明书，阿斯利康，国药准字HJ20171037",
+      "sourceKind": "label",
+      "sourceLevel": "法定说明书（监管来源，竞品）",
+      "jurisdiction": "China (NMPA)",
+      "version": "快照导出 2025-12-17",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/drug-labels/5a10253ee0470112/fe474f8c6953001567aeca268bd3821a976e46f0511b3c55e27b8199bae138d6",
+      "url": "https://www.315jiage.cn/mn267825.aspx"
+    },
+    {
+      "sourceRef": "EVIMED-GUIDE:12",
+      "sourceRefLabel": "《非ST段抬高型急性冠脉综合征诊断和治疗指南（2024）》，中华医学会心血管病学分会",
+      "sourceKind": "guideline",
+      "sourceLevel": "学会指南",
+      "jurisdiction": "China",
+      "version": "2024",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/evimed-guidelines/be4a81bb078630eb/653c56eac5a5fdb66428f9f31387e15fcf9947b0902b3cd48ab17c95d993ac68/guideline.md"
+    },
+    {
+      "sourceRef": "EVIMED-GUIDE:8",
+      "sourceRefLabel": "《2022 CPIC 指南：CYP2C19 基因型与氯吡格雷治疗（更新版）》",
+      "sourceKind": "guideline",
+      "sourceLevel": "国际专业学会指南",
+      "jurisdiction": "International",
+      "version": "2022 更新版",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/evimed-guidelines/00366ec0605bf45d/241308b3fddad9e2df33a60a1955841abd916207b13f51f7b3fc4ce4067383d4/guideline.md",
+      "doi": "10.1002/cpt.2526"
+    },
+    {
+      "sourceRef": "web-page:b63e9a5cc2e22237",
+      "sourceRefLabel": "美国 CLOPIDOGREL 片剂说明书（DailyMed 公开文本，2024-05-17 修订）",
+      "sourceKind": "regulator",
+      "sourceLevel": "监管机构说明书",
+      "jurisdiction": "United States (FDA)",
+      "version": "2024-05-17 修订",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/web-pages/b63e9a5cc2e22237/bbcd7a65e01b228c42afdb01a61b712bb969f5413a9ecde06d63c3a53036516c/page.md",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0078fb3d-3595-4ae1-a059-1d5e81c879cf"
+    },
+    {
+      "sourceRef": "PMID:38018129",
+      "sourceRefLabel": "《中国心血管健康与疾病报告 2022》概要（PMID 38018129）",
+      "sourceKind": "literature",
+      "sourceLevel": "国家级疾病报告（摘要层级）",
+      "version": "2022 年报告",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/pubmed/PMID38018129/c1f34d618faa2c48437eb329f554074aaf2f09ed8c4e129d57618d81fda38fb6/abstract.md",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38018129/"
+    },
+    {
+      "sourceRef": "PMID:23900047",
+      "sourceRefLabel": "Steg 等，《Circulation》2013，PLATO 试验支架内血栓分析（PMID 23900047）",
+      "sourceKind": "literature",
+      "sourceLevel": "随机对照试验的事后分析（摘要层级）",
+      "version": "2013",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/pubmed/PMID23900047/b423d7d7af9574f56bfda788d1fb9ce159f94f52c9265cd6a3ef7b00f2955d08/abstract.md",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/23900047/"
+    },
+    {
+      "sourceRef": "PMID:21685437",
+      "sourceRefLabel": "James 等，《BMJ》2011，PLATO 非侵入治疗亚组（PMID 21685437）",
+      "sourceKind": "literature",
+      "sourceLevel": "随机对照试验预设亚组（摘要层级）",
+      "version": "2011",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/pubmed/PMID21685437/0406dca312187793f3a1cfa738ade4def86cb61b544a6d8b09c08312163884cb/abstract.md",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21685437/"
+    },
+    {
+      "sourceRef": "PMID:31553203",
+      "sourceRefLabel": "Park 等，《Circulation》2019，韩国多中心随机对照试验（PMID 31553203）",
+      "sourceKind": "literature",
+      "sourceLevel": "随机对照试验（摘要层级）",
+      "version": "2019",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/pubmed/PMID31553203/c750376e64c0fbabc2d026ebeffbfa0a3b56915571d95390235e929d8d57d0a9/abstract.md",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/31553203/"
+    },
+    {
+      "sourceRef": "PMID:29094604",
+      "sourceRefLabel": "Wu 等，东亚人群随机试验荟萃分析（PMID 29094604）",
+      "sourceKind": "literature",
+      "sourceLevel": "系统综述/Meta 分析（摘要层级）",
+      "version": "2018",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/pubmed/PMID29094604/48e779a14ea89775bdd49ea0ea87c26a31e82315bfb8c713f3dfcacfd8284558/abstract.md",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/29094604/"
+    },
+    {
+      "sourceRef": "PMID:40164463",
+      "sourceRefLabel": "Kutcher 等，《CMAJ》2025，TC4 随机对照试验（PMID 40164463）",
+      "sourceKind": "literature",
+      "sourceLevel": "随机对照试验（摘要层级）",
+      "version": "2025",
+      "collectedAt": "2026-09-28",
+      "artifactPath": ".evimed-sources/pubmed/PMID40164463/78d0211f394a05a270a8e7a3905a421cf9f2c7ded3025de0fd58b28b936d3390/abstract.md",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40164463/"
+    }
+  ]
+}

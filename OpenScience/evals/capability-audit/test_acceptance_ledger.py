@@ -365,9 +365,11 @@ class RealLedgerTests(unittest.TestCase):
         # fixes, comprehensive-drug-evaluation was accepted on a re-run of
         # cde-001, geo-strategy on a re-run for 信尔美 and geo-proposal on its
         # first run — eighteen accepted, two failed, one never run.
+        # geo-insight finished a turn for the first time on the next release:
+        # nineteen accepted, one failed (meta-analysis), one never run.
         self.assertEqual(statuses.count("not-run"), 1)
-        self.assertEqual(statuses.count("accepted"), 18)
-        self.assertEqual(statuses.count("failed"), 2)
+        self.assertEqual(statuses.count("accepted"), 19)
+        self.assertEqual(statuses.count("failed"), 1)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -419,7 +421,7 @@ class RealLedgerTests(unittest.TestCase):
         # the gate's code being read. comprehensive-drug-evaluation and
         # geo-proposal joined the same day on runs of the capability through
         # `capability-acceptance`, read before the rows changed.
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-proposal", "geo-strategy", "manuscript-support", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding"])
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-insight", "geo-proposal", "geo-strategy", "manuscript-support", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

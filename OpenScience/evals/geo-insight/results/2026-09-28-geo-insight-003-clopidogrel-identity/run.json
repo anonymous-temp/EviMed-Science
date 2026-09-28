@@ -1,0 +1,53 @@
+{
+  "capability": "geo-insight",
+  "brief": "geo-insight-003-clopidogrel-identity",
+  "base": "https://82.156.128.153",
+  "project": "p-d69f6790",
+  "session": "geo-4596dde470dfdfe69a531e275fbc2dd2",
+  "runId": "run_d1ab0bf93a96d037498644ff984a21d2",
+  "agentVersion": "1.0.6",
+  "dispatchedAt": "2026-09-28T06:06:16Z",
+  "prompt": "brandEntity: {\"name\":\"波立维\",\"generic\":\"硫酸氢氯吡格雷片\",\"holder\":\"赛诺菲\"}\ncompetitors: [\"替格瑞洛（倍林达）\",\"国产硫酸氢氯吡格雷片\"]",
+  "promptSource": "rendered brief",
+  "geoProject": "geo_0f58778703e919ae4b6b3b69e4cc7cc1",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/geo-insight-plavix/_freeze-check/compare.py",
+      "deliverables/geo-insight-plavix/build_claims.py",
+      "deliverables/geo-insight-plavix/build_questions.py",
+      "deliverables/geo-insight-plavix/claims.json",
+      "deliverables/geo-insight-plavix/geo-insight.md",
+      "deliverables/geo-insight-plavix/journey.md",
+      "deliverables/geo-insight-plavix/question-map.json",
+      "deliverables/geo-insight-plavix/revision-notes.md",
+      "deliverables/geo-insight-plavix/sources.json"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「geo-insight-plavix」有 3 条审查发现（已修 3，不改并说明 0，未回应 0）。",
+        "text": "独立审查：交付物「geo-insight-plavix」有 3 条审查发现（已修 3，不改并说明 0，未回应 0）。"
+      },
+      {
+        "code": "geo_claim_unverified",
+        "check": "geo-claim-source",
+        "severity": "advice",
+        "title": "结论缺少可核对的原文出处",
+        "detail": "文件 claims.json",
+        "file": "claims.json",
+        "text": "claims.json: 33 claim quote(s) could not be checked because no preserved source text reached the check (PLV-01-LABEL-IND, PLV-02-LABEL-ACS-NSTE, PLV-03-LABEL-ACS-STEMI, PLV-04-LABEL-DOSE, PLV-05-LABEL-CONTRA, PLV-06-LABEL-SURGERY-7D and 27 more). Cite the .evimed-sources/ path a reading tool preserv"
+      }
+    ],
+    "effectiveAgentId": "geo-insight",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 2274467,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

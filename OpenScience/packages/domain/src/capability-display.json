@@ -251,8 +251,11 @@
         "真实问法依赖社媒采集通道；采不到时只用典型问句，并如实标注。"
       ],
       "evaluation": {
-        "lastStatus": "failed",
-        "lastRunAt": "2026-09-25"
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-28",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 38
       }
     },
     "geo-proposal": {
