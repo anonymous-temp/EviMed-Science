@@ -41,6 +41,7 @@ export function Menu({
   align = "end",
   children,
   className,
+  defaultOpen = false,
 }: {
   items: readonly MenuEntry[];
   /** The trigger's accessible name (and the default trigger's tooltip). */
@@ -48,8 +49,10 @@ export function Menu({
   align?: "start" | "end";
   children?: ReactElement;
   className?: string;
+  /** Open on mount: `LazyMenu`'s stand-in was clicked before this arrived. */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const list = useRef<HTMLDivElement>(null);
   const enabled = () => [...(list.current?.querySelectorAll<HTMLButtonElement>("[role^=menuitem]:not([disabled])") ?? [])];
 

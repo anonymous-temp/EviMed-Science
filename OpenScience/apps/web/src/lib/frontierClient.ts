@@ -35,7 +35,6 @@
  *    column. How it is computed, in the reader's words, is `@evimed/domain`'s
  *    `FRONTIER_HEAT_METHOD_ZH` (「热度怎么算」), stated from the same numbers.
  */
-import { useEffect, useState } from "react";
 import {
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
@@ -43,7 +42,7 @@ import {
   FRONTIER_SPECIALTIES as SPECIALTY_KEYS,
   FRONTIER_SPECIALTY_LABELS_ZH,
 } from "@evimed/domain";
-import { fetchWebMe, WebApiError, webErrorMessage, type WebMe } from "./apiClient";
+import { WebApiError, webErrorMessage } from "./apiClient";
 import { productRequest } from "./productClient";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -1085,33 +1084,5 @@ export async function setFrontierDigestSwitch(enabled: boolean): Promise<boolean
 
 /* -------------------------------------------------------------------- feature */
 
-/** Whether `/api/me` offers this account the module. A missing `features` is off. */
-export function frontierOffered(me: WebMe | null): boolean {
-  const features = record((me as (WebMe & { features?: unknown }) | null)?.features);
-  return features?.frontier === true;
-}
-
-/** `error`: `/api/me` could not be read, which is not the same as being told no. */
-export type FrontierFeature = "loading" | "on" | "off" | "error";
-
-/**
- * The account's answer, read once per mount from the shared `/api/me`.
- *
- * Presentation only, like `useOperator`: the routes authorize themselves, so a
- * browser that flips this gains a navigation row, never the data behind it.
- */
-export function useFrontierFeature(): FrontierFeature {
-  const [feature, setFeature] = useState<FrontierFeature>("loading");
-  useEffect(() => {
-    let active = true;
-    // Through a promise even for a synchronous throw, so one failure path.
-    Promise.resolve()
-      .then(() => fetchWebMe())
-      .then(
-        (me) => { if (active) setFeature(frontierOffered(me) ? "on" : "off"); },
-        () => { if (active) setFeature("error"); },
-      );
-    return () => { active = false; };
-  }, []);
-  return feature;
-}
+// In a module of their own, so the sidebar can ask without loading this one.
+export { frontierOffered, useFrontierFeature, type FrontierFeature } from "./frontierFeature";

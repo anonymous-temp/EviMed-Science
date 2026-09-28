@@ -8,7 +8,8 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { isRunning } from "@/components/sidebar/useProjectRuns";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { inputClasses } from "@/components/ui/Input";
-import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { LazyMenu } from "@/components/ui/LazyMenu";
+import type { MenuEntry } from "@/components/ui/Menu";
 import { toast } from "@/lib/toast";
 
 /**
@@ -156,7 +157,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
 
   return (
     <div className={className}>
-      <Menu label={`“${title}”的操作`} items={items} />
+      <LazyMenu label={`“${title}”的操作`} items={items} />
       {confirming === "stop" && (
         <ConfirmDialog
           title="停止这条对话？"

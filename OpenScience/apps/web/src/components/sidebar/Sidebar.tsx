@@ -16,7 +16,7 @@ import { fetchWebMe } from "@/lib/apiClient";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { InboxBell } from "@/components/sidebar/InboxBell";
 import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
-import { useFrontierFeature } from "@/lib/frontierClient";
+import { useFrontierFeature } from "@/lib/frontierFeature";
 import { useGeoFeature } from "@/lib/geoClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
