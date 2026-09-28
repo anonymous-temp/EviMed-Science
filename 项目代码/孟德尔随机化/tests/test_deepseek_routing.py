@@ -29,6 +29,10 @@ class _FakeCompletions:
 
 def _client(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    # The client loads a local .env at import; a developer's model names there
+    # must not decide what these tests expect from the defaults.
+    for name in ("DEEPSEEK_FLASH_MODEL", "DEEPSEEK_PRO_MODEL"):
+        monkeypatch.delenv(name, raising=False)
     client = LLMClient()
     completions = _FakeCompletions()
     client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
