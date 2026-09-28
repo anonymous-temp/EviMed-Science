@@ -625,12 +625,22 @@ def _job_credentials(workload_token: str | None) -> dict[str, str]:
 
 
 _OPENGWAS_NEXT_ACTIONS = [
-    "Tell the researcher OpenGWAS is blocked: a token is saved under 账户→连接器 "
+    "Without an OpenGWAS token, start with both sources from the open GWAS Catalog: "
+    'exposureSource and outcomeSource as {"type": "gwas_catalog", "accession": "GCST..."} '
+    '(or {"type": "gwas_catalog", "pubmedId": "..."} for a paper with one such study), '
+    "forward direction; or two uploaded GWAS files with declared preclumped instruments.",
+    "Tell the researcher OpenGWAS itself is blocked: a token is saved under 账户→连接器 "
     "(issued at api.opengwas.io, valid 14 days) or set by the operator as "
-    "OPEN_SCIENCE_OPENGWAS_JWT.",
-    "Without a token, only two uploaded GWAS files with declared preclumped "
-    "instruments and provenance can run; do not retry a remote request.",
+    "OPEN_SCIENCE_OPENGWAS_JWT; do not retry an OpenGWAS request without one.",
 ]
+
+
+def _open_data_sources() -> list[str]:
+    """The open repositories this engine reads with no credential at all."""
+    try:
+        return [str(name) for name in getattr(_mr_inputs(), "OPEN_DATA_SOURCES", ())]
+    except MRInputSupportUnavailable:
+        return []
 
 
 def _opengwas_state(job_credentials: dict[str, str] | None = None) -> dict[str, Any]:
@@ -911,16 +921,16 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     if job_status == "failed":
         message = str(state.get("error") or f"{_spec()['label']} execution failed.")
         if _kind() == "mendelian-randomization":
-            response = _error(
+            # No `data` on an error: the runtime's tool contract refuses it and
+            # turned this failure into `adapter_contract_failure`, hiding the
+            # engine's own code from the run. The cleanup note goes in the text.
+            if cleanup:
+                message = f"{message} Cleanup: {cleanup.get('message') or cleanup.get('code') or 'incomplete'}."
+            return _error(
                 state.get("errorCode") or "specialist_execution_failed",
                 message,
                 bool(state.get("retryable")),
             )
-            if cleanup or state.get("failureDiagnosticReceipt"):
-                response["data"] = {"jobId": job_id, "jobStatus": "failed"}
-                if cleanup:
-                    response["data"]["cleanupError"] = cleanup
-            return response
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
@@ -978,16 +988,24 @@ def call(
             },
             "sources": [_source("service")],
         }
+        if _kind() == "mendelian-randomization":
+            result["data"]["openDataSources"] = _open_data_sources()
         if opengwas is not None and not opengwas["ready"]:
-            # The capability's own first step reads this: remote data and
-            # online clumping are blocked, two preclumped local files are not.
+            # The capability's own first step reads this: OpenGWAS data and
+            # online clumping are blocked; GWAS Catalog studies and two
+            # preclumped local files are not.
             result.update(
                 status="warning",
                 warnings=[
                     "blocked: OpenGWAS token "
                     + ("expired" if opengwas["reason"] == "opengwas_token_expired" else "missing")
-                    + " — remote GWAS selection, OpenGWAS sources and online LD clumping "
-                    "cannot run for this researcher."
+                    + " — OpenGWAS sources, text-based GWAS selection and online LD clumping "
+                    "cannot run for this researcher; "
+                    + (
+                        "open GWAS Catalog studies (type gwas_catalog) and uploaded files can."
+                        if result["data"].get("openDataSources") else
+                        "only uploaded files with declared preclumped instruments can."
+                    )
                 ],
                 next_actions=_OPENGWAS_NEXT_ACTIONS,
             )
@@ -1361,13 +1379,19 @@ def _create_app() -> FastAPI:
                         os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
                     ),
                 }
-        ready = serving and (opengwas is None or opengwas["ready"])
+        # `ready` means the engine can run an analysis with what this
+        # deployment holds. Open GWAS Catalog studies need no credential, so an
+        # engine that reads them is ready without OpenGWAS; the `opengwas`
+        # block still says, separately, that OpenGWAS sources are blocked.
+        open_sources = _open_data_sources() if _kind() == "mendelian-randomization" and serving else []
+        ready = serving and (opengwas is None or opengwas["ready"] or bool(open_sources))
         return {
             "status": "ok" if ready else "degraded",
             "ready": ready,
             "serving": serving,
             "specialist": _kind(),
             **({"opengwas": opengwas} if opengwas is not None else {}),
+            **({"openDataSources": open_sources} if _kind() == "mendelian-randomization" else {}),
             **({"auditReceiptsReady": audit_receipt.ready()} if _kind() == "mendelian-randomization" else {}),
             **(
                 {"acceptedStartInputs": _accepted_start_inputs()}

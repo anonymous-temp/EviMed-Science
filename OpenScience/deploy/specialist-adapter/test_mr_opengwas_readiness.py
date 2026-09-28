@@ -15,6 +15,8 @@ import re
 import time
 from pathlib import Path
 
+import pytest
+
 from test_job_credentials import _Answer
 from test_mr_inputs import local_source, setup_mr
 from test_service import _token
@@ -53,14 +55,18 @@ def _healthcheck_expression(text: str) -> str:
 # -- /health ---------------------------------------------------------------------
 
 
-def test_health_is_not_ready_without_a_token_but_the_container_stays_healthy(tmp_path, monkeypatch):
+def test_without_a_token_the_engine_is_ready_on_open_data_and_says_opengwas_is_blocked(tmp_path, monkeypatch):
+    """The GWAS Catalog path needs no credential, so a missing OpenGWAS token no
+    longer makes the whole engine unready; the `opengwas` block still says that
+    OpenGWAS itself is blocked, separately."""
     service, client, _, _ = setup_mr(tmp_path, monkeypatch)
     monkeypatch.delenv("OPENGWAS_JWT", raising=False)
     monkeypatch.setenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "http://control-plane.internal/credential")
     health = client.get("/health").json()
-    assert health["ready"] is False
-    assert health["status"] == "degraded"
+    assert health["ready"] is True
+    assert health["status"] == "ok"
     assert health["serving"] is True
+    assert health["openDataSources"] == ["gwas_catalog"]
     assert health["opengwas"] == {
         "ready": False, "reason": "opengwas_token_missing", "expiresAt": None,
         "source": "none", "perAccountCredentials": True,
@@ -85,8 +91,22 @@ def test_health_is_ready_with_a_live_token_and_names_an_expired_one(tmp_path, mo
     assert live not in json.dumps(health)
     monkeypatch.setenv("OPENGWAS_JWT", jwt(time.time() - 60))
     health = client.get("/health").json()
-    assert health["ready"] is False
+    assert health["ready"] is True  # on open data
+    assert health["opengwas"]["ready"] is False
     assert health["opengwas"]["reason"] == "opengwas_token_expired"
+
+
+def test_an_engine_without_the_open_data_path_is_not_ready_without_a_token(tmp_path, monkeypatch):
+    """An older engine (no OPEN_DATA_SOURCES in its reviewed helper) can only
+    reach data through OpenGWAS: without a token it is not ready."""
+    _, client, _, _ = setup_mr(tmp_path, monkeypatch)
+    helper = tmp_path / "agent/evimed_local_inputs.py"
+    helper.write_text(helper.read_text(encoding="utf-8").replace(
+        'OPEN_DATA_SOURCES = ("gwas_catalog",)', "OPEN_DATA_SOURCES = ()"), encoding="utf-8")
+    monkeypatch.delenv("OPENGWAS_JWT", raising=False)
+    health = client.get("/health").json()
+    assert (health["ready"], health["status"], health["serving"]) == (False, "degraded", True)
+    assert health["openDataSources"] == []
 
 
 def test_an_unloadable_helper_reports_not_serving_instead_of_failing(tmp_path, monkeypatch):
@@ -195,6 +215,65 @@ def test_two_preclumped_local_files_are_admitted_without_any_token(tmp_path, mon
     assert body["status"] == "warning", body
 
 
+def test_two_gwas_catalog_studies_are_admitted_without_any_token(tmp_path, monkeypatch):
+    service, client, secret, workspace = setup_mr(tmp_path, monkeypatch)
+    monkeypatch.delenv("OPENGWAS_JWT", raising=False)
+    monkeypatch.delenv("EVIMED_CONNECTOR_CREDENTIAL_URL", raising=False)
+
+    class Worker:
+        def wait(self, timeout=None):
+            return 0
+
+    spawned = []
+    monkeypatch.setattr(service.subprocess, "Popen", lambda command, **_k: spawned.append(command) or Worker())
+    body = _start(
+        client, secret,
+        exposureSource={"type": "gwas_catalog", "accession": "GCST002783"},
+        outcomeSource={"type": "gwas_catalog", "pubmedId": "36474045"},
+    ).json()
+    assert body["status"] == "warning", body
+    assert body["data"]["jobStatus"] == "queued"
+    state = service._read_state(Path(spawned[0][-1]))
+    assert state["request"]["exposureSource"] == {"type": "gwas_catalog", "accession": "GCST002783"}
+    assert state["mrInputBindings"]["files"] == {}
+
+
+@pytest.mark.parametrize("exposure, outcome, direction, code", [
+    # A catalogue study is read with its partner; one per side is the pair.
+    ({"type": "gwas_catalog", "accession": "GCST002783"}, {"type": "opengwas", "gwasId": "ieu-a-7"},
+     "forward", "mr_input_invalid"),
+    # A name is not an identifier the catalogue resolves.
+    ({"type": "gwas_catalog", "accession": "body mass index"}, {"type": "gwas_catalog", "accession": "GCST90132314"},
+     "forward", "mr_input_invalid"),
+    ({"type": "gwas_catalog", "accession": "GCST002783", "pubmedId": "25673413"},
+     {"type": "gwas_catalog", "accession": "GCST90132314"}, "forward", "mr_input_invalid"),
+    # One direction per job: each direction selects its own instruments.
+    ({"type": "gwas_catalog", "accession": "GCST002783"}, {"type": "gwas_catalog", "accession": "GCST90132314"},
+     "bidirectional", "mr_input_direction_unsupported"),
+])
+def test_gwas_catalog_sources_are_refused_by_name_when_malformed(tmp_path, monkeypatch, exposure, outcome, direction, code):
+    service, client, secret, _ = setup_mr(tmp_path, monkeypatch)
+    monkeypatch.delenv("OPENGWAS_JWT", raising=False)
+    spawned = _no_worker(service, monkeypatch)
+    body = _start(
+        client, secret, exposureSource=exposure, outcomeSource=outcome, analysisDirection=direction,
+    ).json()
+    assert body["status"] == "error", body
+    assert body["error"]["code"] == code
+    assert spawned == []
+
+
+def test_a_text_only_request_without_a_token_names_the_open_route(tmp_path, monkeypatch):
+    service, client, secret, _ = setup_mr(tmp_path, monkeypatch)
+    monkeypatch.delenv("OPENGWAS_JWT", raising=False)
+    monkeypatch.delenv("EVIMED_CONNECTOR_CREDENTIAL_URL", raising=False)
+    _no_worker(service, monkeypatch)
+    body = _start(client, secret).json()
+    assert body["error"]["code"] == "mr_input_remote_auth_required"
+    assert "gwas_catalog" in body["error"]["message"]
+    assert "gwas_catalog" in body["next_actions"][0]
+
+
 # -- capabilities ----------------------------------------------------------------
 
 
@@ -209,7 +288,9 @@ def test_capabilities_warn_the_run_that_opengwas_is_blocked(tmp_path, monkeypatc
     assert body["status"] == "warning"
     assert body["data"]["available"] is True
     assert body["data"]["opengwas"]["reason"] == "opengwas_token_missing"
+    assert body["data"]["openDataSources"] == ["gwas_catalog"]
     assert body["warnings"][0].startswith("blocked: OpenGWAS token missing")
+    assert "GWAS Catalog studies (type gwas_catalog)" in body["warnings"][0]
     assert body["next_actions"]
 
     monkeypatch.setenv("OPENGWAS_JWT", jwt(time.time() + 3600))

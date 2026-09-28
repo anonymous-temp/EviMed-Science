@@ -1063,6 +1063,11 @@ services:
       # still wins when it is set; a researcher's own fills the gap when it is
       # not. Reached over the shared default network, like the model gateway.
       EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
+      # Token-free GWAS Catalog sources: what one scan of an exposure file
+      # keeps (a few thousand variants) is reused by later jobs from this
+      # tmpfs. Measured from this host on 2026-09-28, ftp.ebi.ac.uk gives
+      # 38-58 KB/s, so a first scan of an 89 MB file takes about 40 minutes.
+      EVIMED_MR_OPEN_CACHE_DIR: /tmp/evimed-mr-open-cache
     volumes:
       - open-science-data:/data
       - type: bind
@@ -1074,9 +1079,10 @@ services:
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
     healthcheck:
-      # `serving`: without an OpenGWAS JWT this engine reports ready=false
-      # (nothing remote can run) and must still be healthy, or web — which
-      # waits on it — would not start. An older adapter answers only `ready`.
+      # `serving`: an engine that reports ready=false (without an OpenGWAS JWT
+      # an engine older than the GWAS Catalog path could run nothing remote)
+      # must still be healthy, or web — which waits on it — would not start.
+      # An older adapter answers only `ready`.
       test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('serving', value.get('ready')) else 1)"]
       interval: 30s
       timeout: 5s

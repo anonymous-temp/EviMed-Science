@@ -365,10 +365,15 @@ def test_cleanup_error_is_visible_without_changing_analysis_result(tmp_path, mon
     assert service.run_job(str(state)) == (0 if analysis_success else 1)
     result = service._status({"jobId": job_id}, setup[3])
     assert result["status"] == ("success" if analysis_success else "error")
-    assert result["data"]["cleanupError"] == diagnostic
-    assert result["data"]["jobStatus"] == ("succeeded" if analysis_success else "failed")
-    assert "auditReceipt" not in result["data"]
     assert service._read_state(state)["cleanupError"] == diagnostic
-    if not analysis_success:
+    if analysis_success:
+        assert result["data"]["cleanupError"] == diagnostic
+        assert result["data"]["jobStatus"] == "succeeded"
+        assert "auditReceipt" not in result["data"]
+    else:
+        # An error result carries no `data` (the runtime's tool contract turns
+        # one that does into adapter_contract_failure); the note is in the text.
+        assert "data" not in result
+        assert diagnostic["message"] in result["error"]["message"]
         assert result["error"]["code"] == "mr_interpretation_failed"
         assert "deliberate-analysis-failure" not in json.dumps(result)

@@ -61,7 +61,9 @@ def test_failed_mr_retains_only_private_typed_diagnostics_and_numeric_projection
     assert not any(p.name == "provider-response.txt" for p in retained.rglob('*'))
     response = service._status({"jobId": job_id}, workspace)
     assert response["error"]["code"] == "mr_interpretation_failed"
-    assert response["data"]["jobStatus"] == "failed"
+    # The runtime's tool contract refuses `data` on an error result: with it,
+    # this failure reached the run as adapter_contract_failure.
+    assert "data" not in response
     assert "artifacts" not in response and "auditReceipt" not in response
 
 
