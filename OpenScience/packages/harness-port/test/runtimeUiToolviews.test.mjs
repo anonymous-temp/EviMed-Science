@@ -136,10 +136,16 @@ test("the gate's own calls say nothing, unless the call itself was refused", () 
 
 /** A frame with the catalogue listing child-1, and the views applied. */
 function frame() {
+  // The 0.1.7 list: the main view's session is the row it retains, and the
+  // catalogue is the parent's `subagentCatalog` projection.
   const ctx = fakeCtx({ slots: kernelSlots(), sessions: {
-    list: { getSnapshot: () => ({ current: 'session-a', subagentsByParent: { 'session-a': { entries: [{ id: 'child-1', kind: 'child', mode: 'one-shot' }] } } }), subscribe: () => () => {} },
-    refreshSubagents() {}, openSubagent() {},
-  } });
+    list: { getSnapshot: () => ({
+      ids: ['session-a'], phase: 'ready',
+      byId: { 'session-a': { id: 'session-a', retainedBy: { mainView: 1 } } },
+      projectionsBySession: { 'session-a': { state: 'idle', values: { subagentCatalog: [{ id: 'child-1', mode: 'one-shot', label: '证据', createdAt: 1 }] } } },
+    }), subscribe: () => () => {} },
+    refreshProjections: async () => {},
+  }, uiWorkspace: { openSession() {} } });
   const target = fakeTarget({ frame: { capabilities: CAPABILITIES } });
   const frameKit = kitFor(ctx, target);
   apply(ctx, {}, target, undefined, frameKit);

@@ -1,5 +1,12 @@
-/** Native client services, injected only in the kernel's browser application. */
-export const inject = ['sessions', 'conversation', 'connection', 'workspaces'];
+import { mainViewSession } from './runtimeUiKit.mjs';
+
+/**
+ * Native client services, injected only in the kernel's browser application.
+ * `uiWorkspace` is where 0.1.7 moved opening a session (`openSession`, a
+ * session id or a child's catalogue address); `sessions.open` and
+ * `sessions.openSubagent` are gone.
+ */
+export const inject = ['sessions', 'conversation', 'connection', 'workspaces', 'uiWorkspace'];
 
 /**
  * The frame's half of the channel to the hosted shell.
@@ -107,7 +114,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           // Older control-plane sessions may have no Workspace Registry account.
           // Native create with an existing identity idempotently adopts it; its
           // transcript and identity survive while the registry attaches it.
-          if (known && known.cwd === boundCwd
+          // Only with a bound directory: a row without `cwd` and a frame
+          // without one would otherwise read as the same workspace.
+          if (known && typeof boundCwd === 'string' && known.cwd === boundCwd
             && !ctx.workspaces.list.getSnapshot().items.some((/** @type {any} */ item) => workspaceContains(item, sessionId))) {
             const attachedId = await createBoundSession(sessionId);
             if (attachedId !== sessionId) throw new Error('Existing native session identity changed');
@@ -115,7 +124,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         }
         if (!validId(sessionId)) throw new Error('Invalid native session identity');
         if (disposed) return;
-        ctx.sessions.open(sessionId);
+        // Retains the session for the main view, which is what makes its
+        // scope (and so its composer) exist for the draft below.
+        ctx.uiWorkspace.openSession(sessionId);
         if (intent.draft !== undefined) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
@@ -133,11 +144,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * Where the current session sits: a fork of another session, a delegated
    * child of one, or neither.
    *
-   * Read off the kernel's own list rows (`parentId`, and `origin: 'subagent'`
-   * for a delegated child) and, for a child, the catalogue address the kernel
-   * navigated through — a child is addressed by its parent and is not a row of
-   * the ordinary list. A fork is the other kind of child: same `parentId`, no
-   * subagent origin.
+   * Read off the kernel's own list rows: `parentId`, and `origin: 'subagent'`
+   * for a delegated child. At 0.1.7 a child the main view opened is a row of
+   * the list too — the controller projects every retained child from its
+   * address — so the row is the whole answer (0.1.5 published the open
+   * child's address as a separate list field, which no longer exists). A fork is the other kind of
+   * child: same `parentId`, no subagent origin.
    *
    * @param {any} snapshot @param {string} sessionId
    * @returns {{ forkedFrom?: string, subagent?: true, rootSessionId?: string }}
@@ -145,13 +157,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   function lineageOf(snapshot, sessionId) {
     const byId = snapshot?.byId ?? {};
     const row = byId[sessionId];
-    const address = snapshot?.currentAddress;
-    const addressed = address && address.childSessionId === sessionId && validId(address.parentSessionId);
-    if (addressed || row?.origin === 'subagent') {
+    if (row?.origin === 'subagent') {
       // Walk up to the session the researcher started, a few levels at most:
       // a child may delegate again, and a cycle in a corrupt list must not
       // hang the page.
-      let root = addressed ? address.parentSessionId : row?.parentId;
+      let root = row.parentId;
       for (let depth = 0; depth < 8 && validId(root) && byId[root]?.origin === 'subagent' && validId(byId[root]?.parentId); depth++) {
         root = byId[root].parentId;
       }
@@ -163,7 +173,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   function sessionChanged() {
     if (!ready || !activated || disposed) return;
     const snapshot = ctx.sessions.list.getSnapshot();
-    const sessionId = snapshot.current ?? null;
+    const sessionId = mainViewSession(snapshot, previousSession ?? null);
     if (sessionId === previousSession) return;
     previousSession = sessionId;
     selectedSession = sessionId;
@@ -181,7 +191,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     try {
       await ctx.sessions.refresh();
       if (disposed || ctx.connection.generation.getSnapshot() !== generation) return;
-      if (activated && selectedSession) ctx.sessions.open(selectedSession);
+      if (activated && selectedSession) ctx.uiWorkspace.openSession(selectedSession);
       ready = true;
       post('ready'); sessionChanged();
       const pending = pendingNavigation;
@@ -556,4 +566,4 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'bridge', inject, parts: Object.freeze([apply]) });
+export const BODY = Object.freeze({ name: 'bridge', inject, parts: Object.freeze([mainViewSession, apply]) });

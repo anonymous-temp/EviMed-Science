@@ -57,16 +57,18 @@
  *    state (C9 `run-state`, the control plane's `RunProgress`); each row draws
  *    without it when it has not arrived.
  *  - 「查看」 opens the kernel's own subagent view through
- *    `sessions.openSubagent`, which refuses any address the parent's catalogue
- *    does not list with that exact mode; the button waits for the catalogue.
+ *    `uiWorkspace.openSession` with the child's catalogue address — the parent,
+ *    the child and the exact mode the parent's catalogue lists; the button
+ *    waits for the catalogue.
  *
  * @module @evimed/harness-port/runtime-ui-toolviews
  */
 
+import { mainViewSession } from './runtimeUiKit.mjs';
 import { frameStyles } from './runtimeUiStyles.mjs';
 
 /** Services this body needs outright. */
-export const inject = ['slots', 'sessions'];
+export const inject = ['slots', 'sessions', 'uiWorkspace'];
 
 /**
  * The words these views use, in one place.
@@ -360,9 +362,16 @@ export function toolLineView(block, phrase, kit) {
 
 /**
  * 「查看」: the kernel's own view of a child, reached through the parent's
- * catalogue — the only address `sessions.openSubagent` accepts, and only with
- * the exact mode the catalogue lists. Disabled until the catalogue lists the
- * child; the catalogue is asked for once when it does not.
+ * catalogue — the child's address is its parent, its id and the exact mode the
+ * catalogue lists. Disabled until the catalogue lists the child; the catalogue
+ * is asked for once when it does not.
+ *
+ * At 0.1.7 the catalogue is the parent's `subagentCatalog` projection
+ * (`list.projectionsBySession[parent].values.subagentCatalog`, entries
+ * `{ id, mode, label, createdAt }`), loaded by `sessions.refreshProjections`,
+ * and the view opens through `uiWorkspace.openSession(address)` — the calls
+ * the kernel's own catalogue menu makes. 0.1.5's `subagentsByParent`,
+ * `refreshSubagents` and `openSubagent` are gone.
  *
  * @param {any} ctx @param {any} kit @param {any} target
  * @returns {(props: { childSessionId: string, title?: string }) => any}
@@ -380,20 +389,21 @@ export function childLinkFor(ctx, kit, target) {
       read,
       read,
     );
-    const parent = kit.hub.getState().session?.rootSessionId ?? snapshot?.current ?? null;
-    const catalogue = parent && snapshot && snapshot.subagentsByParent ? snapshot.subagentsByParent[parent] : null;
-    const entry = Array.isArray(catalogue?.entries)
-      ? catalogue.entries.find((/** @type {any} */ candidate) => candidate && candidate.id === childSessionId && candidate.kind === 'child')
+    const parent = kit.hub.getState().session?.rootSessionId ?? mainViewSession(snapshot) ?? null;
+    const projection = parent && snapshot && snapshot.projectionsBySession ? snapshot.projectionsBySession[parent] : null;
+    const catalogue = projection && projection.values ? projection.values.subagentCatalog : null;
+    const entry = Array.isArray(catalogue)
+      ? catalogue.find((/** @type {any} */ candidate) => candidate && candidate.id === childSessionId && typeof candidate.mode === 'string')
       : null;
     const asked = React.useRef(false);
     React.useEffect(() => {
-      if (entry || !parent || asked.current || typeof ctx.sessions?.refreshSubagents !== 'function') return;
+      if (entry || !parent || asked.current || typeof ctx.sessions?.refreshProjections !== 'function') return;
       asked.current = true;
-      try { ctx.sessions.refreshSubagents(parent); } catch { /* the catalogue refreshes on its own events too */ }
+      try { void Promise.resolve(ctx.sessions.refreshProjections(parent)).catch(() => {}); } catch { /* the catalogue refreshes on its own events too */ }
     }, [entry, parent]);
     const open = () => {
       if (!entry || !parent) return;
-      try { ctx.sessions.openSubagent({ parentSessionId: parent, childSessionId, mode: entry.mode }); } catch (error) {
+      try { ctx.uiWorkspace.openSession({ parentSessionId: parent, childSessionId, mode: entry.mode }); } catch (error) {
         target.console?.warn?.('[evimed-frame] the subagent view did not open:', error);
       }
     };
@@ -543,5 +553,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, childLinkFor, apply]),
+  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, childLinkFor, apply]),
 });

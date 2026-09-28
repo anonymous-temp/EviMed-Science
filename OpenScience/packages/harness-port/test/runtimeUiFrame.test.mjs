@@ -83,6 +83,22 @@ test('no body text reaches for a module: React arrives through the loader, every
   assert.doesNotMatch(source, /@deepseek-ai\/|node:/);
 });
 
+test('no body calls a session-facade member 0.1.7 retired', () => {
+  // The client session facade lost these at 0.1.7 (read off the shipped
+  // `dsh-api-session-controller` client, 2026-09-28). A body calling one does
+  // not fail a unit test with a fake that still offers it: it throws inside
+  // the kernel's page, and for `sessions.open` that was every shell
+  // navigation answered NAVIGATION_FAILED. Opening is `uiWorkspace.openSession`
+  // (an id or a child's address), the current session is the row the main
+  // view retains, and a parent's catalogue is its `subagentCatalog` projection.
+  const source = renderFrameClient();
+  for (const retired of [/\bsessions\??\.open\(/, /\bopenSubagent\b/, /\brefreshSubagents\b/, /\bsubagentsByParent\b/,
+    /\bcurrentAddress\b/, /\bsetSubagentCatalogOpen\b/, /\bfollowCurrent\b/, /getSnapshot\??\.?\(\)\??\.current\b/, /\bsnapshot\??\.current\b/]) {
+    assert.doesNotMatch(source, retired);
+  }
+  assert.match(source, /uiWorkspace\.openSession\(/, 'the scan read the bodies that open sessions');
+});
+
 test('the registration path refuses each slot misuse by name, before the kernel can refuse it silently', () => {
   const ctx = fakeCtx({ slots: kernelSlots() });
   const kit = createFrameKit(ctx, fakeTarget(), undefined, FRAME_VOCABULARY);

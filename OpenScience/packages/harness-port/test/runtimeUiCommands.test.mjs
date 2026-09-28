@@ -32,7 +32,7 @@ function frame({ commandUi = true, inputTriggers = true } = {}) {
   const ctx = fakeCtx({
     slots: kernelSlots(),
     sessions: {
-      list: { getSnapshot: () => ({ current: 'session-a' }), subscribe: () => () => {} },
+      list: { getSnapshot: () => ({ byId: { 'session-a': { id: 'session-a', retainedBy: { mainView: 1 } } } }), subscribe: () => () => {} },
       scope: (/** @type {string} */ id) => (id === 'session-a' ? { id } : undefined),
     },
     conversation: { input: { for: (/** @type {any} */ scope) => ({

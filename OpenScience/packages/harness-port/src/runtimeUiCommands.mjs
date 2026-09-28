@@ -64,6 +64,7 @@
  * @module @evimed/harness-port/runtime-ui-commands
  */
 
+import { mainViewSession } from './runtimeUiKit.mjs';
 import { frameStyles } from './runtimeUiStyles.mjs';
 
 /** Services this body needs outright. */
@@ -213,7 +214,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   );
 
   const currentSession = () => {
-    try { return ctx.sessions?.list?.getSnapshot?.()?.current ?? null; } catch { return null; }
+    try { return mainViewSession(ctx.sessions?.list?.getSnapshot?.()); } catch { return null; }
   };
   /** The composer's own text, so choosing a tool never costs a typed question. */
   /** @param {string | null} sessionId */
@@ -494,5 +495,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'commands',
   inject,
-  parts: Object.freeze([frameStyles, capabilityOptions, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
+  parts: Object.freeze([frameStyles, mainViewSession, capabilityOptions, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
 });

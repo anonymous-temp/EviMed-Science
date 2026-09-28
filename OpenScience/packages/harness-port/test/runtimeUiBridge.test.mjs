@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apply } from '../src/runtimeUiBridge.mjs';
 
+/**
+ * A 0.1.7 session-list snapshot: the session the main view shows is the row it
+ * retains (`retainedBy.mainView`), as the kernel's own plugins read it.
+ * @param {string | null} id @param {Record<string, any>} [rows]
+ */
+function mainView(id, rows = {}) {
+  const byId = Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, { id: key, retainedBy: {}, ...row }]));
+  if (id) byId[id] = { id, ...(rows[id] ?? {}), retainedBy: { mainView: 1 } };
+  return { ids: Object.keys(byId), byId, phase: 'ready', projectionsBySession: {} };
+}
+
 function fixture() {
   /** @type {any[]} */ const sent = [];
   /** @type {any[]} */ const calls = [];
@@ -23,9 +34,10 @@ function fixture() {
     },
     sessions: {
       refresh: async () => {}, create: async (/** @type {{sessionId:string}} */ { sessionId }) => { calls.push(['create', sessionId]); return sessionId; },
-      open: (/** @type {string} */ id) => { current = id; calls.push(['open', id]); }, scope: (/** @type {string} */ id) => ({ id }),
-      list: { getSnapshot: () => ({ current }), subscribe: () => () => {} },
+      scope: (/** @type {string} */ id) => ({ id }),
+      list: { getSnapshot: () => mainView(current), subscribe: () => () => {} },
     },
+    uiWorkspace: { openSession: (/** @type {string} */ id) => { current = id; calls.push(['open', id]); } },
     conversation: { input: { for: (/** @type {any} */ scope) => ({ setDraft: (/** @type {string} */ text) => calls.push(['draft', scope.id, text]) }) } },
     effect: (/** @type {any} */ setup) => { ctx.dispose = setup(); },
   };
@@ -126,7 +138,7 @@ test('a bound resume retries failed readiness on the same generation without rec
 
 test('navigation to an existing session during delayed reconnect is retained until the generation is ready', async () => {
   const f = fixture(); const known = new Set(['session-a', 'session-b']);
-  f.ctx.sessions.open = (/** @type {string} */ id) => { assert.ok(known.has(id)); f.calls.push(['open', id]); };
+  f.ctx.uiWorkspace.openSession = (/** @type {string} */ id) => { assert.ok(known.has(id)); f.calls.push(['open', id]); };
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
   /** @type {any} */ let release;
@@ -249,7 +261,7 @@ test('missing registry membership cannot produce a successful native readiness a
 
 test('a known legacy session is adopted in place without replacing its identity or history', async () => {
   const f = fixture();
-  f.ctx.sessions.list.getSnapshot = () => ({ current: 'session-a', byId: { 'session-a': { blank: false, cwd: '/workspace/project-a' } } });
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': { blank: false, cwd: '/workspace/project-a' } });
   f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', sessionIds: ['session-a'] });
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
@@ -436,7 +448,7 @@ test('the shell can search this project\'s sessions through the frame', async ()
   const f = fixture();
   /** @type {any[]} */ const queries = [];
   f.ctx.sessions.search = async (/** @type {string} */ query) => { queries.push(query); return { ok: true, value: { items: [{ sessionId: 'session-a', snippet: '……阿司匹林一级预防……' }, { sessionId: 'bad id', snippet: 'x' }], hasMore: true } }; };
-  f.ctx.sessions.list.getSnapshot = () => ({ current: 'session-a', byId: { 'session-a': { displayTitle: '70 岁以上阿司匹林' } } });
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', { 'session-a': { displayTitle: '70 岁以上阿司匹林' } });
   apply(f.ctx, {}, f.target); await settle();
   shellSends(f, { type: 'evimed.runtime-ui.search', seq: 1, requestId: 'q1', query: ' 阿司匹林 ' });
   await settle();
@@ -464,7 +476,7 @@ test('the shell can search this project\'s sessions through the frame', async ()
 test('a session change says whether the session is a fork or a delegated child, and of what', async () => {
   const f = fixture(); const hub = createHub(f.target);
   /** @type {() => void} */ let changed = () => {};
-  /** @type {any} */ let snapshot = { current: 'session-new', byId: {} };
+  /** @type {any} */ let snapshot = mainView('session-new');
   f.ctx.sessions.list = { getSnapshot: () => snapshot, subscribe: (/** @type {() => void} */ listener) => { changed = listener; return () => {}; } };
   apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
   f.navigate(); await settle();
@@ -472,26 +484,36 @@ test('a session change says whether the session is a fork or a delegated child, 
 
   // A branch of a finished turn: the kernel's fork, same parent field, no
   // subagent origin. The shell takes it into the ledger.
-  snapshot = { current: 'session-fork', byId: { 'session-fork': { parentId: 'session-new' } } };
+  snapshot = mainView('session-fork', { 'session-fork': { parentId: 'session-new' } });
   changed();
   assert.equal(sessions().at(-1).forkedFrom, 'session-new');
   assert.equal(sessions().at(-1).subagent, undefined);
 
-  // A delegated child, opened from the catalogue: addressed by its parent,
+  // A delegated child, opened from the catalogue: at 0.1.7 the controller
+  // projects a retained child as a row of its own, addressed by its parent,
   // and its root is the session the researcher started.
-  snapshot = {
-    current: 'child-2',
-    currentAddress: { parentSessionId: 'child-1', childSessionId: 'child-2', mode: 'one-shot' },
-    byId: { 'child-1': { origin: 'subagent', parentId: 'session-new' } },
-  };
+  snapshot = mainView('child-2', {
+    'child-2': { origin: 'subagent', parentId: 'child-1' },
+    'child-1': { origin: 'subagent', parentId: 'session-new' },
+  });
   changed();
   assert.deepEqual({ subagent: sessions().at(-1).subagent, root: sessions().at(-1).rootSessionId, forkedFrom: sessions().at(-1).forkedFrom },
     { subagent: true, root: 'session-new', forkedFrom: undefined });
   assert.equal(hub.getState().session.rootSessionId, 'session-new', 'the bodies learn it too');
 
   // An ordinary session carries neither.
-  snapshot = { current: 'session-plain', byId: { 'session-plain': {} } };
+  snapshot = mainView('session-plain', { 'session-plain': {} });
   changed();
   assert.deepEqual(Object.keys(sessions().at(-1)).filter(key => ['forkedFrom', 'subagent', 'rootSessionId'].includes(key)), []);
+
+  // Switching views, 0.1.7 retains the next session before it releases the
+  // last, so one notification sees both rows retained by the main view. The
+  // shell hears the one being switched to, once.
+  const before = sessions().length;
+  snapshot = mainView('session-next', { 'session-plain': { retainedBy: { mainView: 1 } } });
+  changed();
+  snapshot = mainView('session-next');
+  changed();
+  assert.deepEqual(sessions().slice(before).map(row => row.sessionId), ['session-next']);
   f.ctx.dispose();
 });

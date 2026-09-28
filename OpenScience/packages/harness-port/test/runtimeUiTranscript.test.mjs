@@ -56,7 +56,8 @@ function sessionsFake(initial) {
     faces, loads, bound,
     service: {
       list: {
-        getSnapshot: () => ({ current }),
+        // 0.1.7: the session on screen is the row the main view retains.
+        getSnapshot: () => ({ byId: current ? { [current]: { id: current, retainedBy: { mainView: 1 } } } : {} }),
         subscribe: (/** @type {() => void} */ listener) => { listListeners.add(listener); return () => { listListeners.delete(listener); }; },
       },
       binding: (/** @type {string} */ id) => (bound.has(id) && faces.has(id) ? { sessionId: id, session: faces.get(id) } : undefined),
@@ -135,7 +136,7 @@ test("an operator's conversations fold too; a controller without the loader is l
   frame(s, { operator: true });
   await settle();
   assert.deepEqual(s.loads, ['session-a@0']);
-  const bare = fakeCtx({ slots: kernel(), sessions: { list: { getSnapshot: () => ({ current: 'x' }), subscribe: () => () => {} } } });
+  const bare = fakeCtx({ slots: kernel(), sessions: { list: { getSnapshot: () => ({ byId: { x: { id: 'x', retainedBy: { mainView: 1 } } } }), subscribe: () => () => {} } } });
   const target = fakeTarget();
   assert.doesNotThrow(() => apply(bare, {}, target, undefined, kitFor(bare, target)));
 });

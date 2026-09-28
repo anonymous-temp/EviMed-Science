@@ -325,6 +325,32 @@ export function partialArgField(argsRaw, field) {
 }
 
 /**
+ * The session the kernel's main view shows, or null.
+ *
+ * Until 0.1.5 the session list published it as `current` (and a child's
+ * address as `currentAddress`). 0.1.7 has neither: the main view holds a
+ * reference on the session it shows (`sessions.retain(id, { source:
+ * 'mainView' })`), every list row carries `retainedBy`, and each of the
+ * kernel's own plugins finds the current session as the row the main view
+ * retains. This is that reading. While the view switches, the new session is
+ * retained before the old one is released, so for one notification two rows
+ * claim it; the one that is not `previous` is the one being switched to.
+ *
+ * Not a kit member but a part each body lists, because the bodies are
+ * serialized one function at a time.
+ *
+ * @param {any} snapshot `ctx.sessions.list.getSnapshot()`
+ * @param {string | null} [previous] the session last reported
+ * @returns {string | null}
+ */
+export function mainViewSession(snapshot, previous = null) {
+  const rows = Object.values(snapshot && snapshot.byId ? snapshot.byId : {})
+    .filter((/** @type {any} */ row) => row && typeof row.id === 'string' && ((row.retainedBy && row.retainedBy.mainView) || 0) > 0);
+  const chosen = rows.length > 1 ? (rows.find((/** @type {any} */ row) => row.id !== previous) || rows[0]) : rows[0];
+  return chosen ? chosen.id : null;
+}
+
+/**
  * The kit itself.
  *
  * @param {any} ctx the socket plugin's native client context

@@ -52,6 +52,8 @@
  * @module @evimed/harness-port/runtime-ui-transcript
  */
 
+import { mainViewSession } from './runtimeUiKit.mjs';
+
 /** Services this body needs outright: the slot registry and the sessions. */
 export const inject = ['slots', 'sessions'];
 
@@ -101,7 +103,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       });
     });
     const follow = () => kit.guarded('finished history', () => {
-      const id = sessions.list.getSnapshot()?.current ?? null;
+      const id = mainViewSession(sessions.list.getSnapshot());
       if (watched && watched.id === id) return;
       watched?.unsubscribe();
       watched = null;
@@ -149,4 +151,4 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'transcript', inject, parts: Object.freeze([historyWanted, apply]) });
+export const BODY = Object.freeze({ name: 'transcript', inject, parts: Object.freeze([mainViewSession, historyWanted, apply]) });
