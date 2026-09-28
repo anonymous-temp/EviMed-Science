@@ -4,8 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  GEO_SCHEDULE, baselineTooRecent, contentBrief, dispatchIdFor, exportBrief, geoRunPrompt, insightBrief, nextWeeklySlot, postPublicationCheckpoints,
-  sentinelEngines, sentinelSlot, strategyBrief, topQuestions, wantedSteps, weeklySlot, zonedInstant,
+  GEO_SCHEDULE, baselineTooRecent, contentBrief, dispatchIdFor, exportBrief, geoRunPrompt, insightBrief, measurementFreshness, nextWeeklySlot,
+  postPublicationCheckpoints, sentinelEngines, sentinelSlot, strategyBrief, topQuestions, wantedSteps, weeklySlot, zonedInstant,
 } from "../src/geoOrchestrator.mjs";
 import { GEO_NOTICE_KINDS, createGeoNotifier, geoNoticeHref, operatorBody, wrongOursTitle } from "../src/geoNotify.mjs";
 import { memorySourceRejection } from "../src/memoryIntelligence.mjs";
@@ -134,6 +134,40 @@ test("a run's brief says, in plain Chinese, the step, minimal or not, the produc
   assert.ok(exportBrief(project, { kind: "weekly", week: "2026-09-28" }).includes("周报"));
   assert.ok(exportBrief(project, { kind: "proposal" }).includes("提案资料包"));
   for (const brief of [full, minimal, batch]) assert.equal(/gq_|ggr_|geo_[0-9a-f]{8}/.test(brief), false, "no ids in what a person can read");
+});
+
+test("a brief that reads measurements says how current each engine's are, and which are stale", () => {
+  // Production, 2026-09-28: the probe host had lost DeepSeek and 豆包, so the
+  // newest DeepSeek answer was from 09-25 and 豆包 had none at all while 千问
+  // was measured daily. A strategy or an export built on those numbers without
+  // saying so presents three-day-old cells as this week's.
+  const at = new Date("2026-10-03T02:00:00Z");
+  const rows = [
+    { engine: "deepseek", last: "2026-09-25T18:49:40Z" },
+    { engine: "kimi", last: new Date("2026-10-02T16:09:59Z") },
+    { engine: "qianwen", last: "2026-10-03T00:05:20Z" },
+  ];
+  const line = measurementFreshness(rows, ["doubao", "deepseek", "kimi"], at, SHANGHAI);
+  assert.ok(line, "a project with answers gets a line");
+  for (const phrase of ["豆包 没有有效回答", "DeepSeek 2026-09-26", "Kimi 2026-10-03", "豆包、DeepSeek 没有 7 天内的数", "写明是哪天测的", "“未测”", "不要为此补测或停下"]) {
+    assert.ok(line.includes(phrase), `${phrase} missing from: ${line}`);
+  }
+  assert.equal(line.includes("千问"), false, "only the project's own engines are listed");
+  // Current everywhere: the dates, and no stale sentence.
+  const fresh = measurementFreshness([{ engine: "doubao", last: at }, { engine: "deepseek", last: at }, { engine: "kimi", last: at }],
+    ["doubao", "deepseek", "kimi"], at, SHANGHAI);
+  assert.ok(fresh?.startsWith("各引擎最近一次有效回答："));
+  assert.equal(fresh?.includes("没有 7 天内的数"), false);
+  // Nothing measured yet: no line at all — the step itself says the numbers are missing.
+  assert.equal(measurementFreshness([], ["doubao"], at, SHANGHAI), null);
+
+  // The line reaches the strategy brief and both export briefs, and only when there is one.
+  for (const brief of [strategyBrief(project, { minimal: false, freshness: line }), exportBrief(project, { kind: "proposal", freshness: line }),
+    exportBrief(project, { kind: "weekly", week: "2026-10-05", freshness: line })]) {
+    assert.ok(brief.includes(line), "the freshness line is in the brief");
+    assert.equal(/[「」]/.test(brief), false, "a person reads a brief: quotes are “”");
+  }
+  assert.equal(exportBrief(project, { kind: "proposal" }).includes("最近一次有效回答"), false);
 });
 
 test("the operators' market routes have bounded metric labels", () => {

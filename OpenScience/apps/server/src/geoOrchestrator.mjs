@@ -320,6 +320,44 @@ function scopeLine(project) {
 
 const DATA_LINE = "项目里已有的数据用 geo_read 读（做过且没有过期的不要重做），产出用 geo_write 写回项目。测量由平台自己跑，不要在运行里批量探测。";
 
+/** An engine whose last answer is older than this is reported as stale. */
+export const GEO_STALE_MEASUREMENT_DAYS = 7;
+
+/**
+ * How current the project's measurements are, per engine, as one line of a
+ * brief that reads them (strategy, exports). The runs that read numbers work
+ * from what the project holds; when the probe host has lost an engine's login
+ * that is days-old numbers for that engine, and a package that does not say
+ * so presents them as this week's (2026-09-28: DeepSeek and 元宝 had nothing
+ * newer than 09-25, 豆包 nothing valid at all, while 千问 was measured daily).
+ * A fact the platform holds, so the platform states it; what the run makes of
+ * it is the skill's.
+ * @param {Array<{ engine: string, last: Date | string | null }>} rows the latest valid answer per engine
+ * @param {readonly string[]} engines the project's engines, in its order
+ * @param {Date} now @param {string} timeZone
+ * @returns {string | null} null when the project has measured nothing yet
+ */
+export function measurementFreshness(rows, engines, now, timeZone) {
+  const latest = new Map(rows.filter((row) => row?.engine && row.last).map((row) => [String(row.engine), new Date(row.last)]));
+  if (!latest.size) return null;
+  const stale = [];
+  const parts = engines.map((engine) => {
+    const at = latest.get(engine);
+    if (!at || Number.isNaN(at.getTime())) {
+      stale.push(engine);
+      return `${engineLabel(engine)} 没有有效回答`;
+    }
+    if (now.getTime() - at.getTime() > GEO_STALE_MEASUREMENT_DAYS * DAY_MS) stale.push(engine);
+    return `${engineLabel(engine)} ${zonedParts(at, timeZone).date}`;
+  });
+  const line = [`各引擎最近一次有效回答：${parts.join("；")}。`];
+  if (stale.length) {
+    const names = stale.map(engineLabel).join("、");
+    line.push(`${/[A-Za-z0-9]$/.test(names) ? `${names} ` : names}没有 ${GEO_STALE_MEASUREMENT_DAYS} 天内的数：用到它们的数就写明是哪天测的，不当作本周的数；没有有效回答的写“未测”。不要为此补测或停下，按项目里已有的数据交付。`);
+  }
+  return line.join("");
+}
+
 /**
  * The brief of an insight run (steps 1–3).
  * @param {any} project @param {{ scope: Array<{ step: string, fidelity: "full" | "minimal" }>, target: string | null, full: boolean }} plan
@@ -353,12 +391,16 @@ export function insightBrief(project, { scope, target, full }) {
   return lines.join("\n");
 }
 
-/** The brief of the strategy run (step 5). @param {any} project @param {{ minimal: boolean }} plan */
-export function strategyBrief(project, { minimal }) {
+/**
+ * The brief of the strategy run (step 5).
+ * @param {any} project @param {{ minimal: boolean, freshness?: string | null }} plan `freshness`: `measurementFreshness()`'s line
+ */
+export function strategyBrief(project, { minimal, freshness = null }) {
   return [
     `“循证 GEO”自动运行 · 第 5 步（信源）`,
     productLine(project), scopeLine(project),
     `诊断已经测完${minimal ? "（最小版：30 个问句测一轮，数字只代表这 30 个问句，报告里写明）" : "（基线）"}。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。`,
+    ...(freshness ? [freshness] : []),
     "这次要做：信源表、七类缺口、每个引擎本周期能做到什么、主战场与布局、三档目标（每档写目标、稿件数和预算）。",
     // G3: every coverage candidate is checked, and a site no one checked is
     // never placed into — the market admits only all three conditions true.
@@ -391,14 +433,19 @@ export function contentBrief(project, { number, groups, errors, reason, size }) 
   return lines.join("\n");
 }
 
-/** The brief of an export run. @param {any} project @param {{ kind: string, week?: string | null }} request */
-export function exportBrief(project, { kind, week = null }) {
+/**
+ * The brief of an export run.
+ * @param {any} project @param {{ kind: string, week?: string | null, freshness?: string | null }} request
+ *   `freshness`: `measurementFreshness()`'s line
+ */
+export function exportBrief(project, { kind, week = null, freshness = null }) {
   if (kind === "weekly") {
     return [
       `“循证 GEO”自动运行 · 周报${week ? `（${week} 这一周）` : ""}`,
       productLine(project),
       "用周报模式出一份 PDF 和一份 Word：本周复测、投放组和对照组的净效应、被 AI 引用的稿件、新出现的讲错我方、下一轮做什么。",
       "所有数字都来自 geo_read，不补测、不编数；样本不足 30 写“样本不足”，没测的引擎写“未测”。",
+      ...(freshness ? [freshness] : []),
       DATA_LINE,
     ].join("\n");
   }
@@ -406,6 +453,7 @@ export function exportBrief(project, { kind, week = null }) {
     "“循证 GEO” · 导出提案资料包",
     productLine(project),
     "出一套提案资料包：一个 Excel、两份 Word、一份 PPT、一份 HTML。只用项目已有的数据（geo_read），没做的步骤写“未做”。",
+    ...(freshness ? [freshness] : []),
     DATA_LINE,
   ].join("\n");
 }
@@ -1003,7 +1051,14 @@ export class GeoOrchestrator {
     if (!mark || !this.#allowed(mark)) return null;
     const kind = String(mark.detail?.kind ?? "proposal");
     return { key: mark.key, purpose: "export", capabilityId: GEO_RUN_CAPABILITIES.export, reason: `geo:export-${kind}`,
-      brief: exportBrief(project, { kind, week: mark.detail?.week ?? null }), steps: [], detail: { kind } };
+      brief: exportBrief(project, { kind, week: mark.detail?.week ?? null, freshness: await this.#freshness(project) }), steps: [], detail: { kind } };
+  }
+
+  /** `measurementFreshness()` over the project's snapshots: the latest valid answer per engine. @param {any} project */
+  async #freshness(project) {
+    const rows = (await this.store.query(`SELECT engine, max(asked_at) AS last FROM evimed_geo.snapshots
+      WHERE geo_project_id = $1 AND status IN ('valid', 'refusal') GROUP BY engine`, [project.id])).rows;
+    return measurementFreshness(rows, project.engines ?? [], this.now(), this.timeZone);
   }
 
   /** Steps 1–3 in one `geo-insight` run. @param {any} project @param {ReturnType<typeof wantedSteps>} plan @returns {Promise<RunSpec | null>} */
@@ -1033,7 +1088,7 @@ export class GeoOrchestrator {
     if (!this.#allowed(mark)) return null;
     const minimal = project.steps.diagnosis.status === "minimal";
     return { key: "run:strategy", purpose: "strategy", capabilityId: GEO_RUN_CAPABILITIES.strategy, reason: "geo:sources",
-      brief: strategyBrief(project, { minimal }), steps: ["sources"], detail: { minimal } };
+      brief: strategyBrief(project, { minimal, freshness: await this.#freshness(project) }), steps: ["sources"], detail: { minimal } };
   }
 
   /**
@@ -1048,7 +1103,8 @@ export class GeoOrchestrator {
     const mark = await this.#mark(project.id, key);
     if (mark && (FINISHED.has(mark.state) || mark.state === "failed" || !this.#allowed(mark))) return null;
     return { key, purpose: "export", capabilityId: GEO_RUN_CAPABILITIES.export, reason: "geo:export-weekly",
-      brief: exportBrief(project, { kind: "weekly", week: week.monday }), steps: [], detail: { kind: "weekly", week: week.monday } };
+      brief: exportBrief(project, { kind: "weekly", week: week.monday, freshness: await this.#freshness(project) }), steps: [],
+      detail: { kind: "weekly", week: week.monday } };
   }
 
   /** @param {any} project @param {ReturnType<typeof wantedSteps>} plan */
