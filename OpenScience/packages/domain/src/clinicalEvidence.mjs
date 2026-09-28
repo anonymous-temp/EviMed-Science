@@ -1197,11 +1197,13 @@ const attributedStanceDeterminer = "该|这|此|上述|前述|前文|原";
 const attributedStanceEntity = "研究|综述|试验|队列|分析|文献|论文|报告|文章|指南|共识|荟萃分析|meta\\s*分析";
 const attributedStanceAuthor = "作者|笔者|研究者|研究人员|研究团队|课题组|原作者|综述作者|作者们|原文|该文|文中";
 const attributedStanceSubject = `(?:(?:${attributedStanceDeterminer})\\s*(?:一)?\\s*(?:项|篇|个|份|部)?\\s*(?:${attributedStanceEntity})|${attributedStanceAuthor})`;
-const attributedStanceVerb = "认为|指出|强调|视为|归因|归结|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向|提出|断言|论断|推断|质疑|反驳|否认|声称|宣称|写道|提示";
+// retired-word-ok (this line and the two marked below): a pattern that reads
+// report prose for attributed stances, not copy a reader is shown.
+const attributedStanceVerb = "认为|指出|强调|视为|归因|归结|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向|提出|断言|论断|推断|质疑|反驳|否认|声称|宣称|写道|提示"; // retired-word-ok
 const attributedStancePattern = new RegExp([
   `(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,25}?(?:${attributedStanceVerb})`,
   `在\\s*(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,12}?看来`,
-  `(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,8}?的\\s*(?:核心|主要|基本)?\\s*(?:观点|看法|立场|主张|判断|解释|论点)\\s*(?:是|为|在于)`,
+  `(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,8}?的\\s*(?:核心|主要|基本)?\\s*(?:观点|看法|立场|主张|判断|解释|论点)\\s*(?:是|为|在于)`, // retired-word-ok
 ].join("|"));
 // The exemption: the quote itself carries a position, so attributing one to it
 // is a faithful restatement. It stays a permit-list — matching can only silence
@@ -1266,7 +1268,7 @@ const quotedStancePattern = new RegExp([
   `(?<![A-Za-z])${stanceResultNoun}(?![A-Za-z])[^.;\\n]{0,30}?(?<![A-Za-z])${stanceCausalFrame}(?![A-Za-z])`,
   `(?<![A-Za-z])${stanceCausalFrame}(?![A-Za-z])[^.;\\n]{0,30}?(?<![A-Za-z])${stanceResultNoun}(?![A-Za-z])`,
   "(?<![A-Za-z])(?:remains? (?:to be|unclear|unknown|uncertain|controversial|debated)|(?:is|are|was|were) (?:unclear|uncertain|controversial|questionable|debatable)|cannot be (?:excluded|ruled out|determined))",
-  "认为|指出|主张|推测|归因|建议|强调|提示|警告|坦承|承认|解释为|视为",
+  "认为|指出|主张|推测|归因|建议|强调|提示|警告|坦承|承认|解释为|视为", // retired-word-ok: reads quoted prose
   "(?:可能|或许|大概|似乎|倾向于)[^。；\\n]{0,12}(?:由于|因为|归因|源于|导致|引起|反映|解释|提示|相关|有关)",
 ].join("|"), "i");
 

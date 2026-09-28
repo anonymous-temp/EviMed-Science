@@ -66,16 +66,32 @@ function visibleText(line: string): string[] {
   return found;
 }
 
-/** Every source file the shell can render a string from. */
-function sources(dir: string, found: string[] = []): string[] {
+/** Every source file under `dir` whose name matches `kind`, tests excluded. */
+function sources(dir: string, kind = /\.(ts|tsx)$/, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
-    if (statSync(path).isDirectory()) { sources(path, found); continue; }
-    if (!/\.(ts|tsx)$/.test(entry) || /\.test\.(ts|tsx)$/.test(entry)) continue;
+    if (statSync(path).isDirectory()) { sources(path, kind, found); continue; }
+    if (!kind.test(entry) || /\.test\.\w+$/.test(entry)) continue;
     found.push(path);
   }
   return found;
 }
+
+/**
+ * The domain's sentences reach the same reader: the shell renders the error
+ * dictionary (`errorCodes.mjs`), the gate's titles (`gateIssueText.mjs`) and
+ * the capability display table (`capability-display.json`) as they are written
+ * there. 「运行记录」 outlived its page in six of those sentences, and 「主张」 in
+ * three capability descriptions, because this walk read only the shell.
+ */
+const DOMAIN_SOURCES = join(dirname(fileURLToPath(import.meta.url)), "../../../../packages/domain/src");
+
+/**
+ * 「候选」 is retired from the memory page, where nothing waits for approval
+ * any more; the domain also says 候选药品, drug selection's word for what the
+ * reader is comparing, which is not that word.
+ */
+const DOMAIN_EXEMPT = new Set(["候选"]);
 
 const comment = (line: string) => /^\s*(\/\/|\*|\/\*)/.test(line);
 
@@ -111,6 +127,27 @@ describe("the words the product retired", () => {
       .filter(({ text }) => text.split("\n").some((line) =>
         line.includes(word) && !comment(line) && !line.includes("retired-word-ok")))
       .map(({ path }) => relative(path));
+    expect(guilty, `${word}: ${why}`).toEqual([]);
+  });
+
+  const domainFiles = sources(DOMAIN_SOURCES, /\.(mjs|json)$/);
+  const domainTexts = domainFiles.map((path) => ({ path, text: readFileSync(path, "utf8") }));
+  const domainRelative = (path: string) => path.slice(path.indexOf("/packages/domain/") + 1);
+
+  it("walks the domain's sources", () => {
+    expect(domainFiles.length).toBeGreaterThan(40);
+    const walked = domainFiles.map(domainRelative);
+    for (const expected of ["packages/domain/src/errorCodes.mjs", "packages/domain/src/gateIssueText.mjs", "packages/domain/src/capability-display.json"]) {
+      expect(walked).toContain(expected);
+    }
+    expect(domainTexts.filter(({ text }) => CJK.test(text)).length).toBeGreaterThan(20);
+  });
+
+  it.each(RETIRED.filter(([word]) => !DOMAIN_EXEMPT.has(word)))("does not say 「%s」 in a domain sentence", (word, why) => {
+    const guilty = domainTexts
+      .filter(({ text }) => text.split("\n").some((line) =>
+        line.includes(word) && !comment(line) && !line.includes("retired-word-ok")))
+      .map(({ path }) => domainRelative(path));
     expect(guilty, `${word}: ${why}`).toEqual([]);
   });
 

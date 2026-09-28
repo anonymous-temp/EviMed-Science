@@ -957,7 +957,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // that does not exist. Say what is true and reachable instead.
   runtime_tool_error: '一次工具调用被拒绝或失败，运行没能继续。这不是对成果的质量判断；已经写出的文件仍在工作区里，可以重试或把题面缩小一些。',
   runtime_turn_end_unknown: '运行以本版本未知的方式结束，已记录待排查。',
-  runtime_history_unavailable: '暂时读不到运行记录，这不代表运行没有进展。稍后刷新。',
+  runtime_history_unavailable: '暂时无法读取会话内容，这不代表运行没有进展，请稍后刷新。',
   runtime_status_unavailable: '暂时读不到运行状态，稍后刷新。',
   runtime_event_stream_unavailable: '实时事件流断开，正在重连。',
   runtime_wire_protocol_mismatch: '运行时协议与控制面不一致，请联系管理员升级。',
