@@ -16,7 +16,12 @@ COPY packages/harness-port/package.json packages/harness-port/package.json
 COPY packages/socket/package.json packages/socket/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 
-RUN pnpm install --frozen-lockfile
+# The store is a build cache, so a changed lockfile fetches only what moved,
+# and fewer parallel fetches keep the serving host answering: a from-scratch
+# install at pnpm's defaults held this four-core host at load 100 for twenty
+# minutes, with every product on it unreachable (2026-09-26).
+RUN --mount=type=cache,id=evimed-web-pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --network-concurrency=4 --child-concurrency=2
 
 COPY . .
 
