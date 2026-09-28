@@ -86,11 +86,16 @@ _BGZF_MAX_BLOCK = 65536
 
 
 class OpenSourceError(RuntimeError):
-    """A stable, reportable failure of the open-data path."""
+    """A stable, reportable failure of the open-data path.
 
-    def __init__(self, code: str, message: str):
+    ``status`` is the HTTP status a server answered with, when one did: it is
+    what tells a missing directory (404, a fact about the study) from an outage.
+    """
+
+    def __init__(self, code: str, message: str, *, status: int | None = None):
         super().__init__(message)
         self.code = code
+        self.status = status
 
 
 def _now() -> str:
@@ -509,6 +514,7 @@ class _Http:
                 raise OpenSourceError(
                     "mr_open_source_unavailable",
                     f"{urllib.parse.urlsplit(url).netloc} answered HTTP {error.code} for {url} ({self._way()}).",
+                    status=error.code,
                 ) from None
             except (urllib.error.URLError, TimeoutError, OSError, http_client.HTTPException) as error:
                 if attempt < attempts - 1:
@@ -643,7 +649,21 @@ def locate_harmonised_file(study: CatalogStudy, http: _Http) -> CatalogStudy:
     """The study's harmonised file, and its tabix index when the catalogue has one."""
     directory = study.summary_stats_url.rstrip("/") if study.summary_stats_url.startswith("http") else ""
     directory = directory.replace("http://", "https://") or _ftp_directory(study.accession)
-    listing = http.read(f"{directory}/harmonised/", limit=2 * 1024 * 1024).decode("utf-8", "replace")
+    try:
+        listing = http.read(f"{directory}/harmonised/", limit=2 * 1024 * 1024).decode("utf-8", "replace")
+    except OpenSourceError as error:
+        if error.status != 404:
+            raise
+        # The catalogue says the study has full summary statistics, but EBI has
+        # no harmonised directory for them (GCST006900, Yengo 2018 BMI, on
+        # 2026-09-28). That is a fact about the study, not an outage: the run
+        # chooses another study instead of retrying this one.
+        raise OpenSourceError(
+            "mr_open_source_unharmonised",
+            f"{study.accession} has no harmonised summary-statistics directory at EBI "
+            f"({directory}/harmonised/ answered HTTP 404); only a study with exactly one harmonised "
+            "(GRCh38, allele-aligned) file is read. Choose another study of the same trait.",
+        ) from None
     names = sorted(set(re.findall(r'href="([^"?/]+\.h\.tsv\.gz(?:\.tbi)?)"', listing)))
     data = [name for name in names if name.endswith(".h.tsv.gz")]
     if len(data) != 1:

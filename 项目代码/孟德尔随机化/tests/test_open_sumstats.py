@@ -11,6 +11,7 @@ import gzip
 import io
 import json
 import struct
+import urllib.error
 import zlib
 
 import pytest
@@ -236,6 +237,32 @@ def test_an_unknown_or_unharmonised_study_is_an_error_never_a_guess(catalogue):
     with pytest.raises(osm.OpenSourceError) as caught:
         osm.locate_harmonised_file(study, http)
     assert caught.value.code == "mr_open_source_unharmonised"
+
+
+def test_a_study_without_a_harmonised_directory_is_unharmonised_not_an_outage(catalogue, monkeypatch):
+    # GCST006900 on 2026-09-28: the catalogue lists full summary statistics,
+    # EBI answers 404 for its harmonised/ directory. Reported as "unavailable",
+    # the run was told to wait for an outage that was a fact about the study.
+    listing = "https://ftp.example/pub/GCST000001/harmonised/"
+    answers = {"status": 404}
+
+    def opener(request, timeout=None):
+        if request.full_url == listing:
+            raise urllib.error.HTTPError(listing, answers["status"], "refused", {}, None)
+        return catalogue(request, timeout)
+
+    monkeypatch.setattr(osm.time, "sleep", lambda seconds: None)
+    http = osm._Http(opener=opener)
+    study = osm.resolve_study({"accession": "GCST000001"}, http)
+    with pytest.raises(osm.OpenSourceError) as caught:
+        osm.locate_harmonised_file(study, http)
+    assert caught.value.code == "mr_open_source_unharmonised"
+    assert "GCST000001" in str(caught.value) and "HTTP 404" in str(caught.value)
+    # A server error on the same listing is still an outage, retried and named so.
+    answers["status"] = 503
+    with pytest.raises(osm.OpenSourceError) as caught:
+        osm.locate_harmonised_file(study, http)
+    assert caught.value.code == "mr_open_source_unavailable" and caught.value.status == 503
 
 
 def test_a_stream_over_the_byte_limit_is_refused_by_name(catalogue, monkeypatch):
