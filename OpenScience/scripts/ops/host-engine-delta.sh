@@ -13,7 +13,11 @@
 # write (/agent and /adapter/evimed_specialist_adapter; /app/new_meta for the
 # MetaAgent; /mcp for the drug-evidence adapter). A requirements file that
 # differs from what the running image was built with is refused by name: that
-# is a full build, not a delta.
+# is a full build, not a delta. So is a requirements.lock (the pinned set a
+# full build installs, compile-engine-locks.sh) that the release carries and
+# the running image does not hold byte for byte -- an image built before its
+# engine had a lock included, which is how the first build after a lock
+# lands is always a full one.
 #
 # Run after host-delta-release.sh has seeded <RELEASE_DIR> (with the engine
 # sources in the delta archive) and before host-release-switch.sh; the switch
@@ -53,6 +57,11 @@ same_requirements() { # image path-in-image path-in-release: unreadable counts a
   rm -f "$tmp"; return "$status"
 }
 
+same_inputs() { # image dir-in-image dir-in-release: requirements.txt, and the lock when the release has one
+  same_requirements "$1" "$2/requirements.txt" "$3/requirements.txt" || return 1
+  if [ -f "$3/requirements.lock" ]; then same_requirements "$1" "$2/requirements.lock" "$3/requirements.lock" || return 1; fi
+}
+
 set_env() { # variable value
   if grep -q "^$1=" "$ENVF"; then sed -i "s|^$1=.*|$1=$2|" "$ENVF"; else printf '%s=%s\n' "$1" "$2" >> "$ENVF"; fi
 }
@@ -65,11 +74,15 @@ while IFS='|' read -r service variable fallback agent extra; do
   # The full builds install from /tmp copies and delete them; the copies that
   # stay are the ones under /agent and /adapter.
   if [ "$agent" != "-" ]; then
-    same_requirements "$base" /agent/requirements.txt "${agent}/requirements.txt" \
-      || { echo "${service}: ${agent}/requirements.txt differs from the running image's; build it in full"; exit 1; }
+    same_inputs "$base" /agent "${agent}" \
+      || { echo "${service}: ${agent}/requirements.txt or its lock differs from the running image's; build it in full"; exit 1; }
+    same_requirements "$base" /adapter/requirements.txt OpenScience/deploy/specialist-adapter/requirements.txt \
+      || { echo "${service}: the adapter's requirements differ from the running image's; build it in full"; exit 1; }
+  else
+    # The drug-evidence adapter installs the adapter's lock itself.
+    same_inputs "$base" /adapter OpenScience/deploy/specialist-adapter \
+      || { echo "${service}: the adapter's requirements or lock differ from the running image's; build it in full"; exit 1; }
   fi
-  same_requirements "$base" /adapter/requirements.txt OpenScience/deploy/specialist-adapter/requirements.txt \
-    || { echo "${service}: the adapter's requirements differ from the running image's; build it in full"; exit 1; }
   {
     printf 'FROM %s\n' "$base"
     if [ "$agent" != "-" ]; then printf 'COPY %s /agent\n' "$agent"; fi
@@ -91,8 +104,8 @@ done <<< "$ENGINES"
 # package is replaced.
 base=$(current_image EVIMED_META_AGENT_IMAGE evimed-meta-agent:0.9.0)
 docker image inspect "$base" > /dev/null || { echo "evimed-meta-agent: running image ${base} is not on this host; refusing"; exit 1; }
-same_requirements "$base" /app/requirements.txt 项目代码/meta/requirements.txt \
-  || { echo "evimed-meta-agent: requirements.txt differs from the running image's; build it in full"; exit 1; }
+same_inputs "$base" /app 项目代码/meta \
+  || { echo "evimed-meta-agent: requirements.txt or its lock differs from the running image's; build it in full"; exit 1; }
 target=$(next_tag "$base")
 printf 'FROM %s\nCOPY new_meta /app/new_meta\n' "$base" > /tmp/engine-delta-evimed-meta-agent.Dockerfile
 docker build -q -f /tmp/engine-delta-evimed-meta-agent.Dockerfile -t "$target" 项目代码/meta > /dev/null

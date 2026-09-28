@@ -60,11 +60,21 @@ RUN set -eux; \
 
 WORKDIR /adapter
 ARG AGENT_DIR
+# An engine's requirements.lock, when it has one, is what is installed: every
+# version pinned, resolved for this image's Python with the adapter's pins
+# below already applied (OpenScience/scripts/ops/compile-engine-locks.sh), so a
+# rebuild cannot take a dependency's newest release -- on 2026-09-27 an
+# unpinned openai 3.x broke the topic engine at import. The adapter's own
+# install then finds its pins satisfied. Without a lock the requirements file
+# is resolved at build time, as before.
 COPY OpenScience/deploy/specialist-adapter/requirements.txt /tmp/adapter-requirements.txt
-COPY ${AGENT_DIR}/requirements.txt /tmp/agent-requirements.txt
-RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/agent-requirements.txt \
-    && pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/adapter-requirements.txt \
-    && rm -f /tmp/adapter-requirements.txt /tmp/agent-requirements.txt
+COPY ${AGENT_DIR}/requirements.txt ${AGENT_DIR}/requirements.loc[k] /tmp/agent-requirements/
+RUN set -eux; \
+    agent_requirements=/tmp/agent-requirements/requirements.txt; \
+    if [ -f /tmp/agent-requirements/requirements.lock ]; then agent_requirements=/tmp/agent-requirements/requirements.lock; fi; \
+    pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r "${agent_requirements}"; \
+    pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/adapter-requirements.txt; \
+    rm -rf /tmp/adapter-requirements.txt /tmp/agent-requirements
 
 COPY ${AGENT_DIR} /agent
 

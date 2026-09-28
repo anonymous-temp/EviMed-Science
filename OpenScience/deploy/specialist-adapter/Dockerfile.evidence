@@ -11,11 +11,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     EVIMED_DRUG_LABEL_DB=/data/drug-label-index.sqlite
 
 WORKDIR /adapter
-COPY OpenScience/deploy/specialist-adapter/requirements.txt /tmp/requirements.txt
-RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/requirements.txt && rm -f /tmp/requirements.txt
+# The adapter's requirements.lock, when present, is what is installed: every
+# version pinned for this image's Python
+# (OpenScience/scripts/ops/compile-engine-locks.sh).
+COPY OpenScience/deploy/specialist-adapter/requirements.txt OpenScience/deploy/specialist-adapter/requirements.loc[k] /tmp/adapter-requirements/
+RUN set -eux; \
+    requirements=/tmp/adapter-requirements/requirements.txt; \
+    if [ -f /tmp/adapter-requirements/requirements.lock ]; then requirements=/tmp/adapter-requirements/requirements.lock; fi; \
+    pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r "${requirements}"; \
+    rm -rf /tmp/adapter-requirements
 
 COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_specialist_adapter
 COPY OpenScience/deploy/specialist-adapter/Dockerfile OpenScience/deploy/specialist-adapter/Dockerfile.evidence OpenScience/deploy/specialist-adapter/requirements.txt /adapter/
+# The lock this image was installed from, where host-engine-delta.sh reads it.
+COPY OpenScience/deploy/specialist-adapter/requirements.txt OpenScience/deploy/specialist-adapter/requirements.loc[k] /adapter/
 RUN python -m evimed_specialist_adapter.audit_receipt --write-adapter-manifest /adapter/adapter-evidence.json
 COPY OpenScience/runtime/mcp/evimed-research /mcp
 RUN python -m compileall -q /adapter/evimed_specialist_adapter /mcp
