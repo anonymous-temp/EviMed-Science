@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1284,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/results.json",
       "sha256": "997ee89c8bbc79e029be91eca3e9a780dbe3083ac2acea355aecdc20a04884b8"
     },
     {
       "bytes": 1815,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/scientific-deep-learning-report.md",
-      "sha256": "b7e5bb611b324bf330c3739c3ab003d868bf22e1419339ba38ed2aaadfb042b7"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/scientific-deep-learning-report.md",
+      "sha256": "f51783f42189ce219c7b092f493f135d2bdfc16519fc556fff38ce8b579ea14f"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:56.751313Z",
+  "finishedAt": "2026-09-28T08:40:40.410785Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "scientific-deep-learning",
-  "startedAt": "2026-08-26T05:24:56.167726Z",
+  "startedAt": "2026-09-28T08:40:38.625653Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for scientific-deep-learning and wrote 2 verified artifacts.",
   "warnings": [

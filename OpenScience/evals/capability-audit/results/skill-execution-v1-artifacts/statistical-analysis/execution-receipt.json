@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1420,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/statistical-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/statistical-analysis/results.json",
       "sha256": "f09dc0ad61f32ea1933c9c445ee005e0431555da6747b12a59e7fa52781af67d"
     },
     {
       "bytes": 1841,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/statistical-analysis/statistical-analysis-report.md",
-      "sha256": "2d4efe1b761ffdec7f48643ab0b2ae4e28d1f201d4a337c2e1953d203beda795"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/statistical-analysis/statistical-analysis-report.md",
+      "sha256": "8a6aa40e1b4e2c009e42017019b03f9f89ef3ca55869b21cbba8a7b1f5c7d51b"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:59.132342Z",
+  "finishedAt": "2026-09-28T08:40:43.675394Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "statistical-analysis",
-  "startedAt": "2026-08-26T05:24:59.125891Z",
+  "startedAt": "2026-09-28T08:40:43.668464Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for statistical-analysis and wrote 2 verified artifacts.",
   "warnings": []

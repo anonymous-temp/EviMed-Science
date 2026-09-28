@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 546,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/survival-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/survival-analysis/results.json",
       "sha256": "13f757028c87a7ec2a18cd289434ef6d9cbbfb5324ef35799d11f9adf02a3936"
     },
     {
       "bytes": 1121,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/survival-analysis/survival-analysis-report.md",
-      "sha256": "2ab7b69f1176df2d0f62f190f5f34dbed308fb5ea6be1cba6a865e1307c605fc"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/survival-analysis/survival-analysis-report.md",
+      "sha256": "7a83d4b4137eadb66bc4161e5490dba9fbc838eaacde0904261dc88feaae43e3"
     }
   ],
-  "finishedAt": "2026-08-26T05:25:00.791985Z",
+  "finishedAt": "2026-09-28T08:40:46.180300Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "survival-analysis",
-  "startedAt": "2026-08-26T05:25:00.791422Z",
+  "startedAt": "2026-09-28T08:40:46.179621Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for survival-analysis and wrote 2 verified artifacts.",
   "warnings": [

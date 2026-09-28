@@ -1,17 +1,17 @@
 {
   "artifacts": [
     {
-      "bytes": 234,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/simulation-optimization/results.json",
-      "sha256": "0cc07ef7744bfa379d885be07ab5bd4d5369db0505686bde6bac1cdcb979a548"
+      "bytes": 236,
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/simulation-optimization/results.json",
+      "sha256": "340357fb0050b85ca11e2c63b597be198ef1d605bea2afa3a18aab2ace0270a8"
     },
     {
-      "bytes": 784,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/simulation-optimization/simulation-optimization-report.md",
-      "sha256": "61242d45729afde8b8d0947a3ba3ba266caf197a656d0053dad906165ac1c728"
+      "bytes": 786,
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/simulation-optimization/simulation-optimization-report.md",
+      "sha256": "d25b644feb7b6a2bfd1877b194ef0ad05422cc2f07f190c7b246bb1fc42be7dd"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:57.638498Z",
+  "finishedAt": "2026-09-28T08:40:41.480689Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "simulation-optimization",
-  "startedAt": "2026-08-26T05:24:57.633989Z",
+  "startedAt": "2026-09-28T08:40:41.470417Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for simulation-optimization and wrote 2 verified artifacts.",
   "warnings": [

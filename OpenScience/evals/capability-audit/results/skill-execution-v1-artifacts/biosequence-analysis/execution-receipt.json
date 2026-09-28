@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 342,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/results.json",
       "sha256": "4a80030a6c61d438a883b9f9509376419db7642d3283809ba0c8a8cb4e543c43"
     },
     {
       "bytes": 918,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/biosequence-analysis-report.md",
-      "sha256": "b8658df9c366a371d981ad4fb82246e5aaacef1362cf176992f38294d00fdb48"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/biosequence-analysis-report.md",
+      "sha256": "57022403c07dacdadcafd220786bcbf616540e8fc402354ba6d6391af425c0fe"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:35.885948Z",
+  "finishedAt": "2026-09-28T08:40:09.462468Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biosequence-analysis",
-  "startedAt": "2026-08-26T05:24:35.885560Z",
+  "startedAt": "2026-09-28T08:40:09.461815Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biosequence-analysis and wrote 2 verified artifacts.",
   "warnings": [

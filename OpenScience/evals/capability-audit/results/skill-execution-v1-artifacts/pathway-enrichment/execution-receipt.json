@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 397,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/results.json",
       "sha256": "c837f1360237ab53726a3aae6e6c5d22969657beb220c0e286601c81d45502a5"
     },
     {
       "bytes": 954,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/pathway-enrichment-report.md",
-      "sha256": "6a25029a3bc94fc8299863f84d99d7817528cd99f314212be413177592d27189"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/pathway-enrichment-report.md",
+      "sha256": "32451ee05138500427137213fc53dc13ead55b94e55021fe23e28c7072791cdd"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:51.480480Z",
+  "finishedAt": "2026-09-28T08:40:32.270043Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "pathway-enrichment",
-  "startedAt": "2026-08-26T05:24:51.479774Z",
+  "startedAt": "2026-09-28T08:40:32.269168Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for pathway-enrichment and wrote 2 verified artifacts.",
   "warnings": [

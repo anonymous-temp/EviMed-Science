@@ -1,6 +1,6 @@
 # single-cell-analysis execution report
 
-- Generated: 2026-08-26T05:24:58.411468Z
+- Generated: 2026-09-28T08:40:42.680852Z
 - Engine schema: 1
 
 ## Executed result
@@ -55,9 +55,9 @@
     "medianCountsPerCell": 1.9366182393681521,
     "medianDetectedFeatures": 2.0,
     "pcaExplainedVariance": [
-      0.6930571087603449,
+      0.693057108760345,
       0.173636720855255,
-      0.10567221218456685
+      0.1056722121845667
     ]
   },
   "table": {

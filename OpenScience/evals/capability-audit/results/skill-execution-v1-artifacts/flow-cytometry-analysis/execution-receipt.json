@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1549,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/flow-cytometry-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/flow-cytometry-analysis/results.json",
       "sha256": "d28a3e1b08daad5ecad3355ee924a5fb102e6e07644ea6c4c877d834d2c88f29"
     },
     {
       "bytes": 2103,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/flow-cytometry-analysis/flow-cytometry-analysis-report.md",
-      "sha256": "d5d7bc07a0291495ef442806b6d2ee90ccef822a81ce2034ff5a8b91aec3a452"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/flow-cytometry-analysis/flow-cytometry-analysis-report.md",
+      "sha256": "5ed26eb521d88bab563246f201f1cf3e7312174fbd1cdc55f86ae474c49230d3"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:43.465745Z",
+  "finishedAt": "2026-09-28T08:40:20.179487Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "flow-cytometry-analysis",
-  "startedAt": "2026-08-26T05:24:43.462322Z",
+  "startedAt": "2026-09-28T08:40:20.173502Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for flow-cytometry-analysis and wrote 2 verified artifacts.",
   "warnings": [

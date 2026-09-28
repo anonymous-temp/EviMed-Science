@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1162,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/exploratory-data-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/exploratory-data-analysis/results.json",
       "sha256": "45e39be3403dea707d21b249b92c72e919e78cc02c99a443f242bd1b93b7bef6"
     },
     {
       "bytes": 1588,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/exploratory-data-analysis/exploratory-data-analysis-report.md",
-      "sha256": "19a17914d72b5aee3097430d21d1e496d676e65462a06f7dab945edefe4aeeb7"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/exploratory-data-analysis/exploratory-data-analysis-report.md",
+      "sha256": "7e8d933b99b8947f09be8e7badd11d3d2e468cc9d80de0625be00988658f38ab"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:42.756189Z",
+  "finishedAt": "2026-09-28T08:40:19.103160Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "exploratory-data-analysis",
-  "startedAt": "2026-08-26T05:24:42.753218Z",
+  "startedAt": "2026-09-28T08:40:19.097895Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for exploratory-data-analysis and wrote 2 verified artifacts.",
   "warnings": []

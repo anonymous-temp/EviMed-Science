@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 130,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/results.json",
       "sha256": "6b34bb32da1b7d073abe456b0333b2f4936e3aaee0aa69de7403457227692bb1"
     },
     {
       "bytes": 713,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/genome-variant-analysis-report.md",
-      "sha256": "8df544cd537618d3fcb4efe9fdf3d90ecb36258e4b61ab67f888b9298f18c109"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/genome-variant-analysis-report.md",
+      "sha256": "31e2f4f5f7b2e2df752ef85c0b17d6bc7c1ab13e034293aa212bf81a8f3e1291"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:44.244807Z",
+  "finishedAt": "2026-09-28T08:40:21.298409Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "genome-variant-analysis",
-  "startedAt": "2026-08-26T05:24:44.244491Z",
+  "startedAt": "2026-09-28T08:40:21.297945Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for genome-variant-analysis and wrote 2 verified artifacts.",
   "warnings": [

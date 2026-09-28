@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 206,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/reproducible-workflows/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/reproducible-workflows/results.json",
       "sha256": "2b85f684cb83db5e385b56ec408e47ddcd520f48cdee248f0ba8d3f6b3778b4a"
     },
     {
       "bytes": 629,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/reproducible-workflows/reproducible-workflows-report.md",
-      "sha256": "28b9f82d8e35b4919e1f6ed135c8a7ce111f5f28d3e74898db173cb3b6fff653"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/reproducible-workflows/reproducible-workflows-report.md",
+      "sha256": "fb23d3ed56fa29e02ec68fde404a6cd1459ddec50d19d56bfd5e9d54bced1453"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:53.933897Z",
+  "finishedAt": "2026-09-28T08:40:35.427547Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "reproducible-workflows",
-  "startedAt": "2026-08-26T05:24:53.933612Z",
+  "startedAt": "2026-09-28T08:40:35.427085Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for reproducible-workflows and wrote 2 verified artifacts.",
   "warnings": []

@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 155,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/results.json",
       "sha256": "de7edc8b44f1d5fba3f228e98c6413da2f24cbcd459b603323ee594d5cc2f01f"
     },
     {
       "bytes": 671,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/biomedical-knowledge-graph-report.md",
-      "sha256": "722acd4bd9b3755540bc6c1146b7c6de546efd7ca6a671dc53a3ba0eb446d0a9"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/biomedical-knowledge-graph-report.md",
+      "sha256": "710948bff0517f2fcdc63e08d818cb2ef7685bd181d219bceeed30d2849579c2"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:34.150600Z",
+  "finishedAt": "2026-09-28T08:40:06.648909Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biomedical-knowledge-graph",
-  "startedAt": "2026-08-26T05:24:34.150275Z",
+  "startedAt": "2026-09-28T08:40:06.648345Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biomedical-knowledge-graph and wrote 2 verified artifacts.",
   "warnings": [

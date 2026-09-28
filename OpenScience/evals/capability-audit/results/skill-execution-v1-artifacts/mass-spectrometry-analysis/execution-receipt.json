@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 165,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/results.json",
       "sha256": "2d12f04478b2587438b475def744ada5a4c61fd49a4d178bd919b46f8be8ef96"
     },
     {
       "bytes": 743,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/mass-spectrometry-analysis-report.md",
-      "sha256": "a83a3fb414b0532b4398d0105801ecc697912b4be18fd99f0e5857fdb19ba9cd"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/mass-spectrometry-analysis-report.md",
+      "sha256": "ac9188316d46c1efdab20a9e023e5ef2278af0cee400c6c7de0f262fc18d089a"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:47.417202Z",
+  "finishedAt": "2026-09-28T08:40:25.561942Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "mass-spectrometry-analysis",
-  "startedAt": "2026-08-26T05:24:47.416773Z",
+  "startedAt": "2026-09-28T08:40:25.561001Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for mass-spectrometry-analysis and wrote 2 verified artifacts.",
   "warnings": [

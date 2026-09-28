@@ -1,6 +1,6 @@
 # citation-integrity execution report
 
-- Generated: 2026-08-26T05:24:38.868214Z
+- Generated: 2026-09-28T08:40:13.726675Z
 - Engine schema: 1
 
 ## Executed result

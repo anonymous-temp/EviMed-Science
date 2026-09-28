@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 764,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/phylogenetic-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/phylogenetic-analysis/results.json",
       "sha256": "a20bbf3f787e4c901be4ced19665a62e8af5df6863b88cbc96b187caf55b410e"
     },
     {
       "bytes": 1341,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/phylogenetic-analysis/phylogenetic-analysis-report.md",
-      "sha256": "5a4b6f4ab960c60aa6db35f5790a7e03d7b98c3e0b07a363c521f6ae3ce38445"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/phylogenetic-analysis/phylogenetic-analysis-report.md",
+      "sha256": "e3870633d1c966e304183bb4da332b76eab323eeb25966c97add652949eb6ee9"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:52.394495Z",
+  "finishedAt": "2026-09-28T08:40:33.264230Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "phylogenetic-analysis",
-  "startedAt": "2026-08-26T05:24:52.394020Z",
+  "startedAt": "2026-09-28T08:40:33.263655Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for phylogenetic-analysis and wrote 2 verified artifacts.",
   "warnings": [

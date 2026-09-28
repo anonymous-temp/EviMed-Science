@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1311,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-data-engineering/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-data-engineering/results.json",
       "sha256": "2f121cf25b7bc9edfa62cd7491942d2166563bff87116a910d7aa42dd6740610"
     },
     {
       "bytes": 1739,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-data-engineering/scientific-data-engineering-report.md",
-      "sha256": "87007a47e176eaae147193b308660630391a73f0861093a04176f503fa99c467"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-data-engineering/scientific-data-engineering-report.md",
+      "sha256": "b40a07ee9d4127277bc1653e239d9d44251725bfab0d4f0d8786e7b6372bcb6c"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:55.360316Z",
+  "finishedAt": "2026-09-28T08:40:37.566876Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "scientific-data-engineering",
-  "startedAt": "2026-08-26T05:24:55.356605Z",
+  "startedAt": "2026-09-28T08:40:37.561207Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for scientific-data-engineering and wrote 2 verified artifacts.",
   "warnings": []

@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 191,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/quantum-computing-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/quantum-computing-analysis/results.json",
       "sha256": "47f3999f4615fea9ef27218df23b4ebb3c7720cb70c0bb578a6afa23d2f85dad"
     },
     {
       "bytes": 701,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/quantum-computing-analysis/quantum-computing-analysis-report.md",
-      "sha256": "531f27bd09a129df4939b22a043c23660ca71ec9f850b57a3960ce799ac7a102"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/quantum-computing-analysis/quantum-computing-analysis-report.md",
+      "sha256": "bd72fb4aa85e8bf19cf9ed20d602dcbeb346309073441ae7c4bf520eaae54f82"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:53.167934Z",
+  "finishedAt": "2026-09-28T08:40:34.334956Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "quantum-computing-analysis",
-  "startedAt": "2026-08-26T05:24:53.164688Z",
+  "startedAt": "2026-09-28T08:40:34.334387Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for quantum-computing-analysis and wrote 2 verified artifacts.",
   "warnings": [

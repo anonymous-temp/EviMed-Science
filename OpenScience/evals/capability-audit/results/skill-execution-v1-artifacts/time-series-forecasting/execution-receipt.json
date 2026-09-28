@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 356,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/results.json",
       "sha256": "17c7d78ffe30291f71175fe3b8709a5f2adc1802ee531a3b737a3dae47515724"
     },
     {
       "bytes": 936,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/time-series-forecasting-report.md",
-      "sha256": "76c2ecacda2996e1c2a16e6193836c057a096f85b7dd6fabea379c01de3a0811"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/time-series-forecasting-report.md",
+      "sha256": "fd0e7d7ec5fc9f4a5db8f571e86fc9aef69e3d68b99d8b3e0deda0fd9da9f59c"
     }
   ],
-  "finishedAt": "2026-08-26T05:25:01.605494Z",
+  "finishedAt": "2026-09-28T08:40:47.243853Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "time-series-forecasting",
-  "startedAt": "2026-08-26T05:25:01.604179Z",
+  "startedAt": "2026-09-28T08:40:47.242108Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for time-series-forecasting and wrote 2 verified artifacts.",
   "warnings": [

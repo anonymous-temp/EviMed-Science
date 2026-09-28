@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 877,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/research-grant-development/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/research-grant-development/results.json",
       "sha256": "67037896da814545180fc53e2d4d177fbed4d76627f6e32d6b2374ddaa2deb00"
     },
     {
       "bytes": 1304,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/research-grant-development/research-grant-development-report.md",
-      "sha256": "4c44d36f2ee1eb5aa26067505088b7dd19ac39eb5aaf87f6eadf436b6b265e94"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/research-grant-development/research-grant-development-report.md",
+      "sha256": "737be59278c49976e6658a6e933a4ee92a2ed19ac224876d99a4b73b2c0eb8cb"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:54.654442Z",
+  "finishedAt": "2026-09-28T08:40:36.463464Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "research-grant-development",
-  "startedAt": "2026-08-26T05:24:54.654091Z",
+  "startedAt": "2026-09-28T08:40:36.462950Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for research-grant-development and wrote 2 verified artifacts.",
   "warnings": []

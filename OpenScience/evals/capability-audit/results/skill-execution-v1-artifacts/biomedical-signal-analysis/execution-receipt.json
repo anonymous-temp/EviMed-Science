@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 431,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-signal-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-signal-analysis/results.json",
       "sha256": "255d74345a94a1e1d368ad07c651008656467f4d92616639857c3c2582937de3"
     },
     {
       "bytes": 1014,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-signal-analysis/biomedical-signal-analysis-report.md",
-      "sha256": "e8f0a2aa2346ba73af2d3b6e3c7e37442a7d6a8252151b86508a4c2a5b76f80e"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-signal-analysis/biomedical-signal-analysis-report.md",
+      "sha256": "0016e23e06344de5988dc5c6c0a5ae18d161519a7d2255ee3349f36a26ea9183"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:35.018677Z",
+  "finishedAt": "2026-09-28T08:40:08.430533Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biomedical-signal-analysis",
-  "startedAt": "2026-08-26T05:24:35.008502Z",
+  "startedAt": "2026-09-28T08:40:08.423097Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biomedical-signal-analysis and wrote 2 verified artifacts.",
   "warnings": [

@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1321,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/results.json",
       "sha256": "345c358bf9587875557bc61ec6dcc3c67047ddc51bb43dcb2d5c32687122c1ba"
     },
     {
       "bytes": 1887,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/digital-pathology-analysis-report.md",
-      "sha256": "35de0ba162b0e78fa1106e35f64628c5bace075126e258978434376cf0f0a547"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/digital-pathology-analysis-report.md",
+      "sha256": "9a014ade23db23b2999a50ff44ba58406501f0321c2383c808f188e02d687199"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:40.361750Z",
+  "finishedAt": "2026-09-28T08:40:15.947385Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "digital-pathology-analysis",
-  "startedAt": "2026-08-26T05:24:40.358443Z",
+  "startedAt": "2026-09-28T08:40:15.942091Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for digital-pathology-analysis and wrote 2 verified artifacts.",
   "warnings": [

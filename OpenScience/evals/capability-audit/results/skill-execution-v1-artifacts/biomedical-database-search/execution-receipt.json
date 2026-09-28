@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 212,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-database-search/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-database-search/results.json",
       "sha256": "5876bb28aac5873b6fd9d17cbe35a7d866ee91c8249d1f7267b26d1e5fb1d8fc"
     },
     {
       "bytes": 766,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-database-search/biomedical-database-search-report.md",
-      "sha256": "4d746a12e8c8c7a5129bddb1d382239ce8950eb3cbb26b437fa0fd51061eec18"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-database-search/biomedical-database-search-report.md",
+      "sha256": "fc6d658d9cac97075151582140c7de6cdd060e5f6f00cb8401e099825b29eabc"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:33.393163Z",
+  "finishedAt": "2026-09-28T08:40:05.097144Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biomedical-database-search",
-  "startedAt": "2026-08-26T05:24:33.392818Z",
+  "startedAt": "2026-09-28T08:40:05.096682Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biomedical-database-search and wrote 2 verified artifacts.",
   "warnings": [

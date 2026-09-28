@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1275,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/drug-discovery-data/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/drug-discovery-data/results.json",
       "sha256": "6f13c56a42ef6c5e142a42aa5afb415bdaad1ec6d283efa32fc668d7fa88231d"
     },
     {
       "bytes": 1853,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/drug-discovery-data/drug-discovery-data-report.md",
-      "sha256": "5740a42c34012d0261ef504a22ed76ddd72a6e356d5b993b827fcf044fece92e"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/drug-discovery-data/drug-discovery-data-report.md",
+      "sha256": "ebda4dea9b6d7a9707e8b4bbdd57db2e2dfe2007397874964beb8f709cf3412e"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:41.227464Z",
+  "finishedAt": "2026-09-28T08:40:16.974445Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "drug-discovery-data",
-  "startedAt": "2026-08-26T05:24:41.223659Z",
+  "startedAt": "2026-09-28T08:40:16.968718Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for drug-discovery-data and wrote 2 verified artifacts.",
   "warnings": [

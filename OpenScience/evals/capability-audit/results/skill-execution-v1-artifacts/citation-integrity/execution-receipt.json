@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 200,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/results.json",
       "sha256": "a0be2c6cd7f15c343e8ea33d0a292dc7ae9bda2f07bfac490e16b78df35314d4"
     },
     {
       "bytes": 777,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/citation-integrity-report.md",
-      "sha256": "598e44bfe43c51c5542b28f2e38122a8ca9a45a8f47a207d2faabea383587522"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/citation-integrity-report.md",
+      "sha256": "55a9924bbee57e152bcb727267caf50d5637dc143dbcdd1c530b116ac64bd7a3"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:38.868579Z",
+  "finishedAt": "2026-09-28T08:40:13.726950Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "citation-integrity",
-  "startedAt": "2026-08-26T05:24:38.867600Z",
+  "startedAt": "2026-09-28T08:40:13.726149Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for citation-integrity and wrote 2 verified artifacts.",
   "warnings": [

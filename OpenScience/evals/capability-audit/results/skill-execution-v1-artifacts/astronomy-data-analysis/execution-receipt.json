@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1162,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/results.json",
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/results.json",
       "sha256": "45e39be3403dea707d21b249b92c72e919e78cc02c99a443f242bd1b93b7bef6"
     },
     {
       "bytes": 1731,
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/astronomy-data-analysis-report.md",
-      "sha256": "ee1d7f2fbc0ef589319fd5357d792ecba9ccbdb16737d740b8159a2689fb747b"
+      "path": "/workspace/.audit-repo/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/astronomy-data-analysis-report.md",
+      "sha256": "2d3a4cd70e25d8231d21187be42d5d79f76012aef488a83f7c2124582072440a"
     }
   ],
-  "finishedAt": "2026-08-26T05:24:31.984979Z",
+  "finishedAt": "2026-09-28T08:40:01.961734Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "astronomy-data-analysis",
-  "startedAt": "2026-08-26T05:24:31.978085Z",
+  "startedAt": "2026-09-28T08:40:01.956332Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for astronomy-data-analysis and wrote 2 verified artifacts.",
   "warnings": [
