@@ -169,7 +169,10 @@ export async function apply(ctx, config) {
       const agent = payload?.agent
       if (!step.first || !step.root || !agent || !step.sessionId || asked.has(step.sessionId)) return { allow: true }
       asked.add(step.sessionId)
-      if (asked.size > 1_000) asked.delete(asked.values().next().value)
+      if (asked.size > 1_000) {
+        const oldest = asked.values().next().value
+        if (oldest !== undefined) asked.delete(oldest)
+      }
       const response = await callControlPlane(ctx, config, 'session', { sessionId: step.sessionId })
       const text = response.ok && typeof response.data?.context === 'string' ? response.data.context.trim() : ''
       if (text) injectContext(agent, text, name)

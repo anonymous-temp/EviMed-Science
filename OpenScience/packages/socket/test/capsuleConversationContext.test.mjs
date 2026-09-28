@@ -13,7 +13,10 @@ import { apply } from '../plugins/capsule.mjs'
 
 const TRIAL = '<evimed-capsule-trial>\n用户正在试用别人分享的胶囊「李主任的工作方式」…\n</evimed-capsule-trial>'
 
-/** A control plane that answers `session` for one trial conversation. */
+/**
+ * A control plane that answers `session` for one trial conversation.
+ * @param {import('node:test').TestContext} t
+ */
 async function controlPlane(t) {
   /** @type {any[]} */
   const asked = []
