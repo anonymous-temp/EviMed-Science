@@ -30,7 +30,7 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
 When OpenGWAS is blocked, or the requested study is on the NHGRI-EBI GWAS
 Catalog, give both sides as catalogue studies:
 `{"type": "gwas_catalog", "accession": "GCST..."}`. Find the study from its
-paper (`literature_search`), then pass that PubMed id as
+paper (`mcp__evimed__literature_search`), then pass that PubMed id as
 `{"type": "gwas_catalog", "pubmedId": "..."}` or an accession a tool result
 showed you; a paper with several studies is refused with the list to choose
 from. Never write an accession or PubMed id you have not seen in a tool result.
