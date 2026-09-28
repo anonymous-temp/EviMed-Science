@@ -121,6 +121,11 @@ For EVERY outcome, supply comparative_design using its closed schema vocabulary:
   parallel_rct from missing information or from the review's eligible designs.
 - Use an empty string for a non-RCT result; keep that study's actual design in
   study_design and its existing family-specific fields. Do not relabel it an RCT.
+- treatment_arm and reference_arm name the two arms of that comparison as the
+  source labels them. When an arm is the review's intervention or comparator
+  under an abbreviation or brand name, add the review's own term in parentheses
+  (for example "Topical TXA 3 g (tranexamic acid)"); never add it to an arm that
+  receives something else.
 
 For DIAGNOSTIC-ACCURACY outcomes:
 - true_positive, false_negative, false_positive, true_negative

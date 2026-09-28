@@ -22,6 +22,10 @@ from new_meta.schemas.study import ConflictNote, ExtractedStudy, OutcomeData
 
 _RATIO_MEASURES = {"OR", "RR"}
 _COUNT_MEASURES = {"OR", "RR", "RD"}
+#: Measures computed deterministically from source-verified arm summaries
+#: (mean, SD, n per arm). Only MD: its shared-control covariance is exact
+#: (the control mean's variance, SD_c^2 / n_c); an SMD's is not.
+_ARM_SUMMARY_MEASURES = {"MD"}
 _REPORTED_RATIO_MEASURES = {"OR", "RR", "HR", "IRR"}
 _Z_975 = 1.959963984540054
 
@@ -154,6 +158,8 @@ def reconcile_extracted_rct_designs(
                     updates["precision_basis"] = "source_reported_effect"
                 elif _can_compute_from_counts(outcome, protocol):
                     updates["precision_basis"] = "computed_from_source_verified_2x2"
+                elif _can_compute_from_arm_summaries(outcome, protocol):
+                    updates["precision_basis"] = "computed_from_source_verified_arm_summaries"
                 elif outcome.precision_basis == "computed_from_source_verified_2x2":
                     # A prior migration may have incorrectly labelled HR counts.
                     updates["precision_basis"] = ""
@@ -357,7 +363,41 @@ def _is_source_backed_primary_contrast(outcome: OutcomeData, protocol: ResearchP
     return (
         _matches_primary_outcome(outcome.outcome_name, protocol.pico.outcome_primary)
         and outcome.source_quote_verified is True
-        and (_has_complete_2x2(outcome) or _has_protocol_reported_effect(outcome, protocol))
+        and (
+            _has_complete_2x2(outcome)
+            or _can_compute_from_arm_summaries(outcome, protocol)
+            or _has_protocol_reported_effect(outcome, protocol)
+        )
+    )
+
+
+def _has_complete_arm_summaries(outcome: OutcomeData) -> bool:
+    """Mean, SD and size of both arms, as the source reports them.
+
+    A continuous primary outcome is most often reported this way (total blood
+    loss in mL for each TKA arm), and without it a three-arm trial's rows had
+    no precision basis and were dropped from the ledger whole: on 2026-09-28
+    brief ma-001 lost both of its extracted trials to that.
+    """
+    values = (
+        outcome.mean_intervention, outcome.sd_intervention, outcome.n_intervention,
+        outcome.mean_control, outcome.sd_control, outcome.n_control,
+    )
+    if any(value is None for value in values):
+        return False
+    return (
+        float(outcome.sd_intervention) > 0 and float(outcome.sd_control) > 0
+        and float(outcome.n_intervention) > 1 and float(outcome.n_control) > 1
+    )
+
+
+def _can_compute_from_arm_summaries(outcome: OutcomeData, protocol: ResearchProtocol) -> bool:
+    return (
+        str(protocol.effect_measure or "").upper() in _ARM_SUMMARY_MEASURES
+        and str(outcome.outcome_type or "").strip().lower() == "continuous"
+        and not outcome.reported_effect_adjusted
+        and not _reports_hazard_ratio(outcome)
+        and _has_complete_arm_summaries(outcome)
     )
 
 
@@ -477,10 +517,17 @@ def _reports_hazard_ratio(outcome: OutcomeData) -> bool:
 
 
 def _computed_protocol_effect(outcome: OutcomeData, protocol: ResearchProtocol) -> tuple[float, float]:
+    if _can_compute_from_arm_summaries(outcome, protocol):
+        return effect_size_engine.compute_effect_size(
+            outcome_type="continuous",
+            effect_measure=str(protocol.effect_measure or "").upper(),
+            mean_i=outcome.mean_intervention, sd_i=outcome.sd_intervention, n_i=outcome.n_intervention,
+            mean_c=outcome.mean_control, sd_c=outcome.sd_control, n_c=outcome.n_control,
+        )
     if not _can_compute_from_counts(outcome, protocol):
         raise ValueError(
-            "a crude RR, OR, or RD requires source-verified 2x2 counts; "
-            "HR and adjusted effects require reported precision"
+            "a crude RR, OR, or RD requires source-verified 2x2 counts, an MD source-verified "
+            "arm means, SDs and sizes; HR and adjusted effects require reported precision"
         )
     return effect_size_engine.compute_effect_size(
         outcome_type="dichotomous",
@@ -502,7 +549,25 @@ def _shared_control_covariance(
         or _reports_hazard_ratio(left) or _reports_hazard_ratio(right)
     ):
         return None
+    if str(measure or "").upper() in _ARM_SUMMARY_MEASURES:
+        return _arm_shared_control_covariance(left, right)
     return _count_shared_control_covariance(left, right, measure)
+
+
+def _arm_shared_control_covariance(left: OutcomeData, right: OutcomeData) -> float | None:
+    """Cov(MD_1, MD_2) for two arms against one control arm: Var(control mean).
+
+    Both contrasts subtract the same control mean, so their covariance is that
+    mean's variance, SD_c^2 / n_c, exactly. Only when both rows report the same
+    control summaries; anything else is left unresolved and the design-aware
+    engine refuses the study rather than treat the rows as independent.
+    """
+    if not (_has_complete_arm_summaries(left) and _has_complete_arm_summaries(right)):
+        return None
+    control = (left.mean_control, left.sd_control, left.n_control)
+    if control != (right.mean_control, right.sd_control, right.n_control):
+        return None
+    return float(left.sd_control) ** 2 / float(left.n_control)
 
 
 def _retire_legacy_count_covariances(
