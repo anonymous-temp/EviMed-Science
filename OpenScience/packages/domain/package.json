@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Pure EviMed domain vocabulary: contract kinds, gate rules, state machines, error codes, workspace layout. Zero dependencies, browser-safe.",
   "license": "MIT",
+  "sideEffects": false,
   "files": [
     "index.mjs",
     "src"
