@@ -5008,9 +5008,30 @@ def _patient_total_claim_context(manuscript: str, start: int, end: int) -> bool:
     return any(re.search(pattern, window, flags=re.IGNORECASE) for pattern in patterns)
 
 
+def _artifact_reference_prose(manuscript: str) -> str:
+    """Return the manuscript text that can cross-reference its own tables and figures.
+
+    Markdown table rows and fenced blocks are excluded: a source-location cell
+    such as "Table 5 (Drained Blood, ml)" names a table of the original trial
+    report, not a table of this manuscript.
+    """
+    kept: list[str] = []
+    in_fence = False
+    for line in str(manuscript or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or stripped.startswith("|"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def _detect_artifact_reference_mismatches(manuscript: str) -> list[dict[str, Any]]:
-    figure_refs = _numbered_artifact_refs(manuscript, r"(?:Figure|Fig\.?)") | _numbered_artifact_refs(manuscript, r"图")
-    table_refs = _numbered_artifact_refs(manuscript, r"Table") | _numbered_artifact_refs(manuscript, r"表")
+    prose = _artifact_reference_prose(manuscript)
+    figure_refs = _numbered_artifact_refs(prose, r"(?:Figure|Fig\.?)") | _numbered_artifact_refs(prose, r"图")
+    table_refs = _numbered_artifact_refs(prose, r"Table") | _numbered_artifact_refs(prose, r"表")
     figure_defs = _numbered_artifact_definitions(manuscript, r"(?:Figure|Fig\.?)") | _numbered_artifact_definitions(manuscript, r"图")
     table_defs = _numbered_artifact_definitions(manuscript, r"Table") | _numbered_artifact_definitions(manuscript, r"表")
 
@@ -5035,8 +5056,9 @@ def _detect_artifact_reference_mismatches(manuscript: str) -> list[dict[str, Any
 
 
 def _repair_artifact_reference_mismatches(manuscript: str) -> tuple[str, list[dict[str, Any]]]:
-    figure_refs = _numbered_artifact_refs(manuscript, r"(?:Figure|Fig\.?)") | _numbered_artifact_refs(manuscript, r"图")
-    table_refs = _numbered_artifact_refs(manuscript, r"Table") | _numbered_artifact_refs(manuscript, r"表")
+    prose = _artifact_reference_prose(manuscript)
+    figure_refs = _numbered_artifact_refs(prose, r"(?:Figure|Fig\.?)") | _numbered_artifact_refs(prose, r"图")
+    table_refs = _numbered_artifact_refs(prose, r"Table") | _numbered_artifact_refs(prose, r"表")
     figure_defs = _numbered_artifact_definitions(manuscript, r"(?:Figure|Fig\.?)") | _numbered_artifact_definitions(manuscript, r"图")
     table_defs = _numbered_artifact_definitions(manuscript, r"Table") | _numbered_artifact_definitions(manuscript, r"表")
     missing_figures = sorted(figure_refs - figure_defs)
@@ -5081,8 +5103,12 @@ def _repair_artifact_reference_mismatches(manuscript: str) -> tuple[str, list[di
 def _drop_sentences_with_artifact_ref(text: str, pattern: re.Pattern) -> tuple[str, bool]:
     changed = False
     repaired_lines = []
+    in_fence = False
     for line in text.splitlines():
-        if not pattern.search(line):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+        if in_fence or stripped.startswith("```") or stripped.startswith("|") or not pattern.search(line):
             repaired_lines.append(line)
             continue
         sentences = re.split(r"(?<=[.!?])\s+", line)

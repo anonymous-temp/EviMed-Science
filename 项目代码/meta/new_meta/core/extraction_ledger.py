@@ -348,13 +348,23 @@ def ensure_project_review_id(project: Project) -> str:
 
 def _study_key(study: ExtractedStudy) -> str:
     characteristics = study.characteristics
-    raw = (
-        characteristics.pmid
-        or characteristics.doi
-        or characteristics.study_id
-        or characteristics.title
-        or "study"
+    return study_key_from_identifiers(
+        pmid=characteristics.pmid,
+        doi=characteristics.doi,
+        study_id=characteristics.study_id,
+        title=characteristics.title,
     )
+
+
+def study_key_from_identifiers(
+    *,
+    pmid: object = None,
+    doi: object = None,
+    study_id: object = None,
+    title: object = None,
+) -> str:
+    """Return the ledger study key for raw study identifiers (see ``result_entity_id``)."""
+    raw = pmid or doi or study_id or title or "study"
     normalized = re.sub(r"[^a-zA-Z0-9]+", "-", str(raw).strip().lower()).strip("-")
     if normalized:
         return normalized[:96]

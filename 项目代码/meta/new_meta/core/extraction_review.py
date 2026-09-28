@@ -415,6 +415,63 @@ def load_extraction_outcome_rows(project: Project) -> dict[str, dict]:
     return rows
 
 
+def load_result_entity_row_aliases(project: Project) -> dict[str, str]:
+    """Map ledger result ids (``result:<study key>:<index>``) to extraction row ids.
+
+    Rows that entered a compiled synthesis are addressed by the ledger's result
+    id, while the persisted extraction outcome they were imported from is
+    addressed as ``<study id>:<index>``.  Both name the same outcome.
+    """
+    from new_meta.core.extraction_ledger import study_key_from_identifiers
+
+    studies = project.load_json("all_extractions.json", subdir="extraction") or []
+    if not isinstance(studies, list):
+        return {}
+    aliases: dict[str, str] = {}
+    for study in studies:
+        if not isinstance(study, dict):
+            continue
+        characteristics = study.get("characteristics") or {}
+        study_id = (
+            characteristics.get("pmid")
+            or characteristics.get("study_id")
+            or characteristics.get("doi")
+            or ""
+        )
+        if not study_id:
+            continue
+        key = study_key_from_identifiers(
+            pmid=characteristics.get("pmid"),
+            doi=characteristics.get("doi"),
+            study_id=characteristics.get("study_id"),
+            title=characteristics.get("title"),
+        )
+        for idx, _outcome in enumerate(study.get("outcomes") or []):
+            aliases[f"result:{key}:{idx}"] = f"{study_id}:{idx}"
+    return aliases
+
+
+def _with_verified_quote_match(row: dict, outcome_entry: dict | None) -> dict:
+    """Carry the extraction's verified contiguous quote match onto a ledger row.
+
+    A verified extraction quote can join several source passages ("... | Table
+    3: ..."); only its verified contiguous ``source_quote_match`` can be located
+    in the source text.  The match is borrowed only when both rows quote the
+    same source passage.
+    """
+    if row.get("source_quote_match") or not isinstance(outcome_entry, dict):
+        return row
+    outcome = outcome_entry.get("outcome") or {}
+    quote_match = str(outcome.get("source_quote_match") or "").strip()
+    if not quote_match or outcome.get("source_quote_verified") is False:
+        return row
+    row_quote = _norm(str(row.get("source_quote") or ""))
+    outcome_quote = _norm(str(outcome.get("source_quote") or ""))
+    if not row_quote or (row_quote != outcome_quote and _norm(quote_match) not in row_quote):
+        return row
+    return {**row, "source_quote_match": quote_match}
+
+
 def _row_from_outcome_entry(row_id: str, outcome_entry: dict) -> dict:
     study = outcome_entry.get("study") or {}
     outcome = outcome_entry.get("outcome") or {}
@@ -1137,6 +1194,7 @@ def build_extraction_source_cards(project: Project, rows: list[dict] | None = No
         if before_proofs != [outcome.primary_analysis_alignment for study in studies for outcome in study.outcomes]:
             project.save_json("all_extractions.json", studies, subdir="extraction")
     outcome_by_row = load_extraction_outcome_rows(project)
+    result_aliases = load_result_entity_row_aliases(project)
     current_revision = load_extraction_overrides(project).current_revision
     review_revision = review_decisions.current_revision
 
@@ -1164,6 +1222,9 @@ def build_extraction_source_cards(project: Project, rows: list[dict] | None = No
     for row in source_rows:
         if not isinstance(row, dict):
             continue
+        row_id = str(row.get("row_id") or "")
+        if row_id not in outcome_by_row and row_id in result_aliases:
+            row = _with_verified_quote_match(row, outcome_by_row.get(result_aliases[row_id]))
         card = build_extraction_source_card(
             row,
             outcome_by_row.get(str(row.get("row_id") or "")),
