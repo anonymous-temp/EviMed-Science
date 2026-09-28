@@ -18,14 +18,46 @@
     }
   },
   "timeline": [
-    {"at": "2026-09-25T10:00:37Z", "who": "user", "what": "「继续」 in the conversation bound to geo-insight 1.0.0, after the first attempt was cut by a release at 09:53:32Z (runtime_stopped)."},
-    {"at": "2026-09-25T10:13:30Z", "who": "geo-insight child", "what": "First submission accepted: 80 claims, 80 quote-verified."},
-    {"at": "2026-09-25T10:20:17Z", "who": "geo-insight child", "what": "Second submission accepted with its answers to the review's 23 findings: 82 claims (82 verified), 25 question groups, 88 measured questions, 5 control groups. The receipt records every file's sha256 at this moment."},
-    {"at": "2026-09-25T10:20:30Z", "who": "geo-insight child", "what": "Appended a section 「六、首轮审查之后改了什么」 to deliverables/geo-insight/revision-notes.md with a bash-run Python script, ran evimed_package_check (ok), and reported submitted:true without submitting again."},
-    {"at": "2026-09-25T10:20:49Z", "who": "root", "what": "Delegated geo-strategy (steps 4–5) in the same conversation, before any baseline had been measured."},
-    {"at": "2026-09-25T10:28:23Z", "who": "geo-strategy child", "what": "Package accepted (14 sources, 20 gaps, 5 engines, 3 tiers)."},
-    {"at": "2026-09-25T10:30:47Z", "who": "operator", "what": "POST /api/session/cancel through the kernel frame (runtime ledger): the conversation was stopped because it was writing strategy before the baseline. The root's evimed_await and the strategy child's last evimed_submit_deliverable ended 'tool call aborted'."},
-    {"at": "2026-09-25T10:30:48Z", "who": "control plane", "what": "Read the turn's end (aborted → canceled / runtime_canceled), found revision-notes.md no longer matching its receipt digest, and — because only a succeeded run is re-gated and amended on this path — recorded failed / specialist_receipt_digest_mismatch with no artifacts."}
+    {
+      "at": "2026-09-25T10:00:37Z",
+      "who": "user",
+      "what": "「继续」 in the conversation bound to geo-insight 1.0.0, after the first attempt was cut by a release at 09:53:32Z (runtime_stopped)."
+    },
+    {
+      "at": "2026-09-25T10:13:30Z",
+      "who": "geo-insight child",
+      "what": "First submission accepted: 80 claims, 80 quote-verified."
+    },
+    {
+      "at": "2026-09-25T10:20:17Z",
+      "who": "geo-insight child",
+      "what": "Second submission accepted with its answers to the review's 23 findings: 82 claims (82 verified), 25 question groups, 88 measured questions, 5 control groups. The receipt records every file's sha256 at this moment."
+    },
+    {
+      "at": "2026-09-25T10:20:30Z",
+      "who": "geo-insight child",
+      "what": "Appended a section 「六、首轮审查之后改了什么」 to deliverables/geo-insight/revision-notes.md with a bash-run Python script, ran evimed_package_check (ok), and reported submitted:true without submitting again."
+    },
+    {
+      "at": "2026-09-25T10:20:49Z",
+      "who": "root",
+      "what": "Delegated geo-strategy (steps 4–5) in the same conversation, before any baseline had been measured."
+    },
+    {
+      "at": "2026-09-25T10:28:23Z",
+      "who": "geo-strategy child",
+      "what": "Package accepted (14 sources, 20 gaps, 5 engines, 3 tiers)."
+    },
+    {
+      "at": "2026-09-25T10:30:47Z",
+      "who": "operator",
+      "what": "POST /api/session/cancel through the kernel frame (runtime ledger): the conversation was stopped because it was writing strategy before the baseline. The root's evimed_await and the strategy child's last evimed_submit_deliverable ended 'tool call aborted'."
+    },
+    {
+      "at": "2026-09-25T10:30:48Z",
+      "who": "control plane",
+      "what": "Read the turn's end (aborted → canceled / runtime_canceled), found revision-notes.md no longer matching its receipt digest, and — because only a succeeded run is re-gated and amended on this path — recorded failed / specialist_receipt_digest_mismatch with no artifacts."
+    }
   ],
   "cause": [
     "The receipt is written over the final bytes only when a turn completes: run-policy's sealTurn → refreshReceipt runs on a `completed` turn end and not on an `aborted` one. A stopped turn therefore always leaves the receipt behind any file touched after the last acceptance.",
@@ -37,8 +69,8 @@
     "Not geo_write: it writes the GEO tables in PostgreSQL, never a workspace file."
   ],
   "fixedBy": [
-    "4f23cef34 fix(runs): a run stopped after its files moved stays a stopped run — the same run now ends canceled / runtime_canceled with the matching files as its artifacts and revision-notes.md listed as unverified, and the notice says which file moved and that nothing judged it.",
-    "Already fixed on 2026-09-25 (ed176dd3a, b37106bdc): a conversation delegates only steps 1–3, and geo_write refuses a strategy, targets or the 信源 step before the project has a finished baseline — the reason the operator stopped this run."
+    "fix(runs): a run stopped after its files moved stays a stopped run (2026-09-28) — the same run now ends canceled / runtime_canceled with the matching files as its artifacts and revision-notes.md listed as unverified, and the notice says which file moved and that nothing judged it.",
+    "Already fixed on 2026-09-25 (“fix(geo): a conversation delegates only the first three steps; the platform schedules strategy, content and exports after it has measured” and “fix(geo): no strategy, tiers or 信源 step before the project has a finished baseline”): the reason the operator stopped this run."
   ],
   "stillNeeded": "A geo-insight run that completes its turn. None of the production runs on record is one: this run was stopped, the first was cut by a release, and the later geo-insight packages that passed the gate (run_3fca60b67487, 10:42–10:59Z) were written in a session bound to geo-content and judged against geo-content's contract."
 }

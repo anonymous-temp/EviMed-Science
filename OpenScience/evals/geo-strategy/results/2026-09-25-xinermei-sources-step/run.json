@@ -146,7 +146,8 @@
         "geoTiers": 3
       }
     },
-    "withCommit_a6286df48": {
+    "reading": "The notice was the contract not reading the method pack's shape (the source table under sources.table, the battlefield as its one chosen group). The table has 28 sources and the battlefield names 「P1-03 与其他减重药怎么选」.",
+    "withTheStrategyContractFix": {
       "ok": true,
       "issues": [],
       "metrics": {
@@ -156,7 +157,7 @@
         "geoTiers": 3
       }
     },
-    "reading": "The notice was the contract not reading the method pack's shape (the source table under sources.table, the battlefield as its one chosen group). The table has 28 sources and the battlefield names 「P1-03 与其他减重药怎么选」."
+    "fix": "fix(geo): the strategy contract reads the method pack's source table and battlefield (2026-09-28)"
   },
   "gateIndependence": {
     "transcript": "unavailable",
