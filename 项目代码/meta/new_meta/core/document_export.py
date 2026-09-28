@@ -231,12 +231,18 @@ def _add_pdf_markdown_table(story: list, table_lines: list[str], styles) -> None
 
 
 def _split_table_row(line: str) -> list[str]:
+    """Split a Markdown table row on its cell separators.
+
+    A pipe escaped as ``\\|`` belongs to the cell text (a quoted source table
+    row such as "Drained Blood \\| Group 1 \\| 453.6"); splitting on it made
+    one row two dozen cells wide, too tall to lay out on a PDF page.
+    """
     stripped = line.strip()
     if stripped.startswith("|"):
         stripped = stripped[1:]
-    if stripped.endswith("|"):
+    if stripped.endswith("|") and not stripped.endswith("\\|"):
         stripped = stripped[:-1]
-    return [cell.strip() for cell in stripped.split("|")]
+    return [cell.replace("\\|", "|").strip() for cell in re.split(r"(?<!\\)\|", stripped)]
 
 
 def _add_image(document: Document, project: Project, raw_path: str, alt: str) -> None:
