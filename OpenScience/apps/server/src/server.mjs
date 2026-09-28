@@ -2996,6 +2996,9 @@ export function createWebApiApp(overrides = {}) {
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
     edge: edgeProxy,
+    // Bailian's search is a paid Qwen call, booked like the kernel's.
+    usageLedger,
+    attributeRun,
   });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,

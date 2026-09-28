@@ -226,7 +226,7 @@ const referencePrices20260923 = deepFreeze({
  * is a new version, like any other price change.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20260924 = deepFreeze({
   ...referencePrices20260923,
   version: 'evimed-reference-2026-09-24',
   effectiveFrom: '2026-09-24T00:00:00.000Z',
@@ -241,6 +241,33 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
   model: {
     ...referencePrices20260923.model,
     'jev-1.13.0': { cacheHit: 0.042, cacheMiss: 0.042, output: 0, offPeak: false, currency: 'USD' },
+  },
+})
+
+/**
+ * The 2026-09-24 rates plus Qwen-Plus on DashScope (Beijing), the model the
+ * web-search gateway asks for Bailian's own web search (`enable_search`,
+ * strategy `turbo`). Until this list that spend reached no ledger at all.
+ *
+ * What a search costs is what its model call costs: the `turbo` strategy
+ * carries no per-call fee (only `agent` does), and the pages it retrieves are
+ * appended to the prompt and "billed at the model's standard rate" — so the
+ * provider's own `input_tokens` already include them
+ * (https://www.alibabacloud.com/help/en/model-studio/web-search, read
+ * 2026-09-28). Qwen-Plus, non-thinking, up to 128K tokens: input ¥0.8,
+ * output ¥2 per million (https://help.aliyun.com/zh/model-studio/model-pricing,
+ * read 2026-09-28); an implicit-cache hit is 20% of the input price, ¥0.16
+ * (https://help.aliyun.com/zh/model-studio/context-cache). No night rate.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20260924,
+  version: 'evimed-reference-2026-09-28',
+  effectiveFrom: '2026-09-28T00:00:00.000Z',
+  modelSource: `${referencePrices20260924.modelSource} · https://help.aliyun.com/zh/model-studio/model-pricing · https://www.alibabacloud.com/help/en/model-studio/web-search`,
+  model: {
+    ...referencePrices20260924.model,
+    'qwen-plus': { cacheHit: 0.16, cacheMiss: 0.8, output: 2, offPeak: false },
   },
 })
 
@@ -271,7 +298,8 @@ const priceLists = deepFreeze({
   'evimed-reference-2026-09-05': referencePrices20260905,
   'evimed-reference-2026-09-10': referencePrices20260910,
   'evimed-reference-2026-09-23': referencePrices20260923,
-  'evimed-reference-2026-09-24': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-09-24': referencePrices20260924,
+  'evimed-reference-2026-09-28': REFERENCE_PRICE_LIST,
 })
 
 /**

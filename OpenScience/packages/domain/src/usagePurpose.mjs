@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'frontier'|'review'|'geo'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'frontier'|'review'|'geo'|'web-search'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -27,7 +27,10 @@
  *  reviewed, so a report's price includes its review. `geo` is 「循证 GEO」's
  *  own model calls outside a run — parsing and judging measured answers —
  *  held by the module's own daily budget like `frontier`, never by a
- *  researcher's caps. */
+ *  researcher's caps. `web-search` is the web-search gateway's own model call
+ *  — Bailian's web search rides on a Qwen request whose prompt the retrieved
+ *  pages are billed into — made for a researcher's run and charged to it like
+ *  the kernel's calls, caps included. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -41,6 +44,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'frontier',
   'review',
   'geo',
+  'web-search',
   'other',
 ]))
 
@@ -58,6 +62,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   frontier: '前沿动态',
   review: '成果审查',
   geo: '循证 GEO',
+  'web-search': '联网搜索',
   other: '其他',
 }))
 

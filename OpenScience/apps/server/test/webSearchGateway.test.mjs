@@ -281,6 +281,105 @@ test("one source failing is a thinner answer that names it; both failing is a re
   assert.equal(bailianAlone.statusCode, 200, "Bailian alone is a configured search");
 });
 
+/** A usage ledger that records what the gateway asked of it. */
+function fakeLedger({ refuse = null } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async reserveModel(input) {
+      calls.push(["reserve", input]);
+      if (refuse) throw Object.assign(new Error("refused"), { code: refuse, status: 402 });
+      return { id: input.id };
+    },
+    async settleModel(userId, id, input) { calls.push(["settle", { userId, id, ...input }]); },
+    async markUncertain(userId, id, code, options) { calls.push(["uncertain", { userId, id, code, ...options }]); },
+    async release(userId, id, code) { calls.push(["release", { userId, id, code }]); },
+  };
+}
+
+const caller = { userId: "alice", projectId: "paper1", runId: null, dailyLimit: 0, weeklyLimit: 0 };
+const identifying = { assertActiveModelGatewayToken: () => caller };
+
+async function metered(config, fetchImpl, usageLedger, { attributeRun = async () => "run-7" } = {}) {
+  const handler = createWebSearchGatewayHandler(config, identifying, { fetchImpl, usageLedger, attributeRun });
+  const res = response();
+  await handler(request({ query: "司美格鲁肽 说明书" }), res);
+  return res;
+}
+
+test("a Bailian search is reserved against the researcher's caps and settled on the provider's own count, as web-search", async () => {
+  const ledger = fakeLedger();
+  const res = await metered({ ...withBailian, userDailySpendLimit: 20, userWeeklySpendLimit: 100, userRunSpendLimit: 5 }, async (url) => (String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? searxngResponse({
+      request_id: "req-dashscope-1",
+      output: { search_info: { search_results: [{ title: "公告", url: "https://www.nmpa.gov.cn/y.html", site_name: "国家药监局" }] } },
+      usage: { input_tokens: 3_200, output_tokens: 8, prompt_tokens_details: { cached_tokens: 200 }, plugins: { search: { count: 1, strategy: "turbo" } } },
+    })
+    : searxngResponse({ results: [{ url: "https://example.org/a", title: "A", engine: "bing" }] })), ledger);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(ledger.calls.map(([kind]) => kind), ["reserve", "settle"]);
+  const [, reserve] = ledger.calls[0];
+  assert.equal(reserve.purpose, "web-search");
+  assert.equal(reserve.model, "qwen-plus");
+  assert.equal(reserve.userId, "alice");
+  assert.equal(reserve.projectId, "paper1");
+  assert.equal(reserve.runId, "run-7", "charged to the run the project is running, like the kernel's calls");
+  assert.equal(reserve.priceVersion, "evimed-reference-2026-09-28");
+  assert.equal(reserve.dailyLimit, 20);
+  assert.equal(reserve.weeklyLimit, 100);
+  assert.equal(reserve.runLimit, 5);
+  assert.ok(reserve.estimatedCost > 0 && reserve.estimatedCost < 0.02, `reserved ${reserve.estimatedCost}`);
+  assert.match(reserve.requestFingerprint, /^[0-9a-f]{64}$/);
+  const [, settle] = ledger.calls[1];
+  assert.equal(settle.id, reserve.id);
+  assert.deepEqual(settle.usage, { cacheHitTokens: 200, cacheMissTokens: 3_000, completionTokens: 8 });
+  // ¥0.16/M × 200 + ¥0.8/M × 3,000 + ¥2/M × 8
+  assert.equal(settle.actualCost, 0.002448);
+  assert.equal(settle.priced, true);
+  assert.equal(settle.providerRequestId, "req-dashscope-1");
+});
+
+test("a Bailian call with no count, a refusal, a failure after it left, and a spent budget each close the right way", async () => {
+  const bailianAnd = (answer) => async (url) => (String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? answer()
+    : searxngResponse({ results: [{ url: "https://example.org/a", title: "A", engine: "bing" }] }));
+
+  let ledger = fakeLedger();
+  let res = await metered(withBailian, bailianAnd(() => searxngResponse({ output: { search_info: { search_results: [] } } })), ledger);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["uncertain", "response_usage_missing"]]);
+
+  ledger = fakeLedger();
+  res = await metered(withBailian, bailianAnd(() => searxngResponse({}, { status: 401 })), ledger);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["release", "provider_refused_401"]],
+    "refused in writing, nothing billed");
+
+  ledger = fakeLedger();
+  res = await metered(withBailian, bailianAnd(() => searxngResponse({}, { status: 503 })), ledger);
+  assert.deepEqual(ledger.calls.map(([kind, input]) => [kind, input.code ?? null]), [["reserve", null], ["uncertain", "provider_response_incomplete"]],
+    "sent and lost: possibly spent");
+
+  ledger = fakeLedger({ refuse: "usage_budget_exceeded" });
+  let asked = 0;
+  res = await metered(withBailian, bailianAnd(() => { asked += 1; return searxngResponse({}); }), ledger);
+  assert.equal(res.statusCode, 200, "the other engines still answer");
+  assert.equal(asked, 0, "a search the caps refuse never leaves");
+  assert.ok(res.json().data.unresponsiveEngines.includes("bailian"));
+
+  // Bailian alone, over budget: a named refusal, not a crash.
+  res = await metered({ webSearchTimeoutMs: 5_000, webSearchBailianEnabled: true, dashscopeApiKey: "sk-test-key-not-real" },
+    bailianAnd(() => searxngResponse({})), fakeLedger({ refuse: "usage_budget_exceeded" }));
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.json().code, "web_search_unavailable");
+
+  // Where the ledger is required and absent, Bailian is not called at all.
+  asked = 0;
+  res = await metered({ ...withBailian, requireDurableUsageLedger: true }, bailianAnd(() => { asked += 1; return searxngResponse({}); }), null);
+  assert.equal(res.statusCode, 200);
+  assert.equal(asked, 0);
+});
+
 test("the node's SearXNG is searched first, and this host's answers when the node cannot", async () => {
   const edgeUrl = "http://127.0.0.1:8888/search";
   const config = { ...configured, webSearchEdgeUrl: edgeUrl };

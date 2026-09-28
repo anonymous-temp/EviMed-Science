@@ -23,8 +23,14 @@
 // (edgeProxy.mjs), with this host's as the fallback; and Qwen's own web search
 // on Bailian, asked in parallel, which reaches the Chinese web — 公众号 articles
 // and this year's news — that no SearXNG engine reaches from either place.
+//
+// The Bailian half is a paid model call, and it is metered like one (purpose
+// `web-search`, 2026-09-28): until then its spend reached no ledger.
+import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { edgeFetch, edgeStats } from "./edgeProxy.mjs";
+import { closeUnsettledReservation } from "./usageLedger.mjs";
 
 const gatewayPath = "/internal/search/v1/query";
 const maxQueryLength = 512;
@@ -267,14 +273,45 @@ async function searxngSearch(endpoint, request, fetcher, signal) {
   return readBoundedJson(upstream, maxResponseBytes);
 }
 
+/** The answer the Bailian call is allowed: a few tokens, dropped. */
+const bailianMaxTokens = 8;
+/**
+ * The prompt a Bailian search is reserved at before its answer gives the
+ * count: the query and the pages `turbo` retrieves into the prompt, which
+ * bill as input tokens. A ceiling for the spend windows while the call is in
+ * flight, not a price — the row settles on the provider's own `usage`. At
+ * Qwen-Plus's ¥0.8 per million it holds ¥0.0128.
+ */
+const bailianReservedPromptTokens = 16_000;
+
+/** @param {...unknown} values the smallest positive limit, or 0 for none */
+function minimumPositive(...values) {
+  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return positive.length ? Math.min(...positive) : 0;
+}
+
+/** The provider's own count from a DashScope answer, or null when it sent none.
+ *  @param {any} usage */
+function bailianUsage(usage) {
+  const input = Number(usage?.input_tokens);
+  const output = Number(usage?.output_tokens);
+  if (!Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
+  const cached = Math.min(input, Math.max(0, Number(usage?.prompt_tokens_details?.cached_tokens) || 0));
+  return { cacheHitTokens: cached, cacheMissTokens: input - cached, completionTokens: output };
+}
+
 /** Qwen's web search on Bailian as a second engine. Measured 2026-09-22 from
  *  the production host: 3–4 s and 8–9 sourced results a query, 公众号 articles
  *  and 2026 Chinese news among them. The model call only carries the search:
  *  `max_tokens` keeps its answer to a few tokens and the answer is dropped;
- *  what is kept is `search_info.search_results` (title, url, site name). The
- *  key is the deployment's DashScope key the reranker already uses. */
-async function bailianSearch(config, request, fetcher, signal) {
+ *  what is kept is `search_info.search_results` (title, url, site name) and
+ *  the call's `usage`, which the ledger is settled on. The key is the
+ *  deployment's DashScope key the reranker already uses.
+ *  `onDispatch` is told when the request leaves, so a failure after it is
+ *  booked as possibly spent rather than released. */
+async function bailianSearch(config, request, fetcher, signal, onDispatch = () => {}) {
   const key = String(config.dashscopeApiKey ?? "").trim();
+  onDispatch();
   const response = await fetcher(bailianUrl, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json", authorization: `Bearer ${key}` },
@@ -284,7 +321,7 @@ async function bailianSearch(config, request, fetcher, signal) {
       parameters: {
         result_format: "message",
         enable_search: true,
-        max_tokens: 8,
+        max_tokens: bailianMaxTokens,
         search_options: { forced_search: true, enable_source: true, search_strategy: "turbo" },
       },
     }),
@@ -299,14 +336,92 @@ async function bailianSearch(config, request, fetcher, signal) {
   }
   const payload = await readBoundedJson(response, maxResponseBytes);
   const rows = Array.isArray(payload?.output?.search_info?.search_results) ? payload.output.search_info.search_results : [];
-  return rows.map((row) => ({ url: row?.url, title: row?.title, content: String(row?.site_name ?? "").trim(), engine: "bailian" }));
+  return {
+    rows: rows.map((row) => ({ url: row?.url, title: row?.title, content: String(row?.site_name ?? "").trim(), engine: "bailian" })),
+    usage: bailianUsage(payload?.usage),
+    requestId: typeof payload?.request_id === "string" && payload.request_id ? payload.request_id.slice(0, 512) : null,
+  };
+}
+
+/**
+ * The Bailian search, metered like every model call the platform pays for
+ * (purpose `web-search`): reserved against the researcher's caps before it
+ * leaves, settled on the provider's own count at the reference price, or
+ * closed by the ledger's one rule when no count came back
+ * (`closeUnsettledReservation`). Without a ledger (a deployment with no
+ * PostgreSQL) the call is simply made; where the ledger is required it is not
+ * made at all, because a spend nobody records is the defect this exists for.
+ * A reservation the caps refuse leaves Bailian out of this search — the other
+ * engines still answer.
+ *
+ * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any }} options
+ * @returns {Promise<any[]>}
+ */
+async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun }) {
+  if (!usageLedger) {
+    if (config.requireDurableUsageLedger === true) {
+      throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: its spend cannot be recorded right now.");
+    }
+    return (await bailianSearch(config, request, fetcher, signal)).rows;
+  }
+  const model = String(config.webSearchBailianModel ?? "").trim() || "qwen-plus";
+  const at = new Date();
+  const peak = isPeak(at);
+  const attributed = caller.runId == null && attributeRun
+    ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
+    : null;
+  const runId = caller.runId ?? attributed ?? null;
+  const estimate = priceUsage({ resourceType: "model", model, cacheMiss: bailianReservedPromptTokens, output: bailianMaxTokens, peak });
+  let reservation;
+  try {
+    reservation = await usageLedger.reserveModel({
+      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose: "web-search", model,
+      priceVersion: REFERENCE_PRICE_LIST.version, currency: "CNY",
+      requestFingerprint: createHash("sha256").update(JSON.stringify({ model, query: request.query, strategy: "turbo" })).digest("hex"),
+      estimatedCost: estimate.cost,
+      dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+      weeklyLimit: minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+      runLimit: caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
+      now: at,
+    });
+  } catch (error) {
+    throw gatewayError(503, "web_search_unavailable", error?.code === "usage_budget_exceeded"
+      ? "The Bailian search is unavailable: this account's spending limit is reached."
+      : "The Bailian search is unavailable: its spend cannot be recorded right now.");
+  }
+  let dispatched = false;
+  let outcome;
+  try {
+    outcome = await bailianSearch(config, request, fetcher, signal, () => { dispatched = true; });
+  } catch (error) {
+    await closeUnsettledReservation(usageLedger, caller.userId, reservation.id, {
+      dispatched, status: Number(error?.upstream?.status) || 0,
+    }).catch(() => { /* the reconciliation sweep books what this could not */ });
+    throw error;
+  }
+  // The results stand whatever the bookkeeping does next (principle 19); a
+  // write that fails leaves the reservation to the reconciliation sweep, which
+  // books it `reservation_expired` where the operator's metric counts it.
+  const { usage, requestId } = outcome;
+  if (usage) {
+    const priced = priceUsage({ resourceType: "model", model, cacheHit: usage.cacheHitTokens,
+      cacheMiss: usage.cacheMissTokens, output: usage.completionTokens, peak });
+    await usageLedger.settleModel(caller.userId, reservation.id, {
+      usage, actualCost: priced.cost, priced: priced.priced, providerRequestId: requestId,
+    }).catch(() => {});
+  } else {
+    await usageLedger.markUncertain(caller.userId, reservation.id, "response_usage_missing", { providerRequestId: requestId }).catch(() => {});
+  }
+  return outcome.rows;
 }
 
 /**
  * @param {any} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null }} [options]
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null }} [options]
+ *   `usageLedger` / `attributeRun`: what the Bailian call is booked in and
+ *   which run it is charged to, as for the model gateway
  */
-export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null } = {}) {
+export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null } = {}) {
   const throughEdge = edgeFetchImpl ?? ((url, init) => edgeFetch(/** @type {any} */ (edge), /** @type {URL} */ (url), /** @type {any} */ (init)));
   return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
@@ -319,8 +434,9 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
     timeout.unref?.();
     try {
       const token = bearerToken(req);
+      let caller;
       try {
-        runtimeManager.assertActiveModelGatewayToken(token);
+        caller = runtimeManager.assertActiveModelGatewayToken(token);
       } catch {
         throw gatewayError(401, "web_search_gateway_token_invalid", "Web search authentication failed.");
       }
@@ -348,7 +464,9 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         }
         return searxngSearch(searchEndpoint(localUrl), request, fetchImpl, controller.signal);
       })() : Promise.resolve(null);
-      const bailian = bailianOn ? bailianSearch(config, request, fetchImpl, controller.signal) : Promise.resolve(null);
+      const bailian = bailianOn
+        ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun })
+        : Promise.resolve(null);
       const [searxOutcome, bailianOutcome] = await Promise.allSettled([searx, bailian]);
       const bailianAnswered = bailianOn && bailianOutcome.status === "fulfilled";
       // One source failing is a thinner answer, not a failed search; only when

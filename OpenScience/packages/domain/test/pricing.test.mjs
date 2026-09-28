@@ -4,7 +4,7 @@ import { priceUsage, priceListFor, REFERENCE_PRICE_LIST } from '../index.mjs'
 
 // Verified against https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ on 2026-09-10.
 test('the versioned model reference prices match the current CNY table', () => {
-  assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-09-24')
+  assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-09-28')
   /** @type {[string, number, number][]} */
   const cases = [['deepseek-flash', 10, 5], ['deepseek-v4-flash', 10, 5], ['deepseek-v4-flash-vision-exp', 10, 5], ['deepseek-v4-pro', 36, 18]]
   for (const [model, peak, off] of cases) {
@@ -27,6 +27,18 @@ test('the reviewer model is priced at DashScope\'s one rate, day and night', () 
   assert.deepEqual(REFERENCE_PRICE_LIST.model['deepseek-flash'], september10.model['deepseek-flash'])
   assert.equal(priceUsage({ resourceType: 'model', model: 'qwen3.8-max-0902', cacheMiss: 1, peak: true }, september10).priced, false,
     'a list from before the reviewer existed cannot price it')
+})
+
+// Verified against https://help.aliyun.com/zh/model-studio/model-pricing and
+// .../context-cache on 2026-09-28: Qwen-Plus (Beijing, non-thinking, ≤128K).
+test('the web-search gateway\'s Qwen-Plus call is priced at DashScope\'s one rate, and only from 2026-09-28', () => {
+  const at = (/** @type {boolean} */ peak, /** @type {any[]} */ ...list) => priceUsage({ resourceType: 'model', model: 'qwen-plus', cacheHit: 1_000_000, cacheMiss: 1_000_000, output: 1_000_000, peak }, ...list)
+  assert.equal(at(true).cost, 2.96, '¥0.16 cached + ¥0.8 input + ¥2 output per million')
+  assert.equal(at(false).cost, 2.96, 'no night rate')
+  // A typical search: some 3,000 prompt tokens with the retrieved pages, 8 out.
+  assert.equal(priceUsage({ resourceType: 'model', model: 'qwen-plus', cacheMiss: 3_000, output: 8, peak: true }).cost, 0.002416)
+  assert.equal(at(true, priceListFor('evimed-reference-2026-09-24')).priced, false, 'a list from before it was metered cannot price it')
+  assert.deepEqual(priceListFor('evimed-reference-2026-09-24')?.model['jev-1.13.0'], REFERENCE_PRICE_LIST.model['jev-1.13.0'])
 })
 
 test('small cache charges remain nonzero before aggregation', () => {
