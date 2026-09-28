@@ -70,7 +70,7 @@ const subagent = (sessionId, capability) => ({
 class FakeRuntime {
   constructor(sessions, catalogue = {}) {
     this.sessions = new Map(Object.entries(sessions));
-    /** `subagents/list` per parent, as the kernel publishes it. */
+    /** The child catalogue per parent (`session/projections`), as the kernel publishes it. */
     this.catalogue = new Map(Object.entries(catalogue));
     this.catalogueCalls = [];
     this.calls = [];
@@ -247,7 +247,7 @@ test("a subagent session is read at the address the kernel publishes, not at its
   // because a run with a partial transcript is not a measurement.
   //
   // `mode` is part of what the kernel authorizes against, so the address comes
-  // from its own `subagents/list` rather than from a guess here.
+  // from its own child catalogue rather than from a guess here.
   await withProject(async (project) => {
     const runtime = delegatingRun();
     const sessions = await collectRunTranscripts(runtime, project, { id: "run_addressed", sessionId: "ses_root" });

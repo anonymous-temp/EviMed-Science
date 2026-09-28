@@ -179,14 +179,15 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  // The 0.1.5 inventory contains 84 classified RPCs, including the two
-  // EviMed probe endpoints, plus the gateway acknowledgement endpoint.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 85);
+  // The 0.1.7-rc.2 inventory declares 135 RPCs: 9 the control plane calls, 124
+  // denied and the two follow streams; plus the two EviMed probe endpoints and
+  // the gateway acknowledgement endpoint.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 136);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
 
-  for (const method of ["session/create", "session/prompt", "session/cancel", "session/page", "session/fork", "session/list", "subagents/list", "skills/list", "agentPresets/list"]) {
+  for (const method of ["session/create", "session/prompt", "session/cancel", "session/page", "session/fork", "session/list", "session/projections", "skills/list", "agentPresets/list"]) {
     assert.ok(isAllowedWireMethod(method), method);
   }
   // The rename is the migration: a live 0.1.2 kernel answers 404 to the dotted
@@ -325,12 +326,18 @@ test("cancel and fork travel under the request descriptor too", async () => {
   assert.deepEqual(transport.calls[2].payload, { request: { sessionId: "s-1" } }, "an absent atSeq is absent, not null");
 });
 
-test("subagents are listed by a bare parent id, which is the one method that takes no descriptor", async () => {
-  const transport = scriptedTransport({ "subagents/list": { ok: true, value: { items: [{ sessionId: "child" }] } } });
+test("a session's children are its own catalogue projection, read without activating it", async () => {
+  // 0.1.7 retired `subagents/list`; the recorded answer of `session/projections`.
+  const row = { id: "child", createdAt: 1790564989642, mode: "one-shot", label: "证据评价表" };
+  const transport = scriptedTransport({ "session/projections": { ok: true, value: { asOfSeq: 65, values: { subagentCatalog: [row] } } } });
   const adapter = new DshRuntimeAdapter(transport);
-  assert.deepEqual(await adapter.subagents({ sessionId: "s-1" }), [{ sessionId: "child" }]);
-  assert.deepEqual(transport.calls[0], { method: "subagents/list", payload: { parentSessionId: "s-1" } });
-  assert.deepEqual(SEAMS.wire.unaryArgs["subagents/list"], ["parentSessionId"]);
+  assert.deepEqual(await adapter.subagents({ sessionId: "s-1" }), [row]);
+  assert.deepEqual(transport.calls[0], { method: "session/projections", payload: { request: { sessionId: "s-1" } } });
+  assert.deepEqual(SEAMS.wire.unaryArgs["session/projections"], ["request"]);
+  assert.equal(SEAMS.wire.unaryArgs["subagents/list"], undefined, "a retired method stays out of the allowed half");
+  // A session that does not exist answers null, and has no children.
+  const missing = new DshRuntimeAdapter(scriptedTransport({ "session/projections": { ok: true, value: null } }));
+  assert.deepEqual(await missing.subagents({ sessionId: "gone" }), []);
 });
 
 /* ----------------------------------------------- normalizing a real transcript */

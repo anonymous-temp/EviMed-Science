@@ -1919,13 +1919,6 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // Empty when no sidecar is deployed, and then no row is emitted -- a
     // deployment without one behaves exactly as it did before.
     toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim(),
-    // The directory that CONTAINS the presets, not the preset. `roots` is
-    // scanned for preset directories, so naming the preset itself gives the
-    // kernel a root with no presets under it and `agent-presets: preset
-    // "evimed-universal" not found (available: standard, ptc, minimal, cordis,
-    // skills)` — a message that lists the built-ins and reads like ours was
-    // never built. The image's own build smoke proves this exact value.
-    presetRoot: "/opt/evimed/dsh/presets",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
@@ -4330,7 +4323,7 @@ export class RuntimeManager {
     this.beginProxy(project);
     try {
       return await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "subagents/list", { parentSessionId }, signal),
+        (signal) => this.callKernel(runtime, project, "session/projections", { request: { sessionId: parentSessionId } }, signal),
         "runtime_history_unavailable",
         "Runtime subagent catalogue did not answer in time.",
       ).then(subagentListItems);
@@ -4359,7 +4352,7 @@ export class RuntimeManager {
    * A subagent session cannot be read at its own id — the kernel refuses it with
    * "subagent Sessions require their durable parent address" — so a caller that
    * knows the session's parent passes `parentSessionId` and the address is
-   * resolved here, from the kernel's own `subagents/list`. Resolved in ONE place
+   * resolved here, from the kernel's own child catalogue. Resolved in ONE place
    * on purpose: the first fix composed the address inside the transcript
    * collector only, and the delivery gate's own reader of delegated sessions
    * kept asking at the bare id, swallowed the refusal, and so never saw a single
@@ -4440,7 +4433,7 @@ export class RuntimeManager {
                 // until 2026-09-16 for exactly this, which made every run that
                 // delegated report `completeness: partial` and dropped every
                 // cell of a paired evaluation. The address is the one the
-                // kernel's own `subagents/list` publishes, never one composed
+                // kernel's own child catalogue publishes, never one composed
                 // here, because `mode` has to match the descriptor.
                 address: address ?? { kind: "session", sessionId },
                 throughSeq,

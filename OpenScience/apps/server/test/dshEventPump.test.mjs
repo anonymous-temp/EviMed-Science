@@ -244,12 +244,13 @@ test("a child announced without its mode is followed once the parent's catalogue
   const lookups = [];
   const { pump, muxes } = pumpOnFakeMux({
     reconnectDelayMs: 10,
-    // `subagents/list` answers `SubagentCatalog { entries, parentAvailable }`
-    // and keys the child as `id` (dsh-subagent 0.1.5-rc.2 `catalogView`).
+    // Since 0.1.7 the catalogue is the parent's `subagentCatalog` projection,
+    // read with `session/projections` (recorded live 2026-09-28: rows keyed on
+    // `id`, with `createdAt`, `mode` and the delegation's `label`).
     callUnary: async (_runtime, method, payload) => {
-      if (method !== "subagents/list") return { ok: true, value: {} };
-      lookups.push(payload.parentSessionId);
-      return { ok: true, value: { entries: [{ kind: "child", id: "s-child", activity: "running", hasChildren: false, mode: "one-shot" }], parentAvailable: true } };
+      if (method !== "session/projections") return { ok: true, value: {} };
+      lookups.push(payload.request.sessionId);
+      return { ok: true, value: { asOfSeq: 9, values: { subagentCatalog: [{ id: "s-child", createdAt: 1790564989642, mode: "one-shot", label: "ADR 分析" }] } } };
     },
   });
   const project = { userId: "alice", id: "paper-4b" };
@@ -279,11 +280,11 @@ test("a child named only by the delegation's own receipts is followed, the retri
   const { pump, muxes } = pumpOnFakeMux({
     reconnectDelayMs: 10,
     callUnary: async (_runtime, method, payload) => {
-      if (method !== "subagents/list" || payload.parentSessionId !== "s-root") return { ok: true, value: {} };
-      return { ok: true, value: { entries: [
-        { kind: "child", id: "s-child", activity: "running", hasChildren: false, mode: "one-shot" },
-        { kind: "child", id: "s-retry", activity: "running", hasChildren: false, mode: "one-shot" },
-      ], parentAvailable: true } };
+      if (method !== "session/projections" || payload.request.sessionId !== "s-root") return { ok: true, value: {} };
+      return { ok: true, value: { asOfSeq: 12, values: { subagentCatalog: [
+        { id: "s-child", createdAt: 1790564989642, mode: "one-shot", label: "证据评价表" },
+        { id: "s-retry", createdAt: 1790564989847, mode: "one-shot", label: "证据评价表" },
+      ] } } };
     },
     onRunEvent: (_project, runId, event) => observed.push({ runId, ...event }),
   });
@@ -339,8 +340,8 @@ test("the authenticated host child announcement drives replay-safe run activity"
     reconnectDelayMs: 10,
     // The announcement names the parent, not the address mode; the parent's
     // catalogue supplies it, in the kernel's own `SubagentCatalog` shape.
-    callUnary: async (_runtime, method, payload) => method === "subagents/list" && payload.parentSessionId === rootSessionId
-      ? { ok: true, value: { entries: [{ kind: "child", id: childSessionId, activity: "running", hasChildren: false, mode: "one-shot" }], parentAvailable: true } }
+    callUnary: async (_runtime, method, payload) => method === "session/projections" && payload.request.sessionId === rootSessionId
+      ? { ok: true, value: { asOfSeq: 5, values: { subagentCatalog: [{ id: childSessionId, createdAt: 1790564989642, mode: "one-shot", label: "子任务" }] } } }
       : { ok: true, value: {} },
   });
   const project = { userId: "alice", id: "paper-child-activity" };

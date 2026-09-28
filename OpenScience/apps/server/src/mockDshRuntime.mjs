@@ -567,10 +567,6 @@ export function startMockDshRuntime(options = {}) {
         res.end(JSON.stringify(ok(rpcId, { items: [...sessions.values()].map(summaryOf) })));
         return;
       }
-      if (endpoint === "subagents/list") {
-        res.end(JSON.stringify(ok(rpcId, { items: [] })));
-        return;
-      }
       if (endpoint === "skills/list") {
         if (!descriptor("request")) {
           res.end(invalid("request"));
@@ -583,6 +579,14 @@ export function startMockDshRuntime(options = {}) {
       const request = descriptor("request");
       if (!request) {
         res.end(invalid("request"));
+        return;
+      }
+
+      if (endpoint === "session/projections") {
+        // The 0.1.7 answer: the session's projection baseline, or null for a
+        // session that does not exist. This fake starts no children.
+        const known = sessions.get(String(request.sessionId ?? ""));
+        res.end(JSON.stringify(ok(rpcId, known ? { asOfSeq: 0, values: { subagentCatalog: [] } } : null)));
         return;
       }
 
@@ -771,7 +775,7 @@ export const MOCK_ENDPOINTS = Object.freeze([
   "session/page",
   "session/fork",
   "session/list",
-  "subagents/list",
+  "session/projections",
   "skills/list",
   "agentPresets/list",
 ]);

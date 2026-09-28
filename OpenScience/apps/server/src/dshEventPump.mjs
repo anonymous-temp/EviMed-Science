@@ -526,7 +526,7 @@ export class RuntimeEventPump {
   }
 
   /**
-   * Reads one child's address mode out of its parent's `subagents/list`.
+   * Reads one child's address mode out of its parent's child catalogue (`session/projections`).
    *
    * Needed only for a child the host announced (`api-session/added`) before
    * the parent's `subagent/catalog` fact reached this pump: the announcement

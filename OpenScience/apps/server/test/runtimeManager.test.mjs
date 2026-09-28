@@ -3433,12 +3433,14 @@ test("a subagent session is read at the address the kernel's own catalogue gives
   /** @type {{method: string, args: any}[]} */ const calls = [];
   manager.callKernel = async (/** @type {any} */ _r, /** @type {any} */ _p, /** @type {string} */ method, /** @type {any} */ args) => {
     calls.push({ method, args });
-    if (method === "subagents/list") {
-      // `SubagentCatalog` as the kernel declares it: `entries`, keyed on `id`.
-      return { parentAvailable: true, entries: [
-        { kind: "child", id: "child-1", mode: "one-shot", activity: "inactive", hasChildren: false },
-        { kind: "diagnostic", id: "child-broken", reason: "unavailable" },
-      ] };
+    if (method === "session/projections") {
+      // The parent's `subagentCatalog` projection as 0.1.7 publishes it:
+      // rows keyed on `id`. A child whose descriptor the catalogue could not
+      // read carries mode `unknown`, which the kernel resolves on read.
+      assert.deepEqual(args, { request: { sessionId: "root-1" } });
+      return { asOfSeq: 7, values: { subagentCatalog: [
+        { id: "child-1", createdAt: 1790564989642, mode: "one-shot", label: "子任务" },
+      ] } };
     }
     if (method === "session/list") return { items: [{ sessionId: "child-1", projections: { asOfSeq: 3 } }, { sessionId: "root-1", projections: { asOfSeq: 3 } }] };
     if (method === "session/page") {
@@ -3461,8 +3463,8 @@ test("a subagent session is read at the address the kernel's own catalogue gives
   await manager.sessionMessages(project, "child-1", { wake: false, parentSessionId: "root-1" });
   assert.equal(calls.find((call) => call.method === "session/page")?.args.request.address.kind, "subagent");
 
-  // A root has no parent and is read at its own id; a diagnostic row gives no
-  // address, so that read goes out at the bare id rather than a guessed mode.
+  // A root has no parent and is read at its own id; a child the catalogue does
+  // not name gives no address, so that read goes out at the bare id rather than a guessed mode.
   calls.length = 0;
   await manager.sessionTranscript(project, "root-1", { wake: false });
   assert.equal(calls.find((call) => call.method === "session/page")?.args.request.address.kind, "session");

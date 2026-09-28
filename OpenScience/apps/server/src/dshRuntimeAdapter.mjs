@@ -297,7 +297,7 @@ export function delegatedChildrenOf(tool, output) {
 }
 
 /**
- * The child rows of a `subagents/list` answer.
+ * The child rows of a parent's catalogue (`session/projections`; `subagents/list` before 0.1.7).
  *
  * A separate reader from `sessionListItems`, and it had to be: the two shapes do
  * NOT agree. `session/list` answers `{ items }`; this one answers
@@ -318,10 +318,16 @@ export function delegatedChildrenOf(tool, output) {
  * @param {any} value @returns {Record<string, any>[]}
  */
 export function subagentListItems(value) {
+  // Since DSH 0.1.7 the catalogue is the parent's own `subagentCatalog`
+  // projection, read with `session/projections`: `{ asOfSeq, values: {
+  // subagentCatalog: [{ id, createdAt, mode, label? }] } }`, or null for a
+  // session that does not exist. The `subagents/list` shapes are still read
+  // for a runtime that has not moved yet.
   const rows = Array.isArray(value) ? value
-    : Array.isArray(value?.entries) ? value.entries
-      : Array.isArray(value?.items) ? value.items
-        : [];
+    : Array.isArray(value?.values?.subagentCatalog) ? value.values.subagentCatalog
+      : Array.isArray(value?.entries) ? value.entries
+        : Array.isArray(value?.items) ? value.items
+          : [];
   return rows.filter((row) => row && typeof row === "object" && row.kind !== "diagnostic");
 }
 
@@ -332,7 +338,9 @@ export function subagentListItems(value) {
  * Never composed from a guess. `validateAddress` checks the mode against the
  * child's own descriptor and refuses a mismatch as `subagent/unauthorized` —
  * which is indistinguishable, from the reader's side, from the child being
- * gone.
+ * gone. `unknown` is a mode the kernel itself publishes since 0.1.7 (a child
+ * whose descriptor the catalogue could not read) and resolves from the
+ * child's own log when the history is read, so it is passed through as named.
  *
  * @param {string} parentSessionId @param {any} row
  * @returns {{kind: 'subagent', parentSessionId: string, childSessionId: string, mode: string} | null}
@@ -340,7 +348,7 @@ export function subagentListItems(value) {
 export function subagentAddress(parentSessionId, row) {
   const childSessionId = String(row?.id ?? row?.childSessionId ?? "");
   const mode = String(row?.mode ?? "");
-  if (!childSessionId || (mode !== "one-shot" && mode !== "continuable")) return null;
+  if (!childSessionId || !["one-shot", "continuable", "unknown"].includes(mode)) return null;
   return { kind: "subagent", parentSessionId: String(parentSessionId), childSessionId, mode };
 }
 
@@ -511,9 +519,14 @@ export class DshRuntimeAdapter {
     return { ...normalizeTranscript(sessionId, pages.flat()), exhausted };
   }
 
-  /** @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<Record<string, any>[]>} */
+  /**
+   * A session's direct children: its own `subagentCatalog` projection, read
+   * without activating an agent (`session/projections`, DSH 0.1.7 — the
+   * `subagents/list` method is retired).
+   * @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<Record<string, any>[]>}
+   */
   async subagents({ sessionId, signal }) {
-    return subagentListItems(await this.call("subagents/list", { parentSessionId: sessionId }, { signal }));
+    return subagentListItems(await this.call("session/projections", { request: { sessionId } }, { signal }));
   }
 
   /**
@@ -809,8 +822,13 @@ export function normalizeTranscript(sessionId, entries) {
         // Both shapes are read, because the fixture shape is also the mock
         // runtime's, and a normalizer that drops one of them fails silently.
         const message = data?.message ?? {};
+        // Session format 4 (DSH 0.1.7) makes the result its own `tool`-role
+        // message: `toolCallId` on the message and the blocks directly in
+        // `content`. `source.callId` is kept there too, so every shape below
+        // still reaches the same id.
         const callId = String(
-          message?.callId
+          message?.toolCallId
+            ?? message?.callId
             ?? message?.source?.callId
             ?? (Array.isArray(message?.content)
               ? message.content.find((block) => block?.toolCallId)?.toolCallId
@@ -913,10 +931,10 @@ function contentParts(content) {
 /**
  * The text of a tool result, whichever nesting the kernel used.
  *
- * Live `tool/result` frames wrap their text one level down:
+ * Format-3 `tool/result` frames (DSH 0.1.5) wrap their text one level down:
  * `content: [{ type: "tool-result", content: [{ type: "text", text }] }]`.
- * The flat `[{ type: "text", text }]` shape also exists (the mock runtime,
- * and the fixture recorded before the live shape was observed). `contentText`
+ * The flat `[{ type: "text", text }]` shape is format 4's own (DSH 0.1.7,
+ * recorded live 2026-09-28), the mock runtime's, and the first fixture's. `contentText`
  * alone read the flat shape only, so live results decoded to "".
  * @param {unknown} content @returns {string}
  */
@@ -1088,7 +1106,8 @@ export function decodeMuxFrame(frame) {
           type: "tool/result",
           seq,
           callId: String(
-            data?.message?.callId
+            data?.message?.toolCallId
+              ?? data?.message?.callId
               ?? data?.message?.source?.callId
               ?? (Array.isArray(data?.message?.content)
                 ? data.message.content.find((block) => block?.toolCallId)?.toolCallId
