@@ -69,7 +69,11 @@ test('a trial conversation is handed its pack at its first step, inside that ste
   assert.equal(decision.kind, 'enter')
   assert.equal(decision.messages.length, 1, 'delivered with the request that answers the first question')
   assert.deepEqual(decision.messages[0].content, [{ type: 'text', text: TRIAL }])
-  assert.deepEqual(decision.messages[0].source, { kind: 'plugin', plugin: 'evimed-capsule' }, 'machine text, never the researcher\'s words')
+  // The shape is the pinned kernel's (the port writes it): machine text,
+  // never the researcher's words, and named for this plugin.
+  const source = decision.messages[0].source
+  assert.notEqual(source.kind, 'user', 'machine text, never the researcher\'s words')
+  assert.match(JSON.stringify(source), /evimed-capsule/)
   assert.equal(decision.messages[0].role, 'user')
   assert.deepEqual(plane.asked, [{ path: '/internal/capsules/v1/session', body: { sessionId: 'ses_trial' } }])
 
