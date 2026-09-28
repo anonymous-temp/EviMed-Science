@@ -348,6 +348,25 @@ test("container secret preparation assigns only fixed readers and preserves priv
   }
 });
 
+test("container secret preparation accepts the owner-only 0400 files an older release wrote", async () => {
+  // The production host's token files were written 0400 before the alert
+  // receiver existed; the switch refused them as "not 0600" on 2026-09-28
+  // and stopped before moving `current`.
+  const tmp = await temporaryDirectory();
+  const outputDir = path.join(tmp, "secrets");
+  try {
+    await runMonitoring(outputDir, [], validEnv);
+    for (const name of ["operator-metrics-token.txt", "prometheus-operator-metrics-token.txt", "grafana-admin-password.txt"]) {
+      await chmod(path.join(outputDir, name), 0o400);
+    }
+    const prepared = await prepareContainerSecrets({ directory: outputDir, targetsFile: path.join(tmp, "targets/tls.json"),
+      platform: "linux", uid: 0, openFile: simulatedOwnership([]) });
+    assert.deepEqual(prepared.map((row) => row.mode), ["0400", "0400", "0400", "0600", "0600", "0600"]);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("container secret preparation refuses non-root or non-Linux before opening files", async () => {
   for (const options of [{ platform: "darwin", uid: 0 }, { platform: "linux", uid: 1001 }]) {
     let opened = false;

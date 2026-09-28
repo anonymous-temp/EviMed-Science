@@ -516,8 +516,12 @@ export async function prepareContainerSecrets({
     if (!stat.isFile() || stat.nlink !== 1 || stat.size <= 0 || stat.size > 16 * 1024) {
       fail("monitoring_prepare_file_invalid", "Container secret files must be nonempty, regular, and have one link.");
     }
-    if ((stat.mode & 0o7777) !== 0o600) {
-      fail("monitoring_file_permissions", "Container secret files must retain exact mode 0600.");
+    // Owner-only: 0600, or 0400 as the files written before the alert
+    // receiver existed are on the production host (2026-09-28: the switch
+    // refused them, and a read-only owner mode is the stricter of the two).
+    const mode = stat.mode & 0o7777;
+    if (mode !== 0o600 && mode !== 0o400) {
+      fail("monitoring_file_permissions", "Container secret files must be owner-only (mode 0600 or 0400).");
     }
   };
   try {
@@ -559,7 +563,7 @@ export async function prepareContainerSecrets({
           || bytesRead !== bytes.length || !preserved.equals(bytes)) {
         fail("monitoring_prepare_verification_failed", "Container reader preparation did not preserve the private file contract.");
       }
-      prepared.push({ file: path.basename(file), uid: after.uid, gid: after.gid, mode: "0600" });
+      prepared.push({ file: path.basename(file), uid: after.uid, gid: after.gid, mode: (after.mode & 0o7777).toString(8).padStart(4, "0") });
     }
     await check(secretFiles, targetsFile);
     return prepared;
