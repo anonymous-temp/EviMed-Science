@@ -395,8 +395,9 @@ test("the generated patch mounts the research MCP and hands it a token, never a 
     assert.match(patch, /^ {8}failOnStartupError: true$/m);
 
     assert.deepEqual(mcpEnvironment(patch), {
-      // The frontier and GEO modules are off here, so their tools are not offered.
-      EVIMED_DISABLED_TOOLS: "frontier_search,geo_read,geo_write,social_posts_search",
+      // The frontier and GEO modules are off here, so their tools are not
+      // offered; nor is patent search, which has no adapter here.
+      EVIMED_DISABLED_TOOLS: "frontier_search,geo_read,geo_write,social_posts_search,patent_search",
       EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
       EVIMED_MODEL_GATEWAY_TOKEN_FILE: `/runtime/dsh-home/${modelGatewayTokenFileName}`,
       EVIMED_MODEL_GATEWAY_URL: "http://127.0.0.1:8787/internal/model/v1",

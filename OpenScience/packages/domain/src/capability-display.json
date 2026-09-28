@@ -81,11 +81,11 @@
         "不提供个体诊疗建议。"
       ],
       "evaluation": {
-        "lastStatus": "failed",
-        "lastRunAt": "2026-09-08",
-        "runs": 1,
-        "delivered": 0,
-        "typicalMinutes": null
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-28",
+        "runs": 2,
+        "delivered": 1,
+        "typicalMinutes": 27
       }
     },
     "comprehensive-drug-evaluation": {

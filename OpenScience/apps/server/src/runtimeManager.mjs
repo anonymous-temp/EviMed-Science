@@ -1728,6 +1728,15 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     }
     environment[envName] = value;
   }
+  // Patent search likewise: offered only where a patent adapter was given. The
+  // owner ruled on 2026-09-03 that the EviMed ecosystem does not use patent
+  // evidence for now ("专利查询先关掉"), and production has no adapter, so the
+  // tool was listed to every capability-bound session only to answer
+  // `adapter_unconfigured`. `OPTIONAL_TOOLS` in the MCP server already counts
+  // it as not offered.
+  if (!environment.EVIMED_PATENT_SEARCH_URL) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "patent_search"])].join(",");
+  }
   return environment;
 }
 

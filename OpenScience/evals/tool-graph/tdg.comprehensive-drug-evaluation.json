@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:7bb5fb31e66dd375c09f0a172095cbb95e7c588b63b22f866ecb0ead1c258895",
+  "version": "sha256:9c9dcee8a6425ce68a0b655792174d0e77f014f06212c9bec6d0bf108918e25d",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 29,
+    "nodes": 28,
     "edges": 13,
     "byVia": {
       "schema": 13,
@@ -1587,40 +1587,6 @@
         "doi",
         "pmid"
       ],
-      "stateEffect": "none"
-    },
-    {
-      "name": "mcp__evimed__patent_search",
-      "source": "mcp",
-      "description": "Search traceable EviMed patent records for research-landscape discovery; results are not legal opinions, clinical evidence, or freedom-to-operate conclusions.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 512
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": []
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {

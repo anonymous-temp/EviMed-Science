@@ -99,7 +99,10 @@ test("switching web reading off also stops offering the tool to the runtime", as
     const geo = "geo_read,geo_write,social_posts_search";
     assert.equal(disabledTools({ ...base, webReadEnabled: true }), `patent_search,frontier_search,${geo}`);
     assert.equal(disabledTools({ ...base, webReadEnabled: false }), `patent_search,web_read,frontier_search,${geo}`);
-    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), `web_read,frontier_search,${geo}`);
+    // Patent search is offered only where a patent adapter is configured
+    // (2026-09-03 ruling), so an empty deployment list still leaves it out.
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), `web_read,frontier_search,${geo},patent_search`);
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false, evimedAdapterUrls: { patentSearch: "https://patents.internal/search" } }), `web_read,frontier_search,${geo}`);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
