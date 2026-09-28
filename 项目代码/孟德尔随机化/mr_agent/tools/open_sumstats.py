@@ -1537,6 +1537,7 @@ class RemoteTabix:
         self.header: list[str] | None = None
         self.columns: _Columns | None = None
         self.ranges = 0
+        self._count = threading.Lock()
 
     def _read_header(self) -> None:
         data = self.http.read(self.url, headers={"Range": f"bytes=0-{_BGZF_MAX_BLOCK * 2}"}, limit=_BGZF_MAX_BLOCK * 3)
@@ -1557,7 +1558,8 @@ class RemoteTabix:
                 headers={"Range": f"bytes={first}-{last + _BGZF_MAX_BLOCK}"},
                 limit=last - first + 2 * _BGZF_MAX_BLOCK,
             )
-            self.ranges += 1
+            with self._count:
+                self.ranges += 1
             pieces = []
             for offset, block in _bgzf_blocks(data):
                 absolute = first + offset
@@ -1700,12 +1702,39 @@ def _scan_significant(
 
 
 def _fetch_many(reader: RemoteTabix, wanted: Iterable[tuple[str, str, int]]) -> dict[str, Variant]:
-    found: dict[str, Variant] = {}
-    for rsid, chrom, pos in wanted:
+    """Each wanted position read from the tabix file, several at a time.
+
+    One position is one ~70 KB Range request, and on the Beijing-Tokyo link a
+    request took about 20 s (2026-09-28, production): read one after another,
+    a study with a few hundred lead variants took hours while the connection
+    sat idle between answers. The reads are independent, so they run on the
+    same worker bound as a whole-file fetch; each worker keeps its own tunnel
+    (`_Egress` pools idle tunnels per thread). The answer does not depend on
+    the order the reads finish in: results are collected in the order asked.
+    """
+    items = list(wanted)
+    if not items:
+        return {}
+    if reader.columns is None:
+        reader._read_header()  # once, before the workers share the reader
+
+    def one(item: tuple[str, str, int]) -> tuple[str, Variant | None]:
+        rsid, chrom, pos = item
         for variant in reader.fetch(chrom, pos):
             if variant.snp == rsid:
-                found[rsid] = variant
-                break
+                return rsid, variant
+        return rsid, None
+
+    workers = min(_fetch_workers(), len(items))
+    if workers <= 1:
+        results = [one(item) for item in items]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="evimed-mr-tabix") as pool:
+            results = list(pool.map(one, items))
+    found: dict[str, Variant] = {}
+    for rsid, variant in results:
+        if variant is not None and rsid not in found:
+            found[rsid] = variant
     return found
 
 
