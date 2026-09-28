@@ -235,14 +235,19 @@ def _configure(monkeypatch, tmp_path, url="https://203.0.113.7", content=CREDENT
         ("https://203.0.113.7/squid", CREDENTIALS, 0o400, "unusable", "edge_proxy_url_invalid"),
     ],
 )
-def test_the_configuration_is_read_like_the_control_planes(monkeypatch, tmp_path, url, content, mode, state, issue):
+def test_the_configuration_is_read_like_the_control_planes(
+    monkeypatch, tmp_path, caplog, url, content, mode, state, issue,
+):
     _configure(monkeypatch, tmp_path, url, content, mode)
+    caplog.set_level(logging.DEBUG)
     egress = osm._Egress.from_env()
     assert (egress.state, egress.issue) == (state, issue)
     assert (egress.proxy is not None) is (state == "configured")
     if egress.proxy is not None:
         assert egress.proxy.host == "203.0.113.7" and egress.proxy.port in (443, 8443)
-    _assert_no_secret(repr(egress.proxy), json.dumps(egress.record({"direct": 1})))
+    # A proxy that is set but cannot be used says so in the container's log, by code.
+    assert (f"edge proxy is unusable ({issue})" in caplog.text) is (state == "unusable")
+    _assert_no_secret(repr(egress.proxy), json.dumps(egress.record({"direct": 1})), caplog.text)
 
 
 def test_no_node_is_direct_and_says_so(monkeypatch, tmp_path):

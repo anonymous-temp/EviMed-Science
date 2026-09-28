@@ -305,6 +305,11 @@ class _Egress:
         self.off = False
 
     @classmethod
+    def _unusable(cls, issue: str) -> "_Egress":
+        _LOG.warning("EVIMED_MR_OPEN_PROXY_URL is set but the edge proxy is unusable (%s); EBI is read direct.", issue)
+        return cls(state="unusable", issue=issue)
+
+    @classmethod
     def from_env(cls, *, ssl_context: ssl.SSLContext | None = None) -> "_Egress":
         raw = os.getenv("EVIMED_MR_OPEN_PROXY_URL", "").strip()
         if not raw:
@@ -313,21 +318,21 @@ class _Egress:
             parts = urllib.parse.urlsplit(raw)
             port = parts.port or 443
         except ValueError:
-            return cls(state="unusable", issue="edge_proxy_url_invalid")
+            return cls._unusable("edge_proxy_url_invalid")
         if (
             parts.scheme != "https" or not parts.hostname or parts.username or parts.password
             or parts.path not in ("", "/") or parts.query or parts.fragment
         ):
             # https only: the credentials must never cross the wire in the clear.
-            return cls(state="unusable", issue="edge_proxy_url_invalid")
+            return cls._unusable("edge_proxy_url_invalid")
         path = os.getenv("EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE", "").strip()
         credentials, issue = read_proxy_credentials(path) if path else (None, None)
         if credentials is None:
-            return cls(state="unusable", issue=issue or "edge_proxy_credentials_missing")
+            return cls._unusable(issue or "edge_proxy_credentials_missing")
         try:
             from urllib3.util.ssltransport import SSLTransport  # noqa: F401  (TLS inside TLS)
         except ImportError:
-            return cls(state="unusable", issue="edge_proxy_tls_in_tls_unavailable")
+            return cls._unusable("edge_proxy_tls_in_tls_unavailable")
         authorization = "Basic " + base64.b64encode(credentials.encode("utf-8")).decode("ascii")
         return cls(EdgeProxy(parts.hostname, port, authorization), state="configured", ssl_context=ssl_context)
 
