@@ -644,6 +644,13 @@ test("the run may read the rules and not the marking scheme", () => {
     { name: "read", args: { file_path: `${prefix}/src/runPolicy.mjs` } },
     { name: "bash", args: { command: `grep -n "function sourceArtifactPaths" ${prefix}/src/runPolicy.mjs` } },
     { name: "bash", args: { command: `grep -rn "artifactPath" ${prefix}/plugins/run-policy.mjs` } },
+    // Two production walks round the old markers, which ended in `/` (2026-09-25
+    // geo-content, 2026-09-27 method-relations), and the image's own copy of
+    // the socket, which no marker named.
+    { name: "bash", args: { command: `R=${prefix}/node_modules/@evimed/domain/src\nsed -n '1190,1330p' $R/contractRegistry.mjs` } },
+    { name: "bash", args: { command: "cd /opt/evimed/socket/node_modules/@evimed/domain/src; python3 -c \"import json; print(json.load(open('capability-contracts.json')))\"" } },
+    { name: "read", args: { file_path: "/opt/evimed/socket/plugins/run-policy.mjs" } },
+    { name: "bash", args: { command: "ls /opt/evimed/socket/src" } },
   ]) {
     const verdict = toolPolicy(call, state);
     assert.equal(verdict.allow, false, `${call.name} reached the gate's implementation: ${JSON.stringify(call.args)}`);
@@ -656,6 +663,9 @@ test("the run may read the rules and not the marking scheme", () => {
   // sources, and refusing those would break the work to protect the exam.
   for (const call of [
     { name: "read", args: { file_path: `${prefix}/presets/evimed-universal/skills/clinical-evidence-synthesis/SKILL.md` } },
+    { name: "read", args: { file_path: "/opt/evimed/socket/presets/evimed-universal/skills/geo-content/SKILL.md" } },
+    { name: "read", args: { file_path: "/opt/evimed/capability-skills/geo-content/SKILL.md" } },
+    { name: "bash", args: { command: "cat /workspace/deliverables/x/src-notes.md" } },
     { name: "read", args: { file_path: ".evimed-sources/PMC11451125/fulltext.md" } },
     { name: "read", args: { file_path: "deliverables/x/clinical-evidence-report.md" } },
     { name: "bash", args: { command: "ls -la /workspace/.evimed-sources/" } },

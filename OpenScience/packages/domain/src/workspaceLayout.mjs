@@ -185,12 +185,22 @@ export function isProtectedWritePath(value) {
   })
 }
 
-/** Where the gate's own implementation lives inside the runtime container. */
-const GATE_IMPLEMENTATION_MARKERS = Object.freeze([
-  '@evimed/domain/src/',
-  '@evimed/dsh-socket/src/',
-  '@evimed/dsh-socket/plugins/',
-])
+/**
+ * Where the gate's own implementation lives inside the runtime container: the
+ * domain and the socket as the kernel's profile installed them
+ * (`…/@evimed/domain/src`, `…/@evimed/dsh-socket/{src,plugins}`), and the
+ * socket where the image copies it (`/opt/evimed/socket/{src,plugins}`).
+ *
+ * A directory named without a trailing slash is the same directory. The
+ * markers used to end in `/`, and production runs walked round them without
+ * trying: `R=…/@evimed/domain/src` followed by `sed -n '1190,1330p'
+ * $R/contractRegistry.mjs` (method-relations, 2026-09-27, eight reads of the
+ * validator it was about to be graded by), and `cd …/@evimed/domain/src;
+ * python3 -c "…open('capability-contracts.json')…"` (geo-content, 2026-09-25,
+ * "Find gate implementation for geo-content"). The image's own copy of the
+ * socket was never named at all.
+ */
+const GATE_IMPLEMENTATION_PATTERN = /(?:@evimed\/domain\/src|@evimed\/dsh-socket\/(?:src|plugins)|\/opt\/evimed\/socket\/(?:src|plugins))(?![A-Za-z0-9_-])/
 
 /**
  * Whether a path is the marking scheme rather than the exam paper.
@@ -215,7 +225,7 @@ export function isGateImplementationPath(value) {
   const text = String(value ?? '')
   if (!text) return false
   const unix = text.replace(/\\/g, '/')
-  return GATE_IMPLEMENTATION_MARKERS.some((marker) => unix.includes(marker))
+  return GATE_IMPLEMENTATION_PATTERN.test(unix)
 }
 
 /**
