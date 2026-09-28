@@ -101,6 +101,30 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // 「文件上传不了」). The raw route's size is held by the proxy
   // (`maxFileBytes`), not here.
   "sessionFeedback",
+  // Arrived in 0.1.7, each a way out of the project or into the deployment:
+  //
+  // - `terminal`  a PTY in the kernel's process that the page types into,
+  //               outside the agent's sandbox and as the runtime's own user
+  // - `pluginManager` / `pluginRegistryProbe`  installing, removing and
+  //               switching bundles in a running kernel, and probing registries
+  // - `account`   signing the kernel into a DeepSeek account (an OAuth flow
+  //               and a stored provider credential); runtimes hold none
+  // - `schedule`  cron-like prompts the control plane does not know about,
+  //               the `goals` reason again
+  // - `speech`    experimental voice input that ships audio to a recognizer
+  // - `permissionPresets` the permission table behind the access-mode chip,
+  //               which the hosted page does not show
+  //
+  // The socket's bundle also disables the rows behind the first three, so on a
+  // hosted runtime most of these are not exported at all; the bans are what
+  // hold if a later composition mounts them again.
+  "terminal",
+  "pluginManager",
+  "pluginRegistryProbe",
+  "account",
+  "schedule",
+  "speech",
+  "permissionPresets",
 ]);
 
 /**
@@ -111,6 +135,9 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
  * whole namespace.
  */
 export const RUNTIME_UI_WORKSPACE_PATH_METHODS = Object.freeze([
+  // 0.1.7's Office preview: it authorizes through `workspaceFiles` and reads
+  // the file's bytes by the path it is given, so it is held the same way.
+  "officeToPdf/render",
   "workspaceFiles/list",
   "workspaceFiles/read",
   "workspaceFiles/readAll",
@@ -194,6 +221,11 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
   // running the kernel to reveal or open a directory.
   "session/openWorkspacePath",
   "session/canOpenWorkspacePath",
+  // 0.1.7: which local applications can open a path, the same host
+  // integration; and a default model written for a blank session, the same
+  // model choice `selectModel` is.
+  "session/workspacePathApplications",
+  "session/initializeDefaultModel",
   // A project is the isolation unit and it is created by the control plane.
   // These would make, rename and destroy them behind its back.
   "workspace/create",
@@ -202,6 +234,12 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
   "workspace/archiveSession",
   "workspace/insertBefore",
   "workspace/insertSessionBefore",
+  // 0.1.7's workspace mutators: a default workspace created on first open,
+  // and a session list pinned or un-archived behind the control plane.
+  "workspace/initializeDefault",
+  "workspace/pinSession",
+  "workspace/unpinSession",
+  "workspace/unarchiveSession",
   // `session/uploadFileBinary` stood here until 2026-09-22: the raw-byte half
   // of `fileUploads` (see the namespace list), open again with it.
 ]);

@@ -51,7 +51,6 @@
 ARG RUNTIME_BASE_IMAGE
 FROM ${RUNTIME_BASE_IMAGE}
 
-ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
 ARG DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 ARG SOCKET_VERSION=0.1.0
 
@@ -203,13 +202,13 @@ RUN set -eux; \
   cp -a /opt/evimed/skills/geo-private /opt/evimed/socket/presets/evimed-universal/skills/geo-private; \
   chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
 
+# The preset is a row of the socket's own bundle patch since DSH 0.1.7 (see the
+# `preset-row` phase in install-runtime.sh); it reaches the kernel with the
+# seed's copy of the socket below, so there is no preset root to refresh. A
+# base built before 0.1.7 still carries /opt/evimed/dsh/presets; nothing reads
+# it, and a delta cannot change the kernel it runs on anyway.
 RUN set -eux; \
-  rm -rf "${DSH_PRESET_ROOT}/evimed-universal"; \
-  mkdir -p "${DSH_PRESET_ROOT}"; \
-  cp -a /opt/evimed/socket/presets/evimed-universal "${DSH_PRESET_ROOT}/evimed-universal"; \
-  chmod -R a-w "${DSH_PRESET_ROOT}/evimed-universal"; \
-  grep -q "^name: evimed-universal$" "${DSH_PRESET_ROOT}/evimed-universal/preset.yml"; \
-  test -f "${DSH_PRESET_ROOT}/evimed-universal/agent.cordis.yml"
+  grep -q "^        id: evimed-universal$" /opt/evimed/socket/presets/evimed-universal.patch.yml
 
 # The copy a running container actually imports.
 #

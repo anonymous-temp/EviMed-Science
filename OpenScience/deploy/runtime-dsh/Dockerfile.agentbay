@@ -97,8 +97,7 @@ COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 RUN bash /usr/local/lib/evimed/install-runtime.sh socket-client
 RUN bash /usr/local/lib/evimed/install-runtime.sh preset-skills
 
-ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
-RUN bash /usr/local/lib/evimed/install-runtime.sh preset-root
+RUN bash /usr/local/lib/evimed/install-runtime.sh preset-row
 
 ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml

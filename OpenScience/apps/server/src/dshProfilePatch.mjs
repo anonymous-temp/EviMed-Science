@@ -80,8 +80,6 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {Record<string, string>} mcpEnvironment
  * @property {string} [toolUniverseUrl]   MCP endpoint of the ToolUniverse sidecar; omitted
  *   when the deployment does not run one, and then no row is emitted at all
- * @property {string} presetRoot             absolute path to the read-only preset root the image
- *   ships; named in the agent-presets row's `roots` since alpha.5 made configured roots work
  * @property {string} presetSkillsDir        absolute path to the preset's shipped skill roots
  * @property {string} capabilitiesDir
  * @property {string} [answerPersonaDir]
@@ -136,7 +134,6 @@ export function renderProfilePatch(input) {
   assertLiteral(input.modelGatewayUrl, "modelGatewayUrl");
   assertLiteral(input.sessionsDir, "sessionsDir");
   assertLiteral(input.mcpServerPath, "mcpServerPath");
-  assertLiteral(input.presetRoot, "presetRoot");
   assertLiteral(input.presetSkillsDir, "presetSkillsDir");
 
   const rows = [
@@ -207,24 +204,13 @@ export function renderProfilePatch(input) {
     "- id: open-in-app",
     "  disabled: true",
     "",
-    "# The preset ships with the image in a root this deployment owns.",
-    "#",
-    "# Naming a root here was useless at 0.1.2-alpha.3: `composeProfile` pushed a",
-    "# final overlay that overwrote this one key on every boot, so a configured",
-    "# root vanished while the row still looked configured — and the image copied",
-    "# the preset into the kernel's own directory to work around it. alpha.5",
-    "# documents the opposite behaviour: the shipped root is *prepended* before",
-    "# every configured root rather than replacing the list. So the root is named",
-    "# again, and the image stopped writing into its own installation.",
-    "#",
-    "# `trust: system` is what lets a user's own copy under `<dshHome>/.agent-presets`",
-    "# fail to shadow it; the shipped root still wins an id collision ahead of both,",
-    "# which is why the preset id is ours and not a name upstream might ship.",
-    "- id: agent-presets",
+    "# The preset a session gets when it names none. Since DSH 0.1.7 a preset is",
+    "# a row of the composition -- the socket ships `evimed-universal` in its own",
+    "# bundle patch -- and the registry that chooses among the declared ones reads",
+    "# no directories and no roots. The socket names the same default; this row",
+    "# holds it for a deployment whose bundle was built without it.",
+    "- id: agent-preset-registry",
     "  config:",
-    "    roots:",
-    "      - path: " + yamlScalar(input.presetRoot ?? "/opt/evimed/dsh/presets"),
-    "        trust: system",
     "    default: " + yamlScalar(EVIMED_PRESET),
     "",
     "# The research tools. The MCP process runs outside the kernel's sandbox by",
@@ -356,6 +342,12 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   // hiding the panel was the whole of the change.
   "ui-settings-general",
   "ui-settings-models",
+  // 0.1.7's settings leaves: shell, agent loop, subagent and web-search
+  // settings, each a page of the runtime's own configuration document.
+  "ui-settings-shell",
+  "ui-settings-agent-loop",
+  "ui-settings-subagent",
+  "ui-settings-web-search",
   "ui-settings-plugin-inventory",
   "ui-settings-plugins",
   "ui-model-selection",

@@ -2221,7 +2221,7 @@ test("the controller trusts the same model gateway override as the web service",
   assert.equal(controller.match(gateway)?.[1], webValue, "the controller must validate capsule endpoints against the same operator-configured gateway");
 });
 
-test("the preset root the control plane configures is the one the image's own smoke proves", async () => {
+test("the preset the control plane asks for is the one the build smoke mounts and the socket declares", async () => {
   // `roots` is scanned FOR presets, so the value has to be the directory that
   // contains `evimed-universal`, not `evimed-universal` itself. It was the
   // latter, and the kernel answered `preset "evimed-universal" not found
@@ -2232,17 +2232,25 @@ test("the preset root the control plane configures is the one the image's own sm
   // image build actually mounts a session with: if these two disagree, one of
   // them is describing a deployment that does not work, and the build smoke is
   // the one that ran.
-  const [manager, smoke, dockerfile] = await Promise.all([
-    readFile(path.join(repoRoot, "apps/server/src/runtimeManager.mjs"), "utf8"),
+  //
+  // Since DSH 0.1.7 there is no root: a preset is a row of the socket's own
+  // bundle patch, and what has to agree is the NAME -- the control plane's,
+  // the build smoke's registry default, and the row the socket ships.
+  const [patchSource, smoke, presetPatch, socketManifest] = await Promise.all([
+    readFile(path.join(repoRoot, "apps/server/src/dshProfilePatch.mjs"), "utf8"),
     readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke-patch.yml"), "utf8"),
-    readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8"),
+    readFile(path.join(repoRoot, "packages/socket/presets/evimed-universal.patch.yml"), "utf8"),
+    readFile(path.join(repoRoot, "packages/socket/package.json"), "utf8"),
   ]);
-  const configured = manager.match(/presetRoot:\s*"([^"]+)"/)?.[1];
-  const proven = smoke.match(/- id: agent-presets[\s\S]*?- path:\s*(\S+)/)?.[1];
-  const built = dockerfile.match(/^ARG DSH_PRESET_ROOT=(\S+)/m)?.[1];
-  assert.ok(configured && proven && built, "all three must state a preset root");
-  assert.equal(configured, proven, "the control plane must configure the root the build smoke mounts a session with");
-  assert.equal(configured, built, "and the root the image actually creates");
+  const configured = patchSource.match(/export const EVIMED_PRESET = "([^"]+)"/)?.[1];
+  const proven = smoke.match(/- id: agent-preset-registry\s+config:\s+default:\s*'?([^'\s]+)'?/)?.[1];
+  const shipped = presetPatch.match(/name: '@deepseek-ai\/dsh-agent-preset'\s+config:\s+id:\s*(\S+)/)?.[1];
+  assert.ok(configured && proven && shipped, "all three must name a preset");
+  assert.equal(configured, proven, "the control plane must ask for the preset the build smoke mounts a session with");
+  assert.equal(configured, shipped, "and the preset the socket actually declares");
+  assert.ok(JSON.parse(socketManifest).dsh.bundle.patch.includes("./presets/evimed-universal.patch.yml"),
+    "the preset row reaches the kernel only as one of the bundle's patches");
+  assert.doesNotMatch(smoke, /- id: agent-presets\b/, "0.1.7 has no agent-presets row; a patch naming it addresses nothing");
 });
 
 test("the hosted e2e accepts any certified model, not one written into it", async () => {

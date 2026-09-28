@@ -435,8 +435,8 @@ test("a disabled provider still bootstraps authenticated EviMed sessions and pla
   const patchText = await readFile(patchFile, "utf8");
   const rows = parse(patchText);
   const row = (id) => rows.find((entry) => entry.id === id);
-  assert.equal(row("agent-presets").config.default, "evimed-universal");
-  assert.deepEqual(row("agent-presets").config.roots, [{ path: "/opt/evimed/dsh/presets", trust: "system" }]);
+  assert.equal(row("agent-preset-registry").config.default, "evimed-universal");
+  assert.equal(row("agent-presets"), undefined, "0.1.7 has no preset roots; a row for them would address nothing");
   assert.equal(row("session-persistence-jsonl").config.root, "/runtime/dsh-home/sessions");
   assert.equal(row("session-telemetry-otel").disabled, true);
   assert.equal(row("approval").config.policy, "never");

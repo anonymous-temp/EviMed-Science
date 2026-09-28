@@ -401,7 +401,6 @@ test("every row the control plane's generated patch writes to is a row the image
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: { OPEN_SCIENCE_PROJECT_ID: "prj_1" },
-    presetRoot: "/opt/evimed/socket/presets",
     presetSkillsDir: "/opt/evimed/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",

@@ -47,7 +47,6 @@ test("the generated patch writes enforcement out loud rather than inheriting it"
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: {},
-    presetRoot: "/opt/evimed/socket/presets",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",
     capsuleMethodsDir: "/runtime/capsule/methods",

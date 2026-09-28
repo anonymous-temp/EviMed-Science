@@ -311,18 +311,15 @@ preset_skills() {
   chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/mcp
 }
 
-# A root this image owns, named by the profile patch's `agent-presets.roots`.
-# The shipped root is prepended before configured roots, so naming our own root
-# works, and a container does not write into its own installation. The two
-# assertions check the name on both sides: the control plane asks for this
-# exact string.
-preset_root() {
+# The preset the control plane asks for, as the kernel reads it since DSH 0.1.7:
+# one `@deepseek-ai/dsh-agent-preset` row in the socket's own bundle patch, which
+# the bundle's manifest lists among its patches. There is no preset root; the
+# assertions check the name on both sides, because the control plane asks for
+# this exact string.
+preset_row() {
   set -x
-  mkdir -p "${DSH_PRESET_ROOT}"
-  cp -a /opt/evimed/socket/presets/evimed-universal "${DSH_PRESET_ROOT}/evimed-universal"
-  chmod -R a-w "${DSH_PRESET_ROOT}/evimed-universal"
-  grep -q "^name: evimed-universal$" "${DSH_PRESET_ROOT}/evimed-universal/preset.yml"
-  test -f "${DSH_PRESET_ROOT}/evimed-universal/agent.cordis.yml"
+  grep -q "^        id: evimed-universal$" /opt/evimed/socket/presets/evimed-universal.patch.yml
+  node -e 'const m=require("/opt/evimed/socket/package.json"); if(!m.dsh.bundle.patch.includes("./presets/evimed-universal.patch.yml")) throw new Error("the socket bundle does not list its preset patch")'
 }
 
 # The profile, pre-initialized at build time outside `/runtime` (which a
@@ -425,7 +422,7 @@ case "${phase}" in
   sider-cache) sider_cache ;;
   socket-client) socket_client ;;
   preset-skills) preset_skills ;;
-  preset-root) preset_root ;;
+  preset-row) preset_row ;;
   profile-seed) profile_seed ;;
   smoke) smoke ;;
   serve) serve ;;

@@ -18,7 +18,6 @@ const input = {
     OPEN_SCIENCE_PROJECT_ID: "prj_1",
     EMPTY_VALUE: "",
   },
-  presetRoot: "/opt/evimed/socket/presets",
   capabilitiesDir: "/opt/evimed/capabilities",
   capabilitySkillsDir: "/opt/evimed/capability-skills",
   capsuleMethodsDir: "/runtime/capsule/methods",
@@ -62,21 +61,12 @@ test("the kernel is pointed at our gateway and never at a provider key", () => {
 test("telemetry, the default preset and the approval policy are pinned by the deployment", () => {
   const patch = renderProfilePatch(input);
   assert.match(patch, /- id: session-telemetry-otel\n\s+disabled: true/);
-  assert.match(patch, new RegExp(`default: '${EVIMED_PRESET}'`));
-  // Deliberately absent: a preset root. The kernel overwrites this row's
-  // `roots` with its own shipped directory on every boot, so naming one here
-  // produced a row that read as configured and a preset the kernel could not
-  // see. The image installs the preset into the kernel's root instead, and this
-  // asserts we have stopped pretending otherwise.
-  // The reverse of what this asserted until 0.1.2-alpha.5. At alpha.3 the
-  // kernel overwrote this row's `roots` on every boot, so naming one was worse
-  // than naming none — it read as configured and was discarded, and the image
-  // worked around it by copying the preset into the kernel's own directory.
-  // alpha.5 documents the opposite: the shipped root is prepended before every
-  // configured root rather than replacing the list. The root is named again,
-  // and `trust: system` is what stops a user's copy under `.agent-presets`
-  // from shadowing it.
-  assert.match(patch, /^\s+roots:\n\s+- path: '[^']+'\n\s+trust: system$/m, "the preset root has to be named for the session to find it");
+  // The preset's third arrangement. alpha.3 overwrote a configured preset
+  // root on every boot; alpha.5 prepended the shipped root and honoured ours;
+  // 0.1.7 deleted `dsh-agent-presets` and roots with it — a preset is a row of
+  // the socket's own bundle patch, and the registry only names the default.
+  assert.match(patch, new RegExp(`- id: agent-preset-registry\n  config:\n    default: '${EVIMED_PRESET}'`));
+  assert.doesNotMatch(patch, /- id: agent-presets\b|^\s+roots:/m, "0.1.7 has no preset roots; a row naming one addresses nothing");
   assert.match(patch, /- id: approval\n  config:\n    policy: 'never'/, "an unattended run auto-refuses anything asking to leave the sandbox");
 });
 

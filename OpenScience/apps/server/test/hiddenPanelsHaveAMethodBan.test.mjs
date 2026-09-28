@@ -39,6 +39,10 @@ import { HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY
 const WHAT_STOPS_IT = {
   "ui-settings-general": { namespace: "settings" },
   "ui-settings-models": { namespace: "llm" },
+  "ui-settings-shell": { namespace: "settings" },
+  "ui-settings-agent-loop": { namespace: "settings" },
+  "ui-settings-subagent": { namespace: "settings" },
+  "ui-settings-web-search": { namespace: "settings" },
   "ui-settings-plugin-inventory": { namespace: "evimedPlugins" },
   "ui-settings-plugins": { namespace: "cordis" },
   "ui-model-selection": { methods: ["session/selectModel", "session/modelCatalog"] },

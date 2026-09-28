@@ -158,6 +158,14 @@
   disabled: true
 - id: ui-settings-models
   disabled: true
+- id: ui-settings-shell
+  disabled: true
+- id: ui-settings-agent-loop
+  disabled: true
+- id: ui-settings-subagent
+  disabled: true
+- id: ui-settings-web-search
+  disabled: true
 - id: ui-settings-plugin-inventory
   disabled: true
 - id: ui-settings-plugins

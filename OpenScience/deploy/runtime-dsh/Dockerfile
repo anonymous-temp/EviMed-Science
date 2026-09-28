@@ -176,38 +176,15 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh socket-client
 # collision, and system roots come first.
 RUN bash /usr/local/lib/evimed/install-runtime.sh preset-skills
 
-# The preset also goes into the kernel's OWN preset root, because that is the
-# only root the kernel reads.
-#
-# The bundle mounts an `agent-presets` row whose `roots` names the bundle's
-# preset directory, and the control plane's patch names it again. Neither
-# survives: `composeProfile` pushes a final overlay that REPLACES
-# `agent-presets.config.roots` with the shipped root on every boot, keeping the
-# rest of the row. So the row's `default: evimed-universal` was honoured while
-# the directory it names was invisible, and every session creation failed with
-# `preset "evimed-universal" not found (available: standard, code, minimal,
-# cordis)` — the kernel listing its own four and none of ours.
-#
-# This is the same shape as the profile patch not reaching a preset's rows: a
-# configuration target that DSH silently overrides. The answer is the same —
-# put the thing where the kernel actually looks, rather than configuring a
-# location it will discard.
-# The phase checks the name on both sides: the control plane asks for this
-# exact string, and a rename on either side would otherwise show up only as a
-# failed session in production.
-#
-# A root this image owns, named by the profile patch's `agent-presets.roots`.
-#
-# It used to be copied into the kernel's own preset directory, because at
-# 0.1.2-alpha.3 `composeProfile` overwrote the row's `roots` on every boot and
-# a configured root was silently discarded. That directory no longer exists at
-# alpha.5 — the presets moved inside `@deepseek-ai/dsh-agent-presets` — and the
-# behaviour it forced is gone with it: the shipped root is now *prepended*
-# before configured roots rather than replacing them, so naming our own root
-# works and is documented. Which returns this image to the rule it should never
-# have bent: a container does not write into its own installation.
-ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
-RUN bash /usr/local/lib/evimed/install-runtime.sh preset-root
+# The preset the control plane asks for, where the kernel reads it: since DSH
+# 0.1.7 a preset is a row of the composition — the socket's own bundle patch
+# `presets/evimed-universal.patch.yml` — and there is no preset directory or
+# root to install. Until 0.1.5 this step copied the preset into a root the
+# profile patch named; that root is gone with `dsh-agent-presets`. The phase
+# checks the name on both sides, because the control plane asks for this exact
+# string and a rename on either side would otherwise show up only as a failed
+# session in production.
+RUN bash /usr/local/lib/evimed/install-runtime.sh preset-row
 
 # Pre-initialize the profile at build time so a container never has to install
 # its own plugins over the network while serving — built at a path outside

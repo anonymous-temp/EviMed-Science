@@ -103,7 +103,6 @@ test("a switched-off client bundle is a disabled row in the patch, and an unknow
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: {},
-    presetRoot: "/opt/evimed/dsh/presets",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",
