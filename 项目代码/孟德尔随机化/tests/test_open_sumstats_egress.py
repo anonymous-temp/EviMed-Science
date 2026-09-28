@@ -153,8 +153,10 @@ def test_an_answer_from_ebi_is_not_a_failure_of_the_node(node):
         ("wrong_credentials", "edge_proxy_refused", 407, 1),
         ("destination_refused", "edge_proxy_refused", 403, 1),
         ("untrusted_certificate", "edge_proxy_certificate_rejected", None, 1),
-        ("upstream_unreachable", "edge_proxy_refused", 502, 3),
-        ("node_down", "edge_proxy_unreachable", None, 3),
+        # Transient: each request retries the node before going direct, and
+        # the node goes off only after this many failures in a row.
+        ("upstream_unreachable", "edge_proxy_refused", 502, osm._PROXY_FAILURES_BEFORE_OFF),
+        ("node_down", "edge_proxy_unreachable", None, osm._PROXY_FAILURES_BEFORE_OFF),
     ],
 )
 def test_a_failing_node_sends_the_request_direct_and_the_record_says_so(
@@ -174,6 +176,7 @@ def test_a_failing_node_sends_the_request_direct_and_the_record_says_so(
             probe.bind(("127.0.0.1", 0))
             closed = probe.getsockname()[1]
         monkeypatch.setenv("EVIMED_MR_OPEN_PROXY_URL", f"https://127.0.0.1:{closed}")
+    monkeypatch.setattr(osm, "_sleep", lambda seconds: None)
     caplog.set_level(logging.DEBUG)
     direct = _Direct()
     http = osm._Http(opener=direct, egress=osm._Egress.from_env(ssl_context=trust))
@@ -268,3 +271,28 @@ def test_no_node_is_direct_and_says_so(monkeypatch, tmp_path):
     assert osm._Egress.from_env().issue == "edge_proxy_credentials_symlink"
     monkeypatch.setenv("EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE", str(tmp_path / "absent"))
     assert osm._Egress.from_env().issue == "edge_proxy_credentials_unavailable"
+
+
+def test_a_passing_node_failure_is_retried_through_the_node_not_sent_direct(node, monkeypatch):
+    # 2026-09-28: two passing failures and one unreachable moment sent a 450 MB
+    # production job direct (~19 KB/s from Beijing instead of ~350 through the
+    # node) for hours. A transient failure is now tried through the node again.
+    waits = []
+    monkeypatch.setattr(osm, "_sleep", waits.append)
+    failures_left = {"n": 2}
+    real_open = osm._Egress.open
+
+    def flaky(self, url, headers, timeout):
+        if failures_left["n"] > 0:
+            failures_left["n"] -= 1
+            raise osm._ProxyFailure("edge_proxy_unreachable")
+        return real_open(self, url, headers, timeout)
+
+    monkeypatch.setattr(osm._Egress, "open", flaky)
+    http = osm._Http(opener=_no_direct, egress=osm._Egress.from_env(ssl_context=node.trust))
+    pair = osm.build_pair(*SOURCES, http=http)
+    assert [row.snp for row in pair.outcome_rows] == ["rs1", "rs3", "rs4"]
+    egress = pair.record["http"]["egress"]
+    assert "direct" not in egress["requests"], egress
+    assert egress["proxyTurnedOff"] is False and egress["proxyFailureCount"] == 2
+    assert waits == list(osm._PROXY_RETRY_WAITS[:2])

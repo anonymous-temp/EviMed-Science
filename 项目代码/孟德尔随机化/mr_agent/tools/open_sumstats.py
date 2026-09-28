@@ -98,6 +98,11 @@ class OpenSourceError(RuntimeError):
         self.status = status
 
 
+def _sleep(seconds: float) -> None:
+    """A wait between node retries (patched out in tests)."""
+    time.sleep(seconds)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -192,8 +197,11 @@ def _cache_write(key: str, suffix: str, content: bytes) -> None:
 # A node that fails — unreachable, a TLS failure, a refused tunnel (407 wrong
 # credentials, 403 destination), a timeout — costs that request its shortcut,
 # not its answer: it goes direct. A refusal that a retry cannot change turns
-# the node off for the rest of the job at once; any other failure does at the
-# third. The source record's ``http.egress`` says how many requests went each
+# the node off for the rest of the job at once. Any other failure is tried
+# through the node again after a short wait before the request goes direct,
+# and turns the node off only after several in a row: from Beijing, direct is
+# about nineteen times slower, and on 2026-09-28 three passing failures sent a
+# 450 MB job direct for hours. The source record's ``http.egress`` says how many requests went each
 # way and why the node failed, and each read says which way it went. The
 # credentials are sent to the node in the CONNECT request and nowhere else:
 # never logged, never recorded, never in an error message.
@@ -203,7 +211,10 @@ ROUTE_PROXY = "edge_proxy"
 ROUTE_DIRECT = "direct"
 #: The node's own connect budget, as the control plane's (OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS).
 _PROXY_CONNECT_SECONDS = 10
-_PROXY_FAILURES_BEFORE_OFF = 3
+#: Transient node failures in a row (no success between) that turn it off.
+_PROXY_FAILURES_BEFORE_OFF = 6
+#: Waits before trying the node again for the same request after a transient failure.
+_PROXY_RETRY_WAITS = (2, 5, 12)
 _PROXY_FAILURES_RECORDED = 20
 _CONNECT_HEAD_LIMIT = 16 * 1024
 _CREDENTIALS_LIMIT = 8 * 1024
@@ -307,6 +318,7 @@ class _Egress:
         self._context = ssl_context
         self.failures: list[dict[str, Any]] = []
         self.failure_count = 0
+        self.consecutive_failures = 0
         self.off = False
 
     @classmethod
@@ -357,9 +369,13 @@ class _Egress:
             "The edge proxy failed for %s (%s%s); the request goes direct.",
             host, failure.code, f", HTTP {failure.status}" if failure.status else "",
         )
-        if not self.off and (failure.final or self.failure_count >= _PROXY_FAILURES_BEFORE_OFF):
+        self.consecutive_failures += 1
+        if not self.off and (failure.final or self.consecutive_failures >= _PROXY_FAILURES_BEFORE_OFF):
             self.off = True
             _LOG.warning("The edge proxy is off for the rest of this job after %d failure(s).", self.failure_count)
+
+    def succeeded(self) -> None:
+        self.consecutive_failures = 0
 
     def open(self, url: str, headers: dict[str, str], timeout: float) -> http_client.HTTPResponse:
         """One GET through the node; the answer whatever its status, or ``_ProxyFailure``."""
@@ -475,10 +491,19 @@ class _Http:
         for _ in range(_REDIRECTS + 1):
             if not self.egress.routes(url):
                 break
-            try:
-                response = self.egress.open(url, headers, _timeout())
-            except _ProxyFailure as failure:
-                self.egress.failed(failure, urllib.parse.urlsplit(url).hostname or "")
+            response = None
+            for attempt in range(len(_PROXY_RETRY_WAITS) + 1):
+                try:
+                    response = self.egress.open(url, headers, _timeout())
+                except _ProxyFailure as failure:
+                    self.egress.failed(failure, urllib.parse.urlsplit(url).hostname or "")
+                    if failure.final or self.egress.off or attempt == len(_PROXY_RETRY_WAITS):
+                        break
+                    _sleep(_PROXY_RETRY_WAITS[attempt])
+                    continue
+                self.egress.succeeded()
+                break
+            if response is None:
                 break
             self.routes[ROUTE_PROXY] += 1
             self.last_route = ROUTE_PROXY
