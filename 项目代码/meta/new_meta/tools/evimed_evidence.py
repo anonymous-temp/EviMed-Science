@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from new_meta.config import EVIMED_API_KEY, EVIMED_EVIDENCE_MAX_REFERENCES, EVIMED_EVIDENCE_URL
+from new_meta.config import EVIMED_API_KEY, EVIMED_API_KEY_PROBLEM, EVIMED_EVIDENCE_MAX_REFERENCES, EVIMED_EVIDENCE_URL
 
 logger = logging.getLogger("metaagent.evimed_evidence")
 
@@ -34,7 +34,8 @@ def search_evimed_evidence(
     if not query:
         return {"status": "skipped", "query": query, "references": [], "message": "empty_query"}
     if not key:
-        return {"status": "disabled", "query": query, "references": [], "message": "missing_evimed_api_key"}
+        return {"status": "disabled", "query": query, "references": [],
+                "message": EVIMED_API_KEY_PROBLEM or "missing_evimed_api_key"}
 
     payload_result = _post_evimed_json(endpoint, key, {"query": query})
     if payload_result.get("status") != "ok":

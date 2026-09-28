@@ -702,3 +702,27 @@ def test_evimed_search_falls_back_to_curl_when_requests_tls_fails(monkeypatch) -
 
     assert result["status"] == "ok"
     assert result["references"][0]["study_id"] == "evimed:guide:g1"
+
+
+def test_the_evimed_key_is_read_from_the_file_compose_mounts(tmp_path) -> None:
+    """Compose passes EVIMED_API_KEY_FILE=/run/secrets/evimed-api-key to this
+    engine; until 2026-09-28 only EVIMED_API_KEY was read, so the background
+    evidence search always said missing_evimed_api_key in production."""
+    from new_meta.config import read_secret
+
+    key_file = tmp_path / "evimed-api-key"
+    key_file.write_text("platform-key-value\n", encoding="utf-8")
+    assert read_secret("EVIMED_API_KEY", {"EVIMED_API_KEY_FILE": str(key_file)}) == ("platform-key-value", "")
+    # A value set directly wins; nothing set is not a problem.
+    assert read_secret("EVIMED_API_KEY", {"EVIMED_API_KEY": "direct", "EVIMED_API_KEY_FILE": str(key_file)}) == ("direct", "")
+    assert read_secret("EVIMED_API_KEY", {}) == ("", "")
+    # A file that cannot be the credential is named as a problem, never echoed.
+    key_file.write_text("line one\nline two\n", encoding="utf-8")
+    value, problem = read_secret("EVIMED_API_KEY", {"EVIMED_API_KEY_FILE": str(key_file)})
+    assert value == "" and problem == "EVIMED_API_KEY_FILE does not hold one credential line"
+    assert read_secret("EVIMED_API_KEY", {"EVIMED_API_KEY_FILE": "relative/key"})[1] == "EVIMED_API_KEY_FILE must be an absolute path"
+    assert "unreadable" in read_secret("EVIMED_API_KEY", {"EVIMED_API_KEY_FILE": str(tmp_path / "absent")})[1]
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "evimed-api-key")
+    assert "unreadable" in read_secret("EVIMED_API_KEY", {"EVIMED_API_KEY_FILE": str(link)})[1]
+

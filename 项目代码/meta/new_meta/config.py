@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import stat
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -18,6 +19,41 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def read_secret(name: str, environ=os.environ) -> tuple[str, str]:
+    """(value, problem) of a credential set as NAME, or as the file NAME_FILE names.
+
+    The EviMed compose stack mounts credentials as files and passes the path
+    (EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key). A variable set directly
+    wins. The file must be an absolute path to a regular file of one line; a
+    problem is named, never the value.
+    """
+    value = str(environ.get(name) or "").strip()
+    if value:
+        return value, ""
+    path = str(environ.get(f"{name}_FILE") or "").strip()
+    if not path:
+        return "", ""
+    if not os.path.isabs(path) or "\0" in path:
+        return "", f"{name}_FILE must be an absolute path"
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        return "", f"{name}_FILE is unreadable ({type(exc).__name__})"
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 8192:
+            return "", f"{name}_FILE is not a regular file of at most 8192 bytes"
+        content = os.read(descriptor, 8193).decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return "", f"{name}_FILE is unreadable ({type(exc).__name__})"
+    finally:
+        os.close(descriptor)
+    content = content[:-1] if content.endswith("\n") else content
+    if not content or content != content.strip() or any(character in content for character in "\r\n\0"):
+        return "", f"{name}_FILE does not hold one credential line"
+    return content, ""
 
 
 def _env_optional_bool(name: str) -> Optional[bool]:
@@ -76,7 +112,10 @@ EVIMED_EVIDENCE_URL = os.getenv(
     "EVIMED_EVIDENCE_URL",
     "https://www.evimed.com/api-evimed/medicine-api/ai-api/search/api/evidence",
 )
-EVIMED_API_KEY = os.getenv("EVIMED_API_KEY", "")
+# Read from EVIMED_API_KEY_FILE too: compose has mounted the platform key for
+# this engine since 2026-08-27, and until 2026-09-28 nothing read it, so the
+# background-evidence search always reported missing_evimed_api_key.
+EVIMED_API_KEY, EVIMED_API_KEY_PROBLEM = read_secret("EVIMED_API_KEY")
 EVIMED_EVIDENCE_MAX_REFERENCES = int(os.getenv("EVIMED_EVIDENCE_MAX_REFERENCES", "12"))
 
 # --- Manuscript polish ---
