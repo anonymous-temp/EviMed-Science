@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { connectorCredentialSpec } from "@evimed/domain";
-import { privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
+import { headerValue, nodeWebTransport, privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
 
 const gatewayPath = "/internal/sources/v1/fetch";
 
@@ -462,11 +462,12 @@ function assertPublicHostname(hostname) {
  * the ordinary shape of this attack, and whichever the connection picks is not
  * ours to choose.
  *
- * What remains after this is the rebinding window — the name can answer
- * differently between this lookup and the connection. Closing that needs the
- * socket pinned to the address checked here, which needs an agent this
- * deployment's fetch does not expose. The window is worth naming rather than
- * implying it is shut. */
+ * This is the early refusal, which names the location in the attempt list.
+ * What makes it binding is the fetch: the PDF is read through the pinned web
+ * transport (`webReadNetwork.mjs`), whose socket resolves the name again at
+ * connect time, refuses the connection if any answer is private, and connects
+ * to exactly the addresses it checked — so a name that answers "public" here
+ * and "127.0.0.1" to the socket (DNS rebinding) reaches nothing. */
 async function assertPublicAddresses(hostname, resolveImpl) {
   let records;
   try {
@@ -755,7 +756,7 @@ async function readBoundedBody(body, maxBytes) {
  * kept ending with more eligible records than readable ones. Unpaywall knows
  * where the rest are, but on the publisher's own domain, so the resolution has
  * to happen here rather than in the runtime. */
-async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal, documentParser }) {
+async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, pdfTransport, signal, documentParser }) {
   const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
   if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
     recordCredentialMissing("unpaywall", config);
@@ -819,30 +820,40 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl
       }`);
       continue;
     }
+    // Through the pinned transport, like every hop of a web read: the socket
+    // connects only to addresses checked at connect time, never follows a
+    // redirect, and stops reading at the size limit.
     let upstream;
     try {
-      upstream = await fetchImpl(target, {
+      upstream = await pdfTransport({
+        url: target,
         headers: { accept: "application/pdf", "user-agent": "EviMed-Research/1.2 (server public-source gateway)" },
-        redirect: "error",
         signal,
+        maxBytes,
       });
-    } catch {
-      attempts.push(`${target.hostname}: unreachable`);
+    } catch (error) {
+      const code = /** @type {any} */ (error)?.code;
+      if (code === "web_read_response_too_large") {
+        throw gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
+      }
+      attempts.push(`${target.hostname}: ${
+        code === "web_read_host_forbidden" ? "not publicly routable"
+          : code === "web_read_host_unresolved" ? "did not resolve"
+            : "unreachable"
+      }`);
       continue;
     }
-    if (!upstream.ok) {
-      await upstream.body?.cancel().catch(() => {});
+    if (upstream.status < 200 || upstream.status > 299) {
       attempts.push(`${target.hostname}: HTTP ${upstream.status}`);
       continue;
     }
-    const contentType = String(upstream.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+    const contentType = headerValue(upstream.headers, "content-type").split(";", 1)[0].trim().toLowerCase();
     if (contentType !== "application/pdf") {
-      await upstream.body?.cancel().catch(() => {});
       // A login wall or cookie interstitial answers with HTML and HTTP 200.
       attempts.push(`${target.hostname}: served ${contentType || "no"} content`);
       continue;
     }
-    const buffer = await readBoundedBody(upstream.body, maxBytes);
+    const buffer = upstream.body;
     if (request.parse) {
       await sendParsedPdf(res, buffer, {
         doi: request.doi,
@@ -930,13 +941,19 @@ async function sendParsedPdf(res, buffer, provenance, documentParser) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
+ * `pdfTransport` is how an open-access PDF is fetched: the deployment's web
+ * transport (`webReadTransportFor`), or by default the pinned one resolving
+ * through `resolveImpl` — never a plain fetch, whose socket resolves the name
+ * again unchecked.
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
- *   documentParser?: any }} [options]
+ *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null }} [options]
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
+  pdfTransport = null,
 } = {}) {
+  const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -970,7 +987,9 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
       }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
       if (request.mode === "open-access-pdf") {
-        await serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal: controller.signal, documentParser });
+        await serveOpenAccessPdf(request, {
+          config, res, fetchImpl, resolveImpl, pdfTransport: openAccessTransport, signal: controller.signal, documentParser,
+        });
         return;
       }
       if (request.mode === "web-read") {

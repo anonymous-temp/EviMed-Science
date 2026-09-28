@@ -11,6 +11,7 @@ import {
   PUBLIC_SOURCE_ALLOWED_HOSTS,
   PUBLIC_SOURCE_CREDENTIAL_PROFILES,
 } from "../src/publicSourceGateway.mjs";
+import { fetchWebTransport } from "../src/webReadNetwork.mjs";
 
 const connectorSources = ["public_sources.py", "science_connectors.py"].map((name) => {
   const file = path.resolve(
@@ -60,7 +61,6 @@ test("open-access PDF requests carry only a DOI and the server picks the host", 
     runtimeManager(),
     {
       fetchImpl: async (url) => {
-        seen.push(String(url));
         if (String(url).startsWith("https://api.unpaywall.org/")) {
           return Response.json({
             best_oa_location: { url_for_pdf: "http://publisher.example/a.pdf", host_type: "publisher" },
@@ -70,10 +70,16 @@ test("open-access PDF requests carry only a DOI and the server picks the host", 
             ],
           });
         }
-        if (String(url).startsWith("https://blocked.example/")) return new Response("denied", { status: 403 });
-        return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
+        throw new Error("a PDF is never fetched with a plain fetch");
       },
       resolveImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+      // The deployment passes its pinned web transport; a fixture one reads
+      // the same stub here (the pin has its own test below).
+      pdfTransport: fetchWebTransport(async (url) => {
+        seen.push(String(url));
+        if (String(url).startsWith("https://blocked.example/")) return new Response("denied", { status: 403 });
+        return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
+      }),
     },
   ));
   t.after(() => close(server));
@@ -933,14 +939,17 @@ test("a publisher host that resolves inside this network is refused after resolu
               : [...inward, { url_for_pdf: "https://good.example.org/a.pdf", host_type: "repository" }],
           });
         }
-        fetched.push(new URL(String(url)).hostname);
-        return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
+        throw new Error("a PDF is never fetched with a plain fetch");
       },
       resolveImpl: async (hostname) => {
         const record = resolutions.get(hostname);
         if (!record) throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
         return record;
       },
+      pdfTransport: fetchWebTransport(async (url) => {
+        fetched.push(new URL(String(url)).hostname);
+        return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
+      }),
     },
   ));
   t.after(() => close(server));
@@ -961,4 +970,43 @@ test("a publisher host that resolves inside this network is refused after resolu
   assert.equal(failure.error.code, "public_source_pdf_not_open_access");
   assert.match(failure.error.message, /did not resolve/);
   assert.deepEqual(fetched, ["good.example.org"]);
+});
+
+test("an open-access PDF is fetched over a socket pinned to the address checked when it connects", async (t) => {
+  // DNS rebinding: the name answers a public address to the check and a
+  // private one when the socket connects. A plain fetch resolves again, unchecked,
+  // and would connect inward; the pinned transport resolves at connect time,
+  // refuses, and connects nowhere (2026-09-28 review).
+  /** @type {string[]} */
+  const answers = [];
+  const server = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: { unpaywall: "contact@example.test" } },
+    runtimeManager(),
+    {
+      fetchImpl: async (url) => {
+        if (String(url).startsWith("https://api.unpaywall.org/")) {
+          return Response.json({ best_oa_location: { url_for_pdf: "https://rebinding.example.org/a.pdf", host_type: "repository" } });
+        }
+        throw new Error("a PDF is never fetched with a plain fetch");
+      },
+      // The default transport: the pinned one, resolving through this stub.
+      resolveImpl: async (hostname) => {
+        const address = answers.length === 0 ? "93.184.216.34" : "127.0.0.1";
+        answers.push(`${hostname}=${address}`);
+        return [{ address, family: 4 }];
+      },
+    },
+  ));
+  t.after(() => close(server));
+  const base = await listen(server);
+
+  const response = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/rebinding" });
+  assert.equal(response.status, 404);
+  const failure = await response.json();
+  assert.equal(failure.error.code, "public_source_pdf_not_open_access");
+  // Refused by the connect-time check, not by a failed connection to 127.0.0.1:443.
+  assert.match(failure.error.message, /rebinding\.example\.org: not publicly routable/);
+  assert.doesNotMatch(failure.error.message, /unreachable/);
+  assert.deepEqual(answers, ["rebinding.example.org=93.184.216.34", "rebinding.example.org=127.0.0.1"],
+    "checked once before, and again by the socket itself");
 });

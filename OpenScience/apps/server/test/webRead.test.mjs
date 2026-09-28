@@ -11,6 +11,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { createPublicSourceGatewayHandler } from "../src/publicSourceGateway.mjs";
+import { fetchWebTransport } from "../src/webReadNetwork.mjs";
 import { createWebReader, webReadMetricFamilies, webReadUserAgent } from "../src/webRead.mjs";
 import { isOfficialWebSource } from "../src/webReadOfficial.mjs";
 
@@ -423,7 +424,10 @@ test("an open-access PDF can come back parsed, with the PDF beside the text", as
     },
   };
   const credentials = { publicSourceCredentials: { unpaywall: "contact@example.test" } };
-  const server = createServer(createPublicSourceGatewayHandler(credentials, runtimeManager, { fetchImpl, resolveImpl, documentParser }));
+  // The PDF comes over a fixture transport reading the same stub; the
+  // deployment's is the pinned one (publicSourceGateway.test.mjs).
+  const pdfTransport = fetchWebTransport(fetchImpl);
+  const server = createServer(createPublicSourceGatewayHandler(credentials, runtimeManager, { fetchImpl, resolveImpl, documentParser, pdfTransport }));
   const base = await listen(server);
   t.after(() => server.close());
 
@@ -440,7 +444,7 @@ test("an open-access PDF can come back parsed, with the PDF beside the text", as
   assert.equal(parsedInputs[0].filename, "10.1234-oa.1.pdf");
 
   // No parser: the PDF still comes back, with the reason the text did not.
-  const bare = createServer(createPublicSourceGatewayHandler(credentials, runtimeManager, { fetchImpl, resolveImpl }));
+  const bare = createServer(createPublicSourceGatewayHandler(credentials, runtimeManager, { fetchImpl, resolveImpl, pdfTransport }));
   const bareBase = await listen(bare);
   t.after(() => bare.close());
   const unparsed = await (await post(bareBase, { openAccessPdfDoi: "10.1234/oa.1", parse: true })).json();

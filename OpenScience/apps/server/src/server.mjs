@@ -2986,17 +2986,25 @@ export function createWebApiApp(overrides = {}) {
   // Web reading (plan §3.5): the gateway's web-read mode, a browser behind it
   // for pages drawn in script (webRender.mjs picks the deployment's own or
   // AgentBay's), the parser for PDFs.
+  // One transport for every page and document the gateway reads off an
+  // arbitrary public host: pinned to checked addresses (webReadNetwork.mjs),
+  // with the Tokyo node behind it where configured, and the fixture reader in
+  // the evaluation corpus's modes.
+  const webTransport = overrides.webReadTransport ?? webReadTransportFor(process.env, gatewayFetch, {
+    edge: edgeProxy,
+    directTimeoutMs: config.webReadDirectTimeoutMs,
+    edgeFallback: config.webReadEdgeFallback !== false,
+  });
   const webReader = createWebReader(config, {
-    transport: overrides.webReadTransport ?? webReadTransportFor(process.env, gatewayFetch, {
-      edge: edgeProxy,
-      directTimeoutMs: config.webReadDirectTimeoutMs,
-      edgeFallback: config.webReadEdgeFallback !== false,
-    }),
+    transport: webTransport,
     renderer: overrides.webRenderer ?? createConfiguredWebRenderer(config),
     documentParser,
   });
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: gatewayFetch,
+    // An open-access PDF sits on whichever publisher Unpaywall names, so it
+    // is fetched like a web page: over the pinned transport.
+    pdfTransport: webTransport,
     connectorCredentials,
     webReader,
     documentParser,
