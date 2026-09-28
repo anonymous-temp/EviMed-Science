@@ -252,3 +252,38 @@ test("a launch creates the knowledge-base directory first, so its view is mounte
   await manager.ensureKnowledgeBaseDir({ id: "paper1", userId: "alice", baseDir, workspaceDir: scratch });
   await assert.rejects(() => stat(path.join(scratch, "knowledge-base")));
 });
+
+test("a password sign-in warms a runtime only when it asks, so a script's sign-in starts nothing", async (t) => {
+  const { RuntimeManager } = await import("../src/runtimeManager.mjs");
+  const { createWebApiApp } = await import("../src/server.mjs");
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "rt-warm-login-"));
+  const warmed = [];
+  const original = RuntimeManager.prototype.warmMostRecent;
+  RuntimeManager.prototype.warmMostRecent = async function (projects) {
+    warmed.push(projects.map((project) => project.id));
+    return null;
+  };
+  const app = createWebApiApp({
+    dataDir, port: 0, runtimeMode: "kernel", runtimeWarmOnSignIn: true, devAuth: false,
+    bootstrapUser: "alice", bootstrapPassword: "correct horse battery staple",
+  });
+  t.after(async () => {
+    RuntimeManager.prototype.warmMostRecent = original;
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  const login = (extra) => fetch(`http://127.0.0.1:${address.port}/api/auth/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "alice", password: "correct horse battery staple", ...extra }),
+  });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 200));
+
+  assert.equal((await login({})).status, 200);
+  await settle();
+  assert.deepEqual(warmed, [], "the smoke, the acceptance lanes and the probes sign in without asking");
+
+  assert.equal((await login({ warm: true })).status, 200);
+  await settle();
+  assert.equal(warmed.length, 1, "the web app asks, and its sign-in warms the last project");
+});

@@ -3441,7 +3441,11 @@ export function createWebApiApp(overrides = {}) {
 
   // rt: warm the most recently used project's runtime at sign-in (plan §3.1 #8).
   // Kernel mode only: the mock runtime is the suite's fake, and a fake started
-  // on every sign-in would be a runtime no test asked for.
+  // on every sign-in would be a runtime no test asked for. A password sign-in
+  // warms only when it asks (`warm: true`, which the web app sends): scripts
+  // sign in through the same route, and each of their sign-ins started a
+  // runtime nobody opened — the smoke left one behind for CI's cleanup check,
+  // and an acceptance lane's took one of its account's two runtime slots.
   function warmAfterSignIn(userId) {
     if (!config.runtimeWarmOnSignIn || config.runtimeMode !== "kernel") return;
     void (async () => {
@@ -3727,7 +3731,7 @@ export function createWebApiApp(overrides = {}) {
           const login = await store.login(username, password, req, res);
           await securityAudit(config, "auth.login", "completed", { username });
           sendJson(res, 200, { data: login });
-          warmAfterSignIn(login.user.id);
+          if (body.warm === true) warmAfterSignIn(login.user.id);
         } catch (err) {
           await securityAudit(config, "auth.login", "failed", {
             username,
@@ -3762,7 +3766,7 @@ export function createWebApiApp(overrides = {}) {
           const login = await store.login(username, password, req, res);
           await securityAudit(config, "auth.register", "completed", { username });
           sendJson(res, 201, { data: login });
-          warmAfterSignIn(login.user.id);
+          if (body.warm === true) warmAfterSignIn(login.user.id);
         } catch (err) {
           await securityAudit(config, "auth.register", "failed", {
             username,

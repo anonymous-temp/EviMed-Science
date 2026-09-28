@@ -1145,7 +1145,9 @@ export async function loginWeb(username: string, password: string): Promise<void
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    // `warm`: start the last-used project's runtime while the shell loads.
+    // Only a person at the shell benefits, so only the shell asks.
+    body: JSON.stringify({ username, password, warm: true }),
   });
   await parseApiResponse<{ user: { id: string; name: string }; csrfToken?: string }>(res);
   notifyWebSessionStarted();
@@ -1163,7 +1165,7 @@ export async function registerWeb(username: string, password: string, name?: str
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password, ...(name ? { name } : {}) }),
+    body: JSON.stringify({ username, password, ...(name ? { name } : {}), warm: true }),
   });
   await parseApiResponse<{ user: { id: string; name: string }; csrfToken?: string }>(res);
   notifyWebSessionStarted();

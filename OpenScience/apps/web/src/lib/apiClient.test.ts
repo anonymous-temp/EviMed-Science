@@ -283,7 +283,7 @@ describe("apiClient", () => {
       expect.objectContaining({
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ username: "alice", password: "secret-password" }),
+        body: JSON.stringify({ username: "alice", password: "secret-password", warm: true }),
       }),
     );
   });
