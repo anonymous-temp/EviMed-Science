@@ -26,13 +26,24 @@
  * composition's "deliberately absent" list names `web_fetch` as an SSRF surface
  * on purpose.
  *
+ * So the registry has no consumer, and that is the decision, not a gap
+ * (2026-09-28, after the integration audit listed "no consumer" as one): the
+ * one thing that would consume it here is `tool-web`, which the preset leaves
+ * out and the composition records `disabled`; a consumer added only to exercise
+ * the provider would be the second tool pair ruled out above. What the audit
+ * holds instead is the invariant — both providers name `evimed-gateway` and
+ * `tool-web` stays disabled in the image's recorded composition — so the day a
+ * consumer does appear (a community plugin written against `ctx.web`), it
+ * reaches the gateway and nothing else.
+ *
  * The fetch half asks the gateway's web-read mode (2026-09-20), the same one
  * `web_read` uses: any public page, robots.txt honoured, paced per site,
- * rendered in AgentBay's browser when drawn in script, PDFs through the
- * parser. It used to ask the API mode for raw HTML, which only ever reached
- * the allowlisted APIs and stopped working the day that mode stopped serving
- * HTML — a registry entry whose every call fails, with nobody calling it yet
- * to notice.
+ * rendered in a browser when drawn in script (the deployment's own or
+ * AgentBay's, whichever the control plane is configured with), PDFs through
+ * the parser. It used to ask the API mode for raw HTML, which only ever
+ * reached the allowlisted APIs and stopped working the day that mode stopped
+ * serving HTML — a registry entry whose every call fails, with nobody calling
+ * it yet to notice.
  *
  * @module @evimed/dsh-socket/plugins/web
  */
