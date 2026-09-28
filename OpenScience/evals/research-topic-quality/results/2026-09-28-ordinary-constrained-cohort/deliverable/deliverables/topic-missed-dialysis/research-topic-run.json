@@ -1,0 +1,270 @@
+{
+  "schemaVersion": "1.0.0",
+  "deliverableId": "topic-missed-dialysis",
+  "capability": "research-topic-selection",
+  "jobId": "topic-20260928043524-416fa9e331a9",
+  "jobStatus": "succeeded",
+  "artifacts": [
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-records.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-stats.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/module-outputs.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-portfolio.json"
+    },
+    {
+      "kind": "md",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-topic-report.md"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-topic-run.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/result.json"
+    }
+  ],
+  "generatedAt": "2026-09-28T04:50:00Z",
+  "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+  "researchContext": {
+    "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+    "population": "Adults receiving maintenance hemodialysis",
+    "studySetting": "Community hospital",
+    "resourceConstraints": [
+      "Six months",
+      "No new recruitment",
+      "One part-time analyst"
+    ]
+  },
+  "specialistJob": {
+    "jobId": "topic-20260928043524-416fa9e331a9",
+    "tool": "mcp__evimed__research_topic_selection",
+    "requestedOutputLanguage": "en",
+    "jobStatus": "succeeded",
+    "startedAt": "2026-09-28T04:35:24Z",
+    "completedAt": "2026-09-28T04:44:46Z",
+    "elapsedSeconds": 562,
+    "polling": "Polled with waitSeconds=45 at 30-second intervals. Progress stages observed in order: 多源并行检索 (0%) -> M4_SCIENTIFIC_CONTRADICTION (50%) -> M5_BREAKTHROUGH_OPPORTUNITY (66%) -> M6_RESEARCH_AGENDA (83%) -> 报告生成 (100%) -> succeeded. updatedAt advanced at every poll, so the job was never treated as stalled.",
+    "observedDiscrepancy": "outputLanguage was requested as 'en'; the job's own report and portfolio text were returned in Chinese. The returned content was read in Chinese and reconciled in this run's own English report. No content was discarded for this reason.",
+    "terminalState": "succeeded; no failure and no error_message in any module output"
+  },
+  "artifactsReturnedByJob": [
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-records.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-stats.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/module-outputs.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-portfolio.json"
+    },
+    {
+      "kind": "md",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-topic-report.md"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-topic-run.json"
+    },
+    {
+      "kind": "json",
+      "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/result.json"
+    }
+  ],
+  "preservedCompanions": [
+    {
+      "file": "evidence-records.json",
+      "source": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-records.json",
+      "treatment": "copied verbatim",
+      "recordCount": 87,
+      "recordIdScheme": "pubmed_<PMID>",
+      "publicationStatus": {
+        "values": [
+          "active"
+        ],
+        "count": 87,
+        "statusSource": "PubMed",
+        "statusCheckedAt": "2026-09-28T04:35:41Z"
+      },
+      "note": "All 87 records carry publicationStatus=active with statusCheckedAt and statusSource, so no candidate rests on a retracted or unchecked record."
+    },
+    {
+      "file": "research-portfolio.json",
+      "source": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-portfolio.json",
+      "treatment": "candidate objects R1-R3 preserved verbatim with their original candidateId, sourceOpportunityId and sourceEvidenceIds; candidates Q1-Q6 appended in the same field shape; a top-level reconciliation block added recording every retain, reframe and exclusion and the reason",
+      "candidateIds": [
+        "R1",
+        "R2",
+        "R3",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+        "Q5",
+        "Q6"
+      ]
+    }
+  ],
+  "specialistJobEvidence": {
+    "recordsRetrieved": 87,
+    "yearRange": "2021-2026",
+    "jobDerivedDesignDistribution": {
+      "Clinical Study": 34,
+      "Cohort": 18,
+      "Review": 9,
+      "Case Report": 8,
+      "Cross-sectional": 6,
+      "Meta-analysis": 3,
+      "RCT": 2,
+      "Systematic Review": 2,
+      "Clinical Trial": 2,
+      "Quasi-experimental": 1,
+      "Comparative Study": 1,
+      "Other": 1
+    },
+    "note": "These counts describe the job's own screened set and are reported here as the job returned them. They are not re-derived and are not a measure of the field."
+  },
+  "evidenceExpansionRunHere": {
+    "purpose": "Turn the job's first map into a novelty and feasibility judgment against a wider search, as the method requires.",
+    "channelsUsed": [
+      "pubmed",
+      "europe-pmc",
+      "openalex",
+      "crossref",
+      "guideline",
+      "trial-registry",
+      "open-web"
+    ],
+    "searchesRun": 21,
+    "pubmedAbstractsPreserved": 35,
+    "fullTextsPreserved": 6,
+    "fullTextIdentifiers": [
+      "PMC7285433",
+      "PMC7380431",
+      "PMC6943919",
+      "PMC13348120",
+      "PMC13554538",
+      "PMC12472532"
+    ],
+    "guidelineCandidatesReviewed": 10,
+    "registeredStudiesRetrieved": 11,
+    "zeroResultQueries": [
+      "EviMed literature search: travel distance transport burden and missed hemodialysis sessions attendance",
+      "Europe PMC SRC:PPR: missed haemodialysis sessions non-attendance transport (preprint channel therefore uncovered)",
+      "PubMed: trajectory model patterns of dialysis attendance missed treatments day of week",
+      "PubMed: seasonal variation weather missed hemodialysis sessions attendance",
+      "PubMed: target trial emulation observational study dialysis treatment attendance adherence",
+      "PubMed: machine learning prediction missed dialysis sessions no-show risk model",
+      "PubMed: dialysis attendance weather winter season"
+    ],
+    "queryShapeCaveat": "The PubMed connector in this deployment returned nothing for long compound query strings while answering short keyword queries on the same subjects. Zero results here indicate query shape, not an empty literature, and are recorded as coverage gaps rather than as negative evidence.",
+    "uncoveredChannels": [
+      "preprints (SRC:PPR returned zero)",
+      "Semantic Scholar (no successful query)",
+      "Chinese-language bibliographic databases",
+      "ICTRP and ChiCTR registries"
+    ],
+    "worksThatChangedTheNoveltyAssessment": [
+      {
+        "pmid": "40512563",
+        "effect": "A 115,982-patient national cohort on transportation insecurity and missed treatments was not in the job's retrieved evidence. It largely occupies the patient-level transport question and forced the transport candidate to be reframed to the event level."
+      },
+      {
+        "pmid": "37071662",
+        "effect": "A 60,135-patient time-stratified case-crossover on inclement weather and missed appointments was not in the job's retrieved evidence. It closes the weather/seasonality direction, which is therefore recorded as answered and dropped rather than proposed."
+      },
+      {
+        "pmid": "40051030",
+        "effect": "A single-centre non-attendance cohort with outcome follow-up in North West England was in the job's evidence but not in this run's own earlier searches; retrieved and verified here, it closes the plain single-centre non-attendance question."
+      },
+      {
+        "pmid": "32517695",
+        "effect": "The ARO day-of-week non-attendance analysis closes the day-of-week direction, which is recorded as answered."
+      }
+    ]
+  },
+  "verificationPerformed": [
+    "Every figure quoted in the report carries the bracketed number of the work it came from, or is labelled as the proposal's own design choice.",
+    "Abstracts for 35 PubMed records were fetched and preserved; claims resting on them are worded at abstract level only.",
+    "Six open-access articles were retrieved in full and their Methods and Limitations sections read directly before any design was recommended on their precedent.",
+    "Two works used only for the existence of an approach were identified as conference abstracts and are labelled as such in both the report and the evidence map.",
+    "One identifier was checked rather than assumed: a cohort figure initially attributed to a guessed PubMed identifier was resolved through Crossref to DOI 10.1053/j.ajkd.2012.02.181 and the reference corrected.",
+    "The KDOQI guideline recommendation quoted in the report was read verbatim from the published page, which was retrieved and preserved with a content hash in this run."
+  ],
+  "knownGapsInThisRun": [
+    "Preprints were not covered, so every novelty statement is bounded by the absence of unpublished current work.",
+    "Chinese-language bibliographic databases were not searched; for a Chinese community-hospital setting this is a material gap.",
+    "The attendance and transport records were not inspected. All data requirements in the report are specifications of what would be needed, not statements of what exists.",
+    "No sample size, effect size or power calculation is offered; none can be computed before the field audit.",
+    "The registry overlap check was keyword-based and is recorded as unresolved rather than closed."
+  ],
+  "status": "succeeded",
+  "terminalStatus": "succeeded",
+  "engineRun": {
+    "jobId": "topic-20260928043524-416fa9e331a9",
+    "status": "succeeded",
+    "terminalStatus": "succeeded",
+    "startedAt": "2026-09-28T04:35:24Z",
+    "completedAt": "2026-09-28T04:44:46Z",
+    "elapsedSeconds": 562,
+    "artifacts": [
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-records.json"
+      },
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/evidence-stats.json"
+      },
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/module-outputs.json"
+      },
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/request.json"
+      },
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-portfolio.json"
+      },
+      {
+        "kind": "md",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-topic-report.md"
+      },
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/research-topic-run.json"
+      },
+      {
+        "kind": "json",
+        "path": "research-topic-runs/topic-20260928043524-416fa9e331a9/output/result.json"
+      }
+    ]
+  }
+}

@@ -356,16 +356,17 @@
       "briefCount": 3,
       "realDelivery": {
         "status": "accepted",
-        "evidence": "evals/research-topic-quality/results/2026-09-27-ordinary-constrained-cohort/run.json",
-        "at": "2026-09-27T13:46:23Z",
+        "evidence": "evals/research-topic-quality/results/2026-09-28-ordinary-constrained-cohort/run.json",
+        "at": "2026-09-28T05:02:51Z",
         "surface": "http-api"
       },
       "relatedEvidence": [
+        "evals/research-topic-quality/results/2026-09-27-ordinary-constrained-cohort/run.json",
         "evals/specialist-smoke/results/evimed_research_topic_selection.json",
         "evals/research-topic-quality/test_preflight.py",
         "PROGRESS.md@2026-07-21 06:13"
       ],
-      "note": "Three briefs plus a preflight test, and a succeeded managed engine job on the harness surface. No capability delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run in production; the engine container was healthy and never called. 2026-09-27 production acceptance (release evimed-51f880520360-1, brief ordinary-constrained-cohort, missed dialysis sessions): delivered and verified, 6 artifacts; the engine job ran 461 s and its updatedAt advanced at every poll, and the package keeps the engine's three candidates and 16 evidence records. Advice only: 37 independent-review findings of which 35 went unanswered, and eight report numbers not traceable to a job output. Five earlier attempts that day delivered packages that did not carry the engine's result: the first issued no engine job, because a bound session saw its capability tools only from its second request; in the other four the engine job failed or was given up on while its defects were being fixed (an unpinned openai dependency that failed every job within seconds, and a long job that published no progress and was read as dead). Those packages are kept outside this repository."
+      "note": "Three briefs plus a preflight test, and a succeeded managed engine job on the harness surface. No capability delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run in production; the engine container was healthy and never called. 2026-09-27 production acceptance (release evimed-51f880520360-1, brief ordinary-constrained-cohort, missed dialysis sessions): delivered and verified, 6 artifacts; the engine job ran 461 s and its updatedAt advanced at every poll, and the package keeps the engine's three candidates and 16 evidence records. Advice only: 37 independent-review findings of which 35 went unanswered, and eight report numbers not traceable to a job output. Five earlier attempts that day delivered packages that did not carry the engine's result: the first issued no engine job, because a bound session saw its capability tools only from its second request; in the other four the engine job failed or was given up on while its defects were being fixed (an unpinned openai dependency that failed every job within seconds, and a long job that published no progress and was read as dead). Those packages are kept outside this repository. 2026-09-28 re-run of the same brief on release evimed-1f5607732e37-1 (fresh project acceptance-topic-0928), after the review-answer fixes: 27.5 minutes, delivered verified; the independent review raised 6 findings instead of 37, the run fixed 5 and left none unanswered (1 advice-level suggestion not taken). It replaces the 09-27 run as the row's evidence, which stays in relatedEvidence."
     },
     {
       "id": "source-understanding",

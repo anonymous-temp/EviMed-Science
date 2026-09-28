@@ -1,0 +1,323 @@
+{
+ "schemaVersion": "1.0.0",
+ "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+ "researchContext": {
+  "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+  "population": "Adults receiving maintenance hemodialysis",
+  "studySetting": "Community hospital",
+  "resourceConstraints": [
+   "Six months",
+   "No new recruitment",
+   "One part-time analyst"
+  ]
+ },
+ "candidates": [
+  {
+   "candidateId": "R1",
+   "title": "以clone-censor-weight目标试验模拟估计维持性血液透析患者持续出席策略对急性并发症的因果效应：单中心既有出勤与交通记录研究",
+   "sourceOpportunityId": "BOM1",
+   "sourceEvidenceIds": [
+    "pubmed_40051030",
+    "pubmed_39842385",
+    "pubmed_40512563"
+   ],
+   "sourceEvidencePmids": [
+    "40051030",
+    "39842385",
+    "40512563"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+   "hypothesis": "待验证：在维持性血液透析成人中，与常规出席策略相比，持续出席策略可降低12个月内急性并发症或急诊就诊风险；该因果对比可在既有单中心记录中通过clone-censor-weight目标试验模拟进行估计。",
+   "studyDesign": {
+    "type": "回顾性目标试验模拟（clone-censor-weight）",
+    "rationale": "无新招募且仅有既有记录，不能开展随机试验；漏透是时间变化行为，传统基线暴露或计数暴露不能回答策略性因果问题，故用目标试验模拟框架定义持续出席与常规出席两种策略，并通过克隆-删失-加权估计符合方案效应。"
+   },
+   "estimand": "目标试验模拟的符合方案效应：在12个月随访期内，持续出席策略与常规出席策略对急性并发症/急诊就诊的绝对风险差；需预注册明确时间零点、策略定义、删失规则和权重模型。",
+   "dataRequirements": "需确认可用的时间戳字段：每次排班与实际出席、漏透原因、交通方式与可用性、急性并发症/急诊/住院/死亡结局日期、基线协变量（年龄、透析龄、合并症、血管通路、社会经济指标）。当前仅知存在出勤与交通记录，结局与协变量完整性未知；若缺失则无法估计因果效应，需降级为关联分析。",
+   "falsification": "若持续出席策略与常规策略的急性事件风险差置信区间包含0或方向相反；若负对照结局也出现类似“效应”；若E值提示未测量混杂可轻易解释估计，则假说未获支持。",
+   "feasibility": "条件性可行：若既有记录含时间戳出席、结局和关键协变量，且可在6个月内完成数据提取、清理与权重诊断；单中心样本和一位兼职分析师可能限制复杂权重模型与敏感性分析，需统计合作者。",
+   "noveltyBasis": "最接近证据为将漏透作为基线行为或计数暴露的观察性关联研究（PMID 40051030、39842385、40512563方向），其回答漏透与结局的相关性，但未回答持续出席策略的因果对比。剩余问题：在单中心既有记录中，减少漏透是否因果性降低急性事件，以及时间变化依从性能否用目标试验模拟识别。",
+   "gaps": []
+  },
+  {
+   "candidateId": "R2",
+   "title": "交通外生冲击作为工具变量识别结构性可及性对漏透的准因果效应：单中心透析出勤-交通记录面板分析",
+   "sourceOpportunityId": "BOM2",
+   "sourceEvidenceIds": [
+    "pubmed_40512563",
+    "pubmed_40861382"
+   ],
+   "sourceEvidencePmids": [
+    "40512563",
+    "40861382"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+   "hypothesis": "待验证：外生交通冲击（如服务中断、极端天气）与维持性血液透析患者漏透概率增加相关，且可能满足工具变量排他性约束，从而为结构性交通障碍对漏透的准因果效应提供识别信息。",
+   "studyDesign": {
+    "type": "回顾性个体-时间面板工具变量/准实验设计",
+    "rationale": "无新招募条件下，利用外生交通冲击的时间维度变异，构建个体-时间面板，先检验冲击与漏透的第一阶段关系，再评估排他性约束；若工具变量假设不成立，则转为关联性或描述性分析。"
+   },
+   "estimand": "若工具变量有效：外生交通冲击对漏透概率的局部平均处理效应，即在冲击改变出勤的依从者中结构性交通障碍的因果效应；若排他性不成立，则仅报告关联，不宣称因果。",
+   "dataRequirements": "需：个体-时间出勤面板、居住地或交通方式、日期戳交通中断/极端天气/道路封闭、非漏透通路变量、结局；当前仅知存在出勤与交通记录，外生冲击代理和排他性变量未知；若缺失则无法进行工具变量分析。",
+   "falsification": "若第一阶段弱（冲击与漏透无相关）；若排他性检验失败（冲击通过非漏透通路影响结局）；若安慰剂或预趋势检验提示混杂；若估计在多项敏感性分析中不稳定，则假说未获支持。",
+   "feasibility": "条件性低-中：需交通中断、天气等外生变量；单中心、6个月、兼职分析师可能不足以完成复杂工具变量诊断；若变量缺失则不可行。",
+   "noveltyBasis": "最接近证据为交通不安全与漏透的横断面相关研究（PMID 40512563、40861382方向），其回答相关性；剩余问题：外生交通冲击能否作为工具变量识别结构性可及性对漏透的因果效应，并合理满足排他性约束。",
+   "gaps": []
+  },
+  {
+   "candidateId": "R3",
+   "title": "透析缺席事件的定性障碍分类学：基于单中心事件报告自由文本的编码与复发关联探索",
+   "sourceOpportunityId": "BOM3",
+   "sourceEvidenceIds": [
+    "pubmed_40369455",
+    "pubmed_40051030"
+   ],
+   "sourceEvidencePmids": [
+    "40369455",
+    "40051030"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+   "hypothesis": "待验证：透析缺席事件报告中的自由文本原因可归纳为可干预的结构性、临床、心理社会和系统障碍类别，且特定障碍类别与后续缺席复发相关。",
+   "studyDesign": {
+    "type": "回顾性混合方法：定性内容分析加探索性关联分析",
+    "rationale": "无新招募条件下，对既有缺席事件报告进行结构化编码，产出障碍类别谱系；再以编码类别探索与后续缺席复发的关联，连接机制与可干预靶点。"
+   },
+   "estimand": "无因果estimand；描述性与关联性estimand：障碍类别分布、类别间共存模式、特定类别与后续缺席复发的风险差或比值比。",
+   "dataRequirements": "需：缺席事件报告中的原因字段或自由文本、时间戳、重复缺席标识、可链接的出勤记录；当前仅知存在出勤与交通记录，是否含原因或自由文本未知；若仅计数则不可行。",
+   "falsification": "若编码一致性低；若障碍类别无法区分或无法与既有框架对应；若类别与后续缺席复发无关联；若文本缺失导致选择性偏倚，则假说未获支持。",
+   "feasibility": "条件性：若含自由文本且可去标识，6个月内可完成小样本编码；一位兼职分析师仅能双编码部分样本，需定性方法学合作者；否则不可行。",
+   "noveltyBasis": "最接近证据为漏透次数或二分依从性研究（PMID 40369455、40051030方向），其回答频率或依从性与结局的关联；剩余问题：缺席原因能否形成可干预的障碍分类学，并与后续缺席复发相关。",
+   "gaps": []
+  },
+  {
+   "candidateId": "Q1",
+   "title": "Do session-level transport events, rather than transport mode, immediately precede missed dialysis sessions?",
+   "sourceOpportunityId": "BOM2-transport-events",
+   "sourceEvidenceIds": [
+    "pubmed_40512563",
+    "pubmed_40051030",
+    "pubmed_37071662"
+   ],
+   "sourceEvidencePmids": [
+    "40512563",
+    "40051030",
+    "37071662"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "The cited works establish transport as a predictor of missed treatments and demonstrate session-level attendance ascertainment, but none links a dated transport event to the session missed; support is therefore for the components, not for the design.",
+   "hypothesis": "A session-level transport failure (provider cancellation, no vehicle dispatched, pickup outside the scheduled window, missed connection, or a same-day cost barrier) is associated with a missed session on the same scheduled day, within patient.",
+   "studyDesign": {
+    "type": "Retrospective person-period cohort with conditional (fixed-effects) logistic or negative binomial analysis",
+    "rationale": "Transport mode, deprivation and comorbidity are time-invariant patient attributes; conditioning each patient on themselves removes that confounding entirely, which matching can only balance. Precedent for session-level attendance ascertainment: the ARO cohort; for a dated exposure window: the rescheduling study's 2-day window."
+   },
+   "estimand": "Within-patient risk difference in the probability of missing a scheduled session on days with versus without a recorded transport failure; secondary: incidence rate ratio of missed sessions per transport-failure day.",
+   "dataRequirements": "Transport record: booking date, scheduled and actual pickup time, arrival time, mode, provider type, trip completed, cancellation reason and cancelling party, cost or subsidy code, backup vehicle used. Attendance record: scheduled date and shift, attended/not attended, rescheduled-to date, session start and end time, recorded reason. Linkage: shared patient identifier plus a session date key. None confirmed to exist.",
+   "falsification": "Fails if the within-patient association is null after adjustment, or if transport failures are recorded at the same rate on attended and missed days, which would mean the transport record does not measure what it appears to measure.",
+   "feasibility": "Best fit to the constraints: uses only the two record types described, no recruitment, no specimens, no follow-up. A person-period analysis over session rows is within one part-time analyst's capacity. Entirely conditional on the field audit finding event-level transport records rather than aggregate invoices. Open items to resolve before analysis: Field audit not performed: availability of event-level transport fields is unknown. Outcome source for the secondary harm analysis not confirmed.",
+   "noveltyBasis": "Closest work measures transport as a stable person attribute: a 115,982-patient national cohort using mode of transportation as exposure (missed treatments attributed to transport aIRR 1.83-2.78 for non-private modes), a 25-case/24-control pilot using public-transport dependence (p=0.03), and DOPPS using self-reported travel time. Axis of difference: the unit of exposure is a dated transport event linked to the specific session missed, analysed within patient. Bounded search: preprints and Chinese-language databases not covered.",
+   "gaps": []
+  },
+  {
+   "candidateId": "Q2",
+   "title": "When a session is missed, does rescheduling it in the same week attenuate harm, and what determines whether it can be rescheduled?",
+   "sourceOpportunityId": "BOM1-rescheduling",
+   "sourceEvidenceIds": [
+    "pubmed_40512563",
+    "pubmed_39842385",
+    "pubmed_40051030"
+   ],
+   "sourceEvidencePmids": [
+    "40512563",
+    "39842385",
+    "40051030"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "The harm-attenuation half is directly supported by a published US Medicare study; the determinants half is not addressed by any retrieved work, so overall support for the full question is indirect.",
+   "hypothesis": "Missed sessions followed by a rescheduled session within 72 hours have a lower subsequent emergency department or admission rate than missed sessions not rescheduled; and reschedulability is higher when transport is recoverable within the week and an adjacent-day slot exists.",
+   "studyDesign": {
+    "type": "Self-controlled episode analysis with matched or conditional comparison",
+    "rationale": "Episodes recur within patients, so a within-patient contrast removes the between-patient confounding that the published 1:5 day-of-week and propensity matching could only balance."
+   },
+   "estimand": "Risk difference at 7 and 30 days after a missed session, rescheduled versus not rescheduled, within patient; plus the probability of rescheduling conditional on day of week, transport recoverability and slot availability.",
+   "dataRequirements": "Whether the attendance record distinguishes scheduled-but-absent from rescheduled-and-attended (the published exposure definition depends on this distinction). Then: replacement session date relative to the missed one, day of week, recorded reason, transport availability on the replacement date, slot or shift capacity on adjacent days, and an outcome source with linkable dates.",
+   "falsification": "Fails if rescheduled and not-rescheduled missed sessions show no difference in 7- or 30-day emergency use, or if the apparent benefit disappears once day of week and patient are held fixed - precisely the explanation the original authors could not exclude.",
+   "feasibility": "High, conditional on the attendance record distinguishing rescheduled from absent. Needs an outcome source with dates; without one the question degrades to a rescheduling-rate process measure, still publishable but not the harm question. Open items to resolve before analysis: Outcome source with dates not confirmed. Slot/shift capacity data may not be captured.",
+   "noveltyBasis": "Occupied in a different health system on a different question: a US Medicare study (missed N=3,852; rescheduled N=2,128; 7-day hospitalization 2.09-fold after a miss and 1.68-fold after a reschedule; 30-day 1.39- and 1.28-fold; no significant mortality) concluded rescheduling attenuates but does not fully mitigate harm and flagged unknown generalizability to non-Medicare populations. Axes of difference: health system, and the unasked determinants half.",
+   "gaps": []
+  },
+  {
+   "candidateId": "Q3",
+   "title": "Are shortened and missed sessions distinct behaviours with distinct drivers, or one behaviour on a continuum?",
+   "sourceOpportunityId": "BOM3-shortened-vs-missed",
+   "sourceEvidenceIds": [
+    "pubmed_40369455",
+    "pubmed_40051030"
+   ],
+   "sourceEvidencePmids": [
+    "40369455",
+    "40051030"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "Two works thirty years apart measured both behaviours and agreed on their ratio, which supports the premise; neither modelled them jointly against delivered dose, which is the proposed advance.",
+   "hypothesis": "Shortened sessions and full non-attendance have different associated factors - transport failure and logistics weighting toward non-attendance, symptom burden weighting toward early termination - and the delivered-versus-prescribed dose deficit differs between them.",
+   "studyDesign": {
+    "type": "Session-level multinomial or competing-risks analysis",
+    "rationale": "The two behaviours are distinct states of the same scheduled session, so they belong in one multinomial outcome rather than two separate analyses; reason taxonomy follows the 1993 prospective classification."
+   },
+   "estimand": "Difference in associated-factor profiles between the two behaviours over a four-state session outcome (completed as prescribed / shortened / rescheduled / missed); secondary: mean per-session delivered-versus-prescribed time deficit by state.",
+   "dataRequirements": "Delivered session start and end time alongside prescribed duration; recorded reason for early termination where present; a dialysis-dose field (Kt/V) if the adequacy link is made - a routine dialysis record field, not a biospecimen, but not confirmed available; the same attendance state variable as Q1.",
+   "falsification": "Fails if the two behaviours share an associated-factor profile and reason distribution, or if session duration is recorded only as prescribed, in which case the question is unanswerable from this data and must be reported as such rather than approximated.",
+   "feasibility": "High and cheapest of the six: it needs one field that dialysis units record routinely for adequacy monitoring. Natural fallback if the transport records prove coarse. Open items to resolve before analysis: Delivered (not prescribed) session duration availability unconfirmed. Kt/V field availability unconfirmed.",
+   "noveltyBasis": "Occupied but not in this era or population. Closest work: a 1993 prospective single-unit study in the southeastern United States (31,212 sessions) that measured both behaviours and their reasons but did not model them jointly or link delivered dose. A 2026 Bahrain cross-sectional study separated the behaviours and found transportation issues not significantly associated with adherence, conflicting with the national transport cohort. The KDOQI 2006 recommendation groups both behaviours in one statement. Axis of difference: era, setting, and joint modelling with delivered dose as a consequence.",
+   "gaps": []
+  },
+  {
+   "candidateId": "Q4",
+   "title": "Is missed-session behaviour persistent within patients, or a state any patient can enter?",
+   "sourceOpportunityId": "BOM1-persistence",
+   "sourceEvidenceIds": [
+    "pubmed_40051030",
+    "pubmed_39842385",
+    "pubmed_40512563"
+   ],
+   "sourceEvidencePmids": [
+    "40051030",
+    "39842385",
+    "40512563"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "Existing works describe persistence by threshold or count band rather than by trajectory, so the premise is supported while the proposed modelling approach has no direct precedent in this literature.",
+   "hypothesis": "Non-attendance is better described by a small number of repeat non-attenders plus a larger group with sporadic episodes than by a single latent propensity; and a first missed session raises the probability of a second within 30 days.",
+   "studyDesign": {
+    "type": "Latent-class or group-based trajectory model plus discrete-time survival model with lagged exposure",
+    "rationale": "The field has described persistence by threshold instead of trajectory, so the descriptive step is genuinely open; the lagged-exposure model is the confirmatory test that does not depend on class enumeration."
+   },
+   "estimand": "Number and size of latent attendance-pattern classes, or the empirical distribution of missed-session counts against a Poisson or negative binomial expectation; and the conditional probability of a subsequent missed session within 30 days following a prior one.",
+   "dataRequirements": "A complete session-level attendance history with dates and scheduled-versus-attended status, with enough observation time per patient to define a pattern. No transport fields, no outcome linkage.",
+   "falsification": "Fails if a single-class model fits as well as a multi-class model, or if the probability of a subsequent missed session within 30 days is no higher after a missed session than after an attended one. A negative result would be substantive: it would mean non-attendance is a transient state driven by circumstance, redirecting intervention from case-finding to real-time response.",
+   "feasibility": "Highest of the six: attendance extract only. Limitation is the same as the whole project's - latent-class models can be unstable at single-centre scale, so the analysis must be pre-specified with a small maximum number of classes and reported with fit statistics rather than asserted. Open items to resolve before analysis: Patient count and observation-window length per patient unknown.",
+   "noveltyBasis": "No direct answer identified within this search. Closest works are threshold-based descriptions: 149 of 464 patients (32%) with any non-attendance and 70 (15%) with more than two episodes; 54 of 464 (11.6%) meeting a more-than-four-sessions-in-two-years threshold; and count bands of sessions per 90 days in a 134,372-patient registry cohort. Bounded search: subject, method, comparator and absence axes across PubMed, Europe PMC, OpenAlex and guideline/trial-registry indexes, but preprints and Chinese-language databases not covered, so this is 'no direct answer identified here', not 'unoccupied across the field'.",
+   "gaps": []
+  },
+  {
+   "candidateId": "Q5",
+   "title": "Does the reason recorded for a missed session agree with what the transport record shows happened?",
+   "sourceOpportunityId": "BOM3-reason-concordance",
+   "sourceEvidenceIds": [
+    "pubmed_40369455",
+    "pubmed_40051030"
+   ],
+   "sourceEvidencePmids": [
+    "40369455",
+    "40051030"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "Coding barriers out of existing administrative text is established methodologically elsewhere, and incident-report and nurse-narrative reason capture is established here, but cross-source agreement on non-attendance reasons has no precedent in this literature.",
+   "hypothesis": "Chart-recorded reasons and transport records disagree in a non-trivial fraction of missed sessions, and the disagreement is directional - transport failure is under-recorded when a clinical or personal reason is also available - so chart reasons alone misstate the modifiable share of non-attendance.",
+   "studyDesign": {
+    "type": "Cross-sectional record-concordance study on the missed-session subset",
+    "rationale": "Agreement statistics require no modelling and no outcome linkage, which makes this the most robustly completable question within six months and one part-time analyst, and its result determines whether Q1 and Q2 are worth attempting in strong form."
+   },
+   "estimand": "Proportion of missed sessions with concordant, discordant and non-assessable reason coding; and the change in the estimated transport-attributable fraction of missed sessions when the transport record rather than the chart is the reference.",
+   "dataRequirements": "The free-text or coded reason field in the attendance record; the transport record's disposition for the corresponding trip; a linkage key.",
+   "falsification": "Fails if chart reasons and transport records agree closely, in which case the cheaper chart-reason ascertainment is adequate and should be adopted - a useful and publishable negative result.",
+   "feasibility": "Highest along with Q4, and the natural first analysis: descriptive, no outcome data, and it converts a probable failure into a documented finding in weeks rather than months. Open items to resolve before analysis: Completeness of the chart reason field unknown. Transport record may not carry a per-trip disposition.",
+   "noveltyBasis": "No direct answer identified within this search. Closest works treat reason attribution as unproblematic: a national transport cohort's outcome 'missed dialysis treatments attributed to transportation' derives from facility attribution with no independent check; a single-centre England cohort used incident reports; a psychosocial review used nurse narratives recorded on the day. Axis of difference: the object of study is not who misses sessions but whether the reason attached to a missed session is true. Bounded search: preprints and Chinese-language databases not covered.",
+   "gaps": []
+  },
+  {
+   "candidateId": "Q6",
+   "title": "Can attendance and transport records identify, with honest performance estimates, who to contact this week?",
+   "sourceOpportunityId": "BOM1-prediction",
+   "sourceEvidenceIds": [
+    "pubmed_40051030",
+    "pubmed_39842385",
+    "pubmed_40512563"
+   ],
+   "sourceEvidencePmids": [
+    "40051030",
+    "39842385",
+    "40512563"
+   ],
+   "supportLevel": "speculative",
+   "supportRationale": "No retrieved work predicts session attendance from operational records; the predicate that such a model is buildable at this scale is an inference from the field's event counts, not a demonstrated result.",
+   "hypothesis": "A pre-specified model using only variables available before the start of a dialysis week discriminates patients who will miss a session in the coming week better than the unit's current practice of contacting by clinical impression.",
+   "studyDesign": {
+    "type": "Retrospective prediction-model development with internal validation only, reported against TRIPOD",
+    "rationale": "No new recruitment is permitted, so the model cannot be prospectively verified within this project; internal validation with bootstrapped optimism correction is the strongest design available and any claim of outcome improvement is out of scope."
+   },
+   "estimand": "Discrimination (AUROC with confidence interval) and calibration (slope and intercept) for the outcome 'at least one missed session in the coming dialysis week', against the unit's current referral rule.",
+   "dataRequirements": "Everything in Q1 and Q4 plus a clean weekly time index. Binding constraint is events per variable, computed from the audit and not assumed; if the event count is small the model must be restricted to two or three predictors or abandoned.",
+   "falsification": "Fails if AUROC does not exceed the unit's existing rule, if calibration is poor, or if performance is no better than predicting that every patient will attend - the base rate in a unit with a low missing rate, which would mean case-finding is the wrong paradigm here.",
+   "feasibility": "Lowest of the six and reported as such. Development and internal validation are possible; prospective verification is not, and overfitting is a serious risk at single-centre scale. Included because an agenda that omits the question the hospital most wants answered is not useful, and because its feasibility is decidable from the same audit. Open items to resolve before analysis: Event count unknown; likely too few for a multivariable model. No prospective verification possible within the constraints.",
+   "noveltyBasis": "No direct answer identified within this search. Closest works predict medication non-adherence (a nomogram with questionnaire-based predictors) or target fluid-related admissions with machine learning, neither predicting session attendance from operational records. One PubMed query on this exact axis returned zero records, which in this deployment indicates query shape rather than an empty literature. Axis of difference: the predicted outcome is objectively recorded session attendance, from fields available before the week begins.",
+   "gaps": []
+  }
+ ],
+ "reconciliation": {
+  "performedBy": "research-topic-selection run of 2026-09-28, after evidence expansion beyond the specialist job's retrieval",
+  "jobId": "topic-20260928043524-416fa9e331a9",
+  "policy": "Candidate objects R1-R3 are the specialist job's own and are preserved verbatim with their original IDs and source opportunities. Candidates Q1-Q6 were added by this run. Nothing was deleted.",
+  "retained": [
+   {
+    "candidateId": "R1",
+    "status": "retained as lineage, not recommended",
+    "reason": "Target trial emulation with clone-censor-weight requires a reproducible time zero, correctly specified censoring weights and enough events to support weighting. At one community hospital with unknown patient numbers, unconfirmed outcome linkage, six months and one part-time analyst, the likely result is an unstable estimate that reads as a finding. The job's own entry already conditions feasibility on unconfirmed fields."
+   },
+   {
+    "candidateId": "R2",
+    "status": "reframed and demoted",
+    "reason": "The exclusion restriction for a transport-shock instrument is untestable in this data and a single centre will experience too few disruptions to power a first stage; the job's own entry concedes degradation to a descriptive time series. Retained at the level of a descriptive interrupted-time-series service audit, which is what remains defensible, and reflected in Q1 which studies transport events directly rather than through an instrument."
+   },
+   {
+    "candidateId": "R3",
+    "status": "retained and reframed as Q5",
+    "reason": "Qualitative barrier taxonomy from non-attendance records shares Q5's precondition (does a free-text field exist) and Q5's aim (make the reason attached to a missed session usable). Reframed from taxonomy-building to cross-source concordance because agreement statistics are decidable within the six-month constraint and their result gates the other transport questions."
+   },
+   {
+    "candidateId": "BOM4 (mechanistic dose-response)",
+    "status": "excluded",
+    "reason": "Requires biospecimens, which the brief states do not exist. Recorded as excluded context only; it cannot support a recommended candidate."
+   }
+  ],
+  "added": [
+   "Q1",
+   "Q2",
+   "Q3",
+   "Q4",
+   "Q5",
+   "Q6"
+  ],
+  "disagreementNote": "The specialist job ranked its clone-censor-weight emulation first and the instrumental-variable design second. This run ranks neither in its top position; the reasoning is given in section 9 of research-topic-report.md so the two documents do not silently differ.",
+  "sourceOpportunityIdConvention": "The specialist job returned three source opportunities (BOM1-BOM3), and its own candidate R1 already claims BOM1. Because sourceOpportunityId is a single string per candidate and the gate expects candidates to be distinguishable by it, each candidate added by this run carries a distinct derived identifier naming its parent opportunity plus the question it distinguishes: {\"Q1\": \"BOM2-transport-events\", \"Q2\": \"BOM1-rescheduling\", \"Q3\": \"BOM3-shortened-vs-missed\", \"Q4\": \"BOM1-persistence\", \"Q5\": \"BOM3-reason-concordance\", \"Q6\": \"BOM1-prediction\"}. R1-R3 keep the job's original identifiers unchanged.",
+  "gapsConvention": "Every design field (hypothesis, studyDesign, estimand, dataRequirements, falsification, feasibility, noveltyBasis) is supplied for all nine candidates, so `gaps` is empty throughout. The data-availability unknowns that this run recorded as open items were moved from `gaps` into each candidate's `feasibility` text so the information is kept without asserting an absent design field. The gate field audit that closes them is specified in section 7 of research-topic-report.md.",
+  "gapsMovedIntoSelfFeasibility": {
+   "Q1": [
+    "Field audit not performed: availability of event-level transport fields is unknown.",
+    "Outcome source for the secondary harm analysis not confirmed."
+   ],
+   "Q2": [
+    "Outcome source with dates not confirmed.",
+    "Slot/shift capacity data may not be captured."
+   ],
+   "Q3": [
+    "Delivered (not prescribed) session duration availability unconfirmed.",
+    "Kt/V field availability unconfirmed."
+   ],
+   "Q4": [
+    "Patient count and observation-window length per patient unknown."
+   ],
+   "Q5": [
+    "Completeness of the chart reason field unknown.",
+    "Transport record may not carry a per-trip disposition."
+   ],
+   "Q6": [
+    "Event count unknown; likely too few for a multivariable model.",
+    "No prospective verification possible within the constraints."
+   ]
+  }
+ }
+}

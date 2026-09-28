@@ -1,0 +1,88 @@
+{
+  "capability": "research-topic-selection",
+  "brief": "ordinary-constrained-cohort",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-topic-0928",
+  "session": "acc-research-topic-selec-mukr7g8s",
+  "runId": "run_cb0fb23406507d8fbc22fc78ef7c7b31",
+  "agentVersion": "1.4.0",
+  "dispatchedAt": "2026-09-28T05:02:50Z",
+  "prompt": "researchDirection: Identify actionable questions about missed dialysis sessions and adherence.\navailableData: Existing attendance and transport records from one hospital; no biospecimens.\npopulation: Adults receiving maintenance hemodialysis\nstudySetting: Community hospital\nresourceConstraints: [\"Six months\",\"No new recruitment\",\"One part-time analyst\"]",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/topic-missed-dialysis/evidence-map.md",
+      "deliverables/topic-missed-dialysis/evidence-records.json",
+      "deliverables/topic-missed-dialysis/research-portfolio.json",
+      "deliverables/topic-missed-dialysis/research-topic-report.md",
+      "deliverables/topic-missed-dialysis/research-topic-run.json",
+      "deliverables/topic-missed-dialysis/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「topic-missed-dialysis」有 6 条审查发现（已修 5，不改并说明 0，未回应 0，其余 1 条建议未处理）。",
+        "text": "独立审查：交付物「topic-missed-dialysis」有 6 条审查发现（已修 5，不改并说明 0，未回应 0，其余 1 条建议未处理）。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索文献：「travel distance transport burden and mis…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「SRC:PPR missed haemodialysis sessions no…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「trajectory model patterns of dialysis at…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「seasonal variation weather missed hemodi…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「target trial emulation observational stu…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「machine learning prediction missed dialy…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「dialysis attendance weather winter seaso…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「In-center hemodialysis patients who miss…」——这次检索没有找到可用来源。"
+      }
+    ],
+    "effectiveAgentId": "research-topic-selection",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1650324,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}
