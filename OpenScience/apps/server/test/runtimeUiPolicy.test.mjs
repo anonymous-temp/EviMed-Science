@@ -9,6 +9,7 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket, { WebSocketServer } from "ws";
 import { HttpError } from "../src/security.mjs";
+import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
@@ -27,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, agentRuns = null, audit = undefined } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -73,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, agentRuns, audit });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -157,6 +158,77 @@ test("native mux denies internal-session prompts before upstream and preserves p
   await c.next();
   c.send(open("history", "session/page", { request: { sessionId: "source-private" } }));
   assert.equal((await c.next()).type, "item"); assert.equal(f.received.at(-1).endpoint, "session/page");
+});
+
+test("a message steered into a running turn from the kernel's window is counted on that run, on both transports", async t => {
+  // The learning loop's correction trigger read `corrections` and nothing in
+  // the hosted surface ever moved it: the composer's steer is a plain
+  // `session/prompt` over this proxy, and only `/api/agent-runs/:id/steer`
+  // (which the page never calls) counted.
+  const ledger = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [] });
+  ledger.scheduleMonitor = () => {};
+  const f = await fixture(t, {}, {}, { agentRuns: ledger });
+  const project = await f.store.requireProject(f.user, "default");
+  const binding = (sessionId) => ({ sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+  const { run } = await ledger.reserveRun(project, binding("s-working"), { baselineCursor: null, kernelRequestIds: ["req-question"] });
+  const counted = async () => (await ledger.list(project)).find((item) => item.id === run.id);
+  const prompt = (streamId, sessionId, mode, requestId = streamId) => open(streamId, "session/prompt",
+    { request: { requestId, sessionId, mode, content: [{ type: "text", text: "只纳入随机对照试验" }] } });
+
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  /** Send one prompt, answer it as the kernel does, and wait for the browser to see the end. */
+  const send = async (frame) => {
+    c.send(frame);
+    assert.equal((await c.next()).type, "item");
+    for (const peer of f.peers) peer.send(JSON.stringify({ type: "end", streamId: frame.streamId }));
+    assert.equal((await c.next()).type, "end");
+  };
+  // Queued: the kernel makes it a turn of its own, so it is a run of its own.
+  await send(prompt("queued", "s-working", "queue"));
+  assert.equal((await counted()).corrections ?? 0, 0);
+  // Steered into the running turn: counted, and forwarded exactly as sent.
+  const steer = prompt("steer-1", "s-working", "steer");
+  await send(steer);
+  assert.deepEqual(f.received.at(-1), steer);
+  assert.equal((await counted()).corrections, 1);
+  assert.deepEqual((await counted()).kernelRequestIds, ["req-question"], "counted, not bound: the transcript decides which turn a message is in");
+  // The same submission twice is one message.
+  await send(prompt("steer-1-again", "s-working", "steer", "steer-1"));
+  assert.equal((await counted()).corrections, 1);
+  // A session with nothing running has nothing to steer.
+  await send(prompt("steer-idle", "s-idle", "steer"));
+  assert.equal((await ledger.list(project)).length, 1);
+
+  // The HTTP RPC counts at the same point.
+  const http = (requestId) => fetch(`${f.base}/api/session/prompt`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: requestId, method: "session/prompt",
+      payload: { args: { request: { requestId, sessionId: "s-working", mode: "steer", content: [{ type: "text", text: "再加一条" }] } } } }) });
+  assert.equal((await http("steer-http")).status, 200);
+  assert.equal((await counted()).corrections, 2);
+  // Saturates at the per-run bound, and never refuses the message.
+  assert.equal((await http("steer-http-2")).status, 200);
+  assert.equal((await http("steer-http-3")).status, 200);
+  assert.equal((await counted()).corrections, 3);
+
+  // A finished run is not steered.
+  await ledger.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+  await send(prompt("steer-late", "s-working", "steer"));
+  assert.equal((await counted()).corrections, 3);
+});
+
+test("a steer the ledger cannot count still reaches the kernel, and the failure is audited", async t => {
+  const audits = [];
+  const f = await fixture(t, {}, {}, {
+    agentRuns: { recordSteeredInput: async () => { throw Object.assign(new Error("full"), { code: "agent_runs_too_large" }); } },
+    audit: async (event, detail) => { audits.push({ event, ...detail }); },
+  });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const steer = open("steer", "session/prompt", { request: { requestId: "steer", sessionId: "s-working", mode: "steer", content: [{ type: "text", text: "改一下" }] } });
+  c.send(steer);
+  assert.equal((await c.next()).type, "item");
+  assert.deepEqual(f.received, [steer]);
+  assert.deepEqual(audits.map((entry) => [entry.event, entry.code, entry.projectId]), [["run.correction.observe", "agent_runs_too_large", "default"]]);
 });
 
 test("real HTTP and mux startup cannot replace a bounded source workspace and history opens after release", async t => {

@@ -86,6 +86,27 @@ test("a deleted project's lessons move to the learning project with what the wai
   assert.equal(again.moved, 0);
 });
 
+test("a routine lesson keeps its own project's peers; a peer in another project stays where the distillation reads it", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-lesson-preservation-peers-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = await projectAt(root, "paper");
+  const learningProject = await projectAt(root, LEARNING_PROJECT_ID);
+  await mkdir(path.join(project.metaDir, TRANSCRIPT_DIR_NAME), { recursive: true });
+  for (const runId of ["run_main", "run_near"]) {
+    await writeFile(transcriptPath(project, runId), `{"schemaVersion":1,"runId":"${runId}"}\n`);
+  }
+  const rows = [{ id: "j1", kind: "distill", status: "queued", projectId: "paper", payload: {
+    runId: "run_main", trigger: "routine", peers: [{ runId: "run_near", projectId: "paper" }, { runId: "run_far", projectId: "other-paper" }],
+  } }];
+  const runs = [{ id: "run_main", sessionId: "s1", status: "succeeded", kernelRequestIds: ["req_1", 7], nativeTurn: { startSeq: 4, userSeq: 5 } }];
+  const result = await preserveProjectLessons({ client: client(rows), userId: "u1", project, learningProject, runs });
+  assert.deepEqual(result.preserved.sort(), ["run_main", "run_near"]);
+  assert.equal(await readFile(transcriptPath(learningProject, "run_near"), "utf8"), '{"schemaVersion":1,"runId":"run_near"}\n');
+  // The turns that were the run's, so a correction read later is its own.
+  const archived = await archivedLessonRun(learningProject, "run_main");
+  assert.deepEqual([archived?.kernelRequestIds, archived?.nativeTurn], [["req_1"], { startSeq: 4, userSeq: 5 }]);
+});
+
 test("the learning project itself is never preserved into itself, and nothing moves without a transaction", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "evimed-lesson-preservation-self-"));
   t.after(() => rm(root, { recursive: true, force: true }));

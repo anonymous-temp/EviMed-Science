@@ -190,10 +190,48 @@ function destroyUpgrade(socket, status, code) {
 }
 
 /**
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null }} deps
+ * `agentRuns` is the run ledger a message steered into a running turn is
+ * counted on (`recordSteer`); `audit` reports a count that could not be written.
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
+ *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, authorizeMutation = null }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, authorizeMutation = null,
+  agentRuns = null, audit = async () => {} }) {
+  /**
+   * A message the researcher sends into a turn that is running is counted on
+   * the run it steers, so the learning loop's correction trigger has an in-run
+   * source (`AgentRunStore.recordSteeredInput`).
+   *
+   * `mode` is the kernel's own delivery vocabulary: `queue` hands the message
+   * to the agent's follow-up, which becomes the sole message of a turn of its
+   * own — and so of a run of its own in the ledger — while `steer` hands it to
+   * the running turn at its next step (DSH `Agent.followup` / `Agent.steer`;
+   * the composer sends `steer` on Ctrl/⌘+Enter while the agent is busy). Only
+   * the second is input to a run already going. The queue dock's own steer
+   * button is `session/updateQueue`, which this deployment denies, so a
+   * `session/prompt` is the one way a steer reaches the kernel from here.
+   *
+   * Called once the prompt has passed every refusal this surface can give and
+   * immediately before it is forwarded, on both transports. An observation, not
+   * a check: it never refuses, and a count that could not be written is
+   * audited while the message goes on.
+   * @param {any} project @param {any} payload the native `{ args: { request } }`
+   */
+  async function recordSteer(project, payload) {
+    const request = payload?.args?.request;
+    if (!agentRuns || request?.mode !== "steer") return;
+    try {
+      await agentRuns.recordSteeredInput(project, request.sessionId, request.requestId);
+    } catch (error) {
+      await audit("run.correction.observe", {
+        userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "run_correction_observe_failed",
+        detail: "runtime-ui",
+      }).catch(() => {});
+    }
+  }
   async function authorizePromptSession(project, payload) {
     if (!authorizePrompt) return;
     // The existing native wire uses payload.args.request on both HTTP RPC and
@@ -418,7 +456,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     }
     let workspaceBody = null;
     let promptBody = null;
-    if (method === "session/prompt" && authorizePrompt) {
+    if (method === "session/prompt" && (authorizePrompt || agentRuns)) {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
       try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
@@ -506,9 +544,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);
+      // Counted inside the admission, so a prompt the plugin fence refuses is
+      // not a message that arrived.
+      const admitted = async () => {
+        await recordSteer(project, promptBody?.payload);
+        return forward();
+      };
       return runtimeManager.pluginService
-        ? runtimeManager.pluginService.withAdmission(project, forward, { prompt: true })
-        : forward();
+        ? runtimeManager.pluginService.withAdmission(project, admitted, { prompt: true })
+        : admitted();
     };
     if (method === "session/prompt") {
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
@@ -564,7 +608,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             else await check();
           }
         };
-        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize });
+        // The mux calls `observe` inside the prompt's admission, right before
+        // the frame goes upstream — the same point the HTTP path counts at.
+        const observe = async (endpoint, payload = null) => {
+          if (endpoint === "session/prompt") await recordSteer(project, payload);
+        };
+        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe });
       } catch (error) {
         destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
       }

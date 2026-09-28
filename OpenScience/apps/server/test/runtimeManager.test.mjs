@@ -2738,6 +2738,27 @@ test("the hosted browser application cannot reach the methods that change the de
   assert.notEqual(body?.error?.code, "runtime_ui_method_denied");
 });
 
+test("a message steered into a running turn through the hosted frame reaches that run's ledger row", async (t) => {
+  // The composition root must hand the frame surface the run ledger itself:
+  // the kernel's composer is where the researcher types, and without this the
+  // learning loop's correction trigger has no in-run source (2026-09-28).
+  const f = await uiSurfaceFixture(t);
+  const me = await (await fetch(`http://127.0.0.1:${f.address.port}/api/me`, { headers: { cookie: f.loginCookie } })).json();
+  const user = await f.app.store.userById(String(me.data.user.id));
+  const project = await f.app.store.requireProject(user, "default");
+  f.app.agentRuns.scheduleMonitor = () => {};
+  const { run } = await f.app.agentRuns.reserveRun(project,
+    { sessionId: "s-frame", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }, { baselineCursor: null });
+  const steer = await fetch(`${f.uiBase}/api/session/prompt`, {
+    method: "POST",
+    headers: { cookie: f.cookie, Origin: "https://science.example:8443", "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "steer", method: "session/prompt",
+      payload: { args: { request: { requestId: "steer-1", sessionId: "s-frame", mode: "steer", content: [{ type: "text", text: "只纳入随机对照试验" }] } } } }),
+  });
+  await steer.text();
+  assert.equal((await f.app.agentRuns.list(project)).find((item) => item.id === run.id)?.corrections, 1);
+});
+
 test("a frame is minted by the authenticated control plane only for an owned project", async (t) => {
   const { uiBase, loginCookie: cookie, csrfToken, address } = await uiSurfaceFixture(t);
   const created = await fetch(`http://127.0.0.1:${address.port}/api/projects`, {

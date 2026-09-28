@@ -11,13 +11,17 @@
 // written against the hostile input rather than the happy path: the happy path
 // was green the whole time the hole was open.
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA, parseSkillFrontmatter, validateMethodSkill } from "@evimed/domain";
 
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import { decodeLearningOutput } from "../src/learningRuntime.mjs";
-import { MethodDistillationRuns, buildDistillationInput, lessonSignal } from "../src/methodDistillationRuns.mjs";
+import { MethodDistillationRuns, buildDistillationInput, lessonSignal, steeredCorrections } from "../src/methodDistillationRuns.mjs";
+import { TRANSCRIPT_DIR_NAME, transcriptPath } from "../src/runTranscripts.mjs";
 
 const BODY = [
   "## Purpose", "Do a thing.", "",
@@ -332,4 +336,121 @@ test("a distillation reads the correction memories its lesson names and hands th
   assert.deepEqual(asked, [{ userId: "u1", ids: ["mem_1"] }]);
   assert.deepEqual(dispatched[0].input.corrections, [{ source: "memory", recordId: "mem_1", key: "k", text: "不要用固定剂量" }]);
   assert.equal(dispatched[0].input.signal, "researcher");
+});
+
+/** A project directory with a stored transcript per run, as `persistRunTranscript` leaves them.
+ *  @param {string} root @param {string} id @param {string[]} runIds */
+async function projectWithTranscripts(root, id, runIds, userId = "u1") {
+  const rootDir = path.join(root, id);
+  const project = { id, userId, rootDir, metaDir: path.join(rootDir, ".openscience"), workspaceDir: path.join(rootDir, "workspace") };
+  await mkdir(path.join(project.metaDir, TRANSCRIPT_DIR_NAME), { recursive: true });
+  for (const runId of runIds) {
+    const header = { schemaVersion: 1, runId, capturedAt: "2026-09-28T00:00:00.000Z", completeness: "complete", sessions: [], missing: [] };
+    const message = { sessionId: `s_${runId}`, seq: 1, role: "user", source: "user", parts: [{ type: "text", text: `${id} 的第 ${runId} 次综述` }] };
+    await writeFile(transcriptPath(project, runId), `${JSON.stringify(header)}\n${JSON.stringify(message)}\n`);
+  }
+  return project;
+}
+
+test("a routine's peer is read from whichever of the researcher's projects it ran in, and from nowhere else", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-routine-peers-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const renal = await projectWithTranscripts(root, "renal", ["run_c", "run_b"]);
+  const aspirin = await projectWithTranscripts(root, "aspirin", ["run_a"]);
+  const theirs = await projectWithTranscripts(root, "theirs", ["run_x"], "u2");
+  /** @type {any[]} */
+  const dispatched = [];
+  /** @type {string[]} */
+  const resolved = [];
+  const distillation = new MethodDistillationRuns({
+    learning: { ...fakeLearning(), async listMethods() { return { items: [] }; } },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+    resolveProject: async (userId, projectId) => {
+      resolved.push(`${userId}/${projectId}`);
+      if (projectId === "aspirin") return aspirin;
+      if (projectId === "theirs") return theirs; // a resolver that answered for the wrong account
+      throw Object.assign(new Error("Project not found."), { code: "project_not_found", status: 404 });
+    },
+  });
+  const read = (/** @type {any} */ input) => input.peerRuns.map((/** @type {any} */ peer) => [peer.runId, peer.transcriptCompleteness, peer.transcriptExcerpts[0]?.parts[0]?.text ?? null]);
+
+  await distillation.execute({ project: renal, run: { id: "run_c", effectiveAgentId: "clinical-evidence-synthesis" }, job: {
+    userId: "u1", projectId: "renal",
+    payload: { runId: "run_c", trigger: "routine", peers: [
+      { runId: "run_a", projectId: "aspirin" },
+      { runId: "run_b", projectId: "renal" },
+      { runId: "run_x", projectId: "theirs" },
+      { runId: "run_gone", projectId: "deleted-since" },
+    ] },
+  } });
+  assert.deepEqual(read(dispatched[0].input), [
+    ["run_a", "complete", "aspirin 的第 run_a 次综述"],
+    ["run_b", "complete", "renal 的第 run_b 次综述"],
+    ["run_x", "unavailable", null],
+    ["run_gone", "unavailable", null],
+  ], "another project of the same researcher is read; one resolved for anyone else, or gone, is unavailable");
+  assert.deepEqual(resolved, ["u1/aspirin", "u1/theirs", "u1/deleted-since"], "resolved only within the lesson's account, never for its own project");
+
+  // An internal project is never resolved, whatever the payload says.
+  resolved.length = 0;
+  await distillation.execute({ project: renal, run: { id: "run_c" }, job: {
+    userId: "u1", projectId: "renal", payload: { runId: "run_c", trigger: "routine", peers: [{ runId: "run_a", projectId: LEARNING_PROJECT_ID }] },
+  } });
+  assert.deepEqual(read(dispatched[1].input), [["run_a", "unavailable", null]]);
+  assert.deepEqual(resolved, []);
+
+  // A lesson queued before 2026-09-28 names run ids only, all in its own project.
+  await distillation.execute({ project: renal, run: { id: "run_c" }, job: {
+    userId: "u1", projectId: "renal", payload: { runId: "run_c", trigger: "routine", peerRunIds: ["run_b", "run_c"] },
+  } });
+  assert.deepEqual(read(dispatched[2].input), [["run_b", "complete", "renal 的第 run_b 次综述"]], "the run itself is never its own peer");
+
+  // A lesson moved when its project was deleted reads that project's peers
+  // from the copies beside it in the learning project.
+  const learning = await projectWithTranscripts(root, LEARNING_PROJECT_ID, ["run_c", "run_b"]);
+  await distillation.execute({ project: learning, run: { id: "run_c" }, job: {
+    userId: "u1", projectId: LEARNING_PROJECT_ID,
+    payload: { runId: "run_c", trigger: "routine", sourceProjectId: "renal", peers: [{ runId: "run_b", projectId: "renal" }, { runId: "run_a", projectId: "aspirin" }] },
+  } });
+  assert.deepEqual(read(dispatched[3].input), [
+    ["run_b", "complete", `${LEARNING_PROJECT_ID} 的第 run_b 次综述`],
+    ["run_a", "complete", "aspirin 的第 run_a 次综述"],
+  ]);
+});
+
+test("a message typed into the running turn is the researcher's correction; nothing else in the session is", () => {
+  const typed = (/** @type {number} */ seq, /** @type {number} */ turnStartSeq, /** @type {string} */ text, extra = {}) =>
+    ({ sessionId: "root", seq, turnStartSeq, role: "user", source: "user", sourceRequestId: `req_${seq}`, parts: [{ type: "text", text }], ...extra });
+  const transcript = {
+    header: { completeness: "complete" },
+    messages: [
+      // An earlier run's turn in the same conversation, with its own steer.
+      typed(0, 0, "上一个问题"),
+      typed(2, 0, "上一个问题的插话"),
+      // This run's turn: its question, the model's work, then what was typed into it.
+      typed(10, 10, "请综述二甲双胍的肾功能剂量"),
+      { sessionId: "root", seq: 11, turnStartSeq: 10, role: "assistant", source: "system", parts: [{ type: "text", text: "开始检索。" }] },
+      typed(12, 10, "只纳入随机对照试验", { sourceRequestId: "frame_steer" }),
+      typed(13, 10, "<evimed-repair>run_1</evimed-repair> 修复这一处", { sourceRequestId: null }),
+      { sessionId: "root", seq: 14, turnStartSeq: 10, role: "user", source: "plugin", parts: [{ type: "text", text: "注入的上下文" }] },
+      typed(15, 10, "<evimed-correction>2020 年以后</evimed-correction>", { sourceRequestId: "route_steer" }),
+      // A delegate's session is not where the researcher types.
+      { sessionId: "child", seq: 3, turnStartSeq: 1, role: "user", source: "user", parts: [{ type: "text", text: "子任务的第二条" }] },
+      // The next turn — a queued follow-up is its own turn, and its own run.
+      typed(20, 20, "下一个问题"),
+    ],
+  };
+  const run = { id: "run_1", sessionId: "root", kernelRequestIds: ["req_10"] };
+  assert.deepEqual(steeredCorrections(transcript, run).corrections.map((entry) => [entry.seq, entry.text]), [
+    [12, "只纳入随机对照试验"],
+    [15, "2020 年以后"],
+  ]);
+  // An adopted native run names its turn instead of a request id.
+  assert.deepEqual(steeredCorrections(transcript, { id: "run_0", sessionId: "root", nativeTurn: { startSeq: 0, userSeq: 0 } })
+    .corrections.map((entry) => entry.seq), [2]);
+  // And the input says whose evidence the lesson rests on.
+  const input = buildDistillationInput({ run: { ...run, effectiveAgentId: "clinical-evidence-synthesis" }, trigger: "correction", transcript });
+  assert.equal(input.signal, "researcher");
+  assert.deepEqual(input.corrections.map((entry) => entry.source), ["steered", "steered"]);
 });

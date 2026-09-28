@@ -6363,6 +6363,58 @@ export class AgentRunStore {
     });
   }
 
+  /**
+   * Count a message the researcher steered into a running turn from the
+   * kernel's own window (`session/prompt` with `mode: "steer"`, seen by the
+   * frame proxy). Returns the run it was counted on, or null when the session
+   * has no running run.
+   *
+   * Hidden knowledge: until 2026-09-28 nothing counted these. `corrections`
+   * moved only through `recordCorrection`, which only `POST
+   * /api/agent-runs/:id/steer` and the messaging channel call — and the page has
+   * no caller of that route (`steerWebAgentRun` is defined and never used). The
+   * hosted conversation is the kernel frame, whose composer sends a steer as a
+   * plain `session/prompt` over the mux, so the learning loop's correction
+   * trigger (`learningTriggers.mjs`) had no in-run source at all.
+   *
+   * An observation, not a gate, and deliberately unlike `recordCorrection`:
+   *
+   *  - Nothing is refused. The kernel accepts the message whatever this says;
+   *    the count only records that it arrived while the ledger held a running
+   *    run for the session. Whether it was a correction is the distillation's
+   *    judgement, read from the transcript.
+   *  - The request id is not bound to the run (`kernelRequestIds`). The
+   *    kernel's steer is best-effort — a turn whose window has closed turns it
+   *    into the next queued turn — and a bound id would pull that next turn's
+   *    history into this run (`runHistory`). The transcript, not this count,
+   *    decides which turn a message belongs to. The id is kept on the event
+   *    only so the same submission is not counted twice.
+   *  - Saturates at `MAX_RUN_CORRECTIONS`. The trigger needs one; the ledger has
+   *    a hard ceiling, and a keyboard must not be able to fill it.
+   *
+   * @param {any} project @param {string} sessionId @param {string} requestId
+   * @returns {Promise<any | null>}
+   */
+  async recordSteeredInput(project, sessionId, requestId) {
+    if (typeof sessionId !== "string" || !sessionId || typeof requestId !== "string" || !requestId) return null;
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const running = [...foldEvents(events).values()]
+        .filter((run) => run.sessionId === sessionId && run.status === "running")
+        .sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt)));
+      const run = running[0];
+      if (!run) return null;
+      const counted = events.some((event) => event.event === "kernel-request" && event.id === run.id && event.kind === "steer"
+        && (event.steerRequestId === requestId || (Array.isArray(event.requestIds) && event.requestIds.includes(requestId))));
+      if (counted || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
+      const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId) };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(run.id);
+      this.notifyState(project, updated);
+      return updated;
+    });
+  }
+
   /** Persist a repair's native request identity before sending it. */
   async recordKernelRequest(project, runId, requestId) {
     return withProjectStorageMutation(project, async () => {

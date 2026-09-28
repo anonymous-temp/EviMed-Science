@@ -9,11 +9,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
-import { LearningTriggers, learningTriggersFor } from "../src/learningTriggers.mjs";
+import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
+import {
+  LearningTriggers, ROUTINE_PERIOD_DAYS, learningTriggersFor, lessonPeers, routinePeriodMs,
+} from "../src/learningTriggers.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput } from "../src/methodDistillationRuns.mjs";
 
+const HOUR = 3_600_000;
+const PERIOD = routinePeriodMs(ROUTINE_PERIOD_DAYS);
+/** A day into the routine period holding 2026-09-10, so every run below shares it. */
+const BASE = Math.floor(Date.UTC(2026, 8, 10) / PERIOD) * PERIOD + 24 * HOUR;
+
 let clock = 0;
-/** A finished run as the ledger lists it. @param {Record<string, any>} overrides */
+/** A finished run as the ledger lists it, an hour after the previous one. @param {Record<string, any>} overrides */
 function run(overrides = {}) {
   clock += 1;
   return {
@@ -24,11 +32,15 @@ function run(overrides = {}) {
     effectiveRouteReason: "matched:clinical-evidence-synthesis",
     artifacts: ["deliverables/d1/report.md"],
     transcript: { completeness: "complete" },
-    startedAt: `2026-09-${String(10 + clock).padStart(2, "0")}T01:00:00.000Z`,
-    finishedAt: `2026-09-${String(10 + clock).padStart(2, "0")}T01:30:00.000Z`,
+    startedAt: new Date(BASE + clock * HOUR).toISOString(),
+    finishedAt: new Date(BASE + clock * HOUR + 30 * 60_000).toISOString(),
     ...overrides,
   };
 }
+
+/** One of a researcher's projects, as the store resolves it. @param {string} id @param {Record<string, any>} [overrides] */
+const projectOf = (id, overrides = {}) => ({ id, userId: "user_1", archivedAt: null, ...overrides });
+const routineOf = (lessons) => lessons.find((lesson) => lesson.trigger === "routine");
 
 const triggers = (lessons) => lessons.map((lesson) => lesson.trigger);
 
@@ -76,16 +88,165 @@ test("the same kind of operation repeated is induced every Nth time, from all N 
   const family = [run(), run(), run(), run(), run(), run()];
   const other = run({ effectiveAgentId: "meta-analysis" });
   const ledger = [...family, other];
-  const routineOf = (subject) => learningTriggersFor({ run: subject, runs: ledger }).find((lesson) => lesson.trigger === "routine");
+  const project = projectOf("paper");
+  const routine = (subject) => routineOf(learningTriggersFor({ run: subject, runs: ledger, project }));
 
-  assert.equal(routineOf(family[1]), undefined);
-  const third = routineOf(family[2]);
+  assert.equal(routine(family[1]), undefined);
+  const third = routine(family[2]);
   assert.ok(third, "the third successful run of one capability induces its routine");
-  assert.deepEqual(third.payload.peerRunIds, [family[0].id, family[1].id]);
+  assert.deepEqual(third.payload.peers, [{ runId: family[0].id, projectId: "paper" }, { runId: family[1].id, projectId: "paper" }]);
   assert.equal(third.payload.capabilityId, "clinical-evidence-synthesis");
-  assert.equal(routineOf(family[3]), undefined);
-  assert.deepEqual(routineOf(family[5])?.payload.peerRunIds, [family[3].id, family[4].id]);
-  assert.equal(routineOf(other), undefined, "another capability's first run is not part of this family");
+  assert.equal(routine(family[3]), undefined);
+  assert.deepEqual(routine(family[5])?.payload.peers.map((peer) => peer.runId), [family[3].id, family[4].id]);
+  assert.equal(routine(other), undefined, "another capability's first run is not part of this family");
+});
+
+test("a routine is counted across the researcher's own projects, one capability at a time", () => {
+  // One question per project is what a project is for; counted per project,
+  // this researcher never reached the third run of anything.
+  const first = run();
+  const between = run({ effectiveAgentId: "meta-analysis" });
+  const second = run();
+  const third = run();
+  const ledgers = [
+    { project: projectOf("aspirin"), runs: [first, between] },
+    { project: projectOf("statins"), runs: [second] },
+    { project: projectOf("renal"), runs: [third] },
+  ];
+  const lessons = learningTriggersFor({ run: third, runs: ledgers[2].runs, project: ledgers[2].project, ledgers });
+  assert.deepEqual(routineOf(lessons)?.payload, {
+    runId: third.id, trigger: "routine", capabilityId: "clinical-evidence-synthesis",
+    peers: [{ runId: first.id, projectId: "aspirin" }, { runId: second.id, projectId: "statins" }],
+  }, "each peer by run and by the project its transcript is in");
+  assert.equal(routineOf(learningTriggersFor({ run: third, runs: ledgers[2].runs, project: ledgers[2].project })), undefined,
+    "the same run counted in its own project alone is the first of its kind there");
+  // Another capability's runs neither count nor break the count.
+  assert.equal(routineOf(learningTriggersFor({ run: between, runs: ledgers[0].runs, project: ledgers[0].project, ledgers })), undefined);
+});
+
+test("only the researcher's own work in their own live projects is family", () => {
+  const subject = () => run();
+  /** @param {{ project: any, runs: any[] }} extra */
+  const withPeers = (extra) => {
+    const mine = [run()];
+    const last = subject();
+    const ledgers = [{ project: projectOf("paper"), runs: [...mine, last] }, extra];
+    return routineOf(learningTriggersFor({ run: last, runs: ledgers[0].runs, project: ledgers[0].project, ledgers }));
+  };
+  // A control: one more of the researcher's own runs completes the routine.
+  assert.ok(withPeers({ project: projectOf("other-paper"), runs: [run()] }), "the control completes the group of three");
+  const excluded = [
+    ["an automated run (evaluation cell, probe, harness)", { project: projectOf("other-paper"), runs: [run({ automated: true })] }],
+    ["an autopilot episode", { project: projectOf("other-paper"), runs: [run({ effectiveRouteReason: "autopilot:literature-sentinel" })] }],
+    ["a run that failed", { project: projectOf("other-paper"), runs: [run({ status: "failed" })] }],
+    ["a run still going", { project: projectOf("other-paper"), runs: [run({ status: "running", finishedAt: null })] }],
+    ["a run in an internal project", { project: projectOf(LEARNING_PROJECT_ID), runs: [run()] }],
+    ["a run in an evaluation cell's project", { project: projectOf("methodeval-0123456789abcdef01234567"), runs: [run()] }],
+    ["a run in an archived project", { project: projectOf("old-paper", { archivedAt: "2026-09-01T00:00:00.000Z" }), runs: [run()] }],
+    ["another researcher's run", { project: projectOf("their-paper", { userId: "user_2" }), runs: [run()] }],
+    ["a run finished in an earlier routine period", { project: projectOf("other-paper"), runs: [run({ finishedAt: new Date(BASE - 25 * HOUR).toISOString() })] }],
+  ];
+  for (const [label, extra] of excluded) assert.equal(withPeers(extra), undefined, `${label} is not family`);
+});
+
+test("positions do not move: fixed periods, and a run is induced from once however often it is asked", () => {
+  const project = projectOf("paper");
+  // A steady pace across a period boundary. A window sliding back from each
+  // run would hold a constant count here and fire on every run or on none.
+  const periodEnd = Math.floor(Date.UTC(2026, 8, 10) / PERIOD) * PERIOD + PERIOD;
+  const paced = Array.from({ length: 8 }, (_, index) => run({
+    id: `paced_${index}`,
+    finishedAt: new Date(periodEnd + (index - 4) * 24 * HOUR + HOUR).toISOString(),
+  }));
+  const fired = paced.filter((subject) => routineOf(learningTriggersFor({ run: subject, runs: paced, project }))).map((subject) => subject.id);
+  // Four in the closing period (the 3rd fires, the 4th waits), four in the
+  // next, counted from its own start (its 3rd fires).
+  assert.deepEqual(fired, ["paced_2", "paced_6"]);
+
+  // The lesson is keyed by the run alone, and the family behind it does not
+  // shift when later runs arrive: asked again, the same run names the same
+  // lesson and the same peers.
+  const early = routineOf(learningTriggersFor({ run: paced[2], runs: paced.slice(0, 3), project }));
+  const late = routineOf(learningTriggersFor({ run: paced[2], runs: paced, project }));
+  assert.equal(early?.idempotencyKey, `distill:${paced[2].id}:routine`);
+  assert.deepEqual(late, early);
+});
+
+test("a routine lesson is queued once, whichever of the researcher's projects it is counted from", async () => {
+  // A queue that honours idempotency keys, as the product queue does.
+  const jobs = {
+    byKey: new Map(),
+    async enqueue(userId, kind, payload, options) {
+      if (!this.byKey.has(options.idempotencyKey)) this.byKey.set(options.idempotencyKey, { userId, kind, payload, options });
+      return this.byKey.get(options.idempotencyKey);
+    },
+  };
+  const here = projectOf("renal");
+  const [first, second] = [run(), run()];
+  const subject = run();
+  const ledgers = new Map([
+    ["aspirin", [first, run({ effectiveAgentId: "open-domain-answer" })]],
+    ["statins", [second]],
+    ["renal", [subject]],
+    ["archived", [run()]],
+    [LEARNING_PROJECT_ID, [run()]],
+  ]);
+  const read = [];
+  const agentRuns = {
+    list: async (project) => { read.push(project.id); return ledgers.get(project.id) ?? []; },
+    runWorkflowProjection: async () => null,
+  };
+  const projects = async (userId) => {
+    assert.equal(userId, "user_1", "only the run's own researcher's projects are asked for");
+    return [projectOf("aspirin"), projectOf("statins"), here, projectOf("archived", { archivedAt: "2026-09-01T00:00:00.000Z" }),
+      projectOf(LEARNING_PROJECT_ID), projectOf("foreign", { userId: "user_2" })];
+  };
+  const triggers = new LearningTriggers({ jobs, agentRuns, projects });
+  const result = await triggers.afterRun(here, subject);
+  assert.deepEqual(result.queued, ["delivered", "routine"]);
+  assert.deepEqual(read.sort(), ["aspirin", "renal", "statins"], "archived, internal and foreign ledgers are never read");
+  const routine = jobs.byKey.get(`distill:${subject.id}:routine`);
+  assert.equal(routine.options.projectId, "renal", "filed under the run that completed it");
+  assert.deepEqual(routine.payload.peers, [{ runId: first.id, projectId: "aspirin" }, { runId: second.id, projectId: "statins" }]);
+  await triggers.afterRun(here, subject);
+  assert.equal([...jobs.byKey.keys()].filter((key) => key.endsWith(":routine")).length, 1, "the same key twice is one lesson");
+
+  // A plain answer never reads the other ledgers.
+  read.length = 0;
+  const answer = run({ effectiveAgentId: "open-domain-answer" });
+  ledgers.set("renal", [subject, answer]);
+  await triggers.afterRun(here, answer);
+  assert.deepEqual(read, ["renal"]);
+});
+
+test("a family that cannot be read in full induces nothing, and says so", async () => {
+  const audits = [];
+  const here = projectOf("renal");
+  const subject = run();
+  const triggers = new LearningTriggers({
+    jobs: { enqueue: async () => ({ id: "job" }) },
+    agentRuns: {
+      list: async (project) => {
+        if (project.id === "statins") throw Object.assign(new Error("ledger unreadable"), { code: "agent_runs_corrupt" });
+        return project.id === "renal" ? [subject] : [run(), run()];
+      },
+      runWorkflowProjection: async () => null,
+    },
+    projects: async () => [projectOf("aspirin"), projectOf("statins"), here],
+    audit: async (event, detail) => { audits.push({ event, ...detail }); },
+  });
+  const result = await triggers.afterRun(here, subject);
+  assert.deepEqual(result.queued, ["delivered"], "a position counted over part of the family is a wrong answer");
+  assert.deepEqual(audits.map((entry) => [entry.event, entry.code, entry.detail]),
+    [["learning.routine.family", "agent_runs_corrupt", "clinical-evidence-synthesis"]]);
+});
+
+test("a routine lesson's peers read in both shapes it has been queued in", () => {
+  assert.deepEqual(lessonPeers({ peers: [{ runId: "run_a", projectId: "aspirin" }, { runId: "run_b", projectId: null }, { projectId: "x" }, null] }),
+    [{ runId: "run_a", projectId: "aspirin" }, { runId: "run_b", projectId: null }]);
+  // Queued before 2026-09-28: run ids only, every one in the lesson's own project.
+  assert.deepEqual(lessonPeers({ peerRunIds: ["run_a", "", 7, "run_b"] }), [{ runId: "run_a", projectId: null }, { runId: "run_b", projectId: null }]);
+  assert.deepEqual(lessonPeers({ trigger: "delivered" }), []);
 });
 
 test("the platform's own work and a plain answer never teach the researcher's loop", () => {

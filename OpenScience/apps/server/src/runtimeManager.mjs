@@ -6183,7 +6183,7 @@ export class RuntimeManager {
    * session and endpoint policies. Capacity is reserved through socket close.
    * @param {any} req @param {any} socket @param {Buffer} head
    * @param {Record<string, any>} project @param {string} suffix
-   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void> }} policy
+   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void> }} policy
    */
   async proxyUpgrade(req, socket, head, project, suffix, policy) {
     this.enforceUiProxyEnabled();

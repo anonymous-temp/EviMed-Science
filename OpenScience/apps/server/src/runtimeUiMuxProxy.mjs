@@ -43,10 +43,14 @@ function send(peer, data) {
  * @param {{ req: any, socket: any, head: Buffer, runtime: any, maxPayload: number,
  * heartbeat?: { intervalMs: number, timeoutMs: number },
  * admit?: (endpoint:string,operation:()=>Promise<void>) => Promise<void>,
+ * observe?: (endpoint: string, payload?: any) => Promise<void>,
  * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
+ * `observe` sees an admitted prompt immediately before it goes upstream; it
+ * records, it never refuses.
  */
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
   admit = async (_endpoint, operation) => operation(),
+  observe = async () => {},
   heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
@@ -173,6 +177,9 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (frame.type === "open" && frame.endpoint === "session/prompt") {
       try {
         await admit(frame.endpoint, async () => {
+          // An observer that fails is the observer's to report; the prompt
+          // is forwarded all the same.
+          await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
           const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject }); });
           const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
           try { await send(upstream, raw); await accepted; }

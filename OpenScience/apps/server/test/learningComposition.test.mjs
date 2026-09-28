@@ -327,3 +327,18 @@ test("a stop reads the bounded run it releases, and the counters reach the metri
   // L-G3: the correction memories a lesson names reach its input.
   assert.match(serverSource, /readCorrections: researchMemory\.configured/);
 });
+
+test("a routine is counted across the researcher's own projects, and its peers are read where they ran", () => {
+  // E7 (2026-09-28): the family was one project's ledger, so a researcher who
+  // kept one question per project never reached a routine. The rules are
+  // tested in learningTriggers.test.mjs against the ledgers this hands them;
+  // this asserts the composition root hands them the account's projects, and
+  // only the account's own.
+  const triggers = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
+  assert.ok(triggers.length > 0, "the trigger construction is gone; this test now checks nothing");
+  assert.match(triggers, /projects: async \(userId\) => \{\s*const user = await store\.userById\(userId\);/);
+  assert.match(triggers, /for \(const entry of await store\.listProjects\(user\)\) \{\s*if \(entry\.archivedAt \|\| isInternalProject\(entry\.id\)\) continue;\s*own\.push\(await store\.requireProject\(user, entry\.id\)\);/);
+  assert.match(triggers, /routinePeriodDays: config\.transcriptRetentionDays/, "a peer is never older than the transcript an induction reads");
+  const distillation = serverSource.slice(serverSource.indexOf("const distillation = new MethodDistillationRuns({"), serverSource.indexOf("const consolidation = new MethodConsolidation({"));
+  assert.match(distillation, /resolveProject: async \(userId, projectId\) => \{\s*const user = await store\.userById\(userId\);\s*return user \? store\.requireProject\(user, projectId\) : null;/);
+});

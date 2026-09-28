@@ -31,10 +31,11 @@
 
 import { createHash } from "node:crypto";
 
-import { METHOD_OPERATIONS, parseSkillFrontmatter, SKILL_AUTHORING_LIMITS, unwrapUserWrappers } from "@evimed/domain";
-import { LEARNING_PROJECT_ID } from "./internalProjects.mjs";
+import { carriesPlatformContext, METHOD_OPERATIONS, parseSkillFrontmatter, SKILL_AUTHORING_LIMITS, unwrapUserWrappers } from "@evimed/domain";
+import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
 import { learnedMethodId } from "./learningService.mjs";
+import { lessonPeers } from "./learningTriggers.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The file the run reads its frozen input from. */
@@ -58,7 +59,10 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 // "3" since 2026-09-27: the input opens with the researcher's own corrections
 // and edits and says what the lesson rests on (`signal`), and a lesson read
 // under the old shape would be learnt without them.
-export const DISTILLATION_EXTRACTOR_VERSION = "3";
+// "4" since 2026-09-28: a correction typed into the running turn from the
+// kernel's own window is one of them (`steeredCorrections`), and only the
+// run's own turns are read for them.
+export const DISTILLATION_EXTRACTOR_VERSION = "4";
 
 /**
  * How many messages of context each trigger is worth.
@@ -98,30 +102,88 @@ export function lessonSignal(input) {
   return input.trigger === "repair_accepted" ? "reviewer" : "run";
 }
 
+/** The text parts of one transcript message, joined. @param {any} message */
+function messageText(message) {
+  return (message?.parts ?? []).filter((/** @type {any} */ part) => part?.type === "text").map((/** @type {any} */ part) => String(part.text ?? "")).join("\n");
+}
+
+/**
+ * The turns of a run's own session that belong to the run, by the rule the
+ * ledger assigns history with (`runHistory` in agentRuns.mjs): a turn one of
+ * the run's own request ids entered, or the native turn it was adopted from
+ * when it has no request ids. Null when the run names neither — a record from
+ * before turn identity — and then every turn is read.
+ * @param {any[]} messages the run's own session @param {any} run
+ * @returns {Set<number> | null}
+ */
+function ownTurns(messages, run) {
+  const requestIds = new Set(Array.isArray(run?.kernelRequestIds) ? run.kernelRequestIds : []);
+  /** @type {Set<number>} */
+  const turns = new Set();
+  for (const message of messages) {
+    if (message?.role === "user" && message.source === "user" && Number.isSafeInteger(message.turnStartSeq)
+      && requestIds.has(message.sourceRequestId)) turns.add(message.turnStartSeq);
+  }
+  if (!requestIds.size && Number.isSafeInteger(run?.nativeTurn?.startSeq)) turns.add(run.nativeTurn.startSeq);
+  return turns.size ? turns : null;
+}
+
 /**
  * The corrections the researcher typed into the run, in their own words.
  *
- * A message the researcher sends into a running turn is wrapped in
- * `<evimed-correction>` so a compaction keeps it (`PLATFORM_CONTEXT_TAGS`);
- * the wrapper is a closed tag we write, so finding it is structural, and what
- * is inside it is theirs. Read from the whole transcript rather than from the
- * excerpt window — the window ends where the run ended, and a correction early
- * in a long run is the one most likely to fall outside it. The excerpt's own
- * cleaning applies: a message carrying a credential or a patient identifier
- * is dropped, and counted.
+ * Found by two structural marks, never by reading what the message says:
+ *
+ *  - `<evimed-correction>` — a message sent through the steer route (the
+ *    messaging channel's 补充) is wrapped so a compaction keeps it
+ *    (`PLATFORM_CONTEXT_TAGS`). The wrapper is a closed tag we write, and what
+ *    is inside it is theirs.
+ *  - a message the researcher typed that is not the first of its turn. A turn
+ *    opens with one ordinary message — the kernel makes a queued follow-up
+ *    "the sole ordinary message of its own turn" — so another one typed inside
+ *    it arrived while the turn was running: a steer from the kernel's own
+ *    window, which is where the researcher types, and which carries no
+ *    wrapper. The ledger counted it as it passed the frame proxy
+ *    (`AgentRunStore.recordSteeredInput`); this is where its words are read.
+ *    Nothing the platform wrote qualifies (`carriesPlatformContext`).
+ *
+ * Only the run's own session, and within it only the run's own turns when the
+ * run says which they are: a session holds every earlier run's turns too, and
+ * a correction made to one of those is not a correction of this run. Read from
+ * the whole of those turns rather than from the excerpt window — the window
+ * ends where the run ended, and a correction early in a long run is the one
+ * most likely to fall outside it. The excerpt's own cleaning applies: a
+ * message carrying a credential or a patient identifier is dropped, and
+ * counted.
  * @param {{messages?: any[]} | null | undefined} transcript
+ * @param {any} [run] the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`
  * @returns {{corrections: {source: "steered", sessionId: string | null, seq: number | null, text: string}[], dropped: {sensitive: number, bounded: number}}}
  */
-export function steeredCorrections(transcript) {
-  const wrapped = (transcript?.messages ?? []).filter((message) => message?.role === "user"
-    && (message.parts ?? []).some((part) => part?.type === "text" && String(part.text ?? "").includes("<evimed-correction")));
-  const cleaned = transcriptExcerpt(wrapped, { limit: MAX_CORRECTIONS });
+export function steeredCorrections(transcript, run = null) {
+  const root = typeof run?.sessionId === "string" && run.sessionId ? run.sessionId : null;
+  const messages = (transcript?.messages ?? []).filter((message) => !root || message?.sessionId === root);
+  const turns = ownTurns(messages, run);
+  /** Where each turn's first typed message is. @type {Map<number, number>} */
+  const opening = new Map();
+  for (const message of messages) {
+    if (message?.role !== "user" || message.source !== "user" || !Number.isSafeInteger(message.turnStartSeq)) continue;
+    const first = opening.get(message.turnStartSeq);
+    if (first === undefined || Number(message.seq) < first) opening.set(message.turnStartSeq, Number(message.seq));
+  }
+  const steered = messages.filter((message) => {
+    if (message?.role !== "user" || (turns && !turns.has(message.turnStartSeq))) return false;
+    const text = messageText(message);
+    if (text.includes("<evimed-correction")) return true;
+    return message.source === "user" && Number.isSafeInteger(message.turnStartSeq)
+      && Number(message.seq) > (opening.get(message.turnStartSeq) ?? Number.POSITIVE_INFINITY)
+      && !carriesPlatformContext(text);
+  });
+  const cleaned = transcriptExcerpt(steered, { limit: MAX_CORRECTIONS });
   return {
     corrections: cleaned.messages.map((message) => ({
       source: /** @type {"steered"} */ ("steered"),
       sessionId: message.sessionId ?? null,
       seq: Number.isSafeInteger(message.seq) ? message.seq : null,
-      text: unwrapUserWrappers((message.parts ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("\n")).slice(0, 4000),
+      text: unwrapUserWrappers(messageText(message)).slice(0, 4000),
     })).filter((entry) => entry.text),
     dropped: cleaned.dropped,
   };
@@ -152,7 +214,7 @@ export function buildDistillationInput(input) {
   const excerpt = input.transcript
     ? transcriptExcerpt(input.transcript.messages, { limit })
     : { messages: [], dropped: { sensitive: 0, bounded: 0 } };
-  const steered = steeredCorrections(input.transcript);
+  const steered = steeredCorrections(input.transcript, input.run);
   const corrections = [
     ...steered.corrections,
     ...(input.correctionRecords ?? [])
@@ -224,10 +286,15 @@ export class MethodDistillationRuns {
    * checked when the extractor wrote them — so they open the input rather than
    * stay behind a record id the run cannot resolve. Optional: without it the
    * corrections typed into the run itself still come first.
+   *
+   * `resolveProject` resolves one project of the lesson's own account, for a
+   * `routine` peer that ran in another of the researcher's projects
+   * (`lessonPeers`). Optional: without it such a peer reads as unavailable.
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any, jobs?: any, notifications?: any,
-   *   readCorrections?: ((userId: string, recordIds: string[]) => Promise<{recordId: string, key?: string | null, text: string}[]>) | null}} dependencies
+   *   readCorrections?: ((userId: string, recordIds: string[]) => Promise<{recordId: string, key?: string | null, text: string}[]>) | null,
+   *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null}} dependencies
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null }) {
+  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null, resolveProject = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -238,6 +305,27 @@ export class MethodDistillationRuns {
     this.jobs = jobs;
     this.notifications = notifications;
     this.readCorrections = readCorrections;
+    this.resolveProject = resolveProject;
+  }
+
+  /**
+   * The project a `routine` peer's transcript is read from.
+   *
+   * A peer with no project, or in the lesson's own project, is read where the
+   * lesson's run is — which, for a lesson moved when its project was deleted,
+   * is the learning project holding the copies (`learningPreservation.mjs`).
+   * Any other is resolved within the lesson's own account and nowhere else,
+   * and never as one of the platform's internal projects: the payload is only
+   * as trustworthy as whoever queued it. Null when it cannot be resolved —
+   * deleted since, or no resolver — which the input reports as `unavailable`.
+   * @param {any} job @param {any} project @param {{runId: string, projectId: string | null}} peer
+   */
+  async #peerProject(job, project, peer) {
+    const home = [job.projectId, job.payload?.sourceProjectId, project?.id].filter((id) => typeof id === "string" && id);
+    if (!peer.projectId || home.includes(peer.projectId)) return project;
+    if (!this.resolveProject || isInternalProject(peer.projectId)) return null;
+    const resolved = await this.resolveProject(job.userId, peer.projectId).catch(() => null);
+    return resolved && String(resolved.userId) === String(job.userId) ? resolved : null;
   }
 
   /**
@@ -258,12 +346,15 @@ export class MethodDistillationRuns {
     const related = await this.learning.listMethods(job.userId, { limit: 20 })
       .then((page) => page.items ?? [])
       .catch(() => []);
-    const peerRunIds = trigger === "routine" && Array.isArray(job.payload?.peerRunIds)
-      ? job.payload.peerRunIds.filter((id) => typeof id === "string" && id && id !== run.id).slice(0, MAX_PEER_RUNS)
+    // Each peer by run and project; a lesson queued before 2026-09-28 names
+    // run ids only, all in its own project (`lessonPeers`).
+    const peers = trigger === "routine"
+      ? lessonPeers(job.payload).filter((peer) => peer.runId !== run.id).slice(0, MAX_PEER_RUNS)
       : [];
     const peerRuns = [];
-    for (const runId of peerRunIds) {
-      peerRuns.push({ runId, transcript: await readRunTranscript(project, runId).catch(() => null) });
+    for (const peer of peers) {
+      const peerProject = await this.#peerProject(job, project, peer);
+      peerRuns.push({ runId: peer.runId, transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null });
     }
     const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords });
     const dispatchId = distillationDispatchId(run.id, trigger);

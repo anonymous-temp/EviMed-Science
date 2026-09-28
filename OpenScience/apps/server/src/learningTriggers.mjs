@@ -21,12 +21,18 @@
  *    running turn, or a `correction` memory the extractor wrote citing the
  *    researcher's own words. Whether a sentence is a correction is the
  *    extraction model's judgement; that it quotes the researcher verbatim was
- *    checked in code.
+ *    checked in code. "Sent into a running turn" is the ledger's `corrections`
+ *    count: the steer route, and since 2026-09-28 a message steered into the
+ *    turn from the kernel's own window (`AgentRunStore.recordSteeredInput`,
+ *    counted by the frame proxy), which is where the researcher actually types.
  *  - **the same kind of operation repeated** — the Nth successful run of one
- *    capability in one project, N = `METHOD_INDUCTION_MIN_TRAJECTORIES`
- *    (AWM's routine induction needs several trajectories to find what they
- *    share). "Same kind" is the capability, a closed vocabulary, never a
- *    judgement about the question.
+ *    capability, N = `METHOD_INDUCTION_MIN_TRAJECTORIES` (AWM's routine
+ *    induction needs several trajectories to find what they share). "Same
+ *    kind" is the capability, a closed vocabulary, never a judgement about the
+ *    question. The family is the researcher's, across every one of their own
+ *    projects (`routineFamily`): until 2026-09-28 it was one project's ledger,
+ *    so a researcher who kept one question per project — which is what a
+ *    project is for — never reached the third run of anything.
  *
  * None of this decides whether anything learned takes effect, or what it is.
  * A distillation proposes; the method ledger decides (`LearningService`): a
@@ -52,11 +58,144 @@
  */
 
 import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
+import { isInternalProject } from "./internalProjects.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
+import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
 
 /** The answer line: a plain question answered is not an operation to learn a
  *  procedure from (principle 12). */
 const ANSWER_LINE_AGENT_ID = "open-domain-answer";
+
+const DAY_MS = 86_400_000;
+
+/**
+ * How long one routine period lasts. A routine's family is the capability's
+ * runs that finished in the same period as the run that completes it.
+ *
+ * Why it is bounded at all: the family is read out of every ledger the
+ * researcher owns, and what a routine induction reads of each peer is its
+ * transcript — which the retention sweep removes after
+ * `transcriptRetentionDays` (`TRANSCRIPT_RETENTION_DAYS`, 90 by default). A
+ * peer older than that is a number, not evidence. So the period is the
+ * retention, and the composition root sets both from the same configuration.
+ *
+ * Why fixed periods rather than a window sliding back from each run: "every
+ * Nth" needs positions that do not move. In a sliding window every run's
+ * position shifts each time an old run leaves it, and a researcher who runs a
+ * capability at a steady pace — one run leaving the window for each one
+ * entering it — holds a constant count, which is a multiple of N on every run
+ * or on none. A fixed period only grows between its two boundaries. What that
+ * costs is a group still short of N when its period ends, which starts again
+ * in the next one.
+ */
+export const ROUTINE_PERIOD_DAYS = TRANSCRIPT_RETENTION_DAYS;
+
+/** @param {unknown} days @returns {number} the period in ms; the default for anything but a positive number */
+export function routinePeriodMs(days) {
+  const value = Number(days);
+  return (Number.isFinite(value) && value > 0 ? value : ROUTINE_PERIOD_DAYS) * DAY_MS;
+}
+
+/** When a run finished, in ms; its start when the ledger has no finish. @param {any} run */
+function finishedMs(run) {
+  return Date.parse(String(run?.finishedAt ?? run?.startedAt ?? ""));
+}
+
+/**
+ * The routine period a run finished in, or null for a run with no readable
+ * time. Counted from the Unix epoch, so every reader agrees on the boundaries.
+ * @param {any} run @param {number} [periodMs]
+ * @returns {number | null}
+ */
+export function routinePeriodOf(run, periodMs = routinePeriodMs(ROUTINE_PERIOD_DAYS)) {
+  const time = finishedMs(run);
+  return Number.isFinite(time) && periodMs > 0 ? Math.floor(time / periodMs) : null;
+}
+
+/**
+ * The capability a finished run could be the Nth run of, or null: it
+ * succeeded, it delivered, and it was not a plain answer. The cheap part of
+ * the rule, so the researcher's other ledgers are read only when they can
+ * matter.
+ * @param {any} run
+ * @returns {string | null}
+ */
+export function routineCapability(run) {
+  const agentId = String(run?.effectiveAgentId ?? "");
+  if (run?.status !== "succeeded" || (run.artifacts?.length ?? 0) === 0) return null;
+  return agentId && agentId !== ANSWER_LINE_AGENT_ID ? agentId : null;
+}
+
+/**
+ * Whether a run is the researcher's own work. What the platform did on its own
+ * behalf is not: an evaluation cell, a probe or a harness (`automated`, set by
+ * the dispatch body or the `x-evimed-automated` header), an autopilot episode.
+ * @param {any} run
+ */
+function researcherRun(run) {
+  return run?.automated !== true && !String(run?.effectiveRouteReason ?? "").startsWith("autopilot:");
+}
+
+/**
+ * @typedef {{ project: { id?: string | null, userId?: string | null, archivedAt?: string | null }, runs: readonly any[] }} ProjectLedger
+ * one project's ledger, as a routine's family reads it
+ */
+
+/**
+ * The runs a routine is counted over, oldest first: every successful run of
+ * `capabilityId` that was the researcher's own work, in any of the
+ * researcher's own projects, finished in the same routine period as `run`
+ * (`ROUTINE_PERIOD_DAYS`).
+ *
+ * A project counts when it belongs to `owner`, is not archived (put away is
+ * not being worked in) and is not one the platform keeps for its own
+ * background work (`isInternalProject`). Every rule is applied here, however
+ * the ledgers were gathered, so it can be read in one place.
+ *
+ * @param {{ run: any, owner?: string | null, capabilityId: string, ledgers: readonly ProjectLedger[], periodMs?: number }} input
+ * @returns {{ run: any, projectId: string | null }[]}
+ */
+export function routineFamily({ run, owner = null, capabilityId, ledgers, periodMs = routinePeriodMs(ROUTINE_PERIOD_DAYS) }) {
+  const period = routinePeriodOf(run, periodMs);
+  if (period == null) return [];
+  /** @type {Map<string, { run: any, projectId: string | null }>} */
+  const members = new Map();
+  for (const ledger of ledgers ?? []) {
+    const home = ledger?.project;
+    if (!home || home.archivedAt || isInternalProject(home.id)) continue;
+    if (owner != null && home.userId !== owner) continue;
+    for (const item of ledger.runs ?? []) {
+      if (!item?.id || members.has(item.id)) continue;
+      if (item.status !== "succeeded" || String(item.effectiveAgentId ?? "") !== capabilityId || !researcherRun(item)) continue;
+      if (routinePeriodOf(item, periodMs) !== period) continue;
+      members.set(item.id, { run: item, projectId: home.id ? String(home.id) : null });
+    }
+  }
+  return [...members.values()].sort((left, right) => (finishedMs(left.run) - finishedMs(right.run))
+    || String(left.run.id).localeCompare(String(right.run.id)));
+}
+
+/**
+ * The peer runs a `routine` lesson names, as `{ runId, projectId }`, in either
+ * shape a lesson has been queued in: `peers` since 2026-09-28, when a peer can
+ * be in another of the researcher's projects; and the `peerRunIds` of a lesson
+ * queued before, whose peers were all in the lesson's own project — read as
+ * `projectId: null`, which means exactly that. Malformed entries are dropped.
+ * @param {any} payload
+ * @returns {{ runId: string, projectId: string | null }[]}
+ */
+export function lessonPeers(payload) {
+  const text = (/** @type {unknown} */ value) => (typeof value === "string" && value ? value : null);
+  if (Array.isArray(payload?.peers)) {
+    return payload.peers
+      .filter((/** @type {any} */ peer) => text(peer?.runId))
+      .map((/** @type {any} */ peer) => ({ runId: String(peer.runId), projectId: text(peer.projectId) }));
+  }
+  if (Array.isArray(payload?.peerRunIds)) {
+    return payload.peerRunIds.filter(text).map((/** @type {string} */ runId) => ({ runId, projectId: null }));
+  }
+  return [];
+}
 
 /** The largest number of attempts any deliverable of the run took, from the
  *  run's own projection. @param {any} projection */
@@ -69,16 +208,23 @@ function inRunAttempts(projection) {
  * Which lessons one finished run is evidence for. Pure, so the rules can be
  * read and tested without a queue.
  *
- * @param {{ run: any, runs: readonly any[], projection?: any, memoryResult?: any,
+ * `runs` is the ledger of the run's own `project`, where its current record is
+ * read. `ledgers` are those a routine is counted over — the researcher's
+ * projects, gathered by `LearningTriggers.ledgersFor`; when absent, the run's
+ * own ledger is the only one.
+ *
+ * @param {{ run: any, runs: readonly any[], project?: { id?: string | null, userId?: string | null, archivedAt?: string | null } | null,
+ *   ledgers?: readonly ProjectLedger[] | null, periodMs?: number, projection?: any, memoryResult?: any,
  *   internalAgent?: (agentId: string) => boolean }} input
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }[]}
  */
-export function learningTriggersFor({ run, runs, projection = null, memoryResult = null, internalAgent = () => false }) {
+export function learningTriggersFor({ run, runs, project = null, ledgers = null, periodMs = routinePeriodMs(ROUTINE_PERIOD_DAYS),
+  projection = null, memoryResult = null, internalAgent = () => false }) {
   if (!run || !["succeeded", "failed"].includes(run.status)) return [];
   // Work the platform did on its own behalf is not the researcher's operation:
   // an evaluation cell, a nightly autopilot episode, and the loop's own
   // bounded runs (distillation learning from distillation is a hall of mirrors).
-  if (run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) return [];
+  if (!researcherRun(run)) return [];
   const agentId = String(run.effectiveAgentId ?? "");
   if (agentId && internalAgent(agentId)) return [];
   // A lesson drawn from an incomplete record rests on evidence the
@@ -124,15 +270,18 @@ export function learningTriggersFor({ run, runs, projection = null, memoryResult
       payload: { runId: run.id, trigger: "delivered" },
     });
 
-  if (agentId && agentId !== ANSWER_LINE_AGENT_ID) {
-    const family = runs
-      .filter((item) => item?.status === "succeeded" && String(item.effectiveAgentId ?? "") === agentId)
-      .filter((item) => item.automated !== true && !String(item.effectiveRouteReason ?? "").startsWith("autopilot:"))
-      .sort((left, right) => String(left.finishedAt ?? left.startedAt ?? "").localeCompare(String(right.finishedAt ?? right.startedAt ?? "")));
-    const position = family.findIndex((item) => item.id === run.id) + 1;
+  const capabilityId = routineCapability(run);
+  if (capabilityId) {
+    const family = routineFamily({
+      run, owner: project?.userId ?? null, capabilityId, periodMs,
+      ledgers: ledgers ?? [{ project: project ?? {}, runs }],
+    });
+    const position = family.findIndex((member) => member.run.id === run.id) + 1;
     // Every Nth, not only the Nth: a routine seen again after the first
     // induction is new evidence for the method it produced, and the
     // distillation reads the related methods before it proposes anything.
+    // The key names the run alone, so one run is induced from at most once
+    // however often its lessons are queued.
     if (position > 0 && position % METHOD_INDUCTION_MIN_TRAJECTORIES === 0) {
       lessons.push({
         trigger: "routine",
@@ -140,8 +289,11 @@ export function learningTriggersFor({ run, runs, projection = null, memoryResult
         payload: {
           runId: run.id,
           trigger: "routine",
-          capabilityId: agentId,
-          peerRunIds: family.slice(position - METHOD_INDUCTION_MIN_TRAJECTORIES, position - 1).map((item) => item.id),
+          capabilityId,
+          // By run and project: a run id names a transcript only inside its
+          // own project, and a peer may be in another of the researcher's.
+          peers: family.slice(position - METHOD_INDUCTION_MIN_TRAJECTORIES, position - 1)
+            .map((member) => ({ runId: member.run.id, projectId: member.projectId })),
         },
       });
     }
@@ -151,11 +303,18 @@ export function learningTriggersFor({ run, runs, projection = null, memoryResult
 
 export class LearningTriggers {
   /**
+   * `projects` lists one account's projects, each as the store resolves it
+   * (`{ id, userId, archivedAt, rootDir, … }`), so a routine is counted across
+   * all of the researcher's own; without it a routine is counted in the run's
+   * own project. `routinePeriodDays` is the transcript retention
+   * (`ROUTINE_PERIOD_DAYS`).
    * @param {{ jobs: any, agentRuns: any, memory?: any, internalAgent?: (agentId: string) => boolean | Promise<boolean>,
    *   sessionState?: ((userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null } | null>) | null,
-   *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} dependencies
+   *   audit?: (event: string, detail: Record<string, any>) => Promise<void>,
+   *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number }} dependencies
    */
-  constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {} }) {
+  constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
+    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -163,6 +322,36 @@ export class LearningTriggers {
     this.internalAgent = internalAgent;
     this.sessionState = sessionState;
     this.audit = audit;
+    this.projects = projects;
+    this.periodMs = routinePeriodMs(routinePeriodDays);
+  }
+
+  /**
+   * The ledgers a routine of `capabilityId` is counted over: the run's own, as
+   * already read, and that of every other project of the same researcher that
+   * is neither archived nor internal. Each is cut to the capability and the
+   * run's period as it is read, so what is held is one period of one
+   * capability rather than every ledger's history.
+   *
+   * Throws when any of them cannot be read. A position counted over part of
+   * the family is a wrong answer, and no routine is better than one induced
+   * at the wrong run.
+   * @param {any} project @param {readonly any[]} runs @param {any} run @param {string} capabilityId
+   * @returns {Promise<ProjectLedger[]>}
+   */
+  async ledgersFor(project, runs, run, capabilityId) {
+    const period = routinePeriodOf(run, this.periodMs);
+    const cut = (/** @type {readonly any[]} */ ledger) => ledger.filter((item) => String(item?.effectiveAgentId ?? "") === capabilityId
+      && routinePeriodOf(item, this.periodMs) === period);
+    /** @type {ProjectLedger[]} */
+    const ledgers = [{ project, runs: cut(runs) }];
+    if (!this.projects) return ledgers;
+    for (const other of (await this.projects(project.userId)) ?? []) {
+      if (!other?.id || String(other.id) === String(project.id)) continue;
+      if (other.userId !== project.userId || other.archivedAt || isInternalProject(other.id)) continue;
+      ledgers.push({ project: other, runs: cut(await this.agentRuns.list(other)) });
+    }
+    return ledgers;
   }
 
   /**
@@ -189,7 +378,23 @@ export class LearningTriggers {
     const projection = await this.agentRuns.runWorkflowProjection(project, run).catch(() => null);
     const agentId = String(run.effectiveAgentId ?? "");
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
-    const lessons = learningTriggersFor({ run, runs, projection, memoryResult, internalAgent: () => internal });
+    // The other ledgers are read only when this run could complete a routine.
+    const capabilityId = internal || !researcherRun(run) ? null : routineCapability(run);
+    /** @type {ProjectLedger[] | null} */
+    let ledgers = null;
+    if (capabilityId) {
+      ledgers = await this.ledgersFor(project, runs, run, capabilityId).catch(async (error) => {
+        await this.audit("learning.routine.family", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "learning_routine_family_unreadable",
+          detail: capabilityId,
+        }).catch(() => {});
+        return [];
+      });
+    }
+    const lessons = learningTriggersFor({
+      run, runs, project, ledgers, periodMs: this.periodMs, projection, memoryResult, internalAgent: () => internal,
+    });
     const queued = [];
     for (const lesson of lessons) {
       try {
@@ -209,3 +414,4 @@ export class LearningTriggers {
     return { queued, skipped: null };
   }
 }
+

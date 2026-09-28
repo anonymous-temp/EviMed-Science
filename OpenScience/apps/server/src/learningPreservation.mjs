@@ -35,6 +35,7 @@
 import path from "node:path";
 
 import { LEARNING_PROJECT_ID, LEARNING_PROJECT_NAME } from "./internalProjects.mjs";
+import { lessonPeers } from "./learningTriggers.mjs";
 import { transcriptPath } from "./runTranscripts.mjs";
 import { HttpError, readTextFileNoFollow, safeId, writeFileAtomicNoFollow } from "./security.mjs";
 
@@ -81,6 +82,10 @@ function lessonRunRecord(run) {
     startedAt: run.startedAt ?? null,
     finishedAt: run.finishedAt ?? null,
     transcript: run.transcript ? { completeness: run.transcript.completeness ?? null } : null,
+    // Which turns of the session were this run's, so the corrections read out
+    // of the copied transcript are its own (`steeredCorrections`).
+    ...(Array.isArray(run.kernelRequestIds) ? { kernelRequestIds: run.kernelRequestIds.filter((id) => typeof id === "string") } : {}),
+    ...(run.nativeTurn ? { nativeTurn: run.nativeTurn } : {}),
   };
 }
 
@@ -105,7 +110,11 @@ export async function preserveProjectLessons({ client, userId, project, learning
   const preserved = new Set();
   for (const job of jobs.rows) {
     if (job.kind !== "distill" || !["queued", "running"].includes(job.status)) continue;
-    const runIds = [job.payload?.runId, ...(Array.isArray(job.payload?.peerRunIds) ? job.payload.peerRunIds : [])]
+    // A `routine` peer in another of the researcher's projects keeps its
+    // transcript there, where the distillation reads it; only this project's
+    // own are copied (`lessonPeers` reads both payload shapes).
+    const runIds = [job.payload?.runId, ...lessonPeers(job.payload)
+      .filter((peer) => !peer.projectId || peer.projectId === String(project.id)).map((peer) => peer.runId)]
       .filter((value) => typeof value === "string" && value);
     for (const runId of runIds) {
       if (preserved.has(runId)) continue;

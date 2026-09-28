@@ -2545,6 +2545,12 @@ export function createWebApiApp(overrides = {}) {
           .filter((/** @type {any} */ record) => !record.sensitive)
           .map((/** @type {any} */ record) => ({ recordId: String(record.id), key: record.key ?? null, text: String(record.summary || record.value || "") }))
         : null,
+      // A routine's peer may have run in another of the researcher's projects;
+      // resolved within the lesson's own account, never created.
+      resolveProject: async (userId, projectId) => {
+        const user = await store.userById(userId);
+        return user ? store.requireProject(user, projectId) : null;
+      },
     });
     const consolidation = new MethodConsolidation({
       dispatch: dispatchLearningRun,
@@ -2606,6 +2612,21 @@ export function createWebApiApp(overrides = {}) {
       // grading its own homework.
       internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
+      // A routine is counted across the researcher's own projects, never
+      // anyone else's: the account's list, less what is archived and what the
+      // platform keeps for itself. The period is the transcript retention, so
+      // no peer is older than the transcript an induction reads.
+      projects: async (userId) => {
+        const user = await store.userById(userId);
+        if (!user) return [];
+        const own = [];
+        for (const entry of await store.listProjects(user)) {
+          if (entry.archivedAt || isInternalProject(entry.id)) continue;
+          own.push(await store.requireProject(user, entry.id));
+        }
+        return own;
+      },
+      routinePeriodDays: config.transcriptRetentionDays,
     });
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
@@ -5164,6 +5185,10 @@ export function createWebApiApp(overrides = {}) {
     usageLedger,
     authorizePrompt: assertPublicSessionPrompt,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
+    // A message steered into a running turn from the kernel's window is counted
+    // on that run — the learning loop's in-run correction signal.
+    agentRuns,
+    audit: (event, detail) => securityAudit(config, event, "failed", detail),
   });
 
   // No `upgrade` handler here on purpose. The only WebSocket this deployment
