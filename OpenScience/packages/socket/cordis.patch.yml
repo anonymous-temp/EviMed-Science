@@ -68,6 +68,8 @@
 - id: plugin-manager
   disabled: true
 
+# The plugin manager's page: install / remove buttons for the service above.
+# Hidden with it, so the page offers no control that can only fail.
 - id: ui-plugin-manager
   disabled: true
 
@@ -78,6 +80,7 @@
 - id: terminal-controller
   disabled: true
 
+# The terminal's sidebar panel, the page half of the PTY above.
 - id: ui-sidebar-terminal
   disabled: true
 
@@ -89,12 +92,16 @@
 - id: deepseek-account
   disabled: true
 
+# The second model route, which calls DeepSeek on the account's credential and
+# so around the gateway, its token and its usage ledger.
 - id: llm-deepseek-account
   disabled: true
 
+# The `account/*` wire methods and the OAuth callback the sign-in flow uses.
 - id: account-controller
   disabled: true
 
+# The settings page that starts the sign-in.
 - id: ui-settings-account
   disabled: true
 
