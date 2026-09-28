@@ -422,3 +422,23 @@ def test_an_unattended_review_leaves_out_a_study_whose_design_is_unknown(tmp_pat
     # Idempotent on resume, and never the whole review.
     assert exclude_unresolved_design_studies(project, [resolved]) == set()
     assert exclude_unresolved_design_studies(project, [unresolved]) == set()
+
+
+def test_a_resumed_run_does_not_admit_its_protocol_against_invalidated_extractions(tmp_path):
+    """ma-001 run 6 (2026-09-28) resumed run 5, whose admission refusal had
+    cleared every step back to the protocol. The resume admitted the cached
+    protocol against run 5's extraction files and was refused again before any
+    step ran. Those files are not current until extraction runs again."""
+    protocol = _protocol()
+    project = Project(protocol.research_question, output_dir=tmp_path)
+    _save_studies(project, [_study(), _study("S2", "unclassified randomized study", comparative_design="unknown")])
+    project.save_checkpoint("extraction")
+    with pytest.raises(ProtocolInputRequired):
+        compile_project_method_plan(project, protocol, enforce=True)
+
+    project.clear_downstream("protocol", include_self=True)  # what the refusal does
+    assert "unknown" not in compile_project_method_plan(project, protocol, enforce=True).study_designs
+
+    project.save_checkpoint("extraction")  # the resumed run extracted again
+    with pytest.raises(ProtocolInputRequired):
+        compile_project_method_plan(project, protocol, enforce=True)

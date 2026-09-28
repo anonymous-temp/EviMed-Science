@@ -349,9 +349,12 @@ def _project_execution_design_spec(
     Before extraction the eligible designs supply the planning requirements.
     Afterwards the existing method plan carries the observed designs, including
     non-poolable studies and typed dependencies. No cached reconciliation report
-    or scope receipt substitutes for the current extraction data.
+    or scope receipt substitutes for the current extraction data, and neither
+    does the file of an extraction step the project has invalidated.
     """
     if spec.family is not ReviewFamily.INTERVENTION_RCT:
+        return spec
+    if _extraction_invalidated(project):
         return spec
     payload = project.load_json("all_extractions.json", subdir="extraction")
     if payload is None or payload == []:
@@ -390,6 +393,25 @@ def _project_execution_design_spec(
             field="extraction.study_designs", requested=sorted(observed), supported=sorted(eligible),
         )
     return spec.model_copy(update={"study_designs": sorted(observed)})
+
+
+def _extraction_invalidated(project: Project) -> bool:
+    """Whether the project's extraction files belong to an invalidated step.
+
+    A method-admission refusal clears every step back to the protocol and
+    leaves the files where they are. Before 2026-09-28 a resumed run admitted
+    its cached protocol against those files and was refused again in two
+    seconds, before any step ran, however the code had changed since: a local
+    ma-001 resume did exactly that, and the EviMed adapter would have spent
+    every attempt of the job the same way. The files count again once the
+    resumed run's own extraction step completes.
+    """
+    try:
+        steps = project.load_step_manifest().get("steps") or {}
+    except RuntimeError:
+        return False
+    entry = steps.get("extraction")
+    return isinstance(entry, dict) and entry.get("status") == "invalidated"
 
 
 def _has_computable_effect(studies: list[ExtractedStudy], protocol: ResearchProtocol) -> bool:
