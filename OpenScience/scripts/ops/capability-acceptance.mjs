@@ -35,6 +35,7 @@
 //   --prompt-file <path>
 //       dispatch this text instead of the rendered brief (the brief still names
 //       the results directory), e.g. a GEO step's brief into an existing GEO project.
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -355,7 +356,13 @@ async function main() {
   }
   if (pending.has(run.status)) say(`TIMEOUT after ${Math.round(timeoutMs / 60000)} min; the run is still ${run.status}`);
 
-  const outDir = path.join(repoRoot, harness, "results", `${new Date().toISOString().slice(0, 10)}-${briefId}`);
+  // A second run of one brief on one day gets its own directory: writing into
+  // the first one replaced its run.json, and the record of a delivered or
+  // failed run is what the acceptance ledger cites (2026-09-28, three reruns
+  // of ma-001 and mr-001 each overwrote the committed record).
+  const baseDir = path.join(repoRoot, harness, "results", `${new Date().toISOString().slice(0, 10)}-${briefId}`);
+  let outDir = baseDir;
+  for (let attempt = 2; existsSync(path.join(outDir, "run.json")); attempt += 1) outDir = `${baseDir}-run${attempt}`;
   await mkdir(outDir, { recursive: true });
   const result = {
     capability: capabilityId,

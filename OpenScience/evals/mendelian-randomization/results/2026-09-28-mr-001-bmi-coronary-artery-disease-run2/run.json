@@ -1,0 +1,56 @@
+{
+  "capability": "mendelian-randomization",
+  "brief": "mr-001-bmi-coronary-artery-disease",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-mr-0928f",
+  "session": "acc-mendelian-randomizat-mulhla74",
+  "runId": "run_47f2651e0321702b6604bc172bd9f352",
+  "agentVersion": "1.2.0",
+  "dispatchedAt": "2026-09-28T16:55:43Z",
+  "prompt": "exposure: 体重指数（BMI）\noutcome: 冠状动脉疾病（coronary artery disease）\nanalysisDirection: forward\nexposureSource: GIANT 联盟的欧洲人群 BMI GWAS（运行时解析并记录确切的来源标识）\noutcomeSource: CARDIoGRAMplusC4D 的欧洲人群冠心病 GWAS（运行时解析并记录确切的来源标识）\noutputLanguage: zh-CN",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "failed",
+    "errorCode": "runtime_session_error",
+    "verification": null,
+    "artifacts": [],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索文献：「GIANT consortium genome-wide association…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「body mass index GIANT」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「coronary artery disease CARDIoGRAMplusC4…」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「GCST006900」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「body mass index GIANT consortium meta-an…」——这次检索没有找到可用来源。"
+      }
+    ],
+    "effectiveAgentId": "mendelian-randomization",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 114536,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}
