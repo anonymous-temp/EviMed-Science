@@ -393,10 +393,10 @@
       ],
       "evaluation": {
         "lastStatus": "failed",
-        "lastRunAt": "2026-09-09",
-        "runs": 1,
-        "delivered": 0,
-        "typicalMinutes": null
+        "lastRunAt": "2026-09-28",
+        "runs": 2,
+        "delivered": 1,
+        "typicalMinutes": 47
       }
     },
     "off-label-analysis": {

@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "deliverableId": "tka-txa-meta",
+  "capability": "meta-analysis",
+  "jobId": "meta-20260928115907-361a3acce40a",
+  "jobStatus": "succeeded",
+  "status": "succeeded",
+  "terminalStatus": "succeeded",
+  "terminalStatusAt": "2026-09-28T12:25:00Z",
+  "terminal": true,
+  "engineRun": {
+    "jobId": "meta-20260928115907-361a3acce40a",
+    "status": "succeeded",
+    "terminalStatus": "succeeded",
+    "terminalStatusObserved": true,
+    "terminal": true,
+    "releaseStatus": "blocked",
+    "blocked": true,
+    "readyForSubmission": false,
+    "elapsedSeconds": 1531
+  },
+  "jobElapsedSeconds": 1531,
+  "releaseStatus": "blocked",
+  "releaseStatusVocabulary": ["ready", "ready_with_warnings", "blocked"],
+  "readyForSubmission": false,
+  "requiresReview": true,
+  "degraded": true,
+  "degraded_steps": {
+    "extraction": {
+      "step": "extraction",
+      "status": "failed",
+      "reason": "dependency_metadata_incomplete: A multi_arm_rct result was excluded from the meta-analysis because it is missing contrast_id, estimand_id, precision_basis; pooling it as an ordinary two-arm aggregate would overstate its precision."
+    }
+  },
+  "degradedModules": ["extraction"],
+  "reportType": "evidence_gap",
+  "retrievedAt": "2026-09-28T12:29:36Z",
+  "startedAt": "2026-09-28T11:59:08.299665Z",
+  "analysisType": "pairwise",
+  "outputLanguage": "zh",
+  "maxPapers": 120,
+  "userPdfDirectory": null,
+  "ipdData": null,
+  "workspaceDir": "/workspace",
+  "projectPath": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次",
+  "prismaCounts": {
+    "recordsIdentified": 400,
+    "recordsAfterDedup": 394,
+    "duplicatesRemoved": 6,
+    "recordsNotScreened": 274,
+    "recordsNotScreenedReason": "relevance cap before screening",
+    "titleAbstractScreened": 120,
+    "titleAbstractExcluded": 71,
+    "fullTextAssessed": 4,
+    "fullTextExcluded": 3,
+    "studiesIncluded": 1,
+    "metaEligibleStudies": 0,
+    "computablePrimaryEffects": 0
+  },
+  "searchSources": {
+    "pubmed": 200,
+    "internal_db": 150,
+    "openalex": 50
+  },
+  "includedStudy": {
+    "studyId": "26514221",
+    "displayName": "Çavuşoğlu 2015",
+    "title": "[Is intraarticular administration of tranexamic acid efficient and safe as systemic administration in total knee arthroplasty? Single center, randomized, controlled trial].",
+    "journal": "Eklem hastaliklari ve cerrahisi = Joint diseases & related surgery",
+    "year": 2015,
+    "doi": "10.5606/ehc.2015.33",
+    "design": "multi_arm_rct",
+    "sampleSize": 60,
+    "arms": {"intravenous_txa": 20, "intraarticular_txa": 20, "no_txa_control": 20},
+    "riskOfBiasTool": "RoB 2",
+    "riskOfBiasOverall": "High risk",
+    "excludedFromPoolingReason": "未报告主要结局 Total blood loss（仅报告引流血量），outcome_mismatch"
+  },
+  "blockingReasons": [
+    "manuscript_validation",
+    "project_submission_quality_gate",
+    "manuscript_language",
+    "abstract_polish",
+    "publication_tone",
+    "clinical_interpretation",
+    "evidence_readiness",
+    "primary_source_context",
+    "declarations",
+    "compiled_method_release"
+  ],
+  "warningCodes": ["benchmark"],
+  "modules": {
+    "extraction": {
+      "step": "extraction",
+      "status": "failed",
+      "reason": "dependency_metadata_incomplete: A multi_arm_rct result was excluded from the meta-analysis because it is missing contrast_id, estimand_id, precision_basis; pooling it as an ordinary two-arm aggregate would overstate its precision.",
+      "stepRanToCompletion": true,
+      "itemExcluded": true,
+      "excludedItemReason": "dependency_metadata_incomplete: A multi_arm_rct result was excluded from the meta-analysis because it is missing contrast_id, estimand_id, precision_basis; pooling it as an ordinary two-arm aggregate would overstate its precision.",
+      "engineStepStatus": "failed",
+      "engineSeverity": "fatal"
+    }
+  },
+  "qualityGates": {
+    "total": 32,
+    "passed": 21,
+    "warning": 1,
+    "failed": 10
+  },
+  "warnings": [
+    "Release warnings or blockers must be preserved in every summary.",
+    "16 retrieved/screened record(s) use limited source text (abstract-only).",
+    "45 of 49 screened record(s) are limited text sources (4 full-text, 16 abstract-only, 29 unknown)."
+  ],
+  "nextActions": [
+    "Resolve the blocking issues and rerun article generation.",
+    "Keep the current draft only as a diagnostic artifact."
+  ],
+  "runWarnings": [
+    "extraction/dependency_metadata_incomplete (5 occurrences): multi_arm_rct results excluded from meta-analysis for missing contrast_id, estimand_id, precision_basis."
+  ],
+  "artifacts": [
+    {"kind": "manuscript", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/manuscript/draft.md"},
+    {"kind": "manuscript_pdf", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/manuscript/draft.pdf"},
+    {"kind": "manuscript_docx", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/manuscript/draft.docx"},
+    {"kind": "release_decision", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/package/release_decision.json"},
+    {"kind": "submission_readiness_review", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/package/submission_readiness_review.json"},
+    {"kind": "evidence_gate", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/analysis/evidence_gate_result.json"},
+    {"kind": "method_plan", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/analysis/method_plan.json"},
+    {"kind": "prisma_flow", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/prisma_flow.json"},
+    {"kind": "risk_of_bias", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/risk_of_bias/rob_results.json"},
+    {"kind": "study_cards", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/extraction/evidence_understanding.json"},
+    {"kind": "figure_prisma", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/figures/prisma_diagram.png"},
+    {"kind": "figure_rob", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/figures/rob_summary.png"},
+    {"kind": "review_package", "path": "meta-analysis-runs/meta-20260928115907-361a3acce40a/output/20260928_115914_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析pairwiseP人群接受初次/package/metaagent_export.zip"}
+  ],
+  "navigationDeliverables": [
+    "deliverables/tka-txa-meta/meta-analysis-report.md",
+    "deliverables/tka-txa-meta/meta-analysis-run.json",
+    "deliverables/tka-txa-meta/revision-notes.md"
+  ]
+}

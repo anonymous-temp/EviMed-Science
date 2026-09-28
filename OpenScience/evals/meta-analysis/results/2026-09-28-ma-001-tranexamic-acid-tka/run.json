@@ -1,0 +1,68 @@
+{
+  "capability": "meta-analysis",
+  "brief": "ma-001-tranexamic-acid-tka",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-meta-0928",
+  "session": "acc-meta-analysis-mul726h5",
+  "runId": "run_5b187bb23c5bffe5e5b06b99da7d391f",
+  "agentVersion": "1.1.3",
+  "dispatchedAt": "2026-09-28T12:46:30Z",
+  "prompt": "topic: 氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析\npopulation: 接受初次单侧全膝关节置换术的成年患者\nintervention: 氨甲环酸（静脉、局部或联合给药）\ncomparator: 安慰剂或不使用氨甲环酸\noutcomes: [\"总失血量\",\"输血率\",\"症状性静脉血栓栓塞事件\"]\nstudyDesign: 随机对照试验\nanalysisType: pairwise",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/tka-txa-meta/meta-analysis-report.md",
+      "deliverables/tka-txa-meta/meta-analysis-run.json",
+      "deliverables/tka-txa-meta/reporting-checklist-prisma2020.md",
+      "deliverables/tka-txa-meta/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「tka-txa-meta」有 14 条审查发现（已修 10，不改并说明 1，未回应 3）。",
+        "text": "独立审查：交付物「tka-txa-meta」有 14 条审查发现（已修 10，不改并说明 1，未回应 3）。"
+      },
+      {
+        "code": "review_number_untraced",
+        "severity": "advice",
+        "title": "结果数字溯源不到计算输出",
+        "detail": "第 90 行写的 68.5 在作业 meta-20260928115907-361a3acce40a 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。",
+        "text": "第 90 行写的 68.5 在作业 meta-20260928115907-361a3acce40a 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。"
+      },
+      {
+        "code": "review_number_untraced",
+        "severity": "advice",
+        "title": "结果数字溯源不到计算输出",
+        "detail": "第 104 行写的 13.3、86.7、67.8 在作业 meta-20260928115907-361a3acce40a 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。",
+        "text": "第 104 行写的 13.3、86.7、67.8 在作业 meta-20260928115907-361a3acce40a 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。"
+      },
+      {
+        "code": "review_number_untraced",
+        "severity": "advice",
+        "title": "结果数字溯源不到计算输出",
+        "detail": "第 190 行写的 68.5 在作业 meta-20260928115907-361a3acce40a 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。",
+        "text": "第 190 行写的 68.5 在作业 meta-20260928115907-361a3acce40a 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。"
+      },
+      {
+        "code": "deliverable_run_degraded",
+        "check": "structured-output",
+        "severity": "advice",
+        "title": "结构化产物格式有误",
+        "detail": "文件 meta-analysis-run.json",
+        "file": "meta-analysis-run.json",
+        "text": "meta-analysis-run.json records that the engine finished with steps it could not do: extraction (dependency_metadata_incomplete: A multi_arm_rct result was excluded from the meta-analysis because it is missing contrast_id, estimand_id, precision_basis; pooling it as an ordinary two-arm aggregate woul"
+      }
+    ],
+    "effectiveAgentId": "meta-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 2845756,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}
