@@ -112,6 +112,35 @@ export function ensureMyCapsule() {
  * events above the list said the same thing twice.
  */
 
+/** A moment the growth line marks: a method learned, a capsule received. */
+export interface MemoryGrowthMoment {
+  /** YYYY-MM-DD in the researcher's zone. */
+  day: string;
+  kind: "method" | "capsule";
+  title: string;
+}
+
+/**
+ * How much of the researcher the capsule has held over time: one point per
+ * week (a short history) or month, each what the page listed at its end.
+ * Counted by the server over every row, never from the page's capped lists.
+ */
+export interface MemoryGrowth {
+  unit: "week" | "month" | null;
+  /** The day the first row began to hold. */
+  first: string | null;
+  /** The first point is the zero before the first memory. */
+  fromStart: boolean;
+  points: Array<{ start: string; known: number }>;
+  moments: MemoryGrowthMoment[];
+  timeZone: string;
+}
+
+export function fetchMemoryGrowth(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const query = new URLSearchParams(timeZone ? { timeZone } : {});
+  return productRequest<MemoryGrowth>(`/memory/growth?${query.toString()}`);
+}
+
 /** A pack someone shared, as the received shelf shows it. */
 export interface ReceivedCapsule {
   id: string;

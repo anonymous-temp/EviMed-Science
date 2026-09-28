@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Archive, Brain } from "lucide-react";
 import { fetchMemoryProfile, searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
-import { announceMemoryChanged, ensureMyCapsule, fetchMyCapsule, type OwnCapsuleEntry } from "@/lib/memoryClient";
+import { announceMemoryChanged, ensureMyCapsule, fetchMemoryGrowth, fetchMyCapsule, type OwnCapsuleEntry } from "@/lib/memoryClient";
 import {
   MEMORY_GROUP_ORDER, entryGroup, groupLabel, recordGroup, recordProjectId, type MemoryGroup,
 } from "@/lib/memoryGroups";
@@ -18,6 +18,7 @@ import { FilterChips, FilterSelect } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { CapsuleEntryRow } from "@/components/capsule/CapsuleEntryRow";
+import { CapsuleGrowth } from "@/components/capsule/CapsuleGrowth";
 import { MemoryRecordRow } from "@/components/capsule/MemoryRecordRow";
 import { MethodRow, methodLine } from "@/components/capsule/MethodRow";
 import { ReceivedShelf } from "@/components/capsule/ReceivedShelf";
@@ -66,6 +67,11 @@ function matches(text: string, query: string) {
  * 怎么做」 and its two or three bordered buttons are gone — 编辑 and 忘记
  * appear on hover, the rest is in the row's 「⋯」. Received capsules are inside
  * 分享与导入; forgotten ones inside 已忘记的内容, each with 恢复.
+ *
+ * Above the list, once the capsule has a history of two weeks, one line of how
+ * much it has come to hold (`CapsuleGrowth`, 2026-09-28): the owner's timeline
+ * of growth, as the sentence it proves and at most three moments — not the
+ * back-office stream 「最近变化」 was, and not a tile of counts.
  */
 export function MemoryHubPage() {
   const [params, setParams] = useSearchParams();
@@ -86,12 +92,15 @@ export function MemoryHubPage() {
   useMemoryWritePrompt();
 
   const { data, failed, reload } = useCapsuleData(async () => {
-    const [profile, mine, methods] = await Promise.all([
+    // The growth line is read with the list, so the two arrive together and
+    // the list never jumps down under a chart that came late.
+    const [profile, mine, methods, growth] = await Promise.all([
       fetchMemoryProfile(),
       fetchMyCapsule().catch(() => null),
       listMethods().catch(() => null),
+      fetchMemoryGrowth().catch(() => null),
     ]);
-    return { profile, mine, methods };
+    return { profile, mine, methods, growth };
   });
 
   useEffect(() => {
@@ -194,6 +203,8 @@ export function MemoryHubPage() {
       title="记忆胶囊"
       actions={<MemoryControls onReset={reload} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
     >
+      {/* 「成长」: the one chart, above the list it counts, once there is a line. */}
+      <CapsuleGrowth growth={data?.growth} className="mb-6" />
       {/* One row; on a phone the search box takes its own line rather than
           squeezing the filters out of sight. */}
       <div className="flex flex-wrap items-center justify-between gap-2">

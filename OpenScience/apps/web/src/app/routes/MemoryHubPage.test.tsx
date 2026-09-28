@@ -15,6 +15,7 @@ const fetchMyCapsule = vi.fn();
 const listMethods = vi.fn();
 const methodVersions = vi.fn();
 const archiveMemoryRecord = vi.fn();
+const fetchMemoryGrowth = vi.fn();
 
 vi.mock("@/lib/apiClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient");
@@ -35,6 +36,7 @@ vi.mock("@/lib/memoryClient", async () => {
     ensureMyCapsule: () => Promise.resolve(null),
     fetchMyCapsule: (...args: unknown[]) => fetchMyCapsule(...args),
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
+    fetchMemoryGrowth: (...args: unknown[]) => fetchMemoryGrowth(...args),
   };
 });
 vi.mock("@/lib/methodsClient", async () => {
@@ -100,13 +102,22 @@ describe("记忆胶囊", () => {
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [] });
     listMethods.mockResolvedValue({ items: [method], nextCursor: null });
     searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
+    fetchMemoryGrowth.mockResolvedValue({
+      unit: "week", first: "2026-09-12", fromStart: true, timeZone: "Asia/Shanghai",
+      points: [
+        { start: "2026-08-31", known: 0 }, { start: "2026-09-07", known: 2 }, { start: "2026-09-14", known: 3 }, { start: "2026-09-21", known: 4 },
+      ],
+      moments: [{ day: "2026-09-21", kind: "method", title: "提交前给成品做最后把关" }],
+    });
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ projects: [] }); });
 
   it("is one page: a title with nothing under it, one switch and one 「⋯」 in the header", async () => {
     open();
     const heading = await screen.findByRole("heading", { name: "记忆胶囊", level: 1 });
-    const banner = screen.getByRole("banner");
+    // The page's header is the first banner: jsdom also counts a chart card's
+    // own <header>, which a browser scopes to its <section>.
+    const [banner] = screen.getAllByRole("banner");
     expect(banner).toContainElement(heading);
     expect(screen.queryByText(/EviMed 自己记下的/)).not.toBeInTheDocument();
     expect(await within(banner).findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
@@ -145,6 +156,36 @@ describe("记忆胶囊", () => {
     expect(resetMemory).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "全部删除" }));
     await waitFor(() => expect(resetMemory).toHaveBeenCalledTimes(1));
+  });
+
+  it("draws one line of how the capsule grew above the list, its sentence as the heading and nothing else", async () => {
+    open();
+    const heading = await screen.findByRole("heading", { level: 3, name: "9月12日开始记住你，现在有 4 条记忆，学会 1 种做法" });
+    const card = heading.closest("section")!;
+    expect(within(card).getByRole("img", { name: heading.textContent! })).toBeInTheDocument();
+    // Above the filters and the list it counts, and outside the header.
+    expect(heading.compareDocumentPosition(screen.getByRole("group", { name: "筛选记忆" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole("banner")[0]).not.toContainElement(heading);
+    // One sentence, not a dashboard: no tiles, no legend, no bookkeeping.
+    expect(within(card).queryByText(/用过|次数|置信|%/)).toBeNull();
+    expect(card.querySelectorAll("[data-legend-role]")).toHaveLength(0);
+    expect(fetchMemoryGrowth).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the list alone while the capsule is too new for a line, or when the line cannot be read", async () => {
+    fetchMemoryGrowth.mockResolvedValue({
+      unit: "week", first: "2026-09-26", fromStart: true, timeZone: "Asia/Shanghai", moments: [],
+      points: [{ start: "2026-09-14", known: 0 }, { start: "2026-09-21", known: 4 }],
+    });
+    open();
+    await screen.findByText(/药学背景/);
+    expect(document.querySelector("[data-capsule-growth]")).toBeNull();
+    cleanup();
+    fetchMemoryGrowth.mockRejectedValue(new Error("growth unavailable"));
+    open();
+    await screen.findByText(/药学背景/);
+    expect(document.querySelector("[data-capsule-growth]")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("pauses memory with the one switch, as one decision over both halves", async () => {

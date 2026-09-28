@@ -135,6 +135,13 @@ describe("a trend's labels and lines (E8)", () => {
     // The weights are still the token table's.
     expect(byName("信尔美").lineStyle?.width).toBe(CHART_STROKES.own);
   });
+
+  it("steps a count's axis by whole numbers, and leaves every other axis to the library", () => {
+    const model = trendModel({ labels, own: { name: "记忆", values: [0, 1, 2] } });
+    const axis = (option: unknown) => (option as { yAxis: { minInterval?: number } }).yAxis;
+    expect(axis(chartOption(model, format, { integer: true })).minInterval).toBe(1);
+    expect(axis(chartOption(model, format)).minInterval).toBeUndefined();
+  });
 });
 
 describe("a heat grid's steps", () => {

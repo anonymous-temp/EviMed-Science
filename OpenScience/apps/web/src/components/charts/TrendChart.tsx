@@ -41,6 +41,8 @@ export function TrendChart({
   format = (value: number) => String(Math.round(value)),
   height = 240,
   label,
+  integer = false,
+  unpainted,
 }: {
   input: TrendInput;
   /** The value as a reader says it: “61”“15%”. */
@@ -48,6 +50,10 @@ export function TrendChart({
   height?: number;
   /** The chart's accessible name; its numbers are stated in the page around it. */
   label: string;
+  /** A count: the axis steps by whole numbers, so a small one never reads “0, 1, 1, 2”. */
+  integer?: boolean;
+  /** What the figure says where no canvas can be painted; its measurements by default. */
+  unpainted?: string;
 }) {
   const model = useMemo(() => trendModel(input), [input]);
   // The scheme is a dependency of the option, not only of the instance: the
@@ -57,7 +63,7 @@ export function TrendChart({
   // resolves the palette's custom properties against the live document, and a
   // theme flip changes every one of them.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const option = useMemo(() => (model.mode === "empty" ? null : chartOption(model, format)), [model, format, scheme]);
+  const option = useMemo(() => (model.mode === "empty" ? null : chartOption(model, format, { integer })), [model, format, integer, scheme]);
   const host = useEChart(option);
   const plot = model.mode === "baseline" ? Math.min(height, 176) : height;
   return (
@@ -73,7 +79,7 @@ export function TrendChart({
         // Where a canvas cannot be painted (a test, a printed page), the chart
         // still says what it holds rather than leaving a blank box.
         <figcaption className="text-caption text-text-3">
-          {model.mode === "baseline" ? "只有一次测量：基线。" : `${model.readings} 次测量。`}
+          {unpainted ?? (model.mode === "baseline" ? "只有一次测量：基线。" : `${model.readings} 次测量。`)}
         </figcaption>
       )}
     </figure>
@@ -101,7 +107,11 @@ export function ruleLabelPlaces(model: TrendModel): { target: string; baseline: 
 }
 
 /** The ECharts option, built from the model so the drawing has no decisions left. */
-export function chartOption(model: TrendModel, format: (value: number) => string): EChartsCoreOption {
+export function chartOption(
+  model: TrendModel,
+  format: (value: number) => string,
+  { integer = false }: { integer?: boolean } = {},
+): EChartsCoreOption {
   const own = resolvedColor(model.own.color);
   const target = resolvedColor(TARGET_COLOR);
   const band = model.band;
@@ -150,7 +160,7 @@ export function chartOption(model: TrendModel, format: (value: number) => string
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
     tooltip: { trigger: "axis", valueFormatter: (value: unknown) => (typeof value === "number" ? format(value) : "—") },
     xAxis: { type: "category", boundaryGap: false, data: model.labels },
-    yAxis: { type: "value", scale: true, axisLabel: { formatter: (value: number) => format(value) } },
+    yAxis: { type: "value", scale: true, ...(integer ? { minInterval: 1 } : {}), axisLabel: { formatter: (value: number) => format(value) } },
     series: [
       // The fluctuation band: an invisible floor and a pale ribbon stacked on
       // it, so the band is drawn to size rather than guessed at.
