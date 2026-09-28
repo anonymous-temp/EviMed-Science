@@ -555,6 +555,7 @@ class DataExtractionAgent(BaseAgent):
     def _verify_alignment(self, extracted: ExtractedStudy, paper: dict, parsed: dict,
                           protocol: ResearchProtocol, project: Project) -> ExtractedStudy:
         from new_meta.core.extraction_verification import (
+            blocking_data_issues, calculation_fields, issue_field_outside_calculation,
             refinement_indices, unresolved_issue_errors, update_issue_history,
             validate_check_batch, validate_data_issues, verification_verdict,
         )
@@ -586,7 +587,8 @@ class DataExtractionAgent(BaseAgent):
         persist_pending_extraction()
 
         def record_attempt(batch, attempt, status, errors, checked=None, snapshot=None,
-                           raw_response=None, retained_data_issues=None, retained_clinical_judgments=None):
+                           raw_response=None, retained_data_issues=None, retained_clinical_judgments=None,
+                           notices=None):
             payload = {"schema_version": 1, "study_id": study_id, "outcome_indices": batch,
                 "verification_id": verification_id,
                 "attempt": attempt, "status": status, "source_sha256": source_sha,
@@ -601,8 +603,12 @@ class DataExtractionAgent(BaseAgent):
                     "retained_data_issues": retained_data_issues or [],
                     "retained_clinical_judgments": retained_clinical_judgments or []})
             if checked:
-                payload["row_verdicts"] = {str(item.outcome_index): verification_verdict(item, protocol)
-                                           for item in checked.primary_analysis_alignment}
+                payload["row_verdicts"] = {str(item.outcome_index): verification_verdict(
+                    item, protocol, extracted.outcomes[item.outcome_index]
+                    if 0 <= item.outcome_index < len(extracted.outcomes) else None)
+                    for item in checked.primary_analysis_alignment}
+            if notices:
+                payload["notices"] = notices
             encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode()
             if len(encoded) > 1024 * 1024:
                 raise ValueError("Verification diagnostic exceeds its bounded artifact size")
@@ -650,6 +656,7 @@ class DataExtractionAgent(BaseAgent):
                 snapshot = {index: row_fingerprint(extracted, index) for index in batch}
                 checked = None
                 data_errors = []
+                notices = []  # findings about numbers this row's computation does not read
                 terminal_observation = False
                 observation_errors = []
                 observed_negative_rows = set()
@@ -735,7 +742,8 @@ class DataExtractionAgent(BaseAgent):
                     returned = self._check_extraction(content, extracted, protocol, batch, feedback, observe, catalogue)
                     if latest_resolution is None or checked is None or digest(returned.model_dump(mode="json")) != digest(latest_payload):
                         raise ValueError("Independent verification did not return its durably observed source response")
-                    feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol)
+                    feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol,
+                                                    notices=notices)
                     feedback.extend(observation_errors)
                     data_errors = validate_data_issues(extracted, batch, checked.data_issues, content)
                     feedback.extend(data_errors)
@@ -753,15 +761,22 @@ class DataExtractionAgent(BaseAgent):
                         feedback[0]["validation_errors"] = cause.errors(include_input=False, include_context=False)
                     self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1} failed: {type(exc).__name__}", level="warning")
                 stable_rows = all(row_fingerprint(extracted, index) == fingerprint for index, fingerprint in snapshot.items())
+                # A source-row issue about a number this row's computation does
+                # not read leaves the row complete; it stays in the history.
+                reads = {index: calculation_fields(extracted.outcomes[index], protocol) for index in batch}
                 complete_rows = {index for index in batch if not any(
-                    item.get("outcome_index") in {None, index} or item["code"].startswith("verification_")
+                    (item.get("outcome_index") in {None, index} or item["code"].startswith("verification_"))
+                    and not (item["code"] in {"row_data_issue", "row_source_conflict_requires_adjudication"}
+                             and item.get("outcome_index") == index
+                             and issue_field_outside_calculation(str(item.get("field") or ""), reads[index]))
                     for item in feedback)}
                 update_issue_history(extracted, batch, histories, data_errors if stable_rows else [],
                     source_sha256=source_sha, checked_source_sha256=checked_sha, protocol_sha256=protocol_sha,
                     checked_rows=snapshot, complete_current_check=complete_rows)
                 feedback = [item for item in feedback if item["code"] not in {
                     "row_data_issue", "row_source_conflict_requires_adjudication"}]
-                feedback.extend(unresolved_issue_errors(batch, histories))
+                feedback.extend(unresolved_issue_errors(batch, histories, study=extracted, protocol=protocol,
+                                                        notices=notices))
                 if observed_negative_rows and feedback:
                     # Even a complete negative may be followed by a transport,
                     # usage, or final-validation failure. Regeneration cannot
@@ -772,7 +787,8 @@ class DataExtractionAgent(BaseAgent):
                     feedback.append({"code": "verification_observed_clinical_judgment_incomplete",
                                      "outcome_indices": sorted(observed_negative_rows)})
                 for index in batch:
-                    if index in complete_rows and histories[index][1] and not histories[index][0] and checked is not None:
+                    if (index in complete_rows and histories[index][1] and checked is not None
+                            and not blocking_data_issues(extracted.outcomes[index], protocol, histories[index][0])):
                         assessments[index] = next(item for item in checked.primary_analysis_alignment if item.outcome_index == index)
                         checked_rows[index] = snapshot[index]
                         source_references[index] = latest_resolution
@@ -787,7 +803,7 @@ class DataExtractionAgent(BaseAgent):
                 exhausted = terminal_observation or round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
                     item["code"] in {"numeric_conflict_requires_adjudication", "row_source_conflict_requires_adjudication"} for item in feedback))
                 record_attempt(batch, round_index + 1, "complete" if complete else "needs_input" if exhausted else "retry",
-                               feedback, checked=checked, snapshot=snapshot)
+                               feedback, checked=checked, snapshot=snapshot, notices=notices)
                 if complete:
                     break
                 for index in batch:

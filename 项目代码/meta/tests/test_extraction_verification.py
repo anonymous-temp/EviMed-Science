@@ -311,9 +311,21 @@ def test_p_value_and_covariance_cannot_bypass_numeric_coverage():
     candidate.outcomes[0].covariance_with = {"another_contrast": .01}
     fields = numeric_fields(candidate.outcomes[0])
     assert fields["p_value"] == .00001 and fields["covariance_with[another_contrast]"] == .01
+    notices = []
+    errors = validate_check_batch(candidate, [0], [PrimaryAlignmentAssessment.model_validate(checked_row())], SOURCE,
+                                  protocol(), notices=notices)
+    # An extracted covariance is always verified; the p-value this HR (with its CI) never reads is reported.
+    assert any(item["code"] == "numeric_field_coverage" and "covariance_with[another_contrast]" in item["expected"]
+               for item in errors)
+    candidate.outcomes[0].covariance_with = {}
+    notices = []
+    assert validate_check_batch(candidate, [0], [PrimaryAlignmentAssessment.model_validate(checked_row())], SOURCE,
+                                protocol(), notices=notices) == []
+    assert [item["code"] for item in notices] == ["numeric_field_coverage"]
+    # Without a CI this row computes nothing, and every number counts again.
+    candidate.outcomes[0].hr_ci_lower = candidate.outcomes[0].hr_ci_upper = None
     errors = validate_check_batch(candidate, [0], [PrimaryAlignmentAssessment.model_validate(checked_row())], SOURCE, protocol())
-    assert any(item["code"] == "numeric_field_coverage" and "p_value" in item["expected"]
-               and "covariance_with[another_contrast]" in item["expected"] for item in errors)
+    assert any(item["code"] == "numeric_field_coverage" and "p_value" in item["expected"] for item in errors)
 
 
 def test_name_only_identity_cannot_be_assumed_distinct_from_registry_identity():
@@ -813,4 +825,91 @@ def test_a_binding_that_restates_its_components_judgment_is_not_a_schema_break()
     assert first == {"component_index": 0}
     # A binding that says something else than its component is left for the schema to refuse.
     assert second == {"component_index": 1, "relation": "match"}
+
+
+# A verification finding blocks only the numbers the row's computation reads.
+# ma-001 (2026-09-28): one trial's table printed the TBL p-value as a literal
+# "0" beside "P < 0.05" in its text; the checker raised a source conflict on
+# p_value, and the mean difference computed from the arm means, SDs and sizes -
+# which never reads a p-value - was held with it.
+def _md_study():
+    return ExtractedStudy(characteristics=StudyCharacteristics(study_id="34668331", study_design="RCT"), outcomes=[
+        OutcomeData(outcome_name="Total blood loss", outcome_type="continuous",
+                    mean_intervention=944.34, sd_intervention=130.88, n_intervention=53,
+                    mean_control=1182.45, sd_control=160.5, n_control=53, p_value=0.0,
+                    source_quote="TBL (mL) | 944.34 ± 130.88 | 995.20 ± 154.00 | 1182.45 ± 160.50 | 0 |",
+                    source_location="Table 2", source_quote_verified=True)])
+
+
+def _md_protocol():
+    return ResearchProtocol(research_question="Tranexamic acid versus placebo for total blood loss",
+        pico=PICO(population="TKA", intervention="Tranexamic acid", comparator="Placebo", outcome_primary="Total blood loss"),
+        review_family="intervention_rct", primary_outcome_type="continuous", effect_measure="MD")
+
+
+def test_calculation_fields_are_the_numbers_the_effect_reads():
+    from new_meta.core.extraction_verification import calculation_fields
+    assert calculation_fields(_md_study().outcomes[0], _md_protocol()) == {
+        "mean_intervention", "sd_intervention", "n_intervention", "mean_control", "sd_control", "n_control"}
+    hr = study().outcomes[0]; hr.p_value = 0.04
+    assert calculation_fields(hr, protocol()) == {"hazard_ratio", "hr_ci_lower", "hr_ci_upper"}
+    hr.hr_ci_lower = hr.hr_ci_upper = None
+    assert calculation_fields(hr, protocol()) is None  # it computes nothing, so every number counts
+    assert calculation_fields(OutcomeData(outcome_name="Renal endpoint", outcome_type="time_to_event"), protocol()) is None
+
+
+def test_a_finding_about_an_unread_number_is_a_notice_and_a_read_one_still_blocks():
+    from new_meta.core.extraction_verification import validate_check_batch, verification_verdict
+    from new_meta.schemas.study import PrimaryAlignmentAssessment
+    item = checked_row(); details = item["verification"]
+    candidate = study(); candidate.outcomes[0].p_value = 0.0
+    details["numeric_status"] = "incorrect"
+    details["numeric_findings"].append({"field": "p_value", "status": "mismatch", "reported_value": 0.0, "quote": SOURCE,
+                                        "source_location": "Table 3", "rationale": "The table's 0 contradicts the text."})
+    assessment = PrimaryAlignmentAssessment.model_validate(item)
+    notices = []
+    assert validate_check_batch(candidate, [0], [assessment], SOURCE, protocol(), notices=notices) == []
+    assert {entry["code"] for entry in notices} == {"numeric_status_unresolved", "numeric_value_mismatch"}
+    assert verification_verdict(assessment, protocol(), candidate.outcomes[0])["status"] == "match"
+    assert verification_verdict(assessment, protocol())["status"] == "unknown"  # without the row, every number counts
+    details["numeric_findings"][0]["status"] = "mismatch"  # the hazard ratio itself
+    assessment = PrimaryAlignmentAssessment.model_validate(item)
+    assert any(error["code"] == "numeric_value_mismatch" and error["field"] == "hazard_ratio"
+               for error in validate_check_batch(candidate, [0], [assessment], SOURCE, protocol()))
+    assert verification_verdict(assessment, protocol(), candidate.outcomes[0])["status"] == "unknown"
+
+
+@pytest.mark.parametrize("field,blocks", [("p_value", False), ("p_value_inequality", False), ("mean_control", True),
+                                          ("sd_intervention", True), ("outcome_type", True), ("timepoint", True)])
+def test_a_source_row_issue_blocks_only_within_the_calculation(field, blocks):
+    from new_meta.core.extraction_verification import blocking_data_issues
+    from new_meta.schemas.study import ExtractionDataIssue, ExtractionDataIssueEvidence
+    evidence = ExtractionDataIssueEvidence(
+        issue=ExtractionDataIssue(outcome_index=0, field=field, kind="source_conflict", rationale="Table and text differ.",
+                                  quote="TBL (mL)", source_location="Table 2"),
+        field_sha256="0" * 64, row_sha256="0" * 64, protocol_sha256="0" * 64, source_sha256="0" * 64,
+        checked_source_sha256="0" * 64)
+    assert bool(blocking_data_issues(_md_study().outcomes[0], _md_protocol(), [evidence])) is blocks
+
+
+def test_a_source_conflict_about_an_unread_p_value_does_not_hold_the_row(tmp_path, monkeypatch):
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    from new_meta.core.primary_analysis_alignment import alignment_status
+    from new_meta.schemas.study import ExtractionDataIssue
+    sentence = "The renal endpoint HR was 0.38 (95% CI 0.12 to 1.22)."
+    candidate = study(); candidate.outcomes[0].p_value = 0.0
+    conflict = ExtractionDataIssue(outcome_index=0, field="p_value", kind="source_conflict", quote=sentence,
+                                   source_location="Table 3", rationale="The table's p of 0 contradicts the text.")
+    response = ExtractionCheckResult(data_issues=[conflict], score=9, primary_analysis_alignment=[checked_row()])
+    project, result, calls = run_verifier(tmp_path, monkeypatch, [response] * 3, candidate=candidate)
+    assert len(calls) == 1
+    status = alignment_status(project, protocol(), result, 0)
+    assert status["status"] == "match"
+    assert [item["issue"]["field"] for item in status["unresolved_data_issues"]] == ["p_value"]  # kept, reported
+
+    candidate = study(); candidate.outcomes[0].p_value = 0.0
+    conflict = conflict.model_copy(update={"field": "hazard_ratio"})
+    response = ExtractionCheckResult(data_issues=[conflict], score=9, primary_analysis_alignment=[checked_row()])
+    project, result, calls = run_verifier(tmp_path / "read", monkeypatch, [response] * 3, candidate=candidate)
+    assert alignment_status(project, protocol(), result, 0)["status"] == "unknown"
 

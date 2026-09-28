@@ -570,27 +570,7 @@ def compute_study_effect(study, outcome, protocol, logger, *, audit_row: dict | 
             "requested_effect_measure": protocol.effect_measure,
         })
     try:
-        reported = _reported_effect_analysis(outcome, protocol)
-        yi, vi = reported if reported is not None else es_engine.compute_effect_size(
-            outcome_type=outcome.outcome_type,
-            effect_measure=protocol.effect_measure,
-            reported_effect_measure=outcome.reported_effect_measure,
-            reported_effect_scale=outcome.reported_effect_scale,
-            mean_i=outcome.mean_intervention, sd_i=outcome.sd_intervention, n_i=outcome.n_intervention,
-            mean_c=outcome.mean_control, sd_c=outcome.sd_control, n_c=outcome.n_control,
-            median_i=outcome.median_intervention, q1_i=outcome.q1_intervention,
-            q3_i=outcome.q3_intervention, min_i=outcome.min_intervention, max_i=outcome.max_intervention,
-            median_c=outcome.median_control, q1_c=outcome.q1_control,
-            q3_c=outcome.q3_control, min_c=outcome.min_control, max_c=outcome.max_control,
-            events_i=outcome.events_intervention, total_i=outcome.total_intervention,
-            events_c=outcome.events_control, total_c=outcome.total_control,
-            effect=outcome.effect_size, ci_lower=outcome.ci_lower, ci_upper=outcome.ci_upper,
-            p_value=outcome.p_value, hr=outcome.hazard_ratio,
-            hr_ci_lower=outcome.hr_ci_lower, hr_ci_upper=outcome.hr_ci_upper, hr_se=outcome.hr_se,
-            events_single=outcome.events, total_n=outcome.total_n,
-            correlation_r=outcome.correlation_r, correlation_n=outcome.correlation_n,
-            pyears_i=outcome.pyears_intervention, pyears_c=outcome.pyears_control,
-        )
+        yi, vi = outcome_effect(outcome, protocol)
         characteristics = study.characteristics
         return StudyEffect(
             study_id=characteristics.pmid or characteristics.study_id,
@@ -613,6 +593,35 @@ def compute_study_effect(study, outcome, protocol, logger, *, audit_row: dict | 
             exc,
         )
         return None
+
+
+def outcome_effect(outcome, protocol) -> tuple[float, float]:
+    """(yi, vi) of one extracted row as the pairwise synthesis computes it.
+
+    Raises when the row cannot give one. Shared with verification, which asks
+    which of a row's numbers this computation actually reads.
+    """
+    reported = _reported_effect_analysis(outcome, protocol)
+    return reported if reported is not None else es_engine.compute_effect_size(
+        outcome_type=outcome.outcome_type,
+        effect_measure=protocol.effect_measure,
+        reported_effect_measure=outcome.reported_effect_measure,
+        reported_effect_scale=outcome.reported_effect_scale,
+        mean_i=outcome.mean_intervention, sd_i=outcome.sd_intervention, n_i=outcome.n_intervention,
+        mean_c=outcome.mean_control, sd_c=outcome.sd_control, n_c=outcome.n_control,
+        median_i=outcome.median_intervention, q1_i=outcome.q1_intervention,
+        q3_i=outcome.q3_intervention, min_i=outcome.min_intervention, max_i=outcome.max_intervention,
+        median_c=outcome.median_control, q1_c=outcome.q1_control,
+        q3_c=outcome.q3_control, min_c=outcome.min_control, max_c=outcome.max_control,
+        events_i=outcome.events_intervention, total_i=outcome.total_intervention,
+        events_c=outcome.events_control, total_c=outcome.total_control,
+        effect=outcome.effect_size, ci_lower=outcome.ci_lower, ci_upper=outcome.ci_upper,
+        p_value=outcome.p_value, hr=outcome.hazard_ratio,
+        hr_ci_lower=outcome.hr_ci_lower, hr_ci_upper=outcome.hr_ci_upper, hr_se=outcome.hr_se,
+        events_single=outcome.events, total_n=outcome.total_n,
+        correlation_r=outcome.correlation_r, correlation_n=outcome.correlation_n,
+        pyears_i=outcome.pyears_intervention, pyears_c=outcome.pyears_control,
+    )
 
 
 def _reported_effect_analysis(outcome, protocol) -> tuple[float, float] | None:

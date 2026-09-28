@@ -73,6 +73,83 @@ def _is_derived_covariance(outcome: OutcomeData, key: str, value: float) -> bool
     return math.isclose(float(value), expected, rel_tol=1e-9, abs_tol=1e-12)
 
 
+def _computed_effects(outcome: OutcomeData, protocol: ResearchProtocol) -> tuple:
+    """What synthesis computes from one row: the pairwise (yi, vi) and the typed estimate."""
+    from new_meta.core.effect_selection import outcome_effect
+    from new_meta.core.rct_design_reconciliation import comparative_effect_from_outcome
+    results = []
+    try:
+        results.append(tuple(float(value) for value in outcome_effect(outcome, protocol)))
+    except Exception:
+        results.append(None)
+    try:
+        effect = comparative_effect_from_outcome(outcome, protocol)
+        results.append(tuple(effect.get(name) for name in ("estimate", "standard_error", "ci_lower", "ci_upper")))
+    except Exception:
+        results.append(None)
+    return tuple(results)
+
+
+def calculation_fields(outcome: OutcomeData, protocol: ResearchProtocol) -> frozenset[str] | None:
+    """The numeric fields whose values this row's effect computation reads.
+
+    None when the row computes no effect at all; then every number counts. The
+    set is found by removal rather than by restating the engines' rules: a
+    field is read when taking its value away changes, or stops, the pairwise
+    (yi, vi) or the typed comparative estimate synthesis would use. On
+    2026-09-28 a contested table p-value of one ma-001 trial held back the
+    mean difference computed from its arm means, SDs and sizes, which never
+    reads it. A numeric-map entry (an extracted covariance) always counts.
+    """
+    base = _computed_effects(outcome, protocol)
+    if all(result is None for result in base):
+        return None
+    read = set()
+    for name in numeric_fields(outcome):
+        if "[" in name or _computed_effects(outcome.model_copy(update={name: None}), protocol) != base:
+            read.add(name)
+    return frozenset(read)
+
+
+def _numeric_field_name(name: str) -> bool:
+    return name in NUMERIC_FIELDS or name.split("[", 1)[0] in NUMERIC_MAP_FIELDS
+
+
+def issue_field_outside_calculation(field: str, read: frozenset[str] | None) -> bool:
+    """Whether a finding about ``field`` leaves the row's computed effect standing.
+
+    Only numbers the computation does not read (and a p-value inequality when
+    the scalar p-value is not read). Clinical identity fields - outcome,
+    timepoint, design, arms, quotes - always count.
+    """
+    if read is None:
+        return False
+    if field == "p_value_inequality":
+        return "p_value" not in read
+    return _numeric_field_name(field) and field not in read
+
+
+def _conflict_outside_calculation(conflict: dict[str, Any], read: frozenset[str] | None) -> bool:
+    if read is None:
+        return False
+    named = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", str(conflict.get("field") or ""))) & (
+        set(NUMERIC_FIELDS) | set(NUMERIC_MAP_FIELDS))
+    # A conflict that names no field has no known reach; it keeps blocking.
+    return bool(named) and not named & {name.split("[", 1)[0] for name in read}
+
+
+def blocking_data_issues(outcome: OutcomeData, protocol: ResearchProtocol, issues: list) -> list:
+    """The unresolved source-row issues that hold this row's verification.
+
+    An issue about a number the row's computation does not read is kept in
+    the row's history (and reported) but does not block the computation.
+    """
+    if not issues:
+        return []
+    read = calculation_fields(outcome, protocol)
+    return [item for item in issues if not issue_field_outside_calculation(item.issue.field, read)]
+
+
 def validate_data_issues(study: ExtractedStudy, indices: list[int], issues: list[ExtractionDataIssue],
                          source_text: str) -> list[VerificationIssue]:
     """Keep bad checker contracts separate from unresolved source-row defects."""
@@ -135,14 +212,25 @@ def update_issue_history(study, indices, histories, errors, *, source_sha256,
         histories[index] = unresolved, available
 
 
-def unresolved_issue_errors(indices, histories):
+def unresolved_issue_errors(indices, histories, *, study=None, protocol=None, notices=None):
+    """Errors for every unresolved issue; with ``study`` and ``protocol``, only the blocking ones.
+
+    An issue outside the row's calculation goes to ``notices`` instead.
+    """
     errors = []
     for index in indices:
         issues, available = histories[index]
         if not available:
             errors.append({"code": "verification_issue_history_required", "outcome_index": index})
+        blocking = issues if study is None or protocol is None else blocking_data_issues(
+            study.outcomes[index], protocol, issues)
         for item in issues:
             issue = item.issue
+            if not any(item is kept for kept in blocking):
+                if notices is not None:
+                    notices.append({"code": "row_issue_outside_calculation", "outcome_index": index,
+                                    "field": issue.field, "kind": issue.kind, "rationale": issue.rationale})
+                continue
             repairable = issue.kind != "source_conflict" and (
                 issue.field in REFINABLE_FIELDS or any(issue.field.startswith(name + "[") for name in NUMERIC_MAP_FIELDS))
             errors.append({"code": "row_source_conflict_requires_adjudication" if issue.kind == "source_conflict" else "row_data_issue",
@@ -408,7 +496,9 @@ def endpoint_binding_errors(details, source_text, component_index=None):
     return []
 
 
-def verification_verdict(assessment: PrimaryAlignmentAssessment, protocol: ResearchProtocol) -> VerificationVerdict:
+def verification_verdict(assessment: PrimaryAlignmentAssessment, protocol: ResearchProtocol,
+                         outcome: OutcomeData | None = None) -> VerificationVerdict:
+    """The row's verification verdict; given its ``outcome``, numbers count within its calculation."""
     details = assessment.verification
     unknown = {"status": "unknown", "reason": "extraction_verification_required"}
     if details is None:
@@ -430,18 +520,39 @@ def verification_verdict(assessment: PrimaryAlignmentAssessment, protocol: Resea
                 or details.selection_timing not in {"baseline", "not_applicable"}
                 or any(item.timing == "uncertain" for item in details.conditioning_variables)):
             return unknown
-    if (details.numeric_status != "verified" or any(item.status != "match" for item in details.numeric_findings)
+    if (not _numbers_verified(details, protocol, outcome)
             or details.endpoint_relation != "equivalent" or not details.components
             or any(item.relation != "match" for item in details.components) or details.estimand_relation != "match"):
         return unknown
     return {"status": "match", "reason": "complete_source_verification"}
 
 
+def _numbers_verified(details, protocol, outcome) -> bool:
+    """All numbers match; or, for a row that computes an effect, all the numbers it reads.
+
+    A summary status other than "verified" is accepted only when the checker's
+    own findings explain it by a number outside the calculation.
+    """
+    read = calculation_fields(outcome, protocol) if outcome is not None else None
+    if read is None:
+        return details.numeric_status == "verified" and all(item.status == "match" for item in details.numeric_findings)
+    inside = [item for item in details.numeric_findings if item.field in read]
+    if any(item.status != "match" for item in inside) or not read <= {item.field for item in inside}:
+        return False
+    return details.numeric_status == "verified" or any(
+        item.status != "match" and _numeric_field_name(item.field) and item.field not in read
+        for item in details.numeric_findings)
+
+
 def validate_check_batch(
     study: ExtractedStudy, indices: list[int], assessments: list[PrimaryAlignmentAssessment],
-    source_text: str, protocol: ResearchProtocol, *, allow_legacy=False,
+    source_text: str, protocol: ResearchProtocol, *, allow_legacy=False, notices: list | None = None,
 ) -> list[VerificationIssue]:
-    """Return actionable schema/coverage/anchor/numeric errors before stamping."""
+    """Return actionable schema/coverage/anchor/numeric errors before stamping.
+
+    A number the row's effect computation does not read (``calculation_fields``)
+    cannot block it: its findings go to ``notices``, when given, instead.
+    """
     from new_meta.core.primary_analysis_alignment import _anchored
     errors = []
     plus_minus_sd = plus_minus_reports_sd(source_text)
@@ -494,34 +605,57 @@ def validate_check_batch(
         for item_support in [*details.conditioning_variables, *details.trial_units]:
             if not quote_is_anchored(item_support.quote, item_support.source_location, source_text):
                 issue("verification_quote_not_anchored", index, field="conditioning_or_trial_unit")
-        p_inequality = study.outcomes[index].p_value_inequality
+        outcome = study.outcomes[index]
+        values = numeric_fields(outcome)
+        read = calculation_fields(outcome, protocol)
+
+        def scoped(code, blocks, **context):
+            if blocks:
+                issue(code, index, **context)
+            elif notices is not None:
+                notices.append({"code": code, "outcome_index": index, "outside_calculation": True, **context})
+
+        p_inequality = outcome.p_value_inequality
         if p_inequality and not p_inequality_is_anchored(p_inequality, source_text):
-            issue("p_value_inequality_not_anchored", index, expression=p_inequality)
-        conflicts = numeric_conflicts(study.outcomes[index])
-        if conflicts:
-            issue("numeric_conflict_requires_adjudication", index, conflicts=conflicts)
-        values = numeric_fields(study.outcomes[index])
+            scoped("p_value_inequality_not_anchored", not issue_field_outside_calculation("p_value_inequality", read),
+                   expression=p_inequality)
+        conflicts = numeric_conflicts(outcome)
+        outside = [item for item in conflicts if _conflict_outside_calculation(item, read)]
+        if len(outside) < len(conflicts):
+            issue("numeric_conflict_requires_adjudication", index, conflicts=[item for item in conflicts if item not in outside])
+        if outside:
+            scoped("numeric_conflict_requires_adjudication", False, conflicts=outside)
+        findings = details.numeric_findings
         if values and details.numeric_status != "verified":
-            issue("numeric_status_unresolved", index, numeric_status=details.numeric_status)
+            explained = read is not None and all(item.status == "match" for item in findings if item.field in read) and any(
+                item.status != "match" and _numeric_field_name(item.field) and item.field not in read for item in findings)
+            scoped("numeric_status_unresolved", not explained, numeric_status=details.numeric_status)
         # A finding about a field that holds no number (a checker verifying
         # p_value_inequality beside p_value) verifies nothing and is left out;
         # a name that is no field at all still breaks the contract.
-        names = [finding.field for finding in details.numeric_findings
-                 if finding.field in values or finding.field not in _TEXT_FIELDS]
-        if set(names) != set(values) or len(names) != len(values):
-            issue("numeric_field_coverage", index, expected=sorted(values), received=names)
-        for finding in details.numeric_findings:
+        names = [finding.field for finding in findings if finding.field in values or finding.field not in _TEXT_FIELDS]
+        required = set(values) if read is None else set(values) & read
+        complete = set(names) == set(values) and len(names) == len(values)
+        covered = (required <= set(names) and not any(name not in values and not _numeric_field_name(name) for name in names)
+                   and sum(name in required for name in names) == len(required))
+        if not complete:
+            scoped("numeric_field_coverage", read is None or not covered, expected=sorted(required if covered else values),
+                   received=names)
+        for finding in findings:
             if finding.field not in values:
                 continue
+            blocks = not issue_field_outside_calculation(finding.field, read)
             if finding.status == "mismatch" or (finding.reported_value is not None and not math.isclose(
                     values[finding.field], finding.reported_value, rel_tol=1e-10, abs_tol=1e-12)):
-                issue("numeric_value_mismatch", index, field=finding.field, extracted=values[finding.field], reported=finding.reported_value)
+                scoped("numeric_value_mismatch", blocks, field=finding.field, extracted=values[finding.field],
+                       reported=finding.reported_value)
             elif finding.status != "match" or finding.reported_value is None:
-                issue("numeric_value_unverified", index, field=finding.field)
+                scoped("numeric_value_unverified", blocks, field=finding.field)
             if finding.status == "match" and (not quote_is_anchored(finding.quote, finding.source_location, source_text)
                     or not numeric_value_in_quote(finding.reported_value, finding.quote, finding.field,
                                                   plus_minus_sd=plus_minus_sd)):
-                issue("numeric_quote_not_anchored", index, field=finding.field, quote=finding.quote, reported=finding.reported_value)
+                scoped("numeric_quote_not_anchored", blocks, field=finding.field, quote=finding.quote,
+                       reported=finding.reported_value)
     return errors
 
 

@@ -398,12 +398,12 @@ def record_checked_alignments(project, protocol, study, assessments, *, source_t
             continue
         if 0 <= assessment.outcome_index < len(study.outcomes):
             parsed.append(assessment)
-    from new_meta.core.extraction_verification import validate_check_batch
+    from new_meta.core.extraction_verification import blocking_data_issues, validate_check_batch
     validation_errors = validate_check_batch(study, list(range(len(study.outcomes))), parsed, source_text, protocol)
     rejected_indices = {item["outcome_index"] for item in validation_errors if item.get("outcome_index") is not None}
     for assessment in parsed:
         index = assessment.outcome_index
-        if histories[index][0] or not histories[index][1]:
+        if blocking_data_issues(study.outcomes[index], protocol, histories[index][0]) or not histories[index][1]:
             validation_errors.append({"code": "verification_data_issues_unresolved" if histories[index][1]
                                       else "verification_issue_history_required", "outcome_index": index})
             continue
@@ -482,17 +482,17 @@ def alignment_status(project, protocol, study, index: int) -> dict:
     dimensions = {name: getattr(proof.assessment, name).status for name in DIMENSIONS}
     status = "mismatch" if "mismatch" in dimensions.values() else "match" if set(dimensions.values()) == {"match"} else "unknown"
     reason = "primary_alignment_" + status
-    from new_meta.core.extraction_verification import validate_check_batch, verification_verdict
+    from new_meta.core.extraction_verification import blocking_data_issues, validate_check_batch, verification_verdict
     if not proof.issue_history_complete:
         status, reason = "unknown", "verification_issue_history_required"
-    elif proof.unresolved_data_issues:
+    elif blocking_data_issues(study.outcomes[index], protocol, proof.unresolved_data_issues):
         status, reason = "unknown", "verification_data_issues_unresolved"
     elif proof.assessor == "pending-review-v1":
         status, reason = "unknown", "verification_not_completed"
     elif validate_check_batch(study, [index], [proof.assessment], checked.decode(), protocol, allow_legacy=legacy_assessor):
         status, reason = "unknown", "extraction_verification_invalid"
     else:
-        verified = verification_verdict(proof.assessment, protocol)
+        verified = verification_verdict(proof.assessment, protocol, study.outcomes[index])
         if verified["status"] != "match":
             status, reason = verified["status"], verified["reason"]
         if legacy_assessor and status == "match":

@@ -4,6 +4,7 @@ from collections import Counter
 from pydantic import TypeAdapter, ValidationError
 
 from new_meta.core.extraction_verification import (
+    calculation_fields, issue_field_outside_calculation,
     quote_is_anchored, validate_check_batch, validate_data_issues, endpoint_binding_errors,
 )
 from new_meta.core.llm import parse_source_json
@@ -161,5 +162,18 @@ def inspect_extraction_payload(raw, schema, study, indices, source_text, protoco
         checked = result["response"]
         result["errors"].extend(validate_check_batch(
             study, indices, checked.primary_analysis_alignment, source_text, protocol))
-        result["errors"].extend(validate_data_issues(study, indices, checked.data_issues, source_text))
+        # A source-row issue about a number the row's computation does not read
+        # is retained in its history (data_errors) but is no error of the response.
+        reads = {}
+
+        def outside_calculation(item):
+            index = item.get("outcome_index")
+            if (item["code"] not in {"row_data_issue", "row_source_conflict_requires_adjudication"}
+                    or type(index) is not int or not 0 <= index < len(study.outcomes)):
+                return False
+            if index not in reads:
+                reads[index] = calculation_fields(study.outcomes[index], protocol)
+            return issue_field_outside_calculation(str(item.get("field") or ""), reads[index])
+        result["errors"].extend(item for item in validate_data_issues(study, indices, checked.data_issues, source_text)
+                                if not outside_calculation(item))
     return result
