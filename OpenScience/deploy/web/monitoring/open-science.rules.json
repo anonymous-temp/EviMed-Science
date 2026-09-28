@@ -281,6 +281,18 @@
           }
         },
         {
+          "alert": "FrontierPluginModelCallsHigh",
+          "expr": "open_science_frontier_plugin_model_calls_24h > 50",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The knowledge plugin made more than 50 model calls in a day",
+            "description": "The plugin's only model use is proposing selectors for list pages that drifted (plan 14.2, 14.10); over 50 in 24 hours means many lists broke at once or a proposal loop, and it spends the plugin's own key."
+          }
+        },
+        {
           "alert": "FrontierBacklogOld",
           "expr": "(open_science_frontier_oldest_owed_timestamp_seconds > 0 and time() - open_science_frontier_oldest_owed_timestamp_seconds > 21600) or open_science_frontier_plugin_backlog_oldest_due_seconds > 21600",
           "for": "15m",

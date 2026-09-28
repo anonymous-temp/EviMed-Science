@@ -1572,6 +1572,12 @@ export function frontierMetricFamilies(enabled, snapshot) {
       [{ value: Number(pluginHealth.backlog?.oldest_due_s ?? 0) }]);
     add("plugin_rate_limited_1h", "429 answers from the plugin's worst host in the last hour.", "gauge",
       [{ labels: { host: String(pluginHealth.rateLimited?.host ?? "none") }, value: Number(pluginHealth.rateLimited?.max ?? 0) }]);
+    // The plugin's only model use is selector self-heal (plan §14.2, §14.10:
+    // alert past 50 a day); a plugin that does not report it has no series.
+    if (Number.isFinite(pluginHealth.modelCalls24h)) {
+      add("plugin_model_calls_24h", "Model calls the knowledge plugin made in the last 24 hours (selector self-heal proposals).", "gauge",
+        [{ value: Number(pluginHealth.modelCalls24h) }]);
+    }
   }
   add("cursor_gaps_total", "Times the cursor fell behind what the plugin still holds.", "counter", [{ value: plugin.gaps.count }]);
   add("cursor_gap_entries_total", "Entries skipped because the plugin had purged them before they were pulled.", "counter", [{ value: plugin.gaps.entries }]);

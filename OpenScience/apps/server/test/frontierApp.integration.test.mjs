@@ -149,6 +149,7 @@ test("the metrics carry the module's families", options, async () => {
   for (const family of ["open_science_frontier_enabled 1", "open_science_frontier_plugin_state{state=\"ok\"} 1", "open_science_frontier_pulls_total",
     "open_science_frontier_entries{state=\"received\"}", "open_science_frontier_items_published_today", "open_science_frontier_budget_limit_cny",
     "open_science_frontier_unknown_vocabulary_total", "open_science_frontier_plugin_compatible{contract=\"1.0.0\"} 1",
+    "open_science_frontier_plugin_model_calls_24h 0",
     "open_science_readiness_check{check=\"frontier\",code=\"ok\"} 1"]) {
     assert.ok(text.includes(family), `${family} is missing from the metrics`);
   }

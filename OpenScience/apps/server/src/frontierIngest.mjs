@@ -196,7 +196,7 @@ export class FrontierIngest {
     this.latestSeq = null;
     /** @type {string | null} */
     this.pluginHealth = null;
-    /** @type {{ egress: Record<string, string>, backlog: any, lastOkFetchAt: string | null, lastNewEntryAt: string | null, rateLimited: { max: number, host: string | null } | null, at: string } | null} */
+    /** @type {{ egress: Record<string, string>, backlog: any, lastOkFetchAt: string | null, lastNewEntryAt: string | null, rateLimited: { max: number, host: string | null } | null, modelCalls24h: number | null, at: string } | null} */
     this.pluginHealthDetail = null;
     this.lastPullAt = null;
     this.lastPullOkAt = null;
@@ -506,7 +506,8 @@ export class FrontierIngest {
         this.latestSeq = health.latest_seq;
         this.pluginHealth = health.status;
         this.pluginHealthDetail = { egress: health.egress, backlog: health.backlog, lastOkFetchAt: health.last_ok_fetch_at,
-          lastNewEntryAt: health.last_new_entry_at, rateLimited: health.rate_limited_1h, at: this.now().toISOString() };
+          lastNewEntryAt: health.last_new_entry_at, rateLimited: health.rate_limited_1h, modelCalls24h: health.model_calls_24h ?? null,
+          at: this.now().toISOString() };
         if (!health.compatible) {
           // Upgraded under us: the manifest is the authority, read it now.
           await this.mirrorManifest();
