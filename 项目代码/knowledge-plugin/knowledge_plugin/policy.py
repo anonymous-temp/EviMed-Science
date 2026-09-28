@@ -11,10 +11,17 @@ off, what state a source's health is in. Pure so each rule is a unit test, not a
 - **Failure backoff.** 2^n from a base of min(floor, 30 min), capped at 6 hours; three days in a
   failure streak is ``unreadable``. A refusal by the plugin's own budget (daily cap, paused host)
   is not the source's failure and moves nothing here.
-- **Health** (four states plus new/disabled): ``degraded`` below 80 % success over 24 h,
-  ``unreadable`` after three days of failures, ``drifted`` when a list that used to have items
-  parses to nothing twice in a row or its dates vanish twice in a row (a redesign broke the
-  selectors — the main maintenance cost of list pages).
+- **Health** (four states plus new/disabled): ``unreadable`` after three days of failures;
+  ``drifted`` when a list that used to have items parses to nothing twice in a row or its dates
+  vanish twice in a row (a redesign broke the selectors — the main maintenance cost of list pages);
+  ``degraded`` while the source is failing now, or when over 24 h it failed in two or more separate
+  episodes and fewer than 80 % of (successful polls + failure episodes) were successes. A streak of
+  failed polls is one episode: backoff re-polls a failing source every 30 min to 6 h while a healthy
+  one waits its 3–24 h cadence, so counting polls made one four-hour upstream outage outweigh a day
+  of successes and held a recovered source ``degraded`` for the rest of the 24 h (13 PubMed streams
+  after NCBI's outage of 2026-09-27 02:30–06:20Z). Polls the plugin itself declined (its budget, an
+  exit or key this deployment lacks) are neither. The rule is re-applied hourly, so a state never
+  waits for the next poll of a source on a daily cadence to catch up with the window.
 """
 
 from __future__ import annotations
@@ -22,9 +29,13 @@ from __future__ import annotations
 import hashlib
 import math
 from datetime import datetime, timedelta, timezone
+from typing import Iterable
+
+from .model import SUCCESS_OUTCOMES
 
 UNREADABLE_AFTER = timedelta(days=3)
 DEGRADED_BELOW = 0.8
+FLAPPING_EPISODES = 2
 BACKOFF_CAP_S = 6 * 3600
 BACKOFF_BASE_MAX_S = 1800
 EMPTY_POLLS_BEFORE_SLOWDOWN = 3
@@ -73,8 +84,23 @@ def is_drifted(access: str, last_nonempty_at: datetime | None, zero_streak: int,
     return (last_nonempty_at is not None and zero_streak >= DRIFT_STREAK) or (ever_dated and undated_streak >= DRIFT_STREAK)
 
 
+def reliability(outcomes: Iterable[str]) -> tuple[int, int]:
+    """(successful polls, failure episodes) of polls in time order; a run of failures is one episode.
+    The caller has already dropped the polls the plugin declined itself."""
+    successes = episodes = 0
+    failing = False
+    for outcome in outcomes:
+        if outcome in SUCCESS_OUTCOMES:
+            successes += 1
+            failing = False
+        elif not failing:
+            episodes += 1
+            failing = True
+    return successes, episodes
+
+
 def health_state(*, enabled: bool, last_ok_at: datetime | None, failing_since: datetime | None, now: datetime,
-                 success_rate_24h: float | None, drifted: bool) -> str:
+                 successes_24h: int, failure_episodes_24h: int, drifted: bool) -> str:
     if not enabled:
         return "disabled"
     if failing_since is not None and now - failing_since >= UNREADABLE_AFTER:
@@ -83,8 +109,11 @@ def health_state(*, enabled: bool, last_ok_at: datetime | None, failing_since: d
         return "drifted"
     if last_ok_at is None:
         return "new" if failing_since is None else "degraded"
-    if success_rate_24h is not None and success_rate_24h < DEGRADED_BELOW:
-        return "degraded"
+    if failing_since is not None:
+        return "degraded"                      # failing now, after its in-poll retries
+    if failure_episodes_24h >= FLAPPING_EPISODES:
+        if successes_24h / (successes_24h + failure_episodes_24h) < DEGRADED_BELOW:
+            return "degraded"                  # recovered, but it keeps falling over
     return "healthy"
 
 

@@ -196,6 +196,64 @@ async def test_failures_back_off_and_become_unreadable_after_three_days(settings
     assert first["outcome"] == second["outcome"] == "http-error" and first["error_detail"] == "http_503"
 
 
+async def test_a_recovered_source_is_healthy_at_once_and_a_flapping_one_is_not(settings, pool):
+    clock = Clock()
+    src = source()
+    await seed(pool, src)
+    url = src.config["url"]
+    adapter = ScriptedAdapter(pages={url: ParseOutput(entries=entries("a"))})
+    fetcher = ScriptedFetcher(clock)
+    outage = FetchError("http-error", "http_404", status=404)             # not transient: no in-poll re-send
+    fetcher.responses[url] = [("ok", b"1", {}, 200), outage, outage, ("ok", b"2", {}, 200), outage, ("ok", b"3", {}, 200)]
+    crawler = crawler_for(settings, pool, clock, adapter, fetcher)
+    states = []
+    for _ in range(6):
+        async with pool.connection() as conn:
+            await conn.execute("UPDATE evimed_knowledge.sources SET next_poll_at = %s", (clock.now,))
+        await poll_now(crawler)
+        states.append((await state_of(pool, src.id))["health"])
+        clock.advance(hours=1)
+    # ok · fail (failing now) · fail · ok: one episode, recovered · fail · ok: two episodes in 3 ok + 2 → 60 %
+    assert states == ["healthy", "degraded", "degraded", "healthy", "degraded", "degraded"]
+    # a day later the window holds nothing: the hourly re-check clears it without waiting for a poll
+    clock.advance(hours=24)
+    assert await crawler.recheck_health() == 1
+    assert (await state_of(pool, src.id))["health"] == "healthy"
+    assert await crawler.recheck_health() == 0
+
+
+async def test_the_recheck_leaves_a_source_a_poll_holds(settings, pool):
+    clock = Clock()
+    src = source()
+    await seed(pool, src)
+    async with pool.connection() as conn:
+        await conn.execute(
+            """UPDATE evimed_knowledge.sources SET health = 'degraded', last_ok_at = %s, lease_owner = 'w',
+                      lease_until = %s WHERE id = %s""", (T0 - timedelta(hours=1), T0 + timedelta(minutes=5), src.id))
+    crawler = crawler_for(settings, pool, clock, ScriptedAdapter(), ScriptedFetcher(clock))
+    assert await crawler.recheck_health() == 0
+    assert (await state_of(pool, src.id))["health"] == "degraded"
+    clock.advance(minutes=6)                                               # the lease has lapsed
+    assert await crawler.recheck_health() == 1
+    assert (await state_of(pool, src.id))["health"] == "healthy"
+
+
+async def test_polls_the_plugin_declined_are_not_failure_episodes(settings, pool):
+    from knowledge_plugin.store import insert_fetch, reliability_24h
+
+    src = source()
+    await seed(pool, src)
+    async with pool.connection() as conn:
+        for minutes, outcome, detail in [(0, "ok", None), (10, "blocked", "browser_unreachable"),
+                                         (20, "host-budget", "host_busy"), (30, "ok", None),
+                                         (40, "blocked", "http_403"), (50, "timeout", "timeout"), (60, "ok", None)]:
+            await insert_fetch(conn, source_id=src.id, fetched_at=T0 + timedelta(minutes=minutes), egress="direct",
+                               host="x", http_status=None, outcome=outcome, bytes_=0, duration_ms=1, content_sha256=None,
+                               entries_seen=0, entries_new=0, error_detail=detail, requests=1)
+        assert await reliability_24h(conn, src.id, T0 + timedelta(hours=2)) == (3, 1)
+        assert await reliability_24h(conn, src.id, T0 + timedelta(hours=24, minutes=45)) == (1, 1)
+
+
 async def test_budget_refusals_are_not_the_sources_failure(settings, pool):
     clock = Clock()
     src = source()

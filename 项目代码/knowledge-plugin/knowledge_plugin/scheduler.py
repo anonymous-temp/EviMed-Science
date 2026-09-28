@@ -26,7 +26,8 @@ the source's failure.
 
 The same process also runs the text worker (on-demand enrichment for ``/text``), the hourly
 retention purge (fetches 14 d, entries 30 d after delivery or 90 d when their text was asked for,
-seen_keys 400 d) and a registry watcher that re-syncs when the file changes.
+seen_keys 400 d), the hourly health re-check (``recheck_health``: the 24 h window moves on without a
+poll) and a registry watcher that re-syncs when the file changes.
 """
 
 from __future__ import annotations
@@ -51,13 +52,15 @@ from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row, sync_registry
 from .settings import Settings
-from .store import StoreResult, claim_texts, insert_fetch, save_text_result, store_entries, success_rate_24h, text_failure
+from .store import (StoreResult, claim_texts, insert_fetch, reliability_24h, reliability_24h_all, save_text_result,
+                    store_entries, text_failure)
 
 log = logging.getLogger("knowledge_plugin.scheduler")
 
 MAX_IN_POLL_RETRY_S = 30.0
 ENRICH_TIMEOUT_S = 180.0
 MAINTENANCE_EVERY_S = 3600.0
+HEALTH_RECHECK_EVERY_S = 3600.0
 REGISTRY_WATCH_EVERY_S = 60.0
 PURGE_BATCH = 5000
 ADAPTER_MISSING_RETRY_S = 3600
@@ -121,6 +124,7 @@ class Crawler:
             asyncio.create_task(self._loop("poll", self._poll_tick, self._settings.tick_s)),
             asyncio.create_task(self._loop("text", self._text_tick, self._settings.tick_s)),
             asyncio.create_task(self._loop("maintenance", self.maintenance, MAINTENANCE_EVERY_S, initial_delay=60.0)),
+            asyncio.create_task(self._loop("health", self.recheck_health, HEALTH_RECHECK_EVERY_S, initial_delay=120.0)),
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
@@ -466,10 +470,10 @@ class Crawler:
                                    duration_ms=report.duration_ms, content_sha256=None, entries_seen=report.seen,
                                    entries_new=report.new + report.backfilled, error_detail=failure.detail,
                                    requests=max(1, report.requests))
-                rate = await success_rate_24h(conn, row["id"], started)
+                successes, episodes = await reliability_24h(conn, row["id"], started)
                 health = policy.health_state(
                     enabled=row["enabled"], last_ok_at=row["last_ok_at"], failing_since=failing_since, now=started,
-                    success_rate_24h=rate,
+                    successes_24h=successes, failure_episodes_24h=episodes,
                     drifted=policy.is_drifted(row["access"], row["last_nonempty_at"], row["zero_streak"],
                                               row["ever_dated"], row["undated_streak"]))
                 await conn.execute(
@@ -510,9 +514,10 @@ class Crawler:
                                    duration_ms=report.duration_ms, content_sha256=first.get("body_sha256"),
                                    entries_seen=totals.seen, entries_new=totals.new + totals.backfilled,
                                    error_detail=report.detail, requests=max(1, report.requests))
-                rate = await success_rate_24h(conn, row["id"], started)
+                successes, episodes = await reliability_24h(conn, row["id"], started)
                 health = policy.health_state(enabled=row["enabled"], last_ok_at=started, failing_since=None,
-                                             now=started, success_rate_24h=rate, drifted=drifted)
+                                             now=started, successes_24h=successes, failure_episodes_24h=episodes,
+                                             drifted=drifted)
                 await conn.execute(
                     """UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL,
                               next_poll_at = %(next)s, poll_interval_s = %(interval)s, empty_polls = %(empty)s,
@@ -663,6 +668,44 @@ class Crawler:
         if any(done.values()):
             log.info("retention purge: %s", done)
         return done
+
+    async def recheck_health(self) -> int:
+        """Re-apply the health rule to every enabled source no poll holds right now, and return how
+        many changed. A poll writes its source's state, but the 24 h window moves on without one: a
+        source on a daily cadence would otherwise keep a state its window no longer supports until its
+        next poll (aha-newsroom kept one timeout for 24 h, 2026-09-27). A row a poll touched since it
+        was read here is left to that poll."""
+        now = self._clock()
+        changed = 0
+        async with self._pool.connection() as conn:
+            counts = await reliability_24h_all(conn, now)
+            rows = await (await conn.execute(
+                """SELECT id, health, last_ok_at, failing_since, access, last_nonempty_at, zero_streak, ever_dated,
+                          undated_streak, updated_at
+                     FROM evimed_knowledge.sources
+                    WHERE enabled AND retired_at IS NULL AND (lease_until IS NULL OR lease_until < %s)""",
+                (now,),
+            )).fetchall()
+            for row in rows:
+                successes, episodes = counts.get(row["id"], (0, 0))
+                health = policy.health_state(
+                    enabled=True, last_ok_at=row["last_ok_at"], failing_since=row["failing_since"], now=now,
+                    successes_24h=successes, failure_episodes_24h=episodes,
+                    drifted=policy.is_drifted(row["access"], row["last_nonempty_at"], row["zero_streak"],
+                                              row["ever_dated"], row["undated_streak"]))
+                if health == row["health"]:
+                    continue
+                result = await conn.execute(
+                    """UPDATE evimed_knowledge.sources SET health = %s, updated_at = %s
+                        WHERE id = %s AND updated_at IS NOT DISTINCT FROM %s AND enabled
+                          AND (lease_until IS NULL OR lease_until < %s)""",
+                    (health, now, row["id"], row["updated_at"], now),
+                )
+                if result.rowcount:
+                    changed += 1
+                    log.info("health %s: %s -> %s (24 h: %s ok, %s failure episodes)",
+                             row["id"], row["health"], health, successes, episodes)
+        return changed
 
     async def watch_registry(self) -> None:
         path = self._settings.registry_path

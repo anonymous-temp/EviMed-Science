@@ -48,15 +48,54 @@ def test_failure_backoff_doubles_and_caps_at_six_hours():
 
 
 def test_health_states():
-    kwargs = dict(enabled=True, last_ok_at=NOW, failing_since=None, now=NOW, success_rate_24h=1.0, drifted=False)
+    kwargs = dict(enabled=True, last_ok_at=NOW, failing_since=None, now=NOW, successes_24h=8, failure_episodes_24h=0,
+                  drifted=False)
     assert policy.health_state(**kwargs) == "healthy"
     assert policy.health_state(**{**kwargs, "enabled": False}) == "disabled"
     assert policy.health_state(**{**kwargs, "last_ok_at": None}) == "new"
     assert policy.health_state(**{**kwargs, "last_ok_at": None, "failing_since": NOW}) == "degraded"
-    assert policy.health_state(**{**kwargs, "success_rate_24h": 0.79}) == "degraded"
     assert policy.health_state(**{**kwargs, "failing_since": NOW - timedelta(days=3)}) == "unreadable"
-    assert policy.health_state(**{**kwargs, "failing_since": NOW - timedelta(days=2, hours=23)}) != "unreadable"
+    assert policy.health_state(**{**kwargs, "failing_since": NOW - timedelta(days=2, hours=23)}) == "degraded"
     assert policy.health_state(**{**kwargs, "drifted": True}) == "drifted"
+
+
+def test_a_source_failing_now_is_degraded_whatever_its_day_looked_like():
+    kwargs = dict(enabled=True, last_ok_at=NOW - timedelta(hours=3), now=NOW, drifted=False)
+    assert policy.health_state(**kwargs, failing_since=NOW, successes_24h=20, failure_episodes_24h=1) == "degraded"
+    assert policy.health_state(**kwargs, failing_since=None, successes_24h=20, failure_episodes_24h=1) == "healthy"
+
+
+def test_one_recovered_outage_is_healthy_and_flapping_is_degraded():
+    kwargs = dict(enabled=True, last_ok_at=NOW, failing_since=None, now=NOW, drifted=False)
+    # one episode, however long and however few successes around it: it was degraded while it lasted
+    assert policy.health_state(**kwargs, successes_24h=1, failure_episodes_24h=1) == "healthy"
+    # two or more episodes: under 80 % of (successes + episodes) is flapping
+    assert policy.health_state(**kwargs, successes_24h=7, failure_episodes_24h=2) == "degraded"     # 7/9 ≈ 0.78
+    assert policy.health_state(**kwargs, successes_24h=8, failure_episodes_24h=2) == "healthy"      # 8/10 = 0.8
+    assert policy.health_state(**kwargs, successes_24h=3, failure_episodes_24h=2) == "degraded"     # 3/5
+    assert policy.health_state(**kwargs, successes_24h=3, failure_episodes_24h=3) == "degraded"
+
+
+def test_reliability_counts_a_run_of_failures_as_one_episode():
+    assert policy.reliability([]) == (0, 0)
+    assert policy.reliability(["ok", "not-modified", "empty"]) == (3, 0)
+    assert policy.reliability(["ok", "http-error", "timeout", "http-error", "ok", "ok"]) == (3, 1)
+    assert policy.reliability(["challenge", "ok", "blocked", "ok", "timeout"]) == (2, 3)
+
+
+def test_the_polls_of_2026_09_27_replayed():
+    """pubmed-mendelian-randomization's 24 h to 2026-09-28 01:00Z (production fetch log): NCBI's outage
+    answered four backoff re-polls (02:30, 03:00, 04:00 ``eutils_search_error``, 06:00 ``http_500``),
+    then six polls read the stream. The poll ratio was 6/10, so it sat ``degraded`` a day after it
+    recovered; while the outage lasted it was ``degraded`` under both rules."""
+    polls = ["http-error"] * 4 + ["ok"] * 6
+    successes, episodes = policy.reliability(polls)
+    assert (successes, episodes) == (6, 1)
+    assert policy.health_state(enabled=True, last_ok_at=NOW, failing_since=None, now=NOW, successes_24h=successes,
+                               failure_episodes_24h=episodes, drifted=False) == "healthy"
+    # aha-newsroom on its daily cadence: one timeout, the backoff re-poll read it 30 minutes later
+    assert policy.health_state(enabled=True, last_ok_at=NOW, failing_since=None, now=NOW,
+                               successes_24h=1, failure_episodes_24h=1, drifted=False) == "healthy"
 
 
 def test_drift_only_for_list_reads():

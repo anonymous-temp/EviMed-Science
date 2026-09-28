@@ -26,8 +26,10 @@ from datetime import datetime, timedelta
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 
+from . import policy
 from .db import lock_seq
-from .model import ENRICHMENT_TYPES, FETCHED_FROM, OPEN_ACCESS, TEXT_KINDS, TRIAL_FACT_TYPES, EntryTextResult
+from .model import (ENRICHMENT_TYPES, FETCHED_FROM, NEUTRAL_DETAILS, OPEN_ACCESS, TEXT_KINDS, TRIAL_FACT_TYPES,
+                    EntryTextResult)
 from .normalize import Prepared, clean_text, cut, is_backfill, resolve_dates
 
 ENTRY_COLUMNS = (
@@ -167,16 +169,33 @@ async def insert_fetch(conn: AsyncConnection, *, source_id: str, fetched_at: dat
     )
 
 
-async def success_rate_24h(conn: AsyncConnection, source_id: str, now: datetime) -> float | None:
-    row = await (await conn.execute(
-        """SELECT count(*) FILTER (WHERE outcome IN ('ok', 'not-modified', 'empty')) AS good,
-                  count(*) FILTER (WHERE outcome <> 'host-budget') AS total
-             FROM evimed_knowledge.fetches WHERE source_id = %s AND fetched_at > %s""",
-        (source_id, now - timedelta(hours=24)),
-    )).fetchone()
-    if not row or not row["total"]:
-        return None
-    return row["good"] / row["total"]
+# The polls a source's health counts: not the ones the plugin declined itself — its budget
+# (``host-budget``) or an exit or key this deployment lacks (``blocked`` with a neutral detail).
+_COUNTED_POLLS = ("outcome <> 'host-budget' "
+                  "AND NOT (outcome = 'blocked' AND coalesce(error_detail, '') = ANY(%(neutral)s))")
+
+
+async def reliability_24h(conn: AsyncConnection, source_id: str, now: datetime) -> tuple[int, int]:
+    """(successful polls, failure episodes) of one source over the last 24 h (``policy.reliability``)."""
+    rows = await (await conn.execute(
+        "SELECT outcome FROM evimed_knowledge.fetches WHERE source_id = %(id)s AND fetched_at > %(since)s AND "
+        + _COUNTED_POLLS + " ORDER BY fetched_at, id",
+        {"id": source_id, "since": now - timedelta(hours=24), "neutral": sorted(NEUTRAL_DETAILS)},
+    )).fetchall()
+    return policy.reliability(row["outcome"] for row in rows)
+
+
+async def reliability_24h_all(conn: AsyncConnection, now: datetime) -> dict[str, tuple[int, int]]:
+    """``reliability_24h`` of every source polled in the last 24 h, in one read (the hourly re-check)."""
+    rows = await (await conn.execute(
+        "SELECT source_id, outcome FROM evimed_knowledge.fetches WHERE fetched_at > %(since)s AND "
+        + _COUNTED_POLLS + " ORDER BY source_id, fetched_at, id",
+        {"since": now - timedelta(hours=24), "neutral": sorted(NEUTRAL_DETAILS)},
+    )).fetchall()
+    outcomes: dict[str, list[str]] = {}
+    for row in rows:
+        outcomes.setdefault(row["source_id"], []).append(row["outcome"])
+    return {source_id: policy.reliability(values) for source_id, values in outcomes.items()}
 
 
 # ------------------------------------------------------------------------------------ texts
