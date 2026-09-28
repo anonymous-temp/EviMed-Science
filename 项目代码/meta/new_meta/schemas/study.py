@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, m
 from pydantic.json_schema import SkipJsonSchema
 
 
+#: What an arm of a comparison receives, judged against the review protocol.
+ARM_REVIEW_ROLES = ("review_intervention", "review_comparator", "other")
+
+
 def _is_p_value_inequality(value: str) -> bool:
     normalized = str(value).strip().lower().replace("ｐ", "p").replace("＜", "<").replace("＞", ">").replace("＝", "=")
     return bool(re.match(r"^(?:p\s*)?(?:<=|>=|[<>≤≥])\s*[+\-−]?(?:\d|\.\d)", normalized))
@@ -669,6 +673,20 @@ class OutcomeData(BaseModel):
     # NMA fields
     treatment_arm: str | None = None
     reference_arm: str | None = None
+    # The extractor's judgment of what each arm receives, against the
+    # protocol's own intervention and comparator (ARM_REVIEW_ROLES). Labels
+    # are open language ("No TXA", "Saline", "Group 3"); the role is the
+    # closed field deterministic code matches on. A value outside the
+    # vocabulary is refused (stored empty), and an empty role falls back to
+    # the older label matching, so saved extractions still replay.
+    treatment_arm_role: str = ""
+    reference_arm_role: str = ""
+
+    @field_validator("treatment_arm_role", "reference_arm_role", mode="before")
+    @classmethod
+    def _refuse_unknown_arm_role(cls, value):
+        text = str(value or "").strip().lower()
+        return text if text in ARM_REVIEW_ROLES else ""
     # Design-aware comparative-effect fields for complex RCTs and NMA.
     comparative_design: str = ""
     contrast_id: str = ""

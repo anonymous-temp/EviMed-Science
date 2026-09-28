@@ -108,11 +108,11 @@ def reconcile_extracted_rct_designs(
         if not primary_rows:
             continue
 
+        conflicting_arms = conflicting_role_arms(study)
         eligible_rows = [
             (index, outcome)
             for index, outcome in primary_rows
-            if _arm_matches_intervention(outcome.treatment_arm, protocol.pico.intervention)
-            and _arm_matches_comparator(outcome.reference_arm, protocol.pico.comparator)
+            if is_review_arm_contrast(outcome, protocol, conflicting_arms)
         ]
         if not eligible_rows:
             continue
@@ -237,6 +237,11 @@ def reconcile_extracted_rct_designs(
         "multi_arm_studies": sorted(set(multi_arm_studies)),
         "comparative_rows": comparative_rows,
         "declared_multi_arm_rows_typed": typed_elsewhere,
+        # Arms marked both the review's intervention and its comparator in one study.
+        "arm_role_conflicts": {
+            _study_identifier(study): sorted(conflicts)
+            for study in studies if (conflicts := conflicting_role_arms(study))
+        },
         "reported_effects_recovered": recovered_effects,
         "retired_count_covariances": _retained_covariance_retirements(studies),
     }
@@ -266,6 +271,7 @@ def _type_declared_multi_arm_rows(study: ExtractedStudy, protocol: ResearchProto
     """
     study_id = _study_identifier(study)
     review_estimand = _estimand_id(protocol)
+    conflicting_arms = conflicting_role_arms(study)
     typed = 0
     changed = False
     for index, outcome in enumerate(study.outcomes):
@@ -275,16 +281,13 @@ def _type_declared_multi_arm_rows(study: ExtractedStudy, protocol: ResearchProto
         comparator = str(outcome.reference_arm or "").strip()
         if not treatment or not comparator or _normalise_arm(treatment) == _normalise_arm(comparator):
             continue
-        review_contrast = (
-            is_primary_outcome_row(outcome, protocol)
-            and _arm_matches_intervention(treatment, protocol.pico.intervention)
-            and _arm_matches_comparator(comparator, protocol.pico.comparator)
-        )
+        arms_match = is_review_arm_contrast(outcome, protocol, conflicting_arms)
+        review_contrast = is_primary_outcome_row(outcome, protocol) and arms_match
         updates = {
             "comparative_design": "multi_arm_rct",
             "contrast_id": _contrast_id(study_id, treatment, comparator, index),
             "estimand_id": review_estimand if review_contrast else _descriptive_estimand_id(
-                outcome, protocol, treatment, comparator),
+                outcome, protocol, treatment, comparator, arms_match),
             "precision_basis": derived_precision_basis(outcome, protocol),
         }
         for field, value in updates.items():
@@ -311,13 +314,12 @@ def derived_precision_basis(outcome: OutcomeData, protocol: ResearchProtocol) ->
 
 
 def _descriptive_estimand_id(
-    outcome: OutcomeData, protocol: ResearchProtocol, treatment: str, comparator: str,
+    outcome: OutcomeData, protocol: ResearchProtocol, treatment: str, comparator: str, arms_match: bool,
 ) -> str:
     measure = str(protocol.effect_measure or "").upper()
     if derived_precision_basis(outcome, protocol) == PRECISION_NOT_COMPUTABLE:
         measure = str(outcome.reported_effect_measure or outcome.outcome_type or "unspecified").upper()
-    if (_arm_matches_intervention(treatment, protocol.pico.intervention)
-            and _arm_matches_comparator(comparator, protocol.pico.comparator)):
+    if arms_match:
         contrast = f"{_slug(protocol.pico.intervention)}:vs:{_slug(protocol.pico.comparator)}"
     else:
         contrast = f"{_slug(treatment)}:vs:{_slug(comparator)}"
@@ -893,6 +895,48 @@ def _matches_primary_outcome(name: str, primary: str) -> bool:
         return True
     head, primary_head = _outcome_head(name), _outcome_head(primary)
     return bool(head and primary_head) and primary_head in head
+
+
+def is_review_arm_contrast(
+    outcome: OutcomeData, protocol: ResearchProtocol, conflicting_arms: frozenset[str] = frozenset(),
+) -> bool:
+    """Whether a row compares the review's intervention (treatment) with its comparator (reference).
+
+    Which arm receives what is a language judgment, so it is the extractor's:
+    treatment_arm_role / reference_arm_role, judged against the protocol's own
+    intervention and comparator text. On 2026-09-28 a three-arm TXA trial
+    whose control was labelled "No TXA" failed the label matcher against
+    "Placebo or no tranexamic acid", and its two review contrasts were never
+    pooled. Code checks what it can: the treatment must be review_intervention
+    and the reference the one review_comparator, and an arm the same study
+    marks both as the review's intervention and its comparator is
+    contradictory, so no contrast through it counts (fail closed, not pooled).
+    A row without both roles - an older extraction, or a role outside the
+    vocabulary, refused at the schema - keeps the older label matching.
+    """
+    treatment_role, reference_role = outcome.treatment_arm_role, outcome.reference_arm_role
+    if not (treatment_role and reference_role):
+        return (_arm_matches_intervention(outcome.treatment_arm, protocol.pico.intervention)
+                and _arm_matches_comparator(outcome.reference_arm, protocol.pico.comparator))
+    if {_normalise_arm(outcome.treatment_arm), _normalise_arm(outcome.reference_arm)} & conflicting_arms:
+        return False
+    return treatment_role == "review_intervention" and reference_role == "review_comparator"
+
+
+def conflicting_role_arms(study: ExtractedStudy) -> frozenset[str]:
+    """Arms one study marks as the review's intervention in one row and its comparator in another.
+
+    An active-drug arm cannot be the placebo or no-treatment comparator of
+    the same trial; the roles contradict each other and neither is used.
+    """
+    roles: dict[str, set[str]] = {}
+    for outcome in study.outcomes:
+        for arm, role in ((outcome.treatment_arm, outcome.treatment_arm_role),
+                          (outcome.reference_arm, outcome.reference_arm_role)):
+            if str(arm or "").strip() and role:
+                roles.setdefault(_normalise_arm(arm), set()).add(role)
+    return frozenset(arm for arm, seen in roles.items()
+                     if {"review_intervention", "review_comparator"} <= seen)
 
 
 def _arm_matches_intervention(arm: str | None, intervention: str) -> bool:

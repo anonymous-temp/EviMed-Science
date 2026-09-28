@@ -224,3 +224,128 @@ def test_ma001_three_arm_trials_pool_end_to_end(tmp_path: Path):
     assert sorted(envelope["input_result_ids"]) == ["result:28760121:0", "result:28760121:1", "result:30000001:0"]
     trial = next(item for item in payload["study_effects"] if item["study_id"] == "study:28760121")
     assert math.isclose(trial["variance"], 250.0 ** 2 / 60 + CONTROL_SD ** 2 / CONTROL_N, rel_tol=1e-9)
+
+
+# --- Arm roles: which arm is the review's intervention or comparator is the extractor's judgment ---
+
+def _roled(row: OutcomeData, treatment_role: str, reference_role: str) -> OutcomeData:
+    row.treatment_arm_role, row.reference_arm_role = treatment_role, reference_role
+    return row
+
+
+def _no_txa_three_arm_study() -> ExtractedStudy:
+    """The control labelled only "No TXA" - what the label matcher refused."""
+    study = _three_arm_study()
+    for row in study.outcomes:
+        row.reference_arm = "No TXA"
+        _roled(row, "review_intervention", "review_comparator")
+    return study
+
+
+def test_a_no_txa_control_with_the_comparator_role_gives_two_pooled_review_contrasts(tmp_path: Path):
+    from new_meta.core.method_planning import compile_project_method_plan
+    from new_meta.core.pipeline_runner import PipelineRunner
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+
+    protocol = _protocol()
+    three_arm = _no_txa_three_arm_study()
+    studies = [three_arm, _two_arm_study()]  # the two-arm trial has no roles: label matching
+    report = reconcile_extracted_rct_designs(protocol, studies)
+    iv, topical = three_arm.outcomes[:2]
+    assert iv.estimand_id == topical.estimand_id and iv.estimand_id.startswith("primary:")
+    assert iv.covariance_with == {topical.contrast_id: pytest.approx(CONTROL_SD ** 2 / CONTROL_N)}
+    assert report["multi_arm_studies"] == ["28760121"] and report["arm_role_conflicts"] == {}
+
+    project = Project("no-txa control", output_dir=tmp_path / "project")
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    assert migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies).skipped_results == []
+    compile_project_method_plan(project, protocol, enforce=True)
+    approve_synthetic_method_fixture(project, protocol, studies)
+    phase = PipelineRunner(project).run_compiled_method_synthesis()
+    assert phase.status.value == "succeeded", phase.summary
+    payload = project.load_json("synthesis_result.json", subdir="analysis")["engine_payload"]
+    assert payload["n_studies"] == 2 and payload["n_contrasts"] == 3
+    trial = next(item for item in payload["study_effects"] if item["study_id"] == "study:28760121")
+    assert math.isclose(trial["variance"], 250.0 ** 2 / 60 + CONTROL_SD ** 2 / CONTROL_N, rel_tol=1e-9)
+
+
+def test_without_roles_a_no_txa_control_keeps_the_label_matching():
+    """Saved extractions have no roles; they replay exactly as before."""
+    from new_meta.core.rct_design_reconciliation import is_review_arm_contrast
+    protocol = _protocol()
+    study = _three_arm_study()
+    row = study.outcomes[0]
+    assert (row.treatment_arm_role, row.reference_arm_role) == ("", "")
+    assert is_review_arm_contrast(row, protocol)  # "No TXA (no tranexamic acid)"
+    row.reference_arm = "No TXA"
+    assert not is_review_arm_contrast(row, protocol)
+    for outcome in study.outcomes:
+        outcome.reference_arm = "No TXA"
+    reconcile_extracted_rct_designs(protocol, [study])
+    assert study.outcomes[0].estimand_id.startswith(DESCRIPTIVE_ESTIMAND_PREFIX)
+
+
+@pytest.mark.parametrize("label, role, expected", [
+    ("Saline", "review_comparator", True),
+    ("Group A", "review_comparator", True),   # no label matcher could say so
+    ("Group A", "", False),                   # no role: the label matcher decides
+    ("Saline", "other", False),
+])
+def test_a_comparator_arm_is_matched_by_its_role(label, role, expected):
+    from new_meta.core.rct_design_reconciliation import is_review_arm_contrast
+    row = _row("Tranexamic acid 1 g (tranexamic acid)", 820.0, 240.0, 40, 1050.0, 300.0, 40)
+    row.reference_arm = label
+    if role:
+        _roled(row, "review_intervention", role)
+    assert is_review_arm_contrast(row, _protocol()) is expected
+
+
+def test_an_arm_receiving_something_else_is_not_a_review_contrast():
+    """An active drug outside the protocol is "other", whatever its label says."""
+    from new_meta.core.rct_design_reconciliation import is_review_arm_contrast
+    protocol = _protocol()
+    row = _row("Aminocaproic acid 5 g (not tranexamic acid)", 980.0, 260.0, 30, 1130.0, CONTROL_SD, CONTROL_N)
+    row.reference_arm = "Placebo"
+    assert is_review_arm_contrast(row, protocol)  # the label matcher is fooled by the label
+    _roled(row, "other", "review_comparator")
+    assert not is_review_arm_contrast(row, protocol)
+    row.protocol_outcome_role = "primary"
+    study = ExtractedStudy(characteristics=StudyCharacteristics(study_id="40000001", pmid="40000001", title="EACA"),
+                           outcomes=[row])
+    reconcile_extracted_rct_designs(protocol, [study])
+    assert row.estimand_id.startswith(DESCRIPTIVE_ESTIMAND_PREFIX)
+
+
+def test_roles_code_can_check_are_checked():
+    from new_meta.core.rct_design_reconciliation import conflicting_role_arms, is_review_arm_contrast
+    protocol = _protocol()
+    # One comparator per contrast: comparator versus comparator is no review contrast.
+    both = _roled(_row("Placebo", 1.0, 1.0, 20, 1.0, 1.0, 20), "review_comparator", "review_comparator")
+    both.reference_arm = "No treatment"
+    assert not is_review_arm_contrast(both, protocol)
+    # Reversed: comparator minus intervention is not the review's orientation.
+    reversed_row = _roled(_row("Placebo", 1.0, 1.0, 20, 1.0, 1.0, 20), "review_comparator", "review_intervention")
+    reversed_row.reference_arm = "TXA"
+    assert not is_review_arm_contrast(reversed_row, protocol)
+    # One study cannot call the same arm its active drug and its comparator.
+    study = _no_txa_three_arm_study()
+    study.outcomes[3].reference_arm_role = "review_intervention"  # "No TXA" called the active arm once
+    assert conflicting_role_arms(study) == frozenset({"no txa"})
+    assert not is_review_arm_contrast(study.outcomes[0], protocol, conflicting_role_arms(study))
+    report = reconcile_extracted_rct_designs(protocol, [study])
+    assert report["arm_role_conflicts"] == {"28760121": ["no txa"]}
+    assert study.outcomes[0].estimand_id.startswith(DESCRIPTIVE_ESTIMAND_PREFIX)
+
+
+def test_a_role_outside_the_vocabulary_is_refused():
+    from new_meta.schemas.extracted_outcome import ExtractedOutcomeData
+    row = OutcomeData(treatment_arm="TXA", reference_arm="No TXA",
+                      treatment_arm_role="intervention", reference_arm_role="Review_Comparator")
+    assert (row.treatment_arm_role, row.reference_arm_role) == ("", "review_comparator")
+    extracted = ExtractedOutcomeData.model_validate({
+        "outcome_type": "continuous", "comparative_design": "multi_arm_rct",
+        "treatment_arm": "TXA", "reference_arm": "No TXA",
+        "treatment_arm_role": "active", "reference_arm_role": "review_comparator"})
+    assert (extracted.treatment_arm_role, extracted.reference_arm_role) == ("", "review_comparator")
+    schema = ExtractedOutcomeData.model_json_schema()["properties"]["treatment_arm_role"]
+    assert set(schema["enum"]) == {"review_intervention", "review_comparator", "other", ""}

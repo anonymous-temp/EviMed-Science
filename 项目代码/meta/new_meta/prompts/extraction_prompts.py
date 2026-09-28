@@ -129,6 +129,10 @@ For EVERY outcome, supply comparative_design using its closed schema vocabulary:
   under an abbreviation or brand name, add the review's own term in parentheses
   (for example "Topical TXA 3 g (tranexamic acid)"); never add it to an arm that
   receives something else.
+- treatment_arm_role and reference_arm_role state what each of those arms
+  receives, judged against the protocol's Intervention and Comparator above:
+  review_intervention, review_comparator (a "No TXA", "Saline" or "Group 3" arm
+  that receives the review's comparator is review_comparator), or other.
 
 For DIAGNOSTIC-ACCURACY outcomes:
 - true_positive, false_negative, false_positive, true_negative

@@ -28,6 +28,24 @@ class ExtractedOutcomeData(OutcomeData):
             "A clinical judgment about the endpoint; keep outcome_name as the source names it."
         ),
     )
+    treatment_arm_role: Literal["review_intervention", "review_comparator", "other", ""] = Field(
+        "",
+        description=(
+            "What the treatment_arm receives, judged against the protocol's Intervention and "
+            "Comparator text (not against the arm's label): review_intervention when it receives "
+            "the review's intervention, review_comparator when it receives the review's "
+            "comparator (placebo, saline, no treatment - whatever the source calls it), other when "
+            "it receives anything else (a different active drug, a regimen outside the protocol). "
+            "Empty only when the result has no arms."
+        ),
+    )
+    reference_arm_role: Literal["review_intervention", "review_comparator", "other", ""] = Field(
+        "",
+        description=(
+            "What the reference_arm receives, judged the same way as treatment_arm_role: "
+            "review_intervention, review_comparator or other. Empty only when the result has no arms."
+        ),
+    )
     comparative_design: Literal[
         "", "unknown", "parallel_rct", "cluster_rct", "crossover_rct", "multi_arm_rct",
     ] = Field(
