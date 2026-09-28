@@ -121,7 +121,7 @@ import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.m
 import { MethodDescriber } from "./methodDisplay.mjs";
 import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
-import { createWebRenderer } from "./agentbay/browser.mjs";
+import { createConfiguredWebRenderer } from "./webRender.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
 import { edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
@@ -2974,15 +2974,16 @@ export function createWebApiApp(overrides = {}) {
   // Only the hosts the node is configured for leave through it; the rest go
   // direct exactly as before.
   const gatewayFetch = edgeProxy ? fetchWithEdge(edgeProxy, directGatewayFetch) : directGatewayFetch;
-  // Web reading (plan §3.5): the gateway's web-read mode, AgentBay's browser
-  // behind it for pages drawn in script, the parser for PDFs.
+  // Web reading (plan §3.5): the gateway's web-read mode, a browser behind it
+  // for pages drawn in script (webRender.mjs picks the deployment's own or
+  // AgentBay's), the parser for PDFs.
   const webReader = createWebReader(config, {
     transport: overrides.webReadTransport ?? webReadTransportFor(process.env, gatewayFetch, {
       edge: edgeProxy,
       directTimeoutMs: config.webReadDirectTimeoutMs,
       edgeFallback: config.webReadEdgeFallback !== false,
     }),
-    renderer: overrides.webRenderer ?? createWebRenderer(config),
+    renderer: overrides.webRenderer ?? createConfiguredWebRenderer(config),
     documentParser,
   });
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {

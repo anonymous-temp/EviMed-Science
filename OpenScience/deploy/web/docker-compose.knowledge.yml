@@ -37,6 +37,17 @@
 #   network of its own. Every request a page makes is checked against the
 #   source's allowed hosts by the plugin (route interception), so a page's
 #   script cannot aim the browser anywhere else.
+# - The same browser draws the pages `web_read` finds drawn in script (NMPA,
+#   CDE, NHC: 瑞数), once OPEN_SCIENCE_WEB_RENDER_ENABLED=true. The control
+#   plane reaches it over a second internal network, `web-render-internal`,
+#   which holds the two of them and nothing else, so the plugin's network keeps
+#   its one pair. A web-read render never uses the browser's own egress: its
+#   context is given a proxy the control plane opens for that render alone on
+#   this network (webRenderEgress.mjs), which resolves every host itself,
+#   refuses private addresses, connects to the address it checked, caps the
+#   bytes and closes with the render. What the browser can newly reach is the
+#   control plane's listeners, which face the runtime containers — arbitrary
+#   code — already and authenticate every caller.
 services:
   open-science-web:
     environment:
@@ -45,6 +56,13 @@ services:
       # is asking.
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL:-http://evimed-knowledge-plugin:8080}
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE:-/run/secrets/knowledge-plugin-token}
+      # The browser web reading renders in. The render switch
+      # (OPEN_SCIENCE_WEB_RENDER_ENABLED) stays in .env; this only says where
+      # the browser is. Chromium's DevTools endpoint answers an IP Host only,
+      # so the control plane resolves the name and connects by address.
+      OPEN_SCIENCE_WEB_RENDER_CDP_URL: ${OPEN_SCIENCE_WEB_RENDER_CDP_URL:-http://frontier-browser:9222}
+    networks:
+      - web-render-internal
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_HOST_FILE:-/dev/null}
@@ -187,6 +205,7 @@ services:
     networks:
       - knowledge-browser-internal
       - knowledge-browser-egress
+      - web-render-internal
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9223/json/version', timeout=3).read()"]
       interval: 30s
@@ -215,3 +234,7 @@ networks:
   # The browser's route to the pages it renders. Its own network, so being able
   # to reach the browser never means being able to reach the internet with it.
   knowledge-browser-egress:
+  # The control plane and the browser, and nobody else: web reading's renders
+  # (DevTools one way, the render's proxy the other).
+  web-render-internal:
+    internal: true

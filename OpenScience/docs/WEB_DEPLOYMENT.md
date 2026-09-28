@@ -1020,9 +1020,15 @@ must resolve to a public address and is connected to exactly the address that
 was checked; robots.txt is honoured, the user agent names the product, each
 site is paced and all reads share one concurrency cap
 (`OPEN_SCIENCE_WEB_READ_*`; `OPEN_SCIENCE_WEB_READ_ENABLED=false` turns the
-mode off). A page that needs a browser is rendered by the AgentBay cloud
-browser only when `OPEN_SCIENCE_WEB_RENDER_ENABLED=true` and
-`OPEN_SCIENCE_AGENTBAY_API_KEY_FILE` are both set. Keep
+mode off). A page that needs a browser is rendered only when
+`OPEN_SCIENCE_WEB_RENDER_ENABLED=true`: in the deployment's own headless
+Chromium when `OPEN_SCIENCE_WEB_RENDER_CDP_URL` names it
+(`docker-compose.knowledge.yml` points it at `frontier-browser` over the
+`web-render-internal` network), else in the AgentBay cloud browser when
+`OPEN_SCIENCE_AGENTBAY_API_KEY_FILE` is set. A local render's browser context
+resolves nothing itself: its every connection goes through a proxy the Web
+service opens for that render alone, which refuses private addresses, connects
+to the address it checked and stops at `OPEN_SCIENCE_WEB_RENDER_MAX_BYTES`. Keep
 `OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=false`; adding a source to the
 catalog or mapping it to a Skill does not connect it through this gateway.
 The repository includes a runtime image definition (`deploy/runtime-dsh/`) that

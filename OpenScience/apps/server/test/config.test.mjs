@@ -166,6 +166,9 @@ const FALLBACK_RULES = {
   // docker-compose.knowledge.yml points the control plane at the plugin's
   // compose service; the code's default is no plugin.
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["deployment", "url"],
+  // ...and web reading at the plugin's browser; the code's default is no
+  // local browser.
+  OPEN_SCIENCE_WEB_RENDER_CDP_URL: ["deployment", "url"],
   EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ["deployment", "url"],
   EVIMED_ADR_CASE_QUERY_URL: ["deployment", "url"],
   EVIMED_ADR_SIGNAL_ANALYSIS_URL: ["deployment", "url"],

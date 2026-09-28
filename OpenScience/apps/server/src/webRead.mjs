@@ -12,9 +12,11 @@
  *   3. one site hears from us at most once a second, and a bounded number of
  *      reads run at once (webReadLimits);
  *   4. a page that is a JavaScript challenge or an empty application shell is
- *      opened in AgentBay's cloud browser — never a browser on this host — and
- *      a page still unreadable after that is a named error, so the run moves to
- *      another source instead of citing a shell;
+ *      opened in a browser (webRender.mjs: the deployment's own headless
+ *      Chromium, whose every connection goes through a proxy that holds it to
+ *      rule 1, or AgentBay's cloud browser), after its site's pacing slot like
+ *      any other request; a page still unreadable after that is a named error,
+ *      so the run moves to another source instead of citing a shell;
  *   5. whatever is returned carries a receipt: where the bytes came from, when,
  *      whether a browser drew them, their sha256, and whether the source is an
  *      authority's (a label that never decides whether a page is read).
@@ -168,9 +170,10 @@ function documentFilename(url, extension) {
 /**
  * @typedef {object} WebRenderer
  * @property {boolean} enabled
+ * @property {"local" | "agentbay" | null} [provider] which browser draws the page
  * @property {(request: { url: URL, signal?: AbortSignal }) => Promise<{ html: string, finalUrl: string, status: number }>} render
  * @property {() => Promise<void>} [close]
- * @property {() => Record<string, number>} [stats]
+ * @property {() => Record<string, number> | null} [stats]
  */
 
 /**
@@ -289,13 +292,16 @@ export function createWebReader(config, {
 
   /**
    * The page after a browser has run it, or the named reason it is still
-   * unreadable. The browser's final address is checked against this
-   * network's DNS as well: the page's script ran on AgentBay's machine, but
-   * what it ended up showing is returned from here.
+   * unreadable. The browser's visit is a request to the site like any other,
+   * so it waits for the site's pacing slot. The browser's final address is
+   * checked against this network's DNS as well: wherever the page's script
+   * ran, what it ended up showing is returned from here.
    * @param {URL} requested @param {URL} finalUrl @param {AbortSignal | undefined} signal
    * @returns {Promise<WebReadResult>}
    */
   async function renderedRead(requested, finalUrl, signal) {
+    const verdict = await robots.check(finalUrl, { signal });
+    await pacer.acquire(finalUrl.hostname, { crawlDelayMs: verdict.crawlDelayMs, signal });
     const rendered = await /** @type {WebRenderer} */ (renderer).render({ url: finalUrl, signal });
     const renderedUrl = validatedWebUrl(rendered.finalUrl || finalUrl.href);
     await assertPublicWebHost(renderedUrl.hostname, resolveImpl);
@@ -468,6 +474,7 @@ export function createWebReader(config, {
         parsing: { ...parseGate.counts, active: parseGate.active, refusedPages: parsesRefused },
         runtimeConcurrency: { ...runtimeGates.counts, runtimes: runtimeGates.gates.size },
         render: renderer?.stats?.() ?? null,
+        renderProvider: renderer?.enabled ? (renderer.provider ?? null) : null,
       };
     },
     async close() {
@@ -524,16 +531,23 @@ export function webReadMetricFamilies(stats) {
     },
     {
       name: "open_science_web_render_events_total",
-      help: "Cloud-browser renders, requests refused inside a rendered page, and warm-session lifecycle events.",
+      help: "Browser renders, requests refused inside a rendered page, renders cut at the download cap, and browser session (AgentBay) or connection (local) lifecycle events.",
       type: "counter",
       series: [
         { value: Number(render.renders ?? 0), labels: { event: "render" } },
         { value: Number(render.failures ?? 0), labels: { event: "render_failed" } },
         { value: Number(render.requestsRefused ?? 0), labels: { event: "request_refused" } },
+        { value: Number(render.byteCaps ?? 0), labels: { event: "byte_cap" } },
         { value: Number(render.sessionsCreated ?? 0), labels: { event: "session_created" } },
         { value: Number(render.sessionsReleased ?? 0), labels: { event: "session_released" } },
         { value: Number(render.sessionFailures ?? 0), labels: { event: "session_failed" } },
       ],
+    },
+    {
+      name: "open_science_web_render_provider",
+      help: "Which browser draws pages for web reading (1 on the provider in use; no series when rendering is off).",
+      type: "gauge",
+      series: stats.renderProvider ? [{ value: 1, labels: { provider: stats.renderProvider } }] : [],
     },
     {
       name: "open_science_web_read_in_flight",

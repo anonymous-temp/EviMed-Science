@@ -2285,13 +2285,26 @@ export function loadConfig(overrides = {}) {
         overrides.webReadTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_READ_TIMEOUT_MS ?? 150_000,
       ) || 150_000),
     ),
-    // Tier 3: a page drawn in script opened in AgentBay's cloud browser. Off
-    // until the deployment has an AgentBay key; off, a page that needs a
-    // browser is the named error `web_read_needs_browser` and the run uses
-    // another source.
+    // Tier 3: a page drawn in script opened in a browser (webRender.mjs) —
+    // the deployment's own headless Chromium when `webRenderCdpUrl` names it,
+    // else AgentBay's cloud browser when an AgentBay key file is named. Off,
+    // or with neither, a page that needs a browser is the named error
+    // `web_read_needs_browser` and the run uses another source.
     webRenderEnabled: overrides.webRenderEnabled ?? boolEnv("OPEN_SCIENCE_WEB_RENDER_ENABLED", false),
-    // Renders at once: each is a browser context in the one warm session, and
-    // that session's VM is the resource. Counted in
+    // The DevTools address of the deployment's own browser (the knowledge
+    // overlay's `frontier-browser`). Empty = no local browser.
+    webRenderCdpUrl: String(overrides.webRenderCdpUrl ?? process.env.OPEN_SCIENCE_WEB_RENDER_CDP_URL ?? "").trim(),
+    // What one render in the local browser may download, the page and all it
+    // loads together (images, media and fonts are never loaded); past it the
+    // render's egress is cut and the read refused as too large. A regulator's
+    // notice page with its scripts is a few MiB. Counted in
+    // open_science_web_render_events_total{event="byte_cap"}.
+    webRenderMaxBytes: Math.max(1024 * 1024, Number(
+      overrides.webRenderMaxBytes ?? process.env.OPEN_SCIENCE_WEB_RENDER_MAX_BYTES ?? 33_554_432,
+    ) || 33_554_432),
+    // Renders at once: each is a browser context — in the one warm AgentBay
+    // session, or in the local browser the knowledge plugin also reads its
+    // regulator lists through (1 GB for both). Counted in
     // open_science_web_render_events_total.
     webRenderConcurrency: Math.max(1, Number(
       overrides.webRenderConcurrency ?? process.env.OPEN_SCIENCE_WEB_RENDER_CONCURRENCY ?? 2,

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../src/config.mjs";
 import { buildRuntimeLaunchPlan, dshProfileInput } from "../src/runtimeManager.mjs";
+import { createConfiguredWebRenderer, webRenderProvider } from "../src/webRender.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -31,6 +32,8 @@ const LEVERS = [
   ["OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED", "webSearchBailianEnabled"],
   ["OPEN_SCIENCE_WEB_SEARCH_BAILIAN_MODEL", "webSearchBailianModel"],
   ["OPEN_SCIENCE_WEB_RENDER_ENABLED", "webRenderEnabled"],
+  ["OPEN_SCIENCE_WEB_RENDER_CDP_URL", "webRenderCdpUrl"],
+  ["OPEN_SCIENCE_WEB_RENDER_MAX_BYTES", "webRenderMaxBytes"],
   ["OPEN_SCIENCE_WEB_RENDER_CONCURRENCY", "webRenderConcurrency"],
   ["OPEN_SCIENCE_WEB_RENDER_TIMEOUT_MS", "webRenderTimeoutMs"],
   ["OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS", "webRenderIdleReleaseMs"],
@@ -66,12 +69,14 @@ test("every web-reading lever is forwarded by compose with the code's default an
   }
 });
 
-test("rendering is off until a key exists, and a read's budget ends before the tool call does", async () => {
+test("rendering is off until switched on with a browser, and a read's budget ends before the tool call does", async () => {
   const config = await withoutLevers(() => loadConfig({ rootDir: repoRoot }));
   assert.equal(config.webReadEnabled, true);
   assert.equal(config.webRenderEnabled, false);
+  assert.equal(config.webRenderCdpUrl, "");
   assert.equal(config.agentbayApiKeyFile, "");
   assert.equal(config.agentbayRegion, "cn-hangzhou");
+  assert.equal(webRenderProvider(config), null);
   const clamped = loadConfig({ rootDir: repoRoot, webReadTimeoutMs: 600_000 });
   assert.ok(clamped.webReadTimeoutMs <= 150_000, `a ${clamped.webReadTimeoutMs} ms read would outlive the kernel's 180 s tool call`);
 });
@@ -106,4 +111,32 @@ test("switching web reading off also stops offering the tool to the runtime", as
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
+});
+
+test("the render provider is the deployment's own browser when one is named, else AgentBay when keyed, else none", async () => {
+  const base = { webRenderEnabled: true, webRenderCdpUrl: "", agentbayApiKeyFile: "" };
+  assert.equal(webRenderProvider(base), null);
+  assert.equal(webRenderProvider({ ...base, agentbayApiKeyFile: "/run/secrets/agentbay-api-key" }), "agentbay");
+  assert.equal(webRenderProvider({ ...base, webRenderCdpUrl: "http://frontier-browser:9222" }), "local");
+  assert.equal(webRenderProvider({ ...base, webRenderCdpUrl: "http://frontier-browser:9222", agentbayApiKeyFile: "/k" }), "local");
+  assert.equal(webRenderProvider({ ...base, webRenderEnabled: false, webRenderCdpUrl: "http://frontier-browser:9222" }), null, "the switch decides first");
+  assert.equal(webRenderProvider({ ...base, webRenderCdpUrl: "ftp://frontier-browser:9222" }), null, "a DevTools address is http(s)");
+
+  const off = createConfiguredWebRenderer({ ...base, webRenderEnabled: false });
+  assert.equal(off.enabled, false);
+  await assert.rejects(off.render({ url: new URL("https://www.nmpa.gov.cn/") }), (error) => error.code === "web_render_disabled");
+  const local = createConfiguredWebRenderer({ ...base, webRenderCdpUrl: "http://frontier-browser:9222" });
+  assert.equal(local.enabled, true);
+  assert.equal(local.provider, "local");
+  await local.close?.();
+});
+
+test("the knowledge overlay points web reading at its browser over a network the two share alone", async () => {
+  const overlay = await readFile(path.join(repoRoot, "deploy/web/docker-compose.knowledge.yml"), "utf8");
+  assert.match(overlay, /OPEN_SCIENCE_WEB_RENDER_CDP_URL: \$\{OPEN_SCIENCE_WEB_RENDER_CDP_URL:-http:\/\/frontier-browser:9222\}/);
+  // Each service block, and whether it joins the network.
+  const services = overlay.split(/^networks:$/m)[0].split(/^ {2}(?=[a-z0-9-]+:$)/m).slice(1);
+  const members = services.filter((block) => /^ {6}- web-render-internal$/m.test(block)).map((block) => block.split(":", 1)[0]);
+  assert.deepEqual(members.sort(), ["frontier-browser", "open-science-web"]);
+  assert.match(overlay, /^ {2}web-render-internal:\n {4}internal: true$/m, "no route out: a render's egress is the control plane's proxy");
 });
