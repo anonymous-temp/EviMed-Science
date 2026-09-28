@@ -245,6 +245,17 @@ if (is.null(outcome_dat) || nrow(outcome_dat) == 0) {{
 }}
 
 dat <- harmonise_data(exposure_dat, outcome_dat)
+# How many instruments reached the analysis and why the others did not: the
+# counts a STROBE-MR report states, recorded before the rows are dropped.
+harmonisation <- list(
+    exposure_instruments = length(unique(exposure_dat$SNP)),
+    unavailable_in_outcome = length(setdiff(unique(exposure_dat$SNP), unique(outcome_dat$SNP))),
+    harmonised_pairs = nrow(dat),
+    palindromic = sum(dat$palindromic %in% TRUE),
+    dropped_palindromic_ambiguous = sum(dat$ambiguous %in% TRUE & !(dat$mr_keep %in% TRUE)),
+    dropped_other = sum(!(dat$mr_keep %in% TRUE) & !(dat$ambiguous %in% TRUE)),
+    retained = sum(dat$mr_keep %in% TRUE))
+write(toJSON(harmonisation, auto_unbox=TRUE), file.path(output_dir, "harmonisation.json"))
 dat <- dat[dat$mr_keep == TRUE, ]
 if (nrow(dat) < 3) {{
     mr_fail("insufficient_harmonised_snps", "Insufficient harmonized SNPs (< 3)")
@@ -330,6 +341,17 @@ cat("MR analysis completed successfully\\n")
 
 _MR_DOWNSTREAM_BLOCK = """
 dat <- harmonise_data(exposure_dat, outcome_dat)
+# How many instruments reached the analysis and why the others did not: the
+# counts a STROBE-MR report states, recorded before the rows are dropped.
+harmonisation <- list(
+    exposure_instruments = length(unique(exposure_dat$SNP)),
+    unavailable_in_outcome = length(setdiff(unique(exposure_dat$SNP), unique(outcome_dat$SNP))),
+    harmonised_pairs = nrow(dat),
+    palindromic = sum(dat$palindromic %in% TRUE),
+    dropped_palindromic_ambiguous = sum(dat$ambiguous %in% TRUE & !(dat$mr_keep %in% TRUE)),
+    dropped_other = sum(!(dat$mr_keep %in% TRUE) & !(dat$ambiguous %in% TRUE)),
+    retained = sum(dat$mr_keep %in% TRUE))
+write(toJSON(harmonisation, auto_unbox=TRUE), file.path(output_dir, "harmonisation.json"))
 dat <- dat[dat$mr_keep == TRUE, ]
 if (nrow(dat) < 3) {{
     mr_fail("insufficient_harmonised_snps", "Insufficient harmonized SNPs (< 3)")

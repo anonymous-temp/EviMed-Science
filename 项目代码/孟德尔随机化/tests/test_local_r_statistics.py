@@ -155,3 +155,40 @@ mr_res <- mr(dat, method_list=c("mr_ivw","mr_egger_regression"))
         assert checks[name] == {"status": "ok", "pages": pages, "images": pages}
     assert not (tmp_path / f"{stale_name}-003.png").exists()
     assert unrelated.read_bytes() == b"preserve unrelated output"
+
+
+def test_harmonisation_counts_are_recorded_before_rows_are_dropped(tmp_path):
+    """mr-001 asks how many instruments reached the analysis, how many were
+    dropped as palindromic with intermediate frequency and how many the
+    outcome lacked; the engine recorded none of the three."""
+    from r_scripts.templates import _MR_DOWNSTREAM_BLOCK
+
+    start = _MR_DOWNSTREAM_BLOCK.index("dat <- harmonise_data")
+    stop = _MR_DOWNSTREAM_BLOCK.index("mr_res <- mr(dat)")
+    block = _MR_DOWNSTREAM_BLOCK[start:stop].replace("{{", "{").replace("}}", "}")
+    exposure = tmp_path / "exposure.csv"
+    outcome = tmp_path / "outcome.csv"
+    rows = [
+        # rs3 is palindromic at an intermediate frequency (dropped), rs4 is
+        # palindromic at a low frequency (kept), rs5 is absent from the outcome.
+        ("rs1", "A", "G", 0.20), ("rs2", "C", "T", 0.30), ("rs3", "A", "T", 0.48),
+        ("rs4", "G", "C", 0.10), ("rs5", "A", "C", 0.25),
+    ]
+    header = "SNP,beta,se,effect_allele,other_allele,eaf,pval\n"
+    exposure.write_text(header + "".join(f"{s},0.1,0.01,{a},{b},{f},1e-10\n" for s, a, b, f in rows))
+    outcome.write_text(header + "".join(f"{s},0.02,0.01,{a},{b},{f},0.01\n" for s, a, b, f in rows[:4]))
+    script = (
+        'if (!requireNamespace("TwoSampleMR", quietly=TRUE)) quit(status=77)\n'
+        "suppressMessages(library(TwoSampleMR)); library(jsonlite)\n"
+        f'output_dir <- "{tmp_path.as_posix()}"\n'
+        "mr_fail <- function(code, message) stop(message)\n"
+        f'exposure_dat <- format_data(read.csv("{exposure.as_posix()}"), type="exposure")\n'
+        f'outcome_dat <- format_data(read.csv("{outcome.as_posix()}"), type="outcome")\n'
+        + block
+    )
+    run_r(script, tmp_path)
+    counts = json.loads((tmp_path / "harmonisation.json").read_text())
+    assert counts == {
+        "exposure_instruments": 5, "unavailable_in_outcome": 1, "harmonised_pairs": 4,
+        "palindromic": 2, "dropped_palindromic_ambiguous": 1, "dropped_other": 0, "retained": 3,
+    }

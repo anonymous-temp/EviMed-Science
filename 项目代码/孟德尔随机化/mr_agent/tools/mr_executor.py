@@ -440,6 +440,14 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
     if isinstance(skipped, str):
         skipped = [skipped]
     result.skipped_analyses = [str(item) for item in skipped]
+    harmonisation_file = output_dir / "harmonisation.json"
+    if harmonisation_file.is_file():
+        try:
+            value = json.loads(harmonisation_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            value = None
+        if isinstance(value, dict):
+            result.harmonisation = value
     selection_file = output_dir / "instrument-selection.json"
     if selection_file.exists():
         result.instrument_selection = json.loads(selection_file.read_text(encoding="utf-8"))

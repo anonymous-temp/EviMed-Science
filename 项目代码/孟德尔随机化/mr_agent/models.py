@@ -243,6 +243,8 @@ class MRAnalysisResult(BaseModel):
     # never populated, which is why the R side always writes this field.
     skipped_analyses: list[str] = Field(default_factory=list)
     instrument_selection: dict[str, Any] = Field(default_factory=dict)
+    #: Instruments that reached the analysis and why the rest did not (harmonisation.json).
+    harmonisation: dict[str, Any] = Field(default_factory=dict)
     sample_overlap_warning: bool = False
     sample_size_exposure: int | None = None
     sample_size_outcome: int | None = None
