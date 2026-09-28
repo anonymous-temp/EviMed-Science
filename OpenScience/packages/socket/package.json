@@ -14,19 +14,24 @@
     "capability-skills",
     "client.mjs",
     "dist/client.js",
-    "scripts/build-client.mjs"
+    "scripts/build-client.mjs",
+    "scripts/build-preset.mjs"
   ],
   "exports": {
     ".": "./index.mjs",
     "./plugins/*": "./plugins/*.mjs",
     "./src/*": "./src/*.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./presets/*.patch.yml": "./presets/*.patch.yml",
     "./package.json": "./package.json",
     "./client": "./dist/client.js"
   },
   "dsh": {
     "bundle": {
-      "patch": "./cordis.patch.yml"
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/evimed-universal.patch.yml"
+      ]
     },
     "client": {
       "platform": "web",
@@ -50,8 +55,9 @@
     "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
     "lint": "eslint plugins src test scripts client.mjs index.mjs --ext .mjs --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepack": "node scripts/build-client.mjs && node ../../scripts/build/generate-capability-manifests.mjs --out packages/socket/capabilities && node -e \"require('node:fs').cpSync('../../capability-skills','capability-skills',{recursive:true})\"",
-    "build:client": "node scripts/build-client.mjs"
+    "prepack": "node scripts/build-client.mjs && node scripts/build-preset.mjs && node ../../scripts/build/generate-capability-manifests.mjs --out packages/socket/capabilities && node -e \"require('node:fs').cpSync('../../capability-skills','capability-skills',{recursive:true})\"",
+    "build:client": "node scripts/build-client.mjs",
+    "build:preset": "node scripts/build-preset.mjs"
   },
   "engines": {
     "node": ">=22.22.0"
@@ -66,7 +72,7 @@
     "@evimed/harness-port"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.2"
+    "@deepseek-ai/cordis": "4.0.4"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {

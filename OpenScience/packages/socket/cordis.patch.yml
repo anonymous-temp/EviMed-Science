@@ -49,6 +49,55 @@
 - id: hmr
   disabled: true
 
+# The preset every session gets when it does not name one. Since 0.1.7 a
+# preset is a row of the composition (`presets/evimed-universal.patch.yml`,
+# listed after this file in package.json `dsh.bundle.patch`), and the registry
+# that chooses among them is the `agent-preset-registry` row the web bundle
+# inserts with `default: standard`. The control plane names the preset on every
+# `session/create` as well; this is what holds for a session it did not create.
+- id: agent-preset-registry
+  config:
+    default: evimed-universal
+
+# Installing, removing and switching bundles at run time. New in 0.1.7 and
+# enabled in every profile launch (its row reads `profileContext`, which a
+# profile boot always provides). An EviMed runtime is a profile pre-initialized
+# at build time and never written at run time; a plugin reaches it through the
+# image build and the `dsh-cite` path, never through a running kernel, and this
+# is exactly the hot-injection the routing-suite ruling refused.
+- id: plugin-manager
+  disabled: true
+
+- id: ui-plugin-manager
+  disabled: true
+
+# A browser-driven PTY in the kernel's process, new in 0.1.7: a shell the page
+# types into, outside the agent's sandbox, as the runtime's own user — which
+# can read `$DSH_HOME/.credentials.yaml`. The agent's shell is the sandboxed
+# `bash` tool; nothing else in a runtime runs a command.
+- id: terminal-controller
+  disabled: true
+
+- id: ui-sidebar-terminal
+  disabled: true
+
+# Signing the kernel into a DeepSeek account, new in 0.1.7: an OAuth flow
+# (`/oauth/callback`, `account/*`) that stores a DeepSeek credential in the
+# runtime and a second model route (`deepseek-account`) that uses it. The
+# runtime never holds a provider credential; every model call goes through the
+# control plane's gateway on a short-lived workload token.
+- id: deepseek-account
+  disabled: true
+
+- id: llm-deepseek-account
+  disabled: true
+
+- id: account-controller
+  disabled: true
+
+- id: ui-settings-account
+  disabled: true
+
 # Opening native host applications is not a capability of a hosted project.
 - id: open-in-app
   disabled: true
