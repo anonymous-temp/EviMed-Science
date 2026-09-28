@@ -170,7 +170,10 @@ export function invokedSkillsBySession(sessions) {
         // matches nothing in any real run while a test written to the same
         // wrong shape passes.
         if (part?.type !== "tool" || part?.status !== "completed") continue;
-        if (part?.tool === "read") {
+        // `grep` too, when it is aimed at one method's file: every delegated
+        // child is handed it (`DELEGATION_BASE_TOOLS`), and searching a
+        // method's text is consulting it. Aimed at the directory, it names none.
+        if (part?.tool === "read" || part?.tool === "grep") {
           const target = String(part?.input?.path ?? part?.input?.file_path ?? part?.input?.filePath ?? "");
           const mounted = MOUNTED_METHOD_FILE.exec(target);
           if (mounted) names.add(`file:${mounted[1]}`);

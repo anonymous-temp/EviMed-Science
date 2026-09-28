@@ -332,6 +332,16 @@ test("a method file printed through the shell is opened; one only listed, counte
   }
   assert.deepEqual(methodFilesReadByCommand(`wc -l ${file} && cat /runtime/capsule-methods/${other}/SKILL.md`), [other],
     "each segment is judged by the program it runs");
+
+  // The native tools: `read` absolute or relative, `grep` aimed at one file.
+  const tool = (/** @type {string} */ name, /** @type {any} */ input) => ({ type: "tool", tool: name, callId: name, status: "completed", input, output: "", error: null });
+  const found = invokedSkillsBySession([{ sessionId: "s", transcript: { messages: [{ parts: [
+    tool("read", { file_path: `${dir}/SKILL.md` }),
+    tool("grep", { pattern: "Workflow", path: `/runtime/capsule-methods/${other}/SKILL.md` }),
+    tool("grep", { pattern: "Workflow", path: "/runtime/capsule-methods" }),
+    tool("bash", { command: `wc -l ${file}` }),
+  ] }] } }]);
+  assert.deepEqual([...(found.get("s") ?? [])].sort(), [`file:${dir}`, `file:${other}`]);
 });
 
 test("the 2026-09-28 incident: carrying is not using, and opening the card's file is", async () => {
