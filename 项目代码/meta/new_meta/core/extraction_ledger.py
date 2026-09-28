@@ -39,6 +39,7 @@ from new_meta.schemas.study import ExtractedStudy, OutcomeData
 from new_meta.core.rct_design_reconciliation import (
     canonical_outcome_name,
     comparative_effect_from_outcome,
+    targets_review_estimand,
 )
 
 
@@ -511,6 +512,10 @@ def _result_data(
             if not str(value or "").strip()
         )
         design = re.sub(r"[^a-z0-9]+", "_", str(outcome.comparative_design).strip().lower()).strip("_")
+        if (design in {"cluster_rct", "crossover_rct", "multi_arm_rct"}
+                and not {"treatment_arm", "reference_arm"} & set(missing)
+                and _same_arm(outcome.treatment_arm, outcome.reference_arm)):
+            missing.append("a reference_arm distinct from treatment_arm")
         if missing and design in {"cluster_rct", "crossover_rct", "multi_arm_rct"}:
             raise DependencyMetadataIncomplete(result_id, design, missing)
         if missing:
@@ -532,6 +537,15 @@ def _result_data(
                 intracluster_correlation=outcome.intracluster_correlation,
                 mean_cluster_size=outcome.mean_cluster_size,
             )
+            if not targets_review_estimand(outcome.estimand_id):
+                # A secondary outcome or a comparison other than the review's:
+                # kept with its dependency metadata, never offered for pooling.
+                if warnings is not None:
+                    warnings.append(
+                        f"{result_id} is a {design} contrast outside the review's primary estimand "
+                        f"({outcome.estimand_id}); it is kept with its dependency metadata and not pooled."
+                    )
+                return comparative_data, None
             try:
                 effect = comparative_effect_from_outcome(outcome, protocol)
             except ValueError as exc:
@@ -677,6 +691,12 @@ def _result_data(
         )
 
     return _unstructured_result(outcome), None
+
+
+def _same_arm(treatment: str | None, reference: str | None) -> bool:
+    def norm(value):
+        return " ".join(re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).split())
+    return bool(norm(treatment)) and norm(treatment) == norm(reference)
 
 
 def _unstructured_result(outcome: OutcomeData) -> UnstructuredResultData:

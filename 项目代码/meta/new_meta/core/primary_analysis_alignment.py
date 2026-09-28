@@ -364,6 +364,25 @@ def _record_proof(project, protocol, study, index, assessment, *, source_text, s
     return proof
 
 
+#: Left-out reason of a row whose verifier never produced a usable response in
+#: its bounded attempts: verification could not complete - not "did not match".
+VERIFICATION_COULD_NOT_COMPLETE = "verification_could_not_complete"
+_PENDING_PREFIX = "Independent verification incomplete: "
+
+
+def _pending_for_unusable_output(proof) -> bool:
+    """Whether a pending proof records that the verifier never gave a usable response.
+
+    The other codes beside it describe that same unusable response.
+    """
+    from new_meta.agents.data_extraction_agent import VERIFICATION_OUTPUT_UNUSABLE
+    rationale = str(getattr(getattr(proof.assessment, "outcome", None), "rationale", "") or "")
+    if not rationale.startswith(_PENDING_PREFIX):
+        return False
+    codes = {code.strip() for code in rationale[len(_PENDING_PREFIX):].split(";")}
+    return VERIFICATION_OUTPUT_UNUSABLE in codes
+
+
 def record_checked_alignments(project, protocol, study, assessments, *, source_text: str,
                               source_path=None, checked_rows: dict[int, str] | None = None, expected_source_sha256=None, assessor_id="",
                               pending_reasons: dict | None = None, issue_histories: dict | None = None,
@@ -375,7 +394,7 @@ def record_checked_alignments(project, protocol, study, assessments, *, source_t
     # including rows omitted by an incomplete or failed verification response.
     for index in range(len(study.outcomes)):
         reasons = (pending_reasons or {}).get(index) or [{"code": "verification_not_completed"}]
-        pending_message = "Independent verification incomplete: " + "; ".join(str(item.get("code", "unknown")) for item in reasons)
+        pending_message = _PENDING_PREFIX + "; ".join(str(item.get("code", "unknown")) for item in reasons)
         pending = PrimaryAlignmentAssessment.model_validate({
             "outcome_index": index, **{
                 name: {"status": "uncertain", "rationale": pending_message}
@@ -488,7 +507,8 @@ def alignment_status(project, protocol, study, index: int) -> dict:
     elif blocking_data_issues(study.outcomes[index], protocol, proof.unresolved_data_issues):
         status, reason = "unknown", "verification_data_issues_unresolved"
     elif proof.assessor == "pending-review-v1":
-        status, reason = "unknown", "verification_not_completed"
+        status, reason = "unknown", (
+            VERIFICATION_COULD_NOT_COMPLETE if _pending_for_unusable_output(proof) else "verification_not_completed")
     elif validate_check_batch(study, [index], [proof.assessment], checked.decode(), protocol, allow_legacy=legacy_assessor):
         status, reason = "unknown", "extraction_verification_invalid"
     else:
@@ -786,10 +806,19 @@ def report_unverified_results_left_out(project, left_out: dict[str, str]) -> Non
     if not left_out:
         return
     studies = sorted({result_id.removeprefix("result:").rsplit(":", 1)[0] for result_id in left_out})
+    incomplete = sum(reason == VERIFICATION_COULD_NOT_COMPLETE for reason in left_out.values())
+    if incomplete == len(left_out):
+        why = ("their independent source verification could not complete: the verifier gave no usable "
+               "response in its bounded attempts")
+    elif incomplete:
+        why = (f"their independent source verification could not complete ({incomplete}) or did not complete "
+               "or did not match (the rest)")
+    else:
+        why = "their independent source verification did not complete or did not match"
     project.add_warning(
         "synthesis",
         f"{len(left_out)} extracted result(s) from {len(studies)} stud{'y were' if len(studies) == 1 else 'ies were'} "
-        "left out of the synthesis because their independent source verification did not complete or did not match.",
+        f"left out of the synthesis because {why}.",
         code="unverified_results_left_out",
         context={"results": left_out},
     )

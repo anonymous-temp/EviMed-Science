@@ -70,6 +70,26 @@ class ExtractionRefinement(BaseModel):
     outcomes: list[IndexedOutcomeCorrection]
 
 
+#: Calls per verification round when the verifier's own output cannot be used
+#: (not JSON, off-schema, truncated, empty): the verifier failing, not the
+#: source disagreeing. On 2026-09-28 (ma-001, job meta-20260928154619) an
+#: LLMOutputError, a JSONDecodeError and a ValueError each left a row
+#: unverified and out of the synthesis.
+VERIFIER_OUTPUT_ATTEMPTS = 3
+VERIFICATION_OUTPUT_UNUSABLE = "verification_output_unusable"
+
+
+def verifier_output_unusable(exc: BaseException) -> bool:
+    """A failure of the verifier's own response: unparseable, off-schema, truncated or empty.
+
+    JSONDecodeError and pydantic's ValidationError are ValueErrors; the
+    client's LLMOutputError covers truncation and empty text. Anything else -
+    a transport error, a failed durable write - is not re-asked here.
+    """
+    from new_meta.core.llm import LLMOutputError
+    return isinstance(exc, (ValueError, LLMOutputError))
+
+
 # One result has its own numeric, endpoint, population, estimand and trial proof.
 # Combining results made long responses truncate and coupled unrelated judgments.
 VERIFICATION_BATCH_SIZE = 1
@@ -527,9 +547,13 @@ class DataExtractionAgent(BaseAgent):
     def _check_extraction(
         self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol,
         outcome_indices: list[int] | None = None, feedback: list[dict[str, Any]] | None = None,
-        on_raw_response=None, catalogue=None,
+        on_raw_response=None, catalogue=None, strict_output: bool = False,
     ) -> ExtractionReferenceEnvelope:
-        """Check original-indexed rows against the full bounded source snapshot."""
+        """Check original-indexed rows against the full bounded source snapshot.
+
+        ``strict_output`` re-asks after the verifier's previous output could
+        not be used; the judgment asked for is the same, only the form is held.
+        """
         from new_meta.core.extraction_verification import CHECKER_HIDDEN_FIELDS, numeric_fields
         indices = list(range(len(extracted.outcomes))) if outcome_indices is None else outcome_indices
         data = {"characteristics": extracted.characteristics.model_dump(mode="json"),
@@ -546,6 +570,14 @@ class DataExtractionAgent(BaseAgent):
         prompt += "\nExpected original outcome indices: " + json.dumps(indices)
         if feedback:
             prompt += "\nPrevious response validation errors (repair judgments; do not alter source data):\n" + json.dumps(feedback, ensure_ascii=False)
+        if strict_output:
+            prompt += (
+                "\nYour previous response to this request could not be used: it was not one complete JSON "
+                "object matching the required schema. Respond with exactly one JSON object that conforms to "
+                "the schema above - no markdown fences, no text before or after it, every required field "
+                "present, exactly one primary_analysis_alignment entry per expected outcome index. Assess the "
+                "source exactly as you otherwise would; only the form of the response must change."
+            )
         return self.llm.structured_output(
             [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
             ExtractionReferenceEnvelope, max_tokens=LLM_MAX_TOKENS_EXTRACTION,
@@ -735,13 +767,36 @@ class DataExtractionAgent(BaseAgent):
                     if terminal_observation:
                         raise ValueError("Incomplete independent verification retains a clinical nonmatch")
 
+                output_attempts = 0
+                output_unusable = False
                 try:
-                    # Mark before the provider call so interruptions during the
-                    # first observer write, or any internal length retry, fail closed.
-                    persist_observation_pending()
-                    returned = self._check_extraction(content, extracted, protocol, batch, feedback, observe, catalogue)
-                    if latest_resolution is None or checked is None or digest(returned.model_dump(mode="json")) != digest(latest_payload):
-                        raise ValueError("Independent verification did not return its durably observed source response")
+                    # The verifier's own output failing to parse or to fit its
+                    # schema is the verifier failing, not the source disagreeing:
+                    # ask again (bounded, stricter from the second attempt). A
+                    # response that already recorded a clinical nonmatch is never
+                    # re-asked - that would be shopping for a match.
+                    while True:
+                        output_attempts += 1
+                        checked = latest_payload = latest_resolution = None
+                        # Mark before the provider call so interruptions during the
+                        # first observer write, or any internal length retry, fail closed.
+                        persist_observation_pending()
+                        try:
+                            returned = self._check_extraction(content, extracted, protocol, batch, feedback, observe,
+                                                              catalogue, **({"strict_output": True}
+                                                                            if output_attempts > 1 else {}))
+                            if latest_resolution is None or checked is None or digest(returned.model_dump(mode="json")) != digest(latest_payload):
+                                raise ValueError("Independent verification did not return its durably observed source response")
+                            break
+                        except Exception as exc:
+                            if not verifier_output_unusable(exc) or terminal_observation or observed_negative_rows:
+                                raise
+                            if output_attempts >= VERIFIER_OUTPUT_ATTEMPTS:
+                                output_unusable = True
+                                raise
+                            self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1}: "
+                                     f"the verifier's output was unusable ({type(exc).__name__}); asking again "
+                                     f"({output_attempts + 1}/{VERIFIER_OUTPUT_ATTEMPTS})", level="warning")
                     feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol,
                                                     notices=notices)
                     feedback.extend(observation_errors)
@@ -754,7 +809,13 @@ class DataExtractionAgent(BaseAgent):
                     if source_before is not None and _read_scoped(project, relative_source) != source_before:
                         feedback.append({"code": "verification_source_changed_during_check"})
                 except Exception as exc:
-                    feedback = [{"code": "verification_response_unavailable", "error_type": type(exc).__name__}]
+                    if output_unusable:
+                        # Every attempt's output was unusable: verification could
+                        # not complete. Not a mismatch, and never a match either.
+                        feedback = [{"code": VERIFICATION_OUTPUT_UNUSABLE, "error_type": type(exc).__name__,
+                                     "attempts": output_attempts}]
+                    else:
+                        feedback = [{"code": "verification_response_unavailable", "error_type": type(exc).__name__}]
                     feedback.extend(observation_errors)
                     cause = exc.__cause__
                     if hasattr(cause, "errors"):
@@ -800,7 +861,8 @@ class DataExtractionAgent(BaseAgent):
                                             reason="Independent verification is incomplete or row-data issues remain.")
                 persist_pending_extraction()
                 complete = not feedback
-                exhausted = terminal_observation or round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
+                # An unusable-output round already spent its bounded attempts.
+                exhausted = terminal_observation or output_unusable or round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
                     item["code"] in {"numeric_conflict_requires_adjudication", "row_source_conflict_requires_adjudication"} for item in feedback))
                 record_attempt(batch, round_index + 1, "complete" if complete else "needs_input" if exhausted else "retry",
                                feedback, checked=checked, snapshot=snapshot, notices=notices)

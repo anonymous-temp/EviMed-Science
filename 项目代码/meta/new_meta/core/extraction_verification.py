@@ -44,6 +44,8 @@ CHECKER_HIDDEN_FIELDS = frozenset({"primary_analysis_alignment", "source_quote_v
 #: rct_design_reconciliation): no source states them, so none can be quoted.
 #: Each is re-derived from its own row instead, and verified only by that.
 _DERIVED_COVARIANCE_BASIS = "derived:shared_control_arm_summaries"
+#: Two contrasts sharing no arm: independent randomized groups, covariance 0.
+_NO_SHARED_ARM_BASIS = "derived:no_shared_arm"
 REFINABLE_FIELDS = frozenset(NUMERIC_FIELDS) | frozenset(NUMERIC_MAP_FIELDS) | {
     "source_quote", "source_location", "source_page", "source_section", "reported_effect_measure",
     "reported_effect_scale", "reported_effect_adjusted", "adjustment_covariates",
@@ -65,6 +67,8 @@ def _is_derived_covariance(outcome: OutcomeData, key: str, value: float) -> bool
     Any other value, or the same value without the derivation recorded, stays a
     numeric field that has to be anchored in the source like every other one.
     """
+    if outcome.covariance_basis.get(key) == _NO_SHARED_ARM_BASIS:
+        return float(value) == 0.0
     if outcome.covariance_basis.get(key) != _DERIVED_COVARIANCE_BASIS:
         return False
     if outcome.sd_control is None or outcome.n_control is None or float(outcome.n_control) <= 1:

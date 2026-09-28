@@ -27,6 +27,17 @@ _COUNT_MEASURES = {"OR", "RR", "RD"}
 #: (the control mean's variance, SD_c^2 / n_c); an SMD's is not.
 _ARM_SUMMARY_MEASURES = {"MD"}
 ARM_SUMMARY_COVARIANCE_BASIS = "derived:shared_control_arm_summaries"
+#: Two contrasts of one trial that share no arm compare disjoint randomized
+#: groups (a 2x2 factorial's B-vs-A and D-vs-C), so their covariance is exactly 0.
+NO_SHARED_ARM_COVARIANCE_BASIS = "derived:no_shared_arm"
+#: A dependency-design contrast whose extracted data give no estimate on the
+#: protocol's effect measure (no SDs, a bare difference without its CI, counts
+#: under an MD review). Typed so that it is kept and named, never pooled.
+PRECISION_NOT_COMPUTABLE = "not_computable_from_extracted_data"
+#: Estimand of a typed contrast that is not the review's own comparison - a
+#: secondary outcome, or two arms that are not intervention versus comparator.
+#: It keeps its dependency metadata in the ledger; no pooled estimate is made.
+DESCRIPTIVE_ESTIMAND_PREFIX = "descriptive:"
 _REPORTED_RATIO_MEASURES = {"OR", "RR", "HR", "IRR"}
 _Z_975 = 1.959963984540054
 
@@ -72,6 +83,15 @@ def reconcile_extracted_rct_designs(
     multi_arm_studies: list[str] = []
     comparative_rows = 0
     changed = recovered_effects > 0
+    typed_elsewhere = 0
+    for study in studies:
+        # Every other row the extractor declared multi-arm: typed from its own
+        # arms, before the primary contrasts below may overwrite theirs.
+        typed, row_changed = _type_declared_multi_arm_rows(study, protocol)
+        typed_elsewhere += typed
+        changed = changed or row_changed
+        if typed:
+            detected_designs.add("multi_arm_rct")
     for study in studies:
         characteristics = study.characteristics
         study_id = str(
@@ -206,6 +226,9 @@ def reconcile_extracted_rct_designs(
                                 row.covariance_basis[other] = ARM_SUMMARY_COVARIANCE_BASIS
                                 changed = True
 
+    for study in studies:
+        changed = _resolve_remaining_covariances(study, protocol) or changed
+
     return {
         "schema_version": 1,
         "status": "reconciled",
@@ -213,9 +236,159 @@ def reconcile_extracted_rct_designs(
         "detected_designs": sorted(detected_designs),
         "multi_arm_studies": sorted(set(multi_arm_studies)),
         "comparative_rows": comparative_rows,
+        "declared_multi_arm_rows_typed": typed_elsewhere,
         "reported_effects_recovered": recovered_effects,
         "retired_count_covariances": _retained_covariance_retirements(studies),
     }
+
+
+def targets_review_estimand(estimand_id: str) -> bool:
+    """Whether a typed contrast may be pooled: it is not a descriptive one."""
+    return not str(estimand_id or "").startswith(DESCRIPTIVE_ESTIMAND_PREFIX)
+
+
+def _type_declared_multi_arm_rows(study: ExtractedStudy, protocol: ResearchProtocol) -> tuple[int, bool]:
+    """Give every declared multi-arm row with two named arms its synthesis typing.
+
+    The primary-contrast pass below types only rows that are source-backed,
+    computable primary contrasts of the review's intervention and comparator.
+    Every other row the extractor declared multi_arm_rct - secondary outcomes,
+    a primary row without its SDs, an active-versus-active contrast - went to
+    the ledger without contrast_id, estimand_id and precision_basis and was
+    dropped whole: on 2026-09-28 brief ma-001 (production job
+    meta-20260928154619) lost sixteen results of three three-arm TXA trials
+    that way, and the synthesis was left one contrast from one study. Those
+    fields are determined by the row itself: the contrast by its two arms, the
+    estimand by outcome, time window, effect measure and comparison, the
+    precision basis by which of its numbers give an estimate on the
+    protocol's measure. A row whose arms are not named is left untyped; the
+    ledger drops it naming the missing arm.
+    """
+    study_id = _study_identifier(study)
+    review_estimand = _estimand_id(protocol)
+    typed = 0
+    changed = False
+    for index, outcome in enumerate(study.outcomes):
+        if _map_extracted_design(outcome.comparative_design) != "multi_arm_rct":
+            continue
+        treatment = str(outcome.treatment_arm or "").strip()
+        comparator = str(outcome.reference_arm or "").strip()
+        if not treatment or not comparator or _normalise_arm(treatment) == _normalise_arm(comparator):
+            continue
+        review_contrast = (
+            is_primary_outcome_row(outcome, protocol)
+            and _arm_matches_intervention(treatment, protocol.pico.intervention)
+            and _arm_matches_comparator(comparator, protocol.pico.comparator)
+        )
+        updates = {
+            "comparative_design": "multi_arm_rct",
+            "contrast_id": _contrast_id(study_id, treatment, comparator, index),
+            "estimand_id": review_estimand if review_contrast else _descriptive_estimand_id(
+                outcome, protocol, treatment, comparator),
+            "precision_basis": derived_precision_basis(outcome, protocol),
+        }
+        for field, value in updates.items():
+            if getattr(outcome, field) != value:
+                setattr(outcome, field, value)
+                changed = True
+        typed += 1
+    return typed, changed
+
+
+def derived_precision_basis(outcome: OutcomeData, protocol: ResearchProtocol) -> str:
+    """How this row's variance on the protocol's effect measure is obtained.
+
+    The same predicates comparative_effect_from_outcome uses, so the label and
+    the ledger's estimate cannot disagree.
+    """
+    if _has_protocol_reported_effect(outcome, protocol):
+        return "source_reported_effect"
+    if _can_compute_from_counts(outcome, protocol):
+        return "computed_from_source_verified_2x2"
+    if _can_compute_from_arm_summaries(outcome, protocol):
+        return "computed_from_source_verified_arm_summaries"
+    return PRECISION_NOT_COMPUTABLE
+
+
+def _descriptive_estimand_id(
+    outcome: OutcomeData, protocol: ResearchProtocol, treatment: str, comparator: str,
+) -> str:
+    measure = str(protocol.effect_measure or "").upper()
+    if derived_precision_basis(outcome, protocol) == PRECISION_NOT_COMPUTABLE:
+        measure = str(outcome.reported_effect_measure or outcome.outcome_type or "unspecified").upper()
+    if (_arm_matches_intervention(treatment, protocol.pico.intervention)
+            and _arm_matches_comparator(comparator, protocol.pico.comparator)):
+        contrast = f"{_slug(protocol.pico.intervention)}:vs:{_slug(protocol.pico.comparator)}"
+    else:
+        contrast = f"{_slug(treatment)}:vs:{_slug(comparator)}"
+    return DESCRIPTIVE_ESTIMAND_PREFIX + ":".join([
+        _slug(canonical_outcome_name(outcome, protocol)),
+        _slug(outcome.accepted_timepoint or outcome.timepoint or "timepoint-not-stated"),
+        _slug(measure),
+        contrast,
+    ])
+
+
+def _resolve_remaining_covariances(study: ExtractedStudy, protocol: ResearchProtocol) -> bool:
+    """Fill the covariance of every pair of poolable contrasts of one trial.
+
+    Pairs the primary pass left open, within one estimand, time window and
+    subgroup: two contrasts sharing their comparator arm get the analytic
+    shared-control covariance when both rows report that arm identically;
+    two contrasts sharing no arm get exactly 0. A pair sharing its treatment
+    arm, or a shared arm reported differently, stays unresolved and the
+    design-aware engine refuses to treat it as independent.
+    """
+    groups: dict[tuple[str, str, str], list[OutcomeData]] = {}
+    for outcome in study.outcomes:
+        if (_map_extracted_design(outcome.comparative_design) != "multi_arm_rct"
+                or not outcome.contrast_id or not targets_review_estimand(outcome.estimand_id)
+                or outcome.precision_basis in {"", PRECISION_NOT_COMPUTABLE}):
+            continue
+        key = (
+            outcome.estimand_id,
+            _normalise_label(outcome.accepted_timepoint or outcome.timepoint or ""),
+            _normalise_label(outcome.subgroup or ""),
+        )
+        groups.setdefault(key, []).append(outcome)
+    changed = False
+    for rows in groups.values():
+        for position, left in enumerate(rows):
+            for right in rows[position + 1:]:
+                if left.contrast_id == right.contrast_id or (
+                    right.contrast_id in left.covariance_with or left.contrast_id in right.covariance_with
+                ):
+                    continue
+                left_arms = {_normalise_arm(left.treatment_arm), _normalise_arm(left.reference_arm)}
+                right_arms = {_normalise_arm(right.treatment_arm), _normalise_arm(right.reference_arm)}
+                if not left_arms & right_arms:
+                    covariance, basis = 0.0, NO_SHARED_ARM_COVARIANCE_BASIS
+                elif (_normalise_arm(left.reference_arm) == _normalise_arm(right.reference_arm)
+                      and _normalise_arm(left.treatment_arm) != _normalise_arm(right.treatment_arm)):
+                    covariance = _shared_control_covariance(left, right, protocol.effect_measure)
+                    basis = (ARM_SUMMARY_COVARIANCE_BASIS
+                             if str(protocol.effect_measure or "").upper() in _ARM_SUMMARY_MEASURES else "")
+                else:
+                    covariance = None
+                if covariance is None:
+                    continue
+                left.covariance_with[right.contrast_id] = covariance
+                right.covariance_with[left.contrast_id] = covariance
+                if basis:
+                    left.covariance_basis[right.contrast_id] = basis
+                    right.covariance_basis[left.contrast_id] = basis
+                changed = True
+    return changed
+
+
+def _study_identifier(study: ExtractedStudy) -> str:
+    characteristics = study.characteristics
+    return str(
+        characteristics.pmid
+        or characteristics.doi
+        or characteristics.study_id
+        or characteristics.title
+    ).strip()
 
 
 def canonical_outcome_name(outcome: OutcomeData, protocol: ResearchProtocol) -> str:
