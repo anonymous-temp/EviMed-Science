@@ -556,6 +556,9 @@ class PipelineRunner:
         from new_meta.tools.utils import first_author_lastname as _first_author
 
         source_gate_fingerprint = selection_gate_fingerprint(self.project)
+        from new_meta.core.primary_analysis_alignment import project_is_unattended, report_unverified_results_left_out
+        unattended = project_is_unattended(self.project)
+        left_out: dict[str, str] = {}
         primary_candidates = []
         verified_trial_candidates = []
         primary_selection_audit: list[dict[str, Any]] = []
@@ -624,6 +627,12 @@ class PipelineRunner:
                     continue
                 effect = compute_study_effect(study, outcome, protocol, self.logger, audit_row=audit_row)
                 if effect:
+                    if alignment["status"] != "match" and unattended:
+                        # Nobody will adjudicate it: leave the row out, named, and never pool it.
+                        audit_row.update({"decision": "excluded", "reason": "unverified_in_unattended_run"})
+                        left_out[audit_row["row_id"]] = alignment.get("reason") or "primary_alignment_required"
+                        primary_selection_audit.append(audit_row)
+                        continue
                     if alignment["status"] != "match":
                         audit_row.update({"decision": "needs_input", "reason": "primary_analysis_alignment_required",
                                           "requires_adjudication": True,
@@ -768,6 +777,7 @@ class PipelineRunner:
                     row["decision"] = "excluded"
                     row["reason"] = invalid_effect_reasons[row.get("study_id")]
                     row["in_final_primary_analysis"] = False
+        report_unverified_results_left_out(self.project, left_out)
         unresolved = [row for row in primary_selection_audit if row.get("decision") == "needs_input"]
         self.project.save_json("effect_selection_audit.json", primary_selection_audit, subdir="analysis")
         if unresolved:

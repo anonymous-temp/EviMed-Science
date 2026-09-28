@@ -67,11 +67,13 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
         for item in ledger.current_entities(kind=EntityKind.OUTCOME)
     }
     groups: dict[tuple[str, str, str, str], list[ResultEntity]] = {}
-    for payload in ledger.current_entities(kind=EntityKind.RESULT):
-        entity = ResultEntity.model_validate(payload)
-        if entity.evidence_state not in {EvidenceState.VERIFIED, EvidenceState.ADJUDICATED}:
-            continue
-        if not _entity_matches_plan(entity, plan):
+    entities = [ResultEntity.model_validate(payload) for payload in ledger.current_entities(kind=EntityKind.RESULT)]
+    entities = [entity for entity in entities
+                if entity.evidence_state in {EvidenceState.VERIFIED, EvidenceState.ADJUDICATED}
+                and _entity_matches_plan(entity, plan)]
+    left_out = _unattended_left_out(project, plan, [entity.entity_id for entity in entities])
+    for entity in entities:
+        if entity.entity_id in left_out:
             continue
         key = (
             entity.outcome_id,
@@ -301,6 +303,21 @@ def save_analysis_set_adjudication(
         project.save_json("analysis_set_adjudications.json", history, subdir="analysis")
         project.clear_downstream("meta_analysis", include_self=True)
         return decision
+
+
+def _unattended_left_out(project, plan: MethodPlan, result_ids: list[str]) -> dict[str, str]:
+    """Unattended only: results whose source rows are not verified matches (see
+    primary_analysis_alignment.unattended_unverified_results), reported as a warning."""
+    from new_meta.core.primary_analysis_alignment import (
+        project_is_unattended, report_unverified_results_left_out, unattended_unverified_results,
+    )
+    if plan.family is ReviewFamily.IPD_META or not project_is_unattended(project):
+        return {}
+    from new_meta.schemas.protocol import ResearchProtocol
+    protocol = ResearchProtocol.model_validate(project.load_json("protocol.json"))
+    left_out = unattended_unverified_results(project, protocol, result_ids)
+    report_unverified_results_left_out(project, left_out)
+    return left_out
 
 
 def _entity_matches_plan(entity: ResultEntity, plan: MethodPlan) -> bool:

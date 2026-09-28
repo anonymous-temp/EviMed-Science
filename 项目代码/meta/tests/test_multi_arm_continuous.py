@@ -155,3 +155,43 @@ def test_ma001_trials_reach_the_ledger_and_pool(tmp_path: Path) -> None:
     # Each trial contributes one GLS-consolidated contrast against its placebo.
     assert len(payload["study_effects"]) == 2
     assert payload["pooled_effect"] < 0 and math.isfinite(payload["ci_lower"])
+
+
+def _two_arm_study() -> ExtractedStudy:
+    row = _row("Tranexamic acid 1 g (tranexamic acid)", 820.0, 240.0, 40, 1050.0, 300.0, 40)
+    row.comparative_design = "parallel_rct"
+    return ExtractedStudy(
+        characteristics=StudyCharacteristics(study_id="30000001", pmid="30000001", title="IV TXA versus placebo in TKA",
+                                             study_design="randomized controlled trial"),
+        outcomes=[row],
+    )
+
+
+def test_an_unattended_synthesis_leaves_out_a_result_nobody_verified(tmp_path: Path) -> None:
+    """ma-001 (2026-09-28): one row whose independent verification did not
+    complete stopped the whole synthesis for an adjudication nobody would make.
+    Unattended, the row is left out and named; it is never pooled."""
+    from new_meta.core.primary_analysis_alignment import UNATTENDED_RUN_FILE
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+
+    protocol, studies = _protocol(), _studies() + [_two_arm_study()]
+    reconcile_extracted_rct_designs(protocol, studies)
+    project = Project("ma-001 unverified row", output_dir=tmp_path / "project")
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    migration = migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
+    assert len(migration.result_ids) == 5
+    compile_project_method_plan(project, protocol, enforce=True)
+    approve_synthetic_method_fixture(project, protocol, studies[:2])  # the two-arm trial stays unverified
+
+    phase = PipelineRunner(project).run_compiled_method_synthesis()
+    assert phase.status.value == "needs_input"  # interactively a person adjudicates it
+
+    project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": True})
+    phase = PipelineRunner(project).run_compiled_method_synthesis()
+    assert phase.status.value == "succeeded", phase.summary
+    envelope = project.load_json("synthesis_result.json", subdir="analysis")
+    assert envelope["engine_payload"]["n_studies"] == 2
+    assert "result:30000001:0" not in envelope["input_result_ids"]
+    warnings = [item for item in project.load_json("pipeline_warnings.json") if item["code"] == "unverified_results_left_out"]
+    assert len(warnings) == 1 and list(warnings[0]["context"]["results"]) == ["result:30000001:0"]
+

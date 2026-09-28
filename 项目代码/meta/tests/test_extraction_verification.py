@@ -975,3 +975,32 @@ def test_publication_units_exist_only_in_an_unattended_run(tmp_path):
     project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": True})
     assert project_publication_units(project) == {"34668331": "34668331"}
 
+
+def test_pairwise_selection_unattended_leaves_out_an_unverified_row(tmp_path):
+    """The pairwise route's version of the same rule: a row with no verified
+    match is excluded and named in an unattended run; a person is asked otherwise."""
+    import json
+    from new_meta.core.primary_analysis_alignment import UNATTENDED_RUN_FILE
+    from new_meta.core.pipeline_runner import PipelineRunner
+    first = study(); first.characteristics.study_id = "paperA"
+    second = study(); second.characteristics.study_id = "paperB"
+    third = study(); third.characteristics.study_id = "paperC"
+    other_text = SOURCE.replace("NCT03436693", "NCT02065791")
+    other_assessment = json.loads(json.dumps(checked_row()).replace("NCT03436693", "NCT02065791"))
+    unverified = checked_row(); unverified["population"]["status"] = "uncertain"
+    project, phase = select_stamped(tmp_path, [(first, [checked_row()], SOURCE), (second, [other_assessment], other_text),
+                                               (third, [unverified], SOURCE.replace("NCT03436693", "NCT01111111"))])
+    assert phase.status.value == "needs_input"
+
+    project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": True})
+    studies = [first, second, third]
+    rob = project.load_json("rob_results.json", subdir="risk_of_bias")
+    from new_meta.schemas.risk_of_bias import StudyRoB
+    phase = PipelineRunner(project).run_primary_effect_selection(
+        protocol=protocol(), extracted_studies=studies, rob_results=[StudyRoB.model_validate(item) for item in rob])
+    assert phase.status.value == "succeeded" and len(phase.data["effects"]) == 2
+    audit = {row["row_id"]: row for row in project.load_json("effect_selection_audit.json", subdir="analysis")}
+    assert audit["paperC:0"]["decision"] == "excluded" and audit["paperC:0"]["reason"] == "unverified_in_unattended_run"
+    warning = next(item for item in project.load_json("pipeline_warnings.json") if item["code"] == "unverified_results_left_out")
+    assert list(warning["context"]["results"]) == ["paperC:0"]
+

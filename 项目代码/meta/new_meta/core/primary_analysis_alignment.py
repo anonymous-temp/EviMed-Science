@@ -748,6 +748,53 @@ def save_method_pool_binding(project, plan, execution, envelope, source_studies,
 UNATTENDED_RUN_FILE = "unattended_run.json"
 
 
+def project_is_unattended(project) -> bool:
+    """Whether this run has nobody to answer an adjudication (``--skip-confirm``)."""
+    return (project.load_json(UNATTENDED_RUN_FILE) or {}).get("unattended") is True
+
+
+def unattended_unverified_results(project, protocol, result_ids) -> dict[str, str]:
+    """{result_id: reason} of results an unattended synthesis leaves out.
+
+    A result whose source row has no current "match" proof - verification
+    that did not complete, a clinical mismatch, or a row no longer among the
+    extractions - would stop the whole synthesis for a person to adjudicate.
+    Unattended, nobody will; the result is left out and named instead, and
+    the synthesis runs on what was verified. Never pools an unverified row.
+    """
+    from new_meta.core.extraction_ledger import result_entity_id
+    from new_meta.schemas.study import ExtractedStudy
+    studies = [ExtractedStudy.model_validate(item) for item in
+               project.load_json("all_extractions.json", subdir="extraction") or []]
+    rows = {result_entity_id(study, index): (study, index)
+            for study in studies for index in range(len(study.outcomes))}
+    left_out = {}
+    for result_id in result_ids:
+        row = rows.get(result_id)
+        if row is None:
+            left_out[result_id] = "source_row_not_extracted"
+            continue
+        verdict = alignment_status(project, protocol, *row)
+        if verdict["status"] != "match":
+            left_out[result_id] = verdict.get("reason") or f"primary_alignment_{verdict['status']}"
+    return left_out
+
+
+def report_unverified_results_left_out(project, left_out: dict[str, str]) -> None:
+    """One current warning naming what an unattended synthesis left out, and why."""
+    project.clear_warnings(code="unverified_results_left_out")
+    if not left_out:
+        return
+    studies = sorted({result_id.removeprefix("result:").rsplit(":", 1)[0] for result_id in left_out})
+    project.add_warning(
+        "synthesis",
+        f"{len(left_out)} extracted result(s) from {len(studies)} stud{'y were' if len(studies) == 1 else 'ies were'} "
+        "left out of the synthesis because their independent source verification did not complete or did not match.",
+        code="unverified_results_left_out",
+        context={"results": left_out},
+    )
+
+
 def project_publication_units(project) -> dict[str, str] | None:
     """Primary publications that may stand for their own unregistered trial.
 
@@ -761,8 +808,7 @@ def project_publication_units(project) -> dict[str, str] | None:
     Interactively the refusal stands for a person to resolve.
     """
     from new_meta.tools.utils import paper_identity
-    marker = project.load_json(UNATTENDED_RUN_FILE) or {}
-    if marker.get("unattended") is not True:
+    if not project_is_unattended(project):
         return None
     units = {}
     for record in project.load_json("full_text_screening.json", subdir="screening") or []:
