@@ -121,6 +121,20 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "specialist_agent_unavailable",
   "mr_input_remote_auth_required",
   "mr_input_remote_metadata_unavailable",
+  // The token-free GWAS Catalog path (2026-09-28): the catalogue or EBI FTP did
+  // not answer, a study's file is missing, unharmonised, unreadable or over the
+  // stream limit, too few variants reach genome-wide significance, or the
+  // configured LD reference failed. What open data could give is the fact;
+  // the run records it and delivers what it has.
+  "mr_open_source_unavailable",
+  "mr_open_source_too_large",
+  "mr_open_source_format",
+  "mr_open_source_unharmonised",
+  "mr_open_no_instruments",
+  "mr_open_clumping_failed",
+  // A MetaAgent request that failed at the same step on every allowed run: the
+  // engine could not produce the review, as with meta_agent_execution_failed.
+  "meta_job_attempts_exhausted",
   "specialist_agent_unconfigured",
   "specialist_worker_unavailable",
   "specialist_python_unavailable",
@@ -471,6 +485,16 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "mr_input_size_limit",
   "mr_input_clumping_required",
   "mr_input_manifest_invalid",
+  // GWAS Catalog sources run one direction per job; the run starts two.
+  "mr_input_direction_unsupported",
+  // A catalogue identifier the run gave that resolves to no study, or a PubMed
+  // id with several: the refusal lists the studies to choose from.
+  "mr_open_source_invalid",
+  "mr_open_source_not_found",
+  "mr_open_source_ambiguous",
+  // A second MetaAgent review started while one runs in the project: the answer
+  // names the running job, which the run polls instead.
+  "meta_job_already_running",
   "specialist_job_id_invalid",
   "specialist_job_state_invalid",
   "specialist_job_state_too_large",
@@ -1223,6 +1247,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
   [/^science_connector_/, '科学数据连接器这次没能给出结果。'],
   [/^mr_input_/, '孟德尔随机化的本地输入需要更正后才能继续。'],
+  [/^mr_open_/, 'GWAS Catalog 的公开汇总数据这次没能用于孟德尔随机化；报告会写明缺了什么，或改用其他研究。'],
   [/^pharmacy_reference_/, '药学参考数据这次没能给出结果。'],
   [/^drug_label_/, '药品说明书库这次没能给出结果；可以改用其他说明书来源继续。'],
   [/^quote_/, '引文核对这次没能完成；这只是一次查找，已写的报告不受影响。'],
