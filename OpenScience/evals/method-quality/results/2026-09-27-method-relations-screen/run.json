@@ -46,6 +46,11 @@
       "costCny": 0.157297
     }
   },
+  "gateIndependence": {
+    "transcript": "complete",
+    "toolCallsNamingTheGate": 8,
+    "reading": "The run set R=…/@evimed/domain/src and read contractRegistry.mjs — the method-relations validator among it — before submitting; the guard missed the slashless directory (fixed in 7f6298bf5). Its pass is not independent evidence about the package."
+  },
   "platformOutcome": {
     "job": "consolidate job bb03844b succeeded: screened true, screenDropped 3 — the three candidate pairs were judged not to describe related work, so no DECIDE or BUILD step followed; every hourly sleep since reports screened true, relations 0."
   },

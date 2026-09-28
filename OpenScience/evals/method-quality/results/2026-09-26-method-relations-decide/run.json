@@ -46,6 +46,11 @@
       "costCny": 0.173505
     }
   },
+  "gateIndependence": {
+    "transcript": "unavailable",
+    "toolCallsNamingTheGate": null,
+    "reading": "The run ledger kept no transcript of this bounded run (the collector found its runtime gone), so whether it read the gate cannot be checked."
+  },
   "platformOutcome": {
     "job": "integrate job 951f6e71 succeeded: relations 0, neighbours 1 — no relation was written between the two methods."
   },

@@ -57,6 +57,11 @@
       "metrics": {}
     }
   ],
+  "gateIndependence": {
+    "transcript": "unavailable",
+    "toolCallsNamingTheGate": null,
+    "reading": "The run ledger kept no transcript of this bounded run (the collector found its runtime gone), so whether it read the gate cannot be checked."
+  },
   "platformOutcome": {
     "publication": "The pipeline published the understanding: a summary and three quote-anchored project facts for the note (evimed_product documents, kind fact, sourceId src_1c3a3a0f…, 2026-09-24T11:26:16Z). They were retired at 11:26:57Z and the source is no longer in the store, which is what removing a source does to its derived facts; the note was an acceptance-test upload."
   },

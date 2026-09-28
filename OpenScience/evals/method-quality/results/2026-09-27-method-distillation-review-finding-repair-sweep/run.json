@@ -63,6 +63,11 @@
       "metrics": {}
     }
   ],
+  "gateIndependence": {
+    "transcript": "complete",
+    "toolCallsNamingTheGate": 0,
+    "reading": "No tool call named the gate’s files or directory: an independent verdict."
+  },
   "platformOutcome": {
     "job": "distill job f72bd0e3 succeeded (state complete, operation handbook).",
     "method": "method:handbook:review-finding-repair-sweep written to evimed_product.documents (kind method, revision 1, 2026-09-27T09:20:03Z) — a handbook proposal, the 1.1.0 capability's new operation beside create / amend / no_change.",
