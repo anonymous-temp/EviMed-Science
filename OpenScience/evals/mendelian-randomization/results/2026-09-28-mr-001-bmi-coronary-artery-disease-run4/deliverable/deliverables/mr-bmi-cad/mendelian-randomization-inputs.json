@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "exposure": {
+      "type": "gwas_catalog",
+      "pubmedId": "25673413"
+    },
+    "outcome": {
+      "type": "gwas_catalog",
+      "pubmedId": "26343387"
+    }
+  }
+}

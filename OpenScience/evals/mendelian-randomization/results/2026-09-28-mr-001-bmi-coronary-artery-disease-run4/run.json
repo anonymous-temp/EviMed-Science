@@ -1,0 +1,60 @@
+{
+  "capability": "mendelian-randomization",
+  "brief": "mr-001-bmi-coronary-artery-disease",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-mr-0928h",
+  "session": "acc-mendelian-randomizat-mullgss4",
+  "runId": "run_084bb7af00652cd9131f0e36423ad815",
+  "agentVersion": "1.2.0",
+  "dispatchedAt": "2026-09-28T19:44:57Z",
+  "prompt": "exposure: 体重指数（BMI）\noutcome: 冠状动脉疾病（coronary artery disease）\nanalysisDirection: forward\nexposureSource: GIANT 联盟的欧洲人群 BMI GWAS（运行时解析并记录确切的来源标识）\noutcomeSource: CARDIoGRAMplusC4D 的欧洲人群冠心病 GWAS（运行时解析并记录确切的来源标识）\noutputLanguage: zh-CN",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/mr-bmi-cad/mendelian-randomization-inputs.json",
+      "deliverables/mr-bmi-cad/mendelian-randomization-report.md",
+      "deliverables/mr-bmi-cad/mendelian-randomization-run.json",
+      "deliverables/mr-bmi-cad/reporting-checklist.md",
+      "deliverables/mr-bmi-cad/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「mr-bmi-cad」有 6 条审查发现（已修 0，不改并说明 6，未回应 0）。",
+        "text": "独立审查：交付物「mr-bmi-cad」有 6 条审查发现（已修 0，不改并说明 6，未回应 0）。"
+      },
+      {
+        "code": "clinical_high_risk_entity_notice",
+        "check": "clinical-high-risk-entity",
+        "severity": "advice",
+        "title": "提及高警示药品，请核对",
+        "detail": "文件 mendelian-randomization-report.md",
+        "file": "mendelian-randomization-report.md",
+        "text": "mendelian-randomization-report.md names 胰岛素, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply."
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「body mass index GIANT European ancestry …」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「coronary artery disease CARDIoGRAMplusC4…」——这次检索没有找到可用来源。"
+      }
+    ],
+    "effectiveAgentId": "mendelian-randomization",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 3760155,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

@@ -364,11 +364,11 @@
         "结论依赖工具变量假设；敏感性分析能检验部分假设，但不能替代随机对照试验。"
       ],
       "evaluation": {
-        "lastStatus": "not-run",
-        "lastRunAt": null,
-        "runs": 3,
-        "delivered": 1,
-        "typicalMinutes": 60
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-28",
+        "runs": 4,
+        "delivered": 2,
+        "typicalMinutes": 61
       }
     },
     "meta-analysis": {
@@ -392,11 +392,11 @@
         "统计合并由程序完成，但纳入研究的数据提取仍需人工抽查。"
       ],
       "evaluation": {
-        "lastStatus": "failed",
+        "lastStatus": "accepted",
         "lastRunAt": "2026-09-28",
-        "runs": 3,
-        "delivered": 2,
-        "typicalMinutes": 54
+        "runs": 4,
+        "delivered": 3,
+        "typicalMinutes": 61
       }
     },
     "off-label-analysis": {
