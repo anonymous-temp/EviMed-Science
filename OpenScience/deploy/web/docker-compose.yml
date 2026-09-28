@@ -1073,10 +1073,10 @@ services:
       # not. Reached over the shared default network, like the model gateway.
       EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       # Token-free GWAS Catalog sources: what one scan of an exposure file
-      # keeps (a few thousand variants) is reused by later jobs from this
-      # tmpfs. Measured from this host on 2026-09-28, ftp.ebi.ac.uk gives
-      # 38-58 KB/s, so a first scan of an 89 MB file takes about 40 minutes.
-      EVIMED_MR_OPEN_CACHE_DIR: /tmp/evimed-mr-open-cache
+      # keeps (a few thousand variants) is reused by later jobs. On its own
+      # volume, not the tmpfs: every release recreates this container, and on
+      # 2026-09-28 each one threw away scans that had cost tens of minutes.
+      EVIMED_MR_OPEN_CACHE_DIR: /var/cache/evimed-mr-open
       # EBI through the Tokyo node, the one the web service uses: measured
       # from this host on 2026-09-28, ftp.ebi.ac.uk gave ~19 KB/s direct and
       # ~358 KB/s through the node. Only *.ebi.ac.uk goes through it; empty
@@ -1088,6 +1088,7 @@ services:
       EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE: /run/secrets/edge-proxy-credentials
     volumes:
       - open-science-data:/data
+      - evimed-mr-open-cache:/var/cache/evimed-mr-open
       - type: bind
         source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
         target: /run/secrets/deepseek-api-key
@@ -1646,6 +1647,9 @@ services:
 # Both wait on the cutover in `docs/WEB_DEPLOYMENT.md` having verified its copy.
 volumes:
   evimed-postgres-data:
+  # The MR engine's GWAS Catalog scan cache (EVIMED_MR_OPEN_CACHE_DIR): public
+  # summary statistics only, rebuildable, kept across releases.
+  evimed-mr-open-cache:
   evimed-openviking-data:
   evimed-openviking-secrets:
   open-science-data:
