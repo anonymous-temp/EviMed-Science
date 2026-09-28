@@ -42,6 +42,7 @@ from new_meta.agents.writing import (
     ConsistencyGuardsMixin,
     ReleaseConformanceMixin,
 )
+from new_meta.agents.writing.release_conformance import RELEASE_CONFORMANCE_AUDIT
 from new_meta.agents.writing.contracts import (
     CitationGroundingPatch,
     CitationGroundingRevision,
@@ -517,6 +518,8 @@ class WritingAgent(
         figures_b64 = figures_b64 or {}
         if project:
             self._clear_stale_manuscript_warnings(project)
+            # A new manuscript starts a new save-time conformance record.
+            (project.base_dir / "manuscript" / RELEASE_CONFORMANCE_AUDIT).unlink(missing_ok=True)
         self._background_citation_context = self._load_background_citation_context(project, ref_manager)
         self._methodology_citation_context = self._load_methodology_citation_context(project, ref_manager)
         manuscript_facts = build_manuscript_facts(

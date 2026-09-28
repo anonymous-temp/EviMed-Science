@@ -345,8 +345,13 @@ def test_residual_overlong_sentence_takes_the_models_faithful_split(tmp_path: Pa
     assert "100 counted units" in agent.prompts[0]
     project.save_text("draft.md", text, subdir="manuscript")
     assert _build_readability_audit_review(project)["passed"] is True
-    saved = json.loads((project.base_dir / "manuscript" / "release_conformance_audit.json").read_text())
-    assert saved["model_sentence_splits"]["status"] == "ok"
+    audit_path = project.base_dir / "manuscript" / "release_conformance_audit.json"
+    saved = json.loads(audit_path.read_text())
+    assert [item["model_sentence_splits"]["status"] for item in saved["passes"]] == ["ok"]
+    # A later save with nothing left to do keeps the record of the pass that did the work.
+    agent._apply_release_conformance(text, {}, project=project)
+    again = json.loads(audit_path.read_text())
+    assert len(again["passes"]) == 1 and again["remaining_overlong_sentences"] == []
 
 
 def test_an_unfaithful_split_is_rejected_and_left_as_the_gates_finding(tmp_path: Path, monkeypatch) -> None:

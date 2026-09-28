@@ -55,6 +55,42 @@ def normalize_number_signs(manuscript: str) -> tuple[str, int]:
     return _TYPED_MINUS.subn("-", text)
 
 
+RELEASE_CONFORMANCE_AUDIT = "release_conformance_audit.json"
+_ACTION_KEYS = (
+    "normalized_minus_signs",
+    "restored_number_renderings",
+    "generated_cross_references",
+    "deterministic_sentence_splits",
+    "model_sentence_splits",
+)
+
+
+def _record_release_conformance(project: Project, audit: dict[str, Any]) -> None:
+    """Append a pass that changed the text; keep the latest remaining findings.
+
+    The hook runs at every save, and a later pass usually finds nothing left to
+    do; it must not erase the record of the pass that did the work. The writer
+    removes the file when it starts a new manuscript.
+    """
+    previous = project.load_json(RELEASE_CONFORMANCE_AUDIT, subdir="manuscript")
+    passes = (
+        list(previous.get("passes") or [])
+        if isinstance(previous, dict) and previous.get("schema_version") == 2
+        else []
+    )
+    if any(audit.get(key) for key in _ACTION_KEYS):
+        passes.append({key: audit.get(key) for key in _ACTION_KEYS if key in audit})
+    project.save_json(
+        RELEASE_CONFORMANCE_AUDIT,
+        {
+            "schema_version": 2,
+            "passes": passes,
+            "remaining_overlong_sentences": audit.get("remaining_overlong_sentences") or [],
+        },
+        subdir="manuscript",
+    )
+
+
 def _llm_configured() -> bool:
     """Whether a model endpoint key is configured (read at call time)."""
     import new_meta.config as config
@@ -92,7 +128,7 @@ class ReleaseConformanceMixin:
                 audit["model_sentence_splits"] = {"status": "skipped", "reason": "missing_llm_api_key"}
         audit["remaining_overlong_sentences"] = overlong_interpretive_sentences(text)
         if project is not None:
-            project.save_json("release_conformance_audit.json", audit, subdir="manuscript")
+            _record_release_conformance(project, audit)
         for record in cross_references:
             self.log(f"Generated cross-reference: {record.get('sentence')}")
         for item in audit["remaining_overlong_sentences"]:
