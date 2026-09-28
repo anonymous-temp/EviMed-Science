@@ -519,3 +519,51 @@ test("TypeSafe's key reaches the web API from an optional mount, and nothing els
   assert.equal(unset.reviewJevEnabled, false);
 });
 
+test("the MR engine reads EBI through the web API's node, with its credentials, and only three services hold them", async () => {
+  // The token-free GWAS Catalog path read ftp.ebi.ac.uk at ~19 KB/s from the
+  // Beijing host and ~358 KB/s through the Tokyo node (2026-09-28). The engine
+  // takes the node from the same host variables as the web API, so setting the
+  // node once sets it for both, and a deployment without one binds /dev/null
+  // and reads EBI direct.
+  const files = await composeFiles();
+  const base = files.find(({ name }) => name === "docker-compose.yml");
+  assert.ok(base, "the base compose file was not read");
+  const services = YAML.parse(base.text).services;
+  const web = services["open-science-web"];
+  const mr = services["evimed-mr-agent"];
+  /** @param {any} definition @param {string} target */
+  const mountAt = (definition, target) => definition.volumes.find((/** @type {any} */ volume) => volume?.target === target);
+
+  assert.equal(mr.environment.EVIMED_MR_OPEN_PROXY_URL, "${OPEN_SCIENCE_EDGE_PROXY_URL:-}");
+  assert.equal(mr.environment.EVIMED_MR_OPEN_PROXY_URL, web.environment.OPEN_SCIENCE_EDGE_PROXY_URL, "the engine and the web API name different nodes");
+  const mrMount = mountAt(mr, mr.environment.EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE);
+  assert.deepEqual(mrMount, {
+    type: "bind", source: "${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}", target: "/run/secrets/edge-proxy-credentials", read_only: true,
+  });
+  assert.deepEqual(mrMount, mountAt(web, web.environment.OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_FILE), "the engine binds another host file than the web API");
+
+  // The names compose sets are the names the engine reads.
+  const engine = await readFile(path.join(repoRoot, "..", "项目代码", "孟德尔随机化", "mr_agent", "tools", "open_sumstats.py"), "utf8");
+  for (const name of ["EVIMED_MR_OPEN_PROXY_URL", "EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE"]) {
+    assert.match(engine, new RegExp(`os\\.getenv\\("${name}"`), `open_sumstats.py does not read ${name}`);
+  }
+
+  // The host file is root-owned, 0400 or root:10002 0440. The engine reads it
+  // as its owner, like the web API: it runs as root with every capability
+  // dropped — no `user:` here and no USER in its image.
+  assert.equal(mr.user, undefined, "the MR engine runs as a non-root user and cannot read the root-owned credentials");
+  assert.deepEqual(mr.cap_drop, ["ALL"]);
+  const dockerfile = await readFile(path.join(repoRoot, "deploy", "specialist-adapter", "Dockerfile"), "utf8");
+  assert.doesNotMatch(dockerfile, /^USER\s/m, "the engine image sets a USER; check it can still read the root-owned credentials");
+
+  // Who holds the node's credentials: the web API, the knowledge plugin, the MR engine.
+  const holders = files.flatMap(({ name, text }) => Object.entries(YAML.parse(text)?.services ?? {})
+    .filter(([, definition]) => JSON.stringify(definition ?? {}).includes("OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE"))
+    .map(([service]) => `${name} ${service}`));
+  assert.deepEqual(holders.sort(), [
+    "docker-compose.knowledge.yml evimed-knowledge-plugin",
+    "docker-compose.yml evimed-mr-agent",
+    "docker-compose.yml open-science-web",
+  ]);
+});
+

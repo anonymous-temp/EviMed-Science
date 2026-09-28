@@ -1077,6 +1077,15 @@ services:
       # tmpfs. Measured from this host on 2026-09-28, ftp.ebi.ac.uk gives
       # 38-58 KB/s, so a first scan of an 89 MB file takes about 40 minutes.
       EVIMED_MR_OPEN_CACHE_DIR: /tmp/evimed-mr-open-cache
+      # EBI through the Tokyo node, the one the web service uses: measured
+      # from this host on 2026-09-28, ftp.ebi.ac.uk gave ~19 KB/s direct and
+      # ~358 KB/s through the node. Only *.ebi.ac.uk goes through it; empty
+      # URL (or /dev/null for the credentials) = direct. A node that fails
+      # sends the request direct, and the run's
+      # mendelian-randomization-open-sources.json says which way each went
+      # (mr_agent/tools/open_sumstats.py).
+      EVIMED_MR_OPEN_PROXY_URL: ${OPEN_SCIENCE_EDGE_PROXY_URL:-}
+      EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE: /run/secrets/edge-proxy-credentials
     volumes:
       - open-science-data:/data
       - type: bind
@@ -1086,6 +1095,16 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+      # The node's credentials, the web service's host file (root:10002 0440 on
+      # the production host). This container runs as root with no capabilities,
+      # so it reads the file as its owner, as the web container does; no mode
+      # change is needed. Under docker-compose.specialist-audit.yml the analysis
+      # drops to uid 65532, cannot read it, and records the proxy as unusable
+      # (edge_proxy_credentials_unavailable) and goes direct.
+      - type: bind
+        source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
+        target: /run/secrets/edge-proxy-credentials
         read_only: true
     healthcheck:
       # `serving`: an engine that reports ready=false (without an OpenGWAS JWT
