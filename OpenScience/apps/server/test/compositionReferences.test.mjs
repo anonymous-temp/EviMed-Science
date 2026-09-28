@@ -342,9 +342,13 @@ test("the patch's override rows are collected as host-row references, not lost",
   const hostRows = patchReferences.filter((reference) => reference.kind === "host-row-id").map((reference) => reference.specifier);
   // `web` joined them on 2026-09-15: the row is no longer only disabled
   // underneath, it is configured to name our own provider.
+  // `mcp-resources` and the four upstream preset rows joined them on
+  // 2026-09-28, disabled so `evimed-universal` is the only preset and no agent
+  // is offered resource tools no configured server serves.
   assert.deepEqual(hostRows.sort(), [
-    "account-controller", "agent-preset-registry", "deepseek-account", "hmr", "llm-deepseek-account", "open-in-app",
-    "plugin-manager", "plugin-package-inventory-deepseek", "session-log-deepseek", "session-telemetry-otel",
+    "account-controller", "agent-preset-registry", "deepseek-account", "hmr", "llm-deepseek-account", "mcp-resources",
+    "open-in-app", "plugin-manager", "plugin-package-inventory-deepseek",
+    "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "session-log-deepseek", "session-telemetry-otel",
     "terminal-controller", "tool-web", "ui-open-in-app", "ui-plugin-manager", "ui-settings-account", "ui-sidebar-terminal",
     "web", "web-fetch-http",
   ]);

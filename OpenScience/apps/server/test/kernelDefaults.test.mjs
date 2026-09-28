@@ -148,9 +148,19 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "deepseek-account.disabled=true",
       "hmr.disabled=true",
       "llm-deepseek-account.disabled=true",
+      // 0.1.7's MCP-resource tools: offered to every agent with an MCP server,
+      // and no server this composition configures serves a resource.
+      "mcp-resources.disabled=true",
       "open-in-app.disabled=true",
       "plugin-manager.disabled=true",
       "plugin-package-inventory-deepseek.disabled=true",
+      // The four upstream presets the web bundle declares beside ours: a
+      // session on any of them carries none of this composition, so
+      // `evimed-universal` is the only preset a session can get.
+      "preset-cordis.disabled=true",
+      "preset-minimal.disabled=true",
+      "preset-ptc.disabled=true",
+      "preset-standard.disabled=true",
       // 0.1.7 flipped its default on: the whole session log with every request.
       "session-log-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",

@@ -99,7 +99,7 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "07cc99462d5f60d9377766b822d75f9b476b944d22556ca437cc5f22a72efbe3",
+  sha256: "aa6e2d1f22d7edb805470500b8092ae154bcac5779538e8dd26febc1c67cb8f9",
   recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config over a profile seeded on a host with no container runtime (npm --before=2026-09-24T15:18:11.337Z, Node 22.22.0, pnpm 11.7.0, the image's own pin and seed scripts, the same six `dsh plugin add` arguments deploy/runtime-dsh/install-runtime.sh uses)",
   // Recorded on 2026-09-28 for the move to 0.1.7-rc.2: 160 -> 191 rows. Not
   // from the release image — this machine has no Docker — so the seeding was
@@ -108,6 +108,14 @@ export const BASELINE_PROVENANCE = {
   // hold on the new composition. The release image's own `diff -u` against
   // this file is what would catch a platform-dependent row, and its first
   // build is where this hash is confirmed or replaced from the image.
+  // Re-recorded the same day by the same procedure, after the same seeding at
+  // HEAD first reproduced the previous file (sha256 07cc9946…efbe3) byte for
+  // byte: the socket patch disabled `mcp-resources` and the four upstream
+  // preset rows, and the dump moved by exactly those five `disabled: true`
+  // lines and their provenance headers. Still 191 rows. This re-recording ran
+  // on Node 24.18.0, not the 22.22.0 named above; the calibration on that same
+  // Node reproducing the previous file byte for byte is what shows the dump
+  // does not depend on it.
 };
 
 /**

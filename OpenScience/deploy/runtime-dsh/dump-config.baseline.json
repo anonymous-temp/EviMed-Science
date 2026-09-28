@@ -399,9 +399,10 @@
     fetch: false
     searchTimeoutMs: 60000
   disabled: true
-# == @deepseek-ai/dsh-base
+# == @deepseek-ai/dsh-base, patched by @evimed/dsh-socket
 - id: mcp-resources
   name: '@deepseek-ai/dsh-mcp-resources'
+  disabled: true
 # == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: tools
   name: '@deepseek-ai/dsh-tools'
@@ -648,7 +649,6 @@
   name: '@deepseek-ai/dsh-agent-preset-registry'
   config:
     default: evimed-universal
-# == @deepseek-ai/dsh-web-app
 - id: preset-standard
   name: '@deepseek-ai/dsh-agent-preset'
   config:
@@ -831,6 +831,7 @@
       - id: tool-plugin-manager
         name: '@deepseek-ai/dsh-plugin-manager/tools'
         disabled: true
+  disabled: true
 - id: preset-ptc
   name: '@deepseek-ai/dsh-agent-preset'
   config:
@@ -1019,6 +1020,7 @@
       - id: tool-plugin-manager
         name: '@deepseek-ai/dsh-plugin-manager/tools'
         disabled: true
+  disabled: true
 - id: preset-minimal
   name: '@deepseek-ai/dsh-agent-preset'
   config:
@@ -1099,6 +1101,7 @@
 
                 * Please run long lived commands in the background, e.g.
                 'Start-Job' or start a server with Start-Process.
+  disabled: true
 - id: preset-cordis
   name: '@deepseek-ai/dsh-agent-preset'
   config:
@@ -1288,6 +1291,7 @@
       - id: tool-plugin-manager
         name: '@deepseek-ai/dsh-plugin-manager/tools'
         disabled: !!js '!ctx.get(''profileContext'')'
+  disabled: true
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'

@@ -59,6 +59,44 @@
   config:
     default: evimed-universal
 
+# The four presets the web bundle declares beside ours: `standard`, `ptc`,
+# `minimal` and `cordis`. The registry lets a session name any preset it holds,
+# and a session on one of these carries none of this composition — no
+# guidance, no run policy, no evidence ledger, no delivery gate, every research
+# tool unrestricted — plus the tools it leaves out on purpose: booted at the
+# pin that introduced these rows, a `standard` session was offered `web_fetch`,
+# `subagent` and `subagent_fork`, `workflow` and plan mode. The control plane names `evimed-universal` on every
+# `session/create`, but the kernel's own page is a second caller and can name
+# any of them.
+#
+# Disabled here rather than refused in the control plane. The registry needs no
+# preset to exist at boot: it resolves one when a session asks and answers
+# `agent-preset/not-found` for a name it does not hold. A child joins its
+# parent's preset rather than choosing one, so delegation never used these.
+# And a preset that is not declared cannot be chosen by any caller, including
+# one that reaches the kernel by a route the proxy never sees; a refusal in the
+# control plane would guard one door of several. The picker panel
+# (`ui-agent-preset`) is already hidden by the profile patch, and
+# `agentPresets/select` is denied on the wire.
+- id: preset-standard
+  disabled: true
+
+# `ptc`: `standard` again, its tools handed to the model as code to call. The
+# same composition gap as the row above, and off for the same reason.
+- id: preset-ptc
+  disabled: true
+
+# `minimal`: a persona and a persistent PTY shell, with none of this
+# composition's plugins. The same gap as `standard`, off for the same reason.
+- id: preset-minimal
+  disabled: true
+
+# `cordis`: the preset that writes compositions. It already could not start
+# here — it waits on the plugin manager disabled below — so this also takes a
+# broken entry out of the roster the registry reports.
+- id: preset-cordis
+  disabled: true
+
 # Installing, removing and switching bundles at run time. New in 0.1.7 and
 # enabled in every profile launch (its row reads `profileContext`, which a
 # profile boot always provides). An EviMed runtime is a profile pre-initialized
@@ -182,6 +220,19 @@
   config:
     fetch: false
     searchTimeoutMs: 60000
+
+# Reading MCP *resources*, new in 0.1.7: three shared tools
+# (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`)
+# and a system-prompt section naming the servers, mounted for every agent whose
+# scope has an MCP server configured — which is every agent here. Neither
+# server this composition configures serves a resource: `evimed-research`
+# declares only the `tools` capability and answers `resources/*` with "Method
+# not found", and the ToolUniverse sidecar registers none. A tool the model
+# sees costs catalogue tokens on every first request and invites calls to
+# nothing. This row is the tools' only owner; the MCP client injects it as
+# optional and registers nothing without it.
+- id: mcp-resources
+  disabled: true
 
 # Uploads the session log itself — every message, tool call and tool result,
 # incrementally — as a `dsh_session_log` field on every model request. Its
