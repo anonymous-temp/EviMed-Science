@@ -11,7 +11,7 @@ import { apply } from '../plugins/capsule.mjs'
 // control plane what a conversation's own state adds, once, at its first
 // step, and hands it to that step as the run policy hands a brief.
 
-const TRIAL = '<evimed-capsule-trial>\n用户正在试用别人分享的胶囊「李主任的工作方式」…说一句「本次参考了《李主任的工作方式》」\n</evimed-capsule-trial>'
+const TRIAL = '<evimed-capsule-trial>\n用户正在试用别人分享的胶囊「李主任的工作方式」…\n</evimed-capsule-trial>'
 
 /** A control plane that answers `session` for one trial conversation. */
 async function controlPlane(t) {

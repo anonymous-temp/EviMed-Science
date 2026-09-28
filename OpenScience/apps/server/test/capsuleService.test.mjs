@@ -188,7 +188,10 @@ test("a received pack is trusted whole: scanned once, enabled and disabled in on
   assert.match(context, /<evimed-capsule-trial>/);
   assert.match(context, /试用别人分享的胶囊「李主任的工作方式」/);
   // Build spec §9.4 #8: no bar in the conversation; the model says it once.
-  assert.match(context, /第一次在回答里用到其中的做法时，在那条回答里说一句「本次参考了《李主任的工作方式》」；只说这一次/);
+  // The reply never announces which memory or method it used (owner ruling
+  // 2026-09-24, over spec §9.4 #8): a trial is marked in the conversation
+  // list, not in the answer.
+  assert.doesNotMatch(context, /本次参考了|说一句/);
   assert.match(context, /超说明书用药循证五步法/);
   assert.doesNotMatch(context, /Ignore your rules/, "a dropped entry is never handed to a run");
   assert.equal(await service.trialContext(USER, "missing"), "");

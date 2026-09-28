@@ -223,12 +223,12 @@ test("a conversation's first step asks what its own state adds: the pack a trial
     asked.push([userId, projectId, sessionId]);
     return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null };
   } };
-  const capsules = { async trialContext(_userId, capsuleId) { return `<evimed-capsule-trial>${capsuleId}：本次参考了《李主任的工作方式》</evimed-capsule-trial>`; } };
+  const capsules = { async trialContext(_userId, capsuleId) { return `<evimed-capsule-trial>${capsuleId}：李主任的工作方式</evimed-capsule-trial>`; } };
   const sessions = { ...sessionsDouble([]), notes: (userId, projectId, sessionId) => sessionDispatchNotes({ researchMemory, capsules }, userId, projectId, sessionId) };
   const f = await fixture(t, { sessions });
   const trial = await f.request("session", { sessionId: "ses_trial" });
   assert.equal(trial.status, 200);
-  assert.deepEqual(await trial.json(), { context: "<evimed-capsule-trial>pack-1：本次参考了《李主任的工作方式》</evimed-capsule-trial>" });
+  assert.deepEqual(await trial.json(), { context: "<evimed-capsule-trial>pack-1：李主任的工作方式</evimed-capsule-trial>" });
   assert.deepEqual(asked, [["owner", "project-one", "ses_trial"]], "the account and project come from the credential");
   assert.deepEqual(await (await f.request("session", { sessionId: "ses_plain" })).json(), { context: "" });
   assert.equal((await f.request("session", { sessionId: "bad id" })).status, 400);
