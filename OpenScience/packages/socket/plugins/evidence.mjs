@@ -17,7 +17,7 @@
 import { errorMessage } from '../src/runPolicy.mjs'
 import { mcpToolBaseName, narrateToolCall } from '@evimed/domain'
 import { configSchema, onToolObserved } from '@evimed/harness-port'
-import { EVIDENCE_TOOL_BASE_NAMES, evidenceFromOutcome, mergeEvidence, sourceProbe } from '../src/evidenceIngest.mjs'
+import { evidenceFromOutcome, isEvidenceCall, mergeEvidence, sourceProbe } from '../src/evidenceIngest.mjs'
 import { advanceEvidence } from '../src/runMirror.mjs'
 import { staleEvidence } from '../src/runMirror.mjs'
 
@@ -119,7 +119,7 @@ export async function apply(ctx, config) {
         // Named parts only, never the payload: this is a diagnostic, and tool
         // results carry source text.
         const base = mcpToolBaseName(call?.name ?? '')
-        if (base && EVIDENCE_TOOL_BASE_NAMES.includes(base) && outcome?.status === 'completed') {
+        if (base && isEvidenceCall(call) && outcome?.status === 'completed') {
           // Two different things end up here and only one is a defect. A tool
           // that answered under a container we recognise, with nothing in it,
           // searched and found nothing — a fact about the literature. A tool

@@ -30,6 +30,7 @@
 import {
   CLAIM_TOOLS,
   DOMAIN_VERSION,
+  EVIDENCE_SNAPSHOT_FILE,
   MCP_TOOL_PREFIX,
   RECEIPT_FORMAT_VERSION,
   SOCKET_TOOL_NAMES,
@@ -45,6 +46,7 @@ import {
   resolveContractKind,
   sourceTypeOfSidecar,
   sourceTypeSidecarPath,
+  withRetrievedSources,
   workspaceLayout,
 } from '@evimed/domain'
 import { capabilityCatalogue } from './guidance.mjs'
@@ -95,6 +97,7 @@ import {
   planToolParameters,
   rejectionEnvelope,
   reportingChecklistLines,
+  retrievalRecord,
   rootHiddenMcpTools,
   boundedSuggestions,
   renderDeliverySummary,
@@ -1809,7 +1812,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    */
   const judgeDeliverable = async (entry, item, call) => {
     const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
-    const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
+    const produced = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)
+    const expectedOutputs = produced?.outputs ?? []
+    // The manifest's own checks, applied here as the control plane applies
+    // them afterwards. They used to be applied there alone: a run passed every
+    // submission and was delivered `unverified` over findings it never saw.
+    const checks = Array.isArray(produced?.checks) ? produced.checks.map(String) : []
     const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs, item.contractKind)
     const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
     const matrix = parseJson(files.get('clinical-evidence-matrix.json'))
@@ -1822,8 +1830,36 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       sourceArtifacts,
       sourceTypes: await collectSourceTypes(ctx, entry, call, citedSourcePaths(matrix?.claims, sourceArtifacts)),
       staleEvidenceCount: 0,
+      checks,
+      ...(checks.includes('citedSourcesRecorded') ? { retrievedSources: retrievedSourcesOf(ctx, entry, call) } : {}),
     })
     return { verdict, files, expectedOutputs }
+  }
+
+  /**
+   * Write what this run's retrieval tools returned into the deliverable's
+   * evidence snapshot, under the key the run does not author. Called by every
+   * submission of a contract whose manifest checks cited sources against the
+   * snapshot, before it is judged — the same shape as `renderNumbering`: the
+   * record is an artifact of what happened, not something the model types.
+   * A snapshot that does not parse is left alone for the gate to name.
+   * @param {Record<string, any>} entry @param {Record<string, any>} item @param {Record<string, any>} call
+   * @returns {Promise<{ file: string, sources: number } | null>}
+   */
+  const renderRetrieved = async (entry, item, call) => {
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+    const produced = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)
+    if (!Array.isArray(produced?.checks) || !produced.checks.includes('citedSourcesRecorded')) return null
+    if (!(produced.outputs ?? []).some((/** @type {any} */ output) => output.path === EVIDENCE_SNAPSHOT_FILE)) return null
+    const rows = retrievedSourcesOf(ctx, entry, call)
+    const cwd = entry.cwd || call.cwd
+    return withDeliverableLock(entry, item.id, async () => {
+      const path = deliverablePath(item.id, EVIDENCE_SNAPSHOT_FILE)
+      const rendered = withRetrievedSources(await readFileAt(ctx, cwd, path), rows)
+      if (!rendered.written) return null
+      if (rendered.changed) await writeFileAt(ctx, cwd, path, rendered.text)
+      return { file: path, sources: rows.length }
+    })
   }
 
   async function submitTool() {
@@ -1867,6 +1903,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // matrix and the body, and a run that types it by hand delivers a
           // report whose citations do not match its own reference list.
           const rendered = await renderNumbering(entry, item, entry.cwd || call.cwd)
+          // And the retrieval record, for the same reason: which sources this
+          // run's tools returned is the platform's to write, not the model's.
+          const recorded = await renderRetrieved(entry, item, call)
           // Counted after the verdict, not before it: what a submission costs
           // depends on whether the gate could read it. See below.
           const attempts = (entry.attempts.get(item.id) ?? 0) + 1
@@ -1902,7 +1941,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // to tell a run being repaired from one that has stopped.
           await putRunMirror(ctx, entry, config.bundleVersion)
 
-          const renderedData = rendered?.ok ? { rendered: rendered.data } : {}
+          const renderedData = {
+            ...(rendered?.ok ? { rendered: rendered.data } : {}),
+            ...(recorded ? { retrieved: recorded } : {}),
+          }
           if (!verdict.ok) {
             // Acceptance is not revocable by a later attempt. This forced the item
             // to `submitted` and then applied `reject` whatever it had been, so a
@@ -2847,6 +2889,20 @@ async function collectSourceArtifacts(ctx, entry, call) {
     if (typeof text === 'string' && text) artifacts[artifactPath] = text
   }
   return artifacts
+}
+
+/**
+ * What this run's retrieval tools returned, from the same table
+ * `collectSourceArtifacts` reads: the platform's record, not the model's list.
+ * @param {any} ctx @param {Record<string, any>} entry @param {Record<string, any>} call
+ * @returns {Record<string, string>[]}
+ */
+function retrievedSourcesOf(ctx, entry, call) {
+  const store = ctx.get('evimedRun')
+  const records = store
+    ? [...store.evidence.entries()].map(([, value]) => value)
+    : (ctx.get('evimedEvidence')?.forSession?.(call.sessionId) ?? [])
+  return retrievalRecord(records, entry.runId)
 }
 
 /**

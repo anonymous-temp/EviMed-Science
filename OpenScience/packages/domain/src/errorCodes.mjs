@@ -590,6 +590,9 @@ export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   // Advisory: the blocking budget is spent, so these are findings a run repairs
   // and the ledger counts, not reasons to withhold a delivery.
   'deliverable_json_unparseable',
+  // A link the run's own snapshot lists and no retrieval tool of the run
+  // returned: a notice until its distribution is observed (principle 4).
+  'cited_source_unretrieved',
   'deliverable_run_receipt_shape',
   'deliverable_run_receipt_unbound',
   'deliverable_run_artifact_missing',
@@ -962,6 +965,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   runtime_domain_version_mismatch: '运行时与控制面的契约版本不一致。',
   deliverable_rejected: '交付物未通过契约校验，已列出必修项。',
   deliverable_json_unparseable: '交付包里的 JSON 文件无法解析，下游读不到它写的内容。',
+  cited_source_unretrieved: '报告链接的来源只出现在运行自己写的证据快照里，本次运行的检索工具没有取回过它。',
   deliverable_run_receipt_shape: '引擎运行回执缺少必要字段（作业 id、终态、产物清单）。',
   deliverable_run_receipt_unbound: '引擎运行回执没有作业 id，交付包无法与产生它的那次引擎运行对上。',
   deliverable_run_artifact_missing: '运行回执点名的产物不在交付包里。',

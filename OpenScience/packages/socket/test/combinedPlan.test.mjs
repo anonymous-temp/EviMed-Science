@@ -1960,3 +1960,86 @@ test("the package check reads the same stamped design the claim tool does", asyn
   const required = check.value.ok ? [] : check.value.issues.filter((/** @type {any} */ entry) => entry.severity === "required");
   assert.equal(required.some((/** @type {any} */ entry) => /certainty|riskOfBias|pico/.test(String(entry.message))), false, JSON.stringify(required));
 });
+
+/* ------------------------------------------ the retrieval record (2026-09-28) */
+
+// The comprehensive-drug-evaluation manifest's contract, as shipped: its
+// `checks` used to be read by the control plane alone.
+const DRUG_EVALUATION = Object.freeze({
+  id: "comprehensive-drug-evaluation",
+  persona: "你是药品综合评价分析师。",
+  skills: ["comprehensive-drug-evaluation"],
+  tools: ["mcp__evimed__drug_label_search", "mcp__evimed__literature_search"],
+  produces: [{
+    contractKind: "drug-evaluation-report",
+    outputs: [
+      { path: "comprehensive-evaluation-report.md", required: true },
+      { path: "evidence-table.csv", required: true },
+      { path: "evaluation-summary.json", required: true },
+      { path: "evidence-snapshot.json", required: true },
+    ],
+    checks: ["requiredOutputsExist", "citationsResolvable", "citedSourcesRecorded"],
+  }],
+});
+
+test("a submission records what the run retrieved into its snapshot and names a link nothing retrieved, while the run can fix it", async () => {
+  const f = await combinedFixture({
+    capabilities: [DRUG_EVALUATION],
+    skillBodies: { ...SKILL_BODIES, "comprehensive-drug-evaluation": "## 方法\n评价。\n" },
+    evidenceRecords: [
+      { runId: "combined_run", tool: "literature_search", query: "dapagliflozin CKD", sourceId: "pmid:32970396", pmid: "32970396", title: "DAPA-CKD", url: "https://pubmed.ncbi.nlm.nih.gov/32970396/", status: "queued", recordedAt: "2026-09-27T07:09:46Z" },
+      // Another conversation's retrieval in the same project container.
+      { runId: "other_run", tool: "web_read", sourceId: "https://www.nmpa.gov.cn/", url: "https://www.nmpa.gov.cn/", status: "ready", recordedAt: "2026-09-27T07:00:00Z" },
+    ],
+  });
+  await f.step(1);
+  const planned = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["按题面评价达格列净用于慢性肾脏病。"],
+    deliverables: [{ id: "d-cde", contractKind: "drug-evaluation-report", capability: DRUG_EVALUATION.id, title: "达格列净综合评价", dependsOn: [] }],
+  });
+  assert.equal(planned.value.ok, true, JSON.stringify(planned.value));
+  const base = "/workspace/deliverables/d-cde";
+  const report = (/** @type {boolean} */ withPortal) => [
+    "# 达格列净综合评价",
+    "",
+    "主要试验结果见文献 [1]。",
+    "",
+    "## 参考文献",
+    "",
+    "1. DAPA-CKD. https://pubmed.ncbi.nlm.nih.gov/32970396/",
+    ...(withPortal ? ["2. 说明书候选记录。官方核对入口：https://www.nmpa.gov.cn/"] : []),
+  ].join("\n");
+  f.writeFiles(new Map([
+    [`${base}/comprehensive-evaluation-report.md`, report(true)],
+    [`${base}/evidence-table.csv`, "source,domain\nS01,effectiveness\n"],
+    [`${base}/evaluation-summary.json`, "{\"coreDomains\":[]}"],
+    // The run's own list, typed without a single address.
+    [`${base}/evidence-snapshot.json`, JSON.stringify({ scope: "CKD", sources: [{ id: "S01", observedFields: "HR 0.61" }] })],
+  ]));
+
+  // A check reads the same record and writes nothing.
+  const checked = await f.execute("evimed_package_check", { deliverableId: "d-cde" });
+  assert.equal(checked.value.ok, false);
+  assert.equal(JSON.parse(String(f.files.get(`${base}/evidence-snapshot.json`))).retrieved, undefined, "a check writes nothing");
+
+  const first = await f.execute("evimed_submit_deliverable", { deliverableId: "d-cde" });
+  assert.equal(first.value.ok, false, JSON.stringify(first.value));
+  const unrecorded = first.value.issues.filter((/** @type {any} */ entry) => entry.code === "specialist_cited_source_unrecorded");
+  assert.equal(unrecorded.length, 1, JSON.stringify(first.value.issues));
+  assert.equal(unrecorded[0].severity, "required");
+  assert.match(unrecorded[0].message, /comprehensive-evaluation-report\.md line 8 links https:\/\/www\.nmpa\.gov\.cn\//);
+  assert.deepEqual(checked.value.issues.filter((/** @type {any} */ entry) => entry.code === "specialist_cited_source_unrecorded").map((/** @type {any} */ entry) => entry.message),
+    unrecorded.map((/** @type {any} */ entry) => entry.message), "the check and the submission reach one verdict");
+  // The platform's record is in the snapshot now, beside what the run wrote,
+  // and only this run's retrieval is in it.
+  const snapshot = JSON.parse(String(f.files.get(`${base}/evidence-snapshot.json`)));
+  assert.equal(snapshot.scope, "CKD");
+  assert.deepEqual(snapshot.retrieved.map((/** @type {any} */ row) => [row.sourceId, row.tool, row.url]), [["pmid:32970396", "literature_search", "https://pubmed.ncbi.nlm.nih.gov/32970396/"]]);
+  assert.deepEqual(first.value.data.retrieved, { file: "deliverables/d-cde/evidence-snapshot.json", sources: 1 });
+
+  // Fixed inside the turn: the portal link is gone, the package is accepted.
+  f.writeFiles(new Map([[`${base}/comprehensive-evaluation-report.md`, report(false)]]));
+  const second = await f.execute("evimed_submit_deliverable", { deliverableId: "d-cde" });
+  assert.equal(second.value.ok, true, JSON.stringify(second.value));
+});

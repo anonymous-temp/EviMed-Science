@@ -19,6 +19,8 @@ import {
   unmetDependencies,
   evidenceFromOutcome,
   evidenceSourceErrorCode,
+  isEvidenceCall,
+  retrievalRecord,
   sourceProbe,
   gateDeliverable,
   guardedBashTarget,
@@ -975,6 +977,41 @@ test("evidence records how far a source actually got", () => {
   assert.equal(fetched[0].status, "ready");
   assert.deepEqual(evidenceFromOutcome({ name: "bash", args: {} }, { status: "completed", structured: {}, text: "" }, context), []);
   assert.deepEqual(evidenceFromOutcome({ name: "mcp__evimed__literature_search", args: {} }, { status: "error", structured: null, text: "" }, context), []);
+});
+
+test("a retrieval row carries what the snapshot needs to name the source, and the run's own inventory is not a retrieval", () => {
+  const context = { runId: "r1", now: "2026-09-27T07:09:46Z", digest: (/** @type {string} */ value) => String(value.length) };
+  const [row] = evidenceFromOutcome(
+    { name: "mcp__evimed__literature_search", args: { pmids: ["32970396"] } },
+    { status: "completed", structured: { sources: [{ id: "pmid:32970396", pmid: "32970396", title: "Dapagliflozin in Patients with Chronic Kidney Disease", url: "https://pubmed.ncbi.nlm.nih.gov/32970396/", doi: "10.1056/NEJMoa2024816" }] }, text: "" },
+    context,
+  );
+  assert.equal(row.query, "pmids: 32970396", "a PMID lookup used to record an empty query");
+  assert.equal(row.pmid, "32970396");
+  assert.equal(row.title, "Dapagliflozin in Patients with Chronic Kidney Disease");
+  assert.equal(row.url, "https://pubmed.ncbi.nlm.nih.gov/32970396/");
+  assert.equal(row.doi, "10.1056/NEJMoa2024816");
+  // The assessment tool's retrieval is a retrieval; its compile echoes the
+  // inventory the run handed in, and recording that would make the run's list
+  // the platform's record of it.
+  const found = { status: "completed", structured: { sources: [{ id: "EVIMED:1", url: "https://example.org/1" }] }, text: "" };
+  assert.equal(evidenceFromOutcome({ name: "mcp__evimed__comprehensive_drug_evaluation", args: { action: "retrieve", drug: "dapagliflozin" } }, found, context).length, 1);
+  assert.equal(evidenceFromOutcome({ name: "mcp__evimed__comprehensive_drug_evaluation", args: { drug: "dapagliflozin" } }, found, context).length, 1, "retrieve is the default action");
+  assert.deepEqual(evidenceFromOutcome({ name: "mcp__evimed__comprehensive_drug_evaluation", args: { action: "compile", sourceInventory: [] } }, found, context), []);
+  assert.equal(isEvidenceCall({ name: "mcp__evimed__drug_selection_evaluation", args: { action: "requirements" } }), false);
+});
+
+test("the retrieval record is this run's rows, one per source, oldest first, status only moving forward", () => {
+  const rows = retrievalRecord([
+    { runId: "r1", tool: "literature_search", sourceId: "pmid:1", pmid: "1", query: "a", status: "queued", recordedAt: "2026-09-27T07:02:00Z" },
+    { runId: "r1", tool: "open_access_full_text", sourceId: "pmid:1", artifactPath: ".evimed-sources/p/1/fulltext.md", status: "ready", recordedAt: "2026-09-27T07:05:00Z" },
+    { runId: "r1", tool: "drug_label_search", sourceId: "label:H20170119", title: "安达唐", status: "queued", recordedAt: "2026-09-27T07:01:00Z" },
+    { runId: "r2", tool: "web_read", sourceId: "https://other.example/", status: "ready", recordedAt: "2026-09-27T07:00:00Z" },
+    { tool: "web_read", sourceId: "https://unstamped.example/", status: "ready" },
+  ], "r1");
+  assert.deepEqual(rows.map((row) => row.sourceId), ["label:H20170119", "pmid:1"]);
+  assert.deepEqual(rows[1], { sourceId: "pmid:1", tool: "literature_search", pmid: "1", query: "a", status: "ready", recordedAt: "2026-09-27T07:02:00Z", artifactPath: ".evimed-sources/p/1/fulltext.md" });
+  assert.deepEqual(retrievalRecord([{ runId: "", sourceId: "x", tool: "web_read" }], ""), [], "no run, no record");
 });
 
 test("merging evidence never walks a source backwards", () => {

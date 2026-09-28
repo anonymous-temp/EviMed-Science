@@ -78,6 +78,19 @@ import { clinicalSafetyCautionHits, usagePurposeOfRun } from "@evimed/domain";
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
 import { sourceTypeOfSidecar, sourceTypeSidecarPath } from "@evimed/domain";
+// The manifest's `citedSourcesRecorded`, one implementation for both sides
+// (2026-09-28): it used to be written out here, where the run never saw it.
+import {
+  EMPTY_SNAPSHOT_MESSAGE,
+  EVIDENCE_SNAPSHOT_FILE,
+  INVALID_SNAPSHOT_MESSAGE,
+  NOT_OBJECT_SNAPSHOT_MESSAGE,
+  UNRECORDED_LIMIT,
+  auditCitedSources,
+  citedHttpUrls,
+  unrecordedCitationMessage,
+  unretrievedCitationMessage,
+} from "@evimed/domain";
 import { normalizePagesRead } from "./webReadPages.mjs";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
@@ -1932,13 +1945,6 @@ async function deliverableCandidatePaths(project, relative) {
     .sort();
 }
 
-function citedHttpUrls(text) {
-  // Exclude and strip trailing ASCII and CJK/full-width punctuation so a URL
-  // written in Chinese prose (…example-a。) matches the same URL recorded inside
-  // JSON quotes in the snapshot.
-  return [...String(text).matchAll(/https?:\/\/[^\s)\]}>"'，。；、）】》「」『』！？…]+/g)]
-    .map((match) => match[0].replace(/[.,;，。；、）】》「」『』！？…]+$/, ""));
-}
 
 // An address nobody outside this deployment can resolve. The named internal
 // route was the instance that got written down; loopback and private addresses
@@ -2481,12 +2487,14 @@ async function specialistCompletionOutcome(
       };
     }
   }
-  // Generalized "sources recorded" check (the reusable part of clinical
-  // traceability) for agents that freeze a retrieval snapshot: every URL the
-  // report cites must appear in evidence-snapshot.json, so a report cannot cite
-  // a source that was never recorded in the frozen evidence set.
+  // The manifest's "sources recorded" check, from the domain: every link the
+  // report carries must be a source evidence-snapshot.json records — the
+  // run's own list or the platform's `retrieved` record, which submission
+  // writes into the snapshot from what the run's retrieval tools returned.
+  // The run's gate applies the same audit at every submission, so what is
+  // named here is what the run was told and did not fix.
   if (agent.completionChecks.includes("citedSourcesRecorded")) {
-    const snapshotEntry = [...files].find(([relative]) => relative.endsWith("evidence-snapshot.json"));
+    const snapshotEntry = [...files].find(([relative]) => relative.endsWith(EVIDENCE_SNAPSHOT_FILE));
     if (!snapshotEntry) {
       return {
         artifacts,
@@ -2499,56 +2507,41 @@ async function specialistCompletionOutcome(
         ],
       };
     }
-    let snapshot;
-    try {
-      snapshot = JSON.parse(snapshotEntry[1]);
-    } catch {
+    const audit = auditCitedSources({
+      reports: [...files].filter(([relative]) => relative.endsWith(".md")).map(([relative, text]) => ({ path: relative, text })),
+      snapshotText: snapshotEntry[1],
+    });
+    if (audit.status === "invalid" || audit.status === "not-object") {
       return {
         artifacts,
         errorCode: "specialist_evidence_snapshot_invalid",
         qualityStructural: true,
         qualityDegradable: true,
         qualityUnverified: true,
-        qualityIssues: ["evidence-snapshot.json must contain strict valid JSON; escape quotation marks correctly inside string values."],
+        qualityIssues: [audit.status === "invalid" ? INVALID_SNAPSHOT_MESSAGE : NOT_OBJECT_SNAPSHOT_MESSAGE],
       };
     }
-    if (!snapshot || typeof snapshot !== "object") {
-      return {
-        artifacts,
-        errorCode: "specialist_evidence_snapshot_invalid",
-        qualityStructural: true,
-        qualityDegradable: true,
-        qualityUnverified: true,
-        qualityIssues: ["evidence-snapshot.json must be a JSON object or array of source records, not a bare string or number."],
-      };
-    }
-    const recordedUrls = new Set(citedHttpUrls(snapshotEntry[1]));
-    if (!recordedUrls.size) {
+    if (audit.status === "empty") {
       return {
         artifacts,
         errorCode: "specialist_evidence_snapshot_empty",
         qualityDegradable: true,
         qualityUnverified: true,
-        qualityIssues: [
-          "evidence-snapshot.json records no source URL at all. Every source the report cites must appear there with the address it was retrieved from.",
-        ],
+        qualityIssues: [EMPTY_SNAPSHOT_MESSAGE],
       };
     }
-    const citedUrls = [...files]
-      .filter(([relative]) => relative.endsWith(".md"))
-      .flatMap(([, text]) => citedHttpUrls(text));
-    const unrecorded = [...new Set(citedUrls.filter((url) => !recordedUrls.has(url)))];
-    if (unrecorded.length > 0) {
-      // Naming them. Told only that some citation was unrecorded, a run has no
-      // way to find which of forty it is, and the repair loop has nothing to
-      // hand back.
+    // A link only the run's own list records is a notice (principle 4).
+    advisories.push(...audit.unretrieved.slice(0, UNRECORDED_LIMIT)
+      .map((entry) => runNotice("cited_source_unretrieved", unretrievedCitationMessage(entry))));
+    if (audit.unrecorded.length > 0) {
+      // Naming them, with the line. Told only that some citation was
+      // unrecorded, a run has no way to find which of forty it is.
       return {
         artifacts,
         errorCode: "specialist_cited_source_unrecorded",
         qualityDegradable: true,
         qualityUnverified: true,
-        qualityIssues: unrecorded.slice(0, 12).map((url) =>
-          `The report cites ${url}, which is absent from evidence-snapshot.json. Record the source there as retrieved, or drop the claim that rests on it.`),
+        qualityIssues: audit.unrecorded.slice(0, UNRECORDED_LIMIT).map((entry) => unrecordedCitationMessage(entry)),
       };
     }
   }

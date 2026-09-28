@@ -104,6 +104,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'claim-rob-overall': '偏倚风险总体判断与各领域不符',
   // The contract registry and the per-kind contract modules.
   'required-output': '缺少必需的交付文件',
+  'cited-sources-recorded': '引用来源未记入证据快照',
   'deliverable-json-parse': '交付文件不是有效的 JSON',
   'structured-output': '结构化产物格式有误',
   'clinical-content-trigger': '非临床交付物含临床内容',
@@ -161,6 +162,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   required_output_empty: '交付文件是空的',
   contract_kind_unknown: '交付物类型无法识别',
   deliverable_json_unparseable: '交付文件不是有效的 JSON',
+  cited_source_unretrieved: '引用来源不是本次检索取回的',
   deliverable_run_receipt_shape: '引擎运行记录格式有误',
   deliverable_run_receipt_unbound: '引擎运行记录缺少任务号',
   deliverable_run_artifact_missing: '运行记录所列文件缺失',

@@ -19,6 +19,7 @@ import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
+import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
 import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
@@ -55,6 +56,10 @@ export const GATE_CHECK_IDS = Object.freeze([
   ...clinicalEvidenceCheckIds,
   'required-output',
   'deliverable-json-parse',
+  // A manifest's `citedSourcesRecorded`: every link a report carries is a
+  // source the snapshot or the platform's retrieval record holds. It ran only
+  // on the control plane until 2026-09-28, where the run never saw it.
+  'cited-sources-recorded',
   // Every report-shaped kind reads its own JSON and CSV now, which nine of them
   // never did: a run receipt of `{ this is not json` and a one-column
   // `signals.csv` both used to pass with zero findings.
@@ -160,6 +165,8 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @property {Record<string, string>} [sourceTypes]  evidence type stamped on each preserved source, by path (C8)
  * @property {number} [staleEvidenceCount]
  * @property {string} [finalReplyText]
+ * @property {readonly string[]} [checks]        the manifest's `produces[].checks` for this contract
+ * @property {readonly Record<string, any>[]} [retrievedSources]  what this run's retrieval tools returned (the platform's record)
  */
 
 /** @param {GateInput} input @param {string} path @returns {string} */
@@ -764,7 +771,54 @@ export function runGate(input) {
   }
   const validator = VALIDATORS[contractKind]
   const files = input.files instanceof Map ? input.files : new Map(Object.entries(input.files ?? {}))
-  return validator({ ...input, contractKind, files })
+  return withManifestChecks(validator({ ...input, contractKind, files }), { ...input, contractKind, files })
+}
+
+/**
+ * The checks a capability manifest declares beside its outputs, applied to
+ * the verdict its contract kind's validator reached.
+ *
+ * `citedSourcesRecorded` is the one that decides anything here. It used to be
+ * applied by the control plane alone, after the run had ended, so a run could
+ * pass every submission and still be delivered `unverified` over findings it
+ * was never shown (2026-09-27, the dapagliflozin evaluation). Its unrecorded
+ * link is `required` for the same reason the control plane calls it must-fix:
+ * a citation of a source nobody read is a defect the reader cannot see. It
+ * withholds nothing; the run is told while it can still fix it.
+ *
+ * @param {GateVerdict} verdict @param {GateInput} input @returns {GateVerdict}
+ */
+function withManifestChecks(verdict, input) {
+  const checks = Array.isArray(input.checks) ? input.checks : []
+  if (!checks.includes('citedSourcesRecorded')) return verdict
+  const extra = citedSourceIssues(input)
+  if (!extra.length) return verdict
+  const blocked = extra.some((item) => item.severity === 'required')
+  return {
+    ...verdict,
+    ok: verdict.ok && !blocked,
+    issues: [...verdict.issues, ...extra],
+    errorCode: verdict.errorCode ?? (blocked ? 'deliverable_rejected' : null),
+  }
+}
+
+/** @param {GateInput} input @returns {GateIssue[]} */
+function citedSourceIssues(input) {
+  const snapshotText = input.files.get(EVIDENCE_SNAPSHOT_FILE)
+  // An absent snapshot is the required-output check's finding, not a second one.
+  if (snapshotText == null) return []
+  const reports = proseFilesOf(input).map((path) => ({ path, text: text(input, path) }))
+  const audit = auditCitedSources({ reports, snapshotText, retrieved: input.retrievedSources ?? [] })
+  const at = { path: EVIDENCE_SNAPSHOT_FILE, check: 'cited-sources-recorded' }
+  if (audit.status === 'invalid') return [issue('specialist_evidence_snapshot_invalid', INVALID_SNAPSHOT_MESSAGE, at)]
+  if (audit.status === 'not-object') return [issue('specialist_evidence_snapshot_invalid', NOT_OBJECT_SNAPSHOT_MESSAGE, at)]
+  if (audit.status === 'empty') return [issue('specialist_evidence_snapshot_empty', EMPTY_SNAPSHOT_MESSAGE, at)]
+  return [
+    ...audit.unrecorded.slice(0, UNRECORDED_LIMIT).map((entry) => issue('specialist_cited_source_unrecorded', unrecordedCitationMessage(entry),
+      { path: entry.path, line: entry.line, check: 'cited-sources-recorded' })),
+    ...audit.unretrieved.slice(0, UNRECORDED_LIMIT).map((entry) => issue('cited_source_unretrieved', unretrievedCitationMessage(entry),
+      { severity: 'advisory', path: entry.path, line: entry.line, check: 'cited-sources-recorded' })),
+  ]
 }
 
 /** @param {any} value @returns {string[]} */

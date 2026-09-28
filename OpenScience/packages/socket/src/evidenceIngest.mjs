@@ -38,6 +38,48 @@ export const EVIDENCE_TOOL_BASE_NAMES = Object.freeze([
 const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'web_read'])
 
 /**
+ * The three assessment tools. Their `retrieve` action (the default) asks the
+ * EviMed evidence service and answers with what it found — retrieval like any
+ * search. `compile` answers with the `sourceInventory` the run itself handed
+ * in, and recording that as retrieved would turn the run's own list into the
+ * platform's record of it, which is the one thing the record is for not being.
+ */
+const ASSESSMENT_TOOL_BASE_NAMES = new Set(['comprehensive_drug_evaluation', 'drug_selection_evaluation', 'offlabel_evidence_packet'])
+
+/** Characters of a title kept on a record: enough to recognise the work. */
+const TITLE_LIMIT = 300
+
+/**
+ * Whether a call is a retrieval whose result names sources: one of the search
+ * and read tools, or an assessment tool asked to retrieve.
+ * @param {{ name?: string, args?: Record<string, any> }} call @returns {boolean}
+ */
+export function isEvidenceCall(call) {
+  const base = mcpToolBaseName(call?.name ?? '')
+  if (!base) return false
+  if (EVIDENCE_TOOL_BASE_NAMES.includes(base)) return true
+  const action = call?.args?.action
+  return ASSESSMENT_TOOL_BASE_NAMES.has(base) && (action === undefined || action === null || action === '' || action === 'retrieve')
+}
+
+/**
+ * What the call asked for, as one line: the query, or the identifier, address,
+ * medicine, label or PMIDs a lookup names. A `pmids` lookup and a `labelId`
+ * read used to record an empty query.
+ * @param {Record<string, any> | undefined} args @returns {string}
+ */
+function queryOf(args) {
+  for (const key of ['query', 'identifier', 'url', 'drug', 'labelId']) {
+    const value = args?.[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  const pmids = args?.pmids
+  if (Array.isArray(pmids) && pmids.length) return `pmids: ${pmids.map(String).join(', ')}`
+  if (typeof pmids === 'string' && pmids.trim()) return `pmids: ${pmids.trim()}`
+  return ''
+}
+
+/**
  * @typedef {object} EvidenceRecord
  * @property {string} evidenceId
  * @property {string} runId
@@ -45,6 +87,9 @@ const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'web_read']
  * @property {string} query
  * @property {string} sourceId
  * @property {string} [doi]
+ * @property {string} [pmid]
+ * @property {string} [title]
+ * @property {string} [url]
  * @property {string} [artifactPath]
  * @property {string} [sourceType]
  * @property {string} digest
@@ -66,9 +111,9 @@ const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'web_read']
  */
 export function evidenceFromOutcome(call, outcome, context) {
   const base = mcpToolBaseName(call?.name ?? '')
-  if (!base || !EVIDENCE_TOOL_BASE_NAMES.includes(base)) return []
+  if (!base || !isEvidenceCall(call)) return []
   if (outcome?.status !== 'completed') return []
-  const query = String(call.args?.query ?? call.args?.identifier ?? call.args?.url ?? call.args?.drug ?? '')
+  const query = queryOf(call.args)
   const preserved = PRESERVING_TOOL_BASE_NAMES.has(base)
   const sources = sourcesOf(outcome.structured)
   // Where the preserving tools actually put the path. The MCP contract returns
@@ -101,6 +146,13 @@ export function evidenceFromOutcome(call, outcome, context) {
     if (!sourceId) continue
     const artifactPath = String(source.artifactPath ?? source.path ?? '').trim()
       || (preserved ? outcomeArtifact : '')
+    // What a reader and the snapshot need to recognise the source: its
+    // address, its PMID and its title. The table used to keep an identifier
+    // and a hash of the rest, so nothing downstream could say which work a
+    // row was without the tool result, which only the transcript holds.
+    const url = typeof source.url === 'string' && /^https?:\/\//i.test(source.url.trim()) ? source.url.trim() : ''
+    const pmid = /^\d{1,9}$/.test(String(source.pmid ?? '').trim()) ? String(source.pmid).trim() : ''
+    const title = typeof source.title === 'string' ? source.title.trim().slice(0, TITLE_LIMIT) : ''
     records.push({
       evidenceId: context.digest(`${context.runId}:${base}:${sourceId}`),
       runId: context.runId,
@@ -108,6 +160,9 @@ export function evidenceFromOutcome(call, outcome, context) {
       query,
       sourceId,
       ...(source.doi ? { doi: String(source.doi) } : {}),
+      ...(pmid ? { pmid } : {}),
+      ...(title ? { title } : {}),
+      ...(url ? { url } : {}),
       ...(artifactPath ? { artifactPath } : {}),
       // The evidence badge (C8): the research server stamps it; a record from
       // anywhere else is typed from the same table here.

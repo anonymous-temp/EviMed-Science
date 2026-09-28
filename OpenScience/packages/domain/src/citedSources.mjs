@@ -1,0 +1,282 @@
+/**
+ * Whether every source a report links to is a source the run recorded.
+ *
+ * Hidden knowledge: two things, each learned from a delivery.
+ *
+ * First, where this check lives. It used to be written once, inside the
+ * control plane's completion verdict (`agentRuns.mjs`), and nowhere the run
+ * could reach: `evimed_submit_deliverable` grades a package with `runGate`,
+ * and `runGate` never ran it. The 2026-09-27 dapagliflozin evaluation
+ * (evals/comprehensive-drug-evaluation/results/2026-09-27-cde-001-…) passed
+ * every submission it made and was then delivered `unverified` with two
+ * must-fix findings it had never been shown. A rule the run is held to and
+ * cannot see is the failure `clinicalEvidenceQuality.mjs` was written to make
+ * impossible; this module is the one implementation both sides call.
+ *
+ * Second, what "recorded" means. The snapshot was a file the model typed —
+ * that run wrote a 113-line Python script to build it — so "cited but not
+ * recorded" compared the model's report with the model's own list. The
+ * platform keeps its own record of what the run's retrieval tools returned
+ * (the socket's evidence table), and submission now writes that record into
+ * the snapshot under `retrieved`, a key the run does not author. A source a
+ * tool returned is therefore always recorded, whatever the model's list says,
+ * and a link nothing returned is named with the line it is on.
+ *
+ * Only links are read from the report, as before; what a link may match is
+ * wider: a `doi.org` link matches the DOI however the record writes it, a
+ * PubMed link matches the PMID, and scheme, case and a trailing slash do not
+ * make two addresses different. Those are identifier formats, not prose
+ * (principle 5).
+ *
+ * @module @evimed/domain/citedSources
+ */
+
+/** The file this check reads. */
+export const EVIDENCE_SNAPSHOT_FILE = 'evidence-snapshot.json'
+
+/** The snapshot key the platform writes and the run does not: what the run's tools returned. */
+export const SNAPSHOT_RETRIEVED_KEY = 'retrieved'
+
+/** Unrecorded links named in one verdict; past it the rest are counted. */
+export const UNRECORDED_LIMIT = 12
+
+/**
+ * @typedef {object} RetrievedSource
+ * @property {string} sourceId
+ * @property {string} [title]
+ * @property {string} [url]
+ * @property {string} [doi]
+ * @property {string} [pmid]
+ * @property {string} tool
+ * @property {string} [query]
+ * @property {string} [recordedAt]
+ * @property {string} [status]
+ * @property {string} [artifactPath]
+ * @property {string} [sourceType]
+ */
+
+/**
+ * Every http(s) address in a text. Trailing ASCII and CJK/full-width
+ * punctuation is excluded, so a URL written in Chinese prose (…example-a。)
+ * matches the same URL recorded inside JSON quotes.
+ * @param {unknown} text @returns {string[]}
+ */
+export function citedHttpUrls(text) {
+  return [...String(text ?? '').matchAll(/https?:\/\/[^\s)\]}>"'，。；、）】》「」『』！？…]+/g)]
+    .map((match) => match[0].replace(/[.,;，。；、）】》「」『』！？…]+$/, ''))
+}
+
+/** @param {string} value @returns {URL | null} */
+function parsed(value) {
+  try {
+    return new URL(value)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * One address in the form two spellings of it share: https, a lower-case host
+ * without `www.`, no fragment, no trailing slash.
+ * @param {string} value @returns {string}
+ */
+export function normalizedUrl(value) {
+  const url = parsed(value)
+  if (!url) return String(value).trim()
+  const host = url.hostname.toLowerCase().replace(/^www\./, '')
+  const path = url.pathname.replace(/\/+$/, '')
+  return `https://${host}${url.port ? `:${url.port}` : ''}${path}${url.search}`
+}
+
+/** A DOI, lower-cased, without a trailing full stop. @param {string} value @returns {string} */
+function normalizedDoi(value) {
+  return String(value).trim().toLowerCase().replace(/[.,;]+$/, '')
+}
+
+/** The DOI a link resolves, when it is a doi.org link. @param {string} value @returns {string} */
+function doiOfUrl(value) {
+  const url = parsed(value)
+  if (!url || !/^(?:dx\.)?doi\.org$/i.test(url.hostname.replace(/^www\./i, ''))) return ''
+  let path = url.pathname.replace(/^\/+/, '')
+  try {
+    path = decodeURIComponent(path)
+  } catch {
+    // A malformed escape is left as written.
+  }
+  return /^10\.\d{4,9}\//.test(path) ? normalizedDoi(path) : ''
+}
+
+/** The PMID a link names, when it is a PubMed link. @param {string} value @returns {string} */
+function pmidOfUrl(value) {
+  const url = parsed(value)
+  if (!url) return ''
+  const host = url.hostname.toLowerCase().replace(/^www\./, '')
+  const match = host === 'pubmed.ncbi.nlm.nih.gov'
+    ? /^\/(\d{1,9})\/?$/.exec(url.pathname)
+    : host === 'ncbi.nlm.nih.gov' ? /^\/pubmed\/(\d{1,9})\/?$/.exec(url.pathname) : null
+  return match ? match[1] : ''
+}
+
+const DOI_IN_TEXT = /\b10\.\d{4,9}\/[^\s"'<>，。；、）)\]}]+/g
+const PMID_IN_TEXT = /(?:\bPMID\b\s*[:：]?\s*|"pmid"\s*:\s*"?)(\d{1,9})/gi
+
+/**
+ * Every identifier a record set holds: addresses, DOIs and PMIDs, from the
+ * snapshot's text wherever it writes them and from the platform's rows.
+ * @param {string} snapshotText @param {readonly Record<string, any>[]} retrieved
+ */
+function recordedIdentifiers(snapshotText, retrieved) {
+  /** @type {Set<string>} */
+  const urls = new Set()
+  /** @type {Set<string>} */
+  const dois = new Set()
+  /** @type {Set<string>} */
+  const pmids = new Set()
+  const addUrl = (/** @type {string} */ value) => {
+    urls.add(normalizedUrl(value))
+    const doi = doiOfUrl(value)
+    if (doi) dois.add(doi)
+    const pmid = pmidOfUrl(value)
+    if (pmid) pmids.add(pmid)
+  }
+  for (const url of citedHttpUrls(snapshotText)) addUrl(url)
+  for (const match of String(snapshotText ?? '').matchAll(DOI_IN_TEXT)) dois.add(normalizedDoi(match[0]))
+  for (const match of String(snapshotText ?? '').matchAll(PMID_IN_TEXT)) pmids.add(match[1])
+  for (const row of retrieved ?? []) {
+    if (!row || typeof row !== 'object') continue
+    if (typeof row.url === 'string' && /^https?:\/\//i.test(row.url)) addUrl(row.url)
+    if (typeof row.doi === 'string' && row.doi.trim()) dois.add(normalizedDoi(row.doi.replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)/i, '')))
+    if (row.pmid != null && /^\d{1,9}$/.test(String(row.pmid).trim())) pmids.add(String(row.pmid).trim())
+    const id = String(row.sourceId ?? '').trim()
+    if (/^https?:\/\//i.test(id)) addUrl(id)
+    const idDoi = /^(?:doi:\s*)?(10\.\d{4,9}\/\S+)$/i.exec(id)
+    if (idDoi) dois.add(normalizedDoi(idDoi[1]))
+    const idPmid = /^pmid:?\s*(\d{1,9})$/i.exec(id)
+    if (idPmid) pmids.add(idPmid[1])
+  }
+  return { urls, dois, pmids }
+}
+
+/**
+ * @typedef {object} CitedSourceAudit
+ * @property {'ok'|'missing'|'invalid'|'not-object'|'empty'|'unrecorded'} status
+ * @property {{ path: string, line: number, url: string }[]} unrecorded  in neither the snapshot nor the platform's record
+ * @property {{ path: string, line: number, url: string }[]} unretrieved in the run's own list only: no retrieval tool of this run returned it
+ */
+
+/**
+ * The audit: every link the report files carry, against the snapshot and the
+ * platform's record of what the run retrieved.
+ *
+ * The platform's record is the rows handed in (the run side reads them from
+ * its evidence table) together with whatever the snapshot already carries
+ * under `retrieved` (what submission wrote there, which is all the control
+ * plane can read afterwards). A link in neither the snapshot nor that record
+ * is `unrecorded` — the check this module moved here, must-fix as it always
+ * was. A link only the run's own list carries is `unretrieved`: a notice, not
+ * a verdict, until its distribution has been observed (principle 4); a run
+ * may cite what an earlier run or the user supplied.
+ *
+ * @param {{ reports: readonly { path: string, text: string }[], snapshotText: string | null | undefined, retrieved?: readonly Record<string, any>[] }} input
+ * @returns {CitedSourceAudit}
+ */
+export function auditCitedSources({ reports, snapshotText, retrieved = [] }) {
+  if (snapshotText == null) return { status: 'missing', unrecorded: [], unretrieved: [] }
+  let snapshot
+  try {
+    snapshot = JSON.parse(snapshotText)
+  } catch {
+    return { status: 'invalid', unrecorded: [], unretrieved: [] }
+  }
+  if (!snapshot || typeof snapshot !== 'object') return { status: 'not-object', unrecorded: [], unretrieved: [] }
+  const platformRows = [
+    ...(retrieved ?? []),
+    ...(!Array.isArray(snapshot) && Array.isArray(snapshot[SNAPSHOT_RETRIEVED_KEY]) ? snapshot[SNAPSHOT_RETRIEVED_KEY] : []),
+  ]
+  const ownText = Array.isArray(snapshot) ? snapshotText : JSON.stringify({ ...snapshot, [SNAPSHOT_RETRIEVED_KEY]: undefined })
+  const platform = recordedIdentifiers('', platformRows)
+  const own = recordedIdentifiers(ownText, [])
+  const size = (/** @type {ReturnType<typeof recordedIdentifiers>} */ set) => set.urls.size + set.dois.size + set.pmids.size
+  if (!size(platform) && !size(own)) return { status: 'empty', unrecorded: [], unretrieved: [] }
+  /** @param {ReturnType<typeof recordedIdentifiers>} set @param {string} url */
+  const holds = (set, url) => {
+    const doi = doiOfUrl(url)
+    const pmid = pmidOfUrl(url)
+    return set.urls.has(normalizedUrl(url)) || Boolean(doi && set.dois.has(doi)) || Boolean(pmid && set.pmids.has(pmid))
+  }
+  /** @type {{ path: string, line: number, url: string }[]} */
+  const unrecorded = []
+  /** @type {{ path: string, line: number, url: string }[]} */
+  const unretrieved = []
+  const seen = new Set()
+  for (const report of reports) {
+    const lines = String(report.text ?? '').split('\n')
+    for (let index = 0; index < lines.length; index += 1) {
+      for (const url of citedHttpUrls(lines[index])) {
+        if (seen.has(url)) continue
+        seen.add(url)
+        if (holds(platform, url)) continue
+        if (holds(own, url)) unretrieved.push({ path: report.path, line: index + 1, url })
+        else unrecorded.push({ path: report.path, line: index + 1, url })
+      }
+    }
+  }
+  return { status: unrecorded.length ? 'unrecorded' : 'ok', unrecorded, unretrieved }
+}
+
+/**
+ * What the run is told about one link nothing recorded: where it is, why it
+ * counts, and the three ways out.
+ * @param {{ path: string, line: number, url: string }} entry @returns {string}
+ */
+export function unrecordedCitationMessage({ path, line, url }) {
+  return `${path} line ${line} links ${url}, which no retrieval tool of this run returned and ${EVIDENCE_SNAPSHOT_FILE} does not record. `
+    + 'If you read that page, read it with web_read (or fetch the record with the search tool that finds it) so the platform records it. '
+    + 'A portal, home or search page is not a source: cite the record you read by its identifier (a drug label by its approval number and label id) and drop the link. '
+    + 'If nothing you read supports the sentence, drop the sentence.'
+}
+
+/**
+ * The notice for a link only the run's own list records.
+ * @param {{ path: string, line: number, url: string }} entry @returns {string}
+ */
+export function unretrievedCitationMessage({ path, line, url }) {
+  return `${path} line ${line} links ${url}; ${EVIDENCE_SNAPSHOT_FILE} lists it, but no retrieval tool of this run returned it. `
+    + 'If this run read it, read it through a tool so the platform records it; if it came from the user or an earlier run, say so in its snapshot entry.'
+}
+
+/** What the run is told when neither the snapshot nor the platform recorded any source. */
+export const EMPTY_SNAPSHOT_MESSAGE = `${EVIDENCE_SNAPSHOT_FILE} records no source address, DOI or PMID, and no retrieval tool of this run returned one. Every source the report cites must be one a tool of this run retrieved.`
+
+/** What the run is told when the snapshot does not parse. */
+export const INVALID_SNAPSHOT_MESSAGE = `${EVIDENCE_SNAPSHOT_FILE} must contain strict valid JSON; escape quotation marks correctly inside string values.`
+
+/** What the run is told when the snapshot parses to something that is not a record. */
+export const NOT_OBJECT_SNAPSHOT_MESSAGE = `${EVIDENCE_SNAPSHOT_FILE} must be a JSON object or array of source records, not a bare string or number.`
+
+/**
+ * The snapshot with the platform's record written into it, under the one key
+ * the run does not author. Everything else the run wrote is kept as it was; a
+ * snapshot that is an array of records becomes `{ sources: [...] }` so the key
+ * has somewhere to live. A file that does not parse is returned unchanged —
+ * the check says so, and overwriting it would lose what the run wrote.
+ *
+ * @param {string | null | undefined} snapshotText @param {readonly Record<string, any>[]} retrieved
+ * @returns {{ text: string, changed: boolean, written: boolean }}
+ */
+export function withRetrievedSources(snapshotText, retrieved) {
+  const rows = [...(retrieved ?? [])]
+  /** @type {any} */
+  let snapshot = {}
+  if (snapshotText != null && String(snapshotText).trim()) {
+    try {
+      snapshot = JSON.parse(String(snapshotText))
+    } catch {
+      return { text: String(snapshotText), changed: false, written: false }
+    }
+  }
+  if (Array.isArray(snapshot)) snapshot = { sources: snapshot }
+  if (!snapshot || typeof snapshot !== 'object') return { text: String(snapshotText ?? ''), changed: false, written: false }
+  const text = `${JSON.stringify({ ...snapshot, [SNAPSHOT_RETRIEVED_KEY]: rows }, null, 2)}\n`
+  return { text, changed: text !== String(snapshotText ?? ''), written: true }
+}

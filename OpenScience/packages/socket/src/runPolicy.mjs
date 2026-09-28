@@ -590,6 +590,8 @@ export function childReport(outcome) {
  *   sourceArtifacts?: Record<string, string>,
  *   sourceTypes?: Record<string, string>,
  *   staleEvidenceCount?: number,
+ *   checks?: readonly string[],
+ *   retrievedSources?: readonly Record<string, string>[],
  * }} input
  * @returns {ReturnType<typeof runGate>}
  */
@@ -1161,4 +1163,45 @@ export function sourceArtifactPaths(records, runId) {
     paths.push(artifactPath)
   }
   return paths
+}
+
+/**
+ * What this run's retrieval tools returned, one row per source: the
+ * platform's own record, which submission writes into a deliverable's
+ * `evidence-snapshot.json` under `retrieved` (`withRetrievedSources`). The
+ * model used to type that list itself — the 2026-09-27 dapagliflozin run wrote
+ * a 113-line script to do it — so "recorded" meant "the model wrote it down".
+ * @param {readonly Record<string, any>[] | null | undefined} records evidence rows
+ * @param {string} runId the run these must belong to; '' records nothing
+ * @returns {Record<string, string>[]} one row per source id, oldest first
+ */
+export function retrievalRecord(records, runId) {
+  const rank = { queued: 0, stale: 1, ready: 2, rejected: 3, verified: 4 }
+  /** @type {Map<string, Record<string, string>>} */
+  const bySource = new Map()
+  for (const record of records ?? []) {
+    // Only this run's rows, and never an unstamped one: two roots in one
+    // project container must not record each other's retrievals.
+    if (!runId || record?.runId !== runId) continue
+    const sourceId = String(record?.sourceId ?? '').trim()
+    if (!sourceId) continue
+    /** @type {Record<string, string>} */
+    const row = { sourceId, tool: String(record.tool ?? '') }
+    for (const field of ['title', 'url', 'doi', 'pmid', 'query', 'recordedAt', 'status', 'artifactPath', 'sourceType']) {
+      const value = record[field]
+      if (typeof value === 'string' && value.trim()) row[field] = value.trim()
+    }
+    const previous = bySource.get(sourceId)
+    if (!previous) {
+      bySource.set(sourceId, row)
+      continue
+    }
+    // The first retrieval names the tool and the time; a later one may fill
+    // what it lacked and may only move the status forward.
+    const merged = { ...row, ...previous }
+    const later = (rank[/** @type {keyof typeof rank} */ (row.status)] ?? 0) > (rank[/** @type {keyof typeof rank} */ (previous.status)] ?? 0)
+    if (later) merged.status = row.status
+    bySource.set(sourceId, merged)
+  }
+  return [...bySource.values()].sort((left, right) => String(left.recordedAt ?? '').localeCompare(String(right.recordedAt ?? '')) || left.sourceId.localeCompare(right.sourceId))
 }

@@ -73,6 +73,11 @@ export const RUN_DOMAIN_SPEC = Object.freeze({
       query: 'string',
       sourceId: 'string',
       doi: 'string?',
+      // What the snapshot's platform record (`retrieved`) is written from: an
+      // undeclared field is stripped on open(), so each is declared here.
+      pmid: 'string?',
+      title: 'string?',
+      url: 'string?',
       artifactPath: 'string?',
       // The evidence badge (C8); an undeclared field is stripped on open().
       sourceType: 'string?',

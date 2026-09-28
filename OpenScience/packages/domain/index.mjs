@@ -336,6 +336,22 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
+// citedSources — 12 exports
+export {
+  EMPTY_SNAPSHOT_MESSAGE,
+  EVIDENCE_SNAPSHOT_FILE,
+  INVALID_SNAPSHOT_MESSAGE,
+  NOT_OBJECT_SNAPSHOT_MESSAGE,
+  SNAPSHOT_RETRIEVED_KEY,
+  UNRECORDED_LIMIT,
+  auditCitedSources,
+  citedHttpUrls,
+  normalizedUrl,
+  unrecordedCitationMessage,
+  unretrievedCitationMessage,
+  withRetrievedSources,
+} from './src/citedSources.mjs'
+
 // statConsistency — 5 exports
 export {
   incompleteBeta,

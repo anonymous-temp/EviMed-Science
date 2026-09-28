@@ -52,6 +52,7 @@ export { proseShape } from './src/proseShape.mjs'
 export { RUN_DOMAIN_SPEC, RUN_STATE_FORMAT_VERSION, projectRunState, staleEvidence } from './src/runMirror.mjs'
 export {
   evidenceFromOutcome,
+  isEvidenceCall,
   mergeEvidence,
   sourceProbe,
 } from './src/evidenceIngest.mjs'
@@ -70,6 +71,7 @@ export {
   planCapabilityIssues,
   rejectionEnvelope,
   renderDeliverySummary,
+  retrievalRecord,
   rootHiddenMcpTools,
   settleDelegation,
   sourceArtifactPaths,
