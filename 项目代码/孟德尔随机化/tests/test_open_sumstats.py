@@ -144,6 +144,8 @@ class _Catalogue:
 @pytest.fixture
 def catalogue(monkeypatch):
     monkeypatch.delenv("EVIMED_MR_LD_BFILE", raising=False)
+    # Direct, whatever the shell says: the proxied way is test_open_sumstats_egress.
+    monkeypatch.delenv("EVIMED_MR_OPEN_PROXY_URL", raising=False)
     return _Catalogue()
 
 

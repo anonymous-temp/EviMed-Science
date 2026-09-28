@@ -30,20 +30,30 @@ LD independence it did not check.
 No statistics are computed here beyond reading and filtering what the files
 say. Identifiers come only from the catalogue: a study the catalogue does not
 return, or a file it does not list, is an error, never a guess.
+
+EBI can be read through the platform's edge proxy (``EVIMED_MR_OPEN_PROXY_URL``
+and ``EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE``, see ``_Egress``); the source
+record says which way every request went.
 """
 
 from __future__ import annotations
 
+import base64
 import bisect
 import csv
+import errno
 import gzip
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import re
 import shutil
+import socket
+import ssl
+import stat
 import struct
 import subprocess
 import tempfile
@@ -54,6 +64,7 @@ import urllib.request
 import zlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from http import client as http_client
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
@@ -161,37 +172,351 @@ def _cache_write(key: str, suffix: str, content: bytes) -> None:
             pass
 
 
-class _Http:
-    """Every request this module makes, counted, with bounded retries."""
+# --- Egress: EBI through the edge proxy -----------------------------------------
+#
+# Measured from the Beijing production host on 2026-09-28: one download from
+# ftp.ebi.ac.uk ran at ~19 KB/s direct and ~358 KB/s through the platform's
+# Tokyo edge node — a squid TLS forward proxy on 443 with basic credentials,
+# the same node the control plane uses (apps/server/src/edgeProxy.mjs). With
+# EVIMED_MR_OPEN_PROXY_URL (https://<node>) and
+# EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE (``user:password``) set, a request to an
+# EBI host goes TLS to the node (its certificate verified), CONNECT, then TLS to
+# EBI inside that tunnel, so the node sees a host name and nothing else and
+# EBI's certificate is verified here. Every other host goes direct.
+#
+# A node that fails — unreachable, a TLS failure, a refused tunnel (407 wrong
+# credentials, 403 destination), a timeout — costs that request its shortcut,
+# not its answer: it goes direct. A refusal that a retry cannot change turns
+# the node off for the rest of the job at once; any other failure does at the
+# third. The source record's ``http.egress`` says how many requests went each
+# way and why the node failed, and each read says which way it went. The
+# credentials are sent to the node in the CONNECT request and nowhere else:
+# never logged, never recorded, never in an error message.
 
-    def __init__(self, opener: Callable[..., Any] | None = None):
+EDGE_PROXY_DOMAIN = "ebi.ac.uk"
+ROUTE_PROXY = "edge_proxy"
+ROUTE_DIRECT = "direct"
+#: The node's own connect budget, as the control plane's (OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS).
+_PROXY_CONNECT_SECONDS = 10
+_PROXY_FAILURES_BEFORE_OFF = 3
+_PROXY_FAILURES_RECORDED = 20
+_CONNECT_HEAD_LIMIT = 16 * 1024
+_CREDENTIALS_LIMIT = 8 * 1024
+_REDIRECTS = 5
+_LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class EdgeProxy:
+    """Where the node is, and the Basic credentials for it (kept out of ``repr``)."""
+
+    host: str
+    port: int
+    authorization: str = field(repr=False)
+
+
+class _ProxyFailure(Exception):
+    """The node, or the tunnel through it, failed before an answer arrived."""
+
+    def __init__(self, code: str, status: int | None = None):
+        super().__init__(code)
+        self.code, self.status = code, status
+
+    @property
+    def final(self) -> bool:
+        """A refusal a retry cannot change: the credentials, the node's policy, a certificate."""
+        return self.status in (403, 407) or self.code.endswith("_certificate_rejected")
+
+
+def read_proxy_credentials(path: str) -> tuple[str | None, str | None]:
+    """``(user:password, None)``, or ``(None, issue)``; ``(None, None)`` when there is none.
+
+    The control plane's reader (config.mjs ``readSecretFile``, ``allowGroupRead``)
+    decides the same way on the same host file: no symlink, a regular file (the
+    ``/dev/null`` compose binds where a deployment has no node reads as none), at
+    most 8 KiB, readable by its group (root:10002 0440, shared with the knowledge
+    plugin) but never writable by it and never readable by others.
+    """
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        symlink = error.errno == errno.ELOOP
+        return None, "edge_proxy_credentials_symlink" if symlink else "edge_proxy_credentials_unavailable"
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            return None, None
+        if info.st_size > _CREDENTIALS_LIMIT + 2:
+            return None, "edge_proxy_credentials_too_large"
+        if info.st_mode & 0o037:
+            return None, "edge_proxy_credentials_permissions"
+        raw = os.read(descriptor, _CREDENTIALS_LIMIT + 3)
+    except OSError:
+        return None, "edge_proxy_credentials_unavailable"
+    finally:
+        os.close(descriptor)
+    value = raw.decode("utf-8", "replace")
+    value = value[:-2] if value.endswith("\r\n") else value[:-1] if value.endswith("\n") else value
+    if not re.fullmatch(r"[^:\s]+:\S+", value):
+        return None, "edge_proxy_credentials_invalid"
+    return value, None
+
+
+def _trust() -> ssl.SSLContext:
+    """The system's roots, and certifi's where it is installed (requests ships it)."""
+    context = ssl.create_default_context()
+    try:
+        import certifi
+
+        context.load_verify_locations(cafile=certifi.where())
+    except (ImportError, OSError, ssl.SSLError):
+        pass
+    return context
+
+
+class _TunnelConnection(http_client.HTTPConnection):
+    """HTTP/1.1 over a tunnel that is already open; ``http.client`` still checks the request line."""
+
+    default_port = 443
+
+    def __init__(self, host: str, port: int, transport: Any, timeout: float):
+        super().__init__(host, port, timeout=timeout)
+        self._transport = transport
+
+    def connect(self) -> None:
+        self.sock = self._transport
+
+
+class _Egress:
+    """Which way each request goes; what the source record says about it."""
+
+    def __init__(
+        self,
+        proxy: EdgeProxy | None = None,
+        *,
+        state: str = "not_configured",
+        issue: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
+    ):
+        self.proxy, self.state, self.issue = proxy, state, issue
+        self._context = ssl_context
+        self.failures: list[dict[str, Any]] = []
+        self.failure_count = 0
+        self.off = False
+
+    @classmethod
+    def from_env(cls, *, ssl_context: ssl.SSLContext | None = None) -> "_Egress":
+        raw = os.getenv("EVIMED_MR_OPEN_PROXY_URL", "").strip()
+        if not raw:
+            return cls()
+        try:
+            parts = urllib.parse.urlsplit(raw)
+            port = parts.port or 443
+        except ValueError:
+            return cls(state="unusable", issue="edge_proxy_url_invalid")
+        if (
+            parts.scheme != "https" or not parts.hostname or parts.username or parts.password
+            or parts.path not in ("", "/") or parts.query or parts.fragment
+        ):
+            # https only: the credentials must never cross the wire in the clear.
+            return cls(state="unusable", issue="edge_proxy_url_invalid")
+        path = os.getenv("EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE", "").strip()
+        credentials, issue = read_proxy_credentials(path) if path else (None, None)
+        if credentials is None:
+            return cls(state="unusable", issue=issue or "edge_proxy_credentials_missing")
+        try:
+            from urllib3.util.ssltransport import SSLTransport  # noqa: F401  (TLS inside TLS)
+        except ImportError:
+            return cls(state="unusable", issue="edge_proxy_tls_in_tls_unavailable")
+        authorization = "Basic " + base64.b64encode(credentials.encode("utf-8")).decode("ascii")
+        return cls(EdgeProxy(parts.hostname, port, authorization), state="configured", ssl_context=ssl_context)
+
+    def routes(self, url: str) -> bool:
+        parts = urllib.parse.urlsplit(url)
+        host = (parts.hostname or "").lower()
+        return (
+            self.proxy is not None and not self.off and parts.scheme == "https"
+            and (host == EDGE_PROXY_DOMAIN or host.endswith("." + EDGE_PROXY_DOMAIN))
+        )
+
+    def failed(self, failure: _ProxyFailure, host: str) -> None:
+        self.failure_count += 1
+        if len(self.failures) < _PROXY_FAILURES_RECORDED:
+            self.failures.append({"code": failure.code, "httpStatus": failure.status, "host": host, "at": _now()})
+        _LOG.warning(
+            "The edge proxy failed for %s (%s%s); the request goes direct.",
+            host, failure.code, f", HTTP {failure.status}" if failure.status else "",
+        )
+        if not self.off and (failure.final or self.failure_count >= _PROXY_FAILURES_BEFORE_OFF):
+            self.off = True
+            _LOG.warning("The edge proxy is off for the rest of this job after %d failure(s).", self.failure_count)
+
+    def open(self, url: str, headers: dict[str, str], timeout: float) -> http_client.HTTPResponse:
+        """One GET through the node; the answer whatever its status, or ``_ProxyFailure``."""
+        parts = urllib.parse.urlsplit(url)
+        host, port = parts.hostname or "", parts.port or 443
+        transport = self._tunnel(host, port, timeout)
+        connection = _TunnelConnection(host, port, transport, timeout)
+        try:
+            connection.request(
+                "GET", urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")),
+                headers={**headers, "Connection": "close"},
+            )
+            response = connection.getresponse()
+        except (OSError, http_client.HTTPException):
+            transport.close()
+            raise _ProxyFailure("edge_proxy_upstream_failed") from None
+        # The response's file now holds the tunnel open until it is read or closed.
+        connection.sock = None
+        transport.close()
+        return response
+
+    def _tunnel(self, host: str, port: int, timeout: float) -> Any:
+        """TLS to the node, CONNECT, then TLS to ``host`` inside it."""
+        from urllib3.util.ssltransport import SSLTransport
+
+        assert self.proxy is not None
+        context = self._context or _trust()
+        try:
+            raw = socket.create_connection(
+                (self.proxy.host, self.proxy.port), timeout=min(_PROXY_CONNECT_SECONDS, timeout)
+            )
+        except OSError:
+            raise _ProxyFailure("edge_proxy_unreachable") from None
+        leg: Any = raw
+        try:
+            try:
+                leg = context.wrap_socket(raw, server_hostname=self.proxy.host)
+            except ssl.SSLCertVerificationError:
+                raise _ProxyFailure("edge_proxy_certificate_rejected") from None
+            except (ssl.SSLError, OSError):
+                raise _ProxyFailure("edge_proxy_tls_failed") from None
+            authority = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+            try:
+                leg.sendall(
+                    f"CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n"
+                    f"Proxy-Authorization: {self.proxy.authorization}\r\n\r\n".encode("latin-1")
+                )
+                status = self._connect_status(leg)
+            except TimeoutError:
+                raise _ProxyFailure("edge_proxy_timeout") from None
+            except OSError:
+                raise _ProxyFailure("edge_proxy_unreachable") from None
+            if status != 200:
+                raise _ProxyFailure("edge_proxy_refused", status or None)
+            try:
+                transport = SSLTransport(leg, context, server_hostname=host)
+            except ssl.SSLCertVerificationError:
+                raise _ProxyFailure("edge_proxy_upstream_certificate_rejected") from None
+            except (ssl.SSLError, OSError):
+                raise _ProxyFailure("edge_proxy_upstream_tls_failed") from None
+            leg.settimeout(timeout)
+            return transport
+        except BaseException:
+            leg.close()
+            raise
+
+    @staticmethod
+    def _connect_status(leg: Any) -> int:
+        """The status of the node's answer to CONNECT, read to its blank line and no further."""
+        head = bytearray()
+        while not head.endswith(b"\r\n\r\n"):
+            byte = leg.recv(1)
+            if not byte:
+                raise _ProxyFailure("edge_proxy_unreachable")
+            head += byte
+            if len(head) > _CONNECT_HEAD_LIMIT:
+                raise _ProxyFailure("edge_proxy_protocol")
+        match = re.match(rb"HTTP/1\.[01] (\d{3})", bytes(head))
+        return int(match.group(1)) if match else 0
+
+    def record(self, requests: dict[str, int]) -> dict[str, Any]:
+        """``http.egress`` in the source record: no address, no credential."""
+        return {
+            "proxy": self.state,
+            **({"proxyIssue": self.issue} if self.issue else {}),
+            "proxiedHosts": f"*.{EDGE_PROXY_DOMAIN}" if self.proxy else None,
+            "requests": {route: count for route, count in requests.items() if count},
+            "proxyFailureCount": self.failure_count,
+            "proxyFailures": list(self.failures),
+            "proxyTurnedOff": self.off,
+        }
+
+
+class _Http:
+    """Every request this module makes, counted by the way it went, with bounded retries."""
+
+    def __init__(self, opener: Callable[..., Any] | None = None, *, egress: _Egress | None = None):
         self._open = opener or urllib.request.urlopen
+        self.egress = egress if egress is not None else _Egress.from_env()
         self.requests = 0
         self.bytes = 0
+        self.routes = {ROUTE_PROXY: 0, ROUTE_DIRECT: 0}
+        self.last_route: str | None = None
+
+    def routes_since(self, mark: dict[str, int]) -> dict[str, int]:
+        """Requests per route since ``mark`` (a copy of ``routes`` taken earlier)."""
+        return {
+            route: count - mark.get(route, 0) for route, count in self.routes.items() if count > mark.get(route, 0)
+        }
+
+    def _send(self, url: str, headers: dict[str, str]):
+        """Through the node when it carries this host, else (or when it fails) direct."""
+        for _ in range(_REDIRECTS + 1):
+            if not self.egress.routes(url):
+                break
+            try:
+                response = self.egress.open(url, headers, _timeout())
+            except _ProxyFailure as failure:
+                self.egress.failed(failure, urllib.parse.urlsplit(url).hostname or "")
+                break
+            self.routes[ROUTE_PROXY] += 1
+            self.last_route = ROUTE_PROXY
+            location = response.headers.get("Location")
+            if response.status in (301, 302, 303, 307, 308) and location:
+                response.close()
+                url = urllib.parse.urljoin(url, location)
+                continue
+            if not 200 <= response.status < 300:
+                status, reason, response_headers = response.status, response.reason, response.headers
+                response.close()
+                raise urllib.error.HTTPError(url, status, reason, response_headers, None)
+            return response
+        else:
+            raise OpenSourceError(
+                "mr_open_source_unavailable",
+                f"{urllib.parse.urlsplit(url).netloc} redirected more than {_REDIRECTS} times.",
+            )
+        self.routes[ROUTE_DIRECT] += 1
+        self.last_route = ROUTE_DIRECT
+        return self._open(urllib.request.Request(url, headers=headers), timeout=_timeout())
 
     def open(self, url: str, *, headers: dict[str, str] | None = None, attempts: int = 3):
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+        merged = {"User-Agent": USER_AGENT, **(headers or {})}
         for attempt in range(attempts):
             self.requests += 1
             try:
-                return self._open(request, timeout=_timeout())
+                return self._send(url, merged)
             except urllib.error.HTTPError as error:
                 if error.code in (429, 500, 502, 503, 504) and attempt < attempts - 1:
                     time.sleep(2 ** attempt)
                     continue
                 raise OpenSourceError(
                     "mr_open_source_unavailable",
-                    f"{urllib.parse.urlsplit(url).netloc} answered HTTP {error.code} for {url}.",
+                    f"{urllib.parse.urlsplit(url).netloc} answered HTTP {error.code} for {url} ({self._way()}).",
                 ) from None
-            except (urllib.error.URLError, TimeoutError, OSError) as error:
+            except (urllib.error.URLError, TimeoutError, OSError, http_client.HTTPException) as error:
                 if attempt < attempts - 1:
                     time.sleep(2 ** attempt)
                     continue
                 raise OpenSourceError(
                     "mr_open_source_unavailable",
-                    f"{urllib.parse.urlsplit(url).netloc} could not be reached ({type(error).__name__}).",
+                    f"{urllib.parse.urlsplit(url).netloc} could not be reached ({type(error).__name__}, {self._way()}).",
                 ) from None
         raise AssertionError("unreachable")
+
+    def _way(self) -> str:
+        return "through the edge proxy" if self.last_route == ROUTE_PROXY else "direct"
 
     def read(self, url: str, *, headers: dict[str, str] | None = None, limit: int = 64 * 1024 * 1024) -> bytes:
         with self.open(url, headers=headers) as response:
@@ -474,6 +799,7 @@ def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> t
     kept: list[Variant] = []
     rows = unreadable = 0
     digest = hashlib.sha256()
+    mark = dict(http.routes)
     with http.open(url) as response:
         counter = _CountingReader(response, _stream_limit(), url)
 
@@ -486,17 +812,25 @@ def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> t
                 digest.update(memoryview(buffer)[:size])
                 return size
 
-        with gzip.GzipFile(fileobj=io.BufferedReader(_Hashing(), 1 << 20)) as unzipped:
-            lines = io.TextIOWrapper(unzipped, encoding="utf-8", errors="replace", newline="")
-            header = next(lines).rstrip("\r\n").split("\t")
-            columns = _Columns(header)
-            for line in lines:
-                rows += 1
-                variant = columns.variant(line.rstrip("\r\n").split("\t"))
-                if variant is None:
-                    unreadable += 1
-                elif keep(variant):
-                    kept.append(variant)
+        try:
+            with gzip.GzipFile(fileobj=io.BufferedReader(_Hashing(), 1 << 20)) as unzipped:
+                lines = io.TextIOWrapper(unzipped, encoding="utf-8", errors="replace", newline="")
+                header = next(lines).rstrip("\r\n").split("\t")
+                columns = _Columns(header)
+                for line in lines:
+                    rows += 1
+                    variant = columns.variant(line.rstrip("\r\n").split("\t"))
+                    if variant is None:
+                        unreadable += 1
+                    elif keep(variant):
+                        kept.append(variant)
+        except (OSError, EOFError, zlib.error, http_client.HTTPException) as error:
+            # A connection that drops mid-file, or a file that is not gzip: named, with
+            # the way it was read, rather than escaping as a bare socket error.
+            raise OpenSourceError(
+                "mr_open_source_unavailable",
+                f"Reading {url} stopped after {counter.count} bytes ({type(error).__name__}, {http._way()}).",
+            ) from None
     http.bytes += counter.count
     return kept, {
         "mode": "streamed",
@@ -506,6 +840,7 @@ def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> t
         "rows": rows,
         "rowsUnreadable": unreadable,
         "seconds": round(time.monotonic() - started, 1),
+        "egress": http.routes_since(mark),
     }
 
 
@@ -784,13 +1119,14 @@ def build_pair(
         raise OpenSourceError("mr_open_source_invalid", "Exposure and outcome are the same GWAS Catalog study.")
 
     if exposure.index_url:
+        mark = dict(http.routes)
         reader = RemoteTabix(exposure.harmonised_url, exposure.index_url, http, data_bytes=exposure.harmonised_bytes)
         leads = curated_leads(exposure.accession, http)
         candidates = [variant for variant in _fetch_many(reader, leads).values() if variant.pval < p_threshold]
         exposure_read = {
             "mode": "tabix", "url": exposure.harmonised_url, "index": exposure.index_url,
             "candidateSource": "GWAS Catalog curated associations for the study, re-read from its harmonised file",
-            "candidatesListed": len(leads), "rangeRequests": reader.ranges,
+            "candidatesListed": len(leads), "rangeRequests": reader.ranges, "egress": http.routes_since(mark),
         }
     else:
         candidates, exposure_read = _scan_significant(exposure, http, p_threshold)
@@ -827,10 +1163,11 @@ def build_pair(
 
     wanted = [(variant.snp, variant.chrom, variant.pos) for variant in instruments]
     if outcome.index_url:
+        mark = dict(http.routes)
         reader = RemoteTabix(outcome.harmonised_url, outcome.index_url, http, data_bytes=outcome.harmonised_bytes)
         matches = _fetch_many(reader, wanted)
         outcome_read = {"mode": "tabix", "url": outcome.harmonised_url, "index": outcome.index_url,
-                        "rangeRequests": reader.ranges}
+                        "rangeRequests": reader.ranges, "egress": http.routes_since(mark)}
     else:
         names = {variant.snp for variant in instruments}
         rows, outcome_read = stream_variants(outcome.harmonised_url, http, lambda variant: variant.snp in names)
@@ -858,7 +1195,10 @@ def build_pair(
             "unavailableVariants": missing[:500],
             "proxies": "none — a variant absent from the outcome file is dropped, not replaced",
         },
-        "http": {"requests": http.requests, "bytes": http.bytes, "seconds": round(time.monotonic() - started, 1)},
+        "http": {
+            "requests": http.requests, "bytes": http.bytes, "seconds": round(time.monotonic() - started, 1),
+            "egress": http.egress.record(http.routes),
+        },
     }
     return OpenPair(exposure_rows=instruments, outcome_rows=outcome_rows, record=record)
 

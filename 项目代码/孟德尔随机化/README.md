@@ -94,7 +94,15 @@ is dropped, never proxied. The rows analysed are published as
 `inputs/open-*.csv`, every URL and count in
 `mendelian-randomization-open-sources.json`, and the analysis runs on the
 existing local path, replay package included. `EVIMED_MR_OPEN_CACHE_DIR` keeps
-what a scan found for the next job on the same study. The adapter reports
+what a scan found for the next job on the same study.
+`EVIMED_MR_OPEN_PROXY_URL` (an `https://` edge proxy, e.g. the platform's Tokyo
+node) with `EVIMED_MR_OPEN_PROXY_CREDENTIALS_FILE` (`user:password`, owner- or
+group-readable only) sends requests to `*.ebi.ac.uk` through that proxy: TLS to
+the proxy, CONNECT, TLS to EBI inside the tunnel. A proxy that fails
+(unreachable, TLS, 407/403/5xx to CONNECT, timeout) sends the request direct,
+and `http.egress` in the provenance file (and `egress` on each read) records
+which way every request went; the credential is never logged or recorded.
+The adapter reports
 `ready` with `openDataSources: ["gwas_catalog"]`; the `opengwas` block still
 says whether OpenGWAS itself is usable.
 
