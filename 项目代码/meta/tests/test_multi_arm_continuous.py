@@ -232,3 +232,39 @@ def test_a_row_the_extractor_calls_primary_is_typed_across_languages():
     assert report["multi_arm_studies"] == ["29410968", "39673144"]
     assert row.precision_basis == "computed_from_source_verified_arm_summaries"
 
+
+def test_an_unattended_analysis_set_joins_verified_windows_of_the_primary_outcome(tmp_path: Path) -> None:
+    """ma-001 run 11 (2026-09-28): three verified trials reported total blood
+    loss at "24 hours after surgery", "perioperative" and "to postoperative day
+    3"; grouped by that text they were three one-study strata and nothing was
+    pooled. The checker's match covers the time horizon, so unattended they are
+    one stratum, named with every window and reported."""
+    from new_meta.core.analysis_set import discover_analysis_set_candidates
+    from new_meta.core.primary_analysis_alignment import UNATTENDED_RUN_FILE
+    from new_meta.schemas.method_policy import MethodPlan
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+
+    protocol, studies = _protocol(), _studies() + [_two_arm_study()]
+    windows = ["24 hours after surgery", "perioperative", "to postoperative day 3"]
+    for study, window in zip(studies, windows):
+        for row in study.outcomes:
+            row.timepoint = window
+    reconcile_extracted_rct_designs(protocol, studies)
+    project = Project("ma-001 windows", output_dir=tmp_path / "project")
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
+    compile_project_method_plan(project, protocol, enforce=True)
+    approve_synthetic_method_fixture(project, protocol, studies)
+    plan = MethodPlan.model_validate(project.load_json("method_plan.json", subdir="analysis"))
+
+    assert len(discover_analysis_set_candidates(project, plan).candidates) == 3  # interactively, per window
+    project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": True})
+    candidates = discover_analysis_set_candidates(project, plan).candidates
+    assert len(candidates) == 1 and len(candidates[0].result_ids) == 5
+    assert candidates[0].timepoint == "24 hours after surgery; perioperative; to postoperative day 3"
+    warning = next(item for item in project.load_json("pipeline_warnings.json") if item["code"] == "primary_timepoints_merged")
+    assert list(warning["context"]["windows"].values()) == [windows]
+    phase = PipelineRunner(project).run_compiled_method_synthesis()
+    assert phase.status.value == "succeeded", phase.summary
+    assert project.load_json("synthesis_result.json", subdir="analysis")["engine_payload"]["n_studies"] == 3
+

@@ -72,20 +72,36 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
                 if entity.evidence_state in {EvidenceState.VERIFIED, EvidenceState.ADJUDICATED}
                 and _entity_matches_plan(entity, plan)]
     left_out = _unattended_left_out(project, plan, [entity.entity_id for entity in entities])
+    # Unattended, every result still here has a verified match to the protocol's
+    # primary outcome, and that verdict covers its time horizon (the checker
+    # assesses outcome, thresholds, units, time horizon and estimand). Their
+    # reported windows ("24 hours after surgery", "to postoperative day 3") are
+    # then one stratum under the protocol's outcome, named with every window;
+    # on 2026-09-28 three verified ma-001 trials were three one-study strata
+    # and nothing could be pooled. Interactively a person still chooses.
+    merge_windows = _unattended(project) and plan.family is not ReviewFamily.IPD_META
+    windows: dict[tuple[str, str, str, str], set[str]] = {}
     for entity in entities:
         if entity.entity_id in left_out:
             continue
+        timepoint = " ".join(entity.timepoint.split())
         key = (
             entity.outcome_id,
-            " ".join(entity.timepoint.split()).casefold(),
+            "" if merge_windows else timepoint.casefold(),
             " ".join(entity.subgroup.split()).casefold(),
             entity.effect_measure.upper(),
         )
         groups.setdefault(key, []).append(entity)
+        windows.setdefault(key, set()).add(timepoint)
 
     candidates = []
+    merged = {}
     for key, entities in sorted(groups.items()):
         outcome_id, timepoint, subgroup, effect_measure = key
+        if merge_windows:
+            timepoint = "; ".join(sorted(window for window in windows[key] if window)).casefold()
+            if len(windows[key]) > 1:
+                merged[outcome_id] = sorted(windows[key])
         entities = sorted(entities, key=lambda item: (item.study_id, item.entity_id))
         study_ids = [item.study_id for item in entities]
         issues = []
@@ -116,6 +132,16 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
             eligible=not issues,
             issues=issues,
         ))
+    if merge_windows:
+        project.clear_warnings(code="primary_timepoints_merged")
+        if merged:
+            project.add_warning(
+                "synthesis",
+                "Results reported at different time windows were analysed as one outcome, because the independent "
+                "source verification judged each to match the protocol's primary outcome, time horizon included.",
+                code="primary_timepoints_merged",
+                context={"windows": merged},
+            )
     artifact = AnalysisSetCandidates(
         plan_fingerprint=plan.plan_fingerprint,
         ledger_head_hash=verification.head_hash or "0" * 64,
@@ -303,6 +329,11 @@ def save_analysis_set_adjudication(
         project.save_json("analysis_set_adjudications.json", history, subdir="analysis")
         project.clear_downstream("meta_analysis", include_self=True)
         return decision
+
+
+def _unattended(project) -> bool:
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
+    return project_is_unattended(project)
 
 
 def _unattended_left_out(project, plan: MethodPlan, result_ids: list[str]) -> dict[str, str]:
