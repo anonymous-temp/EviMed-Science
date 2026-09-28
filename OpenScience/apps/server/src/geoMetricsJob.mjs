@@ -248,7 +248,11 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
         control: series.control.filter((point) => sameEngines(point.engines, engines)),
       };
       const hasBaseline = (/** @type {Array<{ date: string }>} */ points) => points.some((point) => point.date <= baselineDate);
-      if (!hasBaseline(comparable.pilot) || !hasBaseline(comparable.control)) {
+      // Engines are the reason only when they are what removed the baseline:
+      // an arm with no baseline point at all (no control groups yet, say)
+      // is the net effect's own "cannot compute", said below with its reason.
+      const enginesRemovedBaseline = (/** @type {"pilot" | "control"} */ arm) => hasBaseline(series[arm]) && !hasBaseline(comparable[arm]);
+      if (enginesRemovedBaseline("pilot") || enginesRemovedBaseline("control")) {
         rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engines_differ" });
         continue;
       }

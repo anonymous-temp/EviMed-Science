@@ -26,6 +26,40 @@ const owner = { userId: operator, projectId: "evimed-frontier" };
 /** @type {any} */
 let database;
 /** @type {{ vector: boolean, trigram: boolean }} */
+/** Thirty titles far apart in wording, for tests that must not merge. */
+const DISTINCT_TOPICS = [
+  "Aspirin in elderly primary prevention",
+  "Statin intolerance and muscle pain",
+  "Warfarin genotype dosing",
+  "Metformin in pregnancy outcomes",
+  "Insulin pump adherence in teenagers",
+  "Antibiotic stewardship in nursing homes",
+  "Vaccine uptake among health workers",
+  "Opioid tapering after surgery",
+  "Hypertension apps in rural clinics",
+  "Kidney function after contrast imaging",
+  "Asthma biologics cost review",
+  "Hepatitis C cure in prisons",
+  "Migraine prevention with antibodies",
+  "Sepsis bundles in emergency rooms",
+  "Stroke thrombectomy transfer times",
+  "Dementia screening in primary care",
+  "Osteoporosis drug holidays",
+  "Psoriasis biosimilar switching",
+  "Tuberculosis shorter regimens",
+  "Anemia iron infusion safety",
+  "Gout flare prophylaxis",
+  "Depression ketamine clinics",
+  "Childhood obesity school meals",
+  "Heart failure telemonitoring",
+  "Atrial fibrillation smartwatch alerts",
+  "Lung cancer screening uptake",
+  "Malaria bed net durability",
+  "Neonatal jaundice phototherapy at home",
+  "Rheumatoid arthritis tapering",
+  "Glaucoma drop adherence",
+];
+
 let capabilities;
 
 before(async () => {
@@ -427,7 +461,9 @@ test("a title near duplicate among a lane's published items is merged; a revisio
   await pipeline.processBatch();
   const merged = await entry(copy.id);
   assert.deepEqual([merged.state, merged.state_reason, Number(merged.item_id)], ["merged", "title-duplicate", Number(published.id)]);
-  assert.equal(capabilities.trigram, false, "this database has no pg_trgm: the normalised-title fallback decided");
+  // Decided by pg_trgm where the database has it (CI's pgvector image does)
+  // and by the normalised-title fallback where it does not (a bare local
+  // server): the merge is the same either way, so the test holds on both.
 
   // The source corrects its title: a new revision of the same entry.
   clock = new Date(clock.getTime() + HOUR);
@@ -551,7 +587,9 @@ test("vectors come after publication and never block it; two concurrent batches 
   const b = pipelineWith({ now: () => clock, editor, plugin, embedder }).pipeline;
   const delivered = [];
   for (let index = 0; index < 30; index += 1) {
-    const id = await deliver({ source_id: index % 2 ? "m-stat" : "m-fierce", title: `Story number ${index} about semaglutide [score:40]`, summary: "X".repeat(200) });
+    // Thirty titles no near-duplicate rule could join: with pg_trgm, "Story
+    // number 1 …" and "Story number 12 …" are ≥ 0.85 alike and merge.
+    const id = await deliver({ source_id: index % 2 ? "m-stat" : "m-fierce", title: `${DISTINCT_TOPICS[index]} [score:40]`, summary: "X".repeat(200) });
     plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
     delivered.push(id);
   }
