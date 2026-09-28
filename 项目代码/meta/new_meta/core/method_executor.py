@@ -343,6 +343,8 @@ class MethodExecutor:
                     "study_id": entity.study_id,
                     **entity.raw_data.model_dump(mode="json", exclude={"data_type"}),
                     **estimate.model_dump(mode="json"),
+                    # The result's own label (a multi-arm trial's route or dose) as a moderator.
+                    "moderator": entity.subgroup,
                 })
             elif plan.family is ReviewFamily.DOSE_RESPONSE:
                 if not isinstance(entity.raw_data, DoseResponseData):

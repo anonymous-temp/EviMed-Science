@@ -37,6 +37,9 @@ class ComplexRCTRecord(BaseModel):
     paired_analysis: bool = False
     intracluster_correlation: float | None = Field(default=None, ge=0, lt=1)
     mean_cluster_size: float | None = Field(default=None, gt=1)
+    #: The result's own label for what distinguishes it (a multi-arm trial's
+    #: route or dose, as the source names it): a moderator, never a stratum.
+    moderator: str = ""
 
     @model_validator(mode="after")
     def validate_precision(self):
@@ -69,6 +72,7 @@ class ComplexRCTResult(BaseModel):
     design_counts: dict[str, int]
     study_effects: list[dict[str, Any]]
     sensitivity: dict[str, Any] = Field(default_factory=dict)
+    moderator_subgroups: dict[str, Any] = Field(default_factory=dict)
     converged: bool = True
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
@@ -185,6 +189,7 @@ def run_complex_rct(records: list[ComplexRCTRecord | dict]) -> ComplexRCTResult:
                 "ci_upper": hksj.ci_upper,
             }
         },
+        moderator_subgroups=_moderator_subgroups(prepared, measure),
         diagnostics={
             "analysis_scale": "log" if measure in _RATIO_MEASURES else "original",
             "cluster_adjustment": "reported_or_design_effect",
@@ -264,6 +269,58 @@ def _consolidate_study(study_id: str, group: list[dict[str, Any]]) -> tuple[floa
     y = np.array([float(item["yi"]) for item in group], dtype=float)
     denominator = float(ones @ precision @ ones)
     return float(ones @ precision @ y / denominator), float(1.0 / denominator)
+
+
+def _moderator_subgroups(prepared: list[dict[str, Any]], measure: str) -> dict[str, Any]:
+    """Pool within each moderator label that at least two trials share; test between them.
+
+    Labels are compared exactly as recorded - whether two differently worded
+    labels mean the same route or dose is not decided here. Within a label a
+    trial still counts once (its contrasts GLS-consolidated). One trial can
+    sit in two labels with a shared control, so the between-label Q test is
+    approximate, and says so.
+    """
+    from scipy import stats
+
+    by_label: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    for item in prepared:
+        label = " ".join(item["record"].moderator.split())
+        if label:
+            by_label[label][item["record"].study_id].append(item)
+    if not by_label:
+        return {}
+    labels: dict[str, Any] = {}
+    pooled_groups = []
+    for label, studies in sorted(by_label.items()):
+        effects = []
+        for study_id, group in sorted(studies.items()):
+            yi, vi = _consolidate_study(study_id, group)
+            effects.append(StudyEffect(study_id=study_id, study_label=study_id, yi=yi, vi=vi, se=math.sqrt(vi)))
+        if len(effects) < 2:
+            labels[label] = {"n_studies": len(effects), "pooled": None}
+            continue
+        pooled = random_effects_reml(effects, measure, label)
+        analysis = float(pooled.pooled_log if pooled.pooled_log is not None else pooled.pooled_effect)
+        se = _ci_se(pooled, measure)
+        labels[label] = {
+            "n_studies": len(effects), "estimate": pooled.pooled_effect, "ci_lower": pooled.ci_lower,
+            "ci_upper": pooled.ci_upper, "tau_squared": pooled.tau_squared, "i_squared": pooled.i_squared,
+        }
+        pooled_groups.append((analysis, se))
+    between = None
+    if len(pooled_groups) >= 2:
+        weights = np.array([1.0 / (se * se) for _, se in pooled_groups])
+        values = np.array([value for value, _ in pooled_groups])
+        centre = float(weights @ values / weights.sum())
+        q = float(weights @ (values - centre) ** 2)
+        df = len(pooled_groups) - 1
+        between = {"q": q, "df": df, "p_value": float(1 - stats.chi2.cdf(q, df))}
+    return {
+        "labels": labels,
+        "between": between,
+        "note": ("Labels are the results' own; a trial contributing to two labels shares its control "
+                 "across them, so the between-label test is approximate."),
+    }
 
 
 def _ci_se(result, measure: str) -> float:
