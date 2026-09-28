@@ -110,7 +110,7 @@ function fixture(t) {
 test("the only accepted full-Web recipe is the reviewed in-image dependency and artifact flow", () => {
   const dockerfile = fs.readFileSync(new URL(`../../../${WEB_DOCKERFILE}`, import.meta.url), "utf8");
   assert.equal(digest(dockerfile), WEB_DOCKERFILE_SHA256);
-  assert.match(dockerfile, /pnpm install --frozen-lockfile/);
+  assert.match(dockerfile, /RUN pnpm install --frozen-lockfile/);
   assert.match(dockerfile, /env -u AI4S_SKILLS_COMMIT bash scripts\/dev\/fetch-skills\.sh/);
   assert.match(dockerfile, /RUN pnpm --filter @evimed\/dsh-socket prepack/);
   assert.match(dockerfile, /RUN pnpm --filter @ai4s\/web build/);
