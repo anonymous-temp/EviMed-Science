@@ -1,6 +1,6 @@
 {
   "id": "drug-selection",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "title": "Drug Selection Evaluation",
   "description": "Compare candidate medicines across pharmaceutical properties, effectiveness, safety, economics, and other formulary attributes.",
   "whenToUse": "交付物是在若干候选药品之间做遴选比较、需要一张可解释的打分表时，委派给我。",

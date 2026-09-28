@@ -1,6 +1,6 @@
 {
   "id": "off-label-analysis",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "title": "Off-label Use Analysis",
   "description": "Assist item-level label comparison and evidence-support scoring for a proposed use.",
   "whenToUse": "交付物是对某个超说明书用法的证据评估时，委派给我。",

@@ -162,6 +162,15 @@ Write `evidence-map.md`, one row per work:
 `Used for` is the column that keeps this honest: a row that cannot say which
 sentence depends on it should not be in the table.
 
+Every number the report states has one of three origins, and the sentence it is
+in says which. A published figure carries the `[n]` of the work it comes from in
+the same sentence. A figure from the specialist job is copied from the job's own
+output files at the precision you state it — never re-derived or re-rounded by
+hand. A design choice or projection (a window, a sample size, an event-count
+estimate) is stated as the proposal's own, with its inputs. The independent
+review traces every uncited result to the job's outputs, and each one it cannot
+find is a finding you answer.
+
 Write `research-topic-run.json` with the terminal job state and exact returned
 artifacts. `research-portfolio.json` and `evidence-records.json` are required:
 preserve the specialist job's actual files and IDs. If the managed job fails,
@@ -201,15 +210,18 @@ It is this capability's tooling, not a second delivery gate: fix what it reports
 as an issue and assess its advisory warnings. Then submit the package.
 
 Submission runs the delivery gate and the independent scientific reviewer in one
-call and answers with both. Repair every `weakened` or `contradicted` finding
-that applies and submit again; record a reason in `revision-notes.md` for a
-finding that does not apply. The files stay editable for the rest of this
-conversation turn — what freezes them is the turn ending — so a finding that
-arrives with an acceptance can still be repaired. To hear the reviewer mid-draft
-instead, call it yourself:
+call and answers with both. Repair each finding that applies, and answer every
+finding marked 需回应 in the next submission's `responses`: `fixed`, or
+`declined` with a one-sentence reason. A submission that changes no file and
+only answers is fine. The review reads only `responses`; an answer written in
+`revision-notes.md` reaches nobody, and an unanswered finding is shown to the
+reader as ignored. The files stay editable for the rest of this conversation
+turn — what freezes them is the turn ending — so a finding that arrives with an
+acceptance can still be repaired. To hear the reviewer mid-draft instead, call
+it yourself:
 
 ```
-evimed_review_run{focus: "candidate novelty, source status, estimands, required data, calculations, and inferential decision rules"}
+evimed_review_run{deliverableId: "<your deliverable id>"}
 ```
 
 ```

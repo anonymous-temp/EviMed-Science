@@ -63,7 +63,7 @@ Write:
 - `off-label-report.md`: exact question, label comparison, evidence synthesis, alternatives, patient risks, four-axis conclusions, gaps, and required reviews.
 - `evidence-table.csv`: one row per observed source or label dimension with source ID, jurisdiction, product/version, evidence role, findings, and limitations.
 - `assessment-result.json`: the exact compiler result, classification, mismatch/uncertain dimensions, audit hash, and human-review flag.
-- `evidence-snapshot.json`: deduplicated sources, exact queries, scope, retrieval timestamps, and observed fields. Every source URL cited in the report must appear here; never cite a source that is not recorded in the frozen snapshot.
+- `evidence-snapshot.json`: the scope, and one entry per source you rely on: its `sourceId` as the retrieval tool returned it, `evidenceAccess`, and the fields you observed. Each submission writes `retrieved` into this file: the platform's record of every source this run's retrieval tools returned, with its identifier, title, address, tool, query and time. That key is the platform's; never type or script it. Every link in the report must be a source this run retrieved. A portal, home or search page is not a source: cite a label by its approval number and label id, and name a work you did not read as not read, without a link.
 
 Resolve every material citation. Completion means the assisted evidence and score package is reproducible; it does not mean an organizational workflow has approved it.
 

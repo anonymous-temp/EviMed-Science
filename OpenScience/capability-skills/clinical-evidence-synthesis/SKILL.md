@@ -1722,9 +1722,12 @@ Submission does three things in one call and answers with all three: it renders
 the citation numbering and the reference list from the matrix, it runs the
 delivery gate, and it runs the independent scientific reviewer over what you
 wrote. A first submission that comes back with issues is the normal case, not a
-failure: fix everything it lists as 必修 — including a reviewer's
-`contradicted` finding — submit again, and repeat until it answers `ok`. Record
-a reason in `revision-notes.md` for a finding that does not apply.
+failure: fix everything it lists as 必修, submit again, and repeat until it
+answers `ok`. Answer every review finding marked 需回应 in the next submission's
+`responses`: `fixed`, or `declined` with a one-sentence reason; a submission that
+changes no file and only answers is fine. The review reads only `responses`; an
+answer written in `revision-notes.md` reaches nobody, and an unanswered finding
+is shown to the reader as ignored.
 
 The files stay editable for the rest of this conversation turn, so a finding
 that arrives with an acceptance is still a finding you can repair; what freezes
@@ -1736,7 +1739,7 @@ To hear the reviewer mid-draft, before you have a package worth submitting, call
 it yourself:
 
 ```
-evimed_review_run{focus: "source status, independent study identity, denominators, quantitative claims, current applicability, and contradictions"}
+evimed_review_run{deliverableId: "<your deliverable id>"}
 ```
 
 The verdict also carries advisory issues, which do not decide the outcome

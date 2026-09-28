@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: drug-selection
-version: 2.2.0
+version: 2.3.0
 title: Drug Selection Evaluation
 category: Formulary Decision Support
 description: Compare candidate medicines across pharmaceutical properties, effectiveness, safety, economics,

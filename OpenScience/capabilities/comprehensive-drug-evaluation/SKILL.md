@@ -17,6 +17,8 @@ Require medicine and indication. First call `mcp__evimed__comprehensive_drug_eva
 
 Call `mcp__evimed__comprehensive_drug_evaluation` with `action: retrieve`. Use label, guideline, trial, literature, and active biomedical-source tools only to fill a declared gap or verify a material claim. Deduplicate records with `mcp__evimed__evidence_deduplicate`.
 
+Labels come from `mcp__evimed__drug_label_search`: search by the medicine's name and jurisdiction (for China it reads the EviMed label index), then read the label you rely on with its `labelId`, which preserves the text with its approval number. `mcp__evimed__biomedical_source_search` asks one catalogued `source` at a time; `dailymed` and `openfda` hold US labels and match a drug name, not a phrase such as "FARXIGA dapagliflozin tablets label".
+
 The optional `mcp__evimed__pharmacy_reference_search` tool may supply private
 terminology, dose-risk, interaction, route, monitoring, or special-population
 context. Treat every returned row as a hypothesis or institution-specific
@@ -69,7 +71,7 @@ Write:
 - `comprehensive-evaluation-report.md`: question, methods, source coverage, domain findings, certainty basis, contradictions, applicability, economics/HTA limits, and reviewer considerations.
 - `evidence-table.csv`: one traceable row per source-domain link with observed findings and limitations.
 - `evaluation-summary.json`: the exact compiler result, domain coverage, audit hash, and human-review flag.
-- `evidence-snapshot.json`: deduplicated sources, exact queries, scope, retrieval timestamps, and observed fields. Every source URL cited in the report must appear here; never cite a source that is not recorded in the frozen snapshot.
+- `evidence-snapshot.json`: the scope, and one entry per source you rely on: its `sourceId` as the retrieval tool returned it, `evidenceAccess`, and the fields you observed. Each submission writes `retrieved` into this file: the platform's record of every source this run's retrieval tools returned, with its identifier, title, address, tool, query and time. That key is the platform's; never type or script it. Every link in the report must be a source this run retrieved. A portal, home or search page is not a source: cite a label by its approval number and label id, and name a work you did not read as not read, without a link.
 
 Resolve every material citation. Completion means the assisted evidence and domain-assessment package is reproducible, not that an external approval workflow has finished.
 

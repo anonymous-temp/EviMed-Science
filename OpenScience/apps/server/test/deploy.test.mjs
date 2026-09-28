@@ -1873,24 +1873,31 @@ test("a capability's two skill copies never drift apart by more than their known
   // Raised on 2026-09-27, same direction: the six skills that poll a managed
   // engine job say how long it may run and when a job whose `updatedAt` stopped
   // advancing counts as failed (+4 each; +1 for the unwrapped MR paragraph).
+  // Raised on 2026-09-28, same direction: a review is answered in the next
+  // submission's `responses`, never in revision-notes.md, and
+  // `evimed_review_run` takes a deliverable id (clinical-evidence-synthesis
+  // +3, research-topic-selection +3); the topic skill says where each number
+  // in the report comes from (+8); the three drug-evaluation skills say the
+  // snapshot carries the platform's `retrieved` record and a portal is not a
+  // source (+1 each), and the evaluation skill names the label tools (+1).
   const knownDivergence = {
     "adr-analysis": 32,
     "bibliometric-analysis": 32,
-    "clinical-evidence-synthesis": 246,
-    "comprehensive-drug-evaluation": 24,
+    "clinical-evidence-synthesis": 249,
+    "comprehensive-drug-evaluation": 26,
     "dataset-research-scoping": 41,
-    "drug-selection": 24,
+    "drug-selection": 25,
     // The hosted-input/replay changes propagated all 18 pre-delivery and
     // revision-notes lines into the retained copy; none was removed, and the
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
     "mendelian-randomization": 11,
     "meta-analysis": 32,
-    "off-label-analysis": 24,
+    "off-label-analysis": 25,
     "peer-review": 22,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are
     // DSH-only; the retained kernel copy is not edited.
-    "research-topic-selection": 54,
+    "research-topic-selection": 65,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");
