@@ -3,6 +3,8 @@
 Runs at save time, after every model pass, on the text that is about to be
 written to ``draft.md``:
 
+0. A negative number typed with a Unicode minus is written with the ASCII
+   minus the engine renders, so it is byte-identical to the computation.
 1. Cross-references to the manuscript's own tables and figures are generated
    (``new_meta.core.manuscript_cross_references``), never left to the prose.
 2. Overlong interpretive sentences are split where no word changes: a
@@ -18,6 +20,7 @@ The audit is written to ``manuscript/release_conformance_audit.json``.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from new_meta.agents.writing.contracts import SentenceSplitRevision
@@ -31,6 +34,21 @@ from new_meta.core.readability import (
 )
 
 _MAX_MODEL_SPLITS = 12
+
+# U+2212 MINUS SIGN and U+FF0D FULLWIDTH HYPHEN-MINUS directly before a digit.
+_TYPED_MINUS = re.compile(r"[−－](?=\d)")
+
+
+def normalize_number_signs(manuscript: str) -> tuple[str, int]:
+    """Write every negative number with the ASCII minus the engine renders.
+
+    The engine formats a negative estimate as "-303.23"; a model retyping it
+    as "−303.23" (U+2212) produces different bytes that number checks read as
+    +303.23. Only a minus sign immediately before a digit is replaced; an en
+    dash (a range separator) is left alone.
+    """
+    text = str(manuscript or "")
+    return _TYPED_MINUS.subn("-", text)
 
 
 def _llm_configured() -> bool:
@@ -51,10 +69,12 @@ class ReleaseConformanceMixin:
         project: Project | None = None,
         allow_model: bool = True,
     ) -> tuple[str, dict[str, Any]]:
-        text, cross_references = generate_table_figure_cross_references(manuscript, facts)
+        text, normalized_signs = normalize_number_signs(manuscript)
+        text, cross_references = generate_table_figure_cross_references(text, facts)
         text, deterministic_splits = split_interpretive_sections(text)
         audit: dict[str, Any] = {
             "schema_version": 1,
+            "normalized_minus_signs": normalized_signs,
             "generated_cross_references": cross_references,
             "deterministic_sentence_splits": deterministic_splits,
         }

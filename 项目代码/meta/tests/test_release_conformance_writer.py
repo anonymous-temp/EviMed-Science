@@ -413,6 +413,38 @@ def test_cli_finalization_saves_the_conformed_text(tmp_path: Path, monkeypatch) 
     assert "纳入研究的基本特征见表1。" in finalized
 
 
+# ── numbers carry the engine's bytes ──────────────────────────────────────
+
+
+def test_a_retyped_unicode_minus_becomes_the_engines_ascii_minus(tmp_path: Path) -> None:
+    from new_meta.agents.writing.release_conformance import normalize_number_signs
+    from new_meta.core.artifact_package import _build_claim_support_audit_review
+
+    # Verbatim from the ma-001 run-12 abstract, as the final revision retyped it.
+    typed = "与安慰剂或不使用氨甲环酸相比，围手术期经静脉、局部或联合给药氨甲环酸的合并均数差（MD）为 −303.23 mL（95% CI −504.52 至 −101.93 mL）。"
+    ranged = "HR 0.81（95% CI 0.74–0.88）"
+
+    text, count = normalize_number_signs(typed + ranged)
+
+    assert count == 3
+    assert text == typed.replace("−", "-") + ranged
+    project = Project("minus signs", output_dir=tmp_path)
+    project.save_json(
+        "manuscript_facts.json",
+        {"primary_effect": {"effect_measure": "MD", "pooled_effect": -303.2265806852571,
+                            "ci_lower": -504.51984194942247, "ci_upper": -101.93331942109168}},
+        subdir="manuscript",
+    )
+
+    def unsupported(body: str) -> int:
+        project.save_text("draft.md", f"# 标题\n\n## 结论\n\n{body}\n", subdir="manuscript")
+        return _build_claim_support_audit_review(project)["summary"]["unsupported_claims"]
+
+    # The retyped bytes read as +303.23; the engine's bytes match the facts.
+    assert unsupported(typed) == 1
+    assert unsupported(text) == 0
+
+
 # ── Table 1 shows the row's own numbers, never a fabricated 0/0 ───────────
 
 
