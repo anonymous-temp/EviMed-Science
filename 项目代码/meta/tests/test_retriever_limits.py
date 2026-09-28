@@ -1197,7 +1197,7 @@ def test_download_pdfs_skips_metadata_only_registry_seed(monkeypatch, tmp_path: 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("metadata-only registry seed should not trigger full-text network retrieval")
 
-    monkeypatch.setattr("new_meta.agents.paper_retriever.get_europe_pmc_pdf_urls", fail_if_called)
+    monkeypatch.setattr("new_meta.agents.paper_retriever.retrieve_paper_text", fail_if_called)
     monkeypatch.setattr("new_meta.agents.paper_retriever.download_pdf", fail_if_called)
 
     project = Project("registry seed download skip", output_dir=tmp_path)
@@ -1257,7 +1257,6 @@ def test_download_pdfs_fetches_registry_seed_source_urls_before_skipping(monkeyp
         return True
 
     monkeypatch.setattr("new_meta.agents.paper_retriever.fetch_html_fulltext_url", fake_fetch)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.get_europe_pmc_pdf_urls", lambda **kwargs: ([], "", ""))
     monkeypatch.setattr("new_meta.agents.paper_retriever.download_pdf", lambda **kwargs: False)
 
     with_text, without_text = PaperRetriever().download_pdfs(
@@ -1370,7 +1369,6 @@ def test_search_and_fetch_clears_stale_clinicaltrials_warning_after_success(monk
 
 def test_download_pdfs_hydrates_pdf_url_from_search_results(monkeypatch, tmp_path: Path) -> None:
     project = Project("hydrate test", output_dir=tmp_path)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.get_europe_pmc_pdf_urls", lambda **kwargs: ([], "", ""))
     project.save_json(
         "search_results.json",
         [
@@ -1384,11 +1382,15 @@ def test_download_pdfs_hydrates_pdf_url_from_search_results(monkeypatch, tmp_pat
     )
     seen = {}
 
-    def fake_download_pdf(doi=None, pmid=None, url=None, save_path=None):
-        seen["url"] = url
-        return True
+    def fake_retrieve(paper, papers_dir, *, memo):
+        seen["url"] = paper.get("pdf_urls")
+        paper["pdf_path"] = str(Path(papers_dir) / "123.pdf")
+        paper["fulltext_source"] = "pdf"
+        paper["text_availability"] = "full_text"
+        paper["fulltext_route"] = "record_pdf_url"
+        return paper
 
-    monkeypatch.setattr("new_meta.agents.paper_retriever.download_pdf", fake_download_pdf)
+    monkeypatch.setattr("new_meta.agents.paper_retriever.retrieve_paper_text", fake_retrieve)
 
     with_pdf, without_pdf = PaperRetriever().download_pdfs(
         [{"pmid": "123", "title": "Known OA paper"}],
@@ -1400,16 +1402,30 @@ def test_download_pdfs_hydrates_pdf_url_from_search_results(monkeypatch, tmp_pat
     assert without_pdf == []
 
 
-def test_download_pdfs_uses_html_fulltext_fallback_when_pdf_fails(monkeypatch, tmp_path: Path) -> None:
-    project = Project("html fallback test", output_dir=tmp_path)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.download_pdf", lambda **kwargs: False)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.get_europe_pmc_pdf_urls", lambda **kwargs: ([], "", ""))
+def _offline_web(monkeypatch, routes):
+    from fulltext_http_fixture import FakeWeb
+    from new_meta.tools import pdf_downloader
 
-    def fake_fulltext(*, pmid="", doi="", save_path="", timeout=15):
+    web = FakeWeb(routes)
+    monkeypatch.setattr(pdf_downloader.requests, "get", web.get)
+    monkeypatch.setattr("new_meta.tools.fulltext_retrieval.UNPAYWALL_EMAIL", "")
+    return web
+
+
+def test_download_pdfs_uses_html_fulltext_fallback_when_pdf_fails(monkeypatch, tmp_path: Path) -> None:
+    from fulltext_http_fixture import epmc_search, not_found
+
+    project = Project("html fallback test", output_dir=tmp_path)
+    _offline_web(monkeypatch, {
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/search": epmc_search({"pmid": "32876697", "pmcid": "PMC7"}),
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7/fullTextXML": not_found(),
+    })
+
+    def fake_html(url, *, save_path, timeout=15, source_label=""):
         Path(save_path).write_text("Full text " * 200, encoding="utf-8")
         return True
 
-    monkeypatch.setattr("new_meta.agents.paper_retriever.fetch_europe_pmc_fulltext", fake_fulltext)
+    monkeypatch.setattr("new_meta.tools.fulltext_retrieval.fetch_html_fulltext_url", fake_html)
 
     with_text, without_text = PaperRetriever().download_pdfs(
         [{"pmid": "32876697", "doi": "10.1001/jama.2020.17022", "title": "Known HTML paper"}],
@@ -1420,21 +1436,22 @@ def test_download_pdfs_uses_html_fulltext_fallback_when_pdf_fails(monkeypatch, t
     assert without_text == []
     assert with_text[0]["pdf_path"] is None
     assert with_text[0]["fulltext_source"] == "europe_pmc_fulltext"
+    assert with_text[0]["fulltext_route"] == "ncbi_pmc_html"
     assert with_text[0]["text_availability"] == "full_text"
     assert Path(with_text[0]["fulltext_path"]).exists()
 
 
 def test_download_pdfs_uses_abstract_fallback_when_fulltext_fails(monkeypatch, tmp_path: Path) -> None:
+    from fulltext_http_fixture import epmc_search
+
     project = Project("abstract fallback test", output_dir=tmp_path)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.download_pdf", lambda **kwargs: False)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.get_europe_pmc_pdf_urls", lambda **kwargs: ([], "", ""))
-    monkeypatch.setattr("new_meta.agents.paper_retriever.fetch_europe_pmc_fulltext", lambda **kwargs: False)
-
-    def fake_abstract(*, pmid="", doi="", save_path="", timeout=15):
-        Path(save_path).write_text("SOURCE: abstract only\n" + ("Outcome text " * 80), encoding="utf-8")
-        return True
-
-    monkeypatch.setattr("new_meta.agents.paper_retriever.fetch_europe_pmc_abstract_text", fake_abstract)
+    _offline_web(monkeypatch, {
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/search": epmc_search({
+            "pmid": "32876695",
+            "title": "Blocked full text",
+            "abstractText": "Outcome text " * 80,
+        }),
+    })
 
     with_text, without_text = PaperRetriever().download_pdfs(
         [{"pmid": "32876695", "doi": "10.1001/jama.2020.17021", "title": "Blocked full text"}],
@@ -1444,24 +1461,27 @@ def test_download_pdfs_uses_abstract_fallback_when_fulltext_fails(monkeypatch, t
     assert len(with_text) == 1
     assert without_text == []
     assert with_text[0]["fulltext_source"] == "europe_pmc_abstract"
+    assert with_text[0]["fulltext_route"] == "europe_pmc_abstract"
     assert with_text[0]["text_availability"] == "abstract_only"
     assert Path(with_text[0]["fulltext_path"]).exists()
 
 
 def test_download_pdfs_prioritizes_europe_pmc_pdf_candidates(monkeypatch, tmp_path: Path) -> None:
+    from fulltext_http_fixture import epmc_search, not_found, pdf
+
     project = Project("europe pmc pdf test", output_dir=tmp_path)
-    seen = {}
-
-    def fake_links(**kwargs):
-        return ["https://europepmc.org/articles/PMC1?pdf=render"], "https://europepmc.org/articles/PMC1", "PMC1"
-
-    def fake_download_pdf(doi=None, pmid=None, url=None, save_path=None):
-        seen["url"] = url
-        Path(save_path).write_bytes(b"%PDF-1.4\nfake")
-        return True
-
-    monkeypatch.setattr("new_meta.agents.paper_retriever.get_europe_pmc_pdf_urls", fake_links)
-    monkeypatch.setattr("new_meta.agents.paper_retriever.download_pdf", fake_download_pdf)
+    web = _offline_web(monkeypatch, {
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/search": epmc_search({
+            "pmid": "32943404",
+            "pmcid": "PMC1",
+            "fullTextUrlList": {"fullTextUrl": [
+                {"availabilityCode": "OA", "documentStyle": "html", "url": "https://europepmc.org/articles/PMC1"},
+            ]},
+        }),
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1/fullTextXML": not_found(),
+        "https://europepmc.org/articles/PMC1?pdf=render": pdf(),
+        "https://publisher.example/paper.pdf": pdf(),
+    })
 
     with_pdf, without_pdf = PaperRetriever().download_pdfs(
         [{
@@ -1475,10 +1495,8 @@ def test_download_pdfs_prioritizes_europe_pmc_pdf_candidates(monkeypatch, tmp_pa
 
     assert without_pdf == []
     assert len(with_pdf) == 1
-    assert seen["url"] == [
-        "https://europepmc.org/articles/PMC1?pdf=render",
-        "https://publisher.example/paper.pdf",
-    ]
+    assert "https://publisher.example/paper.pdf" not in web.calls
+    assert with_pdf[0]["fulltext_route"] == "europe_pmc_pdf"
     assert with_pdf[0]["pmcid"] == "PMC1"
     assert with_pdf[0]["fulltext_url"] == "https://europepmc.org/articles/PMC1"
     assert with_pdf[0]["text_availability"] == "full_text"

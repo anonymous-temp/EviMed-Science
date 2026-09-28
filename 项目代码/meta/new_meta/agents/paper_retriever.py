@@ -17,13 +17,11 @@ from new_meta.tools import multi_search
 from new_meta.tools import clinicaltrials
 from new_meta.tools import registry_seed
 from new_meta.tools.fulltext import (
-    fetch_europe_pmc_abstract_text,
-    fetch_europe_pmc_fulltext,
     fetch_html_fulltext_url,
-    get_europe_pmc_pdf_urls,
 )
-from new_meta.tools.pdf_downloader import download_pdf
-from new_meta.config import MAX_SEARCH_RESULTS, MAX_WORKERS
+from new_meta.tools.fulltext_retrieval import retrieve_paper_text, summarize_routes
+from new_meta.tools.pdf_downloader import HostMemo, download_pdf
+from new_meta.config import FULLTEXT_MAX_WORKERS, MAX_SEARCH_RESULTS
 
 logger = logging.getLogger("metaagent.retriever")
 ENABLE_MULTI_SEARCH_FALLBACK = os.getenv("ENABLE_MULTI_SEARCH_FALLBACK", "1").lower() not in {
@@ -1649,7 +1647,7 @@ class PaperRetriever(BaseAgent):
         )
         self.log(
             f"Downloaded/retrieved text for {len(with_pdf)}/{len(papers)} papers "
-            f"({n_pdf} PDF, {n_html} HTML full text, {n_abstract} abstract-only, "
+            f"({n_pdf} PDF, {n_html} XML/HTML full text, {n_abstract} abstract-only, "
             f"{n_metadata} metadata-only)"
         )
 
@@ -1834,8 +1832,13 @@ class PaperRetriever(BaseAgent):
         return unique
 
     def _download_pdfs(self, papers: list[dict], project: Project) -> list[dict]:
-        """Download PDFs for all papers using thread pool."""
+        """Retrieve full text for all papers using a thread pool.
+
+        One host memo is shared by every paper of the run, so a publisher that
+        answered with a bot wall is not asked again for the next forty papers.
+        """
         papers_dir = project.base_dir / "papers"
+        memo = HostMemo()
 
         def download_one(paper):
             source = str(paper.get("source") or paper.get("source_type") or "").lower()
@@ -1852,76 +1855,9 @@ class PaperRetriever(BaseAgent):
                 paper["needs_user_full_text"] = True
                 return paper
 
-            pmid = paper.get("pmid", "")
-            doi = paper.get("doi", "")
-            identifier = pmid or doi.replace('/', '_') or f"paper_{id(paper)}"
-            safe_name = f"{identifier}.pdf"
-            save_path = str(papers_dir / safe_name)
-            pdf_url = paper.get("pdf_urls") or paper.get("pdf_url") or paper.get("url")
-            europe_pmc_pdf_urls, europe_pmc_html_url, pmcid = get_europe_pmc_pdf_urls(
-                pmid=pmid,
-                doi=doi,
-                timeout=10,
-            )
-            if pmcid and not paper.get("pmcid"):
-                paper["pmcid"] = pmcid
-            if europe_pmc_html_url and not paper.get("fulltext_url"):
-                paper["fulltext_url"] = europe_pmc_html_url
-            if europe_pmc_pdf_urls:
-                existing_urls = []
-                if isinstance(pdf_url, (list, tuple)):
-                    existing_urls = [u for u in pdf_url if u]
-                elif pdf_url:
-                    existing_urls = [pdf_url]
-                merged_urls = []
-                for candidate in list(europe_pmc_pdf_urls) + existing_urls:
-                    if candidate and candidate not in merged_urls:
-                        merged_urls.append(candidate)
-                pdf_url = merged_urls
-                paper["pdf_urls"] = merged_urls
-            if not pdf_url and doi:
-                from new_meta.tools.multi_search import get_openalex_pdf_urls_for_doi
+            return retrieve_paper_text(paper, papers_dir, memo=memo)
 
-                pdf_url = get_openalex_pdf_urls_for_doi(doi)
-                if pdf_url:
-                    paper["pdf_urls"] = pdf_url
-
-            success = download_pdf(doi=doi, pmid=pmid, url=pdf_url, save_path=save_path)
-            if success:
-                paper["pdf_path"] = save_path
-                paper.pop("fulltext_path", None)
-                paper["text_availability"] = "full_text"
-                paper["fulltext_source"] = "pdf"
-            else:
-                paper["pdf_path"] = None
-                fulltext_path = str(papers_dir / f"{identifier}.fulltext.txt")
-                fulltext_ok = fetch_europe_pmc_fulltext(
-                    pmid=pmid,
-                    doi=doi,
-                    save_path=fulltext_path,
-                )
-                if fulltext_ok:
-                    paper["fulltext_path"] = fulltext_path
-                    paper["fulltext_source"] = "europe_pmc_fulltext"
-                    paper["text_availability"] = "full_text"
-                else:
-                    abstract_path = str(papers_dir / f"{identifier}.abstract.txt")
-                    abstract_ok = fetch_europe_pmc_abstract_text(
-                        pmid=pmid,
-                        doi=doi,
-                        save_path=abstract_path,
-                    )
-                    if abstract_ok:
-                        paper["fulltext_path"] = abstract_path
-                        paper["fulltext_source"] = "europe_pmc_abstract"
-                        paper["text_availability"] = "abstract_only"
-                    else:
-                        paper["fulltext_path"] = None
-                        paper.pop("fulltext_source", None)
-                        paper.pop("text_availability", None)
-            return paper
-
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=FULLTEXT_MAX_WORKERS) as executor:
             futures = {executor.submit(download_one, p): p for p in papers}
             results = []
             for future in as_completed(futures):
@@ -1931,8 +1867,20 @@ class PaperRetriever(BaseAgent):
                     logger.warning(f"Download failed: {e}")
                     paper = futures[future]
                     paper["pdf_path"] = None
+                    paper.setdefault("fulltext_route", "error")
                     results.append(paper)
 
+        summary = summarize_routes(results, memo)
+        try:
+            project.save_json("fulltext_retrieval_summary.json", summary)
+        except Exception as exc:
+            logger.warning(f"Could not save full-text retrieval summary: {exc}")
+        if summary["by_route"]:
+            self.log(
+                "Full-text routes: "
+                + ", ".join(f"{route}={count}" for route, count in summary["by_route"].items())
+                + (f"; hosts blocked this run: {', '.join(summary['blocked_hosts'])}" if summary["blocked_hosts"] else "")
+            )
         return results
 
 

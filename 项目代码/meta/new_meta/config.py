@@ -160,3 +160,16 @@ USER_PDF_MAX_BYTES = int(os.getenv("USER_PDF_MAX_BYTES", str(50 * 1024 * 1024)))
 USER_PDF_TOTAL_MAX_BYTES = int(os.getenv("USER_PDF_TOTAL_MAX_BYTES", str(500 * 1024 * 1024)))
 PDF_DOWNLOAD_ALLOWED_HOSTS = os.getenv("PDF_DOWNLOAD_ALLOWED_HOSTS", "").strip()
 PDF_DOWNLOAD_ALLOW_INSECURE_HTTP = _env_flag("PDF_DOWNLOAD_ALLOW_INSECURE_HTTP", False)
+
+# --- Automatic full-text retrieval (step 5) ---
+# Bounds per paper: every full-text fetch (a PDF candidate, a landing page,
+# the Europe PMC XML) counts as one attempt, and no new attempt starts once
+# the paper's wall-clock budget is spent. With ~50 papers per review and
+# FULLTEXT_MAX_WORKERS in parallel, the worst case stays within a few minutes.
+FULLTEXT_MAX_ATTEMPTS_PER_PAPER = max(1, int(os.getenv("FULLTEXT_MAX_ATTEMPTS_PER_PAPER", "8")))
+FULLTEXT_PAPER_DEADLINE_SECONDS = max(5.0, float(os.getenv("FULLTEXT_PAPER_DEADLINE_SECONDS", "45")))
+FULLTEXT_MAX_WORKERS = max(1, int(os.getenv("FULLTEXT_MAX_WORKERS", "8")))
+# Unpaywall identifies callers by a contact address, not a key. The deployment
+# passes the operator's Unpaywall address as PUBMED_EMAIL; with no address the
+# Unpaywall route is skipped. The address is never logged.
+UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "").strip() or PUBMED_EMAIL

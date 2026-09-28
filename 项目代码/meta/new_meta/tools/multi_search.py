@@ -349,39 +349,112 @@ def get_openalex_pdf_urls_for_doi(doi: str) -> list[str]:
     This is used as a resume-safe hydration path for cached search records
     produced before PDF URL candidates were persisted.
     """
+    return get_openalex_locations_for_doi(doi)["pdf_urls"]
+
+
+def get_openalex_locations_for_doi(doi: str, *, timeout: float | None = None) -> dict[str, Any]:
+    """Fetch a DOI's OpenAlex work and return its full-text leads.
+
+    ``pdf_urls``: every declared PDF (best OA, primary, all locations).
+    ``landing_urls``: OA landing pages, to be read for citation_pdf_url.
+    ``pmcid``: the PubMed Central id OpenAlex knows for the work, if any.
+    """
+    empty: dict[str, Any] = {"pdf_urls": [], "landing_urls": [], "pmcid": ""}
     doi = (doi or "").strip()
     if not doi:
-        return []
+        return empty
     try:
         resp = requests.get(
             f"https://api.openalex.org/works/doi:{doi}",
             headers=HEADERS,
-            timeout=MULTI_SEARCH_TIMEOUT,
+            timeout=timeout or MULTI_SEARCH_TIMEOUT,
         )
         resp.raise_for_status()
-        return _openalex_pdf_urls(resp.json())
+        work = resp.json() or {}
     except Exception as exc:
-        logger.debug(f"OpenAlex DOI PDF URL fetch failed for {doi}: {exc}")
-        return []
+        logger.debug(f"OpenAlex DOI location fetch failed for {doi}: {exc}")
+        return empty
+    return {
+        "pdf_urls": _openalex_pdf_urls(work),
+        "landing_urls": _openalex_landing_urls(work),
+        "pmcid": _openalex_pmcid(work),
+    }
+
+
+def _openalex_locations(work: dict) -> list[dict]:
+    """best_oa_location, primary_location, then every location, in that order."""
+    ordered: list[dict] = []
+    for location in [work.get("best_oa_location"), work.get("primary_location"), *(work.get("locations") or [])]:
+        if isinstance(location, dict):
+            ordered.append(location)
+    return ordered
 
 
 def _openalex_pdf_urls(work: dict) -> list[str]:
-    """Return ordered unique OpenAlex PDF URLs for a work."""
+    """Return ordered unique OpenAlex PDF URLs for a work.
+
+    Every location's ``pdf_url`` counts, not only an ``oa_url`` that happens
+    to end in ``.pdf`` (MDPI, BMC and most OA publishers serve PDFs from
+    extension-less paths).
+    """
     urls: list[str] = []
 
     def add(url: str | None) -> None:
-        if not url:
+        url = str(url or "").strip()
+        if url and url not in urls:
+            urls.append(url)
+
+    for location in (work.get("best_oa_location"), work.get("primary_location")):
+        if isinstance(location, dict):
+            add(location.get("pdf_url"))
+    oa_url = str((work.get("open_access") or {}).get("oa_url") or "")
+    if oa_url.lower().endswith(".pdf"):
+        add(oa_url)
+    for location in _openalex_locations(work):
+        add(location.get("pdf_url"))
+    return urls
+
+
+_NON_ARTICLE_LANDING_HOSTS = ("pubmed.ncbi.nlm.nih.gov", "doaj.org")
+
+
+def _openalex_landing_urls(work: dict) -> list[str]:
+    """Return OA landing pages worth reading for a citation_pdf_url.
+
+    PubMed and DOAJ pages carry no article PDF; PMC pages are reached through
+    the PMCID instead (Europe PMC), and doi.org is the DOI route's own.
+    """
+    urls: list[str] = []
+    pdf_urls = set(_openalex_pdf_urls(work))
+
+    def add(url: str | None) -> None:
+        url = str(url or "").strip()
+        lowered = url.lower()
+        if not url or url in urls or url in pdf_urls:
             return
-        if url in urls:
+        if not lowered.startswith(("http://", "https://")):
+            return
+        if "doi.org/" in lowered or "/pmc/articles/" in lowered or "pmc.ncbi.nlm.nih.gov" in lowered:
+            return
+        if any(host in lowered for host in _NON_ARTICLE_LANDING_HOSTS):
             return
         urls.append(url)
 
-    primary = work.get("primary_location") or {}
-    add(primary.get("pdf_url"))
-    open_access = work.get("open_access") or {}
-    oa_url = open_access.get("oa_url") or ""
-    if oa_url.lower().endswith(".pdf"):
-        add(oa_url)
-    for location in work.get("locations") or []:
-        add(location.get("pdf_url"))
+    for location in _openalex_locations(work):
+        if location.get("is_oa"):
+            add(location.get("landing_page_url"))
+    add((work.get("open_access") or {}).get("oa_url"))
     return urls
+
+
+def _openalex_pmcid(work: dict) -> str:
+    """Return a normalized PMCID ("PMC123") from OpenAlex ids or PMC locations."""
+    candidates = [str((work.get("ids") or {}).get("pmcid") or "")]
+    for location in _openalex_locations(work):
+        candidates.append(str(location.get("landing_page_url") or ""))
+        candidates.append(str(location.get("pdf_url") or ""))
+    for value in candidates:
+        match = re.search(r"/pmc/articles/(?:PMC)?(\d+)|\bPMC(\d+)\b", value, flags=re.IGNORECASE)
+        if match:
+            return f"PMC{match.group(1) or match.group(2)}"
+    return ""

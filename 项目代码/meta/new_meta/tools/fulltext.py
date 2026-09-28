@@ -149,6 +149,7 @@ def fetch_europe_pmc_abstract_text(
     doi: str = "",
     save_path: str,
     timeout: float = 15,
+    record: dict[str, Any] | None = None,
 ) -> bool:
     """Save Europe PMC's structured abstract as an explicit low-confidence source.
 
@@ -156,7 +157,8 @@ def fetch_europe_pmc_abstract_text(
     screen and extract visibly marked abstract-only evidence when publisher PDFs
     are blocked and no open full text is available.
     """
-    record = fetch_europe_pmc_record(pmid=pmid, doi=doi, timeout=timeout)
+    if record is None:
+        record = fetch_europe_pmc_record(pmid=pmid, doi=doi, timeout=timeout)
     if not record:
         return False
 
@@ -175,6 +177,22 @@ def fetch_europe_pmc_abstract_text(
     return True
 
 
+def europe_pmc_query(*, pmid: str = "", doi: str = "") -> str:
+    """Europe PMC search query for one article.
+
+    A bare ``EXT_ID:<n>`` also matches other sources' ids (patents, Agricola,
+    preprints) and pageSize=1 may return one of those; ``SRC:MED`` pins the
+    MEDLINE record, the one that carries the PMCID.
+    """
+    pmid = str(pmid or "").strip()
+    doi = str(doi or "").strip()
+    if pmid:
+        return f"EXT_ID:{pmid} AND SRC:MED" if pmid.isdigit() else f"EXT_ID:{pmid}"
+    if doi:
+        return f'DOI:"{doi}"'
+    return ""
+
+
 def fetch_europe_pmc_record(
     *,
     pmid: str = "",
@@ -182,7 +200,7 @@ def fetch_europe_pmc_record(
     timeout: float = 15,
 ) -> dict[str, Any]:
     """Fetch Europe PMC core metadata for a PMID or DOI."""
-    query = f"EXT_ID:{pmid}" if pmid else f"DOI:{doi}" if doi else ""
+    query = europe_pmc_query(pmid=pmid, doi=doi)
     if not query:
         return {}
 
@@ -296,7 +314,7 @@ def find_europe_pmc_html_url(
         links = europe_pmc_fulltext_links(record)
         return links["html_url"]
 
-    query = f"EXT_ID:{pmid}" if pmid else f"DOI:{doi}" if doi else ""
+    query = europe_pmc_query(pmid=pmid, doi=doi)
     if not query:
         return ""
 
