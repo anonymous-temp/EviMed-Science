@@ -31,7 +31,16 @@ import { HttpError, clearSessionCookie, parseCookies } from "./security.mjs";
  * - **A user id of ours is a hash, not EviMed's number.** `evimed_<40 hex>` of
  *   the introspection origin and EviMed's user id, so the account id is a safe
  *   directory name, is stable across renames, and carries no EviMed identifier
- *   into our filesystem, ledgers or exports.
+ *   into our workspace directories, ledgers or exports.
+ * - **EviMed's own number is kept once, on the account, for the credits client
+ *   only** (fusion backend requirements §14). EviMed's deduction and balance
+ *   endpoints know a person by their EviMed id, which the hash above cannot be
+ *   turned back into, so the account row (`evimed_user_id`, or the file
+ *   store's account record) keeps it and every session exchange rewrites it
+ *   from the introspection answer — an account created before it was kept
+ *   fills itself in at its next sign-in. It never rides on the user object a
+ *   request carries, so no run ledger, workspace file or log line can pick it
+ *   up; `store.evimedUserIdOf` is its one reader.
  * - **The account kind is recorded as `evimed`.** Step two of §9.2 moves these
  *   accounts to real OIDC; folding them into `oidc` now would leave that
  *   migration unable to tell them apart.
@@ -369,7 +378,7 @@ export class EvimedAuthService {
   async createSession(req, res, body) {
     const settings = this.settings();
     const identity = await this.introspect(evimedCredentialFrom(req, body));
-    const user = await this.store.upsertEvimedUser(evimedUserId(settings, identity.userId), identity.name);
+    const user = await this.store.upsertEvimedUser(evimedUserId(settings, identity.userId), identity.name, identity.userId);
     const session = await this.store.createSession(user, req, res);
     return { user: this.store.publicUser(user), csrfToken: session.csrfToken };
   }

@@ -138,6 +138,7 @@ test("a balance that cannot be read admits the start instead of blocking it", as
       configured: true,
       async balance() { throw Object.assign(new Error("down"), { code: "evimed_credits_unreachable" }); },
     },
+    evimedUserIdOf: async () => "98211",
   });
   const balance = await credits.balanceFor("u_1");
   assert.deepEqual(balance, { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_unreachable" });
@@ -145,10 +146,39 @@ test("a balance that cannot be read admits the start instead of blocking it", as
   assert.equal(credits.status().counters.balanceUnavailable, 2);
 });
 
+test("a balance read names the EviMed user, and an account with none is not asked about", async () => {
+  // Our account id is a one-way hash EviMed cannot resolve (fusion backend
+  // requirements §14), so the id sent is the one the account row keeps.
+  /** @type {string[]} */
+  const asked = [];
+  /** @type {Record<string, string | null>} */
+  const links = { evimed_abc: "98211", local_admin: null };
+  const credits = new EvimedCreditsService({
+    config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 100 }, database: {},
+    client: { configured: true, async balance(/** @type {string} */ account) { asked.push(account); return { balance: 42, frozen: 3 }; } },
+    evimedUserIdOf: async (/** @type {string} */ id) => links[id] ?? null,
+  });
+  assert.deepEqual(await credits.balanceFor("evimed_abc"), { balance: 42, frozen: 3, unit: "灵豆", status: "ok" });
+  assert.deepEqual(asked, ["98211"]);
+  assert.deepEqual(await credits.balanceFor("local_admin"),
+    { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked" });
+  assert.deepEqual(await credits.assertBalanceForStart("local_admin", "adr-analysis"),
+    { allowed: true, reason: "evimed_credits_account_unlinked" });
+  assert.deepEqual(asked, ["98211"], "an account EviMed does not know was sent under our own id");
+  assert.equal(credits.status().counters.unlinked, 2);
+  // With no way to look anyone up, nobody is asked about.
+  const blind = new EvimedCreditsService({
+    config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 100 }, database: {},
+    client: { configured: true, async balance() { throw new Error("must not be called"); } },
+  });
+  assert.equal((await blind.balanceFor("evimed_abc")).status, "evimed_credits_account_unlinked");
+});
+
 test("an empty balance refuses the start with the code the platform reserved for it", async () => {
   const credits = new EvimedCreditsService({
     config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 100 }, database: {},
     client: { configured: true, async balance() { return { balance: 0, frozen: 0 }; } },
+    evimedUserIdOf: async () => "98211",
   });
   await assert.rejects(credits.assertBalanceForStart("u_1", "adr-analysis"), (/** @type {any} */ error) => {
     // `usageMetering.mjs` kept `credits_exhausted` for 「a balance, which this

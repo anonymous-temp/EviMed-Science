@@ -2,11 +2,13 @@
 // storage's, not the code's — one charge per run however many times it is
 // settled, a pending row that exists before the deduction leaves, a bounded
 // retry, a refusal that is never retried, and a charge that outlives its
-// project.
+// project; and the person charged is the EviMed user the account row names,
+// never our own hashed account id.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { PostgresStore } from "../src/store.mjs";
 import { EVIMED_CREDITS_BACKOFF_MS, EVIMED_CREDITS_MAX_ATTEMPTS, EvimedCreditsService } from "../src/evimedCreditsService.mjs";
 import { EvimedCreditsError } from "../src/evimedCreditsClient.mjs";
 
@@ -17,7 +19,11 @@ if (databaseUrl) {
   assert.match(parsed.pathname, /evimed_test/);
 }
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-const userId = `credits_user_${randomUUID()}`;
+const userId = `evimed_credits_${randomUUID().replaceAll("-", "")}`;
+/** EviMed's own id for that account, as introspection reported it. */
+const evimedUserId = "4711";
+/** A password account in the same deployment: nobody at EviMed. */
+const localUserId = `credits_local_${randomUUID()}`;
 const projectId = "credits-project";
 /** @type {any} */
 let database;
@@ -28,13 +34,16 @@ before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 3_000 });
   await database.migrate();
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Credits test','development')", [userId]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type,evimed_user_id) VALUES($1,'Credits test','evimed',$2)",
+    [userId, evimedUserId]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Local test','development')", [localUserId]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Credits',1048576)", [userId, projectId]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Local',1048576)", [localUserId, projectId]);
 });
 
 after(async () => {
   if (!databaseUrl) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]).catch(() => {});
+  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[userId, localUserId]]).catch(() => {});
   await database.close?.();
 });
 
@@ -60,9 +69,15 @@ function upstream({ answer = () => ({ receiptId: "rcpt", balance: 500 }), balanc
       calls.push(request);
       return answer(request, calls);
     },
-    async balance() { return { balance, frozen: 0 }; },
+    async balance(/** @type {string} */ account) {
+      calls.push({ balanceOf: account });
+      return { balance, frozen: 0 };
+    },
   };
 }
+
+/** The store's own reader of the column, run against this test's database. */
+const evimedUserIdOf = (/** @type {string} */ id) => PostgresStore.prototype.evimedUserIdOf.call({ database }, id);
 
 /**
  * The sweep is deliberately global — it settles every account's due rows — so a
@@ -76,7 +91,7 @@ async function clearPending(service) {
 
 /** @param {{ client: any, costs: Record<string, number>, now?: () => Date }} parts */
 const credits = ({ client, costs, now = () => new Date() }) => new EvimedCreditsService({
-  config, database, client, usageLedger: ledger(costs), now,
+  config, database, client, usageLedger: ledger(costs), evimedUserIdOf, now,
 });
 
 test("one run is charged once, however many times it is settled", options, async () => {
@@ -94,6 +109,9 @@ test("one run is charged once, however many times it is settled", options, async
       { status: "settled", duplicate: true, credits: 120 });
   }
   assert.equal(client.calls.length, 1, "EviMed was asked to charge more than once");
+  // EviMed is told whom to charge in its own words: its user id, which our
+  // hashed account id cannot be turned back into (§14).
+  assert.equal(client.calls[0].userId, evimedUserId);
   const rows = await database.query("SELECT * FROM evimed_credits.settlements WHERE run_id=$1", [runId]);
   assert.equal(rows.rowCount, 1);
   assert.equal(rows.rows[0].status, "settled");
@@ -210,6 +228,46 @@ test("the retry is bounded: after the last wait the settlement is abandoned, not
   at = new Date(Date.parse("2026-12-31T00:00:00.000Z"));
   assert.equal(await service.retryDue(), 0, "an abandoned settlement is never asked again");
   assert.equal(client.calls.length, EVIMED_CREDITS_MAX_ATTEMPTS);
+});
+
+test("an account EviMed does not know is never charged under our own id", options, async () => {
+  const runId = `run_${randomUUID()}`;
+  const client = upstream({ answer: () => { throw new Error("must not be called"); } });
+  const service = credits({ client, costs: { [runId]: 2 } });
+  await clearPending(service);
+  assert.deepEqual(await service.settleRun({ userId: localUserId, projectId, runId, capabilityId: "adr-analysis", subject: "本地账号" }),
+    { status: "refused", credits: 200, errorCode: "evimed_credits_account_unlinked" });
+  assert.equal(client.calls.length, 0, "a deduction left naming an account EviMed cannot resolve");
+  const row = await service.settlementOf(localUserId, runId);
+  assert.equal(row?.status, "refused");
+  assert.equal(row?.nextAttemptAt, null, "no retry gives an account an EviMed id");
+  assert.equal(await service.retryDue(), 0);
+  assert.equal(service.status().counters.unlinked, 1);
+  // Its balance is unknown rather than an error, so its start is admitted.
+  assert.deepEqual(await service.balanceFor(localUserId),
+    { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked" });
+  assert.equal((await service.assertBalanceForStart(localUserId, "adr-analysis")).allowed, true);
+  assert.equal(client.calls.length, 0);
+  // And the linked account's balance read names EviMed's id, not ours.
+  assert.equal((await service.balanceFor(userId)).status, "ok");
+  assert.deepEqual(client.calls, [{ balanceOf: evimedUserId }]);
+  // The settlement row keeps our account id and nothing of EviMed's.
+  const stored = await database.query("SELECT * FROM evimed_credits.settlements WHERE user_id=$1", [userId]);
+  assert.ok(stored.rowCount > 0);
+  assert.equal(JSON.stringify(stored.rows).includes(`"${evimedUserId}"`), false);
+});
+
+test("the account row holds EviMed's id for an EviMed account only", options, async () => {
+  await assert.rejects(
+    database.query("UPDATE evimed_control.users SET evimed_user_id='1' WHERE id=$1", [localUserId]),
+    (/** @type {any} */ error) => error?.code === "23514",
+  );
+  await assert.rejects(
+    database.query("UPDATE evimed_control.users SET evimed_user_id='' WHERE id=$1", [userId]),
+    (/** @type {any} */ error) => error?.code === "23514",
+  );
+  assert.equal(await evimedUserIdOf(userId), evimedUserId);
+  assert.equal(await evimedUserIdOf(localUserId), null);
 });
 
 test("a run that cost nothing is recorded as free, with no call at all", options, async () => {

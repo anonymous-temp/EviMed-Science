@@ -51,6 +51,18 @@ const SESSIONLESS_AUTH_PATHS = Object.freeze([
 ]);
 
 /** @param {unknown} value */
+/**
+ * EviMed's own user id as the account keeps it: the introspection reader has
+ * already trimmed it and cut it to 128 characters, and anything else is not one.
+ * @param {unknown} value
+ */
+function evimedSubject(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  const subject = String(value).trim();
+  // eslint-disable-next-line no-control-regex -- an identifier carries no control characters
+  return subject.length >= 1 && subject.length <= 128 && !/[\0-\x1f\x7f]/.test(subject) ? subject : "";
+}
+
 function externalAuthType(value) {
   return EXTERNAL_AUTH_TYPES.includes(/** @type {string} */ (value));
 }
@@ -230,6 +242,11 @@ export class InMemoryStore {
     this.users = new Map();
     this.projects = new Map();
     this.deletedUsers = new Set();
+    /** EviMed's own user id per `evimed` account, kept beside the account
+     *  rather than on the user object every request carries, so that nothing
+     *  which serializes a user can write it anywhere. Read by the credits
+     *  client alone (`evimedUserIdOf`). @type {Map<string, string>} */
+    this.evimedUserIds = new Map();
     this.usersLoaded = false;
     this.sessionsLoaded = false;
   }
@@ -420,9 +437,12 @@ export class InMemoryStore {
         // Ignore invalid tombstones rather than making login impossible.
       }
     }
+    this.evimedUserIds.clear();
     for (const record of records) {
       const id = safeId(record.id, "username");
       const authType = externalAuthType(record.authType) ? String(record.authType) : "local";
+      const evimedUserId = authType === "evimed" ? evimedSubject(record.evimedUserId) : "";
+      if (evimedUserId) this.evimedUserIds.set(id, evimedUserId);
       this.users.set(id, {
         id,
         tenantId: id,
@@ -457,6 +477,9 @@ export class InMemoryStore {
         name: user.name,
         authType: externalAuthType(user.authType) ? user.authType : "local",
         ...(user.passwordHash ? { passwordHash: user.passwordHash } : {}),
+        ...(user.authType === "evimed" && this.evimedUserIds.has(user.id)
+          ? { evimedUserId: this.evimedUserIds.get(user.id) }
+          : {}),
       }));
     await writeJsonState(this.config, this.config.usersFile, {
       version: 1,
@@ -503,11 +526,17 @@ export class InMemoryStore {
    * turned the provider's subject into an id of ours — nothing of the
    * credential it came from is stored here.
    *
+   * An `evimed` account also keeps EviMed's own user id (`evimedUserId`), the
+   * one EviMed's credits service knows the person by; a later sign-in that
+   * reports a different one replaces it.
+   *
    * @param {string} userId @param {string} name
    * @param {"oidc" | "evimed"} authType
+   * @param {{ evimedUserId?: string | null }} [identity]
    */
-  async upsertExternalUser(userId, name, authType) {
+  async upsertExternalUser(userId, name, authType, { evimedUserId = null } = {}) {
     const id = safeId(userId, `${authType} user id`);
+    const subject = authType === "evimed" ? evimedSubject(evimedUserId) : "";
     await this.loadUsers();
     const existing = this.users.get(id);
     // An id that already belongs to another kind of account is refused rather
@@ -527,10 +556,12 @@ export class InMemoryStore {
       authType,
       rootDir: userRoot,
     };
-    const changed = !existing || user.name !== displayName || this.deletedUsers.has(id);
+    const relinked = Boolean(subject) && this.evimedUserIds.get(id) !== subject;
+    const changed = !existing || user.name !== displayName || this.deletedUsers.has(id) || relinked;
     user.name = displayName;
     this.deletedUsers.delete(id);
     this.users.set(id, user);
+    if (subject) this.evimedUserIds.set(id, subject);
     if (changed) await this.saveUsers();
     return user;
   }
@@ -540,10 +571,27 @@ export class InMemoryStore {
     return this.upsertExternalUser(userId, name, "oidc");
   }
 
-  /** The account behind a user of the EviMed shell (fusion plan §9.2).
-   *  @param {string} userId @param {string} name */
-  async upsertEvimedUser(userId, name) {
-    return this.upsertExternalUser(userId, name, "evimed");
+  /** The account behind a user of the EviMed shell (fusion plan §9.2), with
+   *  EviMed's own id for that user as introspection reported it.
+   *  @param {string} userId @param {string} name @param {string} evimedUserId */
+  async upsertEvimedUser(userId, name, evimedUserId) {
+    return this.upsertExternalUser(userId, name, "evimed", { evimedUserId });
+  }
+
+  /**
+   * EviMed's own id for the person behind one account, or null when the
+   * account is not an EviMed one or has not signed in since this was recorded.
+   * The credits client is its only reader: it is what a deduction and a
+   * balance read name, because the account id here is a one-way hash EviMed
+   * cannot resolve. Never written to a run ledger, a workspace file or a log.
+   * @param {string} userId
+   * @returns {Promise<string | null>}
+   */
+  async evimedUserIdOf(userId) {
+    await this.loadUsers();
+    const user = this.users.get(String(userId ?? ""));
+    if (user?.authType !== "evimed") return null;
+    return this.evimedUserIds.get(user.id) ?? null;
   }
 
   async userById(id) {
@@ -725,6 +773,7 @@ export class InMemoryStore {
     }
     this.deletedUsers.add(id);
     this.users.delete(id);
+    this.evimedUserIds.delete(id);
     await Promise.all([this.saveSessions(), this.saveUsers()]);
     return { id };
   }
@@ -1162,12 +1211,14 @@ export class PostgresStore extends InMemoryStore {
     );
   }
 
-  /** @param {string} userId @param {string} name @param {"oidc" | "evimed"} authType */
-  async upsertExternalUser(userId, name, authType) {
+  /** @param {string} userId @param {string} name @param {"oidc" | "evimed"} authType
+   *  @param {{ evimedUserId?: string | null }} [identity] */
+  async upsertExternalUser(userId, name, authType, { evimedUserId = null } = {}) {
     const id = safeId(userId, `${authType} user id`);
     if (!EXTERNAL_AUTH_TYPES.includes(authType)) {
       throw new HttpError(400, "invalid_id", "Unknown external identity kind.");
     }
+    const subject = authType === "evimed" ? evimedSubject(evimedUserId) : "";
     const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 128) : "EviMed User";
     return this.database.transaction(async (client) => {
       await lockUserIdentity(client, id);
@@ -1179,17 +1230,31 @@ export class PostgresStore extends InMemoryStore {
         throw new HttpError(409, "identity_collision", "External identity conflicts with an existing account.");
       }
       await client.query(`DELETE FROM ${CONTROL_PLANE_SCHEMA}.deleted_users WHERE id = $1`, [id]);
+      // EviMed's own id is written when introspection reported one and kept
+      // otherwise, so an OIDC sign-in never clears it and a changed one is
+      // replaced. It is not returned: the user object travels everywhere.
       const result = await client.query(
-        `INSERT INTO ${CONTROL_PLANE_SCHEMA}.users(id, name, password_hash, auth_type)
-         VALUES ($1, $2, NULL, $3)
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
+        `INSERT INTO ${CONTROL_PLANE_SCHEMA}.users(id, name, password_hash, auth_type, evimed_user_id)
+         VALUES ($1, $2, NULL, $3, $4)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name,
+           evimed_user_id = COALESCE(EXCLUDED.evimed_user_id, ${CONTROL_PLANE_SCHEMA}.users.evimed_user_id),
+           updated_at = now()
          RETURNING id, name, password_hash, auth_type`,
-        [id, displayName, authType],
+        [id, displayName, authType, subject || null],
       );
       const user = databaseUser(this.config, result.rows[0]);
       await ensureUserRoot(this.config, user.rootDir);
       return user;
     });
+  }
+
+  /** @param {string} userId @returns {Promise<string | null>} */
+  async evimedUserIdOf(userId) {
+    const result = await this.database.query(
+      `SELECT evimed_user_id FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1 AND auth_type = 'evimed'`,
+      [String(userId ?? "")],
+    );
+    return result.rows[0]?.evimed_user_id ?? null;
   }
 
   async userById(id) {

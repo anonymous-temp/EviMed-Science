@@ -91,7 +91,7 @@ async function withApp(overrides, body) {
   const app = createWebApiApp({ dataDir, port: 0, ...overrides });
   try {
     const address = await app.listen(0, "127.0.0.1");
-    await body({ app, dataDir, base: `http://127.0.0.1:${address.port}` });
+    await body({ app, dataDir, base: `http://127.0.0.1:${address.port}`, store: /** @type {any} */ (app).store });
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
@@ -117,8 +117,8 @@ function exchange(base, { token, cookie } = {}) {
   });
 }
 
-/** Every byte this deployment wrote down. */
-async function storedBytes(dataDir) {
+/** Every byte this deployment wrote down, one entry per file. */
+async function storedFiles(dataDir) {
   const parts = [];
   const walk = async (/** @type {string} */ dir) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -129,13 +129,13 @@ async function storedBytes(dataDir) {
       }
       if (!entry.isFile()) continue;
       if ((await stat(full)).size > 4 * 1024 * 1024) continue;
-      parts.push(`${full}\n${await readFile(full, "utf8").catch(() => "")}`);
+      parts.push({ file: path.relative(dataDir, full), text: `${full}\n${await readFile(full, "utf8").catch(() => "")}` });
     }
   };
   await walk(dataDir);
   // The walk must prove it walked: an empty read passes every search below.
   assert.ok(parts.length >= 2, `walked ${parts.length} files under the data directory; the walk is broken`);
-  return parts.join("\n");
+  return parts;
 }
 
 test("the shell's user is provisioned once and resolves to the same account after", async () => {
@@ -143,7 +143,7 @@ test("the shell's user is provisioned once and resolves to the same account afte
     body: { code: 200, msg: "success", data: { userId: 98_211, nickName: "王医生", phone: "13800000000" } },
   });
   try {
-    await withApp(evimedOverrides(endpoint.url), async ({ base, dataDir }) => {
+    await withApp(evimedOverrides(endpoint.url), async ({ base, dataDir, store }) => {
       const first = await exchange(base, { token: shellCredential });
       assert.equal(first.status, 200);
       const minted = await first.json();
@@ -201,10 +201,49 @@ test("the shell's user is provisioned once and resolves to the same account afte
       assert.equal((await rotated.json()).data.user.id, expectedId);
       assert.equal(endpoint.requests.length, 2);
 
-      // One account, recorded as an EviMed one so step two of §9.2 can find it.
+      // One account, recorded as an EviMed one so step two of §9.2 can find it,
+      // keeping EviMed's own id for the credits client (§14) — on the account
+      // record, and not on the user a request carries.
       const users = JSON.parse(await readFile(path.join(dataDir, "users.json"), "utf8"));
-      assert.deepEqual(users.users.map((/** @type {any} */ user) => [user.id, user.authType]), [[expectedId, "evimed"]]);
+      assert.deepEqual(users.users.map((/** @type {any} */ user) => [user.id, user.authType, user.evimedUserId]),
+        [[expectedId, "evimed", "98211"]]);
       assert.equal(Object.hasOwn(users.users[0], "passwordHash"), false);
+      assert.equal(await store.evimedUserIdOf(expectedId), "98211");
+      assert.equal(Object.hasOwn(await store.userById(expectedId), "evimedUserId"), false);
+      assert.equal(JSON.stringify(account).includes("98211"), false, "the EviMed id reached a response");
+    });
+  } finally {
+    await endpoint.close();
+  }
+});
+
+test("EviMed's own id is filled in at the next sign-in and replaced when it changes", async () => {
+  const endpoint = await startEvimedUserEndpoint({ body: { code: 200, data: { userId: "40017", nickName: "赵药师" } } });
+  try {
+    await withApp(evimedOverrides(endpoint.url), async ({ base, dataDir, store }) => {
+      const accountId = evimedUserId({ introspectUrl: new URL(endpoint.url) }, "40017");
+      // An account provisioned before the id was kept: it has none, so the
+      // credits client has nobody to name.
+      await store.upsertEvimedUser(accountId, "赵药师");
+      assert.equal(await store.evimedUserIdOf(accountId), null);
+      assert.equal(await exchange(base, { token: shellCredential }).then((response) => response.status), 200);
+      assert.equal(await store.evimedUserIdOf(accountId), "40017");
+
+      // Whatever the record holds, the introspection answer is what is kept.
+      await store.upsertEvimedUser(accountId, "赵药师", "stale-40017");
+      assert.equal(await store.evimedUserIdOf(accountId), "stale-40017");
+      assert.equal(await exchange(base, { token: `${shellCredential}-next` }).then((response) => response.status), 200);
+      assert.equal(await store.evimedUserIdOf(accountId), "40017");
+
+      // It survives a restart of the store (the file store reads it back), and
+      // an account of another kind never has one.
+      const users = JSON.parse(await readFile(path.join(dataDir, "users.json"), "utf8"));
+      assert.equal(users.users.find((/** @type {any} */ user) => user.id === accountId)?.evimedUserId, "40017");
+      store.usersLoaded = false;
+      assert.equal(await store.evimedUserIdOf(accountId), "40017");
+      await store.createUser("local-pharmacist", "correct horse battery", "Local");
+      assert.equal(await store.evimedUserIdOf("local-pharmacist"), null);
+      assert.equal(await store.evimedUserIdOf("nobody"), null);
     });
   } finally {
     await endpoint.close();
@@ -325,13 +364,18 @@ test("the EviMed credential is never written down", async () => {
       const refused = await exchange(base, { token: `${shellCredential}-stale` });
       assert.equal(refused.status, 401);
 
-      const written = await storedBytes(dataDir);
+      const files = await storedFiles(dataDir);
+      const written = files.map((part) => part.text).join("\n");
       // The ledgers were written, so the search is looking at something.
       assert.match(written, /auth\.evimed\.session/);
       assert.match(written, /evimed_credential_rejected/);
-      for (const secret of [shellCredential, `${shellCredential}-stale`, platformKey, "77-541"]) {
+      for (const secret of [shellCredential, `${shellCredential}-stale`, platformKey]) {
         assert.equal(written.includes(secret), false, `${secret.slice(0, 12)}… was written to disk`);
       }
+      // EviMed's own user id is kept on the account record for the credits
+      // client (§14), and in no other file: not a session, not a ledger line,
+      // not a user's workspace.
+      assert.deepEqual(files.filter((part) => part.text.includes("77-541")).map((part) => part.file), ["users.json"]);
     });
   } finally {
     await endpoint.close();

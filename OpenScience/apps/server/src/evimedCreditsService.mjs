@@ -31,6 +31,15 @@
  * 4. **The memo is for a person reading their own bill.** 「深度研究 · 司美格
  *    鲁肽减重 Meta 分析」 — the line and the subject, in Chinese. No run id, no
  *    model name, no tool name: a statement line is not a trace.
+ * 5. **EviMed is told whom to charge in its own words.** Our account id is a
+ *    one-way hash of the EviMed user (`evimedAuthService.mjs`), which EviMed
+ *    cannot resolve, so a deduction and a balance read name the EviMed user id
+ *    the account row keeps (`store.evimedUserIdOf`), looked up at the moment of
+ *    the call and never copied into the settlement row. An account with none —
+ *    a password or OIDC account, or an EviMed one that has not signed in since
+ *    the id was first kept — is never sent under our hash: its settlement is
+ *    refused as `evimed_credits_account_unlinked` without a call, and its
+ *    balance reads as unknown, which admits the start (decision 3).
  *
  * @module evimedCreditsService
  */
@@ -124,17 +133,23 @@ function settlement(row) {
 export class EvimedCreditsService {
   /**
    * @param {{ config: Record<string, any>, database: any, client: any, usageLedger?: any,
+   *   evimedUserIdOf?: ((userId: string) => Promise<string | null>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
-  constructor({ config, database, client, usageLedger = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, database, client, usageLedger = null, evimedUserIdOf = null, now = () => new Date(), report = () => {} }) {
     this.config = config;
     this.database = database;
     this.client = client;
     this.usageLedger = usageLedger;
+    /** Who an account is to EviMed (decision 5). Absent means nobody is. */
+    this.evimedUserIdOf = evimedUserIdOf;
     this.now = now;
     this.report = report;
     this.rate = evimedCreditsRate(config);
-    this.counters = { settled: 0, skipped: 0, duplicates: 0, pending: 0, refused: 0, abandoned: 0, refusedStarts: 0, balanceUnavailable: 0 };
+    this.counters = {
+      settled: 0, skipped: 0, duplicates: 0, pending: 0, refused: 0, abandoned: 0, refusedStarts: 0, balanceUnavailable: 0,
+      unlinked: 0,
+    };
   }
 
   /** On only when the toggle, the database, the two addresses, the key and the
@@ -152,6 +167,18 @@ export class EvimedCreditsService {
       counters: { ...this.counters },
       upstream: this.client?.status?.() ?? null,
     };
+  }
+
+  /**
+   * EviMed's own id for one account, read at the moment it is needed (decision
+   * 5). A lookup that fails throws and is handled as an unknown outcome by the
+   * caller; an account with no id is `null`.
+   * @param {string} userId @returns {Promise<string | null>}
+   */
+  async #evimedUserId(userId) {
+    if (typeof this.evimedUserIdOf !== "function") return null;
+    const value = await this.evimedUserIdOf(userId);
+    return typeof value === "string" && value.trim() ? value : null;
   }
 
   /** Readiness: the schema exists and can be written. @returns {Promise<{ok: true}>} */
@@ -271,8 +298,15 @@ export class EvimedCreditsService {
       return { status: "abandoned", credits: row.credits, errorCode: "evimed_credits_attempts_exhausted" };
     }
     try {
+      const evimedUserId = await this.#evimedUserId(row.userId);
+      if (!evimedUserId) {
+        // Final: no retry gives an account an EviMed id it does not have, and
+        // our own hash is the one thing that must not be sent in its place.
+        this.counters.unlinked += 1;
+        throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account has no EviMed user to charge.", { final: true });
+      }
       const receipt = await this.client.deduct({
-        requestId: row.runId, userId: row.userId, credits: row.credits, memo: row.memo, occurredAt: row.createdAt,
+        requestId: row.runId, userId: evimedUserId, credits: row.credits, memo: row.memo, occurredAt: row.createdAt,
       });
       await this.#finish(row.runId, "settled", { receiptId: receipt.receiptId });
       this.counters.settled += 1;
@@ -417,7 +451,14 @@ export class EvimedCreditsService {
       return { balance: null, frozen: null, unit: "灵豆", status: this.config?.evimedCreditsEnabled ? "unconfigured" : "disabled" };
     }
     try {
-      const answer = await this.client.balance(productId(userId, "user"));
+      const evimedUserId = await this.#evimedUserId(productId(userId, "user"));
+      if (!evimedUserId) {
+        // Not a failure of anything: this account has no EviMed balance to
+        // read, so it has no number, and the start is admitted (decision 3).
+        this.counters.unlinked += 1;
+        return { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked" };
+      }
+      const answer = await this.client.balance(evimedUserId);
       return { balance: answer.balance, frozen: answer.frozen, unit: "灵豆", status: "ok" };
     } catch (error) {
       this.counters.balanceUnavailable += 1;

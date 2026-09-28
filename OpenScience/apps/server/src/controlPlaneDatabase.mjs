@@ -109,6 +109,23 @@ ALTER TABLE ${schema}.users ADD CONSTRAINT users_auth_type_check
 
 INSERT INTO ${schema}.schema_migrations(version) VALUES (3)
 ON CONFLICT (version) DO NOTHING;
+
+-- 2026-09-28 (fusion backend requirements section 14). EviMed's credits
+-- service charges and reads the balance of EviMed's own user, and the account
+-- id here is a one-way hash of that user, so a deduction naming it named nobody
+-- EviMed knows. The account row therefore keeps EviMed's own id, written from
+-- the introspection answer at every session exchange (so an account created
+-- before this column fills itself in at its next sign-in), and read by the
+-- credits client alone. It is a column of the account and nothing else: no run
+-- ledger, workspace file or log line carries it. Only an 'evimed' account may
+-- hold one, and the bound matches what the introspection reader keeps.
+ALTER TABLE ${schema}.users ADD COLUMN IF NOT EXISTS evimed_user_id text;
+ALTER TABLE ${schema}.users DROP CONSTRAINT IF EXISTS users_evimed_user_id_check;
+ALTER TABLE ${schema}.users ADD CONSTRAINT users_evimed_user_id_check
+  CHECK (evimed_user_id IS NULL OR (auth_type = 'evimed' AND char_length(evimed_user_id) BETWEEN 1 AND 128));
+
+INSERT INTO ${schema}.schema_migrations(version) VALUES (4)
+ON CONFLICT (version) DO NOTHING;
 `;
 
 /** @returns {Error & Record<string, any>} An Error carrying the extra fields its
@@ -255,6 +272,8 @@ export class ControlPlaneDatabase {
 
 export const CONTROL_PLANE_SCHEMA = schema;
 /** The migration version this build writes last, and the one readiness
- *  requires: 3 since the `evimed` account kind (2026-09-26); 2 was the project
- *  archive column and the default-name migration (2026-09-18). */
-export const CONTROL_PLANE_SCHEMA_VERSION = 3;
+ *  requires: 4 since an `evimed` account keeps EviMed's own user id for the
+ *  credits client (2026-09-28); 3 was the `evimed` account kind (2026-09-26);
+ *  2 was the project archive column and the default-name migration
+ *  (2026-09-18). */
+export const CONTROL_PLANE_SCHEMA_VERSION = 4;

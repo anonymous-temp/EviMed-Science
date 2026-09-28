@@ -207,7 +207,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     }
 
     const readiness = await first.app.store.readiness();
-    assert.deepEqual(readiness, { mode: "postgres", shared: true, schemaVersion: 3 });
+    assert.deepEqual(readiness, { mode: "postgres", shared: true, schemaVersion: CONTROL_PLANE_SCHEMA_VERSION });
     for (const file of [
       path.join(dataDir, "users.json"),
       path.join(dataDir, ".openscience", "sessions.json"),
@@ -380,6 +380,50 @@ test("a stored English default is renamed once, and a rename and an archive are 
   } finally {
     await first?.app.close();
     await second?.app.close();
+    await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+    await admin.end();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("an EviMed account keeps EviMed's own id on its row, filled in and replaced by sign-ins", {
+  skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  assertTestDatabase(databaseUrl);
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-postgres-evimed-id-"));
+  const id = "evimed_0123456789abcdef0123456789abcdef01234567";
+  let running;
+  try {
+    // A database from before version 4: the column is not there yet, and an
+    // EviMed account already exists without it.
+    const seeding = await start(dataDir);
+    await seeding.app.store.upsertEvimedUser(id, "王医生");
+    await seeding.app.close();
+    await admin.query("ALTER TABLE evimed_control.users DROP CONSTRAINT users_evimed_user_id_check");
+    await admin.query("ALTER TABLE evimed_control.users DROP COLUMN evimed_user_id");
+    await admin.query("DELETE FROM evimed_control.schema_migrations WHERE version = 4");
+
+    running = await start(dataDir);
+    const store = running.app.store;
+    assert.equal(await store.evimedUserIdOf(id), null, "an account from before the column has no EviMed id yet");
+    await store.upsertEvimedUser(id, "王医生", "98211");
+    assert.equal(await store.evimedUserIdOf(id), "98211");
+    // An exchange that reports no id keeps the one on the row; a changed one
+    // replaces it.
+    await store.upsertEvimedUser(id, "王医生");
+    assert.equal(await store.evimedUserIdOf(id), "98211");
+    await store.upsertEvimedUser(id, "王医生", "98212");
+    assert.equal(await store.evimedUserIdOf(id), "98212");
+    // It never rides on the user object a request carries.
+    assert.equal(JSON.stringify(await store.userById(id)).includes("98212"), false);
+    // Only an EviMed account has one.
+    assert.equal(await store.evimedUserIdOf("alice"), null);
+    const versions = await admin.query("SELECT max(version)::integer AS version FROM evimed_control.schema_migrations");
+    assert.equal(versions.rows[0].version, CONTROL_PLANE_SCHEMA_VERSION);
+  } finally {
+    await running?.app.close();
     await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
     await admin.end();
     await rm(dataDir, { recursive: true, force: true });

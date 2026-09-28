@@ -1975,6 +1975,9 @@ export function createWebApiApp(overrides = {}) {
   if (config.evimedCreditsEnabled && productDatabase) {
     const service = new EvimedCreditsService({
       config, database: productDatabase, usageLedger,
+      // Whom EviMed charges: the EviMed user id the account row keeps, since
+      // our account id is a hash EviMed cannot resolve (§14).
+      evimedUserIdOf: (/** @type {string} */ userId) => store.evimedUserIdOf(userId),
       client: createEvimedCreditsClient({
         deductUrl: config.evimedCreditsUrl,
         balanceUrl: config.evimedCreditsBalanceUrl,
