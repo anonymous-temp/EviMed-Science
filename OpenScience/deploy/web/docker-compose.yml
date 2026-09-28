@@ -327,6 +327,59 @@ services:
       # runtime controller below, which writes each as EVIMED_<X>_ENABLED.
       # Unset: every plugin on.
       OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS:
+      # Read by config.mjs and passed by no compose file until 2026-09-28, so
+      # setting any of them in .env changed nothing; the env-reach test now
+      # derives the list from config.mjs. Value-less: unset, the code's default
+      # holds.
+      # 「转为深度研究」 (researchHandoff.mjs, fusion plan §9.5); off by default.
+      OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED:
+      # A run's budgets, the delivery retry ceiling and the runtime's own
+      # switches, read wherever a launch plan is built — here and in the
+      # runtime controller below.
+      OPEN_SCIENCE_RUN_MAX_STEPS:
+      OPEN_SCIENCE_RUN_MAX_TOKENS:
+      OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW:
+      OPEN_SCIENCE_DELIVERY_ATTEMPT_LIMIT:
+      OPEN_SCIENCE_EVIDENCE_STALE_MINUTES:
+      OPEN_SCIENCE_SCREENING_BATCH_SIZE:
+      OPEN_SCIENCE_RUNTIME_ASK_USER:
+      OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT:
+      # The run monitor's window and stall notice, and how long a starting
+      # runtime is waited for.
+      OPEN_SCIENCE_AGENT_RUN_MONITOR_TIMEOUT_MS:
+      OPEN_SCIENCE_AGENT_RUN_MONITOR_STALL_MS:
+      OPEN_SCIENCE_RUNTIME_READY_TIMEOUT_MS:
+      # The model gateway's message ceiling and per-call reservation, whether
+      # usage must be recorded durably, and the workload token's lifetime.
+      OPEN_SCIENCE_MODEL_GATEWAY_MAX_MESSAGES:
+      OPEN_SCIENCE_MODEL_GATEWAY_RESERVATION_MAX_OUTPUT_TOKENS:
+      OPEN_SCIENCE_REQUIRE_DURABLE_USAGE_LEDGER:
+      OPEN_SCIENCE_EVIMED_WORKLOAD_TOKEN_TTL_SECONDS:
+      # Memory extraction's model, and how long run summaries and transcripts
+      # are kept, in days.
+      OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL:
+      OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS:
+      OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS:
+      # What the internal source-understanding runs may spend (CNY; 0 = no cap).
+      OPEN_SCIENCE_SOURCE_UNDERSTANDING_RUN_LIMIT_CNY:
+      OPEN_SCIENCE_SOURCE_UNDERSTANDING_DAILY_LIMIT_CNY:
+      OPEN_SCIENCE_SOURCE_UNDERSTANDING_WEEKLY_LIMIT_CNY:
+      # Worker cadences and leases, the OpenList probe, session purging and the
+      # PostgreSQL pool.
+      OPEN_SCIENCE_LEARNING_POLL_MS:
+      OPEN_SCIENCE_LEARNING_LEASE_MS:
+      OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS:
+      OPEN_SCIENCE_MEMORY_INDEX_POLL_MS:
+      OPEN_SCIENCE_MEMORY_INDEX_LEASE_MS:
+      OPEN_SCIENCE_MEMORY_INDEX_RECONCILE_MS:
+      OPEN_SCIENCE_SOURCE_INGESTION_POLL_MS:
+      OPEN_SCIENCE_SOURCE_INGESTION_LEASE_MS:
+      OPEN_SCIENCE_OPENLIST_PROBE_TIMEOUT_MS:
+      OPEN_SCIENCE_OPENLIST_PROBE_CACHE_MS:
+      OPEN_SCIENCE_AUTH_SESSION_PURGE_INTERVAL_MS:
+      OPEN_SCIENCE_AUTH_SESSION_PURGE_BATCH:
+      OPEN_SCIENCE_DATABASE_POOL_MAX:
+      OPEN_SCIENCE_DATABASE_CONNECTION_TIMEOUT_MS:
       # Which component ranks a recall. `openviking` is what this stack starts;
       # `builtin` is the term matcher, which needs nothing deployed and is what
       # a recall falls back to when the index is unreachable.
@@ -1443,6 +1496,16 @@ services:
       # launch plan's own reads.
       OPEN_SCIENCE_REVIEW_ENABLED:
       OPEN_SCIENCE_OPERATOR_USERS:
+      # A run's budgets, the delivery retry ceiling and the runtime's own
+      # switches, passed to neither container until 2026-09-28.
+      OPEN_SCIENCE_RUN_MAX_STEPS:
+      OPEN_SCIENCE_RUN_MAX_TOKENS:
+      OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW:
+      OPEN_SCIENCE_DELIVERY_ATTEMPT_LIMIT:
+      OPEN_SCIENCE_EVIDENCE_STALE_MINUTES:
+      OPEN_SCIENCE_SCREENING_BATCH_SIZE:
+      OPEN_SCIENCE_RUNTIME_ASK_USER:
+      OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       <<: *runtime-caps

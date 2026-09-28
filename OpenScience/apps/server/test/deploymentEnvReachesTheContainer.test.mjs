@@ -233,6 +233,10 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL: ["open-science-web"],
   OPEN_SCIENCE_EVIMED_INTROSPECT_TIMEOUT_MS: ["open-science-web"],
   OPEN_SCIENCE_EVIMED_INTROSPECT_CACHE_TTL_MS: ["open-science-web"],
+  // 「转为深度研究」 (fusion plan §9.5): read by config.mjs since 2026-09-26 and
+  // passed by no compose file until 2026-09-28, so the handoff answered
+  // "off" in every deployment however .env was set.
+  OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {
@@ -281,6 +285,104 @@ test("the operator levers reach the services that read them", async () => {
         `no compose file passes ${key} to ${service}, so setting it in .env changes nothing there`,
       );
     }
+  }
+});
+
+/** Variables config.mjs reads that the web container is deliberately never
+ *  handed, and why. Two kinds need no row, because the test derives them: a
+ *  name loadConfig refuses (a retired variable must fail where it is set, not
+ *  travel), and a secret's value form whose `_FILE` form the web API receives
+ *  (a secret travels as a mounted file). */
+const notForTheContainer = {
+  // A checkout's development shortcuts: the sibling 项目代码/ engines run in
+  // place, and .evimed-local/ supplies the rest. A hosted deployment reaches
+  // each engine through its adapter's URL (EVIMED_*_URL), which is passed.
+  OPEN_SCIENCE_LOCAL_AUTO_CONFIG: "development",
+  OPEN_SCIENCE_META_AGENT_ROOT: "development",
+  OPEN_SCIENCE_META_AGENT_PYTHON: "development",
+  OPEN_SCIENCE_MR_AGENT_ROOT: "development",
+  OPEN_SCIENCE_MR_AGENT_PYTHON: "development",
+  OPEN_SCIENCE_BIBLIOMETRIC_AGENT_ROOT: "development",
+  OPEN_SCIENCE_BIBLIOMETRIC_AGENT_PYTHON: "development",
+  OPEN_SCIENCE_RESEARCH_TOPIC_AGENT_ROOT: "development",
+  OPEN_SCIENCE_RESEARCH_TOPIC_AGENT_PYTHON: "development",
+  OPEN_SCIENCE_PEER_REVIEW_AGENT_ROOT: "development",
+  OPEN_SCIENCE_PEER_REVIEW_AGENT_PYTHON: "development",
+  OPEN_SCIENCE_DRUG_SAFETY_AGENT_ROOT: "development",
+  OPEN_SCIENCE_DRUG_SAFETY_AGENT_PYTHON: "development",
+  OPEN_SCIENCE_PHARMACY_REFERENCE_DB: "development",
+  // The desktop-era file stores, under OPEN_SCIENCE_DATA_DIR (which the image
+  // sets); a hosted deployment keeps users and sessions in PostgreSQL.
+  OPEN_SCIENCE_USERS_FILE: "development",
+  OPEN_SCIENCE_SESSIONS_FILE: "development",
+  // The image's own layout: the defaults are the directories it was built with.
+  OPEN_SCIENCE_AGENT_PACKAGE_DIRS: "image",
+  OPEN_SCIENCE_CAPABILITY_DIRS: "image",
+  OPEN_SCIENCE_DSH_BIN: "image",
+  // The pins come from the release manifest and deps-version.json; an
+  // environment override would name a kernel the image does not contain.
+  // (OPEN_SCIENCE_DSH_VERSION is the runtime image's build argument.)
+  OPEN_SCIENCE_DSH_VERSION: "pin",
+  OPEN_SCIENCE_SOCKET_BUNDLE_VERSION: "pin",
+  // The name the two delegation limits replaced on 2026-09-18, read only as
+  // their fallback; the two that replaced it are passed.
+  OPEN_SCIENCE_MAX_PARALLEL_CHILDREN: "alias",
+  // `full` fails hosted readiness (full_approval_enabled), so the only value a
+  // hosted container can run with is the code's own.
+  OPEN_SCIENCE_APPROVAL_MODE: "hosted policy",
+  // The backup container's secret. The web API learns that backups are
+  // encrypted from OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK and never holds the key.
+  OPEN_SCIENCE_BACKUP_PASSPHRASE: "backup container",
+  OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: "backup container",
+};
+
+test("every variable config.mjs reads reaches the web API, or says why it does not", async () => {
+  // The per-lever list above is written by hand, one incident at a time, and
+  // it missed OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED (2026-09-26): the switch
+  // for 「转为深度研究」 was read by config.mjs and passed by no compose file,
+  // so the feature could not be turned on in any deployment. The class, not
+  // the instance: every name config.mjs reads is a lever someone will set.
+  const configSource = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const code = configSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  const read = new Set(code.match(/OPEN_SCIENCE_[A-Z0-9_]+/g) ?? []);
+  assert.ok(read.size >= 300 && read.has("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED") && read.has("OPEN_SCIENCE_DEEPSEEK_API_KEY"),
+    `read ${read.size} names from config.mjs; the scan did not walk`);
+
+  const files = await composeFiles();
+  const dockerfile = await readFile(path.join(deployDir, "Dockerfile"), "utf8");
+  const received = new Set([
+    ...files.flatMap(({ text }) => Object.keys(YAML.parse(text, { merge: true })?.services?.["open-science-web"]?.environment ?? {})),
+    ...[...dockerfile.matchAll(/^ENV (OPEN_SCIENCE_[A-Z0-9_]+)=/gm)].map((match) => match[1]),
+  ]);
+  assert.ok(received.size >= 300 && received.has("OPEN_SCIENCE_DATA_DIR"), `the web API receives ${received.size} names; the compose files were not read`);
+
+  /** @param {string} name */
+  const refused = (name) => {
+    const saved = process.env[name];
+    process.env[name] = "x";
+    try {
+      loadConfig({ rootDir: repoRoot });
+      return false;
+    } catch (error) {
+      return /is not read any more/.test(String(/** @type {Error} */ (error)?.message));
+    } finally {
+      if (saved === undefined) delete process.env[name];
+      else process.env[name] = saved;
+    }
+  };
+  const missing = [...read].filter((name) => !received.has(name)).sort();
+  const retired = missing.filter(refused);
+  const secretValues = missing.filter((name) => received.has(`${name}_FILE`));
+  assert.ok(retired.includes("OPEN_SCIENCE_RUNTIME_KERNEL") && secretValues.includes("OPEN_SCIENCE_DEEPSEEK_API_KEY"),
+    `derived ${retired.length} retired names and ${secretValues.length} secret value forms; the derivation is broken`);
+
+  const unexplained = missing.filter((name) => !retired.includes(name) && !secretValues.includes(name) && !Object.hasOwn(notForTheContainer, name));
+  assert.deepEqual(unexplained, [],
+    `config.mjs reads ${unexplained.join(", ")}, and no compose file passes ${unexplained.length === 1 ? "it" : "them"} to open-science-web: pass it (the value-less \`KEY:\` form) and document it in .env.example, or give it a row in notForTheContainer`);
+  for (const name of Object.keys(notForTheContainer)) {
+    assert.ok(read.has(name), `${name} is exempted, and config.mjs no longer reads it; drop the row`);
+    assert.ok(missing.includes(name) && !retired.includes(name) && !secretValues.includes(name),
+      `${name} no longer needs an exemption; drop the row`);
   }
 });
 
