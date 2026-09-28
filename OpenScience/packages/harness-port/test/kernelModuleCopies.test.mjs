@@ -19,7 +19,10 @@ import { pathToFileURL } from 'node:url'
 
 import { kernelModuleUrl } from '../index.mjs'
 
-/** A kernel install: `@deepseek-ai/dsh` with its own copy of two packages. */
+/**
+ * A kernel install: `@deepseek-ai/dsh` with its own copy of two packages.
+ * @param {import('node:test').TestContext} t
+ */
 async function fakeKernel(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'evimed-kernel-'))
   t.after(() => rm(root, { recursive: true, force: true }))
