@@ -225,6 +225,32 @@ class LedgerFixtureTests(unittest.TestCase):
         )
         self.assertIn("alpha records realDelivery not-run but still names evidence, an instant or a surface", self.issues())
 
+    def test_a_platform_job_is_a_surface_and_an_unknown_word_is_not(self):
+        # The internal capabilities are dispatched only by the control plane's
+        # own workers; `platform-job` is the word for that. A surface outside the
+        # vocabulary is still refused by name.
+        build_fixture(
+            self.root,
+            [
+                entry(
+                    "alpha",
+                    realDelivery=delivery("accepted", "PROGRESS.md@2026-09-27 09:19", "2026-09-27T09:19:40Z", "platform-job"),
+                ),
+                entry(
+                    "beta",
+                    realDelivery=delivery("failed", "PROGRESS.md@2026-09-27 09:19", "2026-09-27T09:19:00Z", "cron"),
+                ),
+            ],
+            ["alpha", "beta"],
+            progress_stamps=["2026-09-27 09:19"],
+        )
+        issues = self.issues()
+        self.assertFalse([issue for issue in issues if issue.startswith("alpha")], issues)
+        self.assertIn(
+            "beta records realDelivery surface 'cron', which is not one of native-ui, http-api, harness, platform-job",
+            issues,
+        )
+
     def test_related_evidence_must_resolve(self):
         build_fixture(
             self.root,
