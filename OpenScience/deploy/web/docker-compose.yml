@@ -988,6 +988,14 @@ services:
       LLM_REASONING_EFFORT: high
       LLM_TRUST_ENV: "false"
       LLM_STREAM: "false"
+      # Levers, defaults equal to the code's: model calls in flight per
+      # per-study stage (screening, extraction, risk of bias), MetaAgent jobs
+      # one project may run at once (a second start is answered with the
+      # running job), and runs of one request counting resumes from its
+      # checkpoint. Each is reported where it acts (job state, start answer).
+      MAX_WORKERS: ${OPEN_SCIENCE_META_MAX_WORKERS:-4}
+      EVIMED_META_MAX_ACTIVE_JOBS: ${OPEN_SCIENCE_META_MAX_ACTIVE_JOBS:-1}
+      EVIMED_META_MAX_ATTEMPTS: ${OPEN_SCIENCE_META_MAX_ATTEMPTS:-3}
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
