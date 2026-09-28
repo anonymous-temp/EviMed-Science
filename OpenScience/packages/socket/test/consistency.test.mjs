@@ -1817,6 +1817,49 @@ test("a turn that would end with review findings unanswered is reminded once, an
   }
 });
 
+test("a delegated child that got the review is the one reminded to answer it, for its own deliverable only", async () => {
+  const gateway = await reviewGatewayStub(sampleReview);
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({ briefId: "review-child", reviewEnabled: true, revisionAuthorizeUrl: gateway.revisionAuthorizeUrl,
+    subagentStart: () => ({ id: "child-reviewed", result: childResult }) });
+  /** @type {any[]} */
+  const childSteers = [];
+  const child = {
+    id: "child-agent",
+    session: { id: "child-reviewed", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+    steer: (/** @type {any} */ message) => childSteers.push(message),
+  };
+  const childStopping = async () => {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: child, turn: 1 });
+  };
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+    const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA child-owned summary.\n");
+    const submitted = await f.ctx.tools.execute({ agent: child, name: "evimed_submit_deliverable", callId: "child-submit", arguments: { deliverableId: "d1" }, signal: AbortSignal.timeout(3000) });
+    assert.equal(submitted.value?.ok, true, JSON.stringify(submitted));
+
+    await childStopping();
+    assert.equal(childSteers.length, 1, "the child is told before its turn closes");
+    assert.match(childSteers[0].content[0].text, /「d1」F01/);
+    await childStopping();
+    assert.equal(childSteers.length, 1, "once per review");
+
+    // The child answers; nothing is owed any more.
+    const answered = await f.ctx.tools.execute({ agent: child, name: "evimed_submit_deliverable", callId: "child-answer",
+      arguments: { deliverableId: "d1", responses: [{ id: "F01", response: "fixed" }] }, signal: AbortSignal.timeout(3000) });
+    assert.deepEqual(answered.value?.data?.responses, { recorded: 1, refused: [] });
+    settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
+    await pending;
+  } finally {
+    await gateway.close();
+  }
+});
+
 test("a review that is not there costs the submission nothing but a line saying so", async () => {
   // The control plane with its review module off answers `review_disabled`;
   // the verdict is delivered as it is.

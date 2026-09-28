@@ -1207,6 +1207,22 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // ---- one nudge when the plan promised files and the turn produced none --
   ctx.effect(() => onTurnStopping(ctx, async (agent) => {
     const sessionId = String(agent?.session?.id ?? '')
+    // A delegated child submits its own deliverable and gets its review back
+    // in its own submission, so it is the one that can answer — reminded of
+    // that deliverable only. Its own session state holds no plan, which is why
+    // a child used to close its turn with every finding unanswered and leave
+    // the root to find them.
+    const { entry: owner, binding } = ownedSessionState(sessionId)
+    if (binding) {
+      const reminder = owedAnswersReminder(owner, owner.items.filter((/** @type {any} */ item) => item.id === binding.deliverableId), `${sessionId}:`)
+      if (!reminder) return
+      try {
+        steerContext(agent, reminder, name)
+      } catch {
+        diagnostics(sessionId)?.degrade?.('review answers reminder steer failed')
+      }
+      return
+    }
     const entry = sessionState(sessionId)
     if (entry.completed) return
     // Children whose results the root has not collected — still working, or
@@ -1235,13 +1251,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // shown to the reader as ignored, however the run dealt with them. The
     // 2026-09-27 topic run declined 32 of them in revision-notes.md, a file
     // the review does not read, and ended. Once per review, bounded per turn.
-    const owing = entry.items.filter((/** @type {any} */ item) => owedAnswers(item).length && !entry.reviewReminded.has(String(item.lastReview?.reviewId ?? '')))
-    if (owing.length && entry.reviewReminded.size < REVIEW_REMINDER_LIMIT) {
-      for (const item of owing) entry.reviewReminded.add(String(item.lastReview?.reviewId ?? ''))
-      const lines = owing.map((/** @type {any} */ item) => `「${item.id}」${owedAnswers(item).join('、')}`)
-      const reminder = `<evimed-run>最近一次独立审查还有需回应的发现没有回应：${lines.join('；')}。`
-        + '改了的，重新提交时在 responses 里回 fixed；不改的回 declined 并写一句理由，文件不改也可以直接带 responses 重新提交。'
-        + '写进 revision-notes.md 的回应审查读不到；没有回应的发现会原样列给读者。</evimed-run>'
+    const reminder = owedAnswersReminder(entry, entry.items, '')
+    if (reminder) {
       try {
         steerContext(agent, reminder, name)
       } catch {
@@ -2511,6 +2522,28 @@ const REVIEW_REMINDER_LIMIT = 2
 function owedAnswers(item) {
   const findings = Array.isArray(item?.lastReview?.findings) ? item.lastReview.findings : []
   return findings.filter((/** @type {any} */ finding) => finding?.answerRequired && !finding?.answered).map((/** @type {any} */ finding) => String(finding.id))
+}
+
+/**
+ * What a turn about to close is told when reviews it received are owed
+ * answers, or null. Once per review for each session — the root's reminders
+ * are keyed by review id, a child's by its session and the review id — and at
+ * most `REVIEW_REMINDER_LIMIT` reviews per session and turn.
+ * @param {Record<string, any>} entry the run's state @param {readonly any[]} items the deliverables this session answers for
+ * @param {string} prefix '' for the root, `<childSessionId>:` for a child
+ * @returns {string | null}
+ */
+function owedAnswersReminder(entry, items, prefix) {
+  /** @param {any} item */
+  const keyOf = (item) => `${prefix}${String(item?.lastReview?.reviewId ?? '')}`
+  const owing = items.filter((item) => owedAnswers(item).length && !entry.reviewReminded.has(keyOf(item)))
+  const spent = [...entry.reviewReminded].filter((key) => (prefix ? key.startsWith(prefix) : !key.includes(':'))).length
+  if (!owing.length || spent >= REVIEW_REMINDER_LIMIT) return null
+  for (const item of owing) entry.reviewReminded.add(keyOf(item))
+  const lines = owing.map((item) => `「${item.id}」${owedAnswers(item).join('、')}`)
+  return `<evimed-run>最近一次独立审查还有需回应的发现没有回应：${lines.join('；')}。`
+    + '改了的，重新提交时在 responses 里回 fixed；不改的回 declined 并写一句理由，文件不改也可以直接带 responses 重新提交。'
+    + '写进 revision-notes.md 的回应审查读不到；没有回应的发现会原样列给读者。</evimed-run>'
 }
 
 /** Ask the control plane to consume the authorization created after its private snapshot.
