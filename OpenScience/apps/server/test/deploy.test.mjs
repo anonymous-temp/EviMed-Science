@@ -1883,7 +1883,8 @@ test("a capability's two skill copies never drift apart by more than their known
   // Raised on 2026-09-28, same direction: Mendelian randomization gained the
   // token-free GWAS Catalog source (+27: its section, the harmonisation counts
   // and the two sentences that named OpenGWAS as the only remote path), and meta-analysis says what a
-  // repeated start and a failed job return (+7).
+  // repeated start and a failed job return (+7), then which unattended
+  // decisions a finished job names in its modules (+5).
   const knownDivergence = {
     "adr-analysis": 32,
     "bibliometric-analysis": 32,
@@ -1896,7 +1897,7 @@ test("a capability's two skill copies never drift apart by more than their known
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
     "mendelian-randomization": 38,
-    "meta-analysis": 39,
+    "meta-analysis": 44,
     "off-label-analysis": 25,
     "peer-review": 22,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are

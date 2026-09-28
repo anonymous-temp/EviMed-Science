@@ -55,6 +55,11 @@ full text.
    review; it is not equivalent to an unconditional pass. A failed job names
    the steps it completed and the files it wrote; report them as partial work,
    resume once as its next action says, and never present them as a review.
+   The job decides some things without asking, and its `modules` name each:
+   studies excluded at full text (unusable text, unresolved design), results
+   left out because their verification did not complete, and unregistered
+   trials counted by their own publication. Name each in the limitations; a
+   left-out result was not pooled.
 
 MetaAgent may legitimately conclude that quantitative synthesis is impossible
 or that direct evidence is absent. Report that result as an evidence gap, not as
