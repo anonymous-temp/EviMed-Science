@@ -2,49 +2,13 @@ import { useCallback, useEffect, useRef } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { listGeoProjects, patchGeoProject, type GeoProjectSummary } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
-import {
-  engineName,
-  GEO_CAPABILITY_IDS,
-  GEO_COVERAGE_DAYS,
-  GEO_DEFAULT_COVERAGE_DAYS,
-  GEO_DEFAULT_ENGINES,
-  GEO_OPTIONAL_ENGINES,
-  GEO_STARTERS,
-} from "./geoText";
+import type { FrameGeoOptions } from "./frameGeoOptions";
+import { GEO_CAPABILITY_IDS } from "./geoCapabilities";
 
-/** What the frame's GEO chip draws beside itself (the bridge's `geo` message). */
-export interface FrameGeoOptions {
-  sessionId: string;
-  /** Whether there is a GEO project to write the two options to. */
-  controls: boolean;
-  coverageDays: number;
-  coverageOptions: readonly number[];
-  engines: string[];
-  offered: Array<{ id: string; name: string }>;
-  starters: Array<{ label: string; draft: string }>;
-}
+export type { FrameGeoOptions } from "./frameGeoOptions";
 
-/** The engines the composer offers: the default five, and those the server lists beyond them. */
-export function offeredEngines(project: GeoProjectSummary | null): string[] {
-  const extra = GEO_OPTIONAL_ENGINES.filter((engine) => project?.engines.includes(engine) || project?.availableEngines?.includes(engine));
-  return [...GEO_DEFAULT_ENGINES, ...extra];
-}
-
-/** The chip's options for a conversation, from its GEO project — or, with none, the starters alone. */
-export function frameGeoOptions(sessionId: string, project: GeoProjectSummary | null): FrameGeoOptions {
-  const offered = offeredEngines(project);
-  const chosen = project?.engines.filter((engine) => offered.includes(engine)) ?? [];
-  const product = project?.product.brandName || project?.product.genericName || null;
-  return {
-    sessionId,
-    controls: project !== null,
-    coverageDays: project?.coverageDays ?? GEO_DEFAULT_COVERAGE_DAYS,
-    coverageOptions: GEO_COVERAGE_DAYS,
-    engines: chosen.length ? chosen : [...GEO_DEFAULT_ENGINES],
-    offered: offered.map((id) => ({ id, name: engineName(id) })),
-    starters: GEO_STARTERS.map((starter) => ({ label: starter.label, draft: starter.draft(product) })),
-  };
-}
+/** The chip's option builders, a chunk of their own (`frameGeoOptions.ts`). */
+const builders = () => import("./frameGeoOptions");
 
 /**
  * Where the frame's `geo` destination lands: the tab's project's GEO page at
@@ -68,6 +32,9 @@ export async function geoProjectPath(projectId: string, tab: string | null): Pro
  * there comes back as `geo-options` and is written to the project with
  * `PATCH`; the frame is then told what the project holds, so a refused write
  * puts the old value back rather than leaving the control lying.
+ *
+ * What the chip draws is built by `frameGeoOptions.ts`, loaded the first time
+ * a GEO conversation is on screen: every other conversation never needs it.
  *
  * Returns the handler for `geo-options`.
  */
@@ -95,16 +62,21 @@ export function useFrameGeoOptions({
       return undefined;
     }
     let live = true;
-    void listGeoProjects()
-      .then((projects) => projects.find((project) => project.projectId === projectId) ?? null)
-      // The module refusing, or the list not answering: the chip keeps its
-      // starters and has nothing to write options to.
-      .catch(() => null)
-      .then((project) => {
+    void Promise.all([
+      listGeoProjects()
+        .then((projects) => projects.find((project) => project.projectId === projectId) ?? null)
+        // The module refusing, or the list not answering: the chip keeps its
+        // starters and has nothing to write options to.
+        .catch(() => null),
+      builders(),
+    ])
+      .then(([project, { frameGeoOptions }]) => {
         if (!live) return;
         found.current = { sessionId, project };
         post(frameGeoOptions(sessionId, project));
-      });
+      })
+      // The builders' chunk would not load: the chip draws nothing extra.
+      .catch(() => {});
     return () => { live = false; };
   }, [enabled, geo, projectId, sessionId, post]);
 
@@ -112,24 +84,27 @@ export function useFrameGeoOptions({
     const current = found.current;
     const project = current?.project;
     if (!current || !project || (change.sessionId != null && change.sessionId !== current.sessionId)) return;
-    const patch: { coverageDays?: number; engines?: string[] } = {};
-    if (typeof change.coverageDays === "number" && GEO_COVERAGE_DAYS.includes(change.coverageDays)) patch.coverageDays = change.coverageDays;
-    if (Array.isArray(change.engines)) {
-      const offered = offeredEngines(project);
-      const engines = change.engines.filter((engine): engine is string => typeof engine === "string" && offered.includes(engine));
-      if (engines.length) patch.engines = engines;
-    }
-    if (patch.coverageDays === undefined && patch.engines === undefined) return;
-    void patchGeoProject(project.id, patch).then(
-      () => {
-        const next = { ...project, ...patch };
-        if (found.current === current) found.current = { ...current, project: next };
-        post(frameGeoOptions(current.sessionId, next));
-      },
-      (error: unknown) => {
-        toast.error(webErrorMessage(error, { fallback: "没有改成功，请稍后重试。" }));
-        post(frameGeoOptions(current.sessionId, project));
-      },
-    );
+    // Loaded already: `found` is set only after the builders arrived.
+    void builders().then(({ frameGeoOptions, isCoverageOption, offeredEngines }) => {
+      const patch: { coverageDays?: number; engines?: string[] } = {};
+      if (typeof change.coverageDays === "number" && isCoverageOption(change.coverageDays)) patch.coverageDays = change.coverageDays;
+      if (Array.isArray(change.engines)) {
+        const offered = offeredEngines(project);
+        const engines = change.engines.filter((engine): engine is string => typeof engine === "string" && offered.includes(engine));
+        if (engines.length) patch.engines = engines;
+      }
+      if (patch.coverageDays === undefined && patch.engines === undefined) return;
+      void patchGeoProject(project.id, patch).then(
+        () => {
+          const next = { ...project, ...patch };
+          if (found.current === current) found.current = { ...current, project: next };
+          post(frameGeoOptions(current.sessionId, next));
+        },
+        (error: unknown) => {
+          toast.error(webErrorMessage(error, { fallback: "没有改成功，请稍后重试。" }));
+          post(frameGeoOptions(current.sessionId, project));
+        },
+      );
+    }, () => {});
   }, [post]);
 }

@@ -24,13 +24,7 @@ import type {
 
 /* ------------------------------------------------------------- capabilities */
 
-/**
- * The capabilities a GEO conversation can be bound to. A conversation bound to
- * any of them carries the “循证 GEO” chip. The frame holds the same list in
- * its vocabulary (`packages/harness-port/src/runtimeUiFrame.mjs`, `geo`); both
- * belong in the domain's GEO vocabulary once it exists.
- */
-export const GEO_CAPABILITY_IDS: readonly string[] = Object.freeze(["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]);
+export { GEO_CAPABILITY_IDS } from "./geoCapabilities";
 
 /* ------------------------------------------------------------------ engines */
 

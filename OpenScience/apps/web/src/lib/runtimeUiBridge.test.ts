@@ -6,9 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebAgentRun } from "./apiClient";
 import type { RunStreamEvent } from "./runEvents";
 import {
-  boundRunFor, createThrottledSender, foldRunEvent, forgetKnowledgeSources, frameEvidenceFrom, reportPathOf, runStateFromRecord,
+  boundRunFor, createThrottledSender, foldRunEvent, forgetKnowledgeSources, reportPathOf, runStateFromRecord,
   searchKnowledgeSources, useFrameRunBinding, type FrameRunState,
 } from "./runtimeUiBridge";
+import { frameEvidenceFrom } from "./frameEvidence";
 
 const mocks = vi.hoisted(() => ({
   listRuns: vi.fn(),
