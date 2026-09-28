@@ -1,0 +1,38 @@
+{
+  "capability": "geo-strategy",
+  "brief": "geo-strategy-004-mazdutide-conditions-written",
+  "base": "https://82.156.128.153",
+  "project": "geo",
+  "session": "acc-geo-strategy-mukqfl6e",
+  "runId": "run_0c0d84e10f9fc68cdde65f9886855c1d",
+  "agentVersion": "1.0.4",
+  "dispatchedAt": "2026-09-28T04:30:07Z",
+  "prompt": "这是信源这一步的重做。9 月 27 日数据修复之后，项目里登记的策略没有主战场、布局和七类缺口，963 个信源没有一个核过三条件，三档目标里没有 M-19（综合可见度）和 M-01S（品牌提及率）。9 月 25 日交付的 strategy.json 里有这些内容，但只有七类缺口曾写进平台（之后的版本又把它写空了），主战场、布局和三条件从没写进去。这次按下面的要求重做，并确认 geo_write 写进去了（写完用 geo_read strategy、targets、sources 读回核对）。\n“循证 GEO”自动运行 · 第 5 步（信源）\n产品：信尔美（通用名：玛仕度肽注射液）。\n覆盖周期 90 天；AI 引擎：豆包、千问、DeepSeek、元宝、Kimi。\n诊断已经测完（基线）。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。\n各引擎最近一次有效回答：豆包 没有有效回答；千问 2026-09-28；DeepSeek 2026-09-26；元宝 2026-09-26；Kimi 2026-09-27。豆包没有 7 天内的数：用到它们的数就写明是哪天测的，不当作本周的数；没有有效回答的写“未测”。不要为此补测或停下，按项目里已有的数据交付。\n这次要做：信源表、七类缺口、每个引擎本周期能做到什么、主战场与布局、三档目标（每档写目标、稿件数和预算）。\n覆盖层候选（通常 10–20 个）每个都要核三条件：备案主体一致、被新闻源收录、主营医疗健康，写 icpMatches、newsIndexed、medicalVertical（核不了写 null）和 checkedAt；冒名站写 impostor: true。三条件没核过或不全满足的站，平台不会下单。\n写回：geo_write strategy（battlefield、expectations、gaps、layout，信源放在 sources 里；每个引擎的 expectations 写 promise 和 layers）和 targets（档一、档二、档三，dataType 为 forecast；每档都写 M-19 综合可见度和 M-01S 品牌提及率，pool 为 all）。\n项目里已有的数据用 geo_read 读（做过且没有过期的不要重做），产出用 geo_write 写回项目。测量由平台自己跑，不要在运行里批量探测。",
+  "promptSource": "file geo-strategy-xinermei-rerun.txt",
+  "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/geo-strategy/geo-strategy.md",
+      "deliverables/geo-strategy/revision-notes.md",
+      "deliverables/geo-strategy/strategy.json"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「geo-strategy」有 5 条审查发现（已修 5，不改并说明 0，未回应 0）。",
+        "text": "独立审查：交付物「geo-strategy」有 5 条审查发现（已修 5，不改并说明 0，未回应 0）。"
+      }
+    ],
+    "effectiveAgentId": "geo-strategy",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 992784,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

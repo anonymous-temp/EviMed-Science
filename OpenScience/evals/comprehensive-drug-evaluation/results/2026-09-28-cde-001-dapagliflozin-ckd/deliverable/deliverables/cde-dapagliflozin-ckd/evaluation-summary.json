@@ -1,0 +1,97 @@
+{
+  "deliverableId": "cde-dapagliflozin-ckd",
+  "generatedAt": "2026-09-28T04:25:00Z",
+  "compilerResult": {
+    "assessmentType": "comprehensive_drug_evaluation",
+    "coreDomainCoverage": {
+      "required": ["applicability", "effectiveness", "safety"],
+      "missing": [],
+      "unresolved": [],
+      "complete": true
+    },
+    "domainAssessments": [
+      {
+        "domain": "effectiveness",
+        "status": "favorable",
+        "certainty": "not_rated",
+        "evidenceIds": ["E01", "E05", "E06", "E07", "E08", "E10", "E13", "E14", "E15", "E17", "E18", "E20", "E21", "E22", "E23"],
+        "rationale": "在本次目标人群（eGFR 25–75 mL/min/1.73m² 且 UACR 200–5000 mg/g，背景为最大耐受剂量 ACEI/ARB）中，DAPA-CKD 主要复合终点为 197/2152 对 312/2152，HR 0.61（95% CI 0.51–0.72）；肾脏复合终点 HR 0.56（0.45–0.68）；终末期肾病 HR 0.64（0.50–0.82）；eGFR 下降 ≥50% 的 HR 0.53（0.42–0.67）；全因死亡 HR 0.69（0.53–0.88）。试验按同一人群条件设计并被独立数据监查委员会因疗效提前终止，与本次对照设定一致。伴或不伴糖尿病（交互 P=0.19）、BMI 谱系（交互 P=0.72）、年龄与性别、以及 IgA 肾病与 FSGS 等病因亚组方向一致，但各亚组置信区间宽度差异较大，小样本亚组（FSGS HR 0.62，95% CI 0.17–2.17）不足以单独支持结论。同类药物 EMPA-KIDNEY 在更宽 eGFR 与白蛋白尿范围亦显示肾脏进展或心血管死亡下降（HR 0.72，0.64–0.82），但该结果属于恩格列净，不作为达格列净的效应量。试验中位随访 2.4 年，短于本次 3 年时限；更长时限仅有模型外推（至肾衰竭平均延迟 6.6 年），属推算而非试验内观察。本域因缺经验证的确定性框架，不做正式确定性评级。"
+      },
+      {
+        "domain": "safety",
+        "status": "mixed",
+        "certainty": "not_rated",
+        "evidenceIds": ["E01", "E02", "E03", "E04", "E06", "E08", "E09", "E12", "E18", "E19"],
+        "rationale": "随机安全性数据（DAPA-CKD 全文表 2，安全性分析集每组 2149 例）：任何严重不良事件 633/2149（29.5%）对 729/2149（33.9%），达格列净组更低；确定或可能的糖尿病酮症酸中毒 0/2149 对 2/2149（<0.1%）；容量不足 127/2149（5.9%）对 90/2149（4.2%），达格列净组更高，P=0.01；重度低血糖 14/2149（0.7%）对 28/2149（1.3%），达格列净组更低；急性肾损伤相关严重不良事件 52/2152（2.5%）对 69/2152（3.2%），HR 0.77（0.54–1.10），未达统计学显著；两次相邻访视间血肌酐翻倍 HR 0.68（0.49–0.94）；因不良事件停药两组相近（5.5% 对 5.7%）。生殖器真菌感染在中国说明书与境外处方信息中均列为重要不良反应与警告事项，但本次未取得该人群中的发生率：DAPA-CKD 正文与表 2 未报告该条目，补充附录未获取，中国说明书与已读摘要均未给出发病率，故不给出该结局的数值。用药初期 eGFR 下降（2 周内相对下降 >10% 者 49.4% 对 23.7%）与后续严重不良事件无关，中国共识据此给出 2–4 周复查与 30% 阈值的停药判据。所读说明书中未见黑框警告字段。本域有利项（严重不良事件、重度低血糖、急性肾损伤方向）与不利项（容量不足）并存，不做正式确定性评级。"
+      },
+      {
+        "domain": "applicability",
+        "status": "favorable",
+        "certainty": "not_rated",
+        "evidenceIds": ["E01", "E02", "E04", "E07", "E11", "E14", "E19", "E23", "E27"],
+        "rationale": "中国现行说明书（国药准字H20234463）已将「用于慢性肾脏病成人患者：降低有进展风险的慢性肾脏病成人患者的 eGFR 持续下降、终末期肾病、心血管死亡和因心力衰竭而住院的风险」列为适应症，与本次拟评价用途一致；用法用量按 eGFR 分层，eGFR 25 至 <45 为 10 mg 每日一次，eGFR <25 不推荐起始但已在治疗者可继续 10 mg，透析禁用，均与 eGFR 25–75 的目标人群相容。同一通用名下的另一批准文号（国药准字H20249826）说明书仍仅列 2 型糖尿病适应症并将重度肾损害（eGFR 低于 30）列为禁忌，说明中国境内不同批准文号的说明书版本不同步，处方与医保审核应核对具体产品说明书。2024 中国专家共识推荐 eGFR ≥20 的 CKD 患者（伴或不伴 2 型糖尿病）启动 SGLT2 抑制剂，优先用于进展风险中度及以上、心血管高危或合并心力衰竭者，推荐与 ACEI 或 ARB 联合；共识同时列出证据不足情形（1 型糖尿病、肾移植、大剂量糖皮质激素或免疫抑制剂、UACR ≥5000 mg/g、多囊肾病），这些情形位于本次目标人群之外或其边界。试验人群构成（平均 eGFR 43.1 mL/min/1.73m²、中位 UACR 949 mg/g、97% 使用 ACEI 或 ARB、平均年龄 62 岁、女性 33%）与中国肾内科门诊 CKD 2–4 期伴白蛋白尿人群在关键维度上重叠，但试验未按国别报告入组构成，中国受试者占比无法从已读来源确认。三级医院肾内科门诊具备 2–4 周复查肾功能与血压的随访条件，与该共识的监测要求匹配。"
+      },
+      {
+        "domain": "economics",
+        "status": "mixed",
+        "certainty": "not_rated",
+        "evidenceIds": ["E01", "E15", "E24", "E25", "E26", "E27", "E28", "E29"],
+        "rationale": "准入与支付：国家医保药品目录（2025 年）西药部分 XA10BK 项下编号 165「达格列净片」为乙类、自付比例 5%、备注栏未设限定支付范围；同一通用名的复方制剂「达格列净二甲双胍缓释片（Ⅰ）」亦为乙类 5%。价格：省级医保局公布第十一批国家组织药品集中带量采购落地情况，达格列净片单片价格自 4.35 元降至 0.3 元，该批集采执行周期自 2026 年 2 月起；该价格针对集采中选产品，非中选原研产品价格可能不同。按 10 mg 每日一次与集采单片价 0.3 元推算，年药品费用约 110 元（推算：0.3 元 × 365 天，未计医保报销比例与包装规格差异）。供应：第十一批集采中有一家中选企业因未按协议供量被取消中选资格，其约定采购量转由其他中选企业供应，提示同一通用名内多家中选企业的供应稳定性需跟踪。资源占用方向为正向：3 年时限的成本抵消模型按每 10 万受治患者估算终末期肾病减少 3546 例、心力衰竭住院减少 2314 例、急性肾损伤减少 1709 例、全因死亡减少 2491 例。缺口：本次未检索到中国本土的 CKD 适应症成本效果分析、预算影响分析或本土 HTA 结论；已检得的成本效果研究来自美国与日本，其价格、支付阈值与支付体系不能直接外推到中国，其中日本 CKD 3a 期结论由作者自评为不明确。本域的可及性与价格证据充足，而本土经济性结论缺失，不给出成本效果比或预算影响数值。"
+      },
+      {
+        "domain": "evidence_certainty",
+        "status": "not_assessed",
+        "certainty": "not_rated",
+        "evidenceIds": ["E05", "E06", "E07"],
+        "rationale": "本次未使用任何经验证的确定性框架，也未由用户提供正式的 GRADE 或其他评级，按要求不出确定性等级，只在各域理由中说明偏倚风险、不一致性、间接性、不精确性与发表偏倚相关的具体事实（例如主要终点与全因死亡来自同一项由企业资助的试验；生殖器感染发生率缺失；3 年时限内无试验内直接观察）。该域记 not_assessed；缺证据不记为 0 分。"
+      }
+    ],
+    "evaluationDomains": null,
+    "compositeScore": null,
+    "scoreStatus": "not_requested",
+    "scoreWithheldReasons": [],
+    "recommendationStrength": "not_automatically_determined",
+    "audit": {
+      "compiler": "evimed-drug-assessment",
+      "compilerVersion": "1.4.0",
+      "inputSha256": "0c7c5f2ac3969fa5cb4e8e1eac7efb9dd2431931f3fe69c4e53911a1f4ba7a8b",
+      "automaticDecision": false,
+      "humanReviewRequired": true
+    }
+  },
+  "scoreDisclosure": {
+    "quantitativeScoringRequested": false,
+    "scoreStatus": "not_requested",
+    "compositeScore": null,
+    "explanation": "用户未提供评分维度、条目定义、量表、权重、方向与版本化的评分政策，故未请求定量评分；编译结果为空值而非 0 分。缺证据未被转换为 0 分，也未由研究设计或确定性直接推导推荐强度。",
+    "recommendationStrength": "not_automatically_determined"
+  },
+  "domainCoverageInThisRun": {
+    "requestedByUser": ["effectiveness", "safety", "applicability", "economics"],
+    "assessed": ["effectiveness", "safety", "applicability", "economics"],
+    "additionallyAssessed": ["evidence_certainty"],
+    "mandatoryCorePresent": ["effectiveness", "safety", "applicability"],
+    "withheldOrUnassessed": [
+      {
+        "domain": "evidence_certainty",
+        "status": "not_assessed",
+        "reason": "无经验证的确定性适配器，也无用户提供的正式评级，不出确定性数值。"
+      },
+      {
+        "domains": ["hta", "innovation", "accessibility", "equity", "other"],
+        "status": "not_assessed",
+        "reason": "本次未检索到可支撑的中国本土 HTA 结论；创新性与公平性缺乏可追溯来源；可及性与支付信息并入 economics 域。"
+      }
+    ]
+  },
+  "humanReviewFlag": {
+    "humanReviewRequired": true,
+    "automaticDecision": false,
+    "statement": "本包为辅助证据与评价域评估，不是临床、医保、报销或采购决定；需由具备相应资质的人员复核后方可使用。"
+  },
+  "evidenceSnapshot": "evidence-snapshot.json",
+  "evidenceTable": "evidence-table.csv",
+  "report": "comprehensive-evaluation-report.md",
+  "revisionNotes": "revision-notes.md",
+  "retrieved": "由平台在提交时写入。"
+}

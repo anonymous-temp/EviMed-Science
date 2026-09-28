@@ -361,10 +361,13 @@ class RealLedgerTests(unittest.TestCase):
         # own workers had made (surface `platform-job`): geo-content and
         # geo-strategy (the 信尔美 program), method-distillation,
         # method-relations and source-understanding — sixteen accepted, three
-        # failed, two never run.
-        self.assertEqual(statuses.count("not-run"), 2)
-        self.assertEqual(statuses.count("accepted"), 16)
-        self.assertEqual(statuses.count("failed"), 3)
+        # failed, two never run. Later that day, on the release carrying the
+        # fixes, comprehensive-drug-evaluation was accepted on a re-run of
+        # cde-001, geo-strategy on a re-run for 信尔美 and geo-proposal on its
+        # first run — eighteen accepted, two failed, one never run.
+        self.assertEqual(statuses.count("not-run"), 1)
+        self.assertEqual(statuses.count("accepted"), 18)
+        self.assertEqual(statuses.count("failed"), 2)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -413,8 +416,10 @@ class RealLedgerTests(unittest.TestCase):
         # source-understanding joined on 2026-09-28 from production runs the
         # platform's own workers dispatched, each package copied into the
         # repository with a run.json that says whether its transcript shows
-        # the gate's code being read.
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-strategy", "manuscript-support", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding"])
+        # the gate's code being read. comprehensive-drug-evaluation and
+        # geo-proposal joined the same day on runs of the capability through
+        # `capability-acceptance`, read before the rows changed.
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-proposal", "geo-strategy", "manuscript-support", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

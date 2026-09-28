@@ -1,0 +1,47 @@
+{
+  "capability": "geo-proposal",
+  "brief": "geo-proposal-001-mazdutide-package",
+  "base": "https://82.156.128.153",
+  "project": "geo",
+  "session": "session_0d5ba9d1c935475448f7ba25060b0c07",
+  "runId": "run_cf436f220d859f3300fa967f9bec6a23",
+  "agentVersion": "1.0.2",
+  "dispatchedAt": "2026-09-28T04:45:25Z",
+  "prompt": "“循证 GEO” · 导出提案资料包 产品：信尔美（通用名：玛仕度肽注射液）。 出一套提案资料包：一个 Excel、两份 Word、一份 PPT、一份 HTML。只用项目已有的数据（geo_read），没做的步骤写“未做”。 各引擎最近一次有效回答：豆包 没有有效回答；千问 2026-09-28；DeepSeek 20…",
+  "promptSource": "the GEO orchestrator's brief, as the run ledger records it",
+  "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      ".work/geo7/build_dataset.py",
+      ".work/geo7/build_docx.py",
+      ".work/geo7/build_html.py",
+      ".work/geo7/build_manifest.py",
+      ".work/geo7/build_pptx.py",
+      ".work/geo7/build_verification.py",
+      ".work/geo7/build_xlsx.py",
+      ".work/geo7/pptxlib.py",
+      ".work/geo7/xlsxlib.py",
+      "deliverables/proposal-package/geo-proposal.md",
+      "deliverables/proposal-package/proposal-package.json",
+      "deliverables/proposal-package/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「proposal-package」有 1 条审查发现（已修 1，不改并说明 0，未回应 0）。",
+        "text": "独立审查：交付物「proposal-package」有 1 条审查发现（已修 1，不改并说明 0，未回应 0）。"
+      }
+    ],
+    "effectiveAgentId": "geo-proposal",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 842653,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

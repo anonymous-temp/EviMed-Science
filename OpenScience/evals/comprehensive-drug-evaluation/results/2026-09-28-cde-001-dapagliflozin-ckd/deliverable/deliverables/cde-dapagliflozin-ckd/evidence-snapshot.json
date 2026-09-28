@@ -1,0 +1,2485 @@
+{
+  "schema": "evimed.comprehensive-drug-evaluation/evidence-snapshot/1",
+  "generatedFor": "cde-dapagliflozin-ckd",
+  "generatedAt": "2026-09-28T04:20:00Z",
+  "scope": {
+    "drug": "达格列净（dapagliflozin）",
+    "drugNormalization": {
+      "tool": "drug_term_normalize",
+      "result": "unresolved",
+      "note": "中文名未在确定性词表中归一，返回原词并标记 unresolved；正文以中文通用名、英文通用名、批准文号与说明书条目号共同标识，维持可追溯性。"
+    },
+    "indication": "慢性肾脏病（伴或不伴 2 型糖尿病）",
+    "population": "eGFR 25–75 mL/min/1.73m²、伴白蛋白尿的成人慢性肾脏病患者",
+    "comparator": "标准治疗（最大耐受剂量的 ACEI 或 ARB）",
+    "jurisdiction": "中国（NMPA；国家医保药品目录）",
+    "careSetting": "三级医院肾内科门诊",
+    "outcomes": [
+      "肾脏复合终点（eGFR 持续下降、终末期肾病、肾性或心血管死亡）",
+      "全因死亡",
+      "安全性：酮症酸中毒、容量不足、生殖器感染、急性肾损伤"
+    ],
+    "timeHorizon": "3 年",
+    "decisionDate": "2026-06-30",
+    "evaluationDomains": [
+      "effectiveness",
+      "safety",
+      "applicability",
+      "economics"
+    ],
+    "quantitativeScoringRequested": false,
+    "retrievalNotes": [
+      "EviMed 私有说明书与指南适配器在本部署未配置，检索回落到公开来源与 EviMed 中文说明书索引。",
+      "中国说明书条目来自 EviMed 说明书索引快照（索引版本 drug-labels-cb075ba6a4db，导出日期 2025-12-17），可能在决策日前已被修订，使用任一细节前须核对现行 NMPA 说明书。",
+      "未检得仅针对本次目标人群（eGFR 25–75 且伴白蛋白尿）的中国本土随机对照试验；检索到的中国证据为中国专家共识与中国药代/真实世界研究。",
+      "未检得中国本土的 CKD 适应症药物经济学评价；经济性维度仅使用可追溯的中国医保目录条目与公开集采价格，成本效果分析记为中国未检索到。"
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "label:国药准字H20234463",
+      "source": "EviMed 中文说明书索引（drug-labels-cb075ba6a4db）",
+      "title": "达格列净片（安达唐，阿斯利康药业(中国)有限公司）",
+      "approvalNumber": "国药准字H20234463",
+      "url": "https://www.315jiage.cn/mn545685.aspx",
+      "jurisdiction": "China (NMPA)",
+      "labelVersion": "5af6c1c247954d038765d587d7a57a7384c30b8d07abeca4d94937b2996f101f",
+      "evidenceAccess": "regulatory_record",
+      "retrievedAt": "2026-09-28T04:15:13Z",
+      "observedFields": {
+        "indications": "1、用于2型糖尿病成人患者（单药或联合治疗改善血糖控制）；2、用于心力衰竭成人患者：HFrEF（NYHA Ⅱ–Ⅳ级），降低心血管死亡和因心力衰竭住院风险；3、用于慢性肾脏病成人患者：降低有进展风险的慢性肾脏病成人患者的 eGFR 持续下降、终末期肾病、心血管死亡和因心力衰竭而住院的风险；4、重要的使用限制：不适用于治疗1型糖尿病或糖尿病酮症酸中毒。",
+        "specification": "国产版 10mg*10片*3板",
+        "dosage": "eGFR ≥45：改善血糖控制起始 5 mg qd，可增至 10 mg qd；其他适应症起始 10 mg qd。eGFR 25 至 <45：10 mg qd。eGFR <25：不推荐起始治疗，但已在治疗者可继续 10 mg qd。透析：禁用。",
+        "contraindications": "对本品有严重超敏反应史者禁用（如过敏反应或血管性水肿）；透析患者禁用。",
+        "adverseReactions": "重要不良反应：糖尿病患者的酮症酸中毒；血容量不足；尿脓毒症和肾盂肾炎；与胰岛素和胰岛素促泌剂合用引起低血糖；会阴坏死性筋膜炎（福尼尔坏疽）；生殖器真菌感染。上市后经验另列酮症酸中毒、急性肾损伤、尿脓毒症和肾盂肾炎、福尼尔坏疽、皮疹。",
+        "precautions": "含 DAPA-CKD 描述：在 4304 例 CKD（eGFR 25–75）患者中评价达格列净；未入组 eGFR <25 的患者；不建议 eGFR <45 的 2 型糖尿病成年患者用于改善血糖控制；eGFR 低于 60 的患者血容量不足与低血压风险可能增加。",
+        "boxedWarning": "本次读取的说明书中未出现黑框警告字段；注意事项与不良反应按上列文本记录，未将其表述为黑框警告。"
+      },
+      "limitations": "索引快照为抓取副本，字段可能被截断；为列明 NMPA 批准日期；未逐条核对该批准文号下的现行官方说明书。"
+    },
+    {
+      "sourceId": "label:国药准字H20249826",
+      "source": "EviMed 中文说明书索引（drug-labels-cb075ba6a4db）",
+      "title": "达格列净片（九典，湖南九典制药股份有限公司）",
+      "approvalNumber": "国药准字H20249826",
+      "url": "https://www.315jiage.cn/mn580958.aspx",
+      "jurisdiction": "China (NMPA)",
+      "labelVersion": "0a0da05c5a4de90a7615ee0374736e8c76c078b943289cdacb1b5bf914e89651",
+      "evidenceAccess": "regulatory_record",
+      "retrievedAt": "2026-09-28T04:13:57Z",
+      "observedFields": {
+        "indications": "仅列 2 型糖尿病成人患者（单药/联合治疗）与重要使用限制（不适用于1型糖尿病或糖尿病酮症酸中毒）。",
+        "contraindications": "对本品有严重超敏反应史者禁用；重度肾损害(eGFR低于30mL/min/1.73m2)、终末期肾病(ESRD)或需要透析的患者禁用。",
+        "precautions": "本品可导致血管内体积收缩；开始治疗后可能发生症状性低血压，尤其是肾功能不全（eGFR 低于 60）、老年或使用髓袢利尿剂的患者；治疗前评估并纠正血容量状态，治疗期间监测低血压体征和症状。"
+      },
+      "limitations": "同一通用名下的仿制品说明书，适应症条目不含 CKD；与安达唐说明书的差异说明中国境内不同批准文号的说明书版本并不同步，不能用一个仿制品说明书判断整个通用名的批准范围。"
+    },
+    {
+      "sourceId": "01f90c94-71cb-4a1f-81ff-8004b850529b",
+      "source": "openFDA / DailyMed（美国标签）",
+      "title": "FARXIGA (dapagliflozin) 美国处方信息",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=01f90c94-71cb-4a1f-81ff-8004b850529b",
+      "jurisdiction": "United States (FDA)",
+      "effectiveTime": "20260710",
+      "evidenceAccess": "regulatory_record",
+      "retrievedAt": "2026-09-28T04:14:03Z",
+      "observedFields": {
+        "indicationsAndUsage": "降低有进展风险的慢性肾脏病成人患者的 eGFR 持续下降、终末期肾病、心血管死亡与心力衰竭住院风险；另列心力衰竭与 2 型糖尿病降糖适应症。使用限制：不推荐用于 1 型糖尿病降糖；不推荐用于 eGFR <45 的 2 型糖尿病降糖；不推荐用于多囊肾病或近期接受免疫抑制治疗的 CKD 患者。",
+        "dosageAndAdministration": "除降糖外的适应症推荐剂量 10 mg qd；开始前评估肾功能与血容量状态；择期手术或长时间禁食前至少停用 3 天。",
+        "contraindications": "对达格列净或辅料有严重超敏反应史者。",
+        "boxedWarnings": "该记录返回的 boxedWarnings 字段为空数组。",
+        "warningsAndPrecautions": "5.1 1 型糖尿病及其他酮症酸中毒；5.2 血容量不足；5.3 泌尿生殖道感染（含尿脓毒症、肾盂肾炎、会阴坏死性筋膜炎/福尼尔坏疽、生殖器真菌感染）；5.4 低血糖。"
+      },
+      "limitations": "美国标签，仅作境外监管口径参照，不构成中国的批准状态；返回内容被截断（contentTruncated=true），未读取完整 6.1 不良反应发生率表。"
+    },
+    {
+      "sourceId": "PMC11191031",
+      "source": "Europe PMC 全文",
+      "title": "Chinese expert consensus on the clinical application of sodium-glucose cotransporter 2 inhibitors in patients with chronic kidney disease",
+      "doi": "10.1097/CM9.0000000000003145",
+      "url": "https://europepmc.org/articles/PMC11191031",
+      "year": 2024,
+      "evidenceAccess": "full_text",
+      "retrievedAt": "2026-09-28T04:19:30Z",
+      "observedFields": {
+        "scope": "中国肾内科、内分泌与心血管专家共同制定的 SGLT2 抑制剂在 CKD 患者中应用的共识，16 个临床问题；适用人群为成人 CKD。引言报告中国 CKD 患病率 2018–2019 年为 8.2%。",
+        "recommendation1": "推荐在 eGFR ≥20 mL·min⁻¹·1.73 m⁻² 的 CKD 患者（伴或不伴 2 型糖尿病）启动 SGLT2 抑制剂。",
+        "recommendation2": "优先用于：CKD 进展风险中度及以上；具有心血管事件高危因素；合并心力衰竭（不论射血分数）。",
+        "recommendation4": "证据不足的情形需权衡后使用：1 型糖尿病、肾移植、大剂量糖皮质激素或免疫抑制剂、大量白蛋白尿（UACR ≥5000 mg/g）、多囊肾病。",
+        "recommendation8_9_10": "推荐 SGLT2 抑制剂与 ACEI 或 ARB 联合；对 ACEI/ARB 不耐受者建议使用 SGLT2 抑制剂；合并 2 型糖尿病者可三联（SGLT2 抑制剂＋ACEI/ARB＋非甾体 MRA）。",
+        "recommendation11": "启动后 2–4 周复查肾功能并监测血压与血容量；eGFR 下降不足基线 30% 不建议停药；下降达 30% 及以上建议停药并查找原因。",
+        "recommendation12_14_15_16": "酮症酸中毒相关症状出现时停药并及时测血/尿酮体；严重尿路感染或生殖器真菌感染时停药；各种原因急性肾损伤时停药；已在治疗者 eGFR 缓慢降至 20 以下可继续用药至透析或肾移植，需密切随访。"
+      },
+      "limitations": "共识文件正文中部分条目以要点形式发布（补充材料另载完整理由，本次未获取）；共识不是随机对照证据，且其中的推荐强度为共识性表述。"
+    },
+    {
+      "sourceId": "PMID:32970396",
+      "source": "PubMed 摘要",
+      "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+      "journal": "The New England journal of medicine",
+      "year": 2020,
+      "doi": "10.1056/NEJMoa2024816",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32970396/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:14:09Z",
+      "observedFields": {
+        "primaryOutcome": "197/2152（9.2%）对 312/2152（14.5%）；HR 0.61（95% CI 0.51–0.72），P<0.001；NNT 19（95% CI 15–27）。",
+        "kidneyComposite": "HR 0.56（95% CI 0.45–0.68），P<0.001。",
+        "cvDeathOrHHF": "HR 0.71（95% CI 0.55–0.92），P=0.009。",
+        "allCauseDeath": "101（4.7%）对 146（6.8%）；HR 0.69（95% CI 0.53–0.88），P=0.004。",
+        "design": "多中心随机双盲安慰剂对照，4304 例，随机化至达格列净 10 mg qd 或安慰剂，中位随访 2.4 年；因疗效提前终止。"
+      },
+      "limitations": "仅读到摘要；安全性细节（生殖器感染等）未在摘要中给出，需另读全文表 2。"
+    },
+    {
+      "sourceId": "10.1056-nejmoa2024816",
+      "source": "开放获取全文（Europe PMC 路由的期刊稿）",
+      "title": "Dapagliflozin in Patients with Chronic Kidney Disease（DAPA-CKD 主要结果全文）",
+      "doi": "10.1056/NEJMoa2024816",
+      "url": "https://doi.org/10.1056/NEJMoa2024816",
+      "evidenceAccess": "full_text",
+      "retrievedAt": "2026-09-28T04:17:50Z",
+      "observedFields": {
+        "sourceNature": "由开放获取仓储返回并解析的期刊稿；正文含 N Engl J Med 2020;383:1436-46 的页码与期刊页眉，按全文引用，不称其为预印本。",
+        "table2Effcacy": "主要复合终点 197/2152（9.2%，4.6/100 患者年）对 312/2152（14.5%，7.5/100 患者年），HR 0.61（0.51–0.72）。eGFR 下降 ≥50%：112/2152（5.2%）对 201/2152（9.3%），HR 0.53（0.42–0.67）。终末期肾病：109/2152（5.1%）对 161/2152（7.5%），HR 0.64（0.50–0.82）。肾性死亡：2/2152（<0.1%）对 6/2152（0.3%）。心血管死亡：65/2152（3.0%）对 80/2152（3.7%），HR 0.81（0.58–1.12）。肾复合终点（不含心血管死亡）：142/2152（6.6%）对 243/2152（11.3%），HR 0.56（0.45–0.68）。心血管死亡或心力衰竭住院：100/2152（4.6%）对 138/2152（6.4%），HR 0.71（0.55–0.92）。全因死亡：101/2152（4.7%）对 146/2152（6.8%），HR 0.69（0.53–0.88）。",
+        "table2Safety": "因不良事件停药 118/2149（5.5%）对 123/2149（5.7%）；任何严重不良事件 633/2149（29.5%）对 729/2149（33.9%）（P=0.002）；截肢 35/2149（1.6%）对 39/2149（1.8%）；确定或可能的糖尿病酮症酸中毒 0/2149 对 2/2149（<0.1%）（P=0.50）；骨折 85/2149（4.0%）对 69/2149（3.2%）；肾脏相关不良事件 155/2149（7.2%）对 188/2149（8.7%）；重度低血糖 14/2149（0.7%）对 28/2149（1.3%）（P=0.04）；容量不足 127/2149（5.9%）对 90/2149（4.2%）（P=0.01）。",
+        "safetyNarrative": "达格列净组未见糖尿病酮症酸中毒，安慰剂组 2 例；无 2 型糖尿病者未观察到糖尿病酮症酸中毒或重度低血糖；福尼尔坏疽安慰剂组 1 例、达格列净组 0 例。",
+        "baseline": "随机化 4304 例，eGFR 25–75 mL/min/1.73m² 且 UACR 200–5000 mg/g；多数受试者在入组时接受最大耐受剂量 RAS 抑制剂。",
+        "notReportedInThisText": "该全文正文与其表 2 中未报告生殖器真菌感染的发生率；本次未取得补充附录，故该结局在随机试验层面记为本报告未获取到发生率。"
+      },
+      "limitations": "表格由 PDF 解析得到，个别单元格存在换行与错位（例如全因死亡行的标签缺失）；所有数值均按同一表格内的分组分母核对后引用。未读取补充附录。"
+    },
+    {
+      "sourceId": "PMID:33792669",
+      "source": "PubMed 摘要",
+      "title": "Effects of dapagliflozin on mortality in patients with chronic kidney disease: a pre-specified analysis from the DAPA-CKD randomized controlled trial.",
+      "journal": "European heart journal",
+      "year": 2021,
+      "doi": "10.1093/eurheartj/ehab094",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33792669/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:14:09Z",
+      "observedFields": {
+        "allCauseMortality": "随访期间死亡 247 例（5.7%）：心血管 91 例（36.8%）、非心血管 102 例（41.3%）、未确定 54 例（21.9%）。全因死亡相对风险降低 31%，HR 0.69（95% CI 0.53–0.88），P=0.003，各预设亚组一致。",
+        "nonCvDeath": "非心血管死亡 HR 0.54（95% CI 0.36–0.82）；感染与恶性肿瘤是最常见的非心血管死亡原因，达格列净组低于安慰剂组。",
+        "baseline": "平均年龄 62 岁，女性 33%，平均 eGFR 43.1 mL/min/1.73m²，中位 UACR 949 mg/g。"
+      },
+      "limitations": "预设分析，非主要终点；仅读到摘要。死亡原因构成中的非心血管死亡下降在机制上尚无定论。"
+    },
+    {
+      "sourceId": "PMID:34560136",
+      "source": "PubMed 摘要",
+      "title": "A pre-specified analysis of the DAPA-CKD randomized controlled trial on the incidence of abrupt declines in kidney function.",
+      "journal": "Kidney international",
+      "year": 2022,
+      "doi": "10.1016/j.kint.2021.09.005",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34560136/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:14:09Z",
+      "observedFields": {
+        "abruptDecline": "两次相邻访视间血肌酐翻倍：达格列净 63/2152（2.9%）、安慰剂 91/2152（4.2%），HR 0.68（95% CI 0.49–0.94）；按死亡竞争风险校正后结论不变。",
+        "aki": "研究者报告的急性肾损伤相关严重不良事件：52/2152（2.5%）对 69/2152（3.2%），HR 0.77（95% CI 0.54–1.10），未达统计学显著。"
+      },
+      "limitations": "急性肾损伤为事后分析、由研究者报告而非中心裁定；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:35977807",
+      "source": "PubMed 摘要",
+      "title": "Correlates and Consequences of an Acute Change in eGFR in Response to the SGLT2 Inhibitor Dapagliflozin in Patients with CKD.",
+      "journal": "Journal of the American Society of Nephrology",
+      "year": 2022,
+      "doi": "10.1681/ASN.2021121600",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35977807/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:57Z",
+      "observedFields": {
+        "acuteDip": "基线至 2 周 eGFR 相对下降 >10% 者：达格列净组 1026/2067（49.4%）、安慰剂组 494/2084（23.7%）（分母为有两次数据的 4157 例中的各治疗组）。",
+        "longTermSlope": "达格列净组中 2 周下降 >10% 者长期 eGFR 斜率为 −1.58 mL/min/1.73m²/年，下降较轻或升高者分别为 −2.44 与 −2.48 mL/min/1.73m²/年（交互 P=0.05）。",
+        "safety": "随机至达格列净者的严重不良事件与特别关注不良事件发生率与 2 周 eGFR 急性变化无关。"
+      },
+      "limitations": "预设分析；急性 eGFR 下降的分组百分比的组内分母需按原文表述理解；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:34183431",
+      "source": "PubMed 摘要",
+      "title": "Efficacy and Safety of Dapagliflozin by Baseline Glycemic Status: A Prespecified Analysis From the DAPA-CKD Trial.",
+      "journal": "Diabetes care",
+      "year": 2021,
+      "doi": "10.2337/dc21-0300",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34183431/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:15:23Z",
+      "observedFields": {
+        "subgroups": "4304 例中正常血糖 738 例、糖尿病前期 660 例、2 型糖尿病 2906 例；主要终点 HR 分别为 0.62（0.39–1.01）、0.37（0.21–0.66）、0.64（0.52–0.79），交互 P=0.19。",
+        "safety": "不良事件组间相似；正常血糖与糖尿病前期受试者中未发生重度低血糖或酮症酸中毒。"
+      },
+      "limitations": "亚组为预设分析，正常血糖亚组的置信区间跨过 1；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:32862232",
+      "source": "PubMed 摘要",
+      "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+      "journal": "Nephrology, dialysis, transplantation",
+      "year": 2020,
+      "doi": "10.1093/ndt/gfaa234",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32862232/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:15:23Z",
+      "observedFields": {
+        "baseline": "4304 例，平均 eGFR 43.1 mL/min/1.73m²，中位 UACR 949 mg/g；2 型糖尿病 2906 例（68%）。",
+        "backgroundTherapy": "4174 例（97%）正在使用 ACEI 或 ARB；1882 例（43.7%）利尿剂；229 例（5.3%）MRA；122 例（2.8%）GLP-1 受体激动剂。",
+        "aetiologies": "除糖尿病外，最常见病因为缺血性/高血压性肾病（687 例）与慢性肾小球肾炎（695 例），其中 IgA 肾病 270 例。"
+      },
+      "limitations": "基线特征描述，不提供效应量；仅读到摘要。该研究未按国别报告入组构成，故不能据此断言中国受试者占比。"
+    },
+    {
+      "sourceId": "PMID:37119064",
+      "source": "PubMed 摘要",
+      "title": "Effects of Dapagliflozin in Chronic Kidney Disease, With and Without Other Cardiovascular Medications: DAPA-CKD Trial.",
+      "journal": "Journal of the American Heart Association",
+      "year": 2023,
+      "doi": "10.1161/JAHA.122.028739",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37119064/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:15:23Z",
+      "observedFields": {
+        "concomitantTherapy": "方案要求稳定（且最大耐受）剂量的 RAAS 抑制剂；基线使用 RAAS 抑制剂者 98.1%、钙通道阻滞剂 50.7%、β 受体阻滞剂 39.0%、利尿剂 43.7%、抗血栓药 47.4%、降脂药 15.0%。",
+        "results": "不论上述药物用与不用，达格列净的获益一致；与这些药物联用未增加严重不良事件数。"
+      },
+      "limitations": "亚组分析；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:33878338",
+      "source": "PubMed 摘要",
+      "title": "A pre-specified analysis of the DAPA-CKD trial demonstrates the effects of dapagliflozin on major adverse kidney events in patients with IgA nephropathy.",
+      "journal": "Kidney international",
+      "year": 2021,
+      "doi": "10.1016/j.kint.2021.03.033",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33878338/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:15:23Z",
+      "observedFields": {
+        "population": "270 例 IgA 肾病（254 例经既往活检确认），达格列净 137 例、安慰剂 133 例，中位随访 2.1 年；平均年龄 51.2 岁，平均 eGFR 43.8 mL/min/1.73m²，中位 UACR 900 mg/g。",
+        "primary": "主要终点 6 例（4%）对 20 例（15%），HR 0.29（95% CI 0.12–0.73）；eGFR 平均下降速率 −3.5 对 −4.7 mL/min/1.73m²/年；UACR 相对下降 26%。",
+        "safety": "因不良事件停药两组相似，达格列净组严重不良事件更少，未见新的安全性信号。"
+      },
+      "limitations": "小样本亚组、事件数少；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:38097862",
+      "source": "PubMed 摘要",
+      "title": "Effects of Dapagliflozin in Chronic Kidney Disease Across the Spectrum of Age and by Sex.",
+      "journal": "Journal of general internal medicine",
+      "year": 2023,
+      "doi": "10.1007/s11606-023-08524-6",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38097862/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "ageSex": "4304 例，中位随访 2.4 年；肾脏复合终点绝对风险在 <50 岁组最高（安慰剂 10.7、达格列净 6.2/100 患者年），≥80 岁组最低（3.0 对 1.2/100 患者年）。",
+        "heterogeneity": "年龄或性别对主要与次要终点的效应均无交互证据；年龄与性别也未改变 eGFR 斜率效应。"
+      },
+      "limitations": "仅读到摘要；年龄与性别亚组的绝对风险不能等同于本次目标人群的 3 年绝对效应。"
+    },
+    {
+      "sourceId": "PMID:36469914",
+      "source": "PubMed 摘要",
+      "title": "Effects of Dapagliflozin on Hospitalizations in Patients With Chronic Kidney Disease: A Post Hoc Analysis of DAPA-CKD.",
+      "journal": "Annals of internal medicine",
+      "year": 2023,
+      "doi": "10.7326/M22-2115",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36469914/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:15:23Z",
+      "observedFields": {
+        "hospitalizations": "4304 例，中位随访 2.4 年，共 2072 次住院，涉及 1224 例（28.4%）；首次住院 HR 0.84（0.75–0.94），全部住院或死亡 RR 0.79（0.70–0.89）；住院原因中心脏、肾脏与泌尿、代谢与营养、肿瘤类别的入院率下降。"
+      },
+      "limitations": "事后分析，作者称具假设生成性质；住院与原因由研究者报告，未经中心裁定。"
+    },
+    {
+      "sourceId": "PMID:34850160",
+      "source": "PubMed 摘要",
+      "title": "Safety and efficacy of dapagliflozin in patients with focal segmental glomerulosclerosis: a prespecified analysis of the DAPA-CKD trial.",
+      "journal": "Nephrology, dialysis, transplantation",
+      "year": 2022,
+      "doi": "10.1093/ndt/gfab315",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34850160/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:14:18Z",
+      "observedFields": {
+        "population": "104 例活检证实的 FSGS，达格列净 45 例、安慰剂 59 例；平均 eGFR 41.9 mL/min/1.73m²，中位 UACR 1248 mg/g。",
+        "results": "主要终点 4 例（8.9%）对 7 例（11.9%），HR 0.62（0.17–2.17）；慢性 eGFR 下降速率 −1.9 对 −4.0 mL/min/1.73m²/年（差 2.0，95% CI 0.6–3.5）。",
+        "safety": "因不良事件停用研究药物两组相似，达格列净组严重不良事件更少。"
+      },
+      "limitations": "极小样本亚组，主要终点无统计学意义；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:36331190",
+      "source": "PubMed 摘要 + Europe PMC 全文",
+      "title": "Empagliflozin in Patients with Chronic Kidney Disease（EMPA-KIDNEY）.",
+      "journal": "The New England journal of medicine",
+      "year": 2023,
+      "doi": "10.1056/NEJMoa2204233",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "evidenceAccess": "full_text",
+      "retrievedAt": "2026-09-28T04:14:31Z",
+      "observedFields": {
+        "design": "6609 例随机化；入组要求 eGFR ≥20 且 <45，或 eGFR ≥45 且 <90 伴 UACR ≥200 mg/g；中位随访 2.0 年。",
+        "primary": "432/3304（13.1%）对 558/3305（16.9%），HR 0.72（0.64–0.82），P<0.001；伴或不伴糖尿病及各 eGFR 范围一致。",
+        "other": "任何原因住院更少（HR 0.86，0.78–0.95，P=0.003）；心力衰竭住院或心血管死亡（4.0% 对 4.6%）与全因死亡（4.5% 对 5.1%）无统计学显著差异；两组严重不良事件率大致相似。"
+      },
+      "limitations": "同类药物（恩格列净）的试验，用于补充同类效应与人群范围；不能作为达格列净的效应量。"
+    },
+    {
+      "sourceId": "PMID:39165293",
+      "source": "PubMed 摘要",
+      "title": "Dapagliflozin treatment of patients with chronic kidney disease without diabetes across different albuminuria levels (OPTIMISE-CKD).",
+      "journal": "Clinical kidney journal",
+      "year": 2024,
+      "doi": "10.1093/ckj/sfae249",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39165293/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:57Z",
+      "observedFields": {
+        "population": "无 2 型糖尿病的 CKD 成人 1480 例，低 UACR（30–200 mg/g）796 例、高 UACR（>200 mg/g）684 例；两组年龄中位 75 与 74 岁。",
+        "results": "启动达格列净后出现约 3 mL/min/1.73m² 的急性 eGFR 下降，随后 eGFR 走势平稳；低 UACR 组斜率 0.79（−0.59–2.56）、高 UACR 组 0.40（−0.46–1.38）mL/min/1.73m²/年；心肾并发症与全因死亡风险相似，校正后 HR 分别为 0.89（0.66–1.19）与 1.10（0.63–1.92）。"
+      },
+      "limitations": "观察性研究，无随机化与安慰剂对照；仅读到摘要；急性 eGFR 下降的数值为组内报告值。"
+    },
+    {
+      "sourceId": "PMID:39834621",
+      "source": "PubMed 摘要",
+      "title": "Efficacy and safety of dapagliflozin in patients with CKD: real-world experience in 93 Italian renal clinics.",
+      "journal": "Clinical kidney journal",
+      "year": 2024,
+      "doi": "10.1093/ckj/sfae255",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39834621/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:14:18Z",
+      "observedFields": {
+        "population": "1724 例 CKD 患者（平均年龄 67.4 岁，男性 72.8%，糖尿病 59.9%，平均 eGFR 43.5 mL/min/1.73m²，重度白蛋白尿 70.1%），达格列净 10 mg/d，用药约 4 个月。",
+        "results": "白蛋白尿下降 25.1%（95% CI 23.0–27.2）；48.3% 的患者白蛋白尿下降 ≥30%；体重下降 1.3 kg，血压下降 3.6/1.7 mmHg，eGFR 下降 0.27 mL/min/月。",
+        "safety": "46 例次副作用导致 36 例（2%）停药；最常见的为急性肾损伤与尿路感染。"
+      },
+      "limitations": "单臂、短期、观察性；无对照组，不能用于因果推断；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:34984791",
+      "source": "PubMed 摘要",
+      "title": "Quételet (body mass) index and effects of dapagliflozin in chronic kidney disease.",
+      "journal": "Diabetes, obesity & metabolism",
+      "year": 2022,
+      "doi": "10.1111/dom.14634",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34984791/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "bmi": "4296 例按 BMI 分组；主要复合终点 HR 分别为 0.60（0.43–0.85）、0.55（0.40–0.75）、0.71（0.49–1.04）、0.57（0.37–0.87），交互 P=0.72。"
+      },
+      "limitations": "亚组分析；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:39475817",
+      "source": "PubMed 摘要",
+      "title": "Baseline, Early Changes, and Residual Albuminuria: Post-hoc Analysis of a Clinical Trial of Dapagliflozin in Chronic Kidney Disease.",
+      "journal": "Clinical journal of the American Society of Nephrology",
+      "year": 2024,
+      "doi": "10.2215/CJN.0000000000000546",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39475817/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "uacr": "与安慰剂相比，达格列净使基线至第 4 个月的 UACR 在合并 2 型糖尿病者中下降 36%（95% CI 30.2%–42.5%），在无 2 型糖尿病者中下降 21%（95% CI 12%–30%），交互 P=0.02。",
+        "residual": "第 4 个月仍有残余白蛋白尿者（无论分组）肾脏终点发生率相对较高。",
+        "backgroundTherapy": "4304 例成人 CKD 随机化至达格列净 10 mg 或安慰剂，作为最大耐受剂量 RAAS 抑制剂的附加治疗。"
+      },
+      "limitations": "事后分析；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:38730538",
+      "source": "PubMed 摘要",
+      "title": "The long-term effects of dapagliflozin in chronic kidney disease: a time-to-event analysis.",
+      "journal": "Nephrology, dialysis, transplantation",
+      "year": 2024,
+      "doi": "10.1093/ndt/gfae104",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38730538/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "extrapolation": "用 DAPA-CKD 患者水平数据构建分区生存模型并外推：达格列净组至肾衰竭的平均时间 25.2 年（95% CI 19.0–31.5），标准治疗 18.5 年（14.7–23.4），相当于延迟 6.6 年；合并 CKD 人群的估计为 36.0 年对 29.6 年。"
+      },
+      "limitations": "模型外推而非试验内观察；作者使用终身时间范围，与本次 3 年时限不同；预测依赖模型假设；仅读到摘要。"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_6960a45423d98f365842a6e6",
+      "source": "EviMed 文献索引（PubMed 记录 32030417）",
+      "title": "Rationale and protocol of the DAPA-CKD randomized controlled trial.",
+      "journal": "Nephrology, dialysis, transplantation",
+      "year": 2020,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32030417/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "designTarget": "计划入组约 4300 例 CKD 2–4 期伴尿白蛋白排泄升高患者；绝大多数在入组时接受最大耐受剂量 RAS 抑制剂。",
+        "eligibility": "UACR ≥200 mg/g 且 eGFR 25–75 mL/min/1.73m²，随机化至安慰剂或达格列净 10 mg/d。",
+        "primaryEndpoint": "eGFR 持续下降 ≥50%、终末期肾病、肾性死亡或心血管死亡的复合终点；以 681 例主要肾脏事件提供 90% 检验效能检出 22% 的相对风险下降。",
+        "enrolmentMonitoring": "入组过程监测以确保至少 30% 患者无糖尿病、不超过 10% 患者 eGFR >60。"
+      },
+      "limitations": "研究方案/原理文件，不是结果论文；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:35137296",
+      "source": "PubMed 摘要",
+      "title": "Cost-Effectiveness of Dapagliflozin for Non-diabetic Chronic Kidney Disease.",
+      "journal": "Journal of general internal medicine",
+      "year": 2022,
+      "doi": "10.1007/s11606-021-07143-3",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35137296/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:19:13Z",
+      "observedFields": {
+        "setting": "美国医疗部门视角、终身时限的 Markov 模型，非糖尿病 CKD 患者，达格列净＋标准治疗对标准治疗。",
+        "results": "贴现 QALY 自 6.75 升至 8.06，需肾脏替代治疗的肾衰竭比例自 17.4% 降至 11.0%，平均替代治疗年限自 0.77 年降至 0.43 年；每获得 1 个 QALY 的增量成本约 60 000 美元；结果对达格列净的价格敏感。"
+      },
+      "limitations": "美国价格与支付体系，不能直接外推到中国；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:36070962",
+      "source": "PubMed 摘要",
+      "title": "Cost-Effectiveness of Dapagliflozin for Chronic Kidney Disease in Japan.",
+      "journal": "Circulation journal",
+      "year": 2022,
+      "doi": "10.1253/circj.CJ-22-0288",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36070962/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "setting": "日本卫生系统视角的 CKD Markov 模型，评价 3a 与 3b 期。",
+        "results": "CKD 3a 的 ICER 为 403 万日元/QALY（阈值 500 万日元时成本效果概率 52.6%）；CKD 3b 的 ICER 为 12 万日元/QALY（成本效果概率 75.2%）。"
+      },
+      "limitations": "日本价格与阈值，不能直接外推到中国；3a 期结论作者自评为不明确；仅读到摘要。"
+    },
+    {
+      "sourceId": "PMID:37807895",
+      "source": "PubMed 摘要",
+      "title": "Translating the efficacy of dapagliflozin in chronic kidney disease to lower healthcare resource utilization and costs: a medical care cost offset analysis.",
+      "journal": "Journal of medical economics",
+      "year": 2023,
+      "doi": "10.1080/13696998.2023.2264715",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37807895/",
+      "evidenceAccess": "abstract",
+      "retrievedAt": "2026-09-28T04:13:55Z",
+      "observedFields": {
+        "model": "基于 DAPA-CKD 的 3 年时限成本抵消框架，覆盖 31 个国家/地区，按每 10 万受治患者估算事件数。",
+        "results": "终末期肾病 7221 对 10767（NNT 28）、心力衰竭住院 2370 对 4684（NNT 43）、急性肾损伤 4110 对 5819（NNT 58）、全因死亡 6383 对 8874（NNT 40）；总费用降低 33%，3 年累计平均医疗费用抵消 2.64 亿美元/10 万患者。",
+        "statedLimitations": "受各国事件成本数据质量限制；仅计与结局相关的费用，未计药物与疾病管理成本。"
+      },
+      "limitations": "作者自述的资助方为原研企业；不含中国本土价格；仅读到摘要。"
+    },
+    {
+      "sourceId": "web-page:bfc76810ccba21be",
+      "source": "国家医疗保障局《国家基本医疗保险、生育保险和工伤保险药品目录（2025年）》附件（公开 PDF 副本）",
+      "title": "国家基本医疗保险、生育保险和工伤保险药品目录（2025年）",
+      "url": "https://file.m12333.cn/upfile/download/fa11c2cd-a639-6396-7e44-c542d23a82e3.pdf",
+      "evidenceAccess": "regulatory_record",
+      "retrievedAt": "2026-09-28T04:18:56Z",
+      "observedFields": {
+        "structure": "西药部分 1446 个、中成药部分 1335 个、协议期内谈判药品部分 472 个，共计 3253 个；协议期内谈判药品按乙类支付。",
+        "entry": "西药部分 XA10BK 钠葡萄糖协同转运蛋白2（SGLT-2）抑制剂项下，编号 165「达格列净片」为乙类，备注栏为空，自付比例 5%；同项下恩格列净（163）、卡格列净（164）同为乙类 5%，艾托格列净片（166）备注限二线用药。",
+        "combinationProduct": "口服复方降糖药项下编号 142「达格列净二甲双胍缓释片（Ⅰ）」为乙类、自付比例 5%。",
+        "readingLimits": "本次逐页读取中仅第 1 页内容完整返回；目录条目行从返回的页面正文中读取。"
+      },
+      "limitations": "该 PDF 为官方网站文件的一份公开副本（托管站点非 nhsa.gov.cn），原件应以国家医疗保障局发布版本为准；目录条目未列支付标准金额；各省自付比例与限定支付范围执行口径可能不同。"
+    },
+    {
+      "sourceId": "web-page:a3856b189ae2886e",
+      "source": "青海省医疗保障局（官方网站）",
+      "title": "第十一批国家集采落地 “团购”红利直达百姓 好药不再“高不可攀”",
+      "url": "http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html",
+      "publishedAt": "2026-03-06",
+      "evidenceAccess": "regulatory_record",
+      "retrievedAt": "2026-09-28T04:19:18Z",
+      "observedFields": {
+        "procurement": "青海省于 2026 年 2 月 28 日落地执行第十一批国家组织药品集中带量采购中选结果，共涉及 55 种药品。",
+        "price": "SGLT-2 抑制剂达格列净片单片价格从 4.35 元降至 0.3 元；文中对达格列净的描述为用于成人 2 型糖尿病患者改善血糖控制。"
+      },
+      "limitations": "省级医保局对第十一批集采落地情况的说明；价格降幅针对集采中选产品，非中选原研产品的实际采购价可能不同；文中对药品用途的描述未涵盖 CKD 适应症；未给出医保支付标准或患者自付金额。"
+    },
+    {
+      "sourceId": "web-page:0339ef84acffcef4",
+      "source": "21 世纪经济报道（媒体报道）",
+      "title": "监管亮剑！多个药品集采中选资格遭清退",
+      "url": "https://www.21jingji.com/article/20260407/herald/8938281d01e005c524cc1cb1117104c5.html",
+      "publishedAt": "2026-04-07",
+      "evidenceAccess": "regulatory_record",
+      "retrievedAt": "2026-09-28T04:19:19Z",
+      "observedFields": {
+        "supply": "国家组织药品联合采购办公室取消 Hetero Labs Limited 达格列净片（第十一批集采中选产品）中选资格并列入违规名单，原因是未按协议供应约定采购量；其约定采购量由涉及医疗机构在该品种其他中选企业中自行选择供应企业。",
+        "marketFacts": "文中引述：达格列净片现行国家药监局批准文号 61 条；2025 年全终端医院销售额 88.91 亿元，同比增长 21.92%；第十一批集采执行周期为 2026 年 2 月至 2028 年 12 月 31 日。"
+      },
+      "limitations": "媒体报道，非监管原文；销售额与批准文号数量引自第三方数据库（摩熵医药）与国家药监局公开数据，未在本报告中作为独立证据核验；取消中选资格一事以联合采购办公室公告为准。"
+    },
+    {
+      "sourceId": "PMID:38490803",
+      "source": "PubMed 题录",
+      "title": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "journal": "Kidney international",
+      "year": 2024,
+      "doi": "10.1016/j.kint.2023.10.018",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38490803/",
+      "evidenceAccess": "bibliographic_only",
+      "retrievedAt": "2026-09-28T04:19:24Z",
+      "observedFields": {
+        "note": "仅取得题录（无摘要、无开放获取全文）。本报告不使用该记录支撑任何推荐内容，仅登记为检索线索与缺口。"
+      },
+      "limitations": "bibliographic_only，不得用于任何观察到的域判断。"
+    }
+  ],
+  "domainAssessmentPlan": [
+    "effectiveness：以 DAPA-CKD 主要与关键次要终点为核心，辅以预设亚组分析与同类药物试验；确定性按未做正式评级处理（certainty: not_rated），理由写入各域理由字段。",
+    "safety：以中国现行说明书的主要不良反应条目 + DAPA-CKD 全文表 2 的随机安全性数据为主线，逐条对应题面四项安全性结局。",
+    "applicability：以中国说明书用法用量、2024 中国专家共识推荐与监测要求为据，逐项对照本次目标人群与三级医院肾内科门诊场景。",
+    "economics：仅使用医保目录条目、集采价格与境外药物经济学研究；中国本土 CKD 适应症成本效果分析与预算影响分析记未检索到。",
+    "evidence_certainty：无验证过的确定性适配器，也未由用户提供正式评级，故该域不出确定性数值。"
+  ],
+  "retrieved": [
+    {
+      "sourceId": "label:国药准字H20213815",
+      "tool": "drug_label_search",
+      "title": "达格列净片（山东鲁抗医药股份有限公司）",
+      "url": "https://www.315jiage.cn/mn489160.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20213816",
+      "tool": "drug_label_search",
+      "title": "达格列净片（山东鲁抗医药股份有限公司）",
+      "url": "https://www.315jiage.cn/mn413626.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20244369",
+      "tool": "drug_label_search",
+      "title": "达格列净片（石家庄四药有限公司）",
+      "url": "https://www.315jiage.cn/mn547937.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20244370",
+      "tool": "drug_label_search",
+      "title": "达格列净片（石家庄四药有限公司）",
+      "url": "https://www.315jiage.cn/mn547939.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20244734",
+      "tool": "drug_label_search",
+      "title": "达格列净片（齐鲁制药有限公司）",
+      "url": "https://www.315jiage.cn/mn551584.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20244735",
+      "tool": "drug_label_search",
+      "title": "达格列净片（齐鲁制药有限公司）",
+      "url": "https://www.315jiage.cn/mn551585.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20253764",
+      "tool": "drug_label_search",
+      "title": "达格列净片（福元药业有限公司）",
+      "url": "https://www.315jiage.cn/mn576669.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字HJ20250029",
+      "tool": "drug_label_search",
+      "title": "达格列净片（印度M/s. Hetero Labs Limited）",
+      "url": "https://www.315jiage.cn/mn575674.aspx",
+      "query": "达格列净",
+      "recordedAt": "2026-09-28T04:13:49.647Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_24_64d2562bf793ac9106b4973e",
+      "tool": "literature_search",
+      "title": "A pre-specified analysis of the Dapagliflozin and Prevention of Adverse Outcomes in Chronic Kidney Disease (DAPA-CKD) randomized controlled trial on the incidence of abrupt declines in kidney function.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34560136/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_7_655711be993959817d7b2442",
+      "tool": "literature_search",
+      "title": "Translating the efficacy of dapagliflozin in chronic kidney disease to lower healthcare resource utilization and costs: a medical care cost offset analysis.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37807895/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_112_67233c3f43e157cb570ba20c",
+      "tool": "literature_search",
+      "title": "Benefits of dapagliflozin in chronic kidney disease for US commercial payers: A cost-offset analysis.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39088339/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_156_642658c67e0e6bc605d071a2",
+      "tool": "literature_search",
+      "title": "SHORT-TERM EFFICACY OF DAPAGLIFLOZIN FOR CHRONIC KIDNEY DISEASE PATIENTS",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L640262377&from=export",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_271_64d2274b50644a72f897b13c",
+      "tool": "literature_search",
+      "title": "Effects of dapagliflozin on mortality in patients with chronic kidney disease: a pre-specified analysis from the DAPA-CKD randomized controlled trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33792669/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_295_65f7cbd3fd4b414385678ce3",
+      "tool": "literature_search",
+      "title": "Effects of Dapagliflozin in Chronic Kidney Disease Across the Spectrum of Age and by Sex.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38097862/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_320_64d209728b1db315798802da",
+      "tool": "literature_search",
+      "title": "An update on dapagliflozin for chronic kidney disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35188141/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_677fc3db96d259b4727aa9de",
+      "tool": "literature_search",
+      "title": "The long-term effects of dapagliflozin in chronic kidney disease: a time-to-event analysis.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38730538/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_6960a45423d98f365842a6e6",
+      "tool": "literature_search",
+      "title": "Rationale and protocol of the Dapagliflozin And Prevention of Adverse outcomes in Chronic Kidney Disease (DAPA-CKD) randomized controlled trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32030417/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_366_64d2026495f1b423cd84f617",
+      "tool": "literature_search",
+      "title": "Quételet (body mass) index and effects of dapagliflozin in chronic kidney disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34984791/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_367_677fce6996d259b4727f7daf",
+      "tool": "literature_search",
+      "title": "Baseline, Early Changes, and Residual Albuminuria: Post-hoc Analysis of a Clinical Trial of Dapagliflozin in Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39475817/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_414_67f7ddc6425d70780f0a2f24",
+      "tool": "literature_search",
+      "title": "Dapagliflozin in Chronic Kidney Disease: Insights from Network Pharmacology and Molecular Docking Simulation.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40141782/",
+      "query": "dapagliflozin chronic kidney disease DAPA-CKD randomized trial",
+      "recordedAt": "2026-09-28T04:13:55.100Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_32_64d25ab0127fa481abb16dd1",
+      "tool": "literature_search",
+      "title": "Combined application of eGFR and albuminuria for the precise diagnosis of stage 2 and 3a CKD in the elderly.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/24609886/",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_191_63566ba5d0057d31796bcc38",
+      "tool": "literature_search",
+      "title": "Kidney-metabolic risk factors for cognitive impairment in moderate CKD in the brink study: Beyond EGFR and albuminuria",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L636328671&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_191_6358e9a652a5110c613dcf89",
+      "tool": "literature_search",
+      "title": "The impact of kidney disease etiology on the association between eGFR and albuminuria with ESRD and all-cause mortality in the GCKD cohort",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L633735687&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_191_63e5efed7caabce140ff524c",
+      "tool": "literature_search",
+      "title": "Relationship Between Initial eGFR Dip and Changes in Laboratory Parameters With Dapagliflozin Treatment in Non-Diabetic CKD Patients",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L639544428&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_191_65fd8fdd934dbb17fb9418fd",
+      "tool": "literature_search",
+      "title": "Effect of Dapagliflozin on eGFR Slope in Nondiabetic CKD Patients",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L642701560&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_191_677e8624188891663340af03",
+      "tool": "literature_search",
+      "title": "Simulated Effect of Dapagliflozin on Reducing Incidence of Albuminuria and CKD Using the Urinary Proteomics Classifier CKD273 in Normoalbuminuric Type 2 Diabetes",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L645711092&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_244_64d20ecb097b1c99c98bf0a9",
+      "tool": "literature_search",
+      "title": "Dapagliflozin Improves the Urinary Proteomic Kidney-Risk Classifier CKD273 in Type 2 Diabetes with Albuminuria: A Randomized Clinical Trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35998283/",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_385_635423d0ce628ad352d43528",
+      "tool": "literature_search",
+      "title": "Risk stratification based on EGFR and albuminuria in an existing CKD population - Implications for funding in Ontario",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L71448424&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_406_67ad8b34c92e0d5c0083ff42",
+      "tool": "literature_search",
+      "title": "COST-EFFECTIVENESS ANALYSIS OF EMPAGLIFLOZIN FOR CHRONIC KIDNEY DISEASE BASED ON eGFR- AND ALBUMINURIA-BASED SUBGROUPS",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L2037022323&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_440_65571a51deaa4225cda3c151",
+      "tool": "literature_search",
+      "title": "RELATIONSHIP BETWEEN INITIAL EGFR DIP AND CHANGES IN LABORATORY PARAMETERS WITH DAPAGLIFLOZIN TREATMENT IN NON-DIABETIC CKD PATIENTS",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L641942354&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_463_6557154b32d4ee1d187c7e94",
+      "tool": "literature_search",
+      "title": "Correlates and Consequences of an Acute Change in eGFR in Response to the SGLT2 Inhibitor Dapagliflozin in Patients with CKD.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35977807/",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_479_64701c2a843bb448042c4944",
+      "tool": "literature_search",
+      "title": "Dapagliflozin Initiation and eGFR Trajectories Across uACR Subgroups in Clinical Practice",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L2024374371&from=export",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_487_64d24cb29112c86e36acdb3b",
+      "tool": "literature_search",
+      "title": "In CKD, dapagliflozin reduced a composite of eGFR decline, end-stage kidney disease, or CV or renal mortality.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33524285/",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_497_65f7c731c306089844659b3e",
+      "tool": "literature_search",
+      "title": "Additive effects of dapagliflozin and finerenone on albuminuria in non-diabetic CKD: an open-label randomized clinical trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38186886/",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_497_672333a5e09d814771087df5",
+      "tool": "literature_search",
+      "title": "Dapagliflozin treatment of patients with chronic kidney disease without diabetes across different albuminuria levels (OPTIMISE-CKD).",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39165293/",
+      "query": "dapagliflozin CKD China subgroup eGFR albuminuria",
+      "recordedAt": "2026-09-28T04:13:57.924Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "label:国药准字H20249826",
+      "tool": "drug_label_search",
+      "title": "达格列净片（湖南九典制药股份有限公司）",
+      "url": "https://www.315jiage.cn/mn580958.aspx",
+      "query": "label:国药准字H20249826",
+      "recordedAt": "2026-09-28T04:13:57.993Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "01f90c94-71cb-4a1f-81ff-8004b850529b",
+      "tool": "drug_label_search",
+      "title": "FARXIGA",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=01f90c94-71cb-4a1f-81ff-8004b850529b",
+      "query": "dapagliflozin",
+      "recordedAt": "2026-09-28T04:14:03.531Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "0406a1c0-56b1-4ea1-95ae-00357ac1ba7e",
+      "tool": "drug_label_search",
+      "title": "DAPAGLIFLOZIN",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0406a1c0-56b1-4ea1-95ae-00357ac1ba7e",
+      "query": "dapagliflozin",
+      "recordedAt": "2026-09-28T04:14:03.531Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "05c3cf00-8c2a-4227-958a-fa5db34512b0",
+      "tool": "drug_label_search",
+      "title": "DAPAGLIFLOZIN",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=05c3cf00-8c2a-4227-958a-fa5db34512b0",
+      "query": "dapagliflozin",
+      "recordedAt": "2026-09-28T04:14:03.531Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "PMID:32970396",
+      "tool": "literature_search",
+      "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32970396/",
+      "query": "pmids: 32970396, 33524285, 33190149, 36331190, 34560136, 33792669",
+      "recordedAt": "2026-09-28T04:14:09.529Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID32970396/9a6cf808dae68ad3321e96eed90eeecdab6649fe8a8f2e7cf07f2f1922d5ce73/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:33190149",
+      "tool": "literature_search",
+      "title": "Factors associated with study protocol adherence and bio banking participation in reproductive medicine clinical trials and their relationship to live birth.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33190149/",
+      "query": "pmids: 32970396, 33524285, 33190149, 36331190, 34560136, 33792669",
+      "recordedAt": "2026-09-28T04:14:09.529Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID33190149/36fb69674d26f3425eee0e9f969ec5c05c5f71840c8a20d16e8afa0a323d290f/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:33524285",
+      "tool": "literature_search",
+      "title": "In CKD, dapagliflozin reduced a composite of eGFR decline, end-stage kidney disease, or CV or renal mortality.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33524285/",
+      "query": "pmids: 32970396, 33524285, 33190149, 36331190, 34560136, 33792669",
+      "recordedAt": "2026-09-28T04:14:09.529Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID33524285/a7b6b35e496d48f78aa5cc8169c98b71080f270aa4b9d583760dcf87cf71e263/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:34560136",
+      "tool": "literature_search",
+      "title": "A pre-specified analysis of the Dapagliflozin and Prevention of Adverse Outcomes in Chronic Kidney Disease (DAPA-CKD) randomized controlled trial on the incidence of abrupt declines in kidney function.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34560136/",
+      "query": "pmids: 32970396, 33524285, 33190149, 36331190, 34560136, 33792669",
+      "recordedAt": "2026-09-28T04:14:09.529Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID34560136/6747aec03f688e32c95c0690949a11d62e67ff876e4a4d05f270715d7916fb9d/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:36331190",
+      "tool": "literature_search",
+      "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "query": "pmids: 32970396, 33524285, 33190149, 36331190, 34560136, 33792669",
+      "recordedAt": "2026-09-28T04:14:09.529Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID36331190/ee1956977b0d10430cef766728fe79c17ef80297b91093267c4d06e194fcf738/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_51_64d1fdad8b1db31579825840",
+      "tool": "literature_search",
+      "title": "Chronic kidney disease and coronary atherosclerosis: evidences from intravascular imaging.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/31592685/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_53_64d250dc127fa481abac6c16",
+      "tool": "literature_search",
+      "title": "Biomarkers and Predictors of Adverse Cardiovascular Events in Different Stages of Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36118679/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_57_64d24961127fa481aba8e7f0",
+      "tool": "literature_search",
+      "title": "Computer templates in chronic kidney disease care: a tool for improving patient management.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/18155108/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_58_64d23f53970624037fa50a1f",
+      "tool": "literature_search",
+      "title": "Is decreased lung function associated with chronic kidney disease? A retrospective cohort study in Korea.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/29674361/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_58_68fb20285f2f1a0a77413dce",
+      "tool": "literature_search",
+      "title": "Comprehensive epidemiological analysis of chronic kidney disease in adolescents and young adults (ages 10-24 years) from 1990 to 2021.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41087112/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_152_655712b3993959817d7bdfa1",
+      "tool": "literature_search",
+      "title": "Development of 4-Pyridoxic Acid PBPK Model to Support Biomarker-Informed Evaluation of OAT1/3 Inhibition and Effect of Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37620246/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_152_681d9c95b97aa32291dce951",
+      "tool": "literature_search",
+      "title": "Effect of Dapagliflozin on Measured vs. Panel-Estimated Glomerular Filtration Rate.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39434255/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_154_63570f1f7654bab7096dbb8b",
+      "tool": "literature_search",
+      "title": "Determination of dose of lasix in adult hydronephrosis and patients with chronic renal disease",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L633250957&from=export",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_156_64d24cb89112c86e36ad0fb4",
+      "tool": "literature_search",
+      "title": "Hypertension and chronic kidney disease in Asian populations.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33538081/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_162_64d212e9127fa481ab8cb902",
+      "tool": "literature_search",
+      "title": "Impact of multimorbidity on risk and outcome of stroke: Lessons from chronic kidney disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33243088/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_260_64d21f40970624037f956bdc",
+      "tool": "literature_search",
+      "title": "Risk for recurrent coronary heart disease and all-cause mortality among individuals with chronic kidney disease compared with diabetes mellitus, metabolic syndrome, and cigarette smokers.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/23895822/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_261_64d20b0af793ac91068a6a57",
+      "tool": "literature_search",
+      "title": "Economic evaluation of dapagliflozin versus metformin in Chinese patients whose diabetes is inadequately controlled with diet and exercise.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32140079/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_351_64d26182127fa481abb57aed",
+      "tool": "literature_search",
+      "title": "Coronary vascular dysfunction and prognosis in patients with chronic kidney disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/23058070/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_451_66599c51a7ea3c89e88361a5",
+      "tool": "literature_search",
+      "title": "Innovative Treatments to Counteract Endothelial Dysfunction in Chronic Kidney Disease Patients.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38791047/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_453_64d20a6c097b1c99c988c267",
+      "tool": "literature_search",
+      "title": "Correction: Sonographic Venous Velocity Index Identifies Patients with Chronic Kidney Disease and Severe Diastolic Dysfunction.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35449544/",
+      "query": "达格列净 慢性肾脏病 中国 临床实践指南 SGLT2抑制剂 专家共识",
+      "recordedAt": "2026-09-28T04:14:11.415Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_178_635666abea4e15ce868fceb1",
+      "tool": "literature_search",
+      "title": "甲状旁腺切除术在防治慢性肾脏病-矿物质和骨代谢异常中的意义",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=33864966",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_178_635670f93c8fc32c5c9132af",
+      "tool": "literature_search",
+      "title": "基因多态性与阿托伐他汀对慢性肾脏病调脂治疗的相关性研究",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMzIxEhJzdGR4eXh5eGIyMDE4MDIwMDUaCGNkMjgxY3Jp",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_178_6356888aef9f427cab927cf8",
+      "tool": "literature_search",
+      "title": "Cystatin C相关方程在计算慢性肾脏病肾小球滤过率的对照研究",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=43744670",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_179_642654fe91dd92fc0220019f",
+      "tool": "literature_search",
+      "title": "活血利水法治疗慢性肾脏病的古今应用",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMTEyEhVzamt4anMtenl4ZGgyMDIyMDgwMjUaCDQzeWMzY2Nk",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_271_677e2f0f06587ed64cb8f6b3",
+      "tool": "literature_search",
+      "title": "肾衰泄浊汤对慢性肾脏病并发动脉粥样硬化模型大鼠肠道菌群的影响",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjQwNzA0EhVoYm16ZHh4Yi15eGIyMDI0MDMwMDEaCDUyc2E2bHE2",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_471_6356790e2ff1fcee1591ae48",
+      "tool": "literature_search",
+      "title": "健脾益肾排毒方治疗慢性肾脏病4期的临床效果及对患者生存质量的影响",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=670567199",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_472_64d20de6f793ac91068c0d5f",
+      "tool": "literature_search",
+      "title": "The impact of SGLT2 inhibitors, compared with insulin, on diabetic bone disease in a mouse model of type 1 diabetes.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/27989651/",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_478_63567b550f2f66889591d495",
+      "tool": "literature_search",
+      "title": "KLOTHO基因介导钙磷代谢与慢性肾脏病关系的研究进展",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMzIxEhJnd3l4LW1ueHQyMDEyMDUwMzQaCGt3N2MzbHJ5",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_478_646ee26ddaf03b5e949507d5",
+      "tool": "literature_search",
+      "title": "慢性肾脏病伴丙型肝炎的治疗进展",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMzIxEhJnd3l4LW1ueHQyMDE3MDIwNDMaCGE4dm1scTJj",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_478_646f3e2eb1d22935f05ebeff",
+      "tool": "literature_search",
+      "title": "晚期氧化蛋白产物与慢性肾脏病相关研究进展",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=26500760",
+      "query": "SGLT2 inhibitor chronic kidney disease KDIGO 2024 clinical practice guideline recommendation",
+      "recordedAt": "2026-09-28T04:14:16.412Z",
+      "status": "stale",
+      "sourceType": "review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_24_64d24a0d8b1db31579a81677",
+      "tool": "literature_search",
+      "title": "A pre-specified analysis of the DAPA-CKD trial demonstrates the effects of dapagliflozin on major adverse kidney events in patients with IgA nephropathy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33878338/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_58_69451fdee12e96176f0dfbf3",
+      "tool": "literature_search",
+      "title": "Effects and safety of dapagliflozin in paediatric hereditary kidney disease: protocol for a multicentric, prospective, open and randomised crossover study (DAPA-PedHKD).",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41397763/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_244_64d254819112c86e36b0c0c7",
+      "tool": "literature_search",
+      "title": "Efficacy and Safety of Dapagliflozin by Baseline Glycemic Status: A Prespecified Analysis From the DAPA-CKD Trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34183431/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_248_65571049d3f76d4cf07a7f85",
+      "tool": "literature_search",
+      "title": "Effects of Dapagliflozin in Chronic Kidney Disease, With and Without Other Cardiovascular Medications: DAPA-CKD Trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37119064/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_64d256d88b1db31579af4b62",
+      "tool": "literature_search",
+      "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32862232/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_64d25fb49112c86e36b6a80a",
+      "tool": "literature_search",
+      "title": "Safety and efficacy of dapagliflozin in patients with focal segmental glomerulosclerosis: a prespecified analysis of the dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34850160/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_6960a45923d98f365842ac79",
+      "tool": "literature_search",
+      "title": "Efficacy and safety of zibotentan and dapagliflozin in patients with chronic kidney disease: study design and baseline characteristics of the ZENITH-CKD trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37632201/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_385_66599b31f8cdb75540827401",
+      "tool": "literature_search",
+      "title": "APPLYING LANDMARK DECLARE, DAPA-CKD, DAPA-HF AND DELIVER TRIAL FINDINGS IN US ADULTS WITH CARDIOMETABOLIC AND RENAL DISEASES: MEDICAL CARE COST-OFFSETS ASSOCIATED WITH DAPAGLIFLOZIN COMPARED TO STANDARD OF CARE",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L2030949363&from=export",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_487_64d22eb4970624037f9d96dc",
+      "tool": "literature_search",
+      "title": "Effects of Dapagliflozin on Hospitalizations in Patients With Chronic Kidney Disease : A Post Hoc Analysis of DAPA-CKD.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36469914/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_497_67adc57c26824ec2138a1f2b",
+      "tool": "literature_search",
+      "title": "Efficacy and safety of dapagliflozin in patients with CKD: real-world experience in 93 Italian renal clinics.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39834621/",
+      "query": "dapagliflozin adverse events diabetic ketoacidosis genital infection DAPA-CKD safety",
+      "recordedAt": "2026-09-28T04:14:18.794Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "http://mzyp.yilianmeiti.com/166968/",
+      "tool": "web_search",
+      "title": "安达唐",
+      "url": "http://mzyp.yilianmeiti.com/166968/",
+      "query": "达格列净 安达唐 说明书 慢性肾脏病 适应症 国家药品监督管理局 批准",
+      "recordedAt": "2026-09-28T04:14:23.483Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "http://news.cnhubei.com/content/2022-09/07/content_15039428.html",
+      "tool": "web_search",
+      "title": "达格列净慢性肾脏病适应症获批",
+      "url": "http://news.cnhubei.com/content/2022-09/07/content_15039428.html",
+      "query": "达格列净 安达唐 说明书 慢性肾脏病 适应症 国家药品监督管理局 批准",
+      "recordedAt": "2026-09-28T04:14:23.483Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.astrazeneca.com/content/az-cn-zh/media/press-releases/2021/_-_.html",
+      "tool": "web_search",
+      "title": "安达唐®心衰适应症中国获批 - 阿斯利康",
+      "url": "https://www.astrazeneca.com/content/az-cn-zh/media/press-releases/2021/_-_.html",
+      "query": "达格列净 安达唐 说明书 慢性肾脏病 适应症 国家药品监督管理局 批准",
+      "recordedAt": "2026-09-28T04:14:23.483Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.astrazeneca.com/content/az-cn-zh/media/press-releases/2023/08-18-01.html",
+      "tool": "web_search",
+      "title": "安达唐在中国获批治疗成人症状性慢性心力衰竭降低患者心血管死亡 ...",
+      "url": "https://www.astrazeneca.com/content/az-cn-zh/media/press-releases/2023/08-18-01.html",
+      "query": "达格列净 安达唐 说明书 慢性肾脏病 适应症 国家药品监督管理局 批准",
+      "recordedAt": "2026-09-28T04:14:23.483Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.pharnexcloud.com/zixun/sx_2818",
+      "tool": "web_search",
+      "title": "阿斯利康达格列净更新说明书获国家药监局批准 - 摩熵医药",
+      "url": "https://www.pharnexcloud.com/zixun/sx_2818",
+      "query": "达格列净 安达唐 说明书 慢性肾脏病 适应症 国家药品监督管理局 批准",
+      "recordedAt": "2026-09-28T04:14:23.483Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.zhihu.com/question/20403435",
+      "tool": "web_search",
+      "title": "同一个药物往往有多家药厂在生产 - 知乎",
+      "url": "https://www.zhihu.com/question/20403435",
+      "query": "达格列净 安达唐 说明书 慢性肾脏病 适应症 国家药品监督管理局 批准",
+      "recordedAt": "2026-09-28T04:14:23.483Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMC7614055",
+      "tool": "open_access_full_text",
+      "title": "Empagliflozin in Patients with Chronic Kidney Disease",
+      "url": "https://europepmc.org/articles/PMC7614055",
+      "query": "36331190",
+      "recordedAt": "2026-09-28T04:14:31.043Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/PMC7614055/11298f8f51aa5eb3f230d1f3b9f6dba41bf1a8585eabfd52dfdec0c1a04856dc/fulltext.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_61_635ab1e95d77f9585dba3516",
+      "tool": "literature_search",
+      "title": "Impact of SGLT2 inhibitors on liver function test in type 2 diabetes and nonalcoholic fatty liver disease: A systemic review and meta-analysis",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L629615226&from=export",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_63_6557182cd3f76d4cf07dcfc4",
+      "tool": "literature_search",
+      "title": "SGLT2 Inhibitors: Effect on Myocardial Infarction and Stroke in Type 2 Diabetes.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36856812/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_75_64d20cf095f1b423cd8bedb7",
+      "tool": "literature_search",
+      "title": "Efficacy and safety of the SGLT2 inhibitor dapagliflozin in type 1 diabetes: A meta-analysis of randomized controlled trials.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33680104/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_217_64d203ef9112c86e36870e0a",
+      "tool": "literature_search",
+      "title": "Efficacy and Safety of SGLT2 Inhibitors in Patients with Type 1 Diabetes: A Meta-analysis of Randomized Controlled Trials.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28399981/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_218_685e320baced9794ed6bb36e",
+      "tool": "literature_search",
+      "title": "Cardiovascular and renal outcomes with SGLT-2 inhibitors versus GLP-1 receptor agonists in patients with type 2 diabetes mellitus and chronic kidney disease: a systematic review and network meta-analysis.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33413348/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_244_65f7c6b14cd51f7656654827",
+      "tool": "literature_search",
+      "title": "A Methodological Framework for Meta-analysis and Clinical Interpretation of Subgroup Data: The Case of Major Adverse Cardiovascular Events With GLP-1 Receptor Agonists and SGLT2 Inhibitors in Type 2 Diabetes.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38241493/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_292_64d222b63ece2e819e95bfd9",
+      "tool": "literature_search",
+      "title": "Cardiovascular outcomes with SGLT-2 inhibitors and GLP-1 receptor agonist in Asians with type 2 diabetes: A systematic review and meta-analysis of cardiovascular outcome trials.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32470852/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_326_693643e086580d26c1a58f6f",
+      "tool": "literature_search",
+      "title": "SGLT-2 inhibitors and GLP-1 receptor agonists for nephroprotection and cardioprotection in patients with diabetes mellitus and chronic kidney disease. A consensus statement by the EURECA-m and the DIABESITY working groups of the ERA-EDTA.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30753708/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_367_64d21cc3970624037f93f40e",
+      "tool": "literature_search",
+      "title": "Comparison between SGLT2 inhibitors and DPP4 inhibitors added to insulin therapy in type 2 diabetes: a systematic review with indirect comparison meta-analysis.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/27155214/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_440_64d200a28b1db31579838dcd",
+      "tool": "literature_search",
+      "title": "Does background metformin therapy influence the cardiovascular outcomes with SGLT-2 inhibitors in type 2 diabetes?",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33181201/",
+      "query": "KDIGO 2024 CKD guideline SGLT2 inhibitor recommendation 1A",
+      "recordedAt": "2026-09-28T04:14:32.755Z",
+      "status": "stale",
+      "sourceType": "systematic-review"
+    },
+    {
+      "sourceId": "http://ainusen.com/nd.jsp?id=628",
+      "tool": "web_search",
+      "title": "2025年《国家基本医疗保险、工伤保险和生育保险药品目录》新增 ...",
+      "url": "http://ainusen.com/nd.jsp?id=628",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://baike.baidu.com/item/第十一批国家组织药品集中采购/66219385",
+      "tool": "web_search",
+      "title": "第十一批国家组织药品集中采购",
+      "url": "https://baike.baidu.com/item/第十一批国家组织药品集中采购/66219385",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://file.m12333.cn/upfile/download/fa11c2cd-a639-6396-7e44-c542d23a82e3.pdf",
+      "tool": "web_search",
+      "title": "国家基本医疗保险、生育保险和工伤保险药品目录（2025年） - 人社通",
+      "url": "https://file.m12333.cn/upfile/download/fa11c2cd-a639-6396-7e44-c542d23a82e3.pdf",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002294&id=12123940",
+      "tool": "web_search",
+      "title": "信立泰：2025年年度报告新浪财经",
+      "url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002294&id=12123940",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://mp.weixin.qq.com/s?__biz=MzI1NTIyNTkxNA==&mid=2247502328&idx=2&sn=2be98ebacebe837088f7d0ee529901da&chksm=eb1bebc5386fcbe4ffc4f8f376cb05a753bd4ebd7411b520339c589e30041a97824adb994657&scene=27",
+      "tool": "web_search",
+      "title": "达格列净二甲双胍缓释片(Ⅰ)—国谈产品,医保乙类 自有原料",
+      "url": "https://mp.weixin.qq.com/s?__biz=MzI1NTIyNTkxNA==&mid=2247502328&idx=2&sn=2be98ebacebe837088f7d0ee529901da&chksm=eb1bebc5386fcbe4ffc4f8f376cb05a753bd4ebd7411b520339c589e30041a97824adb994657&scene=27",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.163.com/dy/article/L7H63K6H0552IJOG.html",
+      "tool": "web_search",
+      "title": "暴涨近10倍!协议期谈判药从48种飙到472种,医保目录将淘汰谁?",
+      "url": "https://www.163.com/dy/article/L7H63K6H0552IJOG.html",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.nhsa.gov.cn/attach/Ypsn2024/YPSN202400053/YPSN202400053.pdf",
+      "tool": "web_search",
+      "title": "2024年国家医保药品目录调整 申报材料 (公示版)",
+      "url": "https://www.nhsa.gov.cn/attach/Ypsn2024/YPSN202400053/YPSN202400053.pdf",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.nhsa.gov.cn/module/download/downfile.jsp?classid=0&filename=3a22b9d7f6e649f480b700bf603a8bf0.pdf",
+      "tool": "web_search",
+      "title": "通过2025年国家基本医疗保险、生育保险和工伤保险药品目录及商业 ...",
+      "url": "https://www.nhsa.gov.cn/module/download/downfile.jsp?classid=0&filename=3a22b9d7f6e649f480b700bf603a8bf0.pdf",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://ybj.sh.gov.cn/cmsres/e4/e4ef974596d5422fba561985ecfba0fb/bbe599147f2eb6fd442cfafbc932bcbf.pdf",
+      "tool": "web_search",
+      "title": "上海市基本医疗保险、工伤保险和生育保险药品目录（2024 年版）",
+      "url": "https://ybj.sh.gov.cn/cmsres/e4/e4ef974596d5422fba561985ecfba0fb/bbe599147f2eb6fd442cfafbc932bcbf.pdf",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://yp.eliancloud.cn/",
+      "tool": "web_search",
+      "title": "易联招采网-全国医药招标采购中标数据查询平台|疫苗药品采购信息",
+      "url": "https://yp.eliancloud.cn/",
+      "query": "国家医保药品目录 2025 达格列净片 协议期内 谈判药品 名单",
+      "recordedAt": "2026-09-28T04:14:36.241Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:0",
+      "tool": "guideline_search",
+      "title": "2024 中国专家共识：钠-葡萄糖协同转运蛋白2抑制剂在慢性肾脏病患者临床应用",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/0532ea39fc74610b17ef2efc462020ed1c96931c64a7d5e6e69287741e4fe1d9/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:1",
+      "tool": "guideline_search",
+      "title": "钠-葡萄糖协同转运蛋白2抑制剂临床综合评价山东省专家共识",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/03b1277e9f4128d7/a716f9ef303c6b6cc70b82e5982f4c78300043a9a28023307b8885a80e9ed5a8/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:2",
+      "tool": "guideline_search",
+      "title": "2024 KDIGO慢性肾脏病评估和管理指南要点解读",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/c1a53fb80f84a8c3/3ee52244a96a0e9300558b3be2425dd97571c30b24772c25dbd0febeb6e7453e/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:3",
+      "tool": "guideline_search",
+      "title": "心血管疾病合并慢性肾脏病早期筛查及规范管理专家共识（2024版）",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/90af4741af2a6c56/263f5c2b50143b57147bd17dd5b8a9f003ab17d72e8b0024911b403560dfb7f8/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:4",
+      "tool": "guideline_search",
+      "title": "2022版《ADA/KDIGO共识报告：慢性肾脏病患者的糖尿病管理》要点解读",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/46ccdfba7dee4c19/5e8d53a3a05054cbbdce00bfde171fe67f8dfe5be0359ec2da6282f28a181fec/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:5",
+      "tool": "guideline_search",
+      "title": "2型糖尿病合并慢性肾脏病患者口服降糖药治疗中国专家共识（2019年更新版）",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/822b2e1823408936/b4e4cff4a865a8983189783e2dcf3f20c37576aaa924291f59ee1d1d29a21129/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:6",
+      "tool": "guideline_search",
+      "title": "中国糖尿病合并慢性肾脏病临床管理共识",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/f5338061725f1a61/e51a6ac67c137d061ce35eb2974678ad063831f363f906807816a8a99f36af10/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:7",
+      "tool": "guideline_search",
+      "title": "血管紧张素受体-脑啡肽酶抑制剂在慢性肾脏病患者中应用的中国专家共识",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/954bfcb69d4c2634/9737778c3cd01051af8dc0511b2a1162dca156970ea6054e19b9d436fd74801a/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:8",
+      "tool": "guideline_search",
+      "title": "中国慢性肾脏病早期评价与管理指南",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/00366ec0605bf45d/5c7051f8bb34f2113b36ab0685f041f6acf3198c5dadd3385adb183d8b3763a8/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-GUIDE:9",
+      "tool": "guideline_search",
+      "title": "中国慢性肾脏病患者合并高尿酸血症诊治专家共识",
+      "query": "慢性肾脏病 SGLT2抑制剂 中国 指南 专家共识 钠-葡萄糖协同转运蛋白2",
+      "recordedAt": "2026-09-28T04:14:52.692Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/evimed-guidelines/e36cfd86b9aa0a74/96ac41bdee1ac84aefd93db807bca41504e52111360ff0119020bd39795386f3/guideline.md",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_80_68302804e400d894879afa97",
+      "tool": "literature_search",
+      "title": "Population Pharmacokinetic-pharmacodynamic Model Analysis of Dapagliflozin for HbA1c-lowering Effects in Japanese Patients with Type 2 Diabetes Mellitus using Long-term Real-world Data.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40386055/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_142_64d23786970624037fa103c3",
+      "tool": "literature_search",
+      "title": "Renoprotective Effects of Additional SGLT2 inhibitor Therapy in Patients With Type 2 Diabetes Mellitus and Chronic Kidney Disease Stages 3b-4: A Real World Report From A Japanese Specialized Diabetes Care Center.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30937117/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_252_64d25df8097b1c99c9b53ae6",
+      "tool": "literature_search",
+      "title": "Efficacy and Safety of Enzalutamide in a Real-World Cohort of Japanese Patients With Castration-resistant Prostate Cancer.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33288609/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_265_64d219e73ece2e819e91eebc",
+      "tool": "literature_search",
+      "title": "Identifying Suicidal Ideation Among Chinese Patients with Major Depressive Disorder: Evidence from a Real-World Hospital-Based Study in China.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32184605/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_298_6a61eba30119072ce15b71fc",
+      "tool": "literature_search",
+      "title": "Lack of real-world evidence on active surveillance in Chinese patients with prostate cancer: insights from a 10-year cohort and a physician survey.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42186046/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_311_63542014b7f937b487d3b067",
+      "tool": "literature_search",
+      "title": "Efficacy and safety of direct-acting antiviral agent regimens in a real-world cohort of adult Chinese patients with chronic hepatitis C virus infection",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L2006842332&from=export",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_372_6461e68e3b6aa8b836da08e7",
+      "tool": "literature_search",
+      "title": "Efficacy and safety of direct-acting antiviral agent regimens in a real-world cohort of adult Chinese patients with chronic hepatitis C virus infection",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=7105445871",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_373_6723469007666fb1150d17cd",
+      "tool": "literature_search",
+      "title": "Chinese herbal medicine for patients living with HIV in Guangxi province, China: A propensity score matching analysis of real-world data.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39240822/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_380_6801c8d5275d5942f64624ea",
+      "tool": "literature_search",
+      "title": "Assessment of serum free light chain measurements in a large Chinese chronic kidney disease cohort: a multicenter real-world study.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40214135/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_411_64d250da127fa481abac4fd2",
+      "tool": "literature_search",
+      "title": "Characteristics of Japanese patients with non-dialysis-dependent chronic kidney disease initiating treatment for anemia: a retrospective real-world database study.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36111421/",
+      "query": "dapagliflozin chronic kidney disease China real-world cohort Chinese patients",
+      "recordedAt": "2026-09-28T04:14:55.569Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "web-page:1db2f124ba675a41",
+      "tool": "web_read",
+      "title": "达格列净在华获批 慢性肾脏病患者治疗有了新希望-中国新闻网",
+      "url": "https://www.chinanews.com.cn/m/life/2022/09-05/9845330.shtml",
+      "query": "https://www.chinanews.com.cn/m/life/2022/09-05/9845330.shtml",
+      "recordedAt": "2026-09-28T04:15:09.487Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/web-pages/1db2f124ba675a41/0dfbaeeb46bf3ab27cbec517a3cec7eed65425352841c68b2ee71ae2ecd964e2/page.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://lingua.mtsu.edu/chinese-computing/references/combined/view.php?Which=ICTCLAS",
+      "tool": "web_search",
+      "title": "70793",
+      "url": "https://lingua.mtsu.edu/chinese-computing/references/combined/view.php?Which=ICTCLAS",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://m.creaders.net/bbs/politics/view/1606480",
+      "tool": "web_search",
+      "title": "中国社会的人权灾难 - 万维读者网",
+      "url": "https://m.creaders.net/bbs/politics/view/1606480",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://m.thepaper.cn/newsDetail_forward_26975701",
+      "tool": "web_search",
+      "title": "达格列净“药”知道 | 贤医健康说",
+      "url": "https://m.thepaper.cn/newsDetail_forward_26975701",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://news.xinmin.cn/2022/09/05/32226955.html",
+      "tool": "web_search",
+      "title": "达格列净慢性肾脏病适应症在中国获批,慢性肾脏病患者有了新选择",
+      "url": "https://news.xinmin.cn/2022/09/05/32226955.html",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.astrazeneca.com/content/az-cn-zh/media/press-releases/2022/_4.html",
+      "tool": "web_search",
+      "title": "达格列净慢性肾脏病适应症在中国获批",
+      "url": "https://www.astrazeneca.com/content/az-cn-zh/media/press-releases/2022/_4.html",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.chinanews.com.cn/m/life/2022/09-05/9845330.shtml",
+      "tool": "web_search",
+      "title": "达格列净在华获批 慢性肾脏病患者治疗有了新希望",
+      "url": "https://www.chinanews.com.cn/m/life/2022/09-05/9845330.shtml",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.haodf.com/neirong/wenzhang/9395118995.html",
+      "tool": "web_search",
+      "title": "达格列净/安达唐(钠-葡萄糖协同转运蛋白2/SGLT-2i)-药物说明书(吃饭顺序)",
+      "url": "https://www.haodf.com/neirong/wenzhang/9395118995.html",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.jianke.com/product/894381.html",
+      "tool": "web_search",
+      "title": "达格列净片(安达唐)",
+      "url": "https://www.jianke.com/product/894381.html",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://zh.wikipedia.org/zh-cn/%E8%BE%BE%E6%A0%BC%E5%88%97%E5%87%80",
+      "tool": "web_search",
+      "title": "达格列净- 维基百科，自由的百科全书",
+      "url": "https://zh.wikipedia.org/zh-cn/%E8%BE%BE%E6%A0%BC%E5%88%97%E5%87%80",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://zhuanlan.zhihu.com/p/715129355",
+      "tool": "web_search",
+      "title": "药物研发小史（以原研药巨头类聚） - 知乎专栏",
+      "url": "https://zhuanlan.zhihu.com/p/715129355",
+      "query": "安达唐 达格列净片 说明书 适应症 慢性肾脏病 国家药品监督管理局 2022 获批 中国",
+      "recordedAt": "2026-09-28T04:15:11.425Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "label:H20170117",
+      "tool": "drug_label_search",
+      "title": "达格列净片（美国:AstraZeneca Pharmaceuticals LP）",
+      "url": "https://www.315jiage.cn/mn215336.aspx",
+      "query": "安达唐",
+      "recordedAt": "2026-09-28T04:15:11.466Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字HJ20170119",
+      "tool": "drug_label_search",
+      "title": "达格列净片（美国AstraZeneca Pharmaceuticals LP）",
+      "url": "https://www.315jiage.cn/mn267265.aspx",
+      "query": "安达唐",
+      "recordedAt": "2026-09-28T04:15:11.466Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "label:国药准字H20234463",
+      "tool": "drug_label_search",
+      "title": "达格列净片（阿斯利康药业(中国)有限公司）",
+      "url": "https://www.315jiage.cn/mn545685.aspx",
+      "query": "label:国药准字H20234463",
+      "recordedAt": "2026-09-28T04:15:13.678Z",
+      "status": "stale",
+      "sourceType": "label"
+    },
+    {
+      "sourceId": "PMID:33878338",
+      "tool": "literature_search",
+      "title": "A pre-specified analysis of the DAPA-CKD trial demonstrates the effects of dapagliflozin on major adverse kidney events in patients with IgA nephropathy.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33878338/",
+      "query": "pmids: 34183431, 32862232, 37119064, 36469914, 33878338",
+      "recordedAt": "2026-09-28T04:15:23.809Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID33878338/674a7961067efcc481f301cdd576b4f94e266fa5369a4e2d96a149b7e92785f9/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:34183431",
+      "tool": "literature_search",
+      "title": "Efficacy and Safety of Dapagliflozin by Baseline Glycemic Status: A Prespecified Analysis From the DAPA-CKD Trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34183431/",
+      "query": "pmids: 34183431, 32862232, 37119064, 36469914, 33878338",
+      "recordedAt": "2026-09-28T04:15:23.809Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID34183431/5dba208ef0eabfd99af9c948556f7baaf66eaa3bebd2bf83e7bfb04440a425a3/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:36469914",
+      "tool": "literature_search",
+      "title": "Effects of Dapagliflozin on Hospitalizations in Patients With Chronic Kidney Disease : A Post Hoc Analysis of DAPA-CKD.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36469914/",
+      "query": "pmids: 34183431, 32862232, 37119064, 36469914, 33878338",
+      "recordedAt": "2026-09-28T04:15:23.809Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID36469914/d59c09f8e929ddeff5315f6bfe69668d50da112ff89071665b7b51f561602bd4/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:37119064",
+      "tool": "literature_search",
+      "title": "Effects of Dapagliflozin in Chronic Kidney Disease, With and Without Other Cardiovascular Medications: DAPA-CKD Trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37119064/",
+      "query": "pmids: 34183431, 32862232, 37119064, 36469914, 33878338",
+      "recordedAt": "2026-09-28T04:15:23.809Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID37119064/3ef73abddaf1dde63da4bfcfd02b7dbd0b26ec3e26fdd04c6990ae148cdafb5a/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "10.1056/nejmoa2024816",
+      "tool": "open_access_full_text",
+      "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+      "url": "https://doi.org/10.1056/nejmoa2024816",
+      "query": "10.1056/NEJMoa2024816",
+      "recordedAt": "2026-09-28T04:17:50.026Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/10.1056-nejmoa2024816/9300bdfbf65c619f6c94e10d6e0fe1f9599df40fe7309cd97fe2db1d4f4092e5/fulltext.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_169_655718d30ccaf79c957e8608",
+      "tool": "literature_search",
+      "title": "Short-term costs in patients with chronic kidney disease treated with dapagliflozin: a retrospective cohort study.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37540162/",
+      "query": "达格列净 慢性肾脏病 成本效果 中国 医保 药物经济学",
+      "recordedAt": "2026-09-28T04:18:00.677Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_181_6359da8f2dd41b72417232ec",
+      "tool": "literature_search",
+      "title": "Cost-effectiveness of Dapagliflozin in Heart Failure with Reduced Ejection Fraction",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L634379833&from=export",
+      "query": "达格列净 慢性肾脏病 成本效果 中国 医保 药物经济学",
+      "recordedAt": "2026-09-28T04:18:00.677Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_334_65f7c84ac3060898446628d0",
+      "tool": "literature_search",
+      "title": "Dapagliflozin Utilization in Chronic Kidney Disease and Its Real-World Effectiveness Among Patients with Lower Levels of Albuminuria in the USA and Japan.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38240949/",
+      "query": "达格列净 慢性肾脏病 成本效果 中国 医保 药物经济学",
+      "recordedAt": "2026-09-28T04:18:00.677Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "web-page:bfc76810ccba21be",
+      "tool": "web_read",
+      "title": "fa11c2cd-a639-6396-7e44-c542d23a82e3.pdf",
+      "url": "https://file.m12333.cn/upfile/download/fa11c2cd-a639-6396-7e44-c542d23a82e3.pdf",
+      "query": "https://file.m12333.cn/upfile/download/fa11c2cd-a639-6396-7e44-c542d23a82e3.pdf",
+      "recordedAt": "2026-09-28T04:18:56.193Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/web-pages/bfc76810ccba21be/bd47599db042e2bbb31bef09f0e4bc6e1872d639331380ae1f547b310954f395/page.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "http://hn.qhcredit.gov.cn/gnzc/1013157.jhtml",
+      "tool": "web_search",
+      "title": "【省医疗保障局】第十一批国家集采药品落地青海 55种药品“团购”红利直达",
+      "url": "http://hn.qhcredit.gov.cn/gnzc/1013157.jhtml",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "http://www.qhnews.com/newscenter/system/2026/03/05/030524896.shtml",
+      "tool": "web_search",
+      "title": "青海执行第十一批国家药品集采结果55种药品价格大幅下降惠民红利 ...",
+      "url": "http://www.qhnews.com/newscenter/system/2026/03/05/030524896.shtml",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html",
+      "tool": "web_search",
+      "title": "第十一批国家集采落地 “团购”红利直达百姓 好药不再“高不可攀”",
+      "url": "http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://baike.baidu.com/item/%E7%AC%AC%E5%8D%81%E4%B8%80%E6%89%B9%E5%9B%BD%E5%AE%B6%E7%BB%84%E7%BB%87%E8%8D%AF%E5%93%81%E9%9B%86%E4%B8%AD%E9%87%87%E8%B4%AD/66219385",
+      "tool": "web_search",
+      "title": "第十一批国家组织药品集中采购 - 百度百科",
+      "url": "https://baike.baidu.com/item/%E7%AC%AC%E5%8D%81%E4%B8%80%E6%89%B9%E5%9B%BD%E5%AE%B6%E7%BB%84%E7%BB%87%E8%8D%AF%E5%93%81%E9%9B%86%E4%B8%AD%E9%87%87%E8%B4%AD/66219385",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://sdxw.iqilu.com/share/YS0yMS0xNzA5MTU1OA==.html",
+      "tool": "web_search",
+      "title": "红利直达百姓!第十一批国家集采落地西宁",
+      "url": "https://sdxw.iqilu.com/share/YS0yMS0xNzA5MTU1OA==.html",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.21jingji.com/article/20260407/herald/8938281d01e005c524cc1cb1117104c5.html",
+      "tool": "web_search",
+      "title": "监管亮剑！多个药品集采中选资格遭清退 - 21财经",
+      "url": "https://www.21jingji.com/article/20260407/herald/8938281d01e005c524cc1cb1117104c5.html",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.phirda.com/artilce_42459.html?module=trackingCodeGenerator",
+      "tool": "web_search",
+      "title": "医院又能买到进口药了！上海提出“定额报销”政策 - 中国医药创新促进会",
+      "url": "https://www.phirda.com/artilce_42459.html?module=trackingCodeGenerator",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://www.qh.chinanews.com.cn/yw/news/2026/0306/142496.html",
+      "tool": "web_search",
+      "title": "青海执行第十一批国家药品集采结果 55种药品价格大幅下降 惠民红利持续释放",
+      "url": "https://www.qh.chinanews.com.cn/yw/news/2026/0306/142496.html",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://ylbzj.yichun.gov.cn/ycsybj/sxybdt/pc/content/2032259608815181824/content_2032259608815181824.html",
+      "tool": "web_search",
+      "title": "【丰城】最高直降达88%!第十一批药品集采落地丰城,看病买药更省钱",
+      "url": "https://ylbzj.yichun.gov.cn/ycsybj/sxybdt/pc/content/2032259608815181824/content_2032259608815181824.html",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "https://zhuanlan.zhihu.com/p/1972796339747324446",
+      "tool": "web_search",
+      "title": "全国第11批药品集采 - 知乎专栏",
+      "url": "https://zhuanlan.zhihu.com/p/1972796339747324446",
+      "query": "达格列净片 集采 第十一批 国家组织药品集中采购 中选 价格",
+      "recordedAt": "2026-09-28T04:19:09.542Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_7_6723280fd3b75c74d103c435",
+      "tool": "literature_search",
+      "title": "Projecting the potential cost-effectiveness of dapagliflozin for chronic kidney disease in Kuwait.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36719437/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:0_90_64d2200495f1b423cd9544c9",
+      "tool": "literature_search",
+      "title": "Cost-Effectiveness of Dapagliflozin for Chronic Kidney Disease in Japan.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36070962/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_145_65fd9570194419c8e695fcf3",
+      "tool": "literature_search",
+      "title": "Correction to: Translating the efficacy of dapagliflozin in chronic kidney disease to lower healthcare resource utilization and costs: a medical care cost offset analysis (Journal of Medical Economics, (2023), 26, 1, (1407-1416), 10.1080/13696998.2023.2264715)",
+      "url": "https://www.embase.com/search/results?subaction=viewrecord&id=L2027900940&from=export",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_169_67232bbd068daede2f0547c5",
+      "tool": "literature_search",
+      "title": "Cost-effectiveness of dapagliflozin plus standard treatment compared to standard therapy for the management of chronic kidney disease in Colombia.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39045630/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_295_64d24d6a127fa481abaa7d7c",
+      "tool": "literature_search",
+      "title": "Cost-Effectiveness of Dapagliflozin for Non-diabetic Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35137296/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_366_65570f0f1c6bc637977a2071",
+      "tool": "literature_search",
+      "title": "Cost-effectiveness of canagliflozin and dapagliflozin for treatment of patients with chronic kidney disease and type 2 diabetes.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37409571/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_367_64d1ffda95f1b423cd839113",
+      "tool": "literature_search",
+      "title": "Cost-Effectiveness of Dapagliflozin as a Treatment for Chronic Kidney Disease: A Health-Economic Analysis of DAPA-CKD.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36323444/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_403_64d22feb970624037f9e2039",
+      "tool": "literature_search",
+      "title": "Cost-effectiveness of dapagliflozin versus DPP-4 inhibitors as an add-on to Metformin in the Treatment of Type 2 Diabetes Mellitus from a UK Healthcare System Perspective.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26541516/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_421_64d24ea39112c86e36ae1967",
+      "tool": "literature_search",
+      "title": "Cost-effectiveness of dapagliflozin in chronic heart failure: an analysis from the Australian healthcare perspective.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34402872/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_497_65f7c5d0fd4b41438564d956",
+      "tool": "literature_search",
+      "title": "Dapagliflozin in chronic kidney disease: cost-effectiveness beyond the DAPA-CKD trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38389710/",
+      "query": "dapagliflozin China cost-effectiveness chronic kidney disease Chinese healthcare system economic evaluation",
+      "recordedAt": "2026-09-28T04:19:13.949Z",
+      "status": "stale",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "web-page:a3856b189ae2886e",
+      "tool": "web_read",
+      "title": "第十一批国家集采落地 “团购”红利直达百姓 好药不再“高不可攀”",
+      "url": "http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html",
+      "query": "http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html",
+      "recordedAt": "2026-09-28T04:19:18.475Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/web-pages/a3856b189ae2886e/c14f44f8d5d686427737e4ec58d937db9f81b7ddebe560e384fe239018a31b57/page.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "web-page:0339ef84acffcef4",
+      "tool": "web_read",
+      "title": "监管亮剑！多个药品集采中选资格遭清退 - 21经济网",
+      "url": "https://www.21jingji.com/article/20260407/herald/8938281d01e005c524cc1cb1117104c5.html",
+      "query": "https://www.21jingji.com/article/20260407/herald/8938281d01e005c524cc1cb1117104c5.html",
+      "recordedAt": "2026-09-28T04:19:19.056Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/web-pages/0339ef84acffcef4/ee40c43c4e79d490c673c236090ffccb47a731046ee5df81cc0713b55696adf3/page.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:1_158_635671e8af941930d3911c0d",
+      "tool": "literature_search",
+      "title": "对慢性肾功能不全患者进行Hcy与Cr联合检测对诊断其病情分期的价值研究",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=675659329",
+      "query": "Chinese expert consensus SGLT2 inhibitors chronic kidney disease 2024 Chinese Medical Journal",
+      "recordedAt": "2026-09-28T04:19:26.210Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:2_261_65fce507039686b018966b6c",
+      "tool": "literature_search",
+      "title": "慢性肾功能不全患者甲状旁腺素水平与心电图V1导联P波终末电势的相关性及对左心室舒张功能障碍的预测价值",
+      "url": "https://d.wanfangdata.com.cn/periodical/Ch9QZXJpb2RpY2FsQ0hJTmV3UzIwMjQxMTA1MTcxMzA0EhF6Z3h4Z2J5ajIwMjQwMjAxMRoId21heG9mZGI%3D",
+      "query": "Chinese expert consensus SGLT2 inhibitors chronic kidney disease 2024 Chinese Medical Journal",
+      "recordedAt": "2026-09-28T04:19:26.210Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_354_623ff068e56831f88f7ca8ce",
+      "tool": "literature_search",
+      "title": "慢性肾功能不全患者血清透明质酸和α1-微球蛋白测定评价",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjIwMzAyEg96Z3lzenoyMDAyMTAwNDcaCDZ3YnQ4cXF1",
+      "query": "Chinese expert consensus SGLT2 inhibitors chronic kidney disease 2024 Chinese Medical Journal",
+      "recordedAt": "2026-09-28T04:19:26.210Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_371_623c6cdf72c7d58c029a0c89",
+      "tool": "literature_search",
+      "title": "17例慢性肾功能不全患者的动态脑电图观察",
+      "url": "https://chkdx.cnki.net/kcms/detail/detail.aspx?FileName=OBED701.016&DbName=CHKJ1997",
+      "query": "Chinese expert consensus SGLT2 inhibitors chronic kidney disease 2024 Chinese Medical Journal",
+      "recordedAt": "2026-09-28T04:19:26.210Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:3_380_64ad03be4d7eee62761ea9e2",
+      "tool": "literature_search",
+      "title": "慢性肾功能不全患者血层粘连蛋白和α1-微球蛋白测定意义及评价",
+      "url": "https://www.sinomed.ac.cn/zh/detail.do?ui=2001228152",
+      "query": "Chinese expert consensus SGLT2 inhibitors chronic kidney disease 2024 Chinese Medical Journal",
+      "recordedAt": "2026-09-28T04:19:26.210Z",
+      "status": "stale",
+      "sourceType": "observational"
+    },
+    {
+      "sourceId": "EVIMED-LITERATURE:4_464_646ee79ab88191b41f0c023e",
+      "tool": "literature_search",
+      "title": "地尔硫|艹卓|缓释胶囊联合氯沙坦治疗慢性肾功能不全并发高血压的疗效",
+      "url": "https://www.sinomed.ac.cn/zh/detail.do?ui=2012566022",
+      "query": "Chinese expert consensus SGLT2 inhibitors chronic kidney disease 2024 Chinese Medical Journal",
+      "recordedAt": "2026-09-28T04:19:26.210Z",
+      "status": "stale",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMC11191031",
+      "tool": "open_access_full_text",
+      "title": "Chinese expert consensus on the clinical application of sodium-glucose cotransporter 2 inhibitors in patients with chronic kidney disease",
+      "url": "https://europepmc.org/articles/PMC11191031",
+      "query": "10.1097/CM9.0000000000003145",
+      "recordedAt": "2026-09-28T04:19:30.395Z",
+      "status": "ready",
+      "artifactPath": ".evimed-sources/PMC11191031/0e07ccd0077a404e3b292b475b479b9a2c15b4e709fbe5d6ff0dbebcbc92b478/fulltext.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:32862232",
+      "tool": "literature_search",
+      "title": "The dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial: baseline characteristics.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32862232/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID32862232/a2fa8848f341fe9d72b0b3000cc4ab019fc1ebb8e2963983a181ffec12e4980e/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:34850160",
+      "tool": "literature_search",
+      "title": "Safety and efficacy of dapagliflozin in patients with focal segmental glomerulosclerosis: a prespecified analysis of the dapagliflozin and prevention of adverse outcomes in chronic kidney disease (DAPA-CKD) trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34850160/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID34850160/d2035aecaec8153f79ce5d3e315654caf3086c0d513188fa4c39dd1c1051c283/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:34984791",
+      "tool": "literature_search",
+      "title": "Quételet (body mass) index and effects of dapagliflozin in chronic kidney disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34984791/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID34984791/baedbaf4d891c4ad696f0ea231454494e0c64dc962c463e3fdd73140c0e1642e/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:35137296",
+      "tool": "literature_search",
+      "title": "Cost-Effectiveness of Dapagliflozin for Non-diabetic Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35137296/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID35137296/23ec5850fb11f15582ec7ff1f0081b408c87267ebd6d172b778f55b0e131cccb/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:35977807",
+      "tool": "literature_search",
+      "title": "Correlates and Consequences of an Acute Change in eGFR in Response to the SGLT2 Inhibitor Dapagliflozin in Patients with CKD.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35977807/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID35977807/b7de76fcd914580981a535ae01c019137d382830ad1f29efe90dedfdcbc338eb/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:36070962",
+      "tool": "literature_search",
+      "title": "Cost-Effectiveness of Dapagliflozin for Chronic Kidney Disease in Japan.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/36070962/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID36070962/44061a9f9d084f80a6c8c27953e25e5f6383f208ffac16c0e38db8ed34b0b37c/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:38097862",
+      "tool": "literature_search",
+      "title": "Effects of Dapagliflozin in Chronic Kidney Disease Across the Spectrum of Age and by Sex.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38097862/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID38097862/ed1cec05bb8d0e373d6888430d60f32d3d2957421e03231d0d0a4536ff8fc211/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:38490803",
+      "tool": "literature_search",
+      "title": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38490803/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "sourceType": "guideline"
+    },
+    {
+      "sourceId": "PMID:38730538",
+      "tool": "literature_search",
+      "title": "The long-term effects of dapagliflozin in chronic kidney disease: a time-to-event analysis.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38730538/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID38730538/a9e9a54f5fffd52141f0770a75a45351f1da0aae8a4681d612ddcd120be368a1/abstract.md",
+      "sourceType": "rct"
+    },
+    {
+      "sourceId": "PMID:39165293",
+      "tool": "literature_search",
+      "title": "Dapagliflozin treatment of patients with chronic kidney disease without diabetes across different albuminuria levels (OPTIMISE-CKD).",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39165293/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID39165293/290eb5fb881fd917fe5a6fab6c8ebeb913a7c8a266b234d55d510fa0df6b38e2/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:39475817",
+      "tool": "literature_search",
+      "title": "Baseline, Early Changes, and Residual Albuminuria: Post Hoc Analysis of a Randomized Clinical Trial of Dapagliflozin in Chronic Kidney Disease.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39475817/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID39475817/2b8e9de63a54de54502c1ff8e7bba2b39b90bc75aff86910dc7a1ae30e4a1d3d/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:39834621",
+      "tool": "literature_search",
+      "title": "Efficacy and safety of dapagliflozin in patients with CKD: real-world experience in 93 Italian renal clinics.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/39834621/",
+      "query": "pmids: 35977807, 32862232, 38097862, 34850160, 39165293, 39834621, 34984791, 39475817, 38730538, 35137296, 36070962, 38490803",
+      "recordedAt": "2026-09-28T04:20:42.040Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID39834621/aa138e3c21c2092cd256432cbc29596cd462d41b49c5bcd4ef3000a4a5cd3eaa/abstract.md",
+      "sourceType": "other"
+    },
+    {
+      "sourceId": "PMID:33792669",
+      "tool": "literature_search",
+      "title": "Effects of dapagliflozin on mortality in patients with chronic kidney disease: a pre-specified analysis from the DAPA-CKD randomized controlled trial.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33792669/",
+      "query": "pmids: 33792669",
+      "recordedAt": "2026-09-28T04:28:58.716Z",
+      "status": "stale",
+      "artifactPath": ".evimed-sources/pubmed/PMID33792669/dbb0a1002ee8ea7d0555ef7492d7a4b49b20701617deff3a3925477cb6c358cf/abstract.md",
+      "sourceType": "rct"
+    }
+  ]
+}

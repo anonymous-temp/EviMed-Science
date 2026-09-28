@@ -86,15 +86,16 @@
       "evalHarness": "evals/comprehensive-drug-evaluation",
       "briefCount": 3,
       "realDelivery": {
-        "status": "failed",
-        "evidence": "evals/comprehensive-drug-evaluation/results/2026-09-27-cde-001-dapagliflozin-ckd/run.json",
-        "at": "2026-09-27T07:29:57Z",
+        "status": "accepted",
+        "evidence": "evals/comprehensive-drug-evaluation/results/2026-09-28-cde-001-dapagliflozin-ckd/run.json",
+        "at": "2026-09-28T04:33:27Z",
         "surface": "http-api"
       },
       "relatedEvidence": [
+        "evals/comprehensive-drug-evaluation/results/2026-09-27-cde-001-dapagliflozin-ckd/run.json",
         "evals/drug-evidence-quality/benchmark_cases.json"
       ],
-      "note": "Three briefs written on 2026-09-27 under evals/comprehensive-drug-evaluation (dapagliflozin in CKD, semaglutide product scope, upadacitinib scored without prices). The drug-evidence benchmark's comprehensiveCase stays related evidence: it grades the deterministic assessment compiler, not a delivered package. No delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run, and no research session was ever bound to it. 2026-09-27 production acceptance (release evimed-fa87c23940ce-1, brief cde-001): the first run that reached the capability's own comprehensive_drug_evaluation tool. It delivered with verification unverified and two must-fix findings: the report cites https://www.nmpa.gov.cn/ and doi:10.1016/j.kint.2023.10.018, neither of which is in evidence-snapshot.json. The independent review found no issue. Recorded as failed, not accepted: this ledger reads accepted as a delivery the gate verified, and a report citing sources its own snapshot does not hold is the defect the gate exists for. The earlier run of the same day (evimed-cab15710868b-1) delivered without the tool, because a bound session saw its capability tools only from its second request."
+      "note": "Three briefs written on 2026-09-27 under evals/comprehensive-drug-evaluation (dapagliflozin in CKD, semaglutide product scope, upadacitinib scored without prices). The drug-evidence benchmark's comprehensiveCase stays related evidence: it grades the deterministic assessment compiler, not a delivered package. No delivery on record. Platform audit 2026-09-26 (report I2 §2.2, read-only over the production run ledger, retained runs 2026-09-10 to 09-26): never run, and no research session was ever bound to it. 2026-09-27 production acceptance (release evimed-fa87c23940ce-1, brief cde-001): the first run that reached the capability's own comprehensive_drug_evaluation tool. It delivered with verification unverified and two must-fix findings: the report cites https://www.nmpa.gov.cn/ and doi:10.1016/j.kint.2023.10.018, neither of which is in evidence-snapshot.json. The independent review found no issue. Recorded as failed, not accepted: this ledger reads accepted as a delivery the gate verified, and a report citing sources its own snapshot does not hold is the defect the gate exists for. The earlier run of the same day (evimed-cab15710868b-1) delivered without the tool, because a bound session saw its capability tools only from its second request. 2026-09-28 production acceptance (release evimed-1f5607732e37-1, brief cde-001, fresh project acceptance-cde-0928): accepted. 20 minutes; the package (report, evidence table, evaluation summary, evidence snapshot, revision notes) was delivered verified with no must-fix finding — the cited-source check now runs inside the run's own gate against what its retrieval tools returned, so the 09-27 defect (a portal home page and an unread guideline DOI cited outside the snapshot) was caught and fixed in the turn. The independent review raised 22 findings: 6 fixed, none left unanswered, 16 advice-level suggestions not taken. Advice only otherwise: two plain-http citations and three retrieval notices. The run also used a learned method (methodsInvoked lists pre-submission-freeze-check), the first live proof of the method-card fix. The 09-27 failed run moved to relatedEvidence."
     },
     {
       "id": "dataset-research-scoping",
@@ -187,13 +188,13 @@
       "evalHarness": "evals/geo-proposal",
       "briefCount": 3,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/geo-proposal/results/2026-09-28-geo-proposal-001-mazdutide-package/run.json",
+        "at": "2026-09-28T04:45:26Z",
+        "surface": "http-api"
       },
       "relatedEvidence": [],
-      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. Never run in production: the orchestrator dispatches it only for 导出 and after a weekly round, and 信尔美 has had neither. Nothing in the code keeps it from running today: POST /api/geo/projects/<id>/export {kind: proposal} claims the run and the orchestrator dispatches it with the export brief, which since 05d41bc44 also states each engine's latest measurement date and which are stale, so the package reports from the data the project holds rather than stopping on the probe host's outage. A run on 信尔美 is planned (run plan of 2026-09-28)."
+      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. Never run in production: the orchestrator dispatches it only for 导出 and after a weekly round, and 信尔美 has had neither. Nothing in the code keeps it from running today: POST /api/geo/projects/<id>/export {kind: proposal} claims the run and the orchestrator dispatches it with the export brief, which since 05d41bc44 also states each engine's latest measurement date and which are stale, so the package reports from the data the project holds rather than stopping on the probe host's outage. A run on 信尔美 is planned (run plan of 2026-09-28). 2026-09-28 first production run (release evimed-1f5607732e37-1): capability-acceptance asked 信尔美's GEO module for its proposal export (POST /api/geo/projects/<id>/export, the page's 导出提案资料包) and the orchestrator dispatched geo-proposal; 14 minutes, delivered verified with geo-proposal.md, proposal-package.json and revision notes (the five office/HTML files are binaries the driver does not copy), and the review's one finding fixed. The brief stated each engine's last measurement date, so the package names the stale engines instead of hiding them."
     },
     {
       "id": "geo-strategy",
@@ -202,12 +203,14 @@
       "briefCount": 4,
       "realDelivery": {
         "status": "accepted",
-        "evidence": "evals/geo-strategy/results/2026-09-25-xinermei-sources-step/run.json",
-        "at": "2026-09-25T18:22:20Z",
-        "surface": "platform-job"
+        "evidence": "evals/geo-strategy/results/2026-09-28-geo-strategy-004-mazdutide-conditions-written/run.json",
+        "at": "2026-09-28T04:30:08Z",
+        "surface": "http-api"
       },
-      "relatedEvidence": [],
-      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. 2026-09-25 production (信尔美, step 5, run_3576ce426c20, geo-strategy 1.0.2), dispatched by the 循证 GEO orchestrator once the baseline round had its metrics: succeeded and verified in 22 minutes (¥2.96), all three submissions passing, the independent review's 11 findings all fixed. The delivered strategy.json holds a 28-site source table with the three conditions per site, 20 gaps in the seven classes, five engine expectations, a named battlefield (「P1-03 与其他减重药怎么选」) and three tiers. Its one notice (no battlefield group; no source table) was the contract not reading the method pack's shape; re-gated on 2026-09-28 with a6286df48 the package raises nothing. The run's transcript was not kept, so whether it read the gate cannot be checked. Not the project's current data: after the 2026-09-27 data repair the registered strategy has no battlefield, layout or gaps, none of 963 sources has its conditions checked, and the targets carry no M-19 or M-01S; a re-run on the current release is planned to refill them (run plan of 2026-09-28), and its package can replace this evidence if it is accepted. Briefs geo-strategy-001…004 have not been dispatched as written."
+      "relatedEvidence": [
+        "evals/geo-strategy/results/2026-09-25-xinermei-sources-step/run.json"
+      ],
+      "note": "New on 2026-09-25 with the 「循证 GEO」 module (build spec §8.1); public so the module can bind a session to it, kept off 科研工具 by display.listed: false. 2026-09-25 production (信尔美, step 5, run_3576ce426c20, geo-strategy 1.0.2), dispatched by the 循证 GEO orchestrator once the baseline round had its metrics: succeeded and verified in 22 minutes (¥2.96), all three submissions passing, the independent review's 11 findings all fixed. The delivered strategy.json holds a 28-site source table with the three conditions per site, 20 gaps in the seven classes, five engine expectations, a named battlefield (「P1-03 与其他减重药怎么选」) and three tiers. Its one notice (no battlefield group; no source table) was the contract not reading the method pack's shape; re-gated on 2026-09-28 with a6286df48 the package raises nothing. The run's transcript was not kept, so whether it read the gate cannot be checked. Not the project's current data: after the 2026-09-27 data repair the registered strategy has no battlefield, layout or gaps, none of 963 sources has its conditions checked, and the targets carry no M-19 or M-01S; a re-run on the current release is planned to refill them (run plan of 2026-09-28), and its package can replace this evidence if it is accepted. Briefs geo-strategy-001…004 have not been dispatched as written. 2026-09-28 re-run on 信尔美 through capability-acceptance (release evimed-1f5607732e37-1, brief geo-strategy-004 with the project's own strategy brief, a new session bound to geo-strategy 1.0.4), because the 09-27 data repair had emptied the registered strategy: 17 minutes, delivered verified, the review's five findings all fixed, and the strategy refilled. The 09-25 orchestrator run stays in relatedEvidence."
     },
     {
       "id": "manuscript-support",

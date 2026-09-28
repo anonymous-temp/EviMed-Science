@@ -1,0 +1,57 @@
+{
+ "mode": "proposal",
+ "product": "信尔美（通用名：玛仕度肽注射液）",
+ "dataset": {
+  "frozenAt": "2026-09-28T12:35:00+08:00",
+  "rounds": [
+   "gr_fd37ae22560ccf0bb6899426ec1c0828（基线 2026-09-25）",
+   "gr_0bcf3b9a8529572439815a900cac7cc7（补充轮次，2026-09-28，样本不足，不进基线读数）"
+  ],
+  "snapshotCount": null,
+  "note": "快照总数未逐条枚举；基线轮次的有效回答数为 351（计划 440）。"
+ },
+ "files": [
+  {
+   "path": "files/01_GEO投入优化全案.xlsx",
+   "kind": "xlsx",
+   "role": "客户版工作簿，15 页：总表、现状实测、逐引擎预期、语义问句与缺口、三档目标、增量与投放、产品竞品档案、问句与语义群、监测计划、指标定义、假设与未做、信源表、证据与主张库、证据空白与未核实、数据与来源",
+   "sha256": "c682d2107c3c03a96b5a6f8f4ba8d64420b8dd9b96a27e158b9abafec11193b9",
+   "bytes": 32201
+  },
+  {
+   "path": "files/02_GEO可行性评估报告.docx",
+   "kind": "docx",
+   "role": "客户版报告一：语义问句评估诊断与可行性（能不能做、主战场在哪、承诺与不承诺）",
+   "sha256": "5556605218409b356f43569230b241a0d1246d9d86cd40fed552afdc5eec17f1",
+   "bytes": 9226
+  },
+  {
+   "path": "files/03_GEO策略与执行方案.docx",
+   "kind": "docx",
+   "role": "客户版报告二：投入优化全案及实施方案（四池策略、信源、内容、投放、监测与验收）",
+   "sha256": "633c0b9cc32c6c02c7d87320c324b82fd4e9221ccadbebbee158ba32e2c83357",
+   "bytes": 6045
+  },
+  {
+   "path": "files/04_GEO投入优化提案.pptx",
+   "kind": "pptx",
+   "role": "客户版演示稿（PowerPoint，17 页，16:9）",
+   "sha256": "543ccb1e97ae3373f4030129a092cbc016d29848bdef59bd81657828ba86f538",
+   "bytes": 34489
+  },
+  {
+   "path": "files/05_GEO投入优化提案.html",
+   "kind": "html",
+   "role": "客户版演示稿（自包含 HTML，同一套数字，浏览器直接放映）",
+   "sha256": "6d9e5b9a450fa43728512648484e36a50897456509b2ef99dbf2bf57f455d698",
+   "bytes": 28914
+  },
+  {
+   "path": "dataset.json",
+   "kind": "json",
+   "role": "包内唯一数据源：所有文件里的重复数字都取自这里（本轮一次性读取的项目数据）",
+   "sha256": "0771ff42feb589f47e62c95e8d50893cbf0bf70596b875f7e3c1c02ebdccef67",
+   "bytes": 33836
+  }
+ ]
+}

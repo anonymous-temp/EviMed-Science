@@ -1,0 +1,73 @@
+{
+  "capability": "comprehensive-drug-evaluation",
+  "brief": "cde-001-dapagliflozin-ckd",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-cde-0928",
+  "session": "acc-comprehensive-drug-e-mukqfne6",
+  "runId": "run_0bc326f35df5977a7ec3e193f03e7af1",
+  "agentVersion": "2.4.1",
+  "dispatchedAt": "2026-09-28T04:33:26Z",
+  "prompt": "drug: 达格列净（dapagliflozin）\nindication: 慢性肾脏病（伴或不伴 2 型糖尿病）\ncomparator: 标准治疗（最大耐受剂量的 ACEI 或 ARB）\npopulation: eGFR 25–75 mL/min/1.73m²、伴白蛋白尿的成人慢性肾脏病患者\njurisdiction: 中国（NMPA；国家医保药品目录）\noutcomes: [\"肾脏复合终点（eGFR 持续下降、终末期肾病、肾性或心血管死亡）\",\"全因死亡\",\"安全性：酮症酸中毒、容量不足、生殖器感染、急性肾损伤\"]\ncareSetting: 三级医院肾内科门诊\ntimeHorizon: 3 年\ndecisionDate: 2026-06-30\nevaluationDomains: [\"effectiveness\",\"safety\",\"applicability\",\"economics\"]",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/cde-dapagliflozin-ckd/comprehensive-evaluation-report.md",
+      "deliverables/cde-dapagliflozin-ckd/evaluation-summary.json",
+      "deliverables/cde-dapagliflozin-ckd/evidence-snapshot.json",
+      "deliverables/cde-dapagliflozin-ckd/evidence-table.csv",
+      "deliverables/cde-dapagliflozin-ckd/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「cde-dapagliflozin-ckd」有 22 条审查发现（已修 6，不改并说明 0，未回应 0，其余 16 条建议未处理）。",
+        "text": "独立审查：交付物「cde-dapagliflozin-ckd」有 22 条审查发现（已修 6，不改并说明 0，未回应 0，其余 16 条建议未处理）。"
+      },
+      {
+        "code": "citation_plain_http",
+        "severity": "advice",
+        "title": "引用使用了未加密的链接",
+        "text": "The citation http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one."
+      },
+      {
+        "code": "citation_plain_http",
+        "check": "citations-resolvable",
+        "severity": "advice",
+        "title": "引用链接读者打不开",
+        "detail": "comprehensive-evaluation-report.md 第 195 行",
+        "file": "comprehensive-evaluation-report.md",
+        "line": 195,
+        "text": "comprehensive-evaluation-report.md line 195: The citation http://ybj.qinghai.gov.cn/20260306/990228b674ac40b9b4614f75417f1e80/c.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one."
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "编译药品综合评价：retrieve——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索生物医学来源：「FARXIGA dapagliflozin」——这次检索没有找到可用来源。"
+      },
+      {
+        "code": "run_side_notice",
+        "severity": "advice",
+        "title": "运行过程的技术提示",
+        "text": "检索文献：「dapagliflozin DAPA-CKD safety ketoacidos…」——这次检索没有找到可用来源。"
+      }
+    ],
+    "effectiveAgentId": "comprehensive-drug-evaluation",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1187938,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

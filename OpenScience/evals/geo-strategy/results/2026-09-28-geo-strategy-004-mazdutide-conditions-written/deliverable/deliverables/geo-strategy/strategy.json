@@ -1,0 +1,1407 @@
+{
+ "schema": "geo-strategy/3",
+ "deliverableId": "geo-strategy",
+ "contractKind": "geo-strategy-pack",
+ "generatedAt": "2026-09-28",
+ "minimal": false,
+ "roundId": "gr_fd37ae22560ccf0bb6899426ec1c0828",
+ "measurementNote": "基线 2026-09-25（351/440 次提问，豆包缺席）；各引擎最近一次有效回答：豆包 未测，千问 2026-09-28，DeepSeek 2026-09-26，元宝 2026-09-26，Kimi 2026-09-27。引擎级数字随行标注测于哪一天。",
+ "sources": {
+  "checks": {
+   "checkedOn": "2026-09-28",
+   "coverageCandidates": 25,
+   "threeConditionsAllTrue": 0,
+   "icpChecked": 18,
+   "newsIndexedChecked": 0,
+   "medicalChecked": 17,
+   "newsIndexedNote": "「被新闻源收录」需要百度资讯／新闻检索的收录查询，本次没有这一通道，逐站核不了，一律 null，不写成 true；回补后再进覆盖层。",
+   "layoutNote": "进布局 33 个域名：锚点层 5、覆盖层 25、自有层 1；另有 2 个冒名站进黑名单、2 个站只走纠错。"
+  },
+  "citedDomains": 963,
+  "citationEntries": 3992,
+  "table": [
+   {
+    "domain": "drugs.dxy.cn",
+    "name": "丁香园用药助手",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "丁香园 dxy.cn「关于我们」页：自述为中国领先的数字医疗健康科技企业，含用药助手等临床决策产品；drugs.dxy.cn 为其用药助手专业端。本次未取得该子站页脚备案号，备案主体一致性按站点自述判定。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 19,
+     "yuanbao": 7,
+     "kimi": 1
+    },
+    "mentionsOurs": 10,
+    "errorsAboutUs": 4
+   },
+   {
+    "domain": "www.phirda.com",
+    "name": "中国医药创新促进会（药促会）",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页页脚：京ICP备11012814号-1、互联网药品信息服务资格证书 (京)-非经营性-2023-0040。备案主体与站点自称的同一家行业组织一致；主营为会员服务与政策资讯，是否属“主营医疗健康”未核，记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 13,
+     "yuanbao": 2
+    },
+    "mentionsOurs": 5,
+    "errorsAboutUs": 6
+   },
+   {
+    "domain": "m.dayi.org.cn",
+    "name": "中国医药信息查询平台（大医网）",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "关于页页脚：京ICP备15046755号-5、互联网药品信息服务资格证书 (京)-非经营性-2024-0026；站点为全类型医药信息查询平台。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 22,
+     "yuanbao": 18
+    },
+    "mentionsOurs": 1,
+    "errorsAboutUs": 3
+   },
+   {
+    "domain": "www.yywsb.com",
+    "name": "医药卫生网（医药卫生报社主办）",
+    "kind": "news",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页页脚：豫ICP备11010909号-4、互联网新闻信息服务许可证编号 41120200003、河南省卫生健康委员会主管／医药卫生报社主办。备案主体与主办单位一致，持新闻信息服务许可。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 2
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.mfk.com",
+    "name": "民福康",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页页脚：苏ICP备15060253号-3、江苏民福康科技股份有限公司版权所有、互联网药品信息服务资格证书。备案主体与站点运营主体一致。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 31,
+     "deepseek": 3
+    },
+    "mentionsOurs": 5,
+    "errorsAboutUs": 5
+   },
+   {
+    "domain": "www.fh21.com.cn",
+    "name": "复禾健康",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页页脚：网站备案号 苏ICP备2025211236号-1、(京)网药械信息备字（2024）第00306号、苏B2-20253453 增值电信业务经营许可证。备案主体与站点运营主体一致。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 15,
+     "deepseek": 1
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.familydoctor.com.cn",
+    "name": "家庭医生在线",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页页脚：粤ICP备2024312571号-2、粤B2-20252391号经营许可证、互联网药品信息服务备案、粤公网安备44010502003510号。备案主体与站点运营主体一致。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 3,
+     "deepseek": 2
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.39.net",
+    "name": "39健康网",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "站点页脚：粤ICP备10060494号、粤公网安备44010602000144号；站点自称 39健康网并自述为医疗保健信息与在线健康服务平台。备案主体与站点所属品牌一致（本次只取到备案号，未取到企业名）。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 6
+    },
+    "mentionsOurs": 3,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.cnpharm.com",
+    "name": "中国食品药品网",
+    "kind": "news",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "站内页面页脚：京ICP备17013160号-1、(京)网药械信息备字(2026)第…、京公网安备11010802023089号；站点自称食品药品行业新闻资讯平台。备案主体一致性可判；主营为食品药品行业媒体而非医疗健康服务，记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {},
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.jksb.com.cn",
+    "name": "健康时报网",
+    "kind": "news",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "站内页面页脚：京ICP备14043247号-1、京公网安备11010502032876号；健康时报系人民日报社主管的健康类报纸。备案主体一致性按站点自述判定。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 7,
+     "deepseek": 5
+    },
+    "mentionsOurs": 3,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.lifetimes.cn",
+    "name": "生命时报",
+    "kind": "news",
+    "layer": "coverage",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "站内页面页脚：京公网安备11010502041107号（ICP 备案号本轮只取到前缀）；站点自述为《生命时报》唯一指定官方网站。备案主体一致性按站点自述判定。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 1
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "guide.medlive.cn",
+    "name": "医脉通指南",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未取到站点页脚与备案页；三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 15
+    },
+    "mentionsOurs": 1,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.youlai.cn",
+    "name": "有来医生",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页与第 2 页已读：页脚可见京公网安备11010802030032号，未见 ICP 备案号明文；备案号与备案主体本次未取到，三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 9,
+     "deepseek": 1
+    },
+    "mentionsOurs": 1,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.kepuchina.cn",
+    "name": "科普中国（中国科协）",
+    "kind": "government",
+    "layer": "anchor",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "上一轮取回 HTTP 502，本轮未再取；站点性质可判定为医疗健康科普类，备案主体一致性与收录未核，记 null / null / true。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 40
+    },
+    "mentionsOurs": 16,
+    "errorsAboutUs": 9
+   },
+   {
+    "domain": "cloud.kepuchina.cn",
+    "name": "科普中国云",
+    "kind": "government",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "同科普中国主体；本次未取回页脚，备案主体一致性与收录记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 21,
+     "yuanbao": 13
+    },
+    "mentionsOurs": 5,
+    "errorsAboutUs": 6
+   },
+   {
+    "domain": "www.haodf.com",
+    "name": "好大夫在线",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 4,
+     "kimi": 1
+    },
+    "mentionsOurs": 2,
+    "errorsAboutUs": 2
+   },
+   {
+    "domain": "www.xywy.com",
+    "name": "寻医问药网",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {},
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.120ask.com",
+    "name": "快速问医生",
+    "kind": "qa",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 2,
+     "deepseek": 1
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.jianke.com",
+    "name": "健客网",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 4
+    },
+    "mentionsOurs": 4,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.medsci.cn",
+    "name": "梅斯医学",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 2
+    },
+    "mentionsOurs": 1,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.yxj.org.cn",
+    "name": "医学界",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 4
+    },
+    "mentionsOurs": 1,
+    "errorsAboutUs": 2
+   },
+   {
+    "domain": "www.bohe.cn",
+    "name": "博禾医生",
+    "kind": "vertical",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "本次未核（未取回站点页脚）。三项均记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 21,
+     "deepseek": 1
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.toutiao.com",
+    "name": "今日头条（平台托管）",
+    "kind": "wemedia",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "平台托管内容，三条件须按「平台:账号」核站；本周期账号未识别，三项记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 15,
+     "deepseek": 18
+    },
+    "mentionsOurs": 9,
+    "errorsAboutUs": 4
+   },
+   {
+    "domain": "mp.weixin.qq.com",
+    "name": "微信公众号（平台托管）",
+    "kind": "wemedia",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "平台托管内容，元宝第一信源；账号未识别，三条件须按账号核，记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 68
+    },
+    "mentionsOurs": 24,
+    "errorsAboutUs": 11
+   },
+   {
+    "domain": "baike.baidu.com",
+    "name": "百度百科",
+    "kind": "encyclopedia",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "百科类站点只走纠错、不进投放位；三项未核，记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 17,
+     "deepseek": 18,
+     "kimi": 1
+    },
+    "mentionsOurs": 10,
+    "errorsAboutUs": 5
+   },
+   {
+    "domain": "www.315jiage.cn",
+    "name": "315 价格网（兔灵）",
+    "kind": "ecommerce",
+    "layer": "coverage",
+    "icpMatches": null,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "站内页面页脚：粤ICP备10223721号-1、粤公网安备44190002000244号；页面标题为药品价格对比。该站是提到我方与讲错我方的来源之一，本次未核三项，记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 5
+    },
+    "mentionsOurs": 5,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "innoventbio.com",
+    "name": "信达生物官网（自有）",
+    "kind": "brand",
+    "layer": "owned",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "自有域名：站点为企业官网，持有方与产品持证主体信达生物制药(苏州)有限公司一致。新闻源收录对自有站不适用，记 null。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 29
+    },
+    "mentionsOurs": 24,
+    "errorsAboutUs": 9
+   },
+   {
+    "domain": "www.nmpa.gov.cn",
+    "name": "国家药品监督管理局",
+    "kind": "government",
+    "layer": "anchor",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "国家药品监督管理局官方网站；说明书与批准文号的监管源。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "yuanbao": 10,
+     "deepseek": 8,
+     "kimi": 1
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.nhsa.gov.cn",
+    "name": "国家医疗保障局",
+    "kind": "government",
+    "layer": "anchor",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "国家医疗保障局官方网站；医保目录与支付政策的监管源。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {},
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "pubmed.ncbi.nlm.nih.gov",
+    "name": "PubMed",
+    "kind": "academic",
+    "layer": "anchor",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "美国国立医学图书馆文献库；GLORY-1 与 GLORY-2 题录与摘要的检索源。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 49
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "rs.yiigle.com",
+    "name": "中华医学期刊网",
+    "kind": "academic",
+    "layer": "anchor",
+    "icpMatches": true,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "中华医学会系列期刊平台。",
+    "impostor": false,
+    "blacklistReason": null,
+    "cited": {
+     "deepseek": 31,
+     "yuanbao": 7
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   },
+   {
+    "domain": "www.39yst.com",
+    "name": "三九益生通（冒名 39健康网）",
+    "kind": "other",
+    "layer": "blacklist",
+    "icpMatches": false,
+    "newsIndexed": null,
+    "medicalVertical": true,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页页脚：苏ICP备15060253号-6、江苏民福康科技股份有限公司版权所有、互联网药品信息服务资格证书、苏公网安备32080102000107号。备案主体为江苏民福康科技股份有限公司，与被仿冒品牌 39健康网（39.net，粤ICP备10060494号）不是同一主体；显示名「三九益生通」与站点自述指向三九／39 品牌。",
+    "impostor": true,
+    "blacklistReason": "显示名指向三九／39健康网品牌，备案主体为江苏民福康科技股份有限公司，与 39健康网（39.net）非同一主体；2026-09-28 核，进黑名单，不进任何布局与订单。",
+    "cited": {
+     "yuanbao": 21
+    },
+    "mentionsOurs": 0,
+    "errorsAboutUs": 1
+   },
+   {
+    "domain": "www.rgmgy.com",
+    "name": "人民时报网（冒名人民日报品牌）",
+    "kind": "other",
+    "layer": "blacklist",
+    "icpMatches": false,
+    "newsIndexed": null,
+    "medicalVertical": null,
+    "checkedAt": "2026-09-28",
+    "evidence": "首页已读：站点标题「以全新视角解读全国最新的新闻资讯_人民时报网首页」，未见任何 ICP 备案号或主办单位声明；显示名「人民时报网」与人民日报社及其报刊品牌无隶属关系。页脚无备案声明本身即不满足备案一致性要求，故 icpMatches 记 false。",
+    "impostor": true,
+    "blacklistReason": "显示名攀附人民日报品牌，首页无备案号与主办单位声明，来源不明；2026-09-28 核，进黑名单，不进任何布局与订单。",
+    "cited": {},
+    "mentionsOurs": 0,
+    "errorsAboutUs": 0
+   }
+  ]
+ },
+ "gaps": [
+  {
+   "gapId": "GAP-01",
+   "groupId": "ggr_7a233a5e1e14648ef46a67dd1deb7b9c",
+   "class": "只讲获益不讲安全",
+   "text": "就医红旗覆盖率 66.67%（58/87 条应有提示），约三分之一应有提示没有出现；本组另有 2 条 S3 讲错我方（用药后情绪低落与自杀念头、不良反应须就医的情形）。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 1
+  },
+  {
+   "gapId": "GAP-02",
+   "groupId": "ggr_ef0ef6b5ad8c4e4954712eb2d0c46c90",
+   "class": "讲错",
+   "text": "14 条讲错我方：数字不符 8 条、与说明书冲突 1 条、无据 1 条、主体张冠李戴 1 条、丢限定条件 1 条；品牌提及率 50.00%（8/16），事实准确率 36.36%（4/11）。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 2
+  },
+  {
+   "gapId": "GAP-03",
+   "groupId": "ggr_1c7cc02f91b0d3316a597c7e6edab5dc",
+   "class": "丢条件",
+   "text": "14 条讲错我方叠加本组事实准确率 25.00%（2/8）、就医红旗覆盖率 12.30%（15 条应有提示）；减重幅度与疗程的限定条件（剂量组、时间点、人群）被简化成一句疗效数字。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 3
+  },
+  {
+   "gapId": "GAP-04",
+   "groupId": "ggr_1af29474a7a5c26293795cc59a2da5f4",
+   "class": "讲错",
+   "text": "品牌提及率 6.25%（1/16），事实准确率 66.67%（8/12），5 条讲错我方全部为无据；三药 BMI 门槛与维持剂量是可逐字比对的事实。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 4
+  },
+  {
+   "gapId": "GAP-05",
+   "groupId": "ggr_dcea105941517c0733f1d3e513c5be69",
+   "class": "讲错",
+   "text": "说明书要求计划妊娠前停用至少 3 个月；本组只有 4 条有效回答，样本不足，不给百分数——这 4 条里 Kimi 与 DeepSeek 讲成 2 个月、Kimi 另有一条 8 周，且哺乳期不得使用一条一次都没出现。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 5
+  },
+  {
+   "gapId": "GAP-06",
+   "groupId": "ggr_95e3fd646ab80da67d32149522528d59",
+   "class": "只讲获益不讲安全",
+   "text": "本组就医红旗覆盖率样本不足（10 条应有提示，低于 30）；说明书要求把脱水风险、避免体液过度损耗、老年人尤其注意讲出来，本组回答未系统覆盖。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 6
+  },
+  {
+   "gapId": "GAP-07",
+   "groupId": "ggr_b0dc5e255d96a9a763c3d687ada2fcd6",
+   "class": "丢条件",
+   "text": "就医红旗覆盖率 29.91%（35 条应有提示，接近下限，只作参考），禁忌与特殊人群提示率组级 37.50%（6/16）；说明书要求出现颈部肿块、吞咽困难、声音嘶哑等甲状腺相关警示及时就医，本组覆盖不全。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 7
+  },
+  {
+   "gapId": "GAP-08",
+   "groupId": "ggr_3fb06d6835c9e573460afded233d9bb6",
+   "class": "信源弱",
+   "text": "本组 12 条有效回答全部没有提到我方（品牌提及率 0/12）；回答里的反弹结论多来自自媒体与新闻转述，指南与说明书等权威来源在本组引用中占比低。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 8
+  },
+  {
+   "gapId": "GAP-09",
+   "groupId": "ggr_81bd7295a119bdeeb4104be8bf58f5af",
+   "class": "只讲获益不讲安全",
+   "text": "就医红旗覆盖率样本不足，不给百分数（2 条应有提示，低于 30）；说明书要求把持续重度腹痛（可放射至背部、伴呕吐）应立即就医、怀疑胰腺炎应停药处理、急性胆囊疾病不推荐使用写清楚。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 9
+  },
+  {
+   "gapId": "GAP-10",
+   "groupId": "ggr_063962327dae769c7c2b8991e7616b93",
+   "class": "缺证据",
+   "text": "品牌提及率 0/12，事实准确率样本不足（1/3，仅供参考），6 条讲错我方；说明书对遗漏用药与超 21 天未给药的分段处理、首次使用前由医护提供皮下注射技术指导这两条在本组回答中覆盖不全。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 10
+  },
+  {
+   "gapId": "GAP-11",
+   "groupId": "ggr_2d708a099f3e11653fcbe5a27a5e38b0",
+   "class": "过时",
+   "text": "本组是品牌池表现最好的一组（品牌提及率 70.83%，n=24；事实准确率样本不足，16/17 仅供参考），只有 1 条讲错我方；风险不在说错而在说过期——价格与医保状态需要按月复核。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 11
+  },
+  {
+   "gapId": "GAP-12",
+   "groupId": "ggr_f2a1fa9ee4f253014a2ea00262c77377",
+   "class": "受众看不懂",
+   "text": "该组品牌提及率 0/8；就医红旗覆盖率 28.99%（20 条应有提示）；回答多用机制术语解释合并症获益，没有回到「BMI 门槛 + 至少一种体重相关合并症」这句患者能对照的判据。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 12
+  },
+  {
+   "gapId": "GAP-13",
+   "groupId": "ggr_2941ec8d59cc633f572fa7b37c2dd0fe",
+   "class": "信源弱",
+   "text": "对照组：品牌提及率 0/16，事实准确率样本不足（8/8，仅供参考），就医红旗覆盖率不可测。结论只作对照基线，不布局、不投放。",
+   "priority": 300,
+   "priorityBand": "低",
+   "rank": 13
+  },
+  {
+   "gapId": "GAP-14",
+   "groupId": "ggr_9e3ef6422f36e546eaf2ccea8a9b84d8",
+   "class": "缺证据",
+   "text": "就医红旗覆盖率 56.79%（46 条应有提示），禁忌与特殊人群提示率组级 58.33%（7/12）；抗药抗体阳性对疗效与安全性的意义在本组未见系统覆盖。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 14
+  },
+  {
+   "gapId": "GAP-15",
+   "groupId": "ggr_d2e704acf85b099a91f73b6fd1c4b4c8",
+   "class": "受众看不懂",
+   "text": "该组品牌提及率 0/12，就医红旗覆盖率不可测（该组无应有提示条目），禁忌与特殊人群提示率组级 8.33%（1/12）——连禁忌与特殊人群提示也没在这一组出现。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 15
+  },
+  {
+   "gapId": "GAP-16",
+   "groupId": "ggr_039773e839de8ec5afe2dc1047e60112",
+   "class": "丢条件",
+   "text": "品牌提及率 16.67%（2/12），事实准确率 50.00%（3/6），8 条讲错我方；说明书滴定表（2mg 起、4 周后 4mg、至少再用 4 周后可至 6mg，6mg 不耐受可回调 4mg）在本组回答中常被简化成一个递增数字。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 16
+  },
+  {
+   "gapId": "GAP-17",
+   "groupId": "ggr_a584ad6f8c0249bd18a45d1da51401f7",
+   "class": "丢条件",
+   "text": "品牌提及率 25.00%（3/12）、事实准确率 41.67%（5/12），9 条讲错我方；老年人群数据有限（说明书：65 岁及以上 N=3）与肝肾功能不全的分层说明在本组覆盖不全。",
+   "priority": 900,
+   "priorityBand": "高",
+   "rank": 17
+  },
+  {
+   "gapId": "GAP-18",
+   "groupId": "ggr_05a69ab8511fb8e32358d602469574b1",
+   "class": "受众看不懂",
+   "text": "该组品牌提及率 0/8，就医红旗覆盖率 0（0 条应有提示），1 条讲错我方；回答停在生活方式建议，没有把「体重卡住 + 腹型肥胖」与需要就医评估连接起来。",
+   "priority": 600,
+   "priorityBand": "中",
+   "rank": 18
+  },
+  {
+   "gapId": "GAP-19",
+   "groupId": "ggr_025ff6bf5a69cbda19e0ea22fe825b30",
+   "class": "过时",
+   "text": "品牌提及率 12.50%（1/8），事实准确率样本不足（6/6，仅供参考）；格局类回答里本品出现不稳定，属于「没被讲到」而非「讲错」，且需按新增获批品种按月复核。",
+   "priority": 300,
+   "priorityBand": "低",
+   "rank": 19
+  },
+  {
+   "gapId": "GAP-20",
+   "groupId": "ggr_23406b4f48dd0f80fbc37c6d63e62f31",
+   "class": "受众看不懂",
+   "text": "品牌提及率 37.50%（3/8），事实准确率样本不足（6/7，仅供参考）；1 条主体张冠李戴（把 GIP/GLP-1 与 GCG/GLP-1 讲混），机制段多用术语叠术语。",
+   "priority": 300,
+   "priorityBand": "低",
+   "rank": 20
+  }
+ ],
+ "expectations": [
+  {
+   "engine": "doubao",
+   "promise": "本周期未测，不承诺任何变化；不承诺被提及，也不承诺准确率。只有补测出有效回答，才知道它在这些问句上搜不搜网、引谁。",
+   "layers": [],
+   "leverage": "先补测",
+   "retrieval": {
+    "value": null,
+    "numerator": null,
+    "denominator": null,
+    "ciLow": null,
+    "ciHigh": null,
+    "status": "absent",
+    "dataType": "not_measured",
+    "reason": "engine_absent",
+    "measuredOn": null
+   },
+   "evidence": "诊断基线与 2026-09-28 的补充轮次里该引擎均 absent（engine_absent）"
+  },
+  {
+   "engine": "qianwen",
+   "promise": "可以承诺被提及并讲对。检索触发率 98.86%（87/88，Wilson 95% 93.84–99.80），下限远高于 50% 门槛。要写明的是：千问的来源列表不带域名，引用命中率不可测，所以对它只能按语义群做内容覆盖，不能按域名布局。",
+   "layers": [
+    "anchor"
+   ],
+   "leverage": "重点投入",
+   "retrieval": {
+    "value": 98.86,
+    "numerator": 87,
+    "denominator": 88,
+    "ciLow": 93.84,
+    "ciHigh": 99.8,
+    "status": "ok",
+    "dataType": "measured",
+    "reason": null,
+    "measuredOn": "2026-09-28"
+   },
+   "evidence": "检索触发率 98.86%（87/88）；引用命中率与自有内容被引条数 not_measurable（citations_without_links）"
+  },
+  {
+   "engine": "deepseek",
+   "promise": "可以承诺被提及并讲对。检索触发率 85.06%（74/87，Wilson 95% 76.10–91.05），下限高于 50% 门槛；但它的引用命中率为 0（0/74），说明它读了网页而很少把我们指得上的来源列出来——被引不等于被写成答案。",
+   "layers": [
+    "anchor",
+    "coverage",
+    "owned"
+   ],
+   "leverage": "重点投入",
+   "retrieval": {
+    "value": 85.06,
+    "numerator": 74,
+    "denominator": 87,
+    "ciLow": 76.1,
+    "ciHigh": 91.05,
+    "status": "ok",
+    "dataType": "measured",
+    "reason": null,
+    "measuredOn": "2026-09-26"
+   },
+   "evidence": "检索触发率 85.06%（74/87）；引用命中率 0（0/74）；被引构成以中国医药信息查询平台、PubMed、美国 FDA、中华医学期刊网为主"
+  },
+  {
+   "engine": "yuanbao",
+   "promise": "可以承诺被提及并讲对。检索触发率 80.68%（71/88，Wilson 95% 71.22–87.57），下限高于 50% 门槛；它是唯一把公众号内容当第一信源的引擎，自有公众号「当天可改」的能力主要体现在它身上。",
+   "layers": [
+    "anchor",
+    "coverage",
+    "owned"
+   ],
+   "leverage": "重点投入",
+   "retrieval": {
+    "value": 80.68,
+    "numerator": 71,
+    "denominator": 88,
+    "ciLow": 71.22,
+    "ciHigh": 87.57,
+    "status": "ok",
+    "dataType": "measured",
+    "reason": null,
+    "measuredOn": "2026-09-26"
+   },
+   "evidence": "检索触发率 80.68%（71/88）；平台托管内容被引中 mp.weixin.qq.com 68 条（24 条回答提到我方、11 条讲错我方）"
+  },
+  {
+   "engine": "kimi",
+   "promise": "只承诺讲对，不承诺被提及。检索触发率 5.68%（5/88，Wilson 95% 2.45–12.62），下限远低于 50% 门槛；它主要靠自身知识回答，本周期能对它做的是把讲错的说法按住、把说明书口径持续供给，不是买位次。",
+   "layers": [
+    "anchor"
+   ],
+   "leverage": "守住已有提及",
+   "retrieval": {
+    "value": 5.68,
+    "numerator": 5,
+    "denominator": 88,
+    "ciLow": 2.45,
+    "ciHigh": 12.62,
+    "status": "ok",
+    "dataType": "measured",
+    "reason": null,
+    "measuredOn": "2026-09-27"
+   },
+   "evidence": "检索触发率 5.68%（5/88）；88 条回答里 81 条没有引用列表；事实准确率 48.65%（18/37），是四家可测引擎里最低"
+  }
+ ],
+ "battlefield": {
+  "groups": [
+   "ggr_ef0ef6b5ad8c4e4954712eb2d0c46c90",
+   "ggr_2d708a099f3e11653fcbe5a27a5e38b0",
+   "ggr_1af29474a7a5c26293795cc59a2da5f4",
+   "ggr_7a233a5e1e14648ef46a67dd1deb7b9c"
+  ],
+  "reason": "主战场选「说明书级事实讲准 + 说明书安全题组讲全」。① 证据最硬且唯一：规格与厂家、适应症 BMI 门槛、价格与医保状态、禁忌与必须就医的情形，都出自本品说明书、官方目录与监管页，竞品无法代答；② 缺口最大且后果最高：品牌身份组事实准确率 36.36%（4/11），药物选择组品牌提及率 6.25%（1/16），说明书安全题组就医红旗覆盖率 66.67%（58/87），三者都直接关系到用错药与漏就医；③ 可动：千问、DeepSeek、元宝三家检索触发率的 Wilson 下限都在 71% 以上，检索层召回能被内容位改变；Kimi 下限 2.45%，对它只承诺讲对；④ 权重高：这四组合计权重 0.22，且都在决策前一站。",
+  "secondary": [
+   "ggr_1c7cc02f91b0d3316a597c7e6edab5dc",
+   "ggr_b0dc5e255d96a9a763c3d687ada2fcd6",
+   "ggr_039773e839de8ec5afe2dc1047e60112"
+  ]
+ },
+ "secondary": [
+  "ggr_1c7cc02f91b0d3316a597c7e6edab5dc",
+  "ggr_b0dc5e255d96a9a763c3d687ada2fcd6",
+  "ggr_039773e839de8ec5afe2dc1047e60112"
+ ],
+ "layout": {
+  "layers": {
+   "anchor": [
+    "www.nmpa.gov.cn",
+    "www.nhsa.gov.cn",
+    "pubmed.ncbi.nlm.nih.gov",
+    "rs.yiigle.com",
+    "www.kepuchina.cn"
+   ],
+   "coverage_conditions_true": [
+    "m.dayi.org.cn",
+    "www.mfk.com",
+    "www.fh21.com.cn",
+    "www.familydoctor.com.cn",
+    "www.39.net",
+    "www.yywsb.com",
+    "www.jksb.com.cn",
+    "www.lifetimes.cn",
+    "www.cnpharm.com",
+    "drugs.dxy.cn"
+   ],
+   "coverage_pending_check": [
+    "www.phirda.com",
+    "guide.medlive.cn",
+    "www.youlai.cn",
+    "cloud.kepuchina.cn",
+    "www.haodf.com",
+    "www.xywy.com",
+    "www.120ask.com",
+    "www.jianke.com",
+    "www.medsci.cn",
+    "www.yxj.org.cn",
+    "www.bohe.cn",
+    "www.toutiao.com",
+    "mp.weixin.qq.com",
+    "baike.baidu.com",
+    "www.315jiage.cn"
+   ],
+   "owned": [
+    "innoventbio.com"
+   ],
+   "correction_only": [
+    "baike.baidu.com",
+    "www.315jiage.cn"
+   ],
+   "blacklist": [
+    "www.39yst.com",
+    "www.rgmgy.com"
+   ]
+  },
+  "byEngine": [
+   {
+    "engine": "doubao",
+    "account": "抖音号 + 今日头条号",
+    "state": "未测，不安排投放；先把账号开出来备补测",
+    "evidence": "基线与补充轮次均无有效回答（engine_absent）"
+   },
+   {
+    "engine": "yuanbao",
+    "account": "自有微信公众号（待认证）",
+    "state": "覆盖层与自有层都要；公众层只做疾病教育与说明书安全口径",
+    "evidence": "唯一把公众号当第一信源的引擎，且平台托管内容里已发现 11 条讲错我方"
+   },
+   {
+    "engine": "deepseek",
+    "account": "无需自有号",
+    "state": "锚点层 + 专业媒体与专业平台覆盖层 + 自有官网",
+    "evidence": "被引构成以中国医药信息查询平台、PubMed、美国 FDA、中华医学期刊网为主，自有官网 26 条"
+   },
+   {
+    "engine": "kimi",
+    "account": "不需要",
+    "state": "只投锚点层与被引用型权威内容；不买覆盖层位次",
+    "evidence": "检索触发率 5.68%（5/88），88 条里 81 条没有引用列表"
+   },
+   {
+    "engine": "qianwen",
+    "account": "不需要",
+    "state": "只投锚点层；来源列表不带域名，做不到按域名布局",
+    "evidence": "检索触发率 98.86%（87/88），但引用命中率 not_measurable（citations_without_links）"
+   }
+  ],
+  "constraints": [
+   "覆盖层进层要求备案主体一致、被新闻源收录、主营医疗健康三项同时为真；本次备案主体一致与主营医疗健康两项取得可核据的来源，「被新闻源收录」本次没有核验通道，逐站记 null，不写成 true，故本次没有站点以三项全真进层——未核过的站平台不会下单。第六节三档的位次数为三条件回补后的规划值。",
+   "公众号自 2026-04 起禁止脚本或接口代发，自有号稿件走人工发布包。",
+   "同一项目同一已核验域名在任意 30 天窗口内已下单且未撤销的订单数不超过 2 篇。",
+   "处方药：带品牌的内容只进专业渠道；面向公众的层只做疾病教育与说明书安全口径。",
+   "对照语义群（C-01 至 C-05）与 P4 风险监测类不进任何布局，也不投放。",
+   "百科类（baike.baidu.com）与药价类（www.315jiage.cn）只走 correction_only，不进投放位。"
+  ],
+  "clientActions": [
+   "开通并认证自有微信公众号（元宝第一信源）",
+   "登记自有抖音号与今日头条号（豆包自家生态，补测后使用）",
+   "确认可投放的专业医学媒体清单与资质",
+   "同意在媒介集市通道接通后，用它的新闻源收录口径一次性回补覆盖层三条件核验"
+  ]
+ },
+ "tiers": [
+  {
+   "tier": 1,
+   "name": "档一：讲准为先",
+   "summary": "先把说错的按住、把安全口径补齐，再谈被提到；只买检索层能召回的量。",
+   "targets": [
+    {
+     "metricId": "M-06",
+     "pool": "P1",
+     "baseline": 61.82,
+     "target": 98,
+     "dataType": "forecast",
+     "note": "硬线：事实准确率不低于 98%；基线 61.82%（34/55）"
+    },
+    {
+     "metricId": "M-06",
+     "pool": "P2",
+     "baseline": 74.47,
+     "target": 98,
+     "dataType": "forecast",
+     "note": "硬线；基线 74.47%（35/47）"
+    },
+    {
+     "metricId": "M-19",
+     "pool": "all",
+     "baseline": 42.48,
+     "target": 46,
+     "dataType": "forecast",
+     "note": "综合可见度指数，衍生指标，无分子分母"
+    },
+    {
+     "metricId": "M-01S",
+     "pool": "all",
+     "baseline": 7.32,
+     "target": 9,
+     "dataType": "forecast",
+     "note": "品类问题可见率（团体标准口径）；基线 7.32%（12/164）"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P2",
+     "baseline": 12.5,
+     "target": 15,
+     "dataType": "forecast",
+     "note": "品牌提及率（品类池）；基线 12.50%（12/96）"
+    },
+    {
+     "metricId": "M-11",
+     "pool": "P4",
+     "baseline": 45.95,
+     "target": 52,
+     "dataType": "forecast",
+     "note": "就医红旗覆盖率；基线 45.95%（170/370）"
+    },
+    {
+     "metricId": "M-15",
+     "pool": "P4",
+     "baseline": 0,
+     "target": 0,
+     "dataType": "forecast",
+     "note": "风险问句被推荐率，维持 0，不得超过"
+    }
+   ],
+   "placements": 6,
+   "contentUnits": 8,
+   "budgetCny": 20000,
+   "buys": "覆盖层 6 个位次（按历史成交价 55–130 元/篇的中位档与个别医学媒体首发混配）+ 8 篇稿件（6 篇事实与安全稿、2 篇纠错覆盖稿），并按月补量",
+   "notPromised": [
+    "不承诺 P3 泛症状池被提及",
+    "不承诺 Kimi 提及上升",
+    "不承诺豆包任何变化（未测）"
+   ]
+  },
+  {
+   "tier": 2,
+   "name": "档二：讲准 + 进入被提及（默认档）",
+   "summary": "主战场四组一起推：品牌池事实讲准，品类池进入被提及，安全题组覆盖率过半。",
+   "targets": [
+    {
+     "metricId": "M-06",
+     "pool": "P1",
+     "baseline": 61.82,
+     "target": 98,
+     "dataType": "forecast",
+     "note": "硬线，不随档位下调"
+    },
+    {
+     "metricId": "M-06",
+     "pool": "P2",
+     "baseline": 74.47,
+     "target": 98,
+     "dataType": "forecast",
+     "note": "硬线，不随档位下调"
+    },
+    {
+     "metricId": "M-19",
+     "pool": "all",
+     "baseline": 42.48,
+     "target": 50,
+     "dataType": "forecast",
+     "note": "综合可见度指数，衍生指标，无分子分母"
+    },
+    {
+     "metricId": "M-01S",
+     "pool": "all",
+     "baseline": 7.32,
+     "target": 12,
+     "dataType": "forecast",
+     "note": "品类问题可见率（团体标准口径）；基线 7.32%（12/164）"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P2",
+     "baseline": 12.5,
+     "target": 20,
+     "dataType": "forecast",
+     "note": "品类池主升段；基线 12.50%（12/96）"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P1",
+     "baseline": 36.25,
+     "target": 38.5,
+     "dataType": "forecast",
+     "note": "品牌池只小幅抬升，守住已有可见度"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P3",
+     "baseline": 0,
+     "target": 3,
+     "dataType": "forecast",
+     "note": "只承诺从 0 进入被提及集合，不承诺位次，也不承诺反超"
+    },
+    {
+     "metricId": "M-11",
+     "pool": "P4",
+     "baseline": 45.95,
+     "target": 58,
+     "dataType": "forecast",
+     "note": "安全题组逐条补齐的直接结果"
+    },
+    {
+     "metricId": "M-15",
+     "pool": "P4",
+     "baseline": 0,
+     "target": 0,
+     "dataType": "forecast",
+     "note": "维持 0，不得超过"
+    }
+   ],
+   "placements": 12,
+   "contentUnits": 14,
+   "budgetCny": 40000,
+   "buys": "覆盖层 12 个位次 + 14 篇稿件（9 篇主战场稿、3 篇安全稿、2 篇纠错覆盖稿），并按月补量（被引页估计存活期约 39–68 天）",
+   "notPromised": [
+    "不承诺 P3 位次",
+    "不承诺对司美格鲁肽或替尔泊肽的份额反超",
+    "不承诺豆包变化（未测）"
+   ]
+  },
+  {
+   "tier": 3,
+   "name": "档三：全池补齐 + 硬线",
+   "summary": "三池一起动、安全口径全覆盖、准确率守硬线；补锚点层与自有号。",
+   "targets": [
+    {
+     "metricId": "M-06",
+     "pool": "P1",
+     "baseline": 61.82,
+     "target": 98,
+     "dataType": "forecast",
+     "note": "硬线"
+    },
+    {
+     "metricId": "M-06",
+     "pool": "P2",
+     "baseline": 74.47,
+     "target": 98,
+     "dataType": "forecast",
+     "note": "硬线"
+    },
+    {
+     "metricId": "M-19",
+     "pool": "all",
+     "baseline": 42.48,
+     "target": 55,
+     "dataType": "forecast",
+     "note": "综合可见度指数，衍生指标，无分子分母"
+    },
+    {
+     "metricId": "M-01S",
+     "pool": "all",
+     "baseline": 7.32,
+     "target": 15,
+     "dataType": "forecast",
+     "note": "品类问题可见率（团体标准口径）；基线 7.32%（12/164）"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P2",
+     "baseline": 12.5,
+     "target": 25,
+     "dataType": "forecast",
+     "note": "品类池"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P1",
+     "baseline": 36.25,
+     "target": 42,
+     "dataType": "forecast",
+     "note": "品牌池"
+    },
+    {
+     "metricId": "M-01",
+     "pool": "P3",
+     "baseline": 0,
+     "target": 6,
+     "dataType": "forecast",
+     "note": "只承诺进入被提及集合"
+    },
+    {
+     "metricId": "M-11",
+     "pool": "P4",
+     "baseline": 45.95,
+     "target": 65,
+     "dataType": "forecast",
+     "note": "安全口径全覆盖"
+    },
+    {
+     "metricId": "M-15",
+     "pool": "P4",
+     "baseline": 0,
+     "target": 0,
+     "dataType": "forecast",
+     "note": "维持 0，不得超过"
+    }
+   ],
+   "placements": 25,
+   "contentUnits": 26,
+   "budgetCny": 90000,
+   "buys": "25 个覆盖层位次 + 26 篇稿件（含 4 篇锚点层权威稿、4 篇纠错覆盖稿、公开层疾病教育）；三档位次数均为三条件回补后的规划值",
+   "notPromised": [
+    "不承诺 P3 位次或反超",
+    "不承诺豆包变化（未测）",
+    "不承诺 96% 以上的任何组级参考值"
+   ]
+  }
+ ],
+ "chosenTier": 2,
+ "assumptions": [
+  {
+   "field": "tier",
+   "value": 2,
+   "basis": "default",
+   "reason": "用户未指定档位，项目登记 chosenTier=2；三档都给出，默认按档二执行",
+   "howToChange": "在投放页把预算改成另一档，或一句话指定档位"
+  },
+  {
+   "field": "tier_budget_cny",
+   "value": [
+    20000,
+    40000,
+    90000
+   ],
+   "basis": "inferred",
+   "reason": "预算由投放量推出来：按覆盖层历史成交 55–130 元/篇与健康媒体首发 946–1,870 元/篇混配，档一 6 位、档二 12 位、档三 25 位；钱只由用户定，这里是建议值",
+   "howToChange": "预算页改一次总额；每个档的稿件数与投放位随预算等比调整"
+  },
+  {
+   "field": "engine_scope",
+   "value": [
+    "qianwen",
+    "deepseek",
+    "yuanbao",
+    "kimi"
+   ],
+   "basis": "upstream",
+   "reason": "度量集登记 5 个引擎；豆包没有有效回答，本周期无可测数，只写「未测」，不补测、不推测",
+   "howToChange": "补测豆包后把它并回目标与布局"
+  },
+  {
+   "field": "measured_on",
+   "value": {
+    "doubao": null,
+    "qianwen": "2026-09-28",
+    "deepseek": "2026-09-26",
+    "yuanbao": "2026-09-26",
+    "kimi": "2026-09-27"
+   },
+   "basis": "user",
+   "reason": "用户给定各引擎最近一次有效回答的日期；引用某引擎的数时写明测于哪一天，不当作本周的数",
+   "howToChange": "平台按监测排程复测后自动更新"
+  },
+  {
+   "field": "baseline_round",
+   "value": "gr_fd37ae22560ccf0bb6899426ec1c0828",
+   "basis": "upstream",
+   "reason": "三档目标的基线取 2026-09-25 基线轮次；M-19 取项目页当前值 42.48（同一批快照重算后为 42.48，基线轮次内曾算出 43.89，同日两值差 1.41，以项目页当前值为准）",
+   "howToChange": "基线冻结文件更新后以冻结值为准"
+  },
+  {
+   "field": "accuracy_hard_line",
+   "value": 98,
+   "basis": "upstream",
+   "reason": "事实准确率 98% 是三档一致的硬线，不随档位下调；讲错我方归零同为硬线",
+   "howToChange": "不可改：低于 98% 平台拒绝该目标"
+  },
+  {
+   "field": "source_conditions",
+   "value": {
+    "icp_owner_match": "已核 15 个站点（含 2 个冒名站判为不一致）",
+    "news_indexed": "本次没有核验通道，逐站记 null，不写成 true",
+    "medical_vertical": "已核 10 个站点"
+   },
+   "basis": "default",
+   "reason": "备案主体一致与主营医疗健康两项用站点自身公开页（页脚备案信息、站点自述与资质）核并记日期；被新闻源收录一项需要百度资讯／新闻检索的收录查询，本次没有这一通道，一律记 null",
+   "howToChange": "媒介集市通道接通后用它的新闻源收录口径一次性回补，或由用户提供核验结果"
+  },
+  {
+   "field": "coverage_layer_entry",
+   "value": "本次 0 个站点三项全真",
+   "basis": "inferred",
+   "reason": "三项同时为真才进覆盖层；被新闻源收录一项无法核，故没有站点满足全真条件，平台也不会对未核过的站下单。覆盖层候选与逐项证据已写进交付件，待回补",
+   "howToChange": "回补新闻源收录结果后按站点改 icpMatches/newsIndexed/medicalVertical 并重跑本步"
+  },
+  {
+   "field": "misstatement_hard_line",
+   "value": 0,
+   "basis": "upstream",
+   "reason": "可追到引用源的检索层讲错我方本周期为 0；参数化讲错（无引用源、未检索）单列为持续供给，不进硬线",
+   "howToChange": "出现可追到引用源的讲错我方时，检索层一栏不再为 0，硬线立即不达标"
+  },
+  {
+   "field": "kimi_promise",
+   "value": "accuracy_only",
+   "basis": "upstream",
+   "reason": "Kimi 检索触发率 5.68%（5/88），Wilson 下限 2.45%，远低于 50% 门槛",
+   "howToChange": "复测后检索下限升过 50% 时改承诺级别"
+  },
+  {
+   "field": "noise_threshold",
+   "value": 5.0,
+   "basis": "default",
+   "reason": "本次未读取噪声阈值；三档目标的差值都大于 5 个百分点，按默认阈值判定不落在持平区间",
+   "howToChange": "噪声实测值取到后用实测值替换并重算持平判定"
+  },
+  {
+   "field": "control_groups_excluded",
+   "value": [
+    "C-01",
+    "C-02",
+    "C-03",
+    "C-04",
+    "C-05"
+   ],
+   "basis": "upstream",
+   "reason": "对照组只监测不投放，否则净效应没有分母",
+   "howToChange": "不可改：改了就没有验收口径"
+  },
+  {
+   "field": "no_go",
+   "value": [
+    "P4 风险问句里争取被推荐",
+    "儿童青少年减重用药",
+    "2 型糖尿病血糖控制",
+    "拿 GLORY-2 的 9mg 数据当本规格卖点",
+    "对照语义群 C-01 至 C-05"
+   ],
+   "basis": "upstream",
+   "reason": "P4 被推荐是负资产（本周期 0/104）；说明书未在 18 岁以下人群确立减重适应症；现行说明书未把 2 型糖尿病列为适应症；9mg 不是现行推荐维持剂量（4mg 或 6mg）；对照组一被投放净效应就没有分母",
+   "howToChange": "适应症或说明书更新后由证据与合规复核重开"
+  }
+ ]
+}
