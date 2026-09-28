@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import io
+import concurrent.futures
 import json
 import math
 import os
@@ -1875,10 +1876,18 @@ def adr_signal(arguments):
     drug_search = _event_search({**arguments, "adverseEvent": None}, include_event=False)
     event_search = _openfda_search("patient.reaction.reactionmeddrapt", event)
     joint_search = _event_search(arguments)
-    a, joint_url = _openfda_total(base, joint_search)
-    drug_total, drug_url = _openfda_total(base, drug_search)
-    event_total, event_url = _openfda_total(base, event_search)
-    total, total_url = _openfda_total(base)
+    # The four counts are independent reads of one API; asked one after another
+    # from Beijing they took 10-15 s, at the edge of the tool's deadline (the
+    # 2026-09-28 production tool probe timed out on its first call).
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        joint_f = pool.submit(_openfda_total, base, joint_search)
+        drug_f = pool.submit(_openfda_total, base, drug_search)
+        event_f = pool.submit(_openfda_total, base, event_search)
+        total_f = pool.submit(_openfda_total, base)
+        a, joint_url = joint_f.result()
+        drug_total, drug_url = drug_f.result()
+        event_total, event_url = event_f.result()
+        total, total_url = total_f.result()
     b = max(drug_total - a, 0)
     c = max(event_total - a, 0)
     d = max(total - a - b - c, 0)

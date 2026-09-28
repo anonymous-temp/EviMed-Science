@@ -564,6 +564,15 @@ class AdapterTests(unittest.TestCase):
                 50,
             )
 
+    def test_adr_signal_analysis_gets_the_time_it_is_measured_to_take(self):
+        # 2026-09-28: 10-15 s measured against the 15 s default; the production
+        # tool probe timed out on its first call.
+        with mock.patch.dict(os.environ, {"EVIMED_ADAPTER_TIMEOUT_SECONDS": "15"}):
+            self.assertEqual(self.server._adapter_timeout_seconds({}, "adr_signal_analysis"), 45)
+            self.assertEqual(self.server._adapter_timeout_seconds({}, "adr_case_query"), 15)
+        with mock.patch.dict(os.environ, {"EVIMED_ADAPTER_TIMEOUT_SECONDS": "15", "EVIMED_ADAPTER_TIMEOUT_SECONDS_ADR_SIGNAL_ANALYSIS": "30"}):
+            self.assertEqual(self.server._adapter_timeout_seconds({}, "adr_signal_analysis"), 30)
+
     def test_managed_status_rejects_waits_that_compete_with_mcp_deadline(self):
         result = self.server.call_tool(
             "drug_safety_analysis",

@@ -1440,14 +1440,28 @@ def _public_adapter_call(name, arguments):
     )
 
 
-def _adapter_timeout_seconds(arguments):
+# Adapters that compute synchronously inside the call, and how long they are
+# measured to take. adr_signal_analysis pulls openFDA counts and computes the
+# disproportionality statistics in the request: 10-15 s against the 15 s
+# default, so the 2026-09-28 production tool probe timed out on its first call.
+# A deployment can still set EVIMED_ADAPTER_TIMEOUT_SECONDS_<TOOL>.
+ADAPTER_TIMEOUT_DEFAULTS = {"adr_signal_analysis": 45}
+
+
+def _adapter_timeout_seconds(arguments, name=None):
+    tool_default = ADAPTER_TIMEOUT_DEFAULTS.get(name or "", 15)
+    raw = os.environ.get("EVIMED_ADAPTER_TIMEOUT_SECONDS_" + (name or "").upper()) if name else None
     try:
-        configured = min(
-            max(float(os.environ.get("EVIMED_ADAPTER_TIMEOUT_SECONDS", "15")), 1),
-            60,
-        )
+        if raw is not None:
+            configured = min(max(float(raw), 1), 60)
+        else:
+            configured = min(
+                max(float(os.environ.get("EVIMED_ADAPTER_TIMEOUT_SECONDS", "15")), 1),
+                60,
+            )
+            configured = max(configured, tool_default)
     except ValueError:
-        configured = 15
+        configured = tool_default
     if arguments.get("action") != "status":
         return configured
     wait_seconds = arguments.get("waitSeconds", 0)
@@ -1501,7 +1515,7 @@ def _adapter_call(name, arguments):
         "Authorization": "Bearer %s" % workload_token,
     }
     request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    timeout = _adapter_timeout_seconds(arguments)
+    timeout = _adapter_timeout_seconds(arguments, name)
     try:
         with NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
             if response.headers.get_content_type() != "application/json":
