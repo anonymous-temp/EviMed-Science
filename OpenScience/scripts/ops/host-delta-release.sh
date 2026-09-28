@@ -72,7 +72,7 @@ case "$OLD_RUNTIME_IMAGE" in
 esac
 # The pins of the source being released, off its own runtime Dockerfile (whose
 # ARGs a test holds equal to deps-version.json). A release that moves the kernel
-# (0.1.5-rc.2 -> 0.1.7-rc.2, 2026-09-28) must not inherit the live image's
+# (as on 2026-09-28) must not inherit the live image's
 # prefix or the live .env's OPEN_SCIENCE_DSH_VERSION: the control plane prefers
 # that variable over the release manifest, and readiness refuses the pair when
 # they disagree. A delta keeps the base's kernel by definition, so a moved pin
