@@ -105,7 +105,16 @@ async def fetch_rows(pool, sid):
         return await (await conn.execute("SELECT * FROM evimed_knowledge.fetches WHERE source_id = %s ORDER BY id", (sid,))).fetchall()
 
 
+class Pauses(list):
+    """Records the in-poll waits instead of sleeping them."""
+
+    async def __call__(self, seconds):
+        self.append(seconds)
+
+
 def crawler_for(settings, pool, clock, adapter, fetcher, **kwargs):
+    kwargs.setdefault("pause", Pauses())
+    kwargs.setdefault("jitter", lambda: 0.5)
     return Crawler(settings, pool, fetcher, adapters={adapter.access: adapter}, clock=clock,
                    enricher=kwargs.pop("enricher", None) or _no_enricher, **kwargs)
 
@@ -194,6 +203,95 @@ async def test_failures_back_off_and_become_unreadable_after_three_days(settings
     assert row["next_poll_at"] == clock.now + timedelta(seconds=policy.failure_delay_s(3600, 2))
     [first, second] = await fetch_rows(pool, src.id)
     assert first["outcome"] == second["outcome"] == "http-error" and first["error_detail"] == "http_503"
+
+
+async def test_a_transient_failure_is_resent_and_the_poll_says_so(settings, pool):
+    clock = Clock()
+    src = source()
+    await seed(pool, src)
+    url = src.config["url"]
+    fetcher = ScriptedFetcher(clock)
+    fetcher.responses[url] = [FetchError("http-error", "http_500", status=500), ("ok", b"1", {}, 200)]
+    pauses = Pauses()
+    crawler = crawler_for(settings, pool, clock, ScriptedAdapter(pages={url: ParseOutput(entries=entries("a"))}),
+                          fetcher, pause=pauses)
+    [report] = await poll_now(crawler)
+    assert (report.outcome, report.requests, report.new, report.detail) == ("ok", 2, 1, "retried:http_500")
+    assert pauses == [3.0]                                       # base 3 s × (0.5 + jitter 0.5)
+    [row] = await fetch_rows(pool, src.id)
+    assert (row["outcome"], row["requests"], row["error_detail"]) == ("ok", 2, "retried:http_500")
+    state = await state_of(pool, src.id)
+    assert state["consecutive_failures"] == 0 and state["health"] == "healthy"
+
+
+async def test_a_failure_that_outlasts_two_resends_fails_the_poll(settings, pool):
+    clock = Clock()
+    src = source()
+    await seed(pool, src)
+    fetcher = ScriptedFetcher(clock)
+    fetcher.responses[src.config["url"]] = FetchError("timeout", "timeout")
+    pauses = Pauses()
+    crawler = crawler_for(settings, pool, clock, ScriptedAdapter(), fetcher, pause=pauses, jitter=lambda: 0.0)
+    [report] = await poll_now(crawler)
+    assert (report.outcome, report.detail, report.requests) == ("timeout", "timeout", 3)
+    assert pauses == [1.5, 3.0] and len(fetcher.calls) == 3
+    [row] = await fetch_rows(pool, src.id)
+    assert (row["outcome"], row["requests"]) == ("timeout", 3)
+    assert (await state_of(pool, src.id))["consecutive_failures"] == 1
+
+
+async def test_refusals_rate_limits_and_challenges_are_not_resent(settings, pool):
+    clock = Clock()
+    errors = {"refused": FetchError("blocked", "http_403", status=403),
+              "limited": FetchError("http-error", "rate_limited_429", status=429, retry_after_s=600),
+              "walled": FetchError("challenge", "cloudflare", status=403),
+              "missing": FetchError("http-error", "http_404", status=404)}
+    sources = [source(sid=name) for name in errors]
+    await seed(pool, *sources)
+    fetcher = ScriptedFetcher(clock)
+    for src in sources:
+        fetcher.responses[src.config["url"]] = errors[src.id]
+    pauses = Pauses()
+    crawler = crawler_for(settings, pool, clock, ScriptedAdapter(), fetcher, pause=pauses)
+    reports = await crawler.run_due()
+    assert sorted(r.requests for r in reports) == [1, 1, 1, 1] and pauses == []
+
+
+async def test_pubmeds_search_error_is_resent_and_a_resend_does_not_use_up_max_pages(settings, pool):
+    clock = Clock()
+    src = source(sid="pubmed-q", access="eutils-query", url="https://eutils.example.org/esearch")
+    src.config["max_pages"] = 2
+    await seed(pool, src)
+    page2 = "https://eutils.example.org/efetch"
+    adapter = ScriptedAdapter(access="eutils-query", pages={
+        src.config["url"]: [FetchError("http-error", "eutils_search_error", status=200),
+                            ParseOutput(entries=[], next=RequestSpec(url=page2, api=True))],
+        page2: ParseOutput(entries=entries("p1", "p2")),
+    })
+    fetcher = ScriptedFetcher(clock)
+    fetcher.ok(src.config["url"], body=b"{}")
+    fetcher.responses[page2] = [FetchError("http-error", "http_502", status=502), ("ok", b"<xml/>", {}, 200)]
+    crawler = crawler_for(settings, pool, clock, adapter, fetcher)
+    [report] = await poll_now(crawler)
+    assert (report.outcome, report.requests, report.new) == ("ok", 4, 2)
+    assert report.detail == "retried:eutils_search_error,http_502" and "max_pages_reached" not in report.notes
+
+
+async def test_a_first_request_that_fails_after_its_retry_fails_the_poll(settings, pool):
+    """Before 2026-09-28 a re-sent first request counted as a later page, so its failure was logged
+    as a partial success of the poll."""
+    clock = Clock()
+    src = source(access="europepmc", url="https://www.ebi.ac.uk/europepmc/y")
+    await seed(pool, src)
+    adapter = ScriptedAdapter(access="europepmc", pages={src.config["url"]: [
+        FetchError("http-error", "europepmc_missing_hitcount", retry_after_s=0.01),
+        FetchError("parse-error", "europepmc_unexpected_shape")]})
+    fetcher = ScriptedFetcher(clock)
+    fetcher.ok(src.config["url"], body=b"{}")
+    crawler = crawler_for(settings, pool, clock, adapter, fetcher)
+    [report] = await poll_now(crawler)
+    assert (report.outcome, report.detail, report.requests) == ("parse-error", "europepmc_unexpected_shape", 2)
+    assert (await state_of(pool, src.id))["consecutive_failures"] == 1
 
 
 async def test_a_recovered_source_is_healthy_at_once_and_a_flapping_one_is_not(settings, pool):

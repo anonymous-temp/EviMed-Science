@@ -11,6 +11,11 @@ off, what state a source's health is in. Pure so each rule is a unit test, not a
 - **Failure backoff.** 2^n from a base of min(floor, 30 min), capped at 6 hours; three days in a
   failure streak is ``unreadable``. A refusal by the plugin's own budget (daily cap, paused host)
   is not the source's failure and moves nothing here.
+- **Transient failures are re-sent inside the poll.** A timeout, a 5xx without ``Retry-After``, a
+  dropped connection or PubMed's ``esearchresult.ERROR`` is re-sent up to twice per poll, 1.5–4.5 s
+  and then 3–9 s later (jittered), before the poll counts as failed. Each re-send is a request in the
+  fetch log, and a poll that got through on one names what it met in its ``error_detail``
+  (``retried:http_500``). A long outage still fails the poll: this cures blips, not outages.
 - **Health** (four states plus new/disabled): ``unreadable`` after three days of failures;
   ``drifted`` when a list that used to have items parses to nothing twice in a row or its dates
   vanish twice in a row (a redesign broke the selectors — the main maintenance cost of list pages);
@@ -36,6 +41,16 @@ from .model import SUCCESS_OUTCOMES
 UNREADABLE_AFTER = timedelta(days=3)
 DEGRADED_BELOW = 0.8
 FLAPPING_EPISODES = 2
+TRANSIENT_RETRIES = 2
+TRANSIENT_RETRY_BASE_S = 3.0
+TRANSIENT_RETRY_CAP_S = 20.0
+# Failures of an ``http-error`` outcome a quick re-send can cure: the connection or the upstream
+# hiccuped, nothing about the request is wrong (timeouts are their own outcome, always transient).
+# PubMed answers a backend error as HTTP 200 with ``esearchresult.ERROR`` (``eutils_search_error``,
+# 19 of the 36 PubMed failures of 2026-09-27).
+TRANSIENT_DETAILS = frozenset({"connect_failed", "relay_upstream_unreachable", "transport_readerror",
+                               "transport_writeerror", "transport_remoteprotocolerror", "transport_networkerror",
+                               "navigation_failed", "navigation_interrupted", "eutils_search_error"})
 BACKOFF_CAP_S = 6 * 3600
 BACKOFF_BASE_MAX_S = 1800
 EMPTY_POLLS_BEFORE_SLOWDOWN = 3
@@ -82,6 +97,27 @@ def is_drifted(access: str, last_nonempty_at: datetime | None, zero_streak: int,
     if access not in DRIFT_ACCESSES:
         return False
     return (last_nonempty_at is not None and zero_streak >= DRIFT_STREAK) or (ever_dated and undated_streak >= DRIFT_STREAK)
+
+
+def is_transient(outcome: str, detail: str, status: int | None, retry_after_s: float | None) -> bool:
+    """A failure worth re-sending within the poll (see module docstring). An upstream that named a
+    time to come back (429, 503 with ``Retry-After``) has paused the host instead; a refusal, a
+    challenge, a 4xx or a parse error would answer the same again."""
+    if retry_after_s is not None:
+        return False
+    if outcome == "timeout":
+        return True
+    if outcome != "http-error":
+        return False
+    if status is not None and 500 <= status <= 599 and status not in (501, 505):
+        return True
+    return detail in TRANSIENT_DETAILS
+
+
+def transient_retry_delay_s(attempt: int, jitter: float) -> float:
+    """Seconds before re-send ``attempt`` (1-based); ``jitter`` in [0, 1) spreads it over ±50 %."""
+    base = min(TRANSIENT_RETRY_BASE_S * (2 ** max(0, attempt - 1)), TRANSIENT_RETRY_CAP_S)
+    return base * (0.5 + min(max(jitter, 0.0), 1.0))
 
 
 def reliability(outcomes: Iterable[str]) -> tuple[int, int]:

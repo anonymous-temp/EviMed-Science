@@ -21,8 +21,9 @@ One poll (at least once, harmless to repeat — step 6 is idempotent):
 
 Failures raised by the fetcher and by ``plan``/``parse`` alike are ``FetchError``s with an outcome;
 a parse error carrying a short ``retry_after_s`` (Europe PMC's 200-without-hitCount) is retried once
-within the poll. The plugin's own budget refusals (``host-budget``) reschedule without counting as
-the source's failure.
+within the poll, and a transient failure (``policy.is_transient``) is re-sent up to twice with a
+jittered wait; re-sends are requests in the fetch log but do not use up ``max_pages``. The plugin's
+own budget refusals (``host-budget``) reschedule without counting as the source's failure.
 
 The same process also runs the text worker (on-demand enrichment for ``/text``), the hourly
 retention purge (fetches 14 d, entries 30 d after delivery or 90 d when their text was asked for,
@@ -36,11 +37,12 @@ import asyncio
 import hashlib
 import logging
 import os
+import random
 import socket
 from collections import Counter, deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 
 from psycopg.types.json import Jsonb
@@ -89,8 +91,12 @@ class PollReport:
 
 class Crawler:
     def __init__(self, settings: Settings, pool, fetcher: ProtectedFetcher, *, adapters: dict | None = None,
-                 enricher: Callable | None = None, clock: Callable[[], datetime] = _utcnow) -> None:
+                 enricher: Callable | None = None, clock: Callable[[], datetime] = _utcnow,
+                 pause: Callable[[float], Awaitable[None]] = asyncio.sleep,
+                 jitter: Callable[[], float] = random.random) -> None:
         self._settings = settings
+        self._pause = pause          # the wait before an in-poll re-send (tests pass a recorder)
+        self._jitter = jitter
         self._pool = pool
         self._fetcher = fetcher
         if adapters is None:
@@ -293,10 +299,29 @@ class Crawler:
             log.exception("plan() of %s failed", source.id)
             failure, queue = FetchError("parse-error", f"plan_failed:{type(error).__name__}"), deque()
 
-        requests = 0
-        while queue and requests < max_requests and failure is None:
+        requests = 0            # sent, re-sends included (the fetch log's count)
+        resent: list[str] = []  # what each re-send answered: they do not use up the source's max_pages
+        transient_retries = 0
+        first_done = False      # the plan's first request has been read: a later failure is partial
+
+        async def resend(error: FetchError, *, after_s: float | None = None) -> bool:
+            """Put the request back for one more try when the rules allow it (policy docstring)."""
+            nonlocal transient_retries
+            if after_s is None:
+                if transient_retries >= policy.TRANSIENT_RETRIES or not policy.is_transient(
+                        error.outcome, error.detail, error.status, error.retry_after_s):
+                    return False
+                transient_retries += 1
+                after_s = policy.transient_retry_delay_s(transient_retries, self._jitter())
+            resent.append(error.detail)
+            notes[f"retried:{error.detail}"] += 1
+            await self._pause(max(0.0, after_s))
+            queue.appendleft(spec)
+            return True
+
+        while queue and requests - len(resent) < max_requests and failure is None:
             spec = queue.popleft()
-            is_first = requests == 0
+            is_first = not first_done
             if is_first:
                 host = (urlsplit(spec.url).hostname or "").lower() or None
                 if spec.conditional and row["last_url"] == spec.url and not full:
@@ -315,6 +340,8 @@ class Crawler:
                 result = await self._fetcher.fetch(spec, source_id=source.id, egress=source.egress,
                                                    allowed_hosts=source.config.get("allowed_hosts"), **extra)
             except FetchError as error:
+                if await resend(error):
+                    continue
                 if is_first:
                     failure = error
                 else:
@@ -340,11 +367,11 @@ class Crawler:
                 output = adapter.parse(result, source, started)
             except FetchError as error:
                 if (error.retry_after_s is not None and error.retry_after_s <= MAX_IN_POLL_RETRY_S
-                        and spec.url not in retried and requests < max_requests):
+                        and spec.url not in retried):
                     retried.add(spec.url)
-                    notes[f"retried:{error.detail}"] += 1
-                    await asyncio.sleep(max(0.0, error.retry_after_s))
-                    queue.appendleft(spec)
+                    await resend(error, after_s=error.retry_after_s)
+                    continue
+                if await resend(error):
                     continue
                 if is_first:
                     failure = error
@@ -368,6 +395,7 @@ class Crawler:
                 else:
                     later_error = f"request_{requests}:challenge:empty_shell"
                 break
+            first_done = True
             prepared = []
             for entry in output.entries:
                 try:
@@ -390,7 +418,7 @@ class Crawler:
                 cursor = output.cursor
             if output.next is not None:
                 queue.append(output.next)
-        if failure is None and queue and requests >= max_requests:
+        if failure is None and queue and requests - len(resent) >= max_requests:
             notes["max_pages_reached"] += 1
 
         report.requests = requests
@@ -412,7 +440,9 @@ class Crawler:
                 report.outcome = "not-modified"
             elif totals.seen == 0:
                 report.outcome = "empty"
-            report.detail = later_error
+            # a poll that got through on a re-send still says what it met (policy: re-sends)
+            report.detail = "; ".join(part for part in (
+                later_error, "retried:" + ",".join(resent) if resent else None) if part) or None
             await self._finish_success(row, report, started, totals=totals, first=first, cursor=cursor, full=full,
                                        not_modified=not_modified, host=host, bytes_total=bytes_total)
         self.polls_total[report.outcome] += 1

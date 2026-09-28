@@ -76,6 +76,27 @@ def test_one_recovered_outage_is_healthy_and_flapping_is_degraded():
     assert policy.health_state(**kwargs, successes_24h=3, failure_episodes_24h=3) == "degraded"
 
 
+def test_which_failures_are_resent_within_the_poll():
+    transient = [("timeout", "timeout", None), ("timeout", "navigation_timeout", None), ("http-error", "http_500", 500),
+                 ("http-error", "http_502", 502), ("http-error", "http_522", 522), ("http-error", "connect_failed", None),
+                 ("http-error", "transport_remoteprotocolerror", None), ("http-error", "eutils_search_error", 200)]
+    for outcome, detail, status in transient:
+        assert policy.is_transient(outcome, detail, status, None), detail
+    lasting = [("blocked", "http_403", 403), ("challenge", "cloudflare", 403), ("http-error", "http_404", 404),
+               ("http-error", "http_501", 501), ("parse-error", "feed_not_a_feed", 200), ("robots-denied", "robots_unreachable", None),
+               ("http-error", "dns_failed", None), ("too-large", "body_over_cap", 200), ("host-budget", "host_busy", None)]
+    for outcome, detail, status in lasting:
+        assert not policy.is_transient(outcome, detail, status, None), detail
+    # an upstream that named a time has paused the host instead
+    assert not policy.is_transient("http-error", "rate_limited_503", 503, 120.0)
+
+
+def test_resend_delays_are_short_bounded_and_jittered():
+    assert [policy.transient_retry_delay_s(n, 0.5) for n in (1, 2)] == [3.0, 6.0]
+    assert policy.transient_retry_delay_s(1, 0.0) == 1.5 and policy.transient_retry_delay_s(2, 0.999) < 9.0
+    assert policy.transient_retry_delay_s(9, 0.999) < policy.TRANSIENT_RETRY_CAP_S * 1.5
+
+
 def test_reliability_counts_a_run_of_failures_as_one_episode():
     assert policy.reliability([]) == (0, 0)
     assert policy.reliability(["ok", "not-modified", "empty"]) == (3, 0)
