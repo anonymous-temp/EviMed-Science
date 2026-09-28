@@ -199,11 +199,24 @@ function context() {
   };
   const newPage = async () => {
     let url = "";
+    const failed = [];
+    // FAKE_CHAT=network-changed: the chat page drops its requests with
+    // ERR_NETWORK_CHANGED and shows 打开超时 until 重试 is pressed;
+    // FAKE_CHAT=broken: 重试 does not help either.
+    const chatMode = process.env.FAKE_CHAT || "";
+    let retried = false;
+    const chatFailing = () => chatMode && url.endsWith("/app/chat") && !(chatMode === "network-changed" && retried);
     return {
-      on() {}, async setViewportSize() {}, async route() {}, async close() {}, async screenshot() {}, async waitForTimeout() {},
-      frames: () => [{ url: () => "https://evimed.example.org/__evimed/f/x", evaluate: async () => ({ composer: true, stats: [] }) }],
-      async goto(target) { url = target; log({ goto: target }); await fire(new URL("/api/commands/start_runtime", target).href); },
+      on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
+      async setViewportSize() {}, async route() {}, async close() {}, async screenshot() {}, async waitForTimeout() {},
+      frames: () => [{ url: () => "https://evimed.example.org/__evimed/f/x", evaluate: async () => ({ composer: !chatFailing(), stats: [] }) }],
+      getByRole: (role, { name }) => ({ count: async () => (chatFailing() && role === "button" && name === "重试" ? 1 : 0), first: () => ({ click: async () => { retried = true; log({ click: name }); } }) }),
+      async goto(target) {
+        url = target; log({ goto: target }); await fire(new URL("/api/commands/start_runtime", target).href);
+        if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
+      },
       async evaluate(fn) {
+        if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
         if (typeof fn === "function" && fn.name === "measure") {
           return { title: "页面 · EviMed", controlKinds: 3, colorKinds: 3, borderKinds: 1, sizeWeightPairs: ["12px/400", "13px/400", "14px/400", "14px/500", "24px/600"],
             pageLefts: [240], rowTitleLefts: [], subtitle: [], backOfficeHits: [], leakHits: [], unnamedControls: [], overflowX: false, smallTargets: 0, decorativeSvgs: 0 };
@@ -279,4 +292,21 @@ test("the chat page, when asked for, is the one page allowed to start the runtim
   assert.ok(chatAt > 0, "the chat page was opened");
   assert.deepEqual([...new Set(log.slice(0, chatAt).filter((entry) => entry.start).map((entry) => entry.verdict))], ["aborted"]);
   assert.deepEqual(log.slice(chatAt).filter((entry) => entry.start).map((entry) => entry.verdict), ["allowed"]);
+});
+
+test("a chat page that fails because the walk's own network changed is retried once, as a reader would, and noted", async () => {
+  // 2026-09-28: the walk runs on the host's network; starting the account's
+  // runtime adds a Docker interface, Chromium drops the page's requests with
+  // ERR_NETWORK_CHANGED, and the page says 打开超时，请重试.
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CHAT: "network-changed" });
+  assert.equal(code, 0, stdout + stderr);
+  assert.deepEqual(log.filter((entry) => entry.click).map((entry) => entry.click), ["重试"]);
+  assert.ok(report.notices.some((notice) => /chat@desktop: loaded after one 重试/.test(notice)), report.notices.join("\n"));
+  assert.deepEqual(report.failures, []);
+});
+
+test("a chat page that still fails after the one retry fails the walk", async () => {
+  const { code, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CHAT: "broken" });
+  assert.equal(code, 1);
+  assert.ok(report.failures.some((failure) => /chat@desktop: the conversation frame did not load \(打开超时/.test(failure)), report.failures.join("\n"));
 });

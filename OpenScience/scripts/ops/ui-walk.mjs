@@ -515,6 +515,7 @@ async function main() {
       await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
       report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
       if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
+      else if (chat.retriedAfterNetworkChange) notices.push(`${current}: loaded after one 重试 — the walk's host network changed while the runtime started (${chat.retriedAfterNetworkChange} request(s) dropped)`);
       if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
     }
     // Log out for real: the request needs the shell's origin and the
@@ -545,25 +546,52 @@ async function main() {
 
 /**
  * Open the conversation page and wait for the kernel frame's composer.
+ *
+ * The walk runs on the host's network, and opening the chat starts the
+ * account's runtime container: Docker adds an interface, Chromium reports
+ * ERR_NETWORK_CHANGED and drops the requests in flight, and the page says
+ * 打开超时，请重试 (release walks of 2026-09-28). A reader's browser is not on
+ * the host's network and never sees that, so when the page fails after such a
+ * change the walk presses the page's own 重试 once, as a reader would, and
+ * says so in the report instead of failing the release on its own vantage.
  * @param {any} page @param {string} base
  */
 async function walkChat(page, base) {
-  await page.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(3_000);
-    for (const frame of page.frames()) {
-      if (!frame.url().includes("/__evimed/f/")) continue;
-      const seen = await frame.evaluate(() => ({
-        composer: document.querySelectorAll("textarea, [contenteditable='true']").length > 0,
-        stats: [...document.querySelectorAll("[data-composer-stats]")].map((node) => node.textContent?.trim() ?? ""),
-      })).catch(() => null);
-      if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null };
+  let networkChanged = 0;
+  const onFailed = (request) => { if (/ERR_NETWORK_CHANGED/.test(request.failure()?.errorText ?? "")) networkChanged += 1; };
+  page.on?.("requestfailed", onFailed);
+  try {
+    await page.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    let retried = false;
+    let deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(3_000);
+      for (const frame of page.frames()) {
+        if (!frame.url().includes("/__evimed/f/")) continue;
+        const seen = await frame.evaluate(() => ({
+          composer: document.querySelectorAll("textarea, [contenteditable='true']").length > 0,
+          stats: [...document.querySelectorAll("[data-composer-stats]")].map((node) => node.textContent?.trim() ?? ""),
+        })).catch(() => null);
+        if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null, ...(retried ? { retriedAfterNetworkChange: networkChanged } : {}) };
+      }
+      const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
+      if (/秒内没有载入完成|无法载入|载入失败|打开超时|暂时无法打开|无法连接/.test(shell)) {
+        if (!retried && networkChanged > 0) {
+          const retry = page.getByRole("button", { name: "重试" });
+          if (await retry.count().catch(() => 0)) {
+            retried = true;
+            await retry.first().click().catch(() => {});
+            deadline = Date.now() + 120_000;
+            continue;
+          }
+        }
+        return { loaded: false, state: shell.split("\n").find((line) => /载入|超时|无法/.test(line))?.slice(0, 80), networkChanged };
+      }
     }
-    const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
-    if (/秒内没有载入完成|无法载入|载入失败|打开超时|暂时无法打开|无法连接/.test(shell)) return { loaded: false, state: shell.split("\n").find((line) => /载入|超时|无法/.test(line))?.slice(0, 80) };
+    return { loaded: false, state: "no composer within two minutes", networkChanged };
+  } finally {
+    page.off?.("requestfailed", onFailed);
   }
-  return { loaded: false, state: "no composer within two minutes" };
 }
 
 // Run only as a program: the tests import the budgets and the verdict. By
