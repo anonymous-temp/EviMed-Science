@@ -23,6 +23,17 @@
 //   node scripts/ops/capability-acceptance.mjs \
 //     --capability clinical-evidence-synthesis --brief review-001-empa-kidney-report-family \
 //     [--base https://host] [--insecure] [--project <id>] [--timeout-ms 7200000]
+//
+// 「循证 GEO」 capabilities work on a GEO project's data, which a plain
+// acceptance project does not have (geo_read answers `geo_no_project`):
+//   --geo-create <brand> [--geo-engines qianwen,kimi] [--geo-coverage-days 90]
+//       make a GEO project for the brand and dispatch into its first conversation;
+//   --geo-project <geo id> --geo-export proposal|weekly | --geo-step <step>
+//       ask the GEO module itself for the run (导出 / 让 AI 做) and watch the run
+//       its orchestrator dispatches, with the orchestrator's own brief;
+//   --prompt-file <path>
+//       dispatch this text instead of the rendered brief (the brief still names
+//       the results directory), e.g. a GEO step's brief into an existing GEO project.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +63,13 @@ const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "cdss-ac
 const capabilityId = String(args.capability ?? "");
 const briefId = String(args.brief ?? "");
 const attachRunId = typeof args.run === "string" ? args.run : "";
+const promptFile = typeof args["prompt-file"] === "string" ? args["prompt-file"] : "";
+const geoCreate = typeof args["geo-create"] === "string" ? args["geo-create"].trim() : "";
+const geoProjectId = typeof args["geo-project"] === "string" ? args["geo-project"] : "";
+const geoExport = typeof args["geo-export"] === "string" ? args["geo-export"] : "";
+const geoStep = typeof args["geo-step"] === "string" ? args["geo-step"] : "";
+/** Runs the GEO module dispatches itself: the driver asks, then watches. */
+const geoTrigger = Boolean(geoProjectId && (geoExport || geoStep));
 // Production terminates TLS with a certificate issued to a bare IP, which no
 // trust store will validate by name. The flag is explicit so this can never be
 // the silent default on a host where the name does check out.
@@ -167,8 +185,13 @@ async function main() {
   if (!brief) {
     throw new Error(`${harness}/briefs.json has no brief ${briefId}; it has: ${briefs.briefs.map((/** @type {any} */ b) => b.id).join(", ")}`);
   }
-  const text = renderBrief(brief);
-  if (!text) throw new Error(`brief ${briefId} rendered to an empty prompt`);
+  // A prompt file replaces the rendered brief as the text dispatched; the brief
+  // still names the results directory and is recorded beside it.
+  const text = promptFile ? (await readFile(path.resolve(promptFile), "utf8")).trim() : renderBrief(brief);
+  if (!text) throw new Error(promptFile ? `${promptFile} is empty` : `brief ${briefId} rendered to an empty prompt`);
+  if (geoTrigger && (promptFile || attachRunId || geoCreate)) {
+    throw new Error("--geo-export / --geo-step ask the GEO module for its own run: no --prompt-file, --run or --geo-create with them");
+  }
 
   const passwordFile = String(process.env.OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE ?? "");
   if (!passwordFile) {
@@ -184,7 +207,26 @@ async function main() {
   auth = { cookie, "x-open-science-csrf": String(login.body.data.csrfToken) };
   say("authenticated");
 
-  const projectId = String(args.project ?? `acceptance-${capabilityId}`.slice(0, 60));
+  // A GEO capability reads and writes a GEO project's data. `--geo-create`
+  // makes one (its control project, and a first conversation already bound to
+  // geo-insight); `--geo-project` names one that exists.
+  /** @type {{ id: string, projectId: string, sessionId: string | null } | null} */
+  let geo = null;
+  if (geoCreate) {
+    const engines = typeof args["geo-engines"] === "string" ? args["geo-engines"].split(",").map((entry) => entry.trim()).filter(Boolean) : undefined;
+    const coverageDays = args["geo-coverage-days"] === undefined ? undefined : Number(args["geo-coverage-days"]);
+    const made = await api("/api/geo/projects", { method: "POST", body: JSON.stringify({ brandName: geoCreate, coverageDays, engines }) });
+    if (made.status !== 201 && made.status !== 200) throw new Error(`GEO project create failed: ${made.status} ${JSON.stringify(made.body).slice(0, 300)}`);
+    geo = { id: String(made.body.data.id), projectId: String(made.body.data.projectId), sessionId: made.body.data.sessionId ?? null };
+    say(`GEO project ${geo.id} (${geoCreate}) created in project ${geo.projectId}`);
+  } else if (geoProjectId) {
+    const read = await api(`/api/geo/projects/${encodeURIComponent(geoProjectId)}`);
+    if (read.status !== 200) throw new Error(`GEO project read failed: ${read.status} ${JSON.stringify(read.body).slice(0, 300)}`);
+    geo = { id: geoProjectId, projectId: String(read.body.data.projectId), sessionId: read.body.data.sessionId ?? null };
+    say(`GEO project ${geo.id} is project ${geo.projectId}`);
+  }
+
+  const projectId = String(geo?.projectId ?? args.project ?? `acceptance-${capabilityId}`.slice(0, 60));
   // List before creating. A 409 from the create route means two unrelated
   // things — the id is taken, or the account is at its project ceiling — and
   // treating both as "already there" made a full account look like a resume
@@ -193,6 +235,7 @@ async function main() {
   const existing = await api("/api/projects");
   if (existing.status !== 200) throw new Error(`project list failed: ${existing.status}`);
   const already = (existing.body.data ?? []).some((/** @type {any} */ entry) => entry.id === projectId);
+  if (!already && geo) throw new Error(`the GEO project's control project ${projectId} is not in this account's project list`);
   if (!already) {
     const created = await api("/api/projects", { method: "POST", body: JSON.stringify({ id: projectId, name: `Acceptance ${capabilityId}` }) });
     if (created.status !== 201 && created.status !== 200) {
@@ -214,8 +257,10 @@ async function main() {
 
   // Bind the session to the capability rather than letting the router pick.
   // An acceptance that depends on the classifier is measuring the classifier.
-  const sessionId = String(args.session ?? `acc-${capabilityId.slice(0, 20)}-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
-  if (!attachRunId) {
+  // A new GEO project's first conversation is the one its page opens: dispatch there.
+  let sessionId = String(args.session ?? (geoCreate && geo?.sessionId ? geo.sessionId : `acc-${capabilityId.slice(0, 20)}-${Date.now().toString(36)}`))
+    .replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
+  if (!attachRunId && !geoTrigger) {
     const bound = await api(`/api/research-sessions/${encodeURIComponent(sessionId)}`, {
       method: "PUT",
       body: JSON.stringify({ mode: "specialist", agentId: capabilityId, agentVersion: agent.version }),
@@ -231,12 +276,39 @@ async function main() {
   // "it is still going, come and watch".
   let runId;
   let run;
-  if (attachRunId) {
+  let promptSource = promptFile ? `file ${path.basename(promptFile)}` : "rendered brief";
+  if (geoTrigger && geo) {
+    // The GEO module's own run: 导出 or 让 AI 做, dispatched by its orchestrator
+    // with its own brief. It answers with the run when it could dispatch at
+    // once; when the run slot was busy the orchestrator's next tick sends it,
+    // so the run is found by its `geo-` dispatch id among the project's runs.
+    // Five minutes of slack: the run's start is the server's clock, this is ours.
+    const asked = new Date(Date.now() - 300_000).toISOString();
+    const route = geoExport ? `/api/geo/projects/${encodeURIComponent(geo.id)}/export` : `/api/geo/projects/${encodeURIComponent(geo.id)}/run`;
+    const answer = await api(route, { method: "POST", body: JSON.stringify(geoExport ? { kind: geoExport } : { step: geoStep }) });
+    if (answer.status !== 200) throw new Error(`GEO ${geoExport ? "export" : "step"} request failed: ${answer.status} ${JSON.stringify(answer.body).slice(0, 300)}`);
+    runId = answer.body.data?.runId ? String(answer.body.data.runId) : "";
+    say(runId ? `the GEO module dispatched run=${runId}` : "the GEO module queued the run; waiting for its dispatch");
+    const waitUntil = Date.now() + Number(args["geo-wait-ms"] ?? 1_800_000);
+    while (!runId && Date.now() < waitUntil) {
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+      const list = await pollApi("/api/agent-runs");
+      const found = list.status === 200 ? (list.body.data ?? []).find((/** @type {any} */ entry) => String(entry.dispatchId ?? "").startsWith("geo-")
+        && String(entry.startedAt ?? entry.createdAt ?? "") >= asked && entry.effectiveAgentId === capabilityId) : null;
+      if (found) runId = String(found.id);
+    }
+    if (!runId) throw new Error("the GEO module did not dispatch the run in time; see the project's page for why (paused, a run already out, or a step not yet due)");
+    const list = await api("/api/agent-runs");
+    run = (list.body?.data ?? []).find((/** @type {any} */ entry) => entry.id === runId) ?? { id: runId, status: "running" };
+    sessionId = String(run.sessionId ?? sessionId);
+    promptSource = "the GEO orchestrator's brief, as the run ledger records it";
+  } else if (attachRunId) {
     const list = await api("/api/agent-runs");
     if (list.status !== 200) throw new Error(`could not list runs: ${list.status}`);
     run = list.body.data.find((/** @type {any} */ entry) => entry.id === attachRunId);
     if (!run) throw new Error(`no run ${attachRunId} in project ${projectId}`);
     runId = attachRunId;
+    promptSource = "the run ledger (attached to a run started elsewhere)";
     say(`attached to run=${runId} (${run.status})`);
   } else {
     const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
@@ -282,7 +354,11 @@ async function main() {
     runId,
     agentVersion: agent.version,
     dispatchedAt: stamp(),
-    prompt: text,
+    // What the run was asked: this driver's text when it dispatched, the run's
+    // own record when the GEO module did or the run was started elsewhere.
+    prompt: geoTrigger || attachRunId ? String(run.question ?? "") : text,
+    promptSource,
+    ...(geo ? { geoProject: geo.id } : {}),
     outcome: {
       status: run.status,
       errorCode: run.errorCode ?? null,
