@@ -125,6 +125,12 @@ def _correction_feedback(error):
             if context["field"] == "effect_measure":
                 feedback["rule"] = ("effect_measure is ONE canonical token for the primary outcome only; "
                                     "secondary outcomes of another type are not combined into it.")
+            elif "design" in str(context["field"]):
+                # ma-001 (2026-09-28): "randomized controlled trials of any randomization
+                # design including parallel group, factorial, ..." as one design entry.
+                feedback["rule"] = ("study_designs is a list of canonical entries from supported, one per "
+                                    "design; to admit several randomized designs, list each of them. A design "
+                                    "the catalogue lacks stays in the eligibility criteria prose.")
             break
     findings = [finding for issue in error.phase.issues
                 for finding in issue.context.get("scope_findings", [])]
@@ -152,7 +158,8 @@ class ResearchPlanner(BaseAgent):
         original_prompt = prompt
         last_error = None
         scope_diagnostics = _ScopeDiagnostics()
-        for attempt in range(3):
+        from new_meta.config import PLANNER_MAX_ATTEMPTS
+        for attempt in range(PLANNER_MAX_ATTEMPTS):
             protocol = None
             try:
                 protocol = self.call_llm_structured(prompt, ResearchProtocol, max_tokens=8192)
@@ -194,7 +201,8 @@ class ResearchPlanner(BaseAgent):
                        "Never drop unsupported requested designs or other explicit requirements to pass validation.")
         if isinstance(last_error, ProtocolInputRequired):
             raise last_error
-        raise scope_diagnostics.attach(RuntimeError(f"PICO extraction failed after 3 attempts: {last_error}")) from last_error
+        raise scope_diagnostics.attach(RuntimeError(
+            f"PICO extraction failed after {PLANNER_MAX_ATTEMPTS} attempts: {last_error}")) from last_error
 
     def check_scope(self, question, protocol):
         """Observe every provider response before any retry can replace a judgment."""

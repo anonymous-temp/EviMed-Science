@@ -218,3 +218,45 @@ def test_a_compiler_refusal_tells_the_planner_the_field_and_its_canonical_choice
     assert feedback["rejected"] == "MD_SMD"
     assert feedback["supported"] == ["MD", "RR", "SMD"]
     assert "primary outcome only" in feedback["rule"]
+
+
+def test_a_design_refusal_tells_the_planner_to_list_canonical_designs():
+    from new_meta.agents.research_planner import _correction_feedback
+    from new_meta.core.method_planning import ProtocolInputRequired
+
+    rejected = "randomized_controlled_trials_of_any_randomization_design_including_parallel_group_factorial"
+    error = ProtocolInputRequired(
+        f"study design(s) not supported by intervention_rct: {rejected}",
+        context={"field": "study_designs", "requested": [rejected], "supported": ["parallel_rct", "multi_arm_rct"]},
+    )
+    feedback = json.loads(_correction_feedback(error))
+    assert feedback["supported"] == ["parallel_rct", "multi_arm_rct"]
+    assert "list each of them" in feedback["rule"]
+
+
+@pytest.mark.parametrize("limit,plans", [(None, True), ("3", False)])
+def test_the_planner_has_a_fourth_attempt_by_default(monkeypatch, limit, plans):
+    """ma-001 (2026-09-28): two attempts went to scope corrections and the third
+    to a design label outside the vocabulary; the review ended before searching."""
+    import new_meta.config as config
+    monkeypatch.setattr(config, "PLANNER_MAX_ATTEMPTS", 4 if limit is None else int(limit))
+    planner = ResearchPlanner()
+    calls = []
+
+    def fake_structured(*args, **kwargs):
+        calls.append(args)
+        protocol = _txa_protocol("MD")
+        if len(calls) < 4:
+            protocol.study_designs = ["randomized_controlled_trials_of_any_randomization_design"]
+        return protocol
+
+    monkeypatch.setattr(planner, "call_llm_structured", fake_structured)
+    if plans:
+        assert planner.run("氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析").study_designs == ["parallel_rct"]
+        assert len(calls) == 4
+    else:
+        from new_meta.core.method_planning import ProtocolInputRequired
+        with pytest.raises(ProtocolInputRequired):
+            planner.run("氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析")
+        assert len(calls) == 3
+

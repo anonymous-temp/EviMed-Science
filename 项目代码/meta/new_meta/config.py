@@ -134,6 +134,12 @@ MINERU_TOKEN = os.getenv("MINERU_TOKEN", "")
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", "200"))
 TOP_K_PAPERS = int(os.getenv("TOP_K_PAPERS", "30"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
+# Planning proposals per review, each checked by the compiler and by an
+# independent scope assessment before any search. Was a fixed 3: on 2026-09-28
+# a ma-001 run spent two on scope corrections and its third on a design label
+# outside the vocabulary, and the review ended before searching (about 2 min
+# per attempt). Every attempt is logged ("PICO proposal attempt N").
+PLANNER_MAX_ATTEMPTS = max(1, int(os.getenv("PLANNER_MAX_ATTEMPTS", "4")))
 MAX_CHECK_ROUNDS = 3  # Self-proving max iterations
 TA_BATCH_SIZE = int(os.getenv("TA_BATCH_SIZE", "50"))
 BATCH_SCREENING_THRESHOLD = int(os.getenv("BATCH_SCREENING_THRESHOLD", "200"))

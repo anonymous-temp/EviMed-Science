@@ -209,6 +209,8 @@ def test_old_whole_assessment_and_cached_receipt_remain_compatible(tmp_path):
 
 
 def test_three_semantic_replans_keep_bounded_diagnostics_and_compact_feedback(monkeypatch):
+    # Written for three planning attempts; the budget is PLANNER_MAX_ATTEMPTS.
+    monkeypatch.setattr("new_meta.config.PLANNER_MAX_ATTEMPTS", 3)
     from new_meta.agents.research_planner import SCOPE_DIAGNOSTIC_MAX_BYTES, SCOPE_DIAGNOSTIC_MAX_ATTEMPTS
 
     planner = ResearchPlanner()
@@ -318,6 +320,8 @@ def test_unknown_criterion_reference_retries_only_its_batch(monkeypatch):
 
 
 def test_later_method_normalization_failure_retains_prior_scope_assessments(monkeypatch):
+    # Written for three planning attempts; the budget is PLANNER_MAX_ATTEMPTS.
+    monkeypatch.setattr("new_meta.config.PLANNER_MAX_ATTEMPTS", 3)
     planner = ResearchPlanner()
     initial = proposal()
     unsupported = proposal()
