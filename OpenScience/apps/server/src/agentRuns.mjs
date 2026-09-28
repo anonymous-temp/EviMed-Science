@@ -2102,6 +2102,24 @@ async function requiredSpecialistArtifacts(
   // only the second one has to reach the machine-readable verdict.
   /** @type {string[]} */
   const skippedChecks = [];
+  // A turn is judged by the deliverables it took on, not by the conversation
+  // it was typed into. A conversation's binding is the capability its first
+  // run was for; a later turn in it may plan a different one. On 2026-09-25
+  // (信尔美, run_3fca60b67487) a follow-up asking to fill two journey columns
+  // landed in the conversation the GEO orchestrator had opened for geo-content,
+  // planned and delegated a geo-insight deliverable, had it accepted by its own
+  // contract three times — and was failed for the geo-content.md it never
+  // promised. Every planned item names its capability, and each was graded
+  // run-side by its own contract (the receipt the digests are checked against
+  // below); the binding's required files are not this turn's to deliver.
+  const planned = run.nativeTurn && Array.isArray(run.nativeWorkflow?.plan?.items) ? run.nativeWorkflow.plan.items : [];
+  const plannedCapabilities = [...new Set(planned.map((item) => (typeof item?.capability === "string" ? item.capability.trim() : "")))];
+  if (run.effectiveAgentId && planned.length > 0 && !plannedCapabilities.includes("")
+    && !plannedCapabilities.includes(String(run.effectiveAgentId))) {
+    const sentence = `这一轮计划交付的是「${plannedCapabilities.join("、")}」，不是这个对话绑定的「${run.effectiveAgentId}」；`
+      + `交付物按它们各自的契约核验，不按「${run.effectiveAgentId}」的必需文件判定。`;
+    return { artifacts: [], errorCode: null, qualityNotices: [runNotice("run_other_capability_delivered", sentence, { detail: sentence })] };
+  }
   const outcome = await specialistCompletionOutcome(
     project,
     run,
@@ -2344,7 +2362,8 @@ async function specialistCompletionOutcome(
   const optional = new Set(agent.outputs.filter((output) => !output.required).map((output) => output.path));
   const artifacts = [];
   const files = new Map();
-  for (const relative of [...required, ...optional]) {
+  /** Where this run's copy of one declared output is, if it wrote one. @param {string} relative */
+  const locate = async (relative) => {
     let file = null;
     let artifactPath = relative;
     let outsideNativeTurn = false;
@@ -2367,6 +2386,11 @@ async function specialistCompletionOutcome(
       file = await readRequiredFile(project, relative, Date.parse(run.startedAt));
       if (file) artifactPath = file.relativePath;
     }
+    return { file, artifactPath, outsideNativeTurn };
+  };
+  const declared = [...required, ...optional];
+  for (const [index, relative] of declared.entries()) {
+    const { file, artifactPath, outsideNativeTurn } = await locate(relative);
     if (optional.has(relative) && (!file || file.stat.mtimeMs + 1_000 < Date.parse(run.startedAt))) continue;
     if (!file && skillGap && artifacts.length === 0) {
       return { artifacts: [], errorCode: "specialist_required_skill_missing", qualityIssues: [skillGap] };
@@ -2375,16 +2399,27 @@ async function specialistCompletionOutcome(
       if (outsideNativeTurn) return { artifacts, errorCode: "specialist_required_output_stale", qualityIssues: [
         `${relative} exists outside this native turn's log interval, so it cannot be delivered as this turn's output.`,
       ] };
+      // The rest of the package, as the run wrote it. A missing file is a
+      // finding about a package that exists, not a reason to withhold it
+      // (2026-09-17): only a run that wrote none of its required outputs has
+      // nothing to hand over. This returned `failed` whenever the first
+      // required file was the absent one, whatever else was on disk. Notes
+      // alone (an optional file) are not a package.
+      const written = [...artifacts];
+      for (const later of declared.slice(index + 1).filter((output) => !optional.has(output))) {
+        const found = await locate(later);
+        if (found.file && found.file.stat.mtimeMs + 1_000 >= Date.parse(run.startedAt)) written.push(found.artifactPath);
+      }
       return {
-        artifacts,
+        artifacts: written,
         errorCode: "specialist_required_output_missing",
         // One absent file, whatever else the package would have been judged on:
         // no content rule below has run yet.
         qualityStructural: true,
-        // With the capability's first output absent there is nothing to hand
-        // over. With it present, what exists is delivered and marked: the
-        // reader gets the report and is told which companion file is missing.
-        ...(relative !== required[0] && artifacts.length > 0 ? { qualityDegradable: true, qualityUnverified: true } : {}),
+        // With none of the capability's outputs on disk there is nothing to
+        // hand over. With any of them present, what exists is delivered and
+        // marked: the reader gets the files and is told which one is missing.
+        ...(written.length > 0 ? { qualityDegradable: true, qualityUnverified: true } : {}),
         qualityIssues: [
           `The required deliverable ${relative} is not in the workspace. Write it at exactly that name, either at the workspace root or inside this deliverable\u0027s ${workspaceLayout.deliverablesDir}/<id>/ directory, before finishing.`,
         ],
@@ -5202,7 +5237,14 @@ export class AgentRunStore {
           ...qualityFindingsOf(completion),
           ...(repairNotRun ? [runNotice("run_repair_not_dispatched", repairNotRun)] : []),
         ];
-        if (completion.qualityDegradable) {
+        // A required file of the bound capability missing is not "nothing to
+        // hand over" when the run wrote other deliverables this turn — a
+        // second planned item accepted under its own contract, say. What is on
+        // disk goes out marked, with the missing file named (2026-09-17).
+        const wroteDeliverables = artifacts.some((file) => file.startsWith(`${workspaceLayout.deliverablesDir}/`));
+        const missingBesideDeliverables = !completion.qualityDegradable
+          && completion.errorCode === "specialist_required_output_missing" && wroteDeliverables;
+        if (completion.qualityDegradable || missingBesideDeliverables) {
           // What the run wrote is delivered with what was found said about it,
           // never withheld for it (2026-09-17). Withholding is for a package
           // that cannot be handed over at all — see the branch below.
@@ -5210,7 +5252,7 @@ export class AgentRunStore {
           terminal.errorCode = null;
           // A finding outranks an admission: "we checked and it did not hold
           // up" is the more serious of the two and is what the reader is shown.
-          terminal.verification = completion.qualityUnverified
+          terminal.verification = completion.qualityUnverified || missingBesideDeliverables
             ? "unverified"
             : completion.qualityUnchecked ? "unchecked" : null;
           terminal.qualityNotices = notices;

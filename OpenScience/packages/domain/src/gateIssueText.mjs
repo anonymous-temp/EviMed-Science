@@ -274,6 +274,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   run_deliverable_dropped: '计划中的交付物没有交付',
   run_planned_none_accepted: '计划的交付物都未通过核验',
   run_adopted_unchecked: '未匹配交付契约，未做核验',
+  run_other_capability_delivered: '本轮交付的不是对话绑定的能力',
   run_legacy_unattributed: '旧运行记录无法对应本次输入',
   run_repair_not_dispatched: '修订请求未能送达运行',
   run_report_rewritten: '修订时整篇重写了报告',

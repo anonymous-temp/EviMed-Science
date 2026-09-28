@@ -6751,6 +6751,71 @@ test("a package edited after its receipt into something that fails is still refu
 });
 
 
+test("a missing first required file beside the rest of the package is delivered unverified, not failed", async () => {
+  // 2026-09-17: a gate verdict never withholds a delivery; `failed` is for a
+  // run with nothing on disk. The first-required-output rule still returned
+  // `failed` when that one file was absent, whatever else the run had written.
+  await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
+    store.agentRegistry = {
+      get: () => ({
+        id: "note-writer", version: "1.0.0", runtimeAgent: "evimed-note-writer", skill: "note-writer", companionSkills: [],
+        outputs: [{ path: "summary.md", required: true }, { path: "note.md", required: true }, { path: "revision-notes.md", required: false }],
+        completionChecks: ["requiredOutputsExist"],
+      }),
+    };
+    await dispatch("turn_first_missing");
+    await mkdir(path.join(project.workspaceDir, "deliverables", "d1"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, "deliverables", "d1", "note.md"), "# the note\n", "utf8");
+    appendHistory([{ type: "text", text: "done" }]);
+
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+    assert.equal(run.verification, "unverified", "a package missing a required file is never a clean success");
+    assert.deepEqual(run.artifacts, ["deliverables/d1/note.md"]);
+    assert.ok(noticeTexts(run).some((line) => /summary\.md is not in the workspace/.test(String(line))), "the finding names the missing file");
+  });
+
+  // Negative controls: notes alone are not a package, and nothing on disk is nothing to deliver.
+  for (const written of [["revision-notes.md"], []]) {
+    await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
+      store.agentRegistry = {
+        get: () => ({
+          id: "note-writer", version: "1.0.0", runtimeAgent: "evimed-note-writer", skill: "note-writer", companionSkills: [],
+          outputs: [{ path: "summary.md", required: true }, { path: "note.md", required: true }, { path: "revision-notes.md", required: false }],
+          completionChecks: ["requiredOutputsExist"],
+        }),
+      };
+      await dispatch(`turn_nothing_${written.length}`);
+      for (const file of written) await writeFile(path.join(project.workspaceDir, file), "# notes\n", "utf8");
+      appendHistory([{ type: "text", text: "done" }]);
+      const run = await store.reconcileSession(project, binding.sessionId);
+      assert.equal(run.status, "failed", `${JSON.stringify(written)}: ${noticeTexts(run).join(" | ")}`);
+      assert.equal(run.errorCode, "specialist_required_output_missing");
+    });
+  }
+});
+
+test("a bound capability's missing output does not fail a run that delivered other deliverables this turn", async () => {
+  // A second planned item accepted under its own contract, or any deliverable
+  // file the run wrote: what is on disk is delivered, marked, with the missing
+  // file named — not a failed run listing the files it did write.
+  await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
+    await dispatch("turn_other_deliverable");
+    const relative = "deliverables/other-item/other.md";
+    await mkdir(path.join(project.workspaceDir, "deliverables", "other-item"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), "# another deliverable\n", "utf8");
+    appendHistory([
+      { type: "tool", tool: "write", state: { status: "completed", input: { filePath: relative } } },
+      { type: "text", text: "done" },
+    ]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+    assert.equal(run.verification, "unverified");
+    assert.deepEqual(run.artifacts, [relative]);
+    assert.ok(noticeTexts(run).some((line) => /note\.md is not in the workspace/.test(String(line))));
+  });
+});
+
 test("a terminal row still fits when the ledger is full of other runs' progress", async () => {
   // Production wedge, reproduced. A project reached 7,800 progress rows across
   // 31 runs and stopped 114 bytes under the cap. Progress kept writing, because
