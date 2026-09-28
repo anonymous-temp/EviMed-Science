@@ -324,3 +324,117 @@ def test_mixed_runner_gets_remote_metadata_from_the_existing_client(tmp_path, mo
         record = json.loads((output / "mendelian-randomization-run.json").read_text())[0]
         assert record["outcome_metadata"]["gwas_id"] == "ieu-a-7"
         assert record["outcome_metadata"]["year"] == 2020
+
+
+def _open_pair():
+    from mr_agent.tools import open_sumstats
+
+    def variant(snp, chrom, pos, beta, p):
+        return open_sumstats.Variant(snp, chrom, pos, "A", "G", beta, 0.01, p, 0.3, 1000.0)
+
+    exposure = [variant(f"rs{i}", str(i), 1_000_000, 0.05 * i, 1e-10) for i in range(1, 5)]
+    outcome = [variant(f"rs{i}", str(i), 1_000_000, 0.01 * i, 1e-3) for i in range(1, 4)]
+
+    def study(accession, trait):
+        return {"repository": "NHGRI-EBI GWAS Catalog", "accession": accession, "trait": trait,
+                "pubmedId": "111", "discoveryAncestry": ["1000 European"],
+                "initialSampleSize": "1,000 European ancestry individuals", "licence": "CC0",
+                "studyUrl": f"https://www.ebi.ac.uk/gwas/studies/{accession}",
+                "harmonisedFile": f"https://ftp.example/{accession}.h.tsv.gz", "read": {"mode": "streamed"}}
+
+    record = {
+        "schemaVersion": 1, "dataSource": "gwas_catalog", "retrievedAt": "2026-09-28T00:00:00Z",
+        "exposure": study("GCST000001", "Body mass index"),
+        "outcome": study("GCST000002", "Coronary artery disease"),
+        "instrumentSelection": {"pThreshold": 5e-8, "genomeWideSignificantVariants": 6, "afterClumping": 4,
+                                "method": "distance_pruning", "windowKb": 10000, "ldChecked": False},
+        "outcomeLookup": {"instrumentsFound": 3, "instrumentsUnavailableInOutcome": 1,
+                          "unavailableVariants": ["rs4"]},
+    }
+    return open_sumstats.OpenPair(exposure_rows=exposure, outcome_rows=outcome, record=record)
+
+
+def test_fixed_runner_reads_a_gwas_catalog_pair_without_any_token(tmp_path, monkeypatch):
+    """Both studies from the open GWAS Catalog: no OpenGWAS JWT anywhere, the
+    exact rows analysed are published, and the result names the catalogue."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output = workspace / "mendelian-randomization-runs/mr-runner-open/output"
+    output.mkdir(parents=True)
+    request = {
+        "exposure": "Body mass index", "outcome": "Coronary artery disease", "outputLanguage": "en",
+        "exposureSource": {"type": "gwas_catalog", "accession": "GCST000001"},
+        "outcomeSource": {"type": "gwas_catalog", "pubmedId": "222"},
+    }
+    monkeypatch.delenv("OPENGWAS_JWT", raising=False)
+    inputs.require_admission_credential(request, {"ready": False, "reason": "opengwas_token_missing"})
+    binding = inputs.capture_bindings(workspace, request, tmp_path)
+    authority = inputs.prepare_sources(workspace, output, request, binding, tmp_path, token_available=False)
+    request_path = output / "request.json"
+    request_path.write_text(json.dumps(authority["request"]))
+    from mr_agent.tools import open_sumstats
+
+    monkeypatch.setattr(open_sumstats, "build_pair", lambda exposure, outcome: _open_pair())
+    seen = {}
+
+    class FakeMRAgent:
+        def __init__(self, language):
+            self.state = SimpleNamespace(slots=SimpleNamespace(), analysis_results=[], errors=[],
+                                         paper_sections={}, output_dir=None)
+
+        def _run_analysis(self):
+            slots = self.state.slots
+            for role in ("exposure", "outcome"):
+                source = getattr(slots, f"{role}_source")
+                assert source.source_type == DataSourceType.GWAS_CATALOG
+                seen[role] = Path(source.file_path).read_text()
+            assert slots.exposure_source.gwas_id == "GCST000001"
+            assert slots.exposure_source.instruments_preclumped is True
+            assert slots.exposure_source.selection["mode"] == "gwas_catalog"
+            assert slots.exposure_source.selection["method"] == "distance_pruning"
+            assert slots.outcome_source.instruments_preclumped is False
+            result = MRAnalysisResult(
+                exposure_id="GCST000001", outcome_id="GCST000002", n_instruments=3,
+                exposure_source_type=DataSourceType.GWAS_CATALOG,
+                outcome_source_type=DataSourceType.GWAS_CATALOG,
+            )
+            self.state.analysis_results = [ready_delivery(result, tmp_path / "analysis")]
+            return "Fake analysis complete."
+
+        def _run_paper_generation(self):
+            metadata = self.state.analysis_results[0].exposure_metadata
+            assert metadata["metadata_source"] == "gwas_catalog"
+            assert metadata["sample_size"] == "1,000 European ancestry individuals"
+            self.state.paper_sections = {
+                "abstract": "GWAS Catalog studies GCST000001 and GCST000002 were read openly. " * 12
+            }
+
+    fake = ModuleType("mr_agent.core.engine")
+    fake.MRAgent = FakeMRAgent
+    monkeypatch.setitem(sys.modules, "mr_agent.core.engine", fake)
+    code = evimed_runner.run(request_path, output, input_authority=authority)
+    result = json.loads((output / "result.json").read_text())
+    assert code == 0, result
+    for name in (inputs.MANIFEST_NAME, inputs.OPEN_PROVENANCE_NAME, "inputs/open-exposure.csv",
+                 "inputs/open-outcome.csv"):
+        assert name in result["artifacts"]
+        assert (output / name).is_file()
+    assert (output / "inputs/open-exposure.csv").read_text() == seen["exposure"]
+    assert seen["exposure"].splitlines()[0] == "SNP,beta,se,effect_allele,other_allele,eaf,pval,samplesize,chr,pos"
+    provenance = json.loads((output / inputs.OPEN_PROVENANCE_NAME).read_text())
+    assert provenance["exposure"]["preparedRows"] == 4 and provenance["outcome"]["preparedRows"] == 3
+    row = json.loads((output / "mendelian-randomization-run.json").read_text())[0]
+    assert row["exposure_metadata"]["gwas_id"] == "GCST000001"
+    assert row["outcome_metadata"]["study_url"] == "https://www.ebi.ac.uk/gwas/studies/GCST000002"
+
+
+def test_a_paper_that_omits_a_catalog_accession_is_not_released():
+    result = MRAnalysisResult(
+        exposure_id="GCST000001", outcome_id="GCST000002", n_instruments=3,
+        exposure_source_type=DataSourceType.GWAS_CATALOG, outcome_source_type=DataSourceType.GWAS_CATALOG,
+        exposure_metadata={"gwas_id": "GCST000001", "trait": "BMI", "metadata_source": "gwas_catalog"},
+        outcome_metadata={"gwas_id": "GCST000002", "trait": "CAD", "metadata_source": "gwas_catalog"},
+    )
+    with pytest.raises(RuntimeError, match="omitted the outcome GWAS Catalog accession"):
+        evimed_runner._validate_release("Exposure GCST000001 only.", [result])
+    evimed_runner._validate_release("GCST000001 and GCST000002.", [result])

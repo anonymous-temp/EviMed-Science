@@ -1,0 +1,906 @@
+# [IN] GWAS Catalog REST API v2 + harmonised summary-statistics files on EBI FTP
+# [OUT] instrument/outcome rows and their provenance for the local MR path
+# [POS] mr_agent/tools/open_sumstats.py - token-free open GWAS data
+"""Two-sample MR inputs from open GWAS Catalog summary statistics, without OpenGWAS.
+
+OpenGWAS has required a 14-day JWT since 1 May 2024 and only an account owner
+can issue one, so a deployment without a fresh token could not run a single
+remote MR analysis. The NHGRI-EBI GWAS Catalog publishes full summary
+statistics openly (terms: per-study licence, usually CC0/CC BY): study metadata
+through its REST API v2, and harmonised files (GRCh38, alleles aligned) on its
+FTP site. This module turns two catalogue studies into the two standard CSVs
+the engine's existing local path already analyses, and records exactly what it
+read so the report can name its sources.
+
+Two ways to read a study's file, chosen by what the catalogue publishes:
+
+* a bgzip file with a tabix index (every study harmonised since 2023): single
+  variants are read with HTTP Range requests (about 70 KB each), so a 1.3 GB
+  file is never downloaded;
+* any other harmonised file: streamed once and filtered as it arrives, keeping
+  only the rows asked for; a byte ceiling bounds the stream.
+
+Instrument selection for the exposure: every variant at p < 5e-8 (a genome scan
+of a streamed file; for a tabix file, the study's curated lead associations in
+the catalogue re-read from the file), then clumped — by PLINK against a local
+LD reference when one is configured, otherwise by distance, keeping the most
+significant variant per window. Which one ran is recorded; nothing here claims
+LD independence it did not check.
+
+No statistics are computed here beyond reading and filtering what the files
+say. Identifiers come only from the catalogue: a study the catalogue does not
+return, or a file it does not list, is an error, never a guess.
+"""
+
+from __future__ import annotations
+
+import bisect
+import csv
+import gzip
+import hashlib
+import io
+import json
+import math
+import os
+import re
+import shutil
+import struct
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import zlib
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Iterable, Iterator
+
+CATALOG_API = os.getenv("EVIMED_GWAS_CATALOG_API", "https://www.ebi.ac.uk/gwas/rest/api/v2").rstrip("/")
+FTP_ROOT = os.getenv(
+    "EVIMED_GWAS_CATALOG_FTP", "https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics"
+).rstrip("/")
+USER_AGENT = "EviMed-MR/1.0 (+https://www.ebi.ac.uk/gwas/docs/methods/summary-statistics; open summary statistics)"
+GENOME_WIDE_P = 5e-8
+#: Clumping window when no LD reference is configured, and the window PLINK
+#: clumps within when one is (TwoSampleMR's default clump_kb).
+CLUMP_WINDOW_KB = 10_000
+CLUMP_R2 = 0.001
+_ACCESSION = re.compile(r"^GCST\d{6,9}$")
+_PUBMED = re.compile(r"^\d{1,9}$")
+_RSID = re.compile(r"^rs\d+$")
+_ALLELE = re.compile(r"^[ACGT]+$")
+_BGZF_MAX_BLOCK = 65536
+
+
+class OpenSourceError(RuntimeError):
+    """A stable, reportable failure of the open-data path."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+#: Largest summary-statistics file streamed whole (EVIMED_MR_OPEN_STREAM_MAX_BYTES).
+#: Locke 2015 BMI is 89 MB and Nikpay 2015 CAD 369 MB; a larger file is refused
+#: by name instead of tying a job up for an hour on a slow link.
+def _stream_limit() -> int:
+    return _int_env("EVIMED_MR_OPEN_STREAM_MAX_BYTES", 512 * 1024 * 1024)
+
+
+def _timeout() -> int:
+    return _int_env("EVIMED_MR_OPEN_HTTP_TIMEOUT_SECONDS", 60)
+
+
+# --- Reuse across jobs ------------------------------------------------------------
+#
+# Measured from the Beijing production host on 2026-09-28: www.ebi.ac.uk answers
+# an API call in 1.4 s, but ftp.ebi.ac.uk delivers 38-58 KB/s, so the one
+# genome-wide scan of an 89 MB exposure file takes about 40 minutes, and a
+# 1.8 MB tabix index 30 s. What a scan keeps is small (Locke 2015 BMI: 2,042
+# variants at p < 5e-8), so it is kept, keyed by the file's URL and byte size,
+# in EVIMED_MR_OPEN_CACHE_DIR when that is set: the next job on the same study
+# reads it in no time, and the provenance says it was reused and when it was read.
+
+
+def _cache_dir() -> Path | None:
+    raw = os.getenv("EVIMED_MR_OPEN_CACHE_DIR", "").strip()
+    if not raw or not os.path.isabs(raw):
+        return None
+    path = Path(raw)
+    try:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError:
+        return None
+    return path if path.is_dir() and not path.is_symlink() else None
+
+
+def _cache_key(*parts: Any) -> str:
+    return hashlib.sha256("\x1f".join(str(part) for part in parts).encode("utf-8")).hexdigest()
+
+
+def _cache_read(key: str, suffix: str) -> bytes | None:
+    directory = _cache_dir()
+    if directory is None:
+        return None
+    target = directory / f"{key}{suffix}"
+    try:
+        if target.is_symlink() or not target.is_file():
+            return None
+        return target.read_bytes()
+    except OSError:
+        return None
+
+
+def _cache_write(key: str, suffix: str, content: bytes) -> None:
+    directory = _cache_dir()
+    if directory is None:
+        return
+    target = directory / f"{key}{suffix}"
+    temporary = directory / f".{key}{suffix}.{os.getpid()}.tmp"
+    try:
+        temporary.write_bytes(content)
+        os.replace(temporary, target)
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+
+
+class _Http:
+    """Every request this module makes, counted, with bounded retries."""
+
+    def __init__(self, opener: Callable[..., Any] | None = None):
+        self._open = opener or urllib.request.urlopen
+        self.requests = 0
+        self.bytes = 0
+
+    def open(self, url: str, *, headers: dict[str, str] | None = None, attempts: int = 3):
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+        for attempt in range(attempts):
+            self.requests += 1
+            try:
+                return self._open(request, timeout=_timeout())
+            except urllib.error.HTTPError as error:
+                if error.code in (429, 500, 502, 503, 504) and attempt < attempts - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise OpenSourceError(
+                    "mr_open_source_unavailable",
+                    f"{urllib.parse.urlsplit(url).netloc} answered HTTP {error.code} for {url}.",
+                ) from None
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                if attempt < attempts - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise OpenSourceError(
+                    "mr_open_source_unavailable",
+                    f"{urllib.parse.urlsplit(url).netloc} could not be reached ({type(error).__name__}).",
+                ) from None
+        raise AssertionError("unreachable")
+
+    def read(self, url: str, *, headers: dict[str, str] | None = None, limit: int = 64 * 1024 * 1024) -> bytes:
+        with self.open(url, headers=headers) as response:
+            body = response.read(limit + 1)
+        if len(body) > limit:
+            raise OpenSourceError("mr_open_source_too_large", f"{url} exceeded {limit} bytes.")
+        self.bytes += len(body)
+        return body
+
+    def json(self, url: str) -> Any:
+        try:
+            return json.loads(self.read(url, headers={"Accept": "application/json"}, limit=16 * 1024 * 1024))
+        except ValueError:
+            raise OpenSourceError("mr_open_source_unavailable", f"{url} did not return JSON.") from None
+
+
+# --- Studies ------------------------------------------------------------------
+
+
+@dataclass
+class CatalogStudy:
+    accession: str
+    trait: str
+    pubmed_id: str
+    ancestry: list[str]
+    initial_sample_size: str
+    efo_traits: list[str]
+    summary_stats_url: str
+    licence: str
+    harmonised_url: str = ""
+    index_url: str = ""
+    harmonised_bytes: int | None = None
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "repository": "NHGRI-EBI GWAS Catalog",
+            "accession": self.accession,
+            "studyUrl": f"https://www.ebi.ac.uk/gwas/studies/{self.accession}",
+            "trait": self.trait,
+            "pubmedId": self.pubmed_id,
+            "discoveryAncestry": self.ancestry,
+            "initialSampleSize": self.initial_sample_size,
+            "efoTraits": self.efo_traits,
+            "licence": self.licence,
+            "summaryStatisticsUrl": self.summary_stats_url,
+            "harmonisedFile": self.harmonised_url,
+            "harmonisedBytes": self.harmonised_bytes,
+            "tabixIndex": self.index_url or None,
+        }
+
+
+def _study_from_payload(payload: dict[str, Any]) -> CatalogStudy:
+    ancestry = payload.get("discovery_ancestry") or []
+    efo = payload.get("efo_traits") or []
+    return CatalogStudy(
+        accession=str(payload.get("accession_id") or ""),
+        trait=str(payload.get("disease_trait") or ""),
+        pubmed_id=str(payload.get("pubmed_id") or ""),
+        ancestry=[str(item) for item in ancestry] if isinstance(ancestry, list) else [str(ancestry)],
+        initial_sample_size=str(payload.get("initial_sample_size") or ""),
+        efo_traits=[
+            str(item.get("efo_trait") if isinstance(item, dict) else item) for item in efo
+        ] if isinstance(efo, list) else [],
+        summary_stats_url=str(payload.get("full_summary_stats") or ""),
+        licence=str(payload.get("terms_of_license") or ""),
+    )
+
+
+def resolve_study(source: dict[str, Any], http: _Http) -> CatalogStudy:
+    """The catalogue's own record for an accession, or the one study a PubMed id names."""
+    accession = str(source.get("accession") or "").strip().upper()
+    pubmed_id = str(source.get("pubmedId") or "").strip()
+    if accession:
+        if not _ACCESSION.fullmatch(accession):
+            raise OpenSourceError("mr_open_source_invalid", f"{accession} is not a GWAS Catalog accession.")
+        payload = http.json(f"{CATALOG_API}/studies/{accession}")
+        studies = (
+            [_study_from_payload(payload)]
+            if isinstance(payload, dict) and payload.get("full_summary_stats_available") is not False
+            else []
+        )
+    elif _PUBMED.fullmatch(pubmed_id):
+        payload = http.json(f"{CATALOG_API}/studies?pubmed_id={pubmed_id}&size=100")
+        rows = ((payload or {}).get("_embedded") or {}).get("studies") or []
+        studies = [
+            _study_from_payload(row) for row in rows
+            if isinstance(row, dict) and row.get("full_summary_stats_available")
+        ]
+        if len(studies) > 1:
+            listed = "; ".join(
+                f"{study.accession} ({study.trait}; {study.initial_sample_size})" for study in studies[:12]
+            )
+            raise OpenSourceError(
+                "mr_open_source_ambiguous",
+                f"PubMed {pubmed_id} has {len(studies)} GWAS Catalog studies with full summary statistics: "
+                f"{listed}. Choose one and give its accession.",
+            )
+    else:
+        raise OpenSourceError("mr_open_source_invalid", "A GWAS Catalog source needs an accession or a PubMed id.")
+    if not studies or not studies[0].accession:
+        raise OpenSourceError(
+            "mr_open_source_not_found",
+            f"The GWAS Catalog has no study with full summary statistics for {accession or 'PubMed ' + pubmed_id}.",
+        )
+    study = studies[0]
+    if accession and study.accession != accession:
+        raise OpenSourceError("mr_open_source_not_found", f"The GWAS Catalog did not return {accession}.")
+    return study
+
+
+def _ftp_directory(accession: str) -> str:
+    number = int(accession[4:])
+    low = (number - 1) // 1000 * 1000 + 1
+    width = max(6, len(accession) - 4)
+    return f"{FTP_ROOT}/GCST{low:0{width}d}-GCST{low + 999:0{width}d}/{accession}"
+
+
+def locate_harmonised_file(study: CatalogStudy, http: _Http) -> CatalogStudy:
+    """The study's harmonised file, and its tabix index when the catalogue has one."""
+    directory = study.summary_stats_url.rstrip("/") if study.summary_stats_url.startswith("http") else ""
+    directory = directory.replace("http://", "https://") or _ftp_directory(study.accession)
+    listing = http.read(f"{directory}/harmonised/", limit=2 * 1024 * 1024).decode("utf-8", "replace")
+    names = sorted(set(re.findall(r'href="([^"?/]+\.h\.tsv\.gz(?:\.tbi)?)"', listing)))
+    data = [name for name in names if name.endswith(".h.tsv.gz")]
+    if len(data) != 1:
+        raise OpenSourceError(
+            "mr_open_source_unharmonised",
+            f"{study.accession} has {len(data) or 'no'} harmonised summary-statistics file(s) in the catalogue; "
+            "only a study with exactly one harmonised (GRCh38, allele-aligned) file is read.",
+        )
+    study.harmonised_url = f"{directory}/harmonised/{data[0]}"
+    if f"{data[0]}.tbi" in names:
+        study.index_url = f"{study.harmonised_url}.tbi"
+    try:
+        with http.open(study.harmonised_url, headers={"Range": "bytes=0-0"}) as response:
+            total = response.headers.get("Content-Range", "").rsplit("/", 1)[-1]
+            study.harmonised_bytes = int(total) if total.isdigit() else None
+    except OpenSourceError:
+        study.harmonised_bytes = None
+    return study
+
+
+# --- Rows ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Variant:
+    snp: str
+    chrom: str
+    pos: int
+    effect_allele: str
+    other_allele: str
+    beta: float
+    se: float
+    pval: float
+    eaf: float | None
+    n: float | None
+
+    def row(self) -> dict[str, Any]:
+        return {
+            "SNP": self.snp, "beta": repr(self.beta), "se": repr(self.se),
+            "effect_allele": self.effect_allele, "other_allele": self.other_allele,
+            "eaf": "NA" if self.eaf is None else repr(self.eaf),
+            "pval": repr(self.pval), "samplesize": "NA" if self.n is None else repr(self.n),
+            "chr": self.chrom, "pos": str(self.pos),
+        }
+
+
+CSV_COLUMNS = ("SNP", "beta", "se", "effect_allele", "other_allele", "eaf", "pval", "samplesize", "chr", "pos")
+
+
+def _number(value: Any) -> float | None:
+    try:
+        number = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+class _Columns:
+    """Reads either catalogue layout: pre-2023 ``hm_*`` harmonised or GWAS-SSF."""
+
+    def __init__(self, header: list[str]):
+        index = {name.strip().lower(): position for position, name in enumerate(header)}
+        self.legacy = "hm_rsid" in index
+
+        def pick(*names: str) -> int | None:
+            return next((index[name] for name in names if name in index), None)
+
+        if self.legacy:
+            self.snp, self.chrom, self.pos = pick("hm_rsid"), pick("hm_chrom"), pick("hm_pos")
+            self.ea, self.oa = pick("hm_effect_allele"), pick("hm_other_allele")
+            self.beta, self.odds = pick("hm_beta"), pick("hm_odds_ratio")
+            self.ci_low, self.ci_high = pick("hm_ci_lower"), pick("hm_ci_upper")
+            self.eaf = pick("hm_effect_allele_frequency")
+        else:
+            self.snp, self.chrom, self.pos = pick("rsid", "hm_rsid"), pick("chromosome"), pick("base_pair_location")
+            self.ea, self.oa = pick("effect_allele"), pick("other_allele")
+            self.beta, self.odds = pick("beta"), pick("odds_ratio")
+            self.ci_low, self.ci_high = pick("ci_lower"), pick("ci_upper")
+            self.eaf = pick("effect_allele_frequency")
+        self.se = pick("standard_error")
+        self.p = pick("p_value")
+        self.mlog10p = pick("neg_log_10_p_value")
+        self.n = pick("n")
+        missing = [
+            name for name, position in (
+                ("rsid", self.snp), ("chromosome", self.chrom), ("position", self.pos),
+                ("effect allele", self.ea), ("other allele", self.oa),
+                ("beta or odds ratio", self.beta if self.beta is not None else self.odds),
+                ("p-value", self.p if self.p is not None else self.mlog10p),
+            ) if position is None
+        ]
+        if missing:
+            raise OpenSourceError(
+                "mr_open_source_format", f"The summary-statistics file has no {', '.join(missing)} column."
+            )
+
+    def variant(self, fields: list[str]) -> Variant | None:
+        def cell(position: int | None) -> str:
+            return fields[position].strip() if position is not None and position < len(fields) else ""
+
+        snp = cell(self.snp)
+        ea, oa = cell(self.ea).upper(), cell(self.oa).upper()
+        if not _RSID.fullmatch(snp) or not _ALLELE.fullmatch(ea) or not _ALLELE.fullmatch(oa):
+            return None
+        pos = _number(cell(self.pos))
+        chrom = cell(self.chrom).removeprefix("chr")
+        if pos is None or not chrom:
+            return None
+        beta = _number(cell(self.beta))
+        if beta is None:
+            odds = _number(cell(self.odds))
+            beta = math.log(odds) if odds is not None and odds > 0 else None
+        se = _number(cell(self.se))
+        if se is None:
+            low, high = _number(cell(self.ci_low)), _number(cell(self.ci_high))
+            if low is not None and high is not None and beta is not None and high > low:
+                on_ratio = self.beta is None or _number(cell(self.beta)) is None
+                if on_ratio and low > 0:
+                    low, high = math.log(low), math.log(high)
+                se = (high - low) / (2 * 1.959963984540054)
+        p = _number(cell(self.p))
+        if p is None:
+            mlog = _number(cell(self.mlog10p))
+            p = 10 ** (-mlog) if mlog is not None else None
+        if beta is None or se is None or se <= 0 or p is None or not 0 <= p <= 1:
+            return None
+        eaf = _number(cell(self.eaf))
+        return Variant(
+            snp=snp, chrom=chrom, pos=int(pos), effect_allele=ea, other_allele=oa,
+            beta=beta, se=se, pval=p, eaf=eaf if eaf is not None and 0 <= eaf <= 1 else None,
+            n=_number(cell(self.n)),
+        )
+
+
+class _CountingReader(io.RawIOBase):
+    def __init__(self, response: Any, limit: int, url: str):
+        self._response, self._limit, self._url = response, limit, url
+        self.count = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Any) -> int:
+        data = self._response.read(len(buffer))
+        self.count += len(data)
+        if self.count > self._limit:
+            raise OpenSourceError(
+                "mr_open_source_too_large",
+                f"{self._url} is larger than the {self._limit}-byte stream limit (EVIMED_MR_OPEN_STREAM_MAX_BYTES).",
+            )
+        buffer[: len(data)] = data
+        return len(data)
+
+
+def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> tuple[list[Variant], dict[str, Any]]:
+    """Read a whole gzip file once, keeping the rows ``keep`` accepts."""
+    started = time.monotonic()
+    kept: list[Variant] = []
+    rows = unreadable = 0
+    digest = hashlib.sha256()
+    with http.open(url) as response:
+        counter = _CountingReader(response, _stream_limit(), url)
+
+        class _Hashing(io.RawIOBase):
+            def readable(self) -> bool:
+                return True
+
+            def readinto(self, buffer: Any) -> int:
+                size = counter.readinto(buffer)
+                digest.update(memoryview(buffer)[:size])
+                return size
+
+        with gzip.GzipFile(fileobj=io.BufferedReader(_Hashing(), 1 << 20)) as unzipped:
+            lines = io.TextIOWrapper(unzipped, encoding="utf-8", errors="replace", newline="")
+            header = next(lines).rstrip("\r\n").split("\t")
+            columns = _Columns(header)
+            for line in lines:
+                rows += 1
+                variant = columns.variant(line.rstrip("\r\n").split("\t"))
+                if variant is None:
+                    unreadable += 1
+                elif keep(variant):
+                    kept.append(variant)
+    http.bytes += counter.count
+    return kept, {
+        "mode": "streamed",
+        "url": url,
+        "bytes": counter.count,
+        "sha256": digest.hexdigest(),
+        "rows": rows,
+        "rowsUnreadable": unreadable,
+        "seconds": round(time.monotonic() - started, 1),
+    }
+
+
+# --- Remote tabix ---------------------------------------------------------------
+
+
+def _bgzf_blocks(data: bytes) -> Iterator[tuple[int, bytes]]:
+    """(offset within ``data``, inflated bytes) for each complete BGZF block."""
+    position = 0
+    while position + 18 <= len(data):
+        if data[position:position + 4] != b"\x1f\x8b\x08\x04":
+            raise OpenSourceError("mr_open_source_format", "The summary-statistics file is not BGZF.")
+        size = struct.unpack_from("<H", data, position + 16)[0] + 1
+        if position + size > len(data):
+            return
+        yield position, zlib.decompress(data[position + 18:position + size - 8], -15)
+        position += size
+
+
+def _reg2bins(begin: int, end: int) -> list[int]:
+    bins = [0]
+    end -= 1
+    for shift, offset in ((26, 1), (23, 9), (20, 73), (17, 585), (14, 4681)):
+        bins.extend(range(offset + (begin >> shift), offset + (end >> shift) + 1))
+    return bins
+
+
+class TabixIndex:
+    """A parsed .tbi: which compressed byte ranges can hold a region."""
+
+    def __init__(self, raw: bytes):
+        data = gzip.decompress(raw)
+        if data[:4] != b"TBI\x01":
+            raise OpenSourceError("mr_open_source_format", "The tabix index is not a TBI file.")
+        (n_ref, _fmt, col_seq, col_beg, col_end, meta, skip, l_nm) = struct.unpack_from("<8i", data, 4)
+        self.col_seq, self.col_beg, self.skip, self.meta = col_seq - 1, col_beg - 1, skip, chr(meta)
+        names = data[36:36 + l_nm].split(b"\0")[:n_ref]
+        self.names = [name.decode() for name in names]
+        position = 36 + l_nm
+        self.refs: list[tuple[dict[int, list[tuple[int, int]]], list[int]]] = []
+        for _ in range(n_ref):
+            (n_bin,) = struct.unpack_from("<i", data, position)
+            position += 4
+            bins: dict[int, list[tuple[int, int]]] = {}
+            for _ in range(n_bin):
+                bin_id, n_chunk = struct.unpack_from("<Ii", data, position)
+                position += 8
+                chunks = list(struct.iter_unpack("<QQ", data[position:position + 16 * n_chunk]))
+                position += 16 * n_chunk
+                bins[bin_id] = chunks
+            (n_intv,) = struct.unpack_from("<i", data, position)
+            position += 4
+            linear = [value for (value,) in struct.iter_unpack("<Q", data[position:position + 8 * n_intv])]
+            position += 8 * n_intv
+            self.refs.append((bins, linear))
+
+    def chunks(self, chrom: str, begin: int, end: int) -> list[tuple[int, int]]:
+        name = next((n for n in (chrom, f"chr{chrom}", chrom.removeprefix("chr")) if n in self.names), None)
+        if name is None:
+            return []
+        bins, linear = self.refs[self.names.index(name)]
+        minimum = linear[min(begin >> 14, len(linear) - 1)] if linear else 0
+        found = sorted(
+            (start, stop) for bin_id in _reg2bins(begin, end) for start, stop in bins.get(bin_id, [])
+            if stop > minimum
+        )
+        merged: list[tuple[int, int]] = []
+        for start, stop in found:
+            start = max(start, minimum)
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], stop))
+            else:
+                merged.append((start, stop))
+        return merged
+
+
+class RemoteTabix:
+    """Single-position reads of a bgzip + tabix file over HTTP Range requests."""
+
+    def __init__(self, url: str, index_url: str, http: _Http, *, data_bytes: int | None = None):
+        self.url, self.http = url, http
+        key = _cache_key("tbi", index_url, data_bytes) if data_bytes else None
+        raw = _cache_read(key, ".tbi") if key else None
+        self.index_cached = raw is not None
+        if raw is None:
+            raw = http.read(index_url, limit=64 * 1024 * 1024)
+        self.index = TabixIndex(raw)
+        if key and not self.index_cached:
+            _cache_write(key, ".tbi", raw)
+        self.header: list[str] | None = None
+        self.columns: _Columns | None = None
+        self.ranges = 0
+
+    def _read_header(self) -> None:
+        data = self.http.read(self.url, headers={"Range": f"bytes=0-{_BGZF_MAX_BLOCK * 2}"}, limit=_BGZF_MAX_BLOCK * 3)
+        text = b"".join(block for _, block in _bgzf_blocks(data)).decode("utf-8", "replace")
+        first = text.split("\n", 1)[0].rstrip("\r")
+        self.header = first.split("\t")
+        self.columns = _Columns(self.header)
+
+    def fetch(self, chrom: str, pos: int) -> list[Variant]:
+        if self.columns is None:
+            self._read_header()
+        assert self.columns is not None
+        found: list[Variant] = []
+        for start, stop in self.index.chunks(chrom, pos - 1, pos):
+            first, last = start >> 16, stop >> 16
+            data = self.http.read(
+                self.url,
+                headers={"Range": f"bytes={first}-{last + _BGZF_MAX_BLOCK}"},
+                limit=last - first + 2 * _BGZF_MAX_BLOCK,
+            )
+            self.ranges += 1
+            pieces = []
+            for offset, block in _bgzf_blocks(data):
+                absolute = first + offset
+                if absolute > last:
+                    break
+                begin = (start & 0xFFFF) if absolute == first else 0
+                stop_at = (stop & 0xFFFF) if absolute == last else len(block)
+                pieces.append(block[begin:stop_at])
+            for line in b"".join(pieces).decode("utf-8", "replace").split("\n"):
+                fields = line.rstrip("\r").split("\t")
+                if len(fields) <= max(self.index.col_seq, self.index.col_beg) or line.startswith(self.index.meta):
+                    continue
+                if fields[self.index.col_seq].removeprefix("chr") != chrom.removeprefix("chr"):
+                    continue
+                try:
+                    if int(fields[self.index.col_beg]) != pos:
+                        continue
+                except ValueError:
+                    continue
+                variant = self.columns.variant(fields)
+                if variant is not None:
+                    found.append(variant)
+        return found
+
+
+# --- Instrument selection -------------------------------------------------------
+
+
+def distance_clump(variants: list[Variant], window_kb: int = CLUMP_WINDOW_KB) -> list[Variant]:
+    """Most significant first; drop any variant within ``window_kb`` of one kept."""
+    kept: list[Variant] = []
+    by_chrom: dict[str, list[int]] = {}
+    for variant in sorted(variants, key=lambda item: (item.pval, -abs(item.beta / item.se), item.snp)):
+        positions = by_chrom.setdefault(variant.chrom, [])
+        at = bisect.bisect_left(positions, variant.pos)
+        window = window_kb * 1000
+        near = (at < len(positions) and positions[at] - variant.pos <= window) or (
+            at > 0 and variant.pos - positions[at - 1] <= window
+        )
+        if near:
+            continue
+        positions.insert(at, variant.pos)
+        kept.append(variant)
+    return kept
+
+
+def ld_reference() -> tuple[str, str] | None:
+    """(plink binary, bfile prefix) when a local LD reference is configured."""
+    bfile = os.getenv("EVIMED_MR_LD_BFILE", "").strip()
+    plink = os.getenv("EVIMED_MR_PLINK_BIN", "").strip() or (shutil.which("plink") or "")
+    if not bfile or not plink or not Path(f"{bfile}.bed").is_file() or not os.access(plink, os.X_OK):
+        return None
+    return plink, bfile
+
+
+def plink_clump(variants: list[Variant], plink: str, bfile: str) -> tuple[list[Variant], int]:
+    """PLINK 1.9 clumping (r2 < 0.001 within 10 Mb); returns (index variants, variants absent from the panel)."""
+    with tempfile.TemporaryDirectory(prefix="evimed-mr-clump-") as scratch:
+        assoc = Path(scratch) / "assoc.txt"
+        assoc.write_text(
+            "SNP\tP\n" + "".join(f"{variant.snp}\t{variant.pval!r}\n" for variant in variants), encoding="utf-8"
+        )
+        completed = subprocess.run(
+            [plink, "--bfile", bfile, "--clump", str(assoc), "--clump-p1", "1", "--clump-p2", "1",
+             "--clump-r2", str(CLUMP_R2), "--clump-kb", str(CLUMP_WINDOW_KB), "--out", str(Path(scratch) / "out")],
+            capture_output=True, text=True, timeout=600, check=False,
+        )
+        result = Path(scratch) / "out.clumped"
+        if completed.returncode != 0 or not result.is_file():
+            raise OpenSourceError("mr_open_clumping_failed", "PLINK clumping against the LD reference failed.")
+        index = set()
+        for line in result.read_text(encoding="utf-8").splitlines()[1:]:
+            fields = line.split()
+            if len(fields) > 2:
+                index.add(fields[2])
+        with open(f"{bfile}.bim", encoding="utf-8") as bim:
+            wanted = {variant.snp for variant in variants}
+            present = {fields[1] for fields in (line.split() for line in bim) if len(fields) > 1 and fields[1] in wanted}
+    return [variant for variant in variants if variant.snp in index], len(wanted - present)
+
+
+def curated_leads(accession: str, http: _Http) -> list[tuple[str, str, int]]:
+    """(rsid, chromosome, GRCh38 position) of the study's curated associations."""
+    leads: dict[str, tuple[str, str, int]] = {}
+    page, pages = 0, 1
+    while page < pages and page < 20:
+        payload = http.json(f"{CATALOG_API}/associations?accession_id={accession}&size=1000&page={page}")
+        pages = int(((payload or {}).get("page") or {}).get("totalPages") or 1)
+        for row in ((payload or {}).get("_embedded") or {}).get("associations") or []:
+            alleles = row.get("snp_allele") or []
+            locations = row.get("locations") or []
+            for allele in alleles if isinstance(alleles, list) else []:
+                rsid = str((allele or {}).get("rs_id") or "")
+                if not _RSID.fullmatch(rsid):
+                    continue
+                for location in locations if isinstance(locations, list) else []:
+                    chrom, _, pos = str(location).partition(":")
+                    if pos.isdigit():
+                        leads.setdefault(rsid, (rsid, chrom, int(pos)))
+        page += 1
+    return list(leads.values())
+
+
+# --- The pair -------------------------------------------------------------------
+
+
+@dataclass
+class OpenPair:
+    exposure_rows: list[Variant]
+    outcome_rows: list[Variant]
+    record: dict[str, Any] = field(default_factory=dict)
+
+
+def _scan_significant(
+    study: CatalogStudy, http: _Http, p_threshold: float
+) -> tuple[list[Variant], dict[str, Any]]:
+    """Every variant under ``p_threshold`` in a streamed file, reused when already read."""
+    key = (
+        _cache_key("scan", study.harmonised_url, study.harmonised_bytes, repr(p_threshold))
+        if study.harmonised_bytes else None
+    )
+    cached = _cache_read(key, ".json") if key else None
+    if cached is not None:
+        try:
+            stored = json.loads(cached)
+            variants = [Variant(**row) for row in stored["variants"]]
+            return variants, {**stored["read"], "reusedFromCache": True}
+        except (ValueError, TypeError, KeyError):
+            pass
+    variants, read = stream_variants(study.harmonised_url, http, lambda variant: variant.pval < p_threshold)
+    read["candidateSource"] = "genome-wide scan of the harmonised file"
+    read["readAt"] = _now()
+    if key:
+        _cache_write(key, ".json", json.dumps({
+            "read": read, "variants": [variant.__dict__ for variant in variants],
+        }).encode("utf-8"))
+    return variants, read
+
+
+def _fetch_many(reader: RemoteTabix, wanted: Iterable[tuple[str, str, int]]) -> dict[str, Variant]:
+    found: dict[str, Variant] = {}
+    for rsid, chrom, pos in wanted:
+        for variant in reader.fetch(chrom, pos):
+            if variant.snp == rsid:
+                found[rsid] = variant
+                break
+    return found
+
+
+def build_pair(
+    exposure_source: dict[str, Any],
+    outcome_source: dict[str, Any],
+    *,
+    http: _Http | None = None,
+    p_threshold: float = GENOME_WIDE_P,
+) -> OpenPair:
+    """Exposure instruments and their outcome rows, read from two catalogue studies."""
+    http = http or _Http()
+    started = time.monotonic()
+    exposure = locate_harmonised_file(resolve_study(exposure_source, http), http)
+    outcome = locate_harmonised_file(resolve_study(outcome_source, http), http)
+    if exposure.accession == outcome.accession:
+        raise OpenSourceError("mr_open_source_invalid", "Exposure and outcome are the same GWAS Catalog study.")
+
+    if exposure.index_url:
+        reader = RemoteTabix(exposure.harmonised_url, exposure.index_url, http, data_bytes=exposure.harmonised_bytes)
+        leads = curated_leads(exposure.accession, http)
+        candidates = [variant for variant in _fetch_many(reader, leads).values() if variant.pval < p_threshold]
+        exposure_read = {
+            "mode": "tabix", "url": exposure.harmonised_url, "index": exposure.index_url,
+            "candidateSource": "GWAS Catalog curated associations for the study, re-read from its harmonised file",
+            "candidatesListed": len(leads), "rangeRequests": reader.ranges,
+        }
+    else:
+        candidates, exposure_read = _scan_significant(exposure, http, p_threshold)
+    # One row per rsid: a duplicated rsid keeps its most significant row.
+    unique: dict[str, Variant] = {}
+    for variant in sorted(candidates, key=lambda item: item.pval):
+        unique.setdefault(variant.snp, variant)
+    candidates = list(unique.values())
+    if len(candidates) < 3:
+        raise OpenSourceError(
+            "mr_open_no_instruments",
+            f"{exposure.accession} has {len(candidates)} variant(s) at p < {p_threshold:g}; at least 3 are needed.",
+        )
+
+    reference = ld_reference()
+    if reference is not None:
+        instruments, absent = plink_clump(candidates, *reference)
+        clumping = {
+            "method": "plink_ld_clumping", "r2": CLUMP_R2, "windowKb": CLUMP_WINDOW_KB,
+            "reference": Path(reference[1]).name, "variantsAbsentFromReference": absent,
+            "ldChecked": True,
+        }
+    else:
+        instruments = distance_clump(candidates)
+        clumping = {
+            "method": "distance_pruning", "windowKb": CLUMP_WINDOW_KB, "ldChecked": False,
+            "note": "No LD reference was configured: the most significant variant per 10,000 kb window was "
+                    "kept. This is stricter than r2 < 0.001 clumping within 10,000 kb and does not measure LD.",
+        }
+    if len(instruments) < 3:
+        raise OpenSourceError(
+            "mr_open_no_instruments", f"{len(instruments)} instrument(s) remained after clumping; at least 3 are needed."
+        )
+
+    wanted = [(variant.snp, variant.chrom, variant.pos) for variant in instruments]
+    if outcome.index_url:
+        reader = RemoteTabix(outcome.harmonised_url, outcome.index_url, http, data_bytes=outcome.harmonised_bytes)
+        matches = _fetch_many(reader, wanted)
+        outcome_read = {"mode": "tabix", "url": outcome.harmonised_url, "index": outcome.index_url,
+                        "rangeRequests": reader.ranges}
+    else:
+        names = {variant.snp for variant in instruments}
+        rows, outcome_read = stream_variants(outcome.harmonised_url, http, lambda variant: variant.snp in names)
+        matches = {}
+        for variant in rows:
+            matches.setdefault(variant.snp, variant)
+    outcome_rows = [matches[variant.snp] for variant in instruments if variant.snp in matches]
+    missing = [variant.snp for variant in instruments if variant.snp not in matches]
+
+    record = {
+        "schemaVersion": 1,
+        "dataSource": "gwas_catalog",
+        "retrievedAt": _now(),
+        "exposure": {**exposure.record(), "read": exposure_read},
+        "outcome": {**outcome.record(), "read": outcome_read},
+        "instrumentSelection": {
+            "pThreshold": p_threshold,
+            "genomeWideSignificantVariants": len(candidates),
+            "afterClumping": len(instruments),
+            **clumping,
+        },
+        "outcomeLookup": {
+            "instrumentsFound": len(outcome_rows),
+            "instrumentsUnavailableInOutcome": len(missing),
+            "unavailableVariants": missing[:500],
+            "proxies": "none — a variant absent from the outcome file is dropped, not replaced",
+        },
+        "http": {"requests": http.requests, "bytes": http.bytes, "seconds": round(time.monotonic() - started, 1)},
+    }
+    return OpenPair(exposure_rows=instruments, outcome_rows=outcome_rows, record=record)
+
+
+def csv_bytes(variants: list[Variant]) -> bytes:
+    """The standard columns the engine's local path reads, one row per variant."""
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=CSV_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    for variant in variants:
+        writer.writerow(variant.row())
+    return buffer.getvalue().encode("utf-8")
+
+
+def selection_record(record: dict[str, Any]) -> dict[str, Any]:
+    """What instrument-selection.json says for an open-data run."""
+    selection = record["instrumentSelection"]
+    return {
+        "mode": "gwas_catalog",
+        "source": record["exposure"]["accession"],
+        "provenance": provenance_sentence(record),
+        "ld_rechecked": False,
+        **{key: selection[key] for key in (
+            "method", "pThreshold", "genomeWideSignificantVariants", "afterClumping", "windowKb", "ldChecked",
+        ) if key in selection},
+        **({"r2": selection["r2"], "reference": selection["reference"]}
+           if selection.get("method") == "plink_ld_clumping" else {}),
+    }
+
+
+def provenance_sentence(record: dict[str, Any]) -> str:
+    """The clumping provenance the local engine records with preclumped instruments."""
+    exposure = record["exposure"]
+    selection = record["instrumentSelection"]
+    if selection["method"] == "plink_ld_clumping":
+        how = (f"PLINK clumping r2<{selection['r2']} within {selection['windowKb']} kb against the "
+               f"{selection['reference']} LD reference")
+    else:
+        how = f"distance pruning, one variant per {selection['windowKb']} kb window, no LD reference"
+    return (
+        f"GWAS Catalog {exposure['accession']} (PMID {exposure['pubmedId']}), harmonised file "
+        f"{exposure['harmonisedFile']}; variants at p<{selection['pThreshold']:g} "
+        f"({selection['genomeWideSignificantVariants']}) selected by {how} "
+        f"({selection['afterClumping']} kept); read {record['retrievedAt']}."
+    )

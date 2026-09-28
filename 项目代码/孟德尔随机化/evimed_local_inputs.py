@@ -46,6 +46,14 @@ SOURCE_KEYS = {
 }
 
 
+#: Open repositories this engine reads without any credential (see
+#: mr_agent/tools/open_sumstats.py). The adapter reads this to report that the
+#: engine can run without OpenGWAS.
+OPEN_DATA_SOURCES = ("gwas_catalog",)
+OPEN_PROVENANCE_NAME = "mendelian-randomization-open-sources.json"
+OPEN_INPUT_NAMES = {"exposure": "open-exposure.csv", "outcome": "open-outcome.csv"}
+
+
 class MRInputError(ValueError):
     """A stable public error; never carries an OS path or underlying exception."""
 
@@ -91,6 +99,21 @@ def _validate_source(source: Any) -> None:
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", source["gwasId"])
         ):
             raise _invalid("An OpenGWAS source requires one explicit GWAS identifier.")
+        return
+    if source.get("type") == "gwas_catalog":
+        # One identifier the catalogue itself resolves: a study accession, or
+        # the PubMed id of the paper when it has a single study with full
+        # summary statistics. Never a trait name the engine would have to guess.
+        keys = set(source) - {"type"}
+        if not (
+            (keys == {"accession"} and isinstance(source["accession"], str)
+             and re.fullmatch(r"GCST\d{6,9}", source["accession"]))
+            or (keys == {"pubmedId"} and isinstance(source["pubmedId"], str)
+                and re.fullmatch(r"\d{1,9}", source["pubmedId"]))
+        ):
+            raise _invalid(
+                "A GWAS Catalog source requires exactly one of accession (GCST...) or pubmedId."
+            )
         return
     required = {"type", "path", "columnMapping", "instrumentsPreclumped"}
     if (
@@ -146,21 +169,42 @@ def validate_request(request: dict[str, Any]) -> bool:
         if not _text(request.get(role), 4000):
             raise _invalid("Exposure and outcome must be nonempty trait names.")
         _validate_source(request[f"{role}Source"])
-    if not any(
-        request[f"{role}Source"]["type"] == "local_file" for role in ("exposure", "outcome")
-    ):
+    if request.get("analysisDirection", "forward") not in {"forward", "bidirectional"}:
+        raise _invalid("analysisDirection must be forward or bidirectional.")
+    types = {request[f"{role}Source"]["type"] for role in ("exposure", "outcome")}
+    if "gwas_catalog" in types:
+        if types != {"gwas_catalog"}:
+            raise _invalid(
+                "GWAS Catalog sources are read as a pair: give both exposureSource and "
+                "outcomeSource as gwas_catalog, or supply local files."
+            )
+        if request.get("analysisDirection", "forward") != "forward":
+            # Each direction selects its own instruments from its own exposure;
+            # one job reads one direction honestly.
+            raise MRInputError(
+                "mr_input_direction_unsupported",
+                "GWAS Catalog sources run one direction per job: start a forward job, then a "
+                "second forward job with exposure and outcome swapped for the reverse direction.",
+            )
+        return True
+    if "local_file" not in types:
         raise _invalid(
             "Explicit source objects require at least one local file; use "
             "legacy text inputs for remote-only analysis."
         )
-    if request.get("analysisDirection", "forward") not in {"forward", "bidirectional"}:
-        raise _invalid("analysisDirection must be forward or bidirectional.")
     return True
+
+
+def open_catalog_pair(request: dict[str, Any]) -> bool:
+    """Both roles are GWAS Catalog studies the engine reads itself."""
+    return validate_request(request) and all(
+        request[f"{role}Source"]["type"] == "gwas_catalog" for role in ("exposure", "outcome")
+    )
 
 
 def require_remote_access(request: dict[str, Any], token_available: bool) -> None:
     """No-token execution may use only independently declared preclumped roles."""
-    if token_available:
+    if token_available or open_catalog_pair(request):
         return
     if any(request[f"{role}Source"]["type"] == "opengwas" for role in ("exposure", "outcome")):
         raise MRInputError(
@@ -251,7 +295,9 @@ def require_admission_credential(request: dict[str, Any], credential: dict[str, 
             else "This analysis selects its instruments from OpenGWAS by trait name, "
         )
         + "and neither this deployment nor this researcher has a usable OpenGWAS JWT. "
-        "Two uploaded GWAS files with declared preclumped instruments run without one.",
+        "Without one, give both sides as GWAS Catalog studies "
+        '({"type": "gwas_catalog", "accession": "GCST..."}), which are open, '
+        "or two uploaded GWAS files with declared preclumped instruments.",
     )
 
 
@@ -633,6 +679,110 @@ def runner_sources(
         if isinstance(error, MRInputError):
             raise
         raise _manifest_failure() from None
+
+
+def open_catalog_sources(
+    request: dict[str, Any],
+    output_root: Path,
+    private_root: Path,
+    *,
+    authority: dict[str, Any] | None = None,
+    output_directory_fd: int | None = None,
+    build: Any = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read two GWAS Catalog studies into the standard files the local path analyses.
+
+    The accepted request (the worker's authority) names the studies; nothing
+    here chooses one. The exact rows analysed are published beside the
+    manifest, with a record of every URL read, so the run can be traced and the
+    replay package re-run offline.
+    """
+    from mr_agent.models import ColumnMapping, DataSource, DataSourceType
+    from mr_agent.tools import open_sumstats
+
+    if (
+        not open_catalog_pair(request)
+        or not isinstance(authority, dict)
+        or authority.get("request") != request
+        or not isinstance(authority.get("sources"), dict)
+    ):
+        raise _manifest_failure()
+    try:
+        pair = (build or open_sumstats.build_pair)(request["exposureSource"], request["outcomeSource"])
+    except open_sumstats.OpenSourceError as error:
+        raise MRInputError(error.code, str(error)) from None
+    try:
+        absolute = output_root.absolute()
+        with directory_fd(
+            output_directory_fd if output_directory_fd is not None else Path(absolute.anchor),
+            () if output_directory_fd is not None else absolute.parts[1:],
+        ) as parent:
+            if _read_manifest(parent) != authority["sources"] or any(
+                authority["sources"].get(role) != request[f"{role}Source"] for role in ("exposure", "outcome")
+            ):
+                raise _manifest_failure()
+            with directory_fd(parent, ("inputs",)) as inputs, directory_fd(private_root.resolve()) as private:
+                for role, rows in (("exposure", pair.exposure_rows), ("outcome", pair.outcome_rows)):
+                    content = open_sumstats.csv_bytes(rows)
+                    _write_new(private, OPEN_INPUT_NAMES[role], content)
+                    _write_new(inputs, OPEN_INPUT_NAMES[role], content)
+                    pair.record[role]["preparedPath"] = f"inputs/{OPEN_INPUT_NAMES[role]}"
+                    pair.record[role]["preparedSha256"] = hashlib.sha256(content).hexdigest()
+                    pair.record[role]["preparedRows"] = len(rows)
+            _write_new(
+                parent,
+                OPEN_PROVENANCE_NAME,
+                json.dumps(pair.record, ensure_ascii=False, indent=2).encode("utf-8"),
+            )
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        if isinstance(error, MRInputError):
+            raise
+        raise _manifest_failure() from None
+    mapping = ColumnMapping(**STANDARD_MAPPING, samplesize="samplesize", chr="chr", pos="pos")
+    sources = {}
+    for role in ("exposure", "outcome"):
+        study = pair.record[role]
+        sources[role] = DataSource(
+            source_type=DataSourceType.GWAS_CATALOG,
+            gwas_id=study["accession"],
+            file_path=str(private_root / OPEN_INPUT_NAMES[role]),
+            column_mapping=mapping,
+            trait_name=request[role],
+            population="; ".join(study.get("discoveryAncestry") or [])[:1000] or None,
+            instruments_preclumped=role == "exposure",
+            clumping_provenance=open_sumstats.provenance_sentence(pair.record)[:4000] if role == "exposure" else None,
+            selection=open_sumstats.selection_record(pair.record) if role == "exposure" else None,
+        )
+    return sources, pair.record
+
+
+def bind_open_metadata(results: list[Any], record: dict[str, Any], request: dict[str, Any]) -> None:
+    """Repository facts for catalogue sources, as the catalogue declares them."""
+    by_accession = {record[role]["accession"]: role for role in ("exposure", "outcome")}
+    for result in results:
+        for label in ("exposure", "outcome"):
+            source_type = getattr(result, f"{label}_source_type")
+            if getattr(source_type, "value", source_type) != "gwas_catalog":
+                continue
+            role = by_accession.get(getattr(result, f"{label}_id"))
+            if role is None:
+                raise _manifest_failure()
+            study = record[role]
+            setattr(result, f"{label}_metadata", {
+                "gwas_id": study["accession"],
+                "trait": study.get("trait") or request[role],
+                "requested_trait": request[role],
+                # Verbatim as the catalogue declares them; not parsed into a number.
+                "sample_size": study.get("initialSampleSize") or None,
+                "population": "; ".join(study.get("discoveryAncestry") or []) or None,
+                "pubmed_id": study.get("pubmedId") or None,
+                "repository": study.get("repository"),
+                "study_url": study.get("studyUrl"),
+                "harmonised_file": study.get("harmonisedFile"),
+                "licence": study.get("licence") or None,
+                "metadata_source": "gwas_catalog",
+                "verification_status": "read_from_repository",
+            })
 
 
 def bind_result_provenance(

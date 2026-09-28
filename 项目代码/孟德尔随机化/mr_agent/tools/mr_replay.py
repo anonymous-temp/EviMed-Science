@@ -112,6 +112,7 @@ def prepare_local_replay(
             source_type=source.source_type, file_path=name, column_mapping=mapping,
             instruments_preclumped=source.instruments_preclumped,
             clumping_provenance=source.clumping_provenance,
+            selection=source.selection,
         )
         sources[role] = {
             "file": name,

@@ -459,6 +459,30 @@ class PaperGenerator:
         return str(value)
 
     @staticmethod
+    def _catalog_clumping_sentence(selection: dict, zh: bool) -> str:
+        """What the open-data path recorded about its own instrument selection."""
+        window = selection.get("windowKb", "N/A")
+        total = selection.get("genomeWideSignificantVariants", "N/A")
+        kept = selection.get("afterClumping", "N/A")
+        threshold = selection.get("pThreshold", "N/A")
+        if selection.get("method") == "plink_ld_clumping":
+            if zh:
+                return (f"工具变量由本次运行从GWAS Catalog汇总统计中选取：p<{threshold}的变异{total}个，"
+                        f"经PLINK LD clumping（r²<{selection.get('r2')}，窗口{window} kb，参考面板"
+                        f"{selection.get('reference')}）保留{kept}个。")
+            return (f"Instruments were selected by this run from GWAS Catalog summary statistics: {total} variants "
+                    f"at p<{threshold}, PLINK LD clumping (r²<{selection.get('r2')}, {window} kb, reference "
+                    f"{selection.get('reference')}) kept {kept}. ")
+        if zh:
+            return (f"工具变量由本次运行从GWAS Catalog汇总统计中选取：p<{threshold}的变异{total}个，"
+                    f"按距离修剪（每{window} kb窗口保留最显著的一个变异，未使用LD参考面板）保留{kept}个；"
+                    "该做法比窗口内r²<0.001的clumping更严格，但并未实测LD。")
+        return (f"Instruments were selected by this run from GWAS Catalog summary statistics: {total} variants at "
+                f"p<{threshold}, distance pruning (the most significant variant per {window} kb window, no LD "
+                f"reference panel) kept {kept}; this is stricter than r²<0.001 clumping within the window but "
+                "does not measure LD. ")
+
+    @staticmethod
     def _fmt_p(value: float) -> str:
         return f"{value:.3e}"
 
@@ -502,6 +526,8 @@ class PaperGenerator:
                     "Provided preclumped instruments were used; LD was not independently rechecked. "
                     f"Provided provenance: {selection.get('provenance', 'N/A')}. "
                 )
+            elif selection.get("mode") == "gwas_catalog":
+                clumping = self._catalog_clumping_sentence(selection, zh)
             elif selection.get("mode") == "opengwas" and selection.get("ld_rechecked") is True:
                 clumping = (
                     "已完成OpenGWAS LD clumping（r² < 0.001，窗口10,000 kb）。"
@@ -924,6 +950,8 @@ class PaperGenerator:
                 rows.append(
                     f"{identifier} (https://gwas.mrcieu.ac.uk/datasets/{identifier}/)"
                     if source_type == DataSourceType.OPENGWAS else
+                    f"{identifier} (https://www.ebi.ac.uk/gwas/studies/{identifier})"
+                    if source_type == DataSourceType.GWAS_CATALOG else
                     f"{identifier} ({'本地输入，访问条件由提供方说明' if zh else 'local input; access terms supplied by its provider'})"
                 )
         unique = list(dict.fromkeys(rows))

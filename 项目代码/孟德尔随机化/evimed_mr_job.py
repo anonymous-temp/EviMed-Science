@@ -611,9 +611,13 @@ def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_creden
                         _target_is_current(inputs, job, workspace, output)
                         # These raw receipts come from the worker-held authority,
                         # not the standardized request or mutable workspace files.
+                        # Only an uploaded file has bytes to receipt; an OpenGWAS or
+                        # GWAS Catalog source is an identifier, and the open-data
+                        # rows it produced are published with their own digests.
                         input_receipts = [
                             {key: source[key] for key in ("path", "bytes", "sha256")}
                             for source in authority["sources"].values()
+                            if source.get("type") == "local_file"
                         ]
                         return {"returnCode": 0, "result": result, "artifacts": artifacts,
                                 "inputReceipts": input_receipts, "artifactReceipts": artifact_receipts,

@@ -38,6 +38,10 @@ class DataSourceType(str, Enum):
     EQTL = "eqtl"
     PQTL = "pqtl"
     VCF = "vcf"
+    #: Harmonised summary statistics read from the NHGRI-EBI GWAS Catalog by
+    #: mr_agent/tools/open_sumstats.py into local files: analysed on the local
+    #: path, reported as the catalogue study it came from.
+    GWAS_CATALOG = "gwas_catalog"
 
 
 class ColumnPreset(str, Enum):
@@ -111,6 +115,10 @@ class DataSource(BaseModel):
     population: str | None = None
     instruments_preclumped: bool = False
     clumping_provenance: str | None = Field(default=None, max_length=4000)
+    #: How this engine itself selected the instruments (open-data path only):
+    #: written verbatim to instrument-selection.json instead of the
+    #: "provided by the supplier, not rechecked" declaration.
+    selection: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def require_preclumped_provenance(self) -> "DataSource":

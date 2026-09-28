@@ -613,7 +613,16 @@ def _collect_plots(result: MRAnalysisResult, output_dir: Path) -> None:
 
 def _build_local_clumping(source: DataSource) -> str:
     """Never substitute unselected SNPs when the requested LD step fails."""
-    if source.instruments_preclumped:
+    if source.instruments_preclumped and source.selection:
+        # Selected by this engine from open summary statistics: say how, as
+        # recorded, rather than calling it a supplier's declaration.
+        selection = json.dumps(json.dumps(source.selection, ensure_ascii=True, sort_keys=True))
+        block = (
+            f'instrument_selection <- jsonlite::fromJSON({selection}, simplifyVector=TRUE)\n'
+            'cat(sprintf("Instruments selected from open summary statistics by %s.\\n", '
+            'instrument_selection$method))\n'
+        )
+    elif source.instruments_preclumped:
         provenance = json.dumps(source.clumping_provenance, ensure_ascii=True)
         block = (
             'instrument_selection <- list(mode="provided_preclumped", '

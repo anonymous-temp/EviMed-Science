@@ -16,9 +16,14 @@ from dotenv import load_dotenv
 
 from evimed_local_inputs import (
     MANIFEST_NAME,
+    OPEN_INPUT_NAMES,
+    OPEN_PROVENANCE_NAME,
     MRInputError,
+    bind_open_metadata,
     bind_remote_metadata,
     bind_result_provenance,
+    open_catalog_pair,
+    open_catalog_sources,
     relative_parts,
     remote_metadata,
     runner_sources,
@@ -207,6 +212,19 @@ def _validate_local_metadata(metadata: dict, paper: str, label: str) -> None:
         raise RuntimeError(f"MR paper omitted supplied {label} sample size")
 
 
+def _validate_catalog_metadata(metadata: dict, paper: str, label: str) -> None:
+    """A GWAS Catalog source is named in the paper by the accession it was read from."""
+    accession = str(metadata.get("gwas_id") or "")
+    if (
+        metadata.get("metadata_source") != "gwas_catalog"
+        or not re.fullmatch(r"GCST\d{6,9}", accession)
+        or not metadata.get("trait")
+    ):
+        raise RuntimeError(f"MR {label} GWAS Catalog metadata is incomplete")
+    if accession not in paper:
+        raise RuntimeError(f"MR paper omitted the {label} GWAS Catalog accession")
+
+
 def _validate_release(paper: str, results: list) -> None:
     unsupported_runtime_claims = (
         "通过phenoscanner数据库排除",
@@ -229,6 +247,9 @@ def _validate_release(paper: str, results: list) -> None:
             source_type = getattr(result, f"{label}_source_type", "opengwas")
             if getattr(source_type, "value", source_type) == "local_file":
                 _validate_local_metadata(metadata, paper, label)
+                continue
+            if getattr(source_type, "value", source_type) == "gwas_catalog":
+                _validate_catalog_metadata(metadata, paper, label)
                 continue
             required = ("gwas_id", "trait", "sample_size", "population", "year")
             missing = [key for key in required if metadata.get(key) in (None, "")]
@@ -371,13 +392,25 @@ def run(
 
         language = str(request.get("outputLanguage") or "zh")
         with tempfile.TemporaryDirectory(prefix="evimed-mr-inputs-") as temporary:
-            sources, provenance = runner_sources(
-                request,
-                output_dir,
-                Path(temporary),
-                authority=input_authority,
-                output_directory_fd=output_directory_fd,
-            )
+            open_record = None
+            if open_catalog_pair(request):
+                # Both studies are read from the open GWAS Catalog: no token.
+                sources, open_record = open_catalog_sources(
+                    request,
+                    output_dir,
+                    Path(temporary),
+                    authority=input_authority,
+                    output_directory_fd=output_directory_fd,
+                )
+                provenance = {}
+            else:
+                sources, provenance = runner_sources(
+                    request,
+                    output_dir,
+                    Path(temporary),
+                    authority=input_authority,
+                    output_directory_fd=output_directory_fd,
+                )
             repository_metadata = remote_metadata(sources) if sources else {}
             from mr_agent.core.engine import MRAgent
 
@@ -392,7 +425,9 @@ def run(
                 agent.state.slots.gwas_token = token
             analysis_message = agent._run_analysis()
         for role, source in sources.items():
-            if source.is_local():
+            if open_record is not None:
+                source.file_path = f"inputs/{OPEN_INPUT_NAMES[role]}"
+            elif source.is_local():
                 source.file_path = f"inputs/{role}.csv"
         valid_results = [
             result for result in agent.state.analysis_results if result.n_instruments > 0
@@ -412,6 +447,8 @@ def run(
             bind_result_provenance(valid_results, provenance, request)
             if repository_metadata:
                 bind_remote_metadata(valid_results, repository_metadata)
+        if open_record is not None:
+            bind_open_metadata(valid_results, open_record, request)
         try:
             require_report_ready(valid_results)
         except MRDeliveryError as error:
@@ -454,6 +491,10 @@ def run(
                         if source.is_local()
                     ],
                 ]
+            )
+        if open_record is not None:
+            copied_artifacts.extend(
+                [MANIFEST_NAME, OPEN_PROVENANCE_NAME, *[f"inputs/{name}" for name in OPEN_INPUT_NAMES.values()]]
             )
         analysis_path = output_dir / "mendelian-randomization-run.json"
         analysis_path.write_text(

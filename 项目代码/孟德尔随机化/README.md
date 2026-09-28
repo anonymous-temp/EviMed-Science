@@ -76,6 +76,28 @@ the control plane) is judged before the deployment's, the same precedence the
 worker applies. Two local files with declared preclumped instruments need no
 token.
 
+## Token-free GWAS Catalog sources
+
+`exposureSource` and `outcomeSource` may both be
+`{"type": "gwas_catalog", "accession": "GCST..."}` (or `"pubmedId"` for a
+paper with exactly one study with full summary statistics; forward only, one
+direction per job). `mr_agent/tools/open_sumstats.py` resolves each study
+through the GWAS Catalog REST API v2 and reads its harmonised file from EBI FTP:
+a bgzip file with a tabix index is read variant by variant with HTTP Range
+requests; any other file is streamed once (`EVIMED_MR_OPEN_STREAM_MAX_BYTES`,
+default 512 MiB). Exposure instruments are the variants at p < 5e-8, clumped by
+PLINK 1.9 (r² < 0.001, 10,000 kb) when `EVIMED_MR_LD_BFILE` (and a `plink` on
+PATH or `EVIMED_MR_PLINK_BIN`) name a local LD reference, otherwise pruned to
+the most significant variant per 10,000 kb window; `instrument-selection.json`
+says which. The outcome rows for the same variants are read; a missing variant
+is dropped, never proxied. The rows analysed are published as
+`inputs/open-*.csv`, every URL and count in
+`mendelian-randomization-open-sources.json`, and the analysis runs on the
+existing local path, replay package included. `EVIMED_MR_OPEN_CACHE_DIR` keeps
+what a scan found for the next job on the same study. The adapter reports
+`ready` with `openDataSources: ["gwas_catalog"]`; the `opengwas` block still
+says whether OpenGWAS itself is usable.
+
 ## Portable local analysis replay
 
 Paired local inputs with a declared-preclumped exposure produce an explicit
