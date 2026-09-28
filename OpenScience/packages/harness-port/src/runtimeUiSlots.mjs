@@ -141,13 +141,17 @@ export const RUNTIME_UI_OPTIONAL_SERVICES = Object.freeze({
 /**
  * Services a body requires outright, with their providers. These are the ones
  * every hosted page already has; the navigation bridge cannot work without the
- * first four and the brand cannot without the last two.
+ * first five and the brand cannot without the last two. `uiWorkspace` joined
+ * at 0.1.7, where opening a session moved to it from `sessions`; its row is
+ * one the hosted profile can never disable (the sidebar, the conversation and
+ * the chat inject it).
  */
 export const RUNTIME_UI_REQUIRED_SERVICES = Object.freeze({
   sessions: Object.freeze({ row: 'session-controller', package: '@deepseek-ai/dsh-api-session-controller' }),
   conversation: Object.freeze({ row: 'ui-conversation', package: '@deepseek-ai/dsh-client-ui-conversation' }),
   connection: Object.freeze({ row: 'connection', package: '@deepseek-ai/dsh-client-connection' }),
   workspaces: Object.freeze({ row: 'workspace-controller', package: '@deepseek-ai/dsh-api-workspace-controller' }),
+  uiWorkspace: Object.freeze({ row: 'ui-workspace', package: '@deepseek-ai/dsh-client-ui-workspace' }),
   slots: Object.freeze({ row: 'ui-renderer', package: '@deepseek-ai/dsh-client-ui-renderer' }),
   locale: Object.freeze({ row: 'locale', package: '@deepseek-ai/dsh-client-locale' }),
 });

@@ -22,13 +22,13 @@ test('the packaged native client registers a browser-safe synchronous plugin', a
   const plugin = registration.factory((/** @type {string} */ id) => { required.push(id); return undefined; });
   // The services the bodies require outright, and nothing optional: a
   // required service that is absent parks the whole plugin, bridge included.
-  assert.deepEqual(Array.from(plugin.inject).sort(), ['connection', 'conversation', 'locale', 'sessions', 'slots', 'workspaces']);
+  assert.deepEqual(Array.from(plugin.inject).sort(), ['connection', 'conversation', 'locale', 'sessions', 'slots', 'uiWorkspace', 'workspaces']);
   assert.equal(plugin.apply.constructor.name, 'Function');
   assert.equal(plugin.apply({}, {}), undefined);
   assert.deepEqual(required, [], 'outside a hosted frame neither body touches the loader');
   // Every service the bodies inject has its provider named for the module
   // scanner, so the bundle is ordered after them rather than racing them.
-  for (const provider of ['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-sidebar']) {
+  for (const provider of ['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-workspace']) {
     assert.ok(pkg.dsh.client.inject.includes(provider), `${provider} must be listed under dsh.client.inject`);
   }
   assert.doesNotMatch(source, /(?:import|require)\s*\(?['"](?:node:|@deepseek-ai\/)/);
