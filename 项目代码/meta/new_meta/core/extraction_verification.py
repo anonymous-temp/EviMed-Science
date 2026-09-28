@@ -35,6 +35,7 @@ NUMERIC_FIELDS = tuple(name for name, schema in _PROPERTIES.items()
                        if name not in {"source_page", "override_revision"} and _numeric_schema(schema))
 NUMERIC_MAP_FIELDS = tuple(name for name, schema in _PROPERTIES.items()
                            if schema.get("type") == "object" and _numeric_schema(schema.get("additionalProperties", {})))
+_TEXT_FIELDS = frozenset(name for name in _PROPERTIES if name not in NUMERIC_FIELDS and name not in NUMERIC_MAP_FIELDS)
 
 CHECKER_HIDDEN_FIELDS = frozenset({"primary_analysis_alignment", "source_quote_verified", "source_quote_match",
     "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication", "override_revision",
@@ -187,28 +188,82 @@ def quote_is_anchored(quote: str, location: str, source_text: str) -> bool:
         source, quoted, spans, [start for start, _ in spans], continuous_scripts=True))
 
 
-def numeric_value_in_quote(value: float | int | None, quote: str, field: str = "") -> bool:
+#: Statistical notation a source uses to say what "a ± b" reports. A closed
+#: vocabulary of notation, not prose: the forms that declare a standard
+#: deviation, and the other quantities ± is written for.
+_PLUS_MINUS_SD = re.compile(
+    r"(?:(?:means?|均数|均值|x̄)\s*)?(?:±|\+/-)\s*(?:sd|s\.d\.|standard deviations?|标准差)(?![a-z])"
+    r"|x̄\s*(?:±|\+/-)\s*s(?![a-z.])")
+_PLUS_MINUS_OTHER = re.compile(
+    r"(?:±|\+/-)\s*(?:se|s\.e\.|sem|s\.e\.m\.|standard errors?|标准误|(?:95\s*%\s*)?ci|iqr|range)(?![a-z])")
+_MEAN_SD_NUMBER = r"[+\-−]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+_MEAN_SD_TOKEN = re.compile(rf"({_MEAN_SD_NUMBER})\s*%?\s*(?:±|\+/-)\s*({_MEAN_SD_NUMBER})\s*%?")
+#: Counts written as words. On 2026-09-28 the checker quoted "No patient had
+#: clinical signs of deep vein thrombosis" for zero events and "required for one
+#: patient" for one, and both were refused because no digit was in the quote.
+#: Closed vocabulary: the determiners that state zero, and the cardinals to twenty.
+_COUNT_WORDS = {
+    "zero": 0, "no": 0, "none": 0, "nil": 0, "neither": 0, "nobody": 0,
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+}
+_CJK_ZERO = ("零", "〇", "无", "未", "没有")
+_CJK_DIGITS = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+_CJK_CLASSIFIERS = "例名人位个"
+_EVENT_FIELDS = frozenset({"true_positive", "false_negative", "false_positive", "true_negative", "prediction_events"})
+
+
+def plus_minus_reports_sd(source_text: str) -> bool:
+    """Whether the source declares its "a ± b" values as mean ± SD, and nothing else.
+
+    Tables usually carry the declaration once, in a caption or the statistics
+    paragraph ("Means ± SD"), not beside every value a checker quotes. A source
+    that also writes ± for an SE, a CI or a range keeps the stricter rule: the
+    quoted passage itself has to say which one it is.
+    """
+    from new_meta.core.primary_analysis_alignment import _normalized_quote
+    text = _normalized_quote(source_text)
+    return bool(_PLUS_MINUS_SD.search(text)) and not _PLUS_MINUS_OTHER.search(text)
+
+
+def _count_word_in_quote(value: float, text: str) -> bool:
+    if not float(value).is_integer() or not 0 <= value <= 20:
+        return False
+    count = int(value)
+    if any(re.search(rf"(?<![a-z]){word}(?![a-z])", text) for word, number in _COUNT_WORDS.items() if number == count):
+        return True
+    if count == 0 and any(mark in text for mark in _CJK_ZERO):
+        return True
+    return any(re.search(rf"{digit}[{_CJK_CLASSIFIERS}]", text) for digit, number in _CJK_DIGITS.items() if number == count)
+
+
+def numeric_value_in_quote(value: float | int | None, quote: str, field: str = "", *,
+                           plus_minus_sd: bool = False) -> bool:
     """Check reported decimal/power literals, retaining signs and numeric spans.
 
     Compound fractions, multiplication and plus/minus expressions require explicit
     source values; they are not split into misleading numerator/denominator values.
     Interval endpoints are supported, including the common PDF en-dash form.
+    "a ± b" gives a mean and its SD when the quote or, through ``plus_minus_sd``,
+    the whole source declares that notation. An event count may be written as a
+    word (``_COUNT_WORDS``).
     """
     from new_meta.core.primary_analysis_alignment import _normalized_quote, _NUMBER_ATOM, _NUMERIC_TOKEN
     if value is None or not math.isfinite(float(value)):
         return False
     text = _normalized_quote(quote)
-    event_field = field.startswith("events") or field in {"true_positive", "false_negative", "false_positive", "true_negative", "prediction_events"}
+    event_field = field.startswith("events") or field in _EVENT_FIELDS
     total_field = field.startswith("total") or field in {"n_intervention", "n_control", "correlation_n", "prediction_sample_size"}
     addition_spans = [match.span() for match in re.finditer(_NUMBER_ATOM + r"\s*\+\s*" + _NUMBER_ATOM, text)]
-    labelled_mean_sd = bool(re.search(r"(?:mean|均值)\s*(?:±|\+/-)\s*(?:sd|standard deviations?|标准差)\b", text))
+    labelled_mean_sd = plus_minus_sd or bool(re.search(r"(?:mean|均值)\s*(?:±|\+/-)\s*(?:sd|standard deviations?|标准差)\b", text))
     for compound in _NUMERIC_TOKEN.finditer(text):
         token = compound.group()
         if any(start <= compound.start() and compound.end() <= end for start, end in addition_spans):
             continue
-        mean_sd = re.fullmatch(r"([+\-−]?\d+(?:\.\d+)?)\s*(?:±|\+/-)\s*(\d+(?:\.\d+)?)", token)
+        mean_sd = _MEAN_SD_TOKEN.fullmatch(token)
         if mean_sd and labelled_mean_sd and (field.startswith("mean_") or field.startswith("sd_")):
-            reported = float(mean_sd.group(1 if field.startswith("mean_") else 2).replace("−", "-"))
+            reported = float(mean_sd.group(1 if field.startswith("mean_") else 2).replace("−", "-").replace(",", ""))
             if math.isclose(float(value), reported, rel_tol=1e-10, abs_tol=1e-12):
                 return True
             continue
@@ -248,6 +303,34 @@ def numeric_value_in_quote(value: float | int | None, quote: str, field: str = "
                     return True
             except (ValueError, OverflowError):
                 continue
+    return event_field and _count_word_in_quote(float(value), text)
+
+
+_P_EXPRESSION = re.compile(r"p\s*(?:-?\s*values?)?\s*(<=|>=|≤|≥|<|>|=)\s*(\d*\.?\d+(?:e-?\d+)?)")
+_P_COMPARATORS = {"≤": "<=", "≥": ">="}
+
+
+def p_inequality_is_anchored(expression: str, source_text: str) -> bool:
+    """A reported p-value inequality is in the source when its comparator and bound are.
+
+    Extraction writes "p<0.001" for a source's "P < 0.001" or "P<.001": the
+    same statement, spaced and cased differently, and on 2026-09-28 it was
+    refused 52 times in one ma-001 run. Parsed as (comparator, number), both
+    sides compare exactly; an expression that does not parse keeps the verbatim rule.
+    """
+    from new_meta.core.primary_analysis_alignment import _normalized_quote
+    parsed = _P_EXPRESSION.fullmatch(_normalized_quote(expression).strip())
+    if parsed is None:
+        return quote_is_anchored(expression, "reported p-value inequality", source_text)
+    comparator = _P_COMPARATORS.get(parsed.group(1), parsed.group(1))
+    bound = float(parsed.group(2))
+    text = _normalized_quote(source_text)
+    for match in _P_EXPRESSION.finditer(text):
+        if match.start() and text[match.start() - 1].isalnum():
+            continue
+        if (_P_COMPARATORS.get(match.group(1), match.group(1)) == comparator
+                and math.isclose(float(match.group(2)), bound, rel_tol=1e-12, abs_tol=0.0)):
+            return True
     return False
 
 
@@ -361,6 +444,7 @@ def validate_check_batch(
     """Return actionable schema/coverage/anchor/numeric errors before stamping."""
     from new_meta.core.primary_analysis_alignment import _anchored
     errors = []
+    plus_minus_sd = plus_minus_reports_sd(source_text)
     def issue(code, index=None, **context):
         errors.append({"code": code, "outcome_index": index, **context})
     expected = set(indices)
@@ -411,7 +495,7 @@ def validate_check_batch(
             if not quote_is_anchored(item_support.quote, item_support.source_location, source_text):
                 issue("verification_quote_not_anchored", index, field="conditioning_or_trial_unit")
         p_inequality = study.outcomes[index].p_value_inequality
-        if p_inequality and not quote_is_anchored(p_inequality, "reported p-value inequality", source_text):
+        if p_inequality and not p_inequality_is_anchored(p_inequality, source_text):
             issue("p_value_inequality_not_anchored", index, expression=p_inequality)
         conflicts = numeric_conflicts(study.outcomes[index])
         if conflicts:
@@ -419,7 +503,11 @@ def validate_check_batch(
         values = numeric_fields(study.outcomes[index])
         if values and details.numeric_status != "verified":
             issue("numeric_status_unresolved", index, numeric_status=details.numeric_status)
-        names = [finding.field for finding in details.numeric_findings]
+        # A finding about a field that holds no number (a checker verifying
+        # p_value_inequality beside p_value) verifies nothing and is left out;
+        # a name that is no field at all still breaks the contract.
+        names = [finding.field for finding in details.numeric_findings
+                 if finding.field in values or finding.field not in _TEXT_FIELDS]
         if set(names) != set(values) or len(names) != len(values):
             issue("numeric_field_coverage", index, expected=sorted(values), received=names)
         for finding in details.numeric_findings:
@@ -431,7 +519,8 @@ def validate_check_batch(
             elif finding.status != "match" or finding.reported_value is None:
                 issue("numeric_value_unverified", index, field=finding.field)
             if finding.status == "match" and (not quote_is_anchored(finding.quote, finding.source_location, source_text)
-                    or not numeric_value_in_quote(finding.reported_value, finding.quote, finding.field)):
+                    or not numeric_value_in_quote(finding.reported_value, finding.quote, finding.field,
+                                                  plus_minus_sd=plus_minus_sd)):
                 issue("numeric_quote_not_anchored", index, field=finding.field, quote=finding.quote, reported=finding.reported_value)
     return errors
 

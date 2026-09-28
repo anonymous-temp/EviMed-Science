@@ -714,3 +714,103 @@ def test_bounded_p_cannot_certify_the_scalar_used_by_se_fallback():
         for field,value in numeric_fields(outcome).items()]
     errors=validate_check_batch(candidate,[0],[PrimaryAlignmentAssessment.model_validate(item)],text,protocol())
     assert any(error["code"]=="numeric_quote_not_anchored" and error["field"]=="p_value" for error in errors)
+
+
+# ma-001 (2026-09-28): the checker quoted the right passage for numbers that are
+# in it, and the anchoring refused them. The quotes below are from that run.
+_DRAIN = ("Total drain output was 185.00 ± 38.92 mL in the TXA group compared to 298.33 ± 62.45 mL "
+          "in the control group (P < 0.001), representing a 37.9% reduction ( Table 1 ).")
+
+
+@pytest.mark.parametrize("value,field,quote", [
+    (185.0, "mean_intervention", _DRAIN), (38.92, "sd_intervention", _DRAIN),
+    (298.33, "mean_control", _DRAIN), (62.45, "sd_control", _DRAIN),
+    (1182.45, "mean_control", "group C (1,182.45 ± 160.50 mL; and 965.47 ± 139.61 mL, respectively)"),
+    (160.5, "sd_control", "TBL (mL) | 944.34 ± 130.88 | 995.20 ± 154.00 | 1182.45 ± 160.50 | 0 | 0.196 |"),
+    (51.0, "sd_intervention", "Blood loss (mL) 406±36 422±51 494±73 <0.001"),
+    (3.45, "sd_intervention", "The proportional hemoglobin loss was 14.19 ± 3.45% in the TXA group"),
+])
+def test_a_source_that_declares_mean_plus_minus_sd_anchors_unlabelled_pairs(value, field, quote):
+    from new_meta.core.extraction_verification import numeric_value_in_quote
+    assert numeric_value_in_quote(value, quote, field, plus_minus_sd=True)
+    assert not numeric_value_in_quote(value, quote, field)  # undeclared: the quote must say it
+    other = "sd_control" if field.startswith("mean_") else "mean_control"
+    assert not numeric_value_in_quote(value, quote, other, plus_minus_sd=True)  # the other operand's role
+
+
+@pytest.mark.parametrize("source,declared", [
+    ("Blood loss and transfusion among groups (Means ± SD)", True),
+    ("Values are expressed as mean ± standard deviation.", True),
+    ("计量资料以均数±标准差表示", True),
+    ("Data are mean ± SD; biomarkers are mean ± SEM.", False),
+    ("Values are mean ± SD. Differences are given ± 95% CI.", False),
+    ("Total drain output was 185.00 ± 38.92 mL.", False),
+    ("all data expressed as mean (SD)", False),
+])
+def test_what_plus_minus_reports_is_read_from_the_source_notation(source, declared):
+    from new_meta.core.extraction_verification import plus_minus_reports_sd
+    assert plus_minus_reports_sd(source) is declared
+
+
+@pytest.mark.parametrize("value,quote,field,valid", [
+    (0, "No patient had clinical signs of deep vein thrombosis or pulmonary embolism.", "events_intervention", True),
+    (0, "In our study, there was no patient with thromboembolic events.", "events_control", True),
+    (0, "None of the patients developed a wound infection.", "events_control", True),
+    (1, "Allogeneic blood transfusion was required for one patient (2%) in the control group.", "events_control", True),
+    (0, "Allogeneic blood transfusion was required for one patient (2%) in the control group.", "events_intervention", False),
+    (2, "No patient had clinical signs of deep vein thrombosis.", "events_intervention", False),
+    (0, "No patient had clinical signs of deep vein thrombosis.", "mean_intervention", False),
+    (0, "两组均无深静脉血栓形成。", "events_control", True),
+    (2, "对照组两例患者需要输血。", "events_control", True),
+    (1, "两组结果一致。", "events_control", False),
+    (3, "Known complications occurred.", "events_control", False),
+])
+def test_an_event_count_written_as_a_word_is_in_the_quote(value, quote, field, valid):
+    from new_meta.core.extraction_verification import numeric_value_in_quote
+    assert numeric_value_in_quote(value, quote, field) is valid
+
+
+@pytest.mark.parametrize("expression,source,anchored", [
+    ("p<0.001", "Total drain output fell (P < 0.001).", True),
+    ("p<0.001", "Total drain output fell (P<.001).", True),
+    ("p<0.0001", "The difference was significant (p-value < 0.0001).", True),
+    ("p≤0.05", "significant at P <= 0.05", True),
+    ("p<0.001", "Total drain output fell (P < 0.01).", False),
+    ("p<0.05", "The difference was P = 0.05.", False),
+    ("p>0.05", "The difference was P < 0.05.", False),
+    ("p<0.001", "Group sizes were 12 (ap < 0.001 as noted).", False),
+])
+def test_a_p_value_inequality_is_anchored_by_comparator_and_bound(expression, source, anchored):
+    from new_meta.core.extraction_verification import p_inequality_is_anchored
+    assert p_inequality_is_anchored(expression, source) is anchored
+
+
+def test_a_finding_about_a_field_that_holds_no_number_is_not_a_coverage_break():
+    """ma-001: the checker verified p_value_inequality beside the numeric fields."""
+    from new_meta.core.extraction_verification import validate_check_batch
+    from new_meta.schemas.study import PrimaryAlignmentAssessment
+    item = checked_row()
+    item["verification"]["numeric_findings"].append({
+        "field": "p_value_inequality", "status": "match", "reported_value": 0.001, "quote": SOURCE,
+        "source_location": "Results", "rationale": "Reported inequality."})
+    assert validate_check_batch(study(), [0], [PrimaryAlignmentAssessment.model_validate(item)], SOURCE, protocol()) == []
+    item["verification"]["numeric_findings"][-1]["field"] = "no_such_field"
+    errors = validate_check_batch(study(), [0], [PrimaryAlignmentAssessment.model_validate(item)], SOURCE, protocol())
+    assert any(error["code"] == "numeric_field_coverage" for error in errors)
+
+
+def test_a_binding_that_restates_its_components_judgment_is_not_a_schema_break():
+    """ma-001: two responses repeated relation/protocol_component on a binding."""
+    from new_meta.core.extraction_sources import _drop_restated_component_fields
+    payload = {"primary_analysis_alignment": [{"verification": {
+        "components": [{"protocol_component": "total blood loss", "relation": "match"},
+                       {"protocol_component": "drain output", "relation": "extra"}],
+        "component_bindings": [
+            {"component_index": 0, "relation": "match", "protocol_component": "total blood loss"},
+            {"component_index": 1, "relation": "match", "protocol_component": "drain output"}]}}]}
+    _drop_restated_component_fields(payload)
+    first, second = payload["primary_analysis_alignment"][0]["verification"]["component_bindings"]
+    assert first == {"component_index": 0}
+    # A binding that says something else than its component is left for the schema to refuse.
+    assert second == {"component_index": 1, "relation": "match"}
+

@@ -57,7 +57,7 @@ def test_contiguous_ranges_restore_exact_original_text(text):
     assert metadata[0]["end_byte"] == len(text.encode())
 
 
-@pytest.mark.parametrize("damage", ["other_source", "unknown", "catalogue", "reverse", "quoted_fallback"])
+@pytest.mark.parametrize("damage", ["other_source", "unknown", "catalogue", "quoted_fallback"])
 def test_bad_references_never_turn_into_supplied_quotes(damage):
     text = "First complete sentence.\nSecond complete sentence."
     catalog = catalogue(text)
@@ -65,10 +65,23 @@ def test_bad_references_never_turn_into_supplied_quotes(damage):
     if damage == "other_source": support = reference(catalogue(text + " Different."))
     if damage == "unknown": support["source_id"] = "unknown"
     if damage == "catalogue": catalog["sources"][0]["start"] = 1
-    if damage == "reverse": support = reference(catalog, -1, 0)
     if damage == "quoted_fallback": support.update(quote=text, source_location="Page 1")
     _, errors, _ = resolve(text, catalog, support)
     assert errors
+
+
+def test_a_range_named_last_unit_first_resolves_to_the_same_slice():
+    """ma-001 (2026-09-28): six checker responses named a passage's two ends in
+    reverse and were refused whole. Both ends are real catalogue units of this
+    source, so the slice between them is the same contiguous original text."""
+    text = "First complete sentence.\nSecond complete sentence.\nThird one."
+    catalog = catalogue(text)
+    forward, errors, forward_metadata = resolve(text, catalog, reference(catalog, 0, 1))
+    assert errors == []
+    backward, errors, backward_metadata = resolve(text, catalog, reference(catalog, 1, 0))
+    assert errors == []
+    assert backward == forward and backward_metadata == forward_metadata
+    assert backward["primary_analysis_alignment"][0]["outcome"]["quote"] == "First complete sentence.\nSecond complete sentence."
 
 
 def test_appended_tables_do_not_inherit_the_last_article_page():

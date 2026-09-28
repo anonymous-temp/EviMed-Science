@@ -195,10 +195,36 @@ def _materialize_component_sources(resolved, text, errors, metadata):
                 "text_sha256": _hash(value)})
 
 
+def _drop_restated_component_fields(resolved):
+    """Drop a binding's copy of its own component's relation/protocol_component.
+
+    The checker is asked for those on the component; some responses repeat them
+    on the binding too, which the strict schema refuses. An identical copy says
+    nothing new and is dropped; a different one is left for the schema to refuse.
+    """
+    rows = resolved.get("primary_analysis_alignment") if isinstance(resolved, dict) else None
+    for row in rows if isinstance(rows, list) else []:
+        details = row.get("verification") if isinstance(row, dict) else None
+        if not isinstance(details, dict):
+            continue
+        components, bindings = details.get("components"), details.get("component_bindings")
+        if not isinstance(components, list) or not isinstance(bindings, list):
+            continue
+        for binding in bindings:
+            index = binding.get("component_index") if isinstance(binding, dict) else None
+            if type(index) is not int or not 0 <= index < len(components) or not isinstance(components[index], dict):
+                continue
+            for name in ("relation", "protocol_component"):
+                if name in binding and name in components[index] and binding[name] == components[index][name]:
+                    binding.pop(name)
+
+
 def resolve_reference_payload(text, catalogue, payload, *, wire_version=OBSERVATION_VERSION):
     resolved, errors, metadata = deepcopy(payload), [], []
     if type(wire_version) is not int or wire_version not in {1, 2, 3}:
         return {}, [{"code": "verification_source_wire_version_invalid"}], metadata
+    if wire_version == 3:
+        _drop_restated_component_fields(resolved)
     try: validate_catalogue(text, catalogue)
     except (ValueError, TypeError, KeyError):
         return {}, [{"code": "verification_source_catalogue_invalid"}], metadata
@@ -220,8 +246,12 @@ def resolve_reference_payload(text, catalogue, payload, *, wire_version=OBSERVAT
         if not isinstance(first, str) or (last is not None and not isinstance(last, str)):
             errors.append({"code": "verification_source_reference_invalid", "path": location}); continue
         last = first if last is None else last
-        if first not in positions or last not in positions or positions[first] > positions[last]:
+        if first not in positions or last not in positions:
             errors.append({"code": "verification_source_id_unknown", "path": location}); continue
+        if positions[first] > positions[last]:
+            # Both ends of one passage, named last-first: the same contiguous
+            # slice. Six ma-001 responses on 2026-09-28 were refused whole for it.
+            first, last = last, first
         begin, finish = sources[positions[first]], sources[positions[last]]
         start, end = begin["start"], finish["end"]
         if end - start > MAX_SPAN_CHARS or (start < catalogue["body_end"] < end):

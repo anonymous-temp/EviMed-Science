@@ -233,7 +233,8 @@ quote that source evidence; never invent a comparison or assume missing arms mat
 Use uncertain when the supplied source cannot support the judgment; do not invent
 quotes, eligibility or assessor/verification metadata. Return source_id, never quote or source_location. Source IDs label immutable
 original passages. For a passage spanning adjacent units, select its first
-source_id and last end_source_id; the runtime resolves ONE contiguous raw slice.
+source_id and last end_source_id in document order; the runtime resolves ONE
+contiguous raw slice.
 Select the full relevant context, including negations, qualifiers, and table
 headers. Do not reorder split table text, smooth PDF hyphenation, or manufacture
 events/N. IDs from another catalogue are invalid. Use null only when evidence
@@ -254,8 +255,9 @@ Required per-row verification payload (never omit it, even with a high score):
   THIS endpoint; missing requires absence from THIS endpoint. A component present
   only in another endpoint is not extra in this result. Do not put explanatory
   source_component in your response: the runtime derives its exact source excerpt
-  from that component's support reference. Supply protocol_component, relation and
-  the binding's membership/rationale unchanged as your clinical judgments.
+  from that component's support reference. protocol_component and relation belong
+  to the component in components; a binding carries only component_index,
+  target_result, support, source_membership and rationale.
   Do not retype a source label or omit words to shorten a quote. For a missing component, select the complete
   relevant definition rather than inventing an absent phrase. Source range identity
   is assigned by the runtime; supply only source_id and optional end_source_id.
@@ -263,7 +265,9 @@ Required per-row verification payload (never omit it, even with a high score):
   such as _1fa alone is not a source ID. Never remove or reconstruct a prefix.
 - numeric_findings: verify EVERY supplied numeric_fields_to_verify field, naming its
   directly reported value, source_id, match/mismatch/uncertain and
-  rationale. Check every CI endpoint, sign, unit, measure and scale. A score cannot
+  rationale; one finding per supplied field and none for other fields. Select the
+  passage that states the value itself: a table row with its "mean ± SD" cells, or
+  a sentence that states a count in words ("no patient had ...") for zero. Check every CI endpoint, sign, unit, measure and scale. A score cannot
   override an incorrect CI or an unresolved source/OCR conflict. Use full Results
   and table evidence rather than converting an ambiguous abstract percentage.
 - source_endpoint_definition: select source IDs for the actual endpoint DEFINITION, not merely a
