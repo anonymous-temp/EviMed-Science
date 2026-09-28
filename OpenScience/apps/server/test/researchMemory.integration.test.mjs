@@ -579,8 +579,16 @@ test("a conversation's memory state is the capsule it is trying, and nothing els
     const paused = await memoryPausedFor(store, owner, "study-one", "ses_a");
     assert.deepEqual([paused.learning, paused.recall, paused.trial], [true, false, true]);
 
+    // What the conversation lists mark 「试用 ·」: this project's trials, and only while they last.
+    await store.updateSessionState(owner, "study-one", "ses_b", { trialCapsuleId: null });
+    await store.updateSessionState(owner, "study-two", "ses_x", { trialCapsuleId: "cap_shared" });
+    assert.deepEqual([...await store.trialSessions(owner, "study-one")], ["ses_a"]);
+    await assert.rejects(() => store.trialSessions(owner, "study one"), { code: "memory_session_invalid" });
+
     const ended = await store.updateSessionState(owner, "study-one", "ses_a", { trialCapsuleId: null });
     assert.equal(ended.trialCapsuleId, null);
+    assert.deepEqual([...await store.trialSessions(owner, "study-one")], []);
+    await store.updateSessionState(owner, "study-two", "ses_x", { trialCapsuleId: null });
 
     // Each conversation of each project is its own row.
     assert.equal((await store.sessionState(owner, "study-two", "ses_a")).trialCapsuleId, null);

@@ -57,7 +57,7 @@ import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { withdrawProjectDerivedMemory } from "./derivedMemory.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
-import { sessionDispatchNotes } from "./memorySessions.mjs";
+import { sessionDispatchNotes, withTrialTitles } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
@@ -2949,6 +2949,9 @@ export function createWebApiApp(overrides = {}) {
     sessions: researchMemory.configured ? {
       running: (_user, project) => agentRuns.activeRuns(project),
       state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
+      // What a conversation's own state adds at its first step: the pack a
+      // 「试用一次」 conversation is trying.
+      notes: (userId, projectId, sessionId) => sessionDispatchNotes({ researchMemory, capsules: capsuleService }, userId, projectId, sessionId),
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
         appendRecalledMemories: items.map((item) => (item.source === "capsule"
           ? { id: `capsule:${item.id}`, kind: item.factKind ?? "capsule", scope: "capsule" }
@@ -4068,6 +4071,13 @@ export function createWebApiApp(overrides = {}) {
             .catch(() => null);
           if (summaries) runs = runs.map((run) => { const usage = runUsageFrom(summaries, run); return usage ? { ...run, usage } : run; });
         }
+        // A conversation trying someone else's capsule is listed as one
+        // (build spec §9.4 #8: 「试用 ·」). A memory store that cannot be read
+        // leaves the titles as they are rather than the list without its runs.
+        if (researchMemory.configured && runs.length > 0) {
+          const trials = await (async () => researchMemory.trialSessions(ctx.user.id, ctx.project.id))().catch(() => null);
+          if (trials) runs = withTrialTitles(runs, trials);
+        }
         sendJson(res, 200, { data: runs });
         return;
       }
@@ -4338,9 +4348,6 @@ export function createWebApiApp(overrides = {}) {
                 }
               : routedSpecialist,
           });
-          // What this conversation's own state adds (memorySessions.mjs): the
-          // capsule a 「试用一次」 conversation is trying.
-          const sessionNotes = await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, ctx.user.id, ctx.project.id, session.sessionId);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
           // The same rule for what was recalled: a memory this dispatch used
@@ -4353,7 +4360,10 @@ export function createWebApiApp(overrides = {}) {
           }
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
-            system: sessionNotes.length ? `${prepared.system}\n\n${sessionNotes.join("\n\n")}` : prepared.system,
+            // The capsule a 「试用一次」 conversation is trying reaches it through
+            // the capsule plugin at its first step (memorySessions.mjs), for a
+            // dispatch and a conversation typed in the kernel's own surface alike.
+            system: prepared.system,
             memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,

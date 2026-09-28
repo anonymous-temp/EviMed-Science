@@ -73,7 +73,7 @@ test('applying the plugin with a method mounted reaches no service it does not i
   const diagnostics = { mountedMethods: (/** @type {any[]} */ methods) => { reported.push(...methods) } }
   /** @type {Record<string, any>} */
   const provided = {}
-  const ctx = new Proxy({ effect: (/** @type {any} */ fn) => fn(), provide: (/** @type {string} */ key, /** @type {any} */ value) => { provided[key] = value },
+  const ctx = new Proxy({ effect: (/** @type {any} */ fn) => fn(), on: () => () => {}, provide: (/** @type {string} */ key, /** @type {any} */ value) => { provided[key] = value },
     get: (/** @type {string} */ key) => (key === 'fs' ? fs : key === 'evimedDiagnostics' ? diagnostics : undefined) }, {
     get(target, key) {
       if (typeof key === 'string' && key in services) {

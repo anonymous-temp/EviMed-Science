@@ -267,3 +267,82 @@ test("a pack carries the researcher's learned methods and what they said about h
     await database.query("DELETE FROM evimed_control.users WHERE id=$1",[sharer]);
   }
 });
+
+test("「知识与项目事实」 carries the researcher's own project facts only when ticked, by the same predicate, into the room left",options,async()=>{
+  // 2026-09-28 (gap E15): the box was offered, the scope accepted and the
+  // container carried knowledge/chunks.jsonl — but a pack was assembled from
+  // account-level records only, and a project fact, a decision or a follow-up
+  // is recorded against its project. Ticked, the box carried nothing.
+  const sharer=`transfer_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Knowledge sharer','development')",[sharer]);
+  try{
+    const capsule=await capsules.create(sharer,{title:"Knowledge capsule"});
+    const record=(id,scope,scopeId,kind,value,origin,{sensitive=false,status="active",at=0}={})=>database.query(`INSERT INTO evimed_memory.records(user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,sensitive,updated_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,1,0.8,$10,now()-make_interval(secs=>$11))`,[sharer,id,scope,scopeId,kind,`k.${id.toLowerCase()}`,value,origin,status,sensitive,at]);
+    await record("style","user","","preference","先给结论，再给证据。","explicit");
+    await record("fact","project","proj-aspirin","project_fact","阿司匹林课题纳入 12 项 RCT。","explicit");
+    await record("decided","project","proj-aspirin","decision","只纳入 70 岁以上人群。","manual");
+    await record("lesson","user","","correction","亚组分析要预先注册。","explicit");
+    await record("guessed","project","proj-aspirin","follow_up","Guessed follow-up canary","inferred");
+    await record("secret","project","proj-aspirin","project_fact","Sensitive project canary","explicit",{sensitive:true});
+    await record("gone","project","proj-aspirin","project_fact","Archived fact canary","explicit",{status:"archived"});
+    await record("internal","project","evimed-learning","project_fact","Internal project canary","explicit");
+    await record("paused","project","proj-paused","project_fact","Paused project canary","explicit");
+    await record("talk","session","ses-1","project_fact","Session note canary","explicit");
+    await database.query("INSERT INTO evimed_memory.settings(user_id,paused_projects) VALUES($1,ARRAY['proj-paused'])",[sharer]);
+    const canaries=["Guessed follow-up canary","Sensitive project canary","Archived fact canary","Internal project canary","Paused project canary","Session note canary"];
+
+    // Not ticked: how the researcher works, and nothing of what they work on.
+    const plain=await transfers.exportPreview(sharer,capsule.id,{});
+    assert.deepEqual(plain.entries.map((entry)=>entry.content),["先给结论，再给证据。"]);
+
+    // Ticked: 对方会看到什么 lists them, in the knowledge layer.
+    const ticked=await transfers.exportPreview(sharer,capsule.id,{scopes:["workstyle","+knowledge"]});
+    assert.deepEqual(ticked.entries.map((entry)=>[entry.factKind,entry.layer,entry.content]).sort(),[
+      ["correction","knowledge","亚组分析要预先注册。"],["decision","knowledge","只纳入 70 岁以上人群。"],
+      ["preference","profile","先给结论，再给证据。"],["project_fact","knowledge","阿司匹林课题纳入 12 项 RCT。"]]);
+    assert.match(ticked.card.summary,/项目事实/);
+    for(const canary of canaries)assert.ok(!JSON.stringify(ticked).includes(canary),canary);
+
+    // What leaves is what was previewed, sealed; the recipient imports it whole.
+    const result=await transfers.export(sharer,capsule.id,{password,scopes:["workstyle","+knowledge"]});
+    for(const canary of canaries)assert.ok(!result.archive.includes(canary));
+    const preview=await transfers.preview(recipient,{archive:result.archive,password});
+    assert.deepEqual(preview.scopes,["workstyle","+knowledge"]);
+    assert.equal(preview.entries.filter((entry)=>entry.path==="knowledge/chunks.jsonl").length,3);
+    const imported=await transfers.import(recipient,{archive:result.archive,password,expectedDigest:preview.archiveSha256,confirmed:true,title:"Knowledge pack"});
+    const received=(await capsules.entries(recipient,imported.id)).items;
+    assert.deepEqual(received.map((entry)=>entry.payload.factKind).sort(),["correction","decision","preference","project_fact"]);
+    assert.ok(received.every((entry)=>entry.payload.contextOnly===true));
+
+    // The optional layer fills the room the default one leaves, newest first:
+    // ticking it never makes a pack too large to export.
+    await database.query(`INSERT INTO evimed_memory.records(user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,updated_at)
+      SELECT $1,'bulk'||n,'project','proj-bulk','project_fact','k.bulk'||n,'Bulk fact '||n,'Bulk fact '||n,'explicit','active',1,0.8,now()-make_interval(days=>n)
+      FROM generate_series(1,120) n`,[sharer]);
+    const full=await transfers.exportPreview(sharer,capsule.id,{scopes:["workstyle","+knowledge"]});
+    assert.equal(full.entries.length,100);assert.equal(full.tooMany,false);
+    assert.equal(full.entries.filter((entry)=>entry.layer!=="knowledge").length,1,"the default layer is never crowded out");
+    assert.ok(full.entries.some((entry)=>entry.content==="阿司匹林课题纳入 12 项 RCT。"),"newest first");
+    assert.ok(!full.entries.some((entry)=>entry.content==="Bulk fact 120"),"the oldest wait for the next pack");
+    const large=await transfers.export(sharer,capsule.id,{password,scopes:["workstyle","+knowledge"]});
+    assert.equal(large.snapshot.entryCount,100);
+  }finally{
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1",[sharer]);
+  }
+});
+
+test("a pack made before the knowledge layer was assembled — workstyle only — still previews and imports",options,async()=>{
+  // Nothing about the container moved: `knowledge/chunks.jsonl` was already
+  // the +knowledge scope's entry (`SHARE_SCOPE_ENTRIES`), so a pack of either
+  // shape is the one format an older or newer importer reads.
+  const capsule=await source();
+  const result=await transfers.export(owner,capsule.id,{password,scopes:["workstyle"]});
+  const envelope=JSON.parse(result.archive);
+  assert.equal(envelope.format,"evimedcap");assert.equal(envelope.version,1);
+  assert.ok(Object.keys(envelope.payload).every((file)=>!file.startsWith("knowledge/")));
+  const preview=await transfers.preview(recipient,{archive:result.archive,password});
+  assert.deepEqual(preview.scopes,["workstyle"]);
+  const imported=await transfers.import(recipient,{archive:result.archive,password,expectedDigest:preview.archiveSha256,confirmed:true,title:"Older pack"});
+  assert.equal(imported.payload.imported,true);
+});

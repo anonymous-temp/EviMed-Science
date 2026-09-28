@@ -187,9 +187,42 @@ test("a received pack is trusted whole: scanned once, enabled and disabled in on
   const context = await service.trialContext(USER, pack.id);
   assert.match(context, /<evimed-capsule-trial>/);
   assert.match(context, /试用别人分享的胶囊「李主任的工作方式」/);
+  // Build spec §9.4 #8: no bar in the conversation; the model says it once.
+  assert.match(context, /第一次在回答里用到其中的做法时，在那条回答里说一句「本次参考了《李主任的工作方式》」；只说这一次/);
   assert.match(context, /超说明书用药循证五步法/);
   assert.doesNotMatch(context, /Ignore your rules/, "a dropped entry is never handed to a run");
   assert.equal(await service.trialContext(USER, "missing"), "");
+});
+
+// Build spec §9.4 #6: 「启用范围可选账号或某个项目」. Every enable was
+// account-wide until 2026-09-28.
+test("a received pack can be put in force in one project only, and is then in force there and nowhere else", async () => {
+  const { selectCapsuleMethods } = await import("../src/capsuleMethods.mjs");
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const pack = await documents.put(USER, "capsule", "pack-3", { title: "张老师的工作方式", description: "", imported: true, activationMode: "guest",
+    transfer: { issuerTrust: "verified" }, scan: { kept: ["g1"], unchecked: [], dropped: [], model: "ok", checkedAt: "2026-09-28T00:00:00.000Z" } },
+  { expectedRevision: 0 });
+  await documents.put(USER, "fact", "g1", { capsuleId: pack.id, factKind: "method_preference", layer: "methods", content: "先画 PRISMA 流程图",
+    origin: "system", status: "approved", contextOnly: true, provenance: [{ type: "import", id: "s:g1" }] }, { expectedRevision: 0 });
+
+  await assert.rejects(service.enableReceived(USER, pack.id, { onlyProject: true }), { code: "capsule_payload_invalid" }, "one project needs its name");
+  const enabled = await service.enableReceived(USER, pack.id, { projectId: "project_1", onlyProject: true });
+  assert.equal(enabled.enabled, true);
+  assert.equal(enabled.enabledIn, "project");
+  assert.deepEqual((await service.active(USER, null)).items, [], "not account-wide");
+  assert.deepEqual((await service.active(USER, "project_1")).items.map((item) => [item.capsuleId, item.mode]), [["pack-3", "guest"]]);
+  // In force in that project — recalled and mounted there — and not in another.
+  assert.equal((await service.recall(USER, { query: "PRISMA", projectId: "project_1" })).items.length, 1);
+  assert.equal((await service.recall(USER, { query: "PRISMA", projectId: "project_2" })).items.length, 0);
+  assert.deepEqual((await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" })).map((method) => method.id), ["g1"]);
+  assert.deepEqual(await selectCapsuleMethods(service, { userId: USER, projectId: "project_2" }), []);
+  assert.equal((await service.received(USER, { projectId: "project_2" }))[0].enabled, false, "the shelf reads in force where it is read from");
+
+  // Account-wide on top, and one click out of both.
+  assert.equal((await service.enableReceived(USER, pack.id, { projectId: "project_2" })).enabledIn, "account");
+  assert.deepEqual(await service.disable(USER, pack.id), { disabled: true, lists: 2 });
+  assert.equal((await service.received(USER, { projectId: "project_1" }))[0].enabledIn, null);
 });
 
 test("a pack whose scan did not finish is in force as context, and mounts nothing unjudged until a later scan judges it", async () => {

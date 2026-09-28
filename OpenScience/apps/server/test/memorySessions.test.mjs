@@ -51,5 +51,30 @@ test("the session routes and the panel they served are gone, and the composition
   }
   const server = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(server, /memorySessionRoutes/, "no route table entry for a module with no routes");
-  assert.match(server, /const sessionNotes = await sessionDispatchNotes\(/, "the trial context still reaches a dispatch");
+  // 2026-09-28: the trial context reached only a dispatch from the shell, and
+  // a trial is opened in the kernel's own conversation surface. It now reaches
+  // every conversation through the capsule gateway's `session`, once — so the
+  // dispatch no longer adds it a second time.
+  assert.match(server, /notes: \(userId, projectId, sessionId\) => sessionDispatchNotes\(/, "the capsule gateway answers with it");
+  assert.doesNotMatch(server, /const sessionNotes = await sessionDispatchNotes\(/, "and nothing else adds it");
+});
+
+test("a trial conversation is listed under 「试用 ·」, once, whoever named it", async () => {
+  const { TRIAL_TITLE_PREFIX, trialTitle, withTrialTitles } = await import("../src/memorySessions.mjs");
+  assert.equal(TRIAL_TITLE_PREFIX, "试用 · ");
+  assert.equal(trialTitle("阿司匹林一级预防的获益"), "试用 · 阿司匹林一级预防的获益");
+  assert.equal(trialTitle("试用 · 阿司匹林一级预防的获益"), "试用 · 阿司匹林一级预防的获益", "a rename that kept it is not prefixed twice");
+  assert.equal(trialTitle(""), "试用 ·");
+  const runs = [
+    { id: "run_1", sessionId: "ses_trial", title: "Meta 分析怎么报 GRADE" },
+    { id: "run_2", sessionId: "ses_plain", title: "Meta 分析怎么报 GRADE" },
+    { id: "run_3", sessionId: null, title: "未命名的研究" },
+  ];
+  const listed = withTrialTitles(runs, new Set(["ses_trial"]));
+  assert.deepEqual(listed.map((run) => run.title), ["试用 · Meta 分析怎么报 GRADE", "Meta 分析怎么报 GRADE", "未命名的研究"]);
+  assert.equal(runs[0].title, "Meta 分析怎么报 GRADE", "the ledger's own title is not touched");
+  assert.deepEqual(withTrialTitles(runs, new Set()), runs);
+  // Where the lists read it: the runs route.
+  const server = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
+  assert.match(server, /runs = withTrialTitles\(runs, trials\)/);
 });

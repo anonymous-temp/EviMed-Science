@@ -15,6 +15,10 @@ const client = vi.hoisted(() => ({
 vi.mock("@/lib/memoryClient", () => client);
 vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-a" }));
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: () => "操作未完成，请重试。" }));
+vi.mock("@/lib/projects", () => {
+  const state = { currentId: "project-a", projects: [{ id: "project-a", name: "阿司匹林研究" }, { id: "project-b", name: "别的项目" }] };
+  return { useProjectStore: (select: (value: typeof state) => unknown) => select(state) };
+});
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
 
@@ -82,6 +86,23 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(options.action.label).toBe("撤销");
     await userEvent.click(screen.getByRole("switch", { name: "启用“李主任的工作方式”" }));
     expect(client.disableCapsule).toHaveBeenCalledWith("pack-1");
+  });
+
+  // Build spec §9.4 #6: 「启用范围可选账号或某个项目」.
+  it("puts a pack in force in the project the shell is in only, from the row's 「⋯」, and says where it is in force", async () => {
+    client.fetchReceivedCapsules.mockResolvedValueOnce([structuredClone(pack)])
+      .mockResolvedValue([{ ...structuredClone(pack), enabled: true, enabledIn: "project" }]);
+    client.enableReceivedCapsule.mockResolvedValue({ ...pack, enabled: true, enabledIn: "project" });
+    shelf();
+    await userEvent.click(await screen.findByRole("button", { name: "更多" }));
+    await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "只在“阿司匹林研究”启用" }));
+    await waitFor(() => expect(client.enableReceivedCapsule).toHaveBeenCalledWith("pack-1", "project-a"));
+    expect(toasts.success.mock.calls.at(-1)![0]).toBe("已在“阿司匹林研究”启用“李主任的工作方式”");
+    expect(await screen.findByText(/只在“阿司匹林研究”启用/)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toHaveAttribute("aria-checked", "true");
+    // In force already: the menu offers no second way in.
+    await userEvent.click(screen.getByRole("button", { name: "更多" }));
+    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /只在/ })).toBeNull();
   });
 
   it("「试用一次」, in the row's 「⋯」, marks a new conversation as the trial, then opens it under that id", async () => {

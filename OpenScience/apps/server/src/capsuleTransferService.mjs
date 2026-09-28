@@ -5,6 +5,8 @@ import { CAPSULE_FACT_ORIGINS } from "@evimed/domain";
 import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
 import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
+import { isInternalProject } from "./internalProjects.mjs";
+import { boundedText } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -230,14 +232,33 @@ export class CapsuleTransferService {
         ORDER BY updated_at DESC,id LIMIT 50`, [userId]);
       const stated = await client.query(`SELECT id,version,kind,value,summary FROM evimed_memory.records WHERE user_id=$1
         AND scope='user' AND status='active' AND NOT sensitive AND origin IN ('explicit','manual') AND kind=ANY($2::text[])
-        ORDER BY updated_at DESC,id LIMIT 50`, [userId, kinds]);
-      return { revision: capsule.rows[0].revision, facts: [
+        ORDER BY updated_at DESC,id LIMIT 50`, [userId, kinds.filter((kind) => !KNOWLEDGE.includes(kind))]);
+      // 「知识与项目事实」 (build spec §9.1), only when the sender ticked it:
+      // the same predicate as above — active, their own, never sensitive, and
+      // said, edited or confirmed by them — but read from the projects too,
+      // because a project fact, a decision or a follow-up is recorded against
+      // the project it is about (`memoryIntelligence.mjs`). Reading only
+      // account-level records, the box was offered and carried nothing. Not
+      // from a project the platform works in for itself, nor from one the
+      // researcher paused memory for, and never a conversation's own notes.
+      // Newest first, into whatever room the default layer leaves.
+      const knowledgeKinds = kinds.filter((kind) => KNOWLEDGE.includes(kind));
+      const known = knowledgeKinds.length ? await client.query(`SELECT id,version,kind,value,summary,scope,scope_id FROM evimed_memory.records r
+        WHERE user_id=$1 AND scope IN ('user','project') AND status='active' AND NOT sensitive AND origin IN ('explicit','manual')
+          AND kind=ANY($2::text[]) AND NOT (scope='project' AND scope_id=ANY(COALESCE(
+            (SELECT paused_projects FROM evimed_memory.settings s WHERE s.user_id=r.user_id), '{}'::text[])))
+        ORDER BY updated_at DESC,id LIMIT $3`, [userId, knowledgeKinds, MAX_ENTRIES + 1]) : { rows: [] };
+      const recorded = (/** @type {any} */ row) => ({ id: row.id, revision: row.version, payload: {
+        factKind: row.kind, origin: "explicit", content: boundedText(row.summary || row.value, 20_000) } });
+      const workstyle = [
         ...facts.rows,
         ...methods.rows.map((row) => ({ id: row.id, revision: row.revision, payload: {
           factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
-        ...stated.rows.map((row) => ({ id: row.id, revision: row.version, payload: {
-          factKind: row.kind, origin: "explicit", content: String(row.summary || row.value) } })),
-      ] };
+        ...stated.rows.map(recorded),
+      ];
+      const knowledge = known.rows.filter((row) => row.scope === "user" || !isInternalProject(row.scope_id))
+        .slice(0, Math.max(0, MAX_ENTRIES - workstyle.length)).map(recorded);
+      return { revision: capsule.rows[0].revision, facts: [...workstyle, ...knowledge] };
     });
   }
 

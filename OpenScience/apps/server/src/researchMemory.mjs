@@ -1260,6 +1260,19 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * The conversations of one project that are trying a shared capsule, by
+   * session id — what the conversation lists mark with 「试用 ·」.
+   * @param {string} userId @param {string} projectId @returns {Promise<Set<string>>}
+   */
+  async trialSessions(userId, projectId) {
+    const result = await this.#query(`SELECT session_id FROM evimed_memory.sessions
+      WHERE user_id=$1 AND project_id=$2 AND trial_capsule_id IS NOT NULL
+      ORDER BY updated_at DESC LIMIT 1000`,
+    [assertUserId(userId), assertProjectId(projectId)]);
+    return new Set(result.rows.map((/** @type {any} */ row) => String(row.session_id)));
+  }
+
+  /**
    * Mark a conversation as trying a shared capsule, or end the trial (`null`).
    * @param {string} userId @param {string} projectId @param {string} sessionId
    * @param {{ trialCapsuleId?: unknown }} patch

@@ -1,5 +1,5 @@
 /**
- * What one conversation's own state adds to its dispatch.
+ * What one conversation's own state adds to it.
  *
  * Hidden knowledge: this module used to be a subsystem. It served
  * 「本次用到的背景」 — a panel listing every memory, note, capsule fact and
@@ -14,15 +14,21 @@
  *
  * What is left is the one thing that was never about withholding memory: a
  * conversation trying a capsule someone shared (「试用一次」) is handed that
- * capsule's methods and standards, and this is where its dispatch picks them
- * up.
+ * capsule's methods and standards, and is listed under a title that says so.
+ *
+ * The capsule plugin asks for the first through the capsule gateway at the
+ * conversation's first step (`session` in `capsuleGateway.mjs`). It used to be
+ * added only to a dispatch from the shell, and a trial is opened in the
+ * kernel's own conversation surface, whose prompts never pass through one: a
+ * trial was a conversation that wrote no memory and had never seen the pack
+ * (2026-09-28).
  *
  * @module memorySessions
  */
 
 /**
- * The lines one conversation's own state adds to its system prompt. Best
- * effort: a state that cannot be read adds nothing rather than failing the turn.
+ * The lines one conversation's own state adds to its context. Best effort: a
+ * state that cannot be read adds nothing rather than failing the turn.
  *
  * @param {{ researchMemory: any, capsules?: any }} services
  * @param {string} userId @param {string} projectId @param {string} sessionId
@@ -39,4 +45,30 @@ export async function sessionDispatchNotes({ researchMemory, capsules = null }, 
   if (!state?.trialCapsuleId || !capsules) return [];
   const trial = await capsules.trialContext(userId, state.trialCapsuleId).catch(() => "");
   return trial ? [trial] : [];
+}
+
+/** What a trial conversation's title starts with (build spec §9.4 #8). */
+export const TRIAL_TITLE_PREFIX = "试用 · ";
+
+/**
+ * A trial conversation's title as the lists show it. Applied where the runs
+ * are read, never stored: an automatic title and the researcher's own rename
+ * both arrive without it, and a rename that kept it is not prefixed twice.
+ * @param {unknown} title @returns {string}
+ */
+export function trialTitle(title) {
+  const text = String(title ?? "").trim();
+  if (text.startsWith(TRIAL_TITLE_PREFIX.trim())) return text;
+  return text ? `${TRIAL_TITLE_PREFIX}${text}` : TRIAL_TITLE_PREFIX.trim();
+}
+
+/**
+ * The runs of a project with each trial conversation's title marked.
+ * @template {{ sessionId?: string | null, title?: string | null }} T
+ * @param {readonly T[]} runs @param {ReadonlySet<string>} trialSessions
+ * @returns {T[]}
+ */
+export function withTrialTitles(runs, trialSessions) {
+  if (!trialSessions.size) return [...runs];
+  return runs.map((run) => (run.sessionId && trialSessions.has(run.sessionId) ? { ...run, title: trialTitle(run.title) } : run));
 }

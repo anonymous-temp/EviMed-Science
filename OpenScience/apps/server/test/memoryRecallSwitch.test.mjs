@@ -331,6 +331,31 @@ test("a conversation's own state no longer withholds memory from its dispatch", 
   }, { researchMemory: memory });
 });
 
+// Build spec §9.4 #8: no bar in the conversation; its title says 「试用 ·」.
+test("a conversation trying someone else's capsule is listed under 「试用 ·」, and only while the store can say so", async () => {
+  const headers = { "X-Open-Science-Project": "default" };
+  let storeDown = false;
+  const memory = {
+    ...recordingMemory(),
+    async sessionState(_userId, _projectId, sessionId) { return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null }; },
+    async trialSessions(_userId, projectId) {
+      if (storeDown) throw new Error("memory store down");
+      return new Set(projectId === "default" ? ["ses_trial"] : []);
+    },
+  };
+  await withApp(async ({ base }) => {
+    await dispatchOnce(base, "ses_trial");
+    await dispatchOnce(base, "ses_plain");
+    const titles = async () => Object.fromEntries(((await (await fetch(`${base}/api/agent-runs`, { headers })).json()).data)
+      .map((run) => [run.sessionId, run.title]));
+    const listed = await titles();
+    assert.match(listed.ses_trial, /^试用 · 抗凝药物的出血风险/);
+    assert.doesNotMatch(listed.ses_plain, /试用/);
+    storeDown = true;
+    assert.doesNotMatch((await titles()).ses_trial, /试用/, "a store that cannot say leaves the titles, never the list");
+  }, { researchMemory: memory });
+});
+
 test("readiness names a builtin pin on a deployment whose index is configured", async () => {
   const keyDir = await mkdtemp(path.join(tmpdir(), "os-recall-key-"));
   try {

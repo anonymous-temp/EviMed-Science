@@ -6,6 +6,7 @@ import {
 } from "@/lib/memoryClient";
 import { formatDay } from "@/lib/format";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
+import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
@@ -37,7 +38,9 @@ function contents(pack: ReceivedCapsule) {
  * whole pack — no entry to approve one by one. A row is the pack, what it
  * brings, and a switch that puts it in force account-wide as a reference
  * (methods and standards, never an identity); 「试用一次」 — a conversation of
- * its own that writes nothing into memory — is in its 「⋯」.
+ * its own that writes nothing into memory — and 「只在…启用」, in force in the
+ * project the shell is in and nowhere else (build spec §9.4 #6), are in its
+ * 「⋯」. The switch reads "in force here": account-wide, or in this project.
  *
  * Said only when it matters (2026-09-23 inventory §1.7): a publisher this
  * service cannot verify, and what the automatic scan dropped. When it was
@@ -48,6 +51,7 @@ export function ReceivedShelf() {
   const navigate = useNavigate();
   const { data, failed, reload } = useCapsuleData(fetchReceivedCapsules);
   const [busy, setBusy] = useState<string | null>(null);
+  const project = useProjectStore((state) => state.projects.find((item) => item.id === state.currentId) ?? null);
 
   const act = async (key: string, operation: () => Promise<void>) => {
     setBusy(key);
@@ -64,6 +68,12 @@ export function ReceivedShelf() {
   const enable = (pack: ReceivedCapsule) => act(`enable:${pack.id}`, async () => {
     await enableReceivedCapsule(pack.id);
     toast.success(`已启用“${pack.title}”`, {
+      action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
+    });
+  });
+  const enableHere = (pack: ReceivedCapsule, target: { id: string; name: string }) => act(`enable:${pack.id}`, async () => {
+    await enableReceivedCapsule(pack.id, target.id);
+    toast.success(`已在“${target.name}”启用“${pack.title}”`, {
       action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
     });
   });
@@ -100,6 +110,7 @@ export function ReceivedShelf() {
                     pack.card?.author ? fromSender(pack.card.author) : null,
                     pack.card?.summary || contents(pack),
                     pack.issuerTrust === "verified" ? null : "发布者未验证",
+                    pack.enabledIn === "project" && project ? `只在“${project.name}”启用` : null,
                   ].filter(Boolean).join(" · ")}</p>
                   {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
                   {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
@@ -128,7 +139,12 @@ export function ReceivedShelf() {
                   onChange={(next) => void (next ? enable(pack) : disable(pack))}
                 />
               )}
-              menu={<Menu label="更多" items={[{ label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) }]} />}
+              menu={<Menu label="更多" items={[
+                { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
+                ...(project && !pack.enabled
+                  ? [{ label: `只在“${project.name}”启用`, disabled: busy !== null, onSelect: () => void enableHere(pack, project) }]
+                  : []),
+              ]} />}
             />
           );
         })}

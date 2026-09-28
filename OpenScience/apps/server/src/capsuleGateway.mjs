@@ -18,11 +18,18 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  * that protects the researcher: if any of them is trying someone else's
  * capsule, nothing is written.
  *
+ * `session` answers for one conversation by its id, which the capsule plugin
+ * names at that conversation's first step: what its own state adds to it —
+ * the pack a 「试用一次」 conversation is trying (`memorySessions.mjs`). The
+ * credential still fixes the account and the project; a conversation of
+ * another project is one with no state here.
+ *
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
+ *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null }) {
   const windows = new Map();
@@ -31,7 +38,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
     try {
       const url = new URL(req.url, "http://evimed.local");
       const action = url.pathname.slice(CAPSULE_GATEWAY_PATH.length + 1);
-      if (req.method !== "POST" || url.search || !["recall", "note"].includes(action)) {
+      if (req.method !== "POST" || url.search || !["recall", "note", "session"].includes(action)) {
         throw new HttpError(404, "not_found", "Capsule operation not found.");
       }
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
@@ -48,7 +55,8 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       windows.set(key, window);
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
-      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope"] : ["factKind", "content", "origin"];
+      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope"]
+        : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
       if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((field) => !allowed.includes(field))) {
         throw new HttpError(400, "capsule_payload_invalid", "Unsupported memory fields.");
       }
@@ -57,6 +65,16 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       const currentUser = await store.userById(identity.userId);
       if (!currentUser) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
       const project = await store.requireProject(currentUser, identity.projectId);
+      if (action === "session") {
+        if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId)) {
+          throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
+        }
+        // Best effort, like every read of a conversation's own state: nothing
+        // to add is an answer, and so is a store that cannot say.
+        const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId).catch(() => []) : [];
+        sendJson(res, 200, { context: notes.join("\n\n") });
+        return;
+      }
       // Whose conversation this is, as far as the ledger can say (see above).
       // A ledger that cannot be read leaves the recall as it was before this
       // existed rather than failing it.

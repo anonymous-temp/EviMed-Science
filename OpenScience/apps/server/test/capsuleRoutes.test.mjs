@@ -132,6 +132,46 @@ test("a received pack: shelf, one-click enable and disable, and a trial marked o
   assert.equal(unavailable.status, 503);
 });
 
+// Build spec §9.4 #6: 「启用范围可选账号或某个项目」. Until 2026-09-28 the
+// route took no body and every enable was account-wide.
+test("a received pack can be enabled for one project the account opens, and only for such a project", async (t) => {
+  const calls = [];
+  const audited = [];
+  const service = {
+    enableReceived: async (user, id, options) => { calls.push(options); return { id, enabled: true, enabledIn: options.onlyProject ? "project" : "account" }; },
+  };
+  const store = {
+    ensureSessionUser: async () => ({ user: { id: "owner" } }),
+    assertCsrf: async () => {},
+    selectedProject: async () => ({ id: "current-project" }),
+    requireProject: async (_user, id) => {
+      if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable.");
+      return { id };
+    },
+  };
+  const handle = createCapsuleRoutes({ store, service, maxJsonBytes: 262144,
+    audit: async (_user, action, details) => { audited.push({ action, details }); } });
+  const server = createServer((req, res) => { handle(req, res).catch((error) => sendError(res, error)); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const post = (body) => fetch(`http://127.0.0.1:${server.address().port}/api/capsules/pack-1/enable`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  const scoped = await post({ projectId: "owned-project" });
+  assert.equal(scoped.status, 200);
+  assert.equal((await scoped.json()).data.enabledIn, "project");
+  assert.deepEqual(calls[0], { projectId: "owned-project", onlyProject: true });
+  assert.deepEqual(audited[0], { action: "capsule.pack.enable", details: { capsuleId: "pack-1", projectId: "owned-project" } });
+
+  assert.equal((await post({ projectId: "someone-elses" })).status, 404, "a project the account cannot open is refused, not enabled");
+  assert.equal((await post({ projectId: "" })).status, 400);
+  assert.equal((await post({ projectId: 7 })).status, 400);
+  assert.equal(calls.length, 1, "nothing refused reached the service");
+
+  assert.equal((await post({})).status, 200);
+  assert.deepEqual(calls[1], { projectId: "current-project" }, "no project named: every project, the scan metered where the researcher is");
+});
+
 // 2026-09-26 audit (M-6): no pack action wrote an audit row (build spec §12).
 test("every action on a pack writes an audit row with ids and counts, and a preview writes none", async (t) => {
   const audited = [];

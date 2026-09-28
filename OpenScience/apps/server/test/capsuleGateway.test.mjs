@@ -211,3 +211,35 @@ test("a conversation trying someone else's capsule still reads memory but notes 
   assert.match(note.notice, /试用别人胶囊/);
   assert.equal(f.calls.filter((call) => call.action === "note").length, 0);
 });
+
+// 2026-09-28: a 「试用一次」 conversation is opened in the kernel's own
+// surface, whose prompts pass through no dispatch, so the pack it was trying
+// reached it nowhere. The capsule plugin now asks at the conversation's first
+// step, naming the conversation; the credential still fixes account and project.
+test("a conversation's first step asks what its own state adds: the pack a trial is trying, and nothing for any other", async (t) => {
+  const { sessionDispatchNotes } = await import("../src/memorySessions.mjs");
+  const asked = [];
+  const researchMemory = { configured: true, async sessionState(userId, projectId, sessionId) {
+    asked.push([userId, projectId, sessionId]);
+    return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null };
+  } };
+  const capsules = { async trialContext(_userId, capsuleId) { return `<evimed-capsule-trial>${capsuleId}：本次参考了《李主任的工作方式》</evimed-capsule-trial>`; } };
+  const sessions = { ...sessionsDouble([]), notes: (userId, projectId, sessionId) => sessionDispatchNotes({ researchMemory, capsules }, userId, projectId, sessionId) };
+  const f = await fixture(t, { sessions });
+  const trial = await f.request("session", { sessionId: "ses_trial" });
+  assert.equal(trial.status, 200);
+  assert.deepEqual(await trial.json(), { context: "<evimed-capsule-trial>pack-1：本次参考了《李主任的工作方式》</evimed-capsule-trial>" });
+  assert.deepEqual(asked, [["owner", "project-one", "ses_trial"]], "the account and project come from the credential");
+  assert.deepEqual(await (await f.request("session", { sessionId: "ses_plain" })).json(), { context: "" });
+  assert.equal((await f.request("session", { sessionId: "bad id" })).status, 400);
+  assert.equal((await f.request("session", { sessionId: "ses_trial", projectId: "other" })).status, 400, "nothing but the conversation may be named");
+  assert.equal((await f.request("session", { sessionId: "ses_trial" }, "invalid")).status, 401);
+  assert.deepEqual(f.calls, [], "asking writes nothing and recalls nothing");
+
+  // A store that cannot say, or a deployment without research memory, adds nothing.
+  const broken = { ...sessionsDouble([]), notes: async () => { throw new Error("down"); } };
+  const g = await fixture(t, { sessions: broken });
+  assert.deepEqual(await (await g.request("session", { sessionId: "ses_trial" })).json(), { context: "" });
+  const h = await fixture(t);
+  assert.deepEqual(await (await h.request("session", { sessionId: "ses_trial" })).json(), { context: "" });
+});

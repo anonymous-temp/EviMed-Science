@@ -133,10 +133,17 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     }
     // A received pack: one click in force, one click out, or tried once in a
     // conversation of its own that writes nothing into the researcher's memory.
+    // Every project, or with `projectId` that one project only (build spec
+    // §9.4 #6); a project the account cannot open is refused by name.
     if (parts.length === 2 && action === "enable" && method === "POST") {
-      await bodyOf(req, maxJsonBytes, []);
-      const enabled = await service.enableReceived(user.id, capsuleId, { projectId: await current() });
-      await audit(user, "capsule.pack.enable", { capsuleId });
+      const body = await bodyOf(req, maxJsonBytes, ["projectId"]);
+      if (body.projectId !== undefined && (typeof body.projectId !== "string" || !body.projectId)) {
+        throw new HttpError(400, "capsule_payload_invalid", "Invalid project.");
+      }
+      const onlyProject = body.projectId !== undefined ? await project(body.projectId) : null;
+      const enabled = await service.enableReceived(user.id, capsuleId, onlyProject
+        ? { projectId: onlyProject, onlyProject: true } : { projectId: await current() });
+      await audit(user, "capsule.pack.enable", { capsuleId, ...(onlyProject ? { projectId: onlyProject } : {}) });
       return reply(enabled);
     }
     if (parts.length === 2 && action === "disable" && method === "POST") {
