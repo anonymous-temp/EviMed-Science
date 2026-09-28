@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "kernel": "@deepseek-ai/dsh@0.1.5-rc.2",
+  "kernel": "@deepseek-ai/dsh@0.1.7-rc.2",
   "management": "immutable-release",
   "nativePlugins": [
     "evimed-runtime-ui",
@@ -34,10 +34,11 @@
         "cite_check",
         "cite_health"
       ],
-      "testedOn": "2026-09-06",
+      "testedOn": "2026-09-28",
       "transport": "public-source-gateway",
       "registration": "upstream buildCiteTools with managed fetch; original apply replaced",
-      "readiness": "Installed is not runtime-ready: cite_health and a successful DOI lookup must pass with the current model gateway token."
+      "readiness": "Installed is not runtime-ready: cite_health and a successful DOI lookup must pass with the current model gateway token.",
+      "evidence": "Booted against dsh@0.1.7-rc.2 from a seeded host profile on 2026-09-28 with its host row enabled: the composition activated with no pending entry, and cite_lookup, cite_format, cite_bibtex, cite_check and cite_health were in the tool list of every root model request the kernel sent (mock model upstream; outputs/2026-09-28-dsh-upgrade/evidence)."
     },
     {
       "name": "dsh-plugin-academic-writing",
@@ -69,9 +70,9 @@
       "peerPins": {
         "cordis": "4.0.0-rc.10"
       },
-      "testedOn": "2026-09-20",
+      "testedOn": "2026-09-28",
       "what": "Select a passage in a reply, annotate it, and the annotations travel with the next message as plain text prepended to the user turn. Client-side only: it registers no tools and reaches no network.",
-      "evidence": "Booted against dsh@0.1.5-rc.2 in the production runtime image on 2026-09-15 (try-install.json), and again on 2026-09-20 from a seeded host profile, where its client was served in the kernel's plugin bundle. Its peer is the bare `cordis` package, pinned exactly because pnpm would otherwise install whatever the range resolves to on the build day. The image build smoke boots it on every full build."
+      "evidence": "Booted against dsh@0.1.5-rc.2 in the production runtime image on 2026-09-15 (try-install.json), and again on 2026-09-20 from a seeded host profile, where its client was served in the kernel's plugin bundle. Its peer is the bare `cordis` package, pinned exactly because pnpm would otherwise install whatever the range resolves to on the build day. The image build smoke boots it on every full build. On 2026-09-28 it was booted against dsh@0.1.7-rc.2 from a seeded host profile and its client was served in the kernel's plugin bundle, loading without a console error in the hosted frame."
     },
     {
       "name": "dsh-mermaid",
@@ -81,9 +82,9 @@
       "row": "ui-mermaid",
       "switch": "OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED",
       "peerPins": {},
-      "testedOn": "2026-09-20",
+      "testedOn": "2026-09-28",
       "what": "Renders fenced Mermaid diagrams in replies (PRISMA flow, study-selection trees) with a diagram/code toggle. Client-side only; the counts in a diagram still have to come from the screening ledger.",
-      "evidence": "Booted against dsh@0.1.5-rc.2 in the production runtime image on 2026-09-15, and again on 2026-09-20 from a seeded host profile, where its client was served in the kernel's plugin bundle. The 2026-09-15 source scan's net/proc/fsWrite hits were read one by one: coincidental substrings in the browser-side Mermaid+KaTeX build and the package's own CLI, not the plugin (docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md)."
+      "evidence": "Booted against dsh@0.1.5-rc.2 in the production runtime image on 2026-09-15, and again on 2026-09-20 from a seeded host profile, where its client was served in the kernel's plugin bundle. The 2026-09-15 source scan's net/proc/fsWrite hits were read one by one: coincidental substrings in the browser-side Mermaid+KaTeX build and the package's own CLI, not the plugin (docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md). On 2026-09-28 it was booted against dsh@0.1.7-rc.2 from a seeded host profile and its client was served in the kernel's plugin bundle, loading without a console error in the hosted frame."
     }
   ],
   "updatePolicy": "Exact pins are upgraded only through the upstream matrix, dump-config review, image boot smoke and immutable release rollback.",
