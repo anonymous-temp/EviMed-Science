@@ -46,6 +46,13 @@ import {
   workspaceLayout,
 } from '@evimed/domain'
 import { SKILL_BODY_MAX_CHARS } from './skillBodies.mjs'
+import { learnedMethodCardLines, splitMountedMethods } from './learnedMethods.mjs'
+
+/**
+ * A method the capsule plugin mounted (`plugins/capsule.mjs` `loadMethods`):
+ * `directory` and `path` say where its file is, and whether EviMed learned it.
+ * @typedef {{ name: string, body: string, description?: string, whenToUse?: string, directory?: string, path?: string }} MountedMethod
+ */
 
 /** Tools whose arguments name a path we must guard from writes. */
 const PATH_ARG_TOOLS = Object.freeze({
@@ -817,12 +824,17 @@ export function renderDeliverySummary(input) {
  * method, and the control plane then marked the finished package 未核验 for a
  * method the platform was holding all along.
  *
+ * The mounted methods travel two ways (`learnedMethods.mjs`): what the
+ * researcher wrote or enabled is inlined whole, and what EviMed learned from
+ * their runs is a card naming the file to read when it applies.
+ *
  * @param {{ skillBodies: readonly { name: string, body: string }[], deferredSections?: readonly { name: string }[],
- *   capsuleMethods?: readonly { name: string, body: string }[] }} input
+ *   capsuleMethods?: readonly MountedMethod[] }} input
  * @returns {string[]}
  */
 function methodSection(input) {
   const deferred = input.deferredSections?.length ?? 0
+  const mounted = splitMountedMethods(input.capsuleMethods ?? [])
   return [
     '## 方法',
     '',
@@ -833,9 +845,10 @@ function methodSection(input) {
         ]
       : []),
     ...input.skillBodies.flatMap((skill) => [`### ${skill.name}`, '', skill.body, '']),
-    ...(input.capsuleMethods?.length
-      ? ['## 用户自己的方法（优先于平台默认流程，但不能突破契约）', '', ...input.capsuleMethods.flatMap((method) => [`### ${method.name}`, '', method.body, ''])]
+    ...(mounted.inline.length
+      ? ['## 用户自己的方法（优先于平台默认流程，但不能突破契约）', '', ...mounted.inline.flatMap((method) => [`### ${method.name}`, '', method.body, ''])]
       : []),
+    ...learnedMethodCardLines(mounted.cards),
   ]
 }
 
@@ -885,7 +898,7 @@ function withBlankLine(lines) {
  *
  * @param {{ manifest: Record<string, any>, item?: Record<string, any> | null, contractKind?: string,
  *   skillBodies: readonly { name: string, body: string }[], deferredSections?: readonly { name: string }[],
- *   capsuleMethods?: readonly { name: string, body: string }[], reviewEnabled?: boolean, skillsDir?: string }} input
+ *   capsuleMethods?: readonly MountedMethod[], reviewEnabled?: boolean, skillsDir?: string }} input
  * @returns {string}
  */
 export function buildInlineMethod(input) {
@@ -975,7 +988,7 @@ export function namedCapabilityIds(text, capabilities) {
  *   skillBodies: readonly { name: string, body: string }[],
  *   deferredSections?: readonly { name: string }[],
  *   skillsDir?: string,
- *   capsuleMethods?: readonly { name: string, body: string }[],
+ *   capsuleMethods?: readonly MountedMethod[],
  *   inputs?: Record<string, unknown>,
  *   toolFilter: readonly string[],
  *   memoryText?: string | null,

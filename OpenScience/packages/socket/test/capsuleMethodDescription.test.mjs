@@ -71,7 +71,9 @@ test('applying the plugin with a method mounted reaches no service it does not i
   /** @type {any[]} */
   const reported = []
   const diagnostics = { mountedMethods: (/** @type {any[]} */ methods) => { reported.push(...methods) } }
-  const ctx = new Proxy({ effect: (/** @type {any} */ fn) => fn(), provide: () => {},
+  /** @type {Record<string, any>} */
+  const provided = {}
+  const ctx = new Proxy({ effect: (/** @type {any} */ fn) => fn(), provide: (/** @type {string} */ key, /** @type {any} */ value) => { provided[key] = value },
     get: (/** @type {string} */ key) => (key === 'fs' ? fs : key === 'evimedDiagnostics' ? diagnostics : undefined) }, {
     get(target, key) {
       if (typeof key === 'string' && key in services) {
@@ -89,4 +91,7 @@ test('applying the plugin with a method mounted reaches no service it does not i
   // The root session's receipt of what it carries, by name and body digest.
   assert.deepEqual(reported.map((method) => method.name), ['claim-verdict-audit'])
   assert.match(reported[0].digest, /^sha256:[0-9a-f]{64}$/)
+  // What delegation and the inline method read: the file a learned method's
+  // card names, which is the path the control plane recognises being opened.
+  assert.equal(provided.evimedCapsuleMethods[0].path, `/runtime/capsule-methods/${directory}/SKILL.md`)
 })

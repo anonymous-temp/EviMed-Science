@@ -20,7 +20,9 @@
  * mounted (production, 2026-09-21). A prompt section is the surface guidance
  * already uses in the same scope; each entry names the mounted file, which the
  * model reads when the method applies. Delegations and inline capability
- * methods carry the bodies themselves.
+ * methods carry a capsule entry's body, and a learned method's card
+ * (`src/learnedMethods.mjs`): the reading is the one trace that says a learned
+ * method was used.
  *
  * @module @evimed/dsh-socket/plugins/capsule
  */
@@ -28,6 +30,7 @@
 import { errorMessage } from '../src/runPolicy.mjs'
 import { configSchema, defineTool, listDirAt, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
 import { skillBodyDigestAsync } from '../src/digest.mjs'
+import { isLearnedMethod } from '../src/learnedMethods.mjs'
 
 const Schema = await configSchema()
 
@@ -157,12 +160,16 @@ export async function apply(ctx, config) {
  * here, the delegation receipt, and the control plane's usage counters — and a
  * method whose digest differed between them would reset its own counters on
  * every run and could never cross the threshold that earns it an evaluation.
+ *
+ * And the path of its file in the container, which is what a learned method's
+ * card names (`src/learnedMethods.mjs`) and what the control plane recognises
+ * a session opening (`methodObservations.mjs`).
  * @param {any} ctx @param {string} directory
- * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string }[]>}
+ * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string }[]>}
  */
 async function loadMethods(ctx, directory) {
   if (!directory) return []
-  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string }[]} */
+  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string }[]} */
   const methods = []
   for (const entry of await listDirAt(ctx, directory, '.')) {
     if (!entry.directory) continue
@@ -176,13 +183,11 @@ async function loadMethods(ctx, directory) {
       body,
       digest: await skillBodyDigestAsync(body),
       directory: entry.name,
+      path: `${directory.replace(/\/+$/, '')}/${entry.name}/SKILL.md`,
     })
   }
   return methods
 }
-
-/** How a learned method's directory is named (`learnedMethodDirectoryName`). */
-const LEARNED_METHOD_DIRECTORY = /^_lm[0-9a-f]{32}$/
 
 /**
  * What the model is told a mounted method is: where it came from, and nothing
@@ -197,7 +202,7 @@ const LEARNED_METHOD_DIRECTORY = /^_lm[0-9a-f]{32}$/
  * @returns {string}
  */
 export function mountedMethodDescription(method) {
-  const note = LEARNED_METHOD_DIRECTORY.test(String(method.directory ?? ''))
+  const note = isLearnedMethod(method)
     ? '这是 EviMed 从这位用户以往的研究里学到的做法。'
     : '这是用户启用的记忆胶囊里的做法。'
   const own = method.description || `用户自己的方法：${method.name}`
