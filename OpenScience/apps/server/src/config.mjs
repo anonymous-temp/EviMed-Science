@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
 import { GEO_DEFAULT_ENGINES, GEO_ENGINES } from "@evimed/domain";
+import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -613,6 +614,25 @@ function evimedCreditsSettings(overrides) {
     // How often the retry sweep looks for a settlement whose backoff elapsed.
     evimedCreditsPollMs: integer("evimedCreditsPollMs", "OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS", 60_000, 5_000, 3_600_000),
   };
+}
+
+/**
+ * How many bytes the mounted methods may put in front of the model
+ * (`capsuleMethods.mjs`, `MAX_MOUNTED_CAPSULE_METHOD_BYTES`): a capsule entry's
+ * whole text, a learned method's card. Re-sent in every delegation, so it is a
+ * tax on every child prompt a run starts; lower mounts fewer methods, higher
+ * makes every child's prompt longer. What it leaves out is counted
+ * (`open_science_mounted_methods_left_out_total`).
+ * @param {Record<string, any>} overrides
+ */
+function mountedMethodPromptBytes(overrides) {
+  const value = overrides.mountedMethodPromptBytes ?? process.env.OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES ?? "";
+  if (value === "") return MAX_MOUNTED_CAPSULE_METHOD_BYTES;
+  const bytes = Number(value);
+  if (!Number.isSafeInteger(bytes) || bytes < 4_096 || bytes > 262_144) {
+    throw new Error(`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES must be a whole number from 4096 to 262144, got ${JSON.stringify(value)}.`);
+  }
+  return bytes;
 }
 
 /** @param {Record<string, any>} overrides */
@@ -2064,6 +2084,7 @@ export function loadConfig(overrides = {}) {
     // exists to prevent; an expiry makes forgetting to clear it harmless.
     learningTrialTtlMs: Number(overrides.learningTrialTtlMs
       ?? process.env.OPEN_SCIENCE_LEARNING_TRIAL_TTL_MS ?? 6 * 60 * 60 * 1000),
+    mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // `basic` is the kernel's own engine; `structured` is ours, which preserves

@@ -15,8 +15,12 @@ import {
   capsuleMethodsDirName,
   materializeCapsuleMethods,
   renderCapsuleMethod,
+  runtimeCapsuleMethodsDir,
   selectCapsuleMethods,
 } from "../src/capsuleMethods.mjs";
+import { learnedMethodCardEntry } from "@evimed/domain";
+import { learnedMethodDirectoryName } from "../src/learnedMethodMount.mjs";
+import { RuntimeManager } from "../src/runtimeManager.mjs";
 
 /** One approved `method_preference`, in the shape `ProductDocuments.list` returns. */
 function entry(id, overrides = {}) {
@@ -656,6 +660,78 @@ test("the account's own methods take the budget first; what a received pack brou
     assert.equal(selected[0].id, "own-1");
     assert.equal(selected[0].received, false);
     assert.ok(selected.slice(1).every((method) => method.received === true));
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});
+
+test("a learned method costs the budget its card, not its text, so long ones still mount beside the researcher's own", async () => {
+  // 2026-09-26 → 09-28: learned methods travel as cards naming their file, but
+  // the 32 KiB budget was still spent on their full text, so with the
+  // researcher's own entries taking 20 KiB `claim-verdict-audit` (a 14 KiB
+  // body) was left out of every mount while its card would have cost ~200 bytes.
+  const { project, directory } = await scratchProject();
+  try {
+    const own = ["own-a", "own-b"].map((id, index) => entry(id, {
+      content: "R".repeat(10_000), curatedAt: new Date(Date.UTC(2026, 0, 1 + index)).toISOString(),
+    }));
+    const ownBytes = own.reduce((sum, item) => sum + Buffer.byteLength(renderCapsuleMethod({
+      directoryName: item.id, factKind: "method_preference", content: item.payload.content,
+    }), "utf8"), 0);
+    const learnedPayload = (/** @type {string} */ name, /** @type {number} */ day) => ({
+      status: "approved", statusChangedAt: new Date(Date.UTC(2026, 8, day)).toISOString(),
+      frontmatter: { name, description: `Audits ${name}.`, whenToUse: `When a deliverable needs ${name}.`, metadata: { role: "functional" } },
+      body: `## Purpose\nAudit.\n\n## Workflow\n${"1. Check every claim against its verdict.\n".repeat(350)}`,
+    });
+    const documents = [
+      { id: "method:learned:claim-verdict-audit", payload: learnedPayload("claim-verdict-audit", 26) },
+      { id: "method:learned:pre-submission-freeze-check", payload: learnedPayload("pre-submission-freeze-check", 27) },
+      { id: "method:learned:quote-anchor", payload: learnedPayload("quote-anchor", 25) },
+    ];
+    const learning = { async approvedMethods() { return documents; }, async methodTrial() { return { methodIds: [] }; } };
+    const capsules = fakeCapsules({ projectItems: [{ capsuleId: "capsule-a", mode: "own" }], byCapsule: { "capsule-a": own } });
+    // What a run is handed for each learned method: the card the socket writes
+    // (the same `learnedMethodCardEntry`), naming the file under the mount.
+    const cardBytes = (/** @type {any} */ document) => Buffer.byteLength(`${learnedMethodCardEntry({
+      name: document.payload.frontmatter.name,
+      description: document.payload.frontmatter.description,
+      whenToUse: document.payload.frontmatter.whenToUse,
+      path: `${runtimeCapsuleMethodsDir}/${learnedMethodDirectoryName(document.id)}/SKILL.md`,
+    }).join("\n")}\n`, "utf8");
+    const cards = documents.reduce((sum, document) => sum + cardBytes(document), 0);
+    assert.ok(ownBytes + 14_000 > MAX_MOUNTED_CAPSULE_METHOD_BYTES, "on text, not one learned method fits beside the own entries");
+
+    const result = await materializeCapsuleMethods({ capsules, learning, project, directory });
+    assert.deepEqual(result.learned.map((method) => method.name).sort(),
+      ["claim-verdict-audit", "pre-submission-freeze-check", "quote-anchor"]);
+    assert.equal(result.promptBytes, ownBytes + cards, "the budget is spent on the own entries whole and the learned cards");
+    assert.ok(result.promptBytes <= MAX_MOUNTED_CAPSULE_METHOD_BYTES);
+    assert.ok(result.bytes > MAX_MOUNTED_CAPSULE_METHOD_BYTES, "the full text is on disk, for a run to read");
+    assert.equal(result.leftOut, 0);
+    assert.equal((await mounted(directory)).length, 5);
+
+    // A budget the configuration makes smaller leaves learned methods out, the
+    // newest first in, and says how many.
+    const tight = await materializeCapsuleMethods({
+      capsules, learning, project, directory, maxPromptBytes: ownBytes + cards - 1,
+    });
+    assert.deepEqual(tight.learned.map((method) => method.name), ["pre-submission-freeze-check", "claim-verdict-audit"]);
+    assert.equal(tight.leftOut, 1);
+    // And one that the own entries alone overflow keeps the newest own entry,
+    // counting everything it could not carry.
+    const tiny = await materializeCapsuleMethods({ capsules, learning, project, directory, maxPromptBytes: 4_096 });
+    assert.deepEqual(await mounted(directory), ["own-b"]);
+    assert.equal(tiny.leftOut, 1 + documents.length);
+
+    // A launch spends the configured budget and counts what it did.
+    const manager = new RuntimeManager({ mountedMethodPromptBytes: ownBytes + cards - 1 });
+    manager.capsuleService = capsules;
+    manager.learningService = learning;
+    const launched = await manager.syncCapsuleMethods(project);
+    assert.equal(launched.leftOut, 1);
+    await manager.syncCapsuleMethods(project);
+    assert.deepEqual(manager.statsAll().methodMounts,
+      { launches: 2, promptBytes: 2 * launched.promptBytes, leftOut: 2, maxPromptBytes: ownBytes + cards - 1 });
   } finally {
     await rm(project.rootDir, { recursive: true, force: true });
   }

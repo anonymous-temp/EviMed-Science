@@ -141,7 +141,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
                 contextOnly: { type: "boolean", const: true },
                 methods: {
                   type: "array", items: { $ref: "#/components/schemas/Method" },
-                  description: `At most ${MAX_MOUNTED_CAPSULE_METHODS} methods and ${MAX_MOUNTED_CAPSULE_METHOD_BYTES} bytes, the account's own first — the budget and the selection a run of ours would mount.`,
+                  description: `At most ${MAX_MOUNTED_CAPSULE_METHODS} methods and ${MAX_MOUNTED_CAPSULE_METHOD_BYTES} bytes of method text, the account's own first — the order a run of ours mounts them in.`,
                 },
                 capsules: {
                   type: "array", description: "When `capsuleIds` was given: each named capsule, its title and whose it is (`self` or `institution`).",

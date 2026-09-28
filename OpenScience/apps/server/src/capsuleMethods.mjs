@@ -29,6 +29,11 @@ import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security
 /** The directory name under the project's runtime root. */
 export const capsuleMethodsDirName = "capsule-methods";
 
+/** Where a container sees the mounted methods (a read-only bind). A learned
+ *  method's card names its file under it, so the mount budget measures the
+ *  card with this path. */
+export const runtimeCapsuleMethodsDir = `/runtime/${capsuleMethodsDirName}`;
+
 /**
  * The fact kinds a mounted method may carry.
  *
@@ -105,18 +110,27 @@ export const MAX_CAPSULE_ENTRY_PAGES = 10;
 export const MAX_MOUNTED_CAPSULE_METHODS = 32;
 
 /**
- * How many bytes of method text one runtime may mount.
+ * How many bytes the mounted methods may put in front of the model: the
+ * default of `OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES` (`config.mjs`), which a
+ * launch passes as `maxPromptBytes`.
  *
  * The count cap alone bounds nothing that matters. `capsule.mjs` provides the
- * loaded methods as `evimedCapsuleMethods`, and `plugins/run-policy.mjs` passes
- * that array — full bodies, not names — into `buildDelegation` for every
- * delegation, so each method's bytes are re-inlined into every child's prompt.
- * An entry may hold 20,000 characters (`CapsuleService.addEntry`), so a
- * count-only cap admits a 640,000-character tax on every child a run starts.
- * This is the bound that is actually about the prompt.
+ * loaded methods as `evimedCapsuleMethods`, and `plugins/run-policy.mjs` hands
+ * them to the method block and to `buildDelegation` for every delegation, so
+ * what each method contributes is re-sent in every child's prompt. An entry
+ * may hold 20,000 characters (`CapsuleService.addEntry`), so a count-only cap
+ * admits a 640,000-character tax on every child a run starts. This is the
+ * bound that is actually about the prompt.
  *
- * Applied to the rendered SKILL.md, because that whole file — frontmatter
- * included — is what the plugin reads and what the delegation inlines.
+ * Spent on what is actually injected (2026-09-28). A capsule entry — what the
+ * researcher wrote or enabled — is inlined whole, so it costs its rendered
+ * SKILL.md, frontmatter included. A learned method travels as a card naming
+ * its file (`packages/socket/src/learnedMethods.mjs`), so it costs its card
+ * (`learnedMethodCardBytes`); its text is read from the file when a run needs
+ * it. Until this was measured that way the budget was spent on learned
+ * methods' full text, which no run was shown any more, and
+ * `claim-verdict-audit` was left out of every mount from 2026-09-26. What is
+ * left out is counted (`open_science_mounted_methods_left_out_total`).
  */
 export const MAX_MOUNTED_CAPSULE_METHOD_BYTES = 32 * 1024;
 
@@ -313,11 +327,15 @@ async function receivedCapsule(capsules, userId, selection) {
  * other failure propagates, because mounting nothing quietly is the failure
  * this module exists to end.
  *
+ * `maxBytes` is the byte budget (the configured one at a launch); `onLeftOut`
+ * is told the id of each entry the byte budget left out, for the launch's
+ * counter.
+ *
  * @param {any} capsules `CapsuleService`
- * @param {{ userId: string, projectId: string }} scope
+ * @param {{ userId: string, projectId: string, maxBytes?: number, onLeftOut?: ((entryId: string) => void) | null }} scope
  * @returns {Promise<{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]>}
  */
-export async function selectCapsuleMethods(capsules, { userId, projectId }) {
+export async function selectCapsuleMethods(capsules, { userId, projectId, maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES, onLeftOut = null }) {
   const local = await capsules.active(userId, projectId);
   const account = await capsules.active(userId, null);
   const active = [...local.items, ...account.items]
@@ -363,9 +381,15 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
   /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]} */
   const selected = [];
   let bytes = 0;
-  for (const { confirmedAt: _confirmedAt, ...candidate } of candidates) {
+  for (const [index, { confirmedAt: _confirmedAt, ...candidate }] of candidates.entries()) {
     if (selected.length >= MAX_MOUNTED_CAPSULE_METHODS) break;
-    if (selected.length > 0 && bytes + candidate.bytes > MAX_MOUNTED_CAPSULE_METHOD_BYTES) break;
+    if (selected.length > 0 && bytes + candidate.bytes > maxBytes) {
+      // In rank order, so an older short entry never overtakes a newer long
+      // one: everything from here up to the count cap is left out, and each
+      // is counted.
+      for (const left of candidates.slice(index, index + MAX_MOUNTED_CAPSULE_METHODS - selected.length)) onLeftOut?.(left.id);
+      break;
+    }
     bytes += candidate.bytes;
     selected.push(candidate);
   }
@@ -405,9 +429,15 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * (0444) inside 0700 directories: the container reads them, and nothing —
  * including the run — writes its own method.
  *
+ * `maxPromptBytes` is the byte budget (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`),
+ * spent on what each method puts in front of the model: a capsule entry's
+ * whole document, a learned method's card (`MAX_MOUNTED_CAPSULE_METHOD_BYTES`).
+ * `promptBytes` in the result is what was spent, and `leftOut` how many
+ * methods the byte budget could not carry.
+ *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   trialMethodIds?: readonly string[], frozenMethods?: {capsuleMethods: any[], learnedMethods: any[]} | null,
- *   learnedFamily?: "geo" | "research" | null,
+ *   learnedFamily?: "geo" | "research" | null, maxPromptBytes?: number,
  *   writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
@@ -416,7 +446,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * `learnedFamily` is which learned methods this runtime may carry
  * (`learnedMethodFamilyForRuntime`); absent, the whole library.
  *
- * @returns {Promise<{ directory: string, count: number, bytes: number,
+ * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
  *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
  *   learnedBytes: number,
  *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
@@ -429,13 +459,16 @@ export async function materializeCapsuleMethods({
   trialMethodIds = [],
   frozenMethods = null,
   learnedFamily = undefined,
+  maxPromptBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES,
   writeFile = writeFileAtomicNoFollow,
 }) {
   await assertNoSymlinkPath(project.rootDir, directory, { allowMissingTail: true });
   const userId = String(project.userId);
   const projectId = String(project.id);
+  let leftOut = 0;
+  const countLeftOut = () => { leftOut += 1; };
   const capsuleSelection = frozenMethods ? frozenMethods.capsuleMethods : capsules
-    ? await selectCapsuleMethods(capsules, { userId, projectId })
+    ? await selectCapsuleMethods(capsules, { userId, projectId, maxBytes: maxPromptBytes, onLeftOut: countLeftOut })
     : [];
   // The account's own entries are spent first; what received packs brought
   // waits until the learned methods have had theirs.
@@ -451,23 +484,34 @@ export async function materializeCapsuleMethods({
       userId,
       projectId,
       maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length),
-      maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES - ownBytes,
+      maxBytes: maxPromptBytes - ownBytes,
+      // A learned method is handed to a run as a card naming its file here,
+      // so that is what it costs the budget.
+      cardDirectory: runtimeCapsuleMethodsDir,
+      onLeftOut: countLeftOut,
       trialMethodIds,
       ...(learnedFamily === undefined ? {} : { family: learnedFamily }),
     })
     : [];
   const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);
+  // A snapshot frozen before cards were measured has no `promptBytes`: its
+  // text is then the honest upper bound.
+  const learnedPromptBytes = learnedMethods.reduce((total, method) => total + (method.promptBytes ?? method.bytes), 0);
   // Then the received packs, in what is left of the same two caps. The first
   // method of the whole directory is the one allowed past the byte budget
   // (`selectCapsuleMethods`); a received entry is never that one when the
   // researcher has anything of their own mounted.
   /** @type {any[]} */
   const receivedMethods = [];
-  let spentBytes = ownBytes + learnedBytes;
-  for (const method of receivedCandidates) {
+  let spentBytes = ownBytes + learnedPromptBytes;
+  for (const [index, method] of receivedCandidates.entries()) {
     if (ownMethods.length + learnedMethods.length + receivedMethods.length >= MAX_MOUNTED_CAPSULE_METHODS) break;
     const first = ownMethods.length + learnedMethods.length + receivedMethods.length === 0;
-    if (!first && spentBytes + method.bytes > MAX_MOUNTED_CAPSULE_METHOD_BYTES) break;
+    if (!first && spentBytes + method.bytes > maxPromptBytes) {
+      leftOut += Math.min(receivedCandidates.length - index,
+        MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length - learnedMethods.length - receivedMethods.length);
+      break;
+    }
     spentBytes += method.bytes;
     receivedMethods.push(method);
   }
@@ -483,7 +527,7 @@ export async function materializeCapsuleMethods({
   // The panel shows at most 160 characters of a method; a prefix is all it keeps.
   const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
-  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned, learnedBytes: 0, capsule };
+  if (methods.length === 0) return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, capsule };
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   let bytes = 0;
@@ -510,5 +554,5 @@ export async function materializeCapsuleMethods({
     }
     bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes, learned, learnedBytes, capsule };
+  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, capsule };
 }

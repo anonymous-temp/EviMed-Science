@@ -388,6 +388,31 @@ export function renderMethodSkill(frontmatter, body) {
   return `${renderSkillFrontmatter(frontmatter)}\n\n${String(body ?? '').trim()}\n`
 }
 
+/* -------------------------------------------------------------------- cards */
+
+/** The longest stretch a learned method's card spends on what it is for. */
+export const LEARNED_METHOD_CARD_SUMMARY_MAX_CHARS = 300
+
+/**
+ * One learned method as a run is handed it: a card saying when it applies and
+ * which file holds it, in place of its text (2026-09-28). Two parties need the
+ * same lines — the socket, which writes them into the method block and every
+ * delegation, and the control plane, which budgets a mount by what it puts in
+ * front of the model — so they are written here once.
+ * @param {{ name: string, description?: string, whenToUse?: string, path?: string }} method
+ * @returns {string[]}
+ */
+export function learnedMethodCardEntry(method) {
+  const summary = String(method?.whenToUse || method?.description || '').replace(/\s+/g, ' ').trim()
+  const shown = summary.length > LEARNED_METHOD_CARD_SUMMARY_MAX_CHARS
+    ? `${summary.slice(0, LEARNED_METHOD_CARD_SUMMARY_MAX_CHARS)}…`
+    : summary
+  return [
+    `- ${method?.name ?? ''}${shown ? `：${shown}` : ''}`,
+    `  全文：${method?.path ?? ''}`,
+  ]
+}
+
 /* ------------------------------------------------------------------ digests */
 
 /** @param {unknown} value @returns {unknown} */

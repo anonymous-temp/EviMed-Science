@@ -14,7 +14,7 @@ import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
-import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
+import { capsuleMethodsDirName, materializeCapsuleMethods, runtimeCapsuleMethodsDir } from "./capsuleMethods.mjs";
 import { learnedMethodFamilyForRuntime } from "./learnedMethodMount.mjs";
 import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
 import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
@@ -2670,7 +2670,9 @@ export const runtimeDshHome = "/runtime/dsh-home";
 export const runtimeTmpDir = "/runtime/tmp";
 
 /**
- * Where the active capsules' work-style methods are mounted, read-only.
+ * Where the active capsules' work-style methods are mounted, read-only
+ * (defined beside the mount budget, which measures a learned method's card
+ * with this path).
  *
  * Under `/runtime` because that is where the runtime's own state already lives,
  * and a container path is a naming choice: the mount decides what is really
@@ -2678,7 +2680,7 @@ export const runtimeTmpDir = "/runtime/tmp";
  * its methods and can never write one -- a method the model could edit is a
  * method the user never approved.
  */
-export const runtimeCapsuleMethodsDir = `/runtime/${capsuleMethodsDirName}`;
+export { runtimeCapsuleMethodsDir };
 
 /** Host directory of the container's `/runtime` mount. */
 function containerRuntimeRoot(project) {
@@ -3169,6 +3171,10 @@ export class RuntimeManager {
     this.learningService = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
+    /** What the mounted-method byte budget did across launches
+     *  (`open_science_mounted_method_*`): launches, bytes it spent on what the
+     *  methods put in front of the model, and methods it left out. */
+    this.methodMounts = { launches: 0, promptBytes: 0, leftOut: 0 };
     /** Frozen methods for private evaluation projects only; never a user-controlled override. */
     this.evaluationMethodSnapshots = new Map();
     this.pluginOverrides = new Map();
@@ -3302,9 +3308,16 @@ export class RuntimeManager {
       }),
       project,
       directory: capsuleMethodsHostDir(project),
+      // What the methods may put in front of the model, in bytes of what is
+      // injected (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`).
+      maxPromptBytes: this.config.mountedMethodPromptBytes,
     });
     // What the learned half put in the room, for the loop's own counters.
     try { this.learningMetrics?.observeMount?.({ methods: mounted.learned?.length ?? 0, bytes: mounted.learnedBytes ?? 0 }); } catch { /* a counter never fails a launch */ }
+    // And what the budget spent and could not carry, for its own counter.
+    this.methodMounts.launches += 1;
+    this.methodMounts.promptBytes += Number(mounted.promptBytes) || 0;
+    this.methodMounts.leftOut += Number(mounted.leftOut) || 0;
     return mounted;
   }
 
@@ -4864,6 +4877,7 @@ export class RuntimeManager {
         maxGlobal: positiveLimit(this.config.maxRunningRuntimes),
         maxPerUser: positiveLimit(this.config.maxRunningRuntimesPerUser),
       },
+      methodMounts: { ...this.methodMounts, maxPromptBytes: positiveLimit(this.config.mountedMethodPromptBytes) },
     };
   }
 

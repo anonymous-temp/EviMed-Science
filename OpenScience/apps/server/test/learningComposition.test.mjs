@@ -29,7 +29,9 @@ test("approval receives a live baseline reader checked against the stored owner'
   assert.match(service, /resolveBaselineDigest: async \(userId, projectId\)/);
   assert.match(service, /store\.userById\(userId\)/);
   assert.match(service, /await store\.requireProject\(user, projectId\)/);
-  assert.match(service, /freezeLearningBaseline\(\{ learning: learningService, capsules: capsuleService, userId, projectId \}\)/);
+  // With the launch's own byte budget, so the approval compares against what a
+  // launch would mount.
+  assert.match(service, /freezeLearningBaseline\(\{\s*learning: learningService, capsules: capsuleService, userId, projectId, maxPromptBytes: config\.mountedMethodPromptBytes,\s*\}\)/);
 });
 
 test("every learning module the loop needs is imported by the composition root", () => {

@@ -30,14 +30,16 @@
  * Deletable when the kernel lets an agent-scoped row register skills: the card
  * is then the skill's description and the read is the skill call.
  *
+ * One card's lines are `@evimed/domain`'s `learnedMethodCardEntry`, because
+ * the control plane budgets a mount by the same lines (`capsuleMethods.mjs`).
+ *
  * @module
  */
 
+import { learnedMethodCardEntry } from '@evimed/domain'
+
 /** How a learned method's mounted directory is named (`learnedMethodDirectoryName`). */
 export const LEARNED_METHOD_DIRECTORY = /^_lm[0-9a-f]{32}$/
-
-/** The longest line a card spends on what a method is for. */
-const CARD_SUMMARY_MAX_CHARS = 300
 
 /**
  * Whether a mounted method was learned by EviMed rather than written or
@@ -80,13 +82,7 @@ export function learnedMethodCardLines(methods) {
     '',
     '下面几条是 EviMed 从这位用户以往的研究里推断出的做法，不是用户写下的规则。判断某条适用于这件交付物时，先用 `read` 读它的全文再照做；不适用就不读、不用。与上面的方法冲突时以上面的方法为准；做法不能突破交付契约和安全规则。',
     '',
-    ...methods.flatMap((method) => {
-      const summary = String(method.whenToUse || method.description || '').replace(/\s+/g, ' ').trim()
-      return [
-        `- ${method.name}${summary ? `：${summary.length > CARD_SUMMARY_MAX_CHARS ? `${summary.slice(0, CARD_SUMMARY_MAX_CHARS)}…` : summary}` : ''}`,
-        `  全文：${method.path}`,
-      ]
-    }),
+    ...methods.flatMap((method) => learnedMethodCardEntry(method)),
     '',
   ]
 }

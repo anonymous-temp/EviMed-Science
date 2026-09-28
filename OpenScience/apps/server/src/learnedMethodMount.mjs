@@ -11,12 +11,13 @@
  * counters that decide whether one may be approved could never move, because
  * moving them requires the method to have been in a run.
  *
- * The two sources share a directory on purpose. The plugin registers whatever
- * it finds there as a skill, the delegation inlines the same bodies, and the
- * caps that matter — how many methods and how many bytes of them ride along in
- * every child's prompt — are properties of the directory, not of either source.
- * So this module selects against a *remaining* budget rather than its own, and
- * the caller spends one budget across both.
+ * The two sources share a directory on purpose. The plugin lists whatever it
+ * finds there, a delegation carries a capsule entry's body and a learned
+ * method's card, and the caps that matter — how many methods and how many
+ * bytes of them ride along in every child's prompt — are properties of the
+ * directory, not of either source. So this module selects against a
+ * *remaining* budget rather than its own, and the caller spends one budget
+ * across both.
  *
  * Same guarantees as the capsule half: only `approved` is mounted (with one
  * named exception, `trialMethodIds`, documented on the selector), the rendered
@@ -30,7 +31,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { METHOD_FILE_PREFIXES, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
+import { METHOD_FILE_PREFIXES, learnedMethodCardEntry, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
 import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
 
 /** @param {string} text @returns {string} */
@@ -153,6 +154,28 @@ function methodFileBytes(payload) {
 }
 
 /**
+ * What one learned method puts in front of the model when it is mounted: its
+ * card (`learnedMethodCardEntry`, the lines the socket writes into the method
+ * block and every delegation), not its text, which stays in its file until a
+ * run reads it (2026-09-28). The path is the one the runtime sees
+ * (`cardDirectory`); a remote launcher's install path differs from the
+ * container's by a few bytes, which a budget of kilobytes does not need to
+ * resolve.
+ * @param {any} payload @param {string} directoryName @param {string} cardDirectory
+ * @returns {number}
+ */
+export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
+  const frontmatter = payload?.frontmatter ?? {};
+  const lines = learnedMethodCardEntry({
+    name: String(frontmatter.name ?? ""),
+    description: String(frontmatter.description ?? ""),
+    whenToUse: String(frontmatter.whenToUse ?? ""),
+    path: `${String(cardDirectory).replace(/\/+$/, "")}/${directoryName}/SKILL.md`,
+  });
+  return Buffer.byteLength(`${lines.join("\n")}\n`, "utf8");
+}
+
+/**
  * The approved learned methods a run should mount: the researcher's whole
  * library, whichever project each was learnt in. The most recently approved
  * comes first, so what survives truncation is the most recent thing that
@@ -181,16 +204,31 @@ function methodFileBytes(payload) {
  * the evaluation named it, and an arm that silently mounted nothing would
  * measure the baseline twice.
  *
+ * `maxBytes` is spent on what each method costs the prompt (`promptBytes`).
+ * Given `cardDirectory` — where the runtime sees the mounted methods — that is
+ * the method's card, because a mount hands a run the card and leaves the text
+ * in its file; without it, the method's text and attached files, which is what
+ * a caller that hands the text out (the agent-memory recall API) pays. Budgeting
+ * a mount on the text is how `claim-verdict-audit` went unmounted from
+ * 2026-09-26: the 32 KiB were spent on bodies no run was shown any more.
+ * `bytes` is always the text and files, what the mount writes to disk.
+ *
+ * `onLeftOut`, when given, is told the id of each method the byte budget left
+ * out (not the count cap), so a launch can count what it could not carry.
+ *
  * @param {any} learning `LearningService`
  * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number, trialMethodIds?: readonly string[],
- *   family?: "geo" | "research" | null}} scope
- * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, trial?: boolean}[]>}
+ *   family?: "geo" | "research" | null, cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null}} scope
+ * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, trial?: boolean}[]>}
  */
 export async function selectLearnedMethods(learning, scope) {
   if (!learning) return [];
   const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : MAX_MOUNTED_LEARNED_METHODS;
   const maxBytes = Number.isSafeInteger(scope.maxBytes) ? Number(scope.maxBytes) : Number.POSITIVE_INFINITY;
-  if (maxCount <= 0 || maxBytes <= 0) return [];
+  // A spent byte budget still reads the library, so that what it leaves out
+  // is counted (`onLeftOut`) rather than silently absent; a count cap of zero
+  // has nothing to count.
+  if (maxCount <= 0) return [];
   const familyFilter = scope.family === undefined ? null : scope.family;
   if (scope.family === null && !(scope.trialMethodIds ?? []).length) return [];
 
@@ -231,7 +269,8 @@ export async function selectLearnedMethods(learning, scope) {
     }
   }
 
-  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, approvedAt: number, trial?: boolean}[]} */
+  const cardDirectory = typeof scope.cardDirectory === "string" && scope.cardDirectory ? scope.cardDirectory : null;
+  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, approvedAt: number, trial?: boolean}[]} */
   const candidates = [];
   for (const document of documents) {
     const payload = document?.payload ?? {};
@@ -242,12 +281,14 @@ export async function selectLearnedMethods(learning, scope) {
     // than not: its bytes ride in every prompt and nothing it does is counted.
     if (!name || !body.trim()) continue;
     const rendered = renderLearnedMethod(payload);
+    const directoryName = learnedMethodDirectoryName(String(document.id));
+    const bytes = Buffer.byteLength(rendered, "utf8") + methodFileBytes(payload);
     candidates.push({
       id: String(document.id),
       ...(trials.has(String(document.id)) ? { trial: true } : {}),
       name,
       digest: mountedMethodDigest(payload, sha256),
-      directoryName: learnedMethodDirectoryName(String(document.id)),
+      directoryName,
       document: rendered,
       // A code skill's scripts, tests and tool schema, which the validator has
       // already checked against each other and against the prefix rules. They
@@ -255,7 +296,8 @@ export async function selectLearnedMethods(learning, scope) {
       // hold them, and a method whose body is small and whose scripts are not
       // taxes the launch exactly as much.
       files: methodFiles(payload),
-      bytes: Buffer.byteLength(rendered, "utf8") + methodFileBytes(payload),
+      bytes,
+      promptBytes: cardDirectory ? learnedMethodCardBytes(payload, directoryName, cardDirectory) : bytes,
       approvedAt: Date.parse(String(payload.statusChangedAt ?? payload.createdAt ?? "")) || 0,
     });
   }
@@ -266,18 +308,23 @@ export async function selectLearnedMethods(learning, scope) {
     || right.approvedAt - left.approvedAt
     || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 
-  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, trial?: boolean}[]} */
+  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, promptBytes: number, trial?: boolean}[]} */
   const selected = [];
-  let bytes = 0;
+  let spent = 0;
   for (const { approvedAt: _approvedAt, ...candidate } of candidates) {
     if (selected.length >= maxCount) break;
-    if (candidate.trial) { bytes += candidate.bytes; selected.push(candidate); continue; }
+    // A trial is exempt from the byte budget, not from its being spent before
+    // the learned half began: the researcher's own entries still come first.
+    if (candidate.trial && maxBytes > 0) { spent += candidate.promptBytes; selected.push(candidate); continue; }
     // Unlike the capsule half, the first candidate is not exempt from the byte
     // budget. A capsule entry the user wrote is theirs to make enormous; an
     // inferred method that alone exceeds the prompt budget is a distillation
     // defect, and mounting it anyway would tax every child of every run.
-    if (bytes + candidate.bytes > maxBytes) continue;
-    bytes += candidate.bytes;
+    if (spent + candidate.promptBytes > maxBytes) {
+      scope.onLeftOut?.(candidate.id);
+      continue;
+    }
+    spent += candidate.promptBytes;
     selected.push(candidate);
   }
   return selected;

@@ -990,7 +990,9 @@ export function createWebApiApp(overrides = {}) {
         const user = await store.userById(userId);
         if (!user) throw new HttpError(404, "learning_account_unavailable", "The evaluation owner is unavailable.");
         await store.requireProject(user, projectId);
-        return (await freezeLearningBaseline({ learning: learningService, capsules: capsuleService, userId, projectId })).baselineDigest;
+        return (await freezeLearningBaseline({
+          learning: learningService, capsules: capsuleService, userId, projectId, maxPromptBytes: config.mountedMethodPromptBytes,
+        })).baselineDigest;
       } })
     : null;
   // The loop's own counters (learningMetrics.mjs): the ones nothing durable
@@ -6562,6 +6564,23 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       { value: runtimeStats.proxy?.limits?.maxPerProject ?? 0, labels: { scope: "project" } },
     ],
   );
+  // The mounted-method byte budget (capsuleMethods.mjs,
+  // OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES): what launches spent of it on
+  // what the methods put in front of the model, and how many methods it left
+  // out — the number that was zero-and-invisible while `claim-verdict-audit`
+  // went unmounted from 2026-09-26.
+  addMetric(lines, "open_science_mounted_method_prompt_bytes_limit",
+    "Configured bytes the mounted methods may put in every child prompt.", "gauge",
+    { value: runtimeStats.methodMounts?.maxPromptBytes ?? 0 });
+  addMetric(lines, "open_science_mounted_method_launches_total",
+    "Runtime launches that materialized the project's methods.", "counter",
+    { value: runtimeStats.methodMounts?.launches ?? 0 });
+  addMetric(lines, "open_science_mounted_method_prompt_bytes_total",
+    "Bytes the mounted methods put in front of the model (capsule entries whole, learned methods as cards), summed over launches.", "counter",
+    { value: runtimeStats.methodMounts?.promptBytes ?? 0 });
+  addMetric(lines, "open_science_mounted_methods_left_out_total",
+    "Methods a launch left out because the prompt byte budget was spent, summed over launches.", "counter",
+    { value: runtimeStats.methodMounts?.leftOut ?? 0 });
   addMetric(
     lines,
     "open_science_server_info",

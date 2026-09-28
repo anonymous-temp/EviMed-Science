@@ -511,6 +511,7 @@ export {
 
 // methodSkill — the learned-method format, its digest, and every rule code can decide
 export {
+  LEARNED_METHOD_CARD_SUMMARY_MAX_CHARS,
   METHOD_BODY_SECTIONS,
   METHOD_FILE_PREFIXES,
   METHOD_FILES_MAX_BYTES,
@@ -527,6 +528,7 @@ export {
   cleanMethodSteps,
   formatDependsOn,
   isMethodDigest,
+  learnedMethodCardEntry,
   methodBodySections,
   methodContentDigest,
   mountedMethodDigest,

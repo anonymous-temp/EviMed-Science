@@ -16,6 +16,7 @@ import { safeId } from "../src/security.mjs";
 import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
   MAX_MOUNTED_LEARNED_METHODS,
+  learnedMethodCardBytes,
   learnedMethodDirectoryName,
   learnedMethodFamilyForRuntime,
   methodFamily,
@@ -124,6 +125,39 @@ test("the byte budget is a real bound, including on the largest single method", 
     "an inferred method that alone blows the prompt budget is a distillation defect, not a mount");
   assert.deepEqual(await selectLearnedMethods(learning, { userId: "u1", projectId: "p1", maxBytes: 1 }), []);
   assert.deepEqual(await selectLearnedMethods(learning, { userId: "u1", projectId: "p1", maxCount: 0 }), []);
+});
+
+test("given where the runtime sees them, methods are budgeted at their card and what is left out is named", async () => {
+  // A mount hands a run each learned method's card and leaves the text in its
+  // file; the recall API, which hands out the text, budgets the text.
+  const long = (/** @type {string} */ name, /** @type {string} */ day) => doc(`method:learned:${name}`, name,
+    { payload: { body: `${BODY}\n${"y".repeat(9_000)}`, statusChangedAt: `2026-09-${day}T00:00:00.000Z` } });
+  const learning = fakeLearning([long("first", "20"), long("second", "21"), long("third", "22")]);
+  const onText = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1", maxBytes: 12_000 });
+  assert.deepEqual(onText.map((method) => method.name), ["third"], "on text only one 9 KB method fits in 12 KB");
+  assert.ok(onText.every((method) => method.promptBytes === method.bytes));
+
+  /** @type {string[]} */
+  const leftOut = [];
+  const cardDirectory = "/runtime/capsule-methods";
+  const onCards = await selectLearnedMethods(learning, {
+    userId: "u1", projectId: "p1", maxBytes: 12_000, cardDirectory, onLeftOut: (id) => leftOut.push(id),
+  });
+  assert.deepEqual(onCards.map((method) => method.name), ["third", "second", "first"]);
+  assert.deepEqual(leftOut, []);
+  for (const method of onCards) {
+    const payload = (await learning.approvedMethods("u1")).find((/** @type {any} */ document) => document.id === method.id)?.payload;
+    assert.equal(method.promptBytes, learnedMethodCardBytes(payload, method.directoryName, cardDirectory));
+    assert.ok(method.promptBytes < 300, `a card is short: ${method.promptBytes} bytes`);
+    assert.ok(method.bytes > 9_000, "the text is still what is written to disk");
+  }
+  // A budget smaller than the cards leaves the oldest out, by name.
+  const tight = await selectLearnedMethods(learning, {
+    userId: "u1", projectId: "p1", maxBytes: onCards[0].promptBytes + onCards[1].promptBytes, cardDirectory,
+    onLeftOut: (id) => leftOut.push(id),
+  });
+  assert.deepEqual(tight.map((method) => method.name), ["third", "second"]);
+  assert.deepEqual(leftOut, ["method:learned:first"]);
 });
 
 test("a method with no name or no body is not mounted, because it could never be counted", async () => {

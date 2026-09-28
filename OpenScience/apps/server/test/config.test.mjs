@@ -38,6 +38,14 @@ test("the runtime mode defaults to a real kernel rather than a mock", async () =
   });
 });
 
+test("the mounted-method prompt budget has a key, a default and a bound", () => {
+  assert.equal(loadConfig({ rootDir: repoRoot }).mountedMethodPromptBytes, 32 * 1024);
+  assert.equal(loadConfig({ rootDir: repoRoot, mountedMethodPromptBytes: "65536" }).mountedMethodPromptBytes, 65_536);
+  for (const value of ["0", "4095", "262145", "32k"]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, mountedMethodPromptBytes: value }), /OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES/);
+  }
+});
+
 test("memory extraction is given longer than one extraction actually takes", () => {
   // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
   // the previous 30s budget every request aborted, so the store only ever held

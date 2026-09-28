@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import { LEARNING_EVALUATION_DISPATCH_PREFIX, mountedMethodDigest, parseSkillFrontmatter, skillBodyDigest } from "@evimed/domain";
-import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { selectLearnedMethods } from "./learnedMethodMount.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { startLearningEvaluationBridge } from "./learningEvaluationBridge.mjs";
@@ -12,9 +11,9 @@ import { HttpError, assertProjectCapacity, resolveScopedPath, writeFileAtomicNoF
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
 /** Freeze the original owner's method payloads before any evaluation runs.
- * @param {{learning: any, capsules: any, project: any, request: any}} input
+ * @param {{learning: any, capsules: any, project: any, request: any, maxPromptBytes?: number}} input
  */
-export async function freezeLearningEvaluation({ learning, capsules, project, request }) {
+export async function freezeLearningEvaluation({ learning, capsules, project, request, maxPromptBytes }) {
   const candidate = structuredClone(await learning.getMethod(request.userId, request.methodId));
   // Effective or not yet: since 2026-09-20 a distilled method is effective the
   // night it is learned, and this comparison is what can take it away again, so
@@ -31,6 +30,7 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
     // mount it in both arms and every verdict would be `non_inferior` by
     // construction — a comparison of a thing with itself, reported as evidence.
     excludeMethodIds: [candidate.id],
+    ...(maxPromptBytes === undefined ? {} : { maxPromptBytes }),
   });
   const { approved, approvedMethods, capsuleMethods, learnedMethods: baseline, limits, baselineDigest } = frozen;
   const frozenLearning = {
@@ -42,8 +42,10 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
     userId: request.userId, projectId: project.id, trialMethodIds: [candidate.id],
     ...limits,
   });
+  // What the candidate arm puts in front of the model, as a launch counts it:
+  // capsule entries whole, learned methods as their cards.
   if (!candidateMethods.some((method) => method.id === candidate.id)
-    || capsuleBytes + candidateMethods.reduce((sum, method) => sum + method.bytes, 0) > MAX_MOUNTED_CAPSULE_METHOD_BYTES) {
+    || capsuleBytes + candidateMethods.reduce((sum, method) => sum + method.promptBytes, 0) > frozen.maxPromptBytes) {
     throw new HttpError(413, "method_evaluation_mount_limit", "The frozen candidate does not fit the method context budget.");
   }
   const records = (methods) => approved.filter((document) => methods.some((method) => method.id === document.id));
@@ -61,7 +63,11 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
       userId: request.userId, projectId: project.id, methodId: candidate.id,
       candidateDigest: candidate.payload.contentDigest, mountedDigest: mountedMethodDigest(candidate.payload, sha256),
       snapshotDigest: `sha256:${sha256(JSON.stringify({ userId: request.userId, projectId: project.id, baselineDigest,
-        candidateDigest: candidate.payload.contentDigest, candidate: arms.candidate.learnedMethods }))}`, baselineDigest,
+        // Without `promptBytes`, which says what a method costs the budget
+        // rather than what is mounted: a grant issued before it existed still
+        // names the same snapshot.
+        candidateDigest: candidate.payload.contentDigest,
+        candidate: arms.candidate.learnedMethods.map(({ promptBytes: _promptBytes, ...method }) => method) }))}`, baselineDigest,
       expectedMethods: { baseline: receipt(arms.baseline), candidate: receipt(arms.candidate) },
       bootstrap: request.bootstrap === true,
     },
@@ -113,7 +119,9 @@ export async function evaluateLearnedMethod(dependencies, request, options = {})
   const user = await store.userById(request.userId);
   if (!user) throw new HttpError(404, "learning_account_unavailable", "The evaluation owner is unavailable.");
   const source = await store.requireProject(user, request.projectId);
-  const frozen = await freezeLearningEvaluation({ learning, capsules, project: source, request });
+  const frozen = await freezeLearningEvaluation({
+    learning, capsules, project: source, request, maxPromptBytes: config.mountedMethodPromptBytes,
+  });
   const timeoutMs = 6 * 60 * 60_000;
   const created = new Map();
   const cleaning = new Map();
