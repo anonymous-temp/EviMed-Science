@@ -141,6 +141,14 @@ describe("证据", () => {
     expect(screen.getByText("说明书内")).toBeInTheDocument();
   });
 
+  it("a claim past its validity is marked 待重核, not shown as current", async () => {
+    const [first, ...rest] = evidenceFilled.claims;
+    client.getGeoEvidence.mockResolvedValue({ ...evidenceFilled, claims: [{ ...first, validUntil: "2026-01-01T00:00:00.000Z", status: "expired" }, ...rest] });
+    renderTab(<EvidenceTab {...props()} />);
+    expect(await screen.findByText("待重核")).toBeInTheDocument();
+    expect(screen.queryByText("已过期")).not.toBeInTheDocument();
+  });
+
   it("filters by source kind and opens a claim's quote in place", async () => {
     client.getGeoEvidence.mockResolvedValue(evidenceFilled);
     renderTab(<EvidenceTab {...props()} />);

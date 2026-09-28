@@ -122,6 +122,21 @@ export function geoScreenshotPath(dataDir, sha256) {
   return path.join(dataDir, "geo", "snapshots", sha256.slice(0, 2), `${sha256}.png`);
 }
 
+/**
+ * A claim's status as a reader and a run should take it: an active claim
+ * whose validity has run out (`validUntil` in the past) is `expired` — 待重核
+ * on the page — until it is checked again, never silently still valid (plan
+ * §3.1: 到期或说明书改版自动失效重核; `valid_until` was stored and never read).
+ * Advice, not a block: the stored row is unchanged and a run re-checks it by
+ * writing the claim again with a new `validUntil`.
+ * @param {{ status?: string | null, validUntil?: string | null }} claim @param {Date} now
+ */
+export function claimStatusAt(claim, now) {
+  const status = String(claim?.status ?? "active");
+  const until = claim?.validUntil ? Date.parse(claim.validUntil) : Number.NaN;
+  return status === "active" && Number.isFinite(until) && until < now.getTime() ? "expired" : status;
+}
+
 /** @param {any} row @returns {GeoCell} */
 export function geoCellFromRow(row) {
   if (!row) return { ...GEO_ABSENT_CELL };
@@ -678,13 +693,14 @@ export class GeoService {
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
   async evidenceOf(project) {
     const claims = await this.store.listClaims(project.id);
+    const now = this.now();
     return {
       product: project.product,
       competitors: project.competitors,
       claims: claims.map((claim) => ({
         id: claim.id, statement: claim.statement, quote: claim.quote, sourceRef: claim.sourceRef, sourceLabel: claim.sourceLabel, sourceKind: claim.sourceKind,
         evidenceLevel: claim.evidenceLevel, population: claim.population, inLabel: claim.inLabel, verifiedAt: claim.verifiedAt,
-        validUntil: claim.validUntil, status: claim.status,
+        validUntil: claim.validUntil, status: claimStatusAt(claim, now),
       })),
     };
   }

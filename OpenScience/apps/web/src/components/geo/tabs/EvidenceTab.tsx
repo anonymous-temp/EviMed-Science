@@ -118,7 +118,7 @@ function Claims({ claims }: { claims: GeoClaim[] }) {
               )}
               trailing={(
                 <>
-                  {claim.status === "expired" && <Tag>已过期</Tag>}
+                  {claim.status === "expired" && <Tag>待重核</Tag>}
                   {claim.inLabel === true && <Tag>说明书内</Tag>}
                   {claim.inLabel === false && <Tag>说明书外</Tag>}
                 </>
