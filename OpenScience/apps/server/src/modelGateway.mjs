@@ -898,6 +898,15 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // (a session ended by a refused sibling request, a stopped container)
         // read on the error ledger as a provider outage (2026-09-27).
         sendError(res, gatewayError(499, "model_gateway_client_closed", "The model gateway client disconnected."), onFailure);
+      } else if (res.headersSent && !res.writableEnded && !(error instanceof GatewayError)) {
+        // The provider's stream broke off after its 200 had been forwarded —
+        // a reset or a read that failed mid-answer. It fell to sendError's
+        // default and was booked `model_gateway_unavailable`, the code for a
+        // gateway that is not configured: every one of the ~500 such rows on
+        // the error ledger from 2026-09-04 to 09-27 was this, truncated, never
+        // a configuration fault. The call itself is closed as `uncertain`
+        // above, which is right: the provider may have billed it.
+        sendError(res, gatewayError(502, "model_gateway_upstream_interrupted", "The model provider's stream broke off mid-answer."), onFailure);
       } else {
         sendError(res, error, onFailure);
       }

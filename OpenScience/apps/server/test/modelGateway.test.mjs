@@ -569,6 +569,34 @@ test("a gateway failure is reported to the caller's ledger, including one that a
   assert.deepEqual(failures, [{ code: "model_gateway_client_closed", status: 499, truncated: true }]);
 });
 
+test("a provider stream that breaks off mid-answer is named as such, not as a gateway that is not configured", async (t) => {
+  // Every model_gateway_unavailable on production's error ledger from
+  // 2026-09-04 to 09-27 (about 500) was this: truncated, after the 200.
+  const failures = [];
+  const breaking = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n");
+    setTimeout(() => res.socket?.destroy(), 20);
+  });
+  const breakingBase = await listen(breaking);
+  t.after(() => close(breaking));
+  const gateway = createServer((req, res) =>
+    createModelGatewayHandler(config(breakingBase, { modelGatewayTimeoutMs: 60_000 }), runtimeManager())(req, res, (failure) => failures.push(failure)));
+  const gatewayBase = await listen(gateway);
+  t.after(() => close(gateway));
+  const answer = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }], stream: true }),
+  });
+  assert.equal(answer.status, 200);
+  await assert.rejects(answer.text(), "the caller still sees a cut stream");
+  const deadline = Date.now() + 5_000;
+  while (failures.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(failures, [{ code: "model_gateway_upstream_interrupted", status: 502, truncated: true }]);
+});
+
 test("a forwarded answer is counted against the account that asked for it", async (t) => {
   // The gateway is the only place the provider's own token counts pass
   // through, and it authenticates the runtime, so it knows whose call it is.
