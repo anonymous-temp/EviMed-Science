@@ -442,3 +442,40 @@ def test_a_resumed_run_does_not_admit_its_protocol_against_invalidated_extractio
     project.save_checkpoint("extraction")  # the resumed run extracted again
     with pytest.raises(ProtocolInputRequired):
         compile_project_method_plan(project, protocol, enforce=True)
+
+
+def test_a_refusal_about_extracted_designs_keeps_the_protocol_search_and_screening(tmp_path):
+    """ma-001 (2026-09-28): an admission refusal about one extracted study's
+    design cleared every step back to the protocol, and each resume replanned,
+    searched and screened again - 24, 37 and 67 inclusions across three runs.
+    Only extraction and what follows it are stale."""
+    from new_meta.core.project import PIPELINE_STEPS
+    protocol = _protocol()
+    project = Project(protocol.research_question, output_dir=tmp_path)
+    for step in PIPELINE_STEPS[:PIPELINE_STEPS.index("rob") + 1]:
+        project.save_checkpoint(step)
+    _save_studies(project, [_study(), _study("S2", "unclassified randomized study", comparative_design="unknown")])
+
+    with pytest.raises(ProtocolInputRequired) as refusal:
+        compile_project_method_plan(project, protocol, enforce=True)
+
+    assert refusal.value.restart_step == "extraction"
+    assert refusal.value.phase.data["restart_step"] == "extraction"
+    assert project.get_completed_steps() == PIPELINE_STEPS[:PIPELINE_STEPS.index("extraction")]
+    assert project.get_resume_step() == "extraction"
+
+
+def test_a_refusal_about_the_protocol_itself_still_restarts_planning(tmp_path):
+    from new_meta.core.project import PIPELINE_STEPS
+    protocol = _protocol()
+    protocol.effect_measure = "not-a-measure"
+    project = Project(protocol.research_question, output_dir=tmp_path)
+    for step in PIPELINE_STEPS[:PIPELINE_STEPS.index("extraction") + 1]:
+        project.save_checkpoint(step)
+
+    with pytest.raises(ProtocolInputRequired) as refusal:
+        admit_project_protocol(project, protocol, enforce=True)
+
+    assert refusal.value.restart_step == "protocol"
+    assert project.get_completed_steps() == []
+

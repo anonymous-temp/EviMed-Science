@@ -23,6 +23,17 @@ _GENERIC_RCT_DESIGNS = {
 }
 
 
+def refused_step(context) -> str:
+    """The pipeline step whose output a method-admission refusal is about.
+
+    Compilation refuses on the protocol's own fields, or on what extraction
+    observed ("extraction.study_designs"). Only the latter's step and what
+    follows it are stale; the protocol, search and screening are not.
+    """
+    field = str((context or {}).get("field") or "")
+    return "extraction" if field.startswith("extraction.") else "protocol"
+
+
 class ProtocolInputRequired(MethodCompilationError):
     """A preserved proposal that cannot become an executable review protocol."""
 
@@ -31,15 +42,22 @@ class ProtocolInputRequired(MethodCompilationError):
         from new_meta.schemas.phase_result import ExecutionStatus, NextAction, PhaseIssue, PhaseName, PhaseResult
         super().__init__(message)
         self.project = project
+        self.restart_step = refused_step(context)
+        next_action = NextAction(action_id="restart_with_supported_protocol",
+            title="Clarify the research question and restart with supported, scope-faithful inputs.",
+            description="Preserve the original population, intervention, comparator, outcome and eligibility intent; do not silently remove unsupported requirements.")
+        if self.restart_step == "extraction":
+            next_action = NextAction(action_id="resolve_extracted_designs",
+                title="Resolve the extracted study designs and resume from extraction.",
+                description="The admitted protocol, search and screening stand; a resumed run extracts again.")
         self.phase = PhaseResult(
             run_id=project.base_dir.name if project else "protocol-planning",
             phase=PhaseName.PROTOCOL, status=ExecutionStatus.NEEDS_INPUT,
             summary=message, error_code=code,
             issues=[PhaseIssue(code=code, message=message, blocking=True, context=context or {})],
-            next_actions=[NextAction(action_id="restart_with_supported_protocol",
-                title="Clarify the research question and restart with supported, scope-faithful inputs.",
-                description="Preserve the original population, intervention, comparator, outcome and eligibility intent; do not silently remove unsupported requirements.")],
-            data={"proposal": protocol.model_dump(mode="json") if protocol else {}},
+            next_actions=[next_action],
+            data={"proposal": protocol.model_dump(mode="json") if protocol else {},
+                  "restart_step": self.restart_step},
         )
         if project:
             self.persist(project)
@@ -62,7 +80,11 @@ class ProtocolInputRequired(MethodCompilationError):
         _write_scoped_atomic(project, "analysis/protocol_input_status.json", self.phase.model_dump_json(indent=2).encode())
         _write_scoped_atomic(project, "analysis/protocol_rejected_proposal.json", json.dumps(self.phase.data, ensure_ascii=False, indent=2).encode())
         if original_present:
-            project.clear_downstream("protocol", include_self=True)
+            # Until 2026-09-28 every refusal cleared back to the protocol, so a
+            # resumed ma-001 job replanned, searched and screened again (24,
+            # 37 and 67 inclusions across three runs) over a refusal that was
+            # about one extracted study's design.
+            project.clear_downstream(self.restart_step, include_self=True)
         return self
 
 
