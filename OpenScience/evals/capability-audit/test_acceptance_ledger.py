@@ -356,10 +356,15 @@ class RealLedgerTests(unittest.TestCase):
         # comprehensive-drug-evaluation failed (delivered unverified, citing
         # sources its snapshot does not hold) — six never run, five failed.
         # On 2026-09-28 clinical-evidence-synthesis was accepted on its tenth
-        # attempt: eleven accepted, four failed.
-        self.assertEqual(statuses.count("not-run"), 6)
-        self.assertEqual(statuses.count("accepted"), 11)
-        self.assertEqual(statuses.count("failed"), 4)
+        # attempt: eleven accepted, four failed. The same day the production
+        # run ledger was read into five rows whose deliveries the platform's
+        # own workers had made (surface `platform-job`): geo-content and
+        # geo-strategy (the 信尔美 program), method-distillation,
+        # method-relations and source-understanding — sixteen accepted, three
+        # failed, two never run.
+        self.assertEqual(statuses.count("not-run"), 2)
+        self.assertEqual(statuses.count("accepted"), 16)
+        self.assertEqual(statuses.count("failed"), 3)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -404,7 +409,12 @@ class RealLedgerTests(unittest.TestCase):
         # so its evidence is the PROGRESS.md entry. clinical-evidence-synthesis
         # joined on 2026-09-28 (brief review-001, fresh project, delivered
         # verified with advice only).
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "manuscript-support", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection"])
+        # geo-content, geo-strategy, method-distillation, method-relations and
+        # source-understanding joined on 2026-09-28 from production runs the
+        # platform's own workers dispatched, each package copied into the
+        # repository with a run.json that says whether its transcript shows
+        # the gate's code being read.
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-strategy", "manuscript-support", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":
@@ -451,10 +461,13 @@ class RealLedgerTests(unittest.TestCase):
         # dropped it would read as if nothing had ever been built. The row has
         # since recorded a real failed run (2026-09-09), which is a fact about
         # the capability and no reason to lose the harness-built pack either.
+        # On 2026-09-28 the row was accepted on the 信尔美 program's 2.0 runs,
+        # and the failed 09-10 run and the harness pack both stay beside it.
         row = next(
             item for item in checker.load_ledger(REPO)["capabilities"] if item["id"] == "geo-content"
         )
-        self.assertEqual(row["realDelivery"]["status"], "failed")
+        self.assertEqual(row["realDelivery"]["status"], "accepted")
+        self.assertIn("evals/geo-content/results/2026-09-10-geo-001-suxiao-baseline", row["relatedEvidence"])
         self.assertIn(
             "evals/geo-content/results/2026-08-30-geo-001/deliverable", row["relatedEvidence"]
         )
