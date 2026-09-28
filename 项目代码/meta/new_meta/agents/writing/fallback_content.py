@@ -454,7 +454,15 @@ class FallbackContentMixin:
         cite_map = {str(study_id): f"[{num}]" for study_id, num in getattr(ref_manager, "_id_map", {}).items()}
         return "\n\n".join(lines), cite_map
 
+    def _count_pair_cell(self, events, total) -> str:
+        """Arm events/total, or NR when the row carries no denominator (never a fabricated 0/0)."""
+        if not self._int(total):
+            return "NR"
+        return f"{self._int(events)}/{self._int(total)}"
+
     def _generic_study_table(self, rows: list[dict], cite_map: dict[str, str], effect_measure: str) -> str:
+        if str(effect_measure or "").upper() in {"MD", "SMD", "WMD"}:
+            return self._generic_continuous_study_table(rows, cite_map, effect_measure)
         lines = (
             [
                 f"| 研究 | 报告位置 | 干预组事件/总数 | 对照组事件/总数 | 报告{effect_measure} | 资料依据 |",
@@ -477,9 +485,59 @@ class FallbackContentMixin:
                 + " | ".join([
                     self._md_cell(study),
                     self._md_cell(self._fallback_source_location(row)),
-                    f"{self._int(row.get('events_intervention'))}/{self._int(row.get('total_intervention'))}",
-                    f"{self._int(row.get('events_control'))}/{self._int(row.get('total_control'))}",
+                    self._count_pair_cell(row.get("events_intervention"), row.get("total_intervention")),
+                    self._count_pair_cell(row.get("events_control"), row.get("total_control")),
                     self._fmt(effect, 2) if effect is not None else "NR",
+                    (
+                        "报告摘录支持" if row.get("source_quote_verified") is True else "需结合原文确认"
+                    ) if self._zh else (
+                        "Supported by report excerpt" if row.get("source_quote_verified") is True else "Requires report confirmation"
+                    ),
+                ])
+                + " |"
+            )
+        return "\n".join(lines)
+
+    def _generic_continuous_study_table(self, rows: list[dict], cite_map: dict[str, str], effect_measure: str) -> str:
+        """Table 1 for a difference measure: timepoint and the row's own estimate with its CI.
+
+        A continuous outcome has no arm events; the row's study-level estimate
+        (the same value Table 2 lists) is shown instead of event counts.
+        """
+        lines = (
+            [
+                f"| 研究 | 报告位置 | 时间点 | 研究层面{effect_measure}（95% CI） | 资料依据 |",
+                "|---|---|---|---:|---|",
+            ]
+            if self._zh
+            else [
+                f"| Study | Report location | Timepoint | Study-level {effect_measure} (95% CI) | Evidence basis |",
+                "|---|---|---|---:|---|",
+            ]
+        )
+        for row in rows:
+            study = self._fallback_trial_label(row)
+            cite = cite_map.get(str(row.get("study_id") or ""), "")
+            if cite:
+                study = f"{study} {cite}"
+            effect = row.get("effect") if row.get("effect") is not None else row.get("effect_size")
+            if effect is None:
+                effect_cell = "NR"
+            elif row.get("ci_lower") is not None and row.get("ci_upper") is not None:
+                effect_cell = (
+                    f"{self._fmt(effect, 2)}（{self._fmt(row.get('ci_lower'), 2)}至{self._fmt(row.get('ci_upper'), 2)}）"
+                    if self._zh else
+                    f"{self._fmt(effect, 2)} ({self._fmt(row.get('ci_lower'), 2)} to {self._fmt(row.get('ci_upper'), 2)})"
+                )
+            else:
+                effect_cell = self._fmt(effect, 2)
+            lines.append(
+                "| "
+                + " | ".join([
+                    self._md_cell(study),
+                    self._md_cell(self._fallback_source_location(row)),
+                    self._md_cell(row.get("timepoint") or "NR"),
+                    effect_cell,
                     (
                         "报告摘录支持" if row.get("source_quote_verified") is True else "需结合原文确认"
                     ) if self._zh else (

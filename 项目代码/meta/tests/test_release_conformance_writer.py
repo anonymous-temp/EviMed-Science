@@ -413,6 +413,51 @@ def test_cli_finalization_saves_the_conformed_text(tmp_path: Path, monkeypatch) 
     assert "纳入研究的基本特征见表1。" in finalized
 
 
+# ── Table 1 shows the row's own numbers, never a fabricated 0/0 ───────────
+
+
+def test_continuous_study_table_shows_each_rows_estimate_not_event_counts() -> None:
+    rows = [
+        {
+            "study_id": "study:28326403",
+            "study_label": "Alexandru 2016",
+            "source_location": "Table 3",
+            "timepoint": "perioperative",
+            "effect_size": -329.69999999999993,
+            "ci_lower": -497.88601752716465,
+            "ci_upper": -161.5139824728352,
+            "source_quote_verified": True,
+        },
+        {
+            "study_id": "study:34566475",
+            "study_label": "Montovanelli 2021",
+            "source_location": "Table 5 (Drained Blood, ml)",
+            "timepoint": "24 hours after surgery",
+            "effect_size": -112.5,
+            "source_quote_verified": True,
+        },
+    ]
+
+    table = WritingAgent(lang="zh")._generic_study_table(rows, {}, "MD")
+
+    assert "| Alexandru 2016 | Table 3 | perioperative | -329.70（-497.89至-161.51） | 报告摘录支持 |" in table
+    assert "| Montovanelli 2021 | Table 5 (Drained Blood, ml) | 24 hours after surgery | -112.50 | 报告摘录支持 |" in table
+    assert "0/0" not in table
+
+
+def test_dichotomous_study_table_marks_missing_denominators_as_not_reported() -> None:
+    rows = [
+        {"study_id": "S1", "study_label": "Trial A", "events_intervention": 3, "total_intervention": 40,
+         "events_control": 9, "total_control": 41},
+        {"study_id": "S2", "study_label": "Trial B", "effect": 0.8},
+    ]
+
+    table = WritingAgent(lang="en")._generic_study_table(rows, {}, "OR")
+
+    assert "| 3/40 | 9/41 |" in table
+    assert "| NR | NR | 0.80 |" in table
+
+
 @pytest.mark.parametrize("language", ["zh", "en"])
 def test_writer_prompts_carry_the_gate_limit(language: str) -> None:
     from new_meta.core.readability import sentence_length_rule
