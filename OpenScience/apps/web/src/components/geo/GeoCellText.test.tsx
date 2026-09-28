@@ -28,6 +28,11 @@ describe("a GEO number", () => {
     expect(readGeoCell({ status: "not_measurable", reason: "citations_without_links" }).reason).toBe("citations_without_links");
   });
 
+  it("says “引擎不同，不可比” for a change between measurements on different engines", () => {
+    expect(geoCellWord({ ...cell(null, null, null, "not_measurable"), reason: "engines_differ" })).toBe("引擎不同，不可比");
+    expect(geoSampleText({ ...cell(null, null, null, "not_measurable"), reason: "engines_differ" })).toBeNull();
+  });
+
   it("says “未测” for an engine that was not measured and “—” for what cannot be measured — never zero", () => {
     expect(geoCellWord(cell(null, null, null, "absent"))).toBe("未测");
     expect(geoCellWord(cell(0, 0, 0, "absent"))).toBe("未测");

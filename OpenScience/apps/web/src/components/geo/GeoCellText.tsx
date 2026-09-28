@@ -12,11 +12,16 @@ import type { GeoUnit } from "./geoText";
  *  - `absent` (the engine was not measured) → “未测”, never zero.
  *  - `not_measurable` because the engine cited titles without links → “引用不可测”
  *    (G8): whether it cited us cannot be told, which is not the same as “—”.
+ *  - `not_measurable` because the two measurements a change compares were
+ *    taken on different engines → “引擎不同，不可比”.
  *  - any other `not_measurable`, or no cell at all → “—”.
  */
 
 /** The word for a citation rate an engine's linkless citations make impossible to take. */
 export const GEO_LINKLESS_WORD = "引用不可测";
+
+/** The word for a change between two measurements taken on different engines (comparability key `engines`). */
+export const GEO_ENGINES_DIFFER_WORD = "引擎不同，不可比";
 
 /** The value on the metric's own scale: 18%, 0.4%, 38. */
 export function formatGeoValue(value: number, unit: GeoUnit = "percent"): string {
@@ -31,6 +36,7 @@ export function geoCellWord(cell: GeoCell | null | undefined, unit: GeoUnit = "p
   if (cell.status === "insufficient") return "样本不足";
   if (cell.status === "absent") return "未测";
   if (cell.status === "not_measurable" && cell.reason === "citations_without_links") return GEO_LINKLESS_WORD;
+  if (cell.status === "not_measurable" && cell.reason === "engines_differ") return GEO_ENGINES_DIFFER_WORD;
   if (cell.status !== "ok" || cell.value === null) return "—";
   return formatGeoValue(cell.value, unit);
 }

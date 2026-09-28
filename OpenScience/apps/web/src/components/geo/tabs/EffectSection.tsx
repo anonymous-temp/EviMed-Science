@@ -43,11 +43,16 @@ export function EffectSection({ project }: { project: GeoProject }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [dates, pilot, control]);
 
-  const title = net === null
-    ? "投放的效果还要等下一次复测"
-    : flat
-      ? "投放组和对照组目前还在波动范围内"
-      : `投放的语义群比对照组${(cell.value ?? 0) > 0 ? "多涨" : "少涨"} ${Math.abs(Math.round(cell.value ?? 0))}`;
+  // Measured on other engines than the baseline, a change is two different
+  // quantities side by side: said as such, never as “wait for the next one”.
+  const enginesDiffer = cell.status === "not_measurable" && cell.reason === "engines_differ";
+  const title = enginesDiffer
+    ? "这次复测和基线测的引擎不同，净效应不可比"
+    : net === null
+      ? "投放的效果还要等下一次复测"
+      : flat
+        ? "投放组和对照组目前还在波动范围内"
+        : `投放的语义群比对照组${(cell.value ?? 0) > 0 ? "多涨" : "少涨"} ${Math.abs(Math.round(cell.value ?? 0))}`;
 
   return (
     <div className="flex flex-col gap-6">

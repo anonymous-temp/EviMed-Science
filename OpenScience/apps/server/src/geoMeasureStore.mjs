@@ -976,26 +976,32 @@ export class GeoMeasureStore {
   }
 
   /**
-   * The project's earlier arm-scope cells of one metric, one per comparable
-   * round (same question set version, baseline or weekly), oldest first.
+   * The project's earlier arm-scope cells of one metric, one per round of the
+   * same question set version (baseline or weekly), oldest first, each with
+   * the engines its cross-engine cells were computed over (the round's
+   * balance, `noteRoundBalance`; null for a round measured before it was
+   * recorded). Whether two rounds are comparable is the caller's to decide by
+   * those engines (metrics.json net_effect.comparability_keys).
    * @param {{ geoProjectId: string, setVersion: number | null, metricId: string, pool: string | null, variant?: string | null }} key
    */
   async armSeries({ geoProjectId, setVersion, metricId, pool, variant = null }) {
-    const result = await this.query(`SELECT m.arm, m.value, m.numerator, m.denominator, m.status, r.sample_date, r.id AS round_id
+    const result = await this.query(`SELECT m.arm, m.value, m.numerator, m.denominator, m.status, r.sample_date, r.id AS round_id,
+        r.ref -> 'balance' -> 'engines' AS engines
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id
       WHERE m.geo_project_id = $1 AND m.scope = 'arm' AND m.metric_id = $2 AND m.pool IS NOT DISTINCT FROM $3
         AND m.variant IS NOT DISTINCT FROM $4 AND m.rival IS NULL AND r.kind IN ('baseline', 'weekly')
         AND r.set_version IS NOT DISTINCT FROM $5 AND r.sample_date IS NOT NULL
       ORDER BY r.sample_date, r.created_at`, [geoProjectId, metricId, pool, variant, setVersion]);
-    /** @type {Record<"pilot" | "control", Array<{ date: string, value: number | null, numerator: number | null, denominator: number | null }>>} */
+    /** @type {Record<"pilot" | "control", Array<{ date: string, value: number | null, numerator: number | null, denominator: number | null, engines: string[] | null }>>} */
     const series = { pilot: [], control: [] };
     for (const row of result.rows) {
       const arm = row.arm === "control" ? "control" : row.arm === "pilot" ? "pilot" : null;
       if (!arm) continue;
       const measurable = row.status === "ok" || row.status === "insufficient";
       const date = typeof row.sample_date === "string" ? row.sample_date.slice(0, 10) : /** @type {string} */ (iso(row.sample_date)).slice(0, 10);
+      const engines = Array.isArray(row.engines) ? row.engines.map(String).sort() : null;
       series[arm].push({ date, value: measurable ? num(row.value) : null, numerator: measurable ? num(row.numerator) : null,
-        denominator: measurable ? num(row.denominator) : null });
+        denominator: measurable ? num(row.denominator) : null, engines });
     }
     return series;
   }

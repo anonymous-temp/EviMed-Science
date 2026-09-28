@@ -188,7 +188,7 @@ export async function measureRound(deps, roundId) {
   const arms = options.arms;
 
   if (NET_ROUND_KINDS.has(round.kind)) {
-    const net = await netEffectRows(store, { project, round, controlGroups: arms.control.length });
+    const net = await netEffectRows(store, { project, round, controlGroups: arms.control.length, engines: balance.engines });
     await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: net, replace: { metricId: GEO_NET_METRIC_ID } });
     out.net = net.length;
   }
@@ -199,13 +199,35 @@ export async function measureRound(deps, roundId) {
 }
 
 /**
+ * Whether a round's cells were computed over exactly these engines (the
+ * comparability key `engines`). A round with no recorded engine set is not
+ * known to match, so it is not compared.
+ * @param {readonly string[] | null | undefined} measured @param {readonly string[]} engines
+ */
+export function sameEngines(measured, engines) {
+  if (!Array.isArray(measured)) return false;
+  const left = [...new Set(measured.map(String))].sort();
+  const right = [...new Set(engines.map(String))].sort();
+  return left.length === right.length && left.every((engine, index) => engine === right[index]);
+}
+
+/**
  * The net effect of every metric the owner's table names per pool, and of the
  * index, from the project's comparable rounds (same question set, baseline and
- * weekly), as `NET` rows.
+ * weekly, and measured on the same engines), as `NET` rows.
+ *
+ * The same engines, because a cross-engine rate over four engines and one
+ * over two are different quantities: with the probe host down to 千问 and Kimi,
+ * the first weekly re-measure against the 09-25 baseline (DeepSeek, Kimi,
+ * 千问, 元宝) would have read as a drop in both arms and a net effect built on
+ * it (metrics.json net_effect.comparability_keys names `engines`; nothing read
+ * it). Only rounds measured on the engines this round was measured on are
+ * compared; when the baseline window holds none, the row says `engines_differ`
+ * — 引擎不同，不可比 — instead of a number.
  * @param {import("./geoMeasureStore.mjs").GeoMeasureStore} store
- * @param {{ project: { id: string }, round: { setVersion: number | null, sampleDate: string | null }, controlGroups: number }} input
+ * @param {{ project: { id: string }, round: { setVersion: number | null, sampleDate: string | null }, controlGroups: number, engines: readonly string[] }} input
  */
-async function netEffectRows(store, { project, round, controlGroups }) {
+export async function netEffectRows(store, { project, round, controlGroups, engines }) {
   const baselineDate = await store.baselineDate(project.id, round.setVersion);
   const noiseIds = new Set(GEO_METRICS.platform.noise_band_metric_ids);
   const rows = [];
@@ -221,7 +243,16 @@ async function netEffectRows(store, { project, round, controlGroups }) {
         rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "no_follow_up" });
         continue;
       }
-      const effect = netEffect(series.pilot, series.control, { noise, baselineDate, controlGroupCount: controlGroups });
+      const comparable = {
+        pilot: series.pilot.filter((point) => sameEngines(point.engines, engines)),
+        control: series.control.filter((point) => sameEngines(point.engines, engines)),
+      };
+      const hasBaseline = (/** @type {Array<{ date: string }>} */ points) => points.some((point) => point.date <= baselineDate);
+      if (!hasBaseline(comparable.pilot) || !hasBaseline(comparable.control)) {
+        rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engines_differ" });
+        continue;
+      }
+      const effect = netEffect(comparable.pilot, comparable.control, { noise, baselineDate, controlGroupCount: controlGroups });
       rows.push(effect.status === "computed"
         ? { ...where, value: effect.value ?? null, numerator: effect.pilotChange ?? null, denominator: effect.controlChange ?? null, status: "ok",
           reason: effect.verdict ?? null }

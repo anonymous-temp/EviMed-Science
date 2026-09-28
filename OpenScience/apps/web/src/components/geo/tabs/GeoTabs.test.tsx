@@ -487,6 +487,16 @@ describe("效果", () => {
     expect(screen.getByText("豆包、元宝")).toBeInTheDocument();
   });
 
+  it("a week measured on other engines than the baseline says so instead of a number", async () => {
+    client.getGeoMonitoring.mockResolvedValue({
+      ...monitoringFilled,
+      arms: { ...monitoringFilled.arms, netEffect: { ...monitoringFilled.arms.netEffect, value: null, status: "not_measurable", reason: "engines_differ" } },
+    });
+    renderTab(<EffectSection project={geoProject()} />);
+    expect(await screen.findByText("这次复测和基线测的引擎不同，净效应不可比")).toBeInTheDocument();
+    expect(screen.getByText("引擎不同，不可比")).toBeInTheDocument();
+  });
+
   it("a net effect inside the fluctuation band is 持平", async () => {
     client.getGeoMonitoring.mockResolvedValue({
       ...monitoringFilled,

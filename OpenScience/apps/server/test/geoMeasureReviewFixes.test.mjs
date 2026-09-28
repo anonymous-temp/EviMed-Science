@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { geoConstant } from "@evimed/domain";
 import { GEO_JUDGE_INSTRUCTIONS, GeoJudge, judgeFailureIsTheAnswers } from "../src/geoJudge.mjs";
-import { balanceRows } from "../src/geoMetricsJob.mjs";
+import { balanceRows, netEffectRows, sameEngines } from "../src/geoMetricsJob.mjs";
 import { GEO_PROBE_BREAK_AFTER, GeoProbeBreaker, engineAnswers } from "../src/geoProbeQueue.mjs";
 
 test("the circuit breaker's threshold is the owner's five, read from the domain's table", () => {
@@ -89,4 +89,49 @@ test("a paused engine resumes only when a test ask comes back, not because its t
   assert.equal(await engineAnswers(stuck, "doubao", 1_000), false, "a stuck tab stays paused");
   assert.equal(await engineAnswers(busy, "doubao", 1_000), false, "a busy host is checked again later");
   assert.equal(await engineAnswers(answering, "doubao", 1_000), true);
+});
+
+test("a week is compared with the baseline only on the engines both were measured on; otherwise the net effect says 引擎不同，不可比", async () => {
+  // Production, 2026-09-28: the 信尔美 baseline (09-25) was measured on
+  // DeepSeek, Kimi, 千问 and 元宝; the probe host has since lost DeepSeek and
+  // 元宝. The first weekly re-measure on two engines, compared with the four-engine
+  // baseline, would read as a drop in both arms and a net effect built on it.
+  const FOUR = ["deepseek", "kimi", "qianwen", "yuanbao"];
+  const TWO = ["kimi", "qianwen"];
+  const point = (/** @type {string} */ date, /** @type {number} */ value, /** @type {string[] | null} */ engines) => (
+    { date, value, numerator: value, denominator: 100, engines });
+  /** @param {{ pilot: any[], control: any[] }} series */
+  const storeWith = (series) => /** @type {any} */ ({
+    baselineDate: async () => "2026-09-25",
+    latestNoiseBand: async () => ({ value: 2, measured: true }),
+    armSeries: async () => structuredClone(series),
+  });
+  const input = (/** @type {string[]} */ engines) => ({ project: { id: "geo_x" }, round: { setVersion: 5, sampleDate: "2026-10-05" }, controlGroups: 5, engines });
+
+  const differ = await netEffectRows(storeWith({
+    pilot: [point("2026-09-25", 50, FOUR), point("2026-10-05", 30, TWO)],
+    control: [point("2026-09-25", 10, FOUR), point("2026-10-05", 4, TWO)],
+  }), input(TWO));
+  assert.ok(differ.length >= 9, "every pool metric and the index");
+  assert.ok(differ.every((row) => row.status === "not_measurable" && row.reason === "engines_differ" && row.value === null), JSON.stringify(differ));
+
+  // The same engines on both sides: a number, from those rounds only.
+  const same = await netEffectRows(storeWith({
+    pilot: [point("2026-09-25", 50, FOUR), point("2026-10-05", 60, [...FOUR].reverse())],
+    control: [point("2026-09-25", 10, FOUR), point("2026-10-05", 12, FOUR)],
+  }), input(FOUR));
+  assert.ok(same.every((row) => row.status === "ok"), JSON.stringify(same));
+  // The domain's rolling windows: the current window averages 50 and 60 (+5), the control's 10 and 12 (+1).
+  assert.ok(same.every((row) => row.numerator === 5 && row.denominator === 1 && row.value === 4), JSON.stringify(same));
+
+  // A round with no recorded engine set is not known to match.
+  const legacy = await netEffectRows(storeWith({
+    pilot: [point("2026-09-25", 50, null), point("2026-10-05", 60, FOUR)],
+    control: [point("2026-09-25", 10, null), point("2026-10-05", 12, FOUR)],
+  }), input(FOUR));
+  assert.ok(legacy.every((row) => row.reason === "engines_differ"));
+
+  assert.equal(sameEngines(["qianwen", "kimi"], ["kimi", "qianwen"]), true);
+  assert.equal(sameEngines(["qianwen"], ["kimi", "qianwen"]), false);
+  assert.equal(sameEngines(null, ["kimi"]), false);
 });
