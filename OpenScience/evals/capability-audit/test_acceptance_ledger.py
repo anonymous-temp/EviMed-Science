@@ -329,9 +329,11 @@ class RealLedgerTests(unittest.TestCase):
         # drug-selection, peer-review and research-topic-selection accepted,
         # comprehensive-drug-evaluation failed (delivered unverified, citing
         # sources its snapshot does not hold) — six never run, five failed.
+        # On 2026-09-28 clinical-evidence-synthesis was accepted on its tenth
+        # attempt: eleven accepted, four failed.
         self.assertEqual(statuses.count("not-run"), 6)
-        self.assertEqual(statuses.count("accepted"), 10)
-        self.assertEqual(statuses.count("failed"), 5)
+        self.assertEqual(statuses.count("accepted"), 11)
+        self.assertEqual(statuses.count("failed"), 4)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -373,8 +375,10 @@ class RealLedgerTests(unittest.TestCase):
         # 2026-09-27, each one dispatch through `capability-acceptance` on a
         # clean project, read before the row changed; peer-review's package
         # reviews an unpublished manuscript and is kept outside the repository,
-        # so its evidence is the PROGRESS.md entry.
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "manuscript-support", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection"])
+        # so its evidence is the PROGRESS.md entry. clinical-evidence-synthesis
+        # joined on 2026-09-28 (brief review-001, fresh project, delivered
+        # verified with advice only).
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "manuscript-support", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

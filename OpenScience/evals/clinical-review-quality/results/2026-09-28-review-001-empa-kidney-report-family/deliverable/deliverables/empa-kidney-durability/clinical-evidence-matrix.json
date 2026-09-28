@@ -1,0 +1,2374 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "EMPA-KIDNEY 在 8 个国家的 241 个中心开展，8544 例参加筛查、8184 例进入导入期、6609 例接受随机化。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "From February 2019 to April 2021, 8544 potential participants attended a screening visit from which 8184 (96%) entered the pre-randomization run-in and 6609 were randomized",
+      "applicability": "EMPA-KIDNEY 随机化人群，成人慢性肾脏病进展风险人群，8 个国家 241 个中心。",
+      "uncertainty": "随机化人数与筛查流程直接报告，不确定性低；未覆盖停药后随访期间的入组情况。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次或安慰剂",
+        "outcome": "研究人群与随机化规模"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "随机期随访中位 2.0 年（四分位距 1.5 to 2.4 年）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "Follow-up was completed on July 05 2022, at which time median follow-up was 2.0 years (interquartile range, 1.5 to 2.4 years).",
+      "applicability": "随机期内用药时长与观察时长。",
+      "uncertainty": "随访时长直接报告；个体用药时长存在差异，未逐例报告。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次或安慰剂",
+        "outcome": "随访时长"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "在 EMPA-KIDNEY 随机化人群中，恩格列净 10 mg 每日一次在随机期内降低主要复合结局（肾脏病进展或心血管死亡）风险：432/3304（13.1%）对 558/3305（16.9%），风险比 0.72（95% CI 0.64 to 0.82），P<0.001。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "Methods We randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo. … Results During a median of 2.0 years follow-up, a primary outcome event occurred in 432 of 3304 patients (13.1%) in the empagliflozin group and in 558 of 3305 patients (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001)",
+      "applicability": "符合 EMPA-KIDNEY 入选条件的成人 CKD 人群，随机期用药约 2 年。",
+      "uncertainty": "大型双盲随机试验的主要结局，偏倚风险低、估计精确；试验因疗效提前终止可能高估效应幅度。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "肾脏病进展或心血管死亡的复合结局"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "随机期内肾脏病进展单项的风险比为 0.71（0.62 to 0.81），心血管死亡单项为 0.84（0.60 to 1.19）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "The hazard ratios for the comparison of empagliflozin with placebo on kidney disease progression and for death from cardiovascular causes separately were 0.71 (95% CI 0.62 to 0.81) and 0.84 (95% CI 0.60 to 1.19), respectively ( Fig. S3 ).",
+      "applicability": "随机期内复合结局的两个组分；肾脏成分证据强于心血管死亡成分。",
+      "uncertainty": "心血管死亡的事件数少、区间跨越 1，单独不能支持效应。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "肾脏病进展；心血管死亡"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "随机期内全因住院（首发与再发合并）在恩格列净组为每 100 患者年 24.8 次、安慰剂组 29.2 次，风险比 0.86（0.78 to 0.95），P=0.003。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "After controlling the family-wise error rate for the three key secondary outcomes, there were significantly fewer first and subsequent hospitalizations from any cause in the empagliflozin group (24.8 versus 29.2 hospitalizations per 100 patient years: hazard ratio, 0.86; 95% CI 0.78 to 0.95, P=0.003) ( Tables 2 and S4 ).",
+      "applicability": "随机期内预设关键次要结局，已作多重检验控制。",
+      "uncertainty": "估计精确、偏倚风险低；住院为主要由患者与医师驱动的结局，受非试验因素影响。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "全因住院（首发与再发）"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "随机期内恩格列净对心力衰竭住院或心血管死亡的复合结局（风险比 0.84，0.67 to 1.07，P=0.15）与全因死亡（0.87，0.70 to 1.08，P=0.21）均无统计学显著效应。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "There was no statistically significant effect on the composite of hospitalization for heart failure or death from cardiovascular causes (hazard ratio, 0.84; 95% CI 0.67 to 1.07; P=0.15), or on death from any cause (hazard ratio, 0.87; 95% CI 0.70 to 1.08; P=0.21) ( Table 2 and Fig. S2 ).",
+      "applicability": "随机期内预设关键次要结局；事件数低于预期导致统计效能受限。",
+      "uncertainty": "不能区分“无效应”与“效能不足”，区间同时包含明显获益与无效。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "心力衰竭住院或心血管死亡；全因死亡"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机期内 eGFR 急性变化，所有随机化参与者按意向治疗分析。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "随机化后至第 2 个月，恩格列净引起的安慰剂校正 eGFR 急性下降为 2.12（95% CI 1.83–2.41）mL/min/1.73 m²，相对下降 6%（5–6%）。",
+      "claimId": "CLM-008",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "eGFR 急性变化（随机化至 2 个月）",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "Between randomization and the 2 month follow-up visit, the placebo-adjusted ‘acute dip’ in eGFR with empagliflozin was 2.12 (95% CI 1.83–2.41) mL/min/1.73m 2 , or, in relative terms, 6% (5–6%).",
+      "uncertainty": "预设的三级结局，估计精确；急性下降的机制解释为推断，非本次测量。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机期内 eGFR 斜率，作为肾脏病进展的替代终点；中位用药 2 年。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "恩格列净使第 2 个月至末次随访的慢性 eGFR 斜率减慢 1·37（95% CI 1·16–1·59）mL/min/1·73m²/年，相当于慢性斜率相对降低 50%（42–58%）。",
+      "claimId": "CLM-009",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "慢性 eGFR 斜率",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "Overall, allocation to empagliflozin slowed the rate of decline in eGFR from 2 months to final follow-up (the ‘chronic slope’) by 1·37 (95% CI 1·16–1·59) mL/min/1·73m 2 /year, which represented a 50% (42–58%) relative reduction in the mean chronic slope.",
+      "uncertainty": "估计精确，但为替代终点，对硬结局的外推存在间接性；用药期短于临床长期使用。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "在有停药后 4 周血样的存活英国参与者中，急性 eGFR 下降在停用研究用药后回升：4 周后恩格列净组 eGFR 为 29.8、安慰剂组为 27.9 mL/min/1.73 m²，组间相差 1.87（95% CI 1.23–2.52）mL/min/1.73 m²。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "identifier": "PMID:38061371",
+      "accessLevel": "full_text",
+      "supportQuote": "In the surviving UK participants with a 4-week post-final follow-up blood sample, this acute dip reversed when study treatment was discontinued, with mean eGFR at 4 weeks post-final follow-up being of 29.8 mL/min/1.73m 2 in the empagliflozin group and 27.9 mL/min/1.73m 2 in the placebo group (difference 1.87 [95% CI 1.23–2.52] mL/min/1.73m 2 ) (after accounting for any differences at final follow-up; Webtable 2 )",
+      "applicability": "仅限英国存活且有停药后 4 周血样的亚组，不是全部随机化人群。",
+      "uncertainty": "亚组分析、样本有限，且为停药后单一时点，不能代表全部参与者的停药后轨迹。",
+      "pico": {
+        "population": "英国存活并有停药后 4 周血样的 EMPA-KIDNEY 参与者",
+        "intervention": "既往随机分配至恩格列净 10 mg 每日一次",
+        "outcome": "停药后 4 周 eGFR"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "uksubset",
+          "forms": [
+            "英国参与者",
+            "停药后 4 周血样"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "研究期平均 uACR 的几何均值在恩格列净组为 202 mg/g、安慰剂组为 250 mg/g，恩格列净组相对降低 19%（95% CI 15–23%）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "identifier": "PMID:38061371",
+      "accessLevel": "full_text",
+      "supportQuote": "The geometric mean study average uACR was 202 mg/g in the empagliflozin group and 250 mg/g in the placebo group, a relative reduction in the empagliflozin group of 19% (95% CI 15–23%).",
+      "applicability": "随机期内白蛋白尿的替代终点，全部随机化参与者。",
+      "uncertainty": "为替代终点；区间较窄，估计稳定。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "研究期平均 uACR"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "探索性分析中，研究期 uACR、收缩压、舒张压与糖化血红蛋白共同解释了主要复合结局治疗效应的 41%（95% CI 23–77%）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "identifier": "PMID:38061371",
+      "accessLevel": "full_text",
+      "supportQuote": "In exploratory analyses, on-study levels of uACR, SBP, DBP and HbA1c explained 41% (95% CI: 23–77%) of the treatment effect on the primary composite of kidney disease progression or cardiovascular death (an attenuation of the hazard ratio from 0.73 [0.63–0.83] to 0.83 [0.72–0.95], and 67% reduction in χ 2 from 20.5 to 6.8; Table 2 ).",
+      "applicability": "随机期内中介分析，属探索性；不能作为因果中介的证明。",
+      "uncertainty": "原作者提示可能受测量误差与残余中介-结局混杂影响，区间很宽。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "主要复合结局治疗效应被研究期生物标志物解释的比例"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "exploratory",
+          "forms": [
+            "探索性分析",
+            "探索性"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "慢性斜率的相对效应存在异质性：糖尿病者的相对降低为 62%（50–73%），非糖尿病者为 40%（29–51%），异质性检验 P=0.0074。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "identifier": "PMID:38061371",
+      "accessLevel": "full_text",
+      "supportQuote": "Larger relative effects were observed among those with diabetes than those without diabetes (62% [50–73%] vs 40% [29–51%] respectively, p for heterogeneity 0.0074, Figure 2 ).",
+      "applicability": "随机期内按糖尿病状态分层的慢性斜率效应。",
+      "uncertainty": "为预设亚组分析，异质性检验支持效应量差异；亚组分析本身不能证明机制。",
+      "pico": {
+        "population": "按糖尿病状态分层的 EMPA-KIDNEY 随机化人群",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "慢性 eGFR 斜率的相对效应"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "subgroup",
+          "forms": [
+            "亚组",
+            "分层"
+          ]
+        }
+      ]
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机期内按基线白蛋白尿分层的慢性斜率相对效应；相对与绝对尺度的方向相反。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "按基线 uACR 分层时，慢性斜率的相对降低在 uACR 低于 30 mg/g 者为 76%（95% CI 32–120%），在 uACR 至少 2000 mg/g 者为 28%（19–38%），趋势检验 P=0.0001。",
+      "claimId": "CLM-014",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "慢性 eGFR 斜率的相对效应",
+        "population": "按基线 uACR 分层的 EMPA-KIDNEY 随机化人群"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "亚组",
+            "分层"
+          ],
+          "id": "subgroup"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "this trend was reversed with those in the lowest uACR categories having the largest relative reduction in the chronic slope (relative reduction 76% [95% CI 32–120%] in those with uACR <30 mg/g compared with 28% [19–38%] in those with uACR ≥2000 mg/g, p for trend 0.0001, Figure 2 ).",
+      "uncertainty": "最低 uACR 层的区间很宽（32% 至 120%），点估计不确定性大。"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "uACR 至少 2000 mg/g 者的慢性斜率绝对差为 1.84 mL/min/1.73m²/年，而 uACR 低于 30 mg/g 者的背景慢性斜率仅为 0.99 mL/min/1.73m²/年。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "identifier": "PMID:38061371",
+      "accessLevel": "full_text",
+      "supportQuote": "This is demonstrated in the analysis by baseline uACR: the absolute difference in chronic slope among participants with uACR ≥2000 mg/g was 1.84 mL/min/1.73m 2 /yr whereas the background chronic slope among participants with uACR <30 mg/g was 0.99 mL/min/1.73m 2 /yr, so it was impossible for the absolute difference in the latter subgroup to be similar to that observed in the highest uACR subgroup.",
+      "applicability": "解释慢性斜率绝对差与相对差方向相反的原因，随机期内数据。",
+      "uncertainty": "为对已报告亚组结果的解释，数值本身来自分层分析。",
+      "pico": {
+        "population": "按基线 uACR 分层的 EMPA-KIDNEY 随机化人群",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "慢性 eGFR 斜率的绝对差与背景斜率"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "subgroup",
+          "forms": [
+            "亚组",
+            "分层"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "随机化人群平均年龄 63.8 岁，33% 为女性，54% 无糖尿病，平均 eGFR 37.3 mL/min/1.73 m²，35% 的 eGFR 低于 30 mL/min/1.73 m²。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "At randomization, mean age was 63.8 years, 33% of participants were women and 54% did not have diabetes ( Table 1 ), and broadly representative of patients with CKD at risk of progression ( Table S1 ). Mean±standard deviation eGFR was 37.3±14.5 ml per minute per 1.73 m 2 and 35% had an eGFR less than 30 ml per minute per 1.73 m 2 .",
+      "applicability": "随机化人群基线特征，用于判断结论可外推的人群。",
+      "uncertainty": "基线表报告完整；“representative”是作者基于对比的判断。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次或安慰剂",
+        "outcome": "基线人口学与肾功能特征"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "随机期内酮症酸中毒在恩格列净组发生 6 例、安慰剂组 1 例（每 100 患者年 0.09 对 0.02），下肢截肢为 28 例对 19 例（0.43 对 0.29）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "identifier": "PMID:36331190",
+      "accessLevel": "full_text",
+      "supportQuote": "Ketoacidosis occurred in 6 patients in the empagliflozin group versus 1 patient in the placebo group (0.09 versus 0.02 per 100 patient-years). Lower limb amputations occurred in 28 patients in the empagliflozin group and 19 in the placebo group (0.43 versus 0.29 per 100 patient-years).",
+      "applicability": "随机期内安全性事件，经预设定义与盲法裁定。",
+      "uncertainty": "事件数少，发生率区间宽；未报告统计学比较。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "酮症酸中毒与下肢截肢"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "population",
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "停药后随访中，除已死亡或撤出者外的 6253 例中有 1362 例（22%）未进入停药后随访，4891 例进入，随访中位 2.0（2.0-2.1）年。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "Of the 6253 participants not dead or withdrawn, 1362 (22%) did not provide consent for post-trial follow-up or were from sites that could not participate for logistical reasons (including all sites in Japan), leaving 4891 who entered the post-trial follow-up period. These participants were followed post-trial for a median of 2.0 (Q1-Q3 2.0-2.1) years.",
+      "applicability": "停药后随访的覆盖范围与时长；进入者构成停药后期间分析的样本。",
+      "uncertainty": "未进入的原因分布影响外推；进入者与未进入者基线略有差异。",
+      "pico": {
+        "population": "存活并同意参加停药后随访的 EMPA-KIDNEY 参与者",
+        "intervention": "既往随机分配至恩格列净 10 mg 每日一次或安慰剂",
+        "outcome": "停药后随访的入组比例与时长"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "posttrial_subset",
+          "forms": [
+            "74%",
+            "4891 例"
+          ]
+        },
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "随机期内平均 SGLT2 抑制剂使用比例在恩格列净组为 90%、安慰剂组为 2%；停药后期间两组使用比例相近，分别为 43% 与 40%。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "During the entire trial follow-up period, blinding to original study drug allocation was maintained in 6578 of the 6609 (>99%) participants. Average use of SGLT2 inhibitors during the active trial period was 90% in the empagliflozin group versus 2% in the placebo group. During post-trial follow-up, average use was similar between groups (43% vs. 40%, respectively; Table 2 ).",
+      "applicability": "暴露与混浊评估：停药后期间两组后续用药比例相近，但由临床决定。",
+      "uncertainty": "为时间加权平均使用的粗略指标，不反映个体暴露轨迹。",
+      "pico": {
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者",
+        "intervention": "既往随机分配至恩格列净 10 mg 每日一次或安慰剂",
+        "outcome": "SGLT2 抑制剂使用比例"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "整个随访期（随机期加停药后期间）主要复合结局在恩格列净组为 865/3304（26.2%）、安慰剂组 1001/3305（30.3%），风险比 0.79（95% CI 0.72-0.87）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ).",
+      "applicability": "按最初随机分组、覆盖用药期与停药期的累计估计；分母为全部随机化者。",
+      "uncertainty": "估计精确，但混合了用药期效应与停药后残余效应，不能单独读作停药后效应。",
+      "pico": {
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者",
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "肾脏病进展或心血管死亡的复合结局（整个随访期）"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "posttrial_subset",
+          "forms": [
+            "74%",
+            "4891 例"
+          ]
+        },
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-022",
+      "claim": "停药后期间主要复合结局的风险比为 0.87（0.76-0.99）；随机期为 0.72（0.64-0.82，990 个首次结局），停药后期间另有 876 个首次结局。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "This comprised a 28% overall reduction in risk during the active trial period (0.72, 0.64-0.82; 990 outcomes) and a 13% reduction during the post-trial period (0.87, 0.76-0.99; 876 additional first primary outcomes).",
+      "applicability": "停药后期间按最初随机分组的效应；该期间无试验用药。",
+      "uncertainty": "区间上限接近 1，属不精确；该期间为开放标签观察。",
+      "pico": {
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者",
+        "intervention": "既往随机分配至恩格列净 10 mg 每日一次",
+        "outcome": "肾脏病进展或心血管死亡的复合结局（停药后期间）"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        },
+        {
+          "id": "openlabel",
+          "forms": [
+            "开放标签随访",
+            "开放标签"
+          ]
+        },
+        {
+          "id": "posttrial_subset",
+          "forms": [
+            "74%",
+            "4891 例"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-023",
+      "claim": "停药后期间的效应前重后轻：前 6 个月风险比 0.60（0.38-0.93），第 1 年 0.76（0.60-0.96），第 2 年 0.90（0.75-1.07）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "Much of the post-trial benefit on the primary outcome occurred early: hazard ratios for the first and second years of follow-up post-trial were 0.76 (0.60-0.96) and 0.90 (0.75-1.07) respectively, with the hazard ratio for first 6 months 0.60 (0.38-0.93) ( Figure 1B ).",
+      "applicability": "停药后期间的时间分段估计，用于判断残余效应的持续时间。",
+      "uncertainty": "分段估计的区间宽，第 2 年跨越 1；分段比较不是预设的主要分析。",
+      "pico": {
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者",
+        "intervention": "既往随机分配至恩格列净 10 mg 每日一次",
+        "outcome": "主要复合结局（停药后第 1 年、第 2 年、前 6 个月）"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        },
+        {
+          "id": "openlabel",
+          "forms": [
+            "开放标签随访",
+            "开放标签"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-024",
+      "claim": "整个随访期肾脏病进展为 23.5% 对 27.1%（风险比 0.79，0.72-0.87），终末期肾病为 9.0% 对 11.3%（0.74，0.64-0.87）；停药后期间两者分别为 0.89（0.77-1.02）与 0.80（0.66-0.98）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "The effect on the primary outcome during the entire follow-up period included a 21% reduction in the risk of the secondary outcomes of kidney disease progression (23.5% vs. 27.1%: 0.79, 0.72-0.87; Table 3 & Figure S3 ), and a 26% reduction in ESKD (9.0% vs. 11.3%: 0.74, 0.64-0.87; Table S5 ). During the post-trial period, the hazard ratios for kidney disease progression and ESKD were 0.89 (0.77-1.02) and 0.80 (0.66-0.98), respectively ( Figure S3 ).",
+      "applicability": "肾脏终点在用药期与停药后期间的表现；终末期肾病为最接近硬结局的肾脏终点。",
+      "uncertainty": "停药后期间的肾脏病进展估计跨越 1；终末期肾病估计接近 1 的上限。",
+      "pico": {
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者",
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "肾脏病进展与终末期肾病"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        },
+        {
+          "id": "posttrial_subset",
+          "forms": [
+            "74%",
+            "4891 例"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-025",
+      "claim": "全因死亡或终末期肾病的复合结局在整个随访期为 16.9% 对 19.6%（风险比 0.81，0.72-0.90），停药后期间为 0.82（0.70-0.96）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "identifier": "PMID:39453837",
+      "accessLevel": "full_text",
+      "supportQuote": "During the entire follow-up period, there was a 19% reduction in the risk of the key secondary composite outcome of death from any cause or ESKD (16.9% vs. 19.6%: 0.81, 0.72-0.90), including a hazard ratio of 0.82 (0.70-0.96) for the post-trial period.",
+      "applicability": "预设的关键次要复合结局（全因死亡或终末期肾病）；停药后期间估计的区间不含 1。",
+      "uncertainty": "该复合结局以死亡为主要驱动，停药后期间的估计区间接近 1。",
+      "pico": {
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者",
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "全因死亡或终末期肾病"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "offtreatment",
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ]
+        },
+        {
+          "id": "posttrial_subset",
+          "forms": [
+            "74%",
+            "4891 例"
+          ]
+        }
+      ]
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "绝对尺度上用药期与停药后期间的对比，分母为 1000 例随机分配者。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "随机期结束时恩格列净组每 1000 人比安慰剂组少 57（SE 14）例主要复合结局，整个随访期结束时少 45（SE 14）例；终末期肾病为每 1000 人少 26（SE 8）例与少 25（SE 10）例。",
+      "claimId": "CLM-026",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "主要复合结局与终末期肾病的绝对差值",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "In absolute terms, compared with placebo there were 57 (SE14) fewer participants with a primary outcome per 1000 participants allocated to empagliflozin at the end of the active trial period, and 45 (14) fewer at the end of the entire follow-up period. This included 26 (8) and 25 (10) fewer participants with ESKD per 1000 participants allocated to empagliflozin, respectively.",
+      "uncertainty": "两个时点的绝对差均为 Kaplan-Meier 估计之差的直接报告，未给出两点之差的假设检验。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "全因死亡或终末期肾病复合结局的绝对尺度；与主要复合结局的方向相反。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "全因死亡或终末期肾病的复合结局，在随机期结束时每 1000 人少 25（SE 11）例，而到整个随访期结束时为少 32（SE 12）例。",
+      "claimId": "CLM-027",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "全因死亡或终末期肾病的绝对差值",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "There were 25 (11) and 32 (12) fewer participants per 1000 allocated to empagliflozin with the composite outcome of death or ESKD at the end of active trial and entire follow-up periods ( Table S6 ).",
+      "uncertainty": "为两个时点的点估计，未给出两点之差的检验；标准误较大。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "整个随访期的心血管与非心血管死亡；心血管死亡为三级结局，未作多重检验校正。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "整个随访期心血管死亡为 3.8% 对 4.9%，风险比 0.75（0.59-0.95）；非心血管死亡为 5.3% 对 5.3%，风险比 0.97（0.79-1.20）；全因死亡为 301 例（9.1%）对 336 例（10.2%），风险比 0.86（0.74-1.01）。",
+      "claimId": "CLM-028",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "心血管死亡、非心血管死亡与全因死亡",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "During the entire follow-up period, there was a reduction in the risk of death from a cardiovascular cause by 25% (3.8% vs. 4.9%: 0.75, 0.59-0.95) and no material effect on non-cardiovascular mortality (5.3% vs. 5.3%: 0.97, 0.79-1.20), meaning there were 301 (9.1%) vs. 336 (10.2%) deaths from any cause (0.86, 0.74-1.01; Table 3 and Figure S5 ).",
+      "uncertainty": "心血管死亡为非预设主要终点、未作多重检验校正，且事件数有限，区间接近 1。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "对停药后是否有残留效应的反事实推理，建立在绝对获益未按预测缩小的观察上。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "该报告指出，若停药后完全没有残留效应（即停药后风险比为 1.0），绝对获益本应自随机期结束时起持续缩小；实际观察到的是主要复合结局与死亡或终末期肾病两个结局的绝对获益在停药后初期得以维持。",
+      "claimId": "CLM-029",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后绝对获益的变化",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Mathematically, if there had been no off-treatment effect of empagliflozin post-trial (i.e. the hazard ratio was 1.0 after study drug stopped), absolute benefits would be observed to diminish from the end of the active trial period (see supplementary methods). Instead, we observed that absolute benefits both for the primary outcome and for the key secondary outcome of death or ESKD were initially maintained.",
+      "uncertainty": "为作者基于绝对差曲线的推理，补充方法未在本次可及范围内逐行核对。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "对残余效应幅度的作者判断，用于回答持久性；属解释性表述而非测量。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "试验作者判断，停药后残留效应对主要复合结局而言小于随机期内用药的效应，且“看来持续至多 12 个月”，其中大部分额外获益出现在随机期结束后的前 6 个月。",
+      "claimId": "CLM-030",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后效应的时间跨度",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "In relative terms, the carry-over effect on the primary outcome was less than the effect of taking empagliflozin during the active trial period and appeared to last for up to 12 months, with most additional benefit exerted in the first 6 months after the active trial ended.",
+      "uncertainty": "“至多 12 个月”是作者对分段估计的解释，不是预设的持续性检验；无长于 12 个月的单独估计。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "作者对临床用药时长的推断，明确声明未被直接证明。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "试验作者推断，要使 SGLT2 抑制剂在 CKD 中的心肾临床获益最大化需要长期治疗，并说明该推断未被直接证明。",
+      "claimId": "CLM-031",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "对治疗时长的推断",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Although not demonstrated directly, this suggests that to maximize the cardiorenal clinical benefits of SGLT2 inhibitors in CKD requires long-term treatment.",
+      "uncertainty": "为作者的推断而非随机比较；本评价将其作为解释性结论而非测量结果。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后残余获益的机制解释：急性下降逆转与结构性保护两条来源。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "该报告指出，急性 eGFR 下降在停药后 4 周内回升，因此停药后一部分 eGFR 相关成分的获益可能来自急性下降的逆转，但这不能解释终末期肾病上的持续获益。",
+      "claimId": "CLM-032",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后残余获益的机制",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "The acute eGFR dip with SGLT2 inhibition reversed within 4 weeks after discontinuation, 12 , 13 so some of the observed post-trial benefit on eGFR components of kidney disease progression could result from reversal of the acute eGFR dip after cessation of study drug. However, that does not explain continuing benefits on ESKD.",
+      "uncertainty": "为机制上的可能解释，未用测量区分两条来源的各自贡献；引用文献未在本次纳入。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后期间暴露分配与预后失衡，限定可比较的问题范围。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后未启用 SGLT2 抑制剂者的肾功能衰竭预测风险是启用者的两倍；据此，任何把停药后是否用药作为分组的结局比较都会被混杂，结果不可靠。",
+      "claimId": "CLM-033",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后用药与结局比较的混杂",
+        "population": "接受随机化、并进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Participants who did not start an SGLT2 inhibitor had twice the predicted risk of kidney failure of participants who started an SGLT2 inhibitor post-trial. This phenomenon may reflect some uncertainty about the efficacy of SGLT2 inhibition in those with more advanced CKD, and inertia in changes in practice owing to the time taken for regulatory/payer approvals. This prognostic imbalance implies, in particular, that any comparison of outcomes between participants allocated empagliflozin who started an SGLT2 inhibitor post-trial versus those allocated placebo who remained off SGLT2 inhibition post-trial will be confounded, and hence unreliable.",
+      "uncertainty": "预测风险为模型估计；未给出启用与未启用者的完整基线对比表。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "无终末期肾病者的末次 eGFR 组间差值，仅在停药后随访结束时可得。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "无终末期肾病者末次 eGFR 在恩格列净组为 31.4（±0.2）mL/min/1.73 m²、安慰剂组为 30.6（±0.2）mL/min/1.73 m²，差值 0.8（95% CI 0.1-1.4）mL/min/1.73 m²。",
+      "claimId": "CLM-034",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后随访结束时 eGFR",
+        "population": "进入停药后随访且未发生终末期肾病的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "当地实验室",
+            "非中心实验室"
+          ],
+          "id": "localassay"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Mean eGFR at last local measurement among those without ESKD was 31.4 (±0.2) mL/min/1.73m 2 in the group originally allocated empagliflozin compared with 30.6 (±0.2) mL/min/1.73m 2 in the placebo group, i.e., an absolute difference of 0.8 (95% CI 0.1-1.4) mL/min/1.73m 2 ( Table 3 and Figure S6 ).",
+      "uncertainty": "差值区间下限接近 0；仅覆盖未发生终末期肾病者，属存活与未透析人群。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后 eGFR 的测量来源，属测量质量的限制。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后随访期间未采集中心样本，所有停药后 eGFR 测量均以当地 eGFR 测量为基础。",
+      "claimId": "CLM-035",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "eGFR 的测量来源",
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "当地实验室",
+            "非中心实验室"
+          ],
+          "id": "localassay"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "As central samples were not collected during the post-trial follow-up period, all eGFR-based post-trial measurements were relative to the local eGFR measurement at baseline (see Supplementary Methods for more details).",
+      "uncertainty": "原作者认为不影响随机期结论（中心与当地肌酐结果相似），但本次未核对补充方法。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后随访的完整性；失访比例低但非零。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后随访结束时，4891 例中 86 例（1.8%）生命状态缺失，7 例（0.1%）在停药后随访期间撤回同意。",
+      "claimId": "CLM-036",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后随访的完整性",
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "74%",
+            "4891 例"
+          ],
+          "id": "posttrial_subset"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "By the end of post-trial follow-up vital status was missing on or after 1 April 2024 for 86 of these 4891 participants (1.8%), and 7 (0.1%) withdrew consent during post-trial follow-up ( Supplementary Appendix, Figure S1 ).",
+      "uncertainty": "失访比例低；但未进入停药后随访的 22% 不属于失访，而属未入组。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后期间效应在各亚组间的一致性，用于判断结论是否局限于某一人群层。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后随访报告显示，主要复合结局的相对效应在糖尿病状态、eGFR、uACR 与原发肾脏病原预设亚组间相似。",
+      "claimId": "CLM-037",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "主要复合结局的亚组效应",
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "亚组",
+            "分层"
+          ],
+          "id": "subgroup"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "The relative effects on the primary outcome were similar in subgroup analyses by baseline diabetes status, eGFR, uACR and primary cause of kidney disease ( Figure 2 ).",
+      "uncertainty": "亚组分析未作多重检验校正；部分层的事件数有限。"
+    },
+    {
+      "accessLevel": "abstract",
+      "applicability": "随机期内按原发肾脏病分层的肾脏终点；仅摘要层级。",
+      "artifactPath": ".evimed-sources/pubmed/PMID38061372/da9b0f60c2335d015979deb9b59c26cea7d6ba297b8ef12e8c866916a2e8ba18/abstract.md",
+      "claim": "按原发肾脏病分层，随机期内肾脏病进展在恩格列净组为 384/3304（11·6%）、安慰剂组 504/3305（15·2%），风险比 0·71（95% CI 0·62-0·81），各原发肾脏病之间无显著异质性（P=0·62）。",
+      "claimId": "CLM-038",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061372",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "肾脏病进展",
+        "population": "按原发肾脏病分层的 EMPA-KIDNEY 随机化人群"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 4,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "摘要层级",
+            "仅为摘要"
+          ],
+          "id": "accesslevel"
+        },
+        {
+          "forms": [
+            "亚组",
+            "分层"
+          ],
+          "id": "subgroup"
+        }
+      ],
+      "sourceTitle": "Impact of primary kidney disease on the effects of empagliflozin in patients with chronic kidney disease: secondary analyses of the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061372/",
+      "supportQuote": "Kidney disease progression occurred in 384 (11·6%) of 3304 patients in the empagliflozin group and 504 (15·2%) of 3305 patients in the placebo group (hazard ratio 0·71 [95% CI 0·62-0·81]), with no evidence that the relative effect size varied significantly by primary kidney disease (pheterogeneity=0·62).",
+      "uncertainty": "只读到摘要层级，亚组估计的逐层区间与交互项细节未核对。"
+    },
+    {
+      "accessLevel": "abstract",
+      "applicability": "随机期内全因住院的事后分析；仅摘要层级。",
+      "artifactPath": ".evimed-sources/pubmed/PMID41047325/144e957dbddded6e0ba8197355953ae9b9c8420fdb7122bba7b0556967c0a36c/abstract.md",
+      "claim": "全因住院的事后分析报告，恩格列净组相对安慰剂组的风险比 0.86（95% CI 0.78-0.95，P=0.003），且在糖尿病状态、eGFR 与 uACR 各层一致。",
+      "claimId": "CLM-039",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:41047325",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "全因住院",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 5,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "摘要层级",
+            "仅为摘要"
+          ],
+          "id": "accesslevel"
+        }
+      ],
+      "sourceTitle": "Empagliflozin Reduces Risk of Hospitalization in Patients With Chronic Kidney Disease in the EMPA-KIDNEY Trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41047325/",
+      "supportQuote": "Risk of ACH was significantly reduced for empagliflozin vs placebo (HR: 0.86, 95% CI, 0.78-0.95, P = 0.003). This was consistent regardless of baseline diabetes status, estimated glomerular filtration rate, or urinary albumin-to-creatinine ratio.",
+      "uncertainty": "为事后分析、仅摘要层级；住院原因由不良事件编码推导，非独立裁定。"
+    },
+    {
+      "accessLevel": "abstract",
+      "applicability": "随机期内日本参与者的探索性比较；仅摘要层级。",
+      "artifactPath": ".evimed-sources/pubmed/PMID38643286/0da784356905fa62fa8ac5e6f747de7333e0f1f855b850f44db86ceb674f4671/abstract.md",
+      "claim": "在 612 例日本参与者中，主要复合结局风险比为 0.49（0.32-0.75），非日本地区为 0.75（0.66-0.86），地区间异质性检验 P=0.06。",
+      "claimId": "CLM-040",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38643286",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "肾脏病进展或心血管死亡的复合结局",
+        "population": "来自日本与非日本地区的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "different"
+      },
+      "referenceNumber": 6,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "摘要层级",
+            "仅为摘要"
+          ],
+          "id": "accesslevel"
+        },
+        {
+          "forms": [
+            "亚组",
+            "分层"
+          ],
+          "id": "subgroup"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin in patients with chronic kidney disease from Japan: exploratory analyses from EMPA-KIDNEY.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38643286/",
+      "supportQuote": "EMPA-KIDNEY assessed the effects of empagliflozin 10 mg once daily vs. placebo in 6609 patients with chronic kidney disease (CKD) at risk of progression, including 612 participants from Japan. … Among the participants from non-Japan regions, there were 399 vs. 494 primary outcomes (0.75, 0.66-0.86), and 33 vs. 64 (0.49, 0.32-0.75; heterogeneity p = 0.06) in Japan.",
+      "uncertainty": "为事后探索分析、仅摘要层级；日本参与者基线白蛋白尿与 eGFR 高于其他地区。"
+    },
+    {
+      "accessLevel": "abstract",
+      "applicability": "随机期内按虚弱相关特征分层的事后分析；仅摘要层级。",
+      "artifactPath": ".evimed-sources/pubmed/PMID40179340/006825a001306a305e55dee887f26438c9c606a0d7d8d9f2366467a2d94fabfd/abstract.md",
+      "claim": "按虚弱、多重用药与多重疾病分层的事后分析报告，恩格列净使主要复合结局风险降低 28%（风险比 0.72，0.64 to 0.82）、全因住院降低 14%（0.86，0.78 to 0.95），各层效应大体一致，且在住院预测风险最高的人群中绝对获益更大。",
+      "claimId": "CLM-041",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:40179340",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "主要复合结局与全因住院",
+        "population": "按虚弱相关特征分层的 EMPA-KIDNEY 随机化人群"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 7,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "摘要层级",
+            "仅为摘要"
+          ],
+          "id": "accesslevel"
+        },
+        {
+          "forms": [
+            "亚组",
+            "分层"
+          ],
+          "id": "subgroup"
+        }
+      ],
+      "sourceTitle": "Frailty, Multimorbidity, and Polypharmacy: Exploratory Analyses of the Effects of Empagliflozin from the EMPA-KIDNEY Trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/40179340/",
+      "supportQuote": "In relative terms, allocation to empagliflozin reduced the risk of the primary outcome of kidney disease progression or cardiovascular death by 28% (hazard ratio, 0.72; 95% confidence interval, 0.64 to 0.82) and all-cause hospitalization by 14% (hazard ratio, 0.86; 95% confidence interval, 0.78 to 0.95), with broadly consistent effects across subgroups of predicted risk of hospitalization, multimorbidity, polypharmacy, or health-related quality of life.",
+      "uncertainty": "为事后分析、仅摘要层级；虚弱以住院预测模型近似，非标准虚弱量表。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南对合并 2 型糖尿病与非糖尿病 CKD 成人的 SGLT2 抑制剂推荐，属药物类别而非单一药品。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南以 1A 推荐对合并 2 型糖尿病、CKD 且 eGFR 至少 20 mL/min/1.73 m² 的患者使用 SGLT2 抑制剂；并以 1A 推荐对 eGFR 至少 20 mL/min/1.73 m² 且尿 ACR 至少 200 mg/g、或合并心力衰竭（不论白蛋白尿水平）的成人 CKD 患者使用 SGLT2 抑制剂。",
+      "claimId": "CLM-042",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "推荐强度与适用条件",
+        "population": "成人慢性肾脏病，含合并 2 型糖尿病者"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "| Recommendation 3.7.2: We recommend treating adults with CKD with an SGLT2i for the following(1A):。 eGFR ‡20 ml/min per 1.73 m2 with urine ACR ‡200 mg/g(‡20 mg/mmol), or🟥 heart failure, irrespective of level of albuminuria.|",
+      "uncertainty": "指南针对 SGLT2 抑制剂类别；本次未核对指南对具体品种的表述，且其发表日期早于试验后随访报告。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南关于 eGFR 降至 20 以下后继续用药的实践要点。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南的实践要点指出，一旦启用 SGLT2 抑制剂，即使 eGFR 降至 20 mL/min/1.73 m² 以下，只要可耐受且未开始肾脏替代治疗，继续使用是合理的。",
+      "claimId": "CLM-043",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "继续用药的条件",
+        "population": "成人慢性肾脏病"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "| Practice Point 3.7.1: Once an SGLT2i is initiated, it is reasonable to continue an SGLT2i even if the eGFR falls below\t20 ml/min per 1.73 m2, unless it is not tolerated or KRT is initiated.",
+      "uncertainty": "为实践要点而非分级推荐；具体判断仍需个体化。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南关于启动后可逆性 eGFR 下降的处理。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南的实践要点指出，SGLT2 抑制剂的启用或使用不要求改变 CKD 监测频率，启动时的可逆性 eGFR 下降通常不构成停药指征。",
+      "claimId": "CLM-044",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "启动后可逆性 eGFR 下降的处理",
+        "population": "成人慢性肾脏病"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "| Practice Point 3.7.3: SGLT2i initiation or use does not necessitate alteration of frequency of CKD monitoring and thereversible decrease in eGFR on initiation is generally not an indication to discontinue therapy.|",
+      "uncertainty": "为实践要点；发生超出预期的 eGFR 下降时的个体处理不在该要点范围内。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南关于暂时停药的时机。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南的实践要点指出，在长时间禁食、手术或危重疾病期间暂停 SGLT2 抑制剂是合理的，因为此时酮症风险升高。",
+      "claimId": "CLM-045",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "暂时停药时机",
+        "population": "成人慢性肾脏病"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "Practice Point 3.7.2: It is reasonable to withhold SGLT2i during times of prolonged fasting, surgery, or critical medical\tillness(when people may be at greater risk for ketosis).",
+      "uncertainty": "为实践要点，未给出停药时长与重启时机。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南对低白蛋白尿人群的较弱推荐，是实践背景中与试验结论张力最大的一条。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南对 eGFR 20 to 45 mL/min/1.73 m² 且尿 ACR 低于 200 mg/g 的成人给出 2B 推荐，建议使用 SGLT2 抑制剂。",
+      "claimId": "CLM-046",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "推荐强度",
+        "population": "eGFR 20 至 45 mL/min/1.73 m² 且尿 ACR 低于 200 mg/g 的成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "| Recommendation 3.7.3: We suggest treating adults with eGFR 20 to 45 ml/min per 1.73 m2 with urine ACR<200 mg/g(<20 mg/mmol) with an SGLT2i(2B).|",
+      "uncertainty": "推荐强度为“建议”而非“推荐”；指南的措辞基于其自身的证据评价，不等同于本评价的 GRADE 等级。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南发表信息，用于判断其与停药后随访报告的时间关系。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南发表于 2024 年 4 月，卷期为 Kidney International 第 105 卷第 4S 期、页码 S117 至 S314。",
+      "claimId": "CLM-048",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "指南的出版信息",
+        "population": "成人慢性肾脏病"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease VOLUME 105|ISSUE 4S|APRIL 2024",
+      "uncertainty": "出版信息直接来自指南文件封面。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "试验提前终止的事实，用于偏倚风险评估与效应量解读。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "2022 年 3 月 7 日，独立数据安全监查委员会基于当时已有的 624 个首次主要结局报告，两种提前终止的条件均已在正式期中分析中达到。",
+      "claimId": "CLM-049",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "试验终止决定",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "On March 07 2022, the independent DSMB reported that based on 624 first primary outcomes, both conditions for stopping early for efficacy were met at the formal interim analysis.",
+      "uncertainty": "提前终止可能高估效应幅度；本次未获得期中分析的具体时点数据。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "试验统计效能的自报告限制，影响心血管终点的解释。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "主要报告将“心血管事件率低于预期、从而降低了对次要或三级心血管结局的统计效能”列为其局限性。",
+      "claimId": "CLM-050",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "心血管结局的统计效能",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "The trial has certain limitations, including the lower-than-expected cardiovascular event rate, which reduced statistical power to assess the secondary or tertiary cardiovascular outcomes.",
+      "uncertainty": "为作者自述限制；具体效能损失幅度未给出。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "作者对随机期效应与既往同类试验比较的表述。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "主要报告将本试验的随机期效应描述为与另外两项大型安慰剂对照 CKD 试验定量相近。",
+      "claimId": "CLM-051",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "与同类试验的比较",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "The effect of SGLT2 inhibition on kidney disease progression or cardiovascular death seen in the present trial is quantitatively similar to that seen in two other large placebo-controlled trials in CKD populations.",
+      "uncertainty": "为跨试验比较的定性描述，未给出合并估计；被比较试验因属其他研究药物而未纳入本评价。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后随访人群的基线特征，用于外推判断。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "进入停药后随访的参与者随机化时平均年龄 63 岁，1664 例（34%）为女性，2784 例（57%）无糖尿病，平均 eGFR 36.9 mL/min/1.73 m²，中位 uACR 317 mg/g。",
+      "claimId": "CLM-052",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次或安慰剂",
+        "outcome": "基线特征",
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "74%",
+            "4891 例"
+          ],
+          "id": "posttrial_subset"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Mean (±SD) age of the post-trial participants at randomization was 63 (±14) years, 1664 (34%) were women, and 2784 (57%) did not have diabetes. The mean (±SD) eGFR was 36.9 (±14.1) mL/min/1.73m 2 and median (Q1-Q3) uACR was 317 mg/g (44-1063), with 2393 (49%) with a uACR ≤300 mg/g.",
+      "uncertainty": "为进入随访者的基线；与未进入者相比略有差异。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机化方法，用于 RoB 2 的随机化过程域评价。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "完成至少 6 周导入期后，参与者按最小化随机化并保留 10% 随机成分，被分配至恩格列净 10 mg 每日一次或匹配安慰剂。",
+      "claimId": "CLM-053",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "随机化方法",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "After completing at least 6 weeks of run-in, willing participants had central samples of blood and urine collected for central analysis and storage, and were randomly allocated to receive empagliflozin (10 mg once daily) or matching placebo using minimized randomization with a 10% stochastic element.",
+      "uncertainty": "分配隐藏的具体实施未在正文详述。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机期内用药依从性，用于解释效应量与偏倚风险。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "随访第 12 个月时，恩格列净组 2909 例（89.6%）、安慰剂组 2924 例（90.3%）报告服用了 80% 以上的研究用药。",
+      "claimId": "CLM-054",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "用药依从性",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "At 12 months of follow-up (the approximate midpoint), 2909 [89.6%] of the empagliflozin group and 2924 [90.3%] of the placebo group reported taking most (i.e. >80%) of their study treatment.",
+      "uncertainty": "依从性为自报，可能高估实际服药。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机期随访的完整性，用于 RoB 2 的结局数据缺失域评价。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "随机期中共 6552 例（99.1%）在末次随访时存活并完成随访或在随访期间死亡；18 例（0.3%）生命状态缺失，39 例（0.6%）撤回同意。",
+      "claimId": "CLM-055",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "随访完整性",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "In all, 6552 participants (99.1%) were alive and completed final follow-up or had died during follow-up. Vital status was missing for 18 (0.3%) participants, and 39 participants (0.6%) withdrew consent ( Fig. S1 ).",
+      "uncertainty": "缺失比例极低，对结局数据缺失的影响有限。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "对替代终点与随访时长关系的说明，用于讨论中长期外推。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "该分析认为，总斜率效应与短期（2-3 年）临床结局相关性较强，而慢性斜率对更长时间跨度更具信息量。",
+      "claimId": "CLM-056",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "eGFR 斜率作为替代终点的适用时限",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "亚组",
+            "分层"
+          ],
+          "id": "subgroup"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "Although effects on total slope correlate strongly with effects on clinical outcomes over short (2-3 year) follow-up periods, 8 chronic slope is likely to be more informative for longer time horizons.",
+      "uncertainty": "为作者对替代终点属性的论述，引用的验证文献未纳入本次评价。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "用药时长与后续随访计划，用于界定现有证据的时间范围。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "由于试验因明确获益而提前终止，参与者平均只接受了 2 年研究用药；该分析写作时，另有 2 年的停药后随访正在开展。",
+      "claimId": "CLM-057",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "用药时长与后续随访",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "Participants only received study treatment for 2 years on average because the trial was stopped earlier than planned owing to clear evidence of benefit. A further 2 years of off-treatment follow-up is underway to assess the longer-term effects of an average of 2 years of treatment.",
+      "uncertainty": "该表述写于停药后随访结果发表之前；其时的计划已完成，本次纳入的报告即其结果。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后随访的自述限制（地域与测量方式）。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后随访报告的局限性包括：日本参与者未参加（日本随机期效应与其他地区相似），以及停药后随访依赖当地测量的肌酐。",
+      "claimId": "CLM-058",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后随访的局限",
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "当地实验室",
+            "非中心实验室"
+          ],
+          "id": "localassay"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Limitations of the post-trial study include the exclusion of participants from Japan (where active trial treatment effects were similar to other regions 16 ). Doing so did not bias presented hazard ratios. Additionally, post-trial follow-up relied on locally measured creatinine levels.",
+      "uncertainty": "作者认为当地肌酐不构成关键限制；该判断依据的是随机期中心与当地肌酐结果相似。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后期间无法评估的结局范围。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后随访未采集住院数据，因此无法评估停药后期间对住院的任何效应。",
+      "claimId": "CLM-059",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后期间的住院结局",
+        "population": "进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "The lack of additional data on hospitalizations - a deliberate decision to streamline post-trial follow-up as far as possible - prevented any assessment of any effects on hospitalization during the post-trial period.",
+      "uncertainty": "属未采集数据，不是阴性结果。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后随访入组人群的代表性。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "进入停药后随访的参与者与未进入者相比，更少来自亚洲、略年轻、eGFR 与 uACR 略低，肾功能衰竭风险略高。",
+      "claimId": "CLM-060",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "入组人群的代表性",
+        "population": "进入与未进入停药后随访的 EMPA-KIDNEY 参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "74%",
+            "4891 例"
+          ],
+          "id": "posttrial_subset"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Participants who entered post-trial follow-up were less likely to be Asian, slightly younger, had a slightly lower eGFR and uACR, and slightly higher risk of kidney failure when compared to survivors who did not enter post-trial follow-up ( Table S2 ).",
+      "uncertainty": "差异幅度以“slightly”描述，未给出各变量的具体差值。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "严重不良事件总体情况，用于安全性报告。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "随机期安全性分析显示，没有证据表明恩格列净增加了严重不良事件的总体发生率，也未在任何特定 MedDRA 系统器官分类中增加。",
+      "claimId": "CLM-061",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "严重不良事件",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "There was no apparent evidence that empagliflozin increased the incidence of serious adverse events overall, or in any particular MedDRA system organ class ( Table S8 ).",
+      "uncertainty": "为总体与系统器官分类层面的比较，个别事件（如酮症酸中毒）例数仍高于安慰剂组。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "仅适用于 EMPA-KIDNEY 随机化人群的主要复合结局，不能外推到其他终点的绝对尺度。",
+      "assumptions": "两个时点的绝对差均为同一随机化人群、同一复合结局的 Kaplan-Meier 估计之差，量纲一致；两端的标准误可近似视为独立；未校正两点之间的正相关性。",
+      "claim": "复合结局上的绝对获益在停药后期间缩小了每 1000 人 12 例，相当于随机期结束时绝对获益的约 21%；按两端标准误估算，这一缩小量与“没有变化”不能区分。",
+      "claimId": "CLM-062",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-026"
+      ],
+      "method": "以报告的两个点估计相减：随机期结束时每 1000 人少 57（SE 14）例，整个随访期结束时少 45（SE 14）例；57 − 45 = 12，即每 1000 人 12 例；12 / 57 = 21%。两点之差的标准误按 sqrt(14^2 + 14^2) ≈ 20 估算，95% 区间约为 −27 至 +51 例/1000，跨越 0。",
+      "sensitivity": "若两端估计因来自同一队列而存在正相关，差值标准误将小于 20，区间可能不跨越 0，则“绝对获益未变”这一判断不成立；若按独立估算，12 例/1000 的缩小量与 0 不可区分。该推算不进入临床实践要点。",
+      "uncertainty": "为基于报告点估计与标准误的推算，不是来源直接报告的检验；不能据此断言绝对获益确已缩小或确未缩小。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "仅适用于同一复合结局在三个时窗之间的读数解释。",
+      "assumptions": "两个时窗的首次结局数（990 与 876）为报告直接给出；整个随访期的合并估计是两段数据的加权结果。",
+      "claim": "把整个随访期的合并估计直接读作“停药后仍有约 21% 的相对风险降低”会高估停药后效应：该合并估计主要由随机期内的 990 个首次结局支撑，停药后新增的 876 个结局自身的估计为 0.87。",
+      "claimId": "CLM-063",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-021",
+        "CLM-022"
+      ],
+      "method": "比较同一结局在两段时窗的报告值：随机期 0.72（990 个首次结局）与停药后期间 0.87（876 个新增首次结局）合并为整个随访期 0.79（共 1866 个首次结局）。合并估计位于两者之间且更靠近结局数更多的随机期估计；以 0.79 代替 0.87 描述停药后效应，等于把用药期效应计入停药后。",
+      "sensitivity": "若停药后新增的 876 个结局中相当比例发生在停药后最初 6 个月（报告的前 6 个月风险比为 0.60），则停药后晚期时窗的效应比 0.87 更接近无效，本文对停药后效应的表述应按时间分段而非整段解读。该推算不进入临床实践要点。",
+      "uncertainty": "为对报告数值结构的推算，来源未给出两段数据的拆分检验。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "试验入选标准，界定结论适用的人群边界。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "入选条件为：eGFR 至少 20 但低于 45mL/min/1.73 m²（不论白蛋白尿水平），或 eGFR 至少 45 但低于 90mL/min/1.73 m² 且 uACR 至少 200 mg/g，且已在适用与耐受的情况下接受适当剂量的单一 RAS 抑制剂；多囊肾病与肾移植受者被排除。",
+      "claimId": "CLM-064",
+      "denominatorKind": "not_applicable",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "入选标准",
+        "population": "成人慢性肾脏病"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "Adults with a race-adjusted CKD-EPI 16 eGFR of at least 20 but less than 45 ml per minute per 1.73 m 2 of body-surface area (irrespective of level of albuminuria); or an eGFR of at least 45 but less than 90 ml per minute per 1.73 m 2 with a urinary ACR of at least 200 mg/g at the screening visit were eligible provided they were prescribed a clinically appropriate dose of single-agent RAS-inhibitor. Patients could also be included if an investigator judged that such treatment was either not tolerated or not indicated. Patients with or without diabetes were eligible. Those with polycystic kidney disease or a kidney transplant were excluded.",
+      "uncertainty": "入选标准与排除病种直接报告；人群以筛查时的 eGFR 与 uACR 定义。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "随机期内把急性与慢性两段合并计算的总斜率效应，受急性下降幅度影响。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "随机期内，恩格列净使从基线至末次随访的总 eGFR 斜率减慢 0.75（95% CI 0.54-0.96）mL/min/1·73m²/年，相当于总斜率相对降低 26%（19-33%）。",
+      "claimId": "CLM-065",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "总 eGFR 斜率",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "Overall, allocation to empagliflozin slowed the rate of decline in eGFR from baseline to final follow-up by 0.75 (95% CI 0.54-0.96) mL/min/1·73m 2 /year, which represents a 26% (19-33%) relative reduction in the mean total slope ( Figure 2 ).",
+      "uncertainty": "总斜率受急性下降与慢性斜率两段共同影响；作者提示更长时间跨度下慢性斜率更具信息量。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "急性 eGFR 下降的幅度与停药后是否可逆，是解释停药后残余获益的关键前提。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "该分析称急性 eGFR 下降幅度不大（各亚组平均低于 3mL/min/1.73 m² 或基线 eGFR 的 10%），且在停用治疗后大部分可逆。",
+      "claimId": "CLM-066",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "急性 eGFR 下降的可逆性",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "The acute dip in eGFR when empagliflozin was initiated in EMPA-KIDNEY was modest (in all participant subgroups it was on average less than 3 mL/min/1.73m 2 or <10% of baseline eGFR), and was largely reversible when treatment was discontinued.",
+      "uncertainty": "“大部分可逆”基于停用后有血样的英国亚组，不是全部参与者的停药后测量。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "停药后随访的开展范围，决定停药后证据的地理与中心覆盖。",
+      "artifactPath": ".evimed-sources/PMC7616743/84e3f874453642bfb14a30f2ff44e49e24bf09eaf682e0feaff8f5ccb449612c/fulltext.md",
+      "claim": "停药后随访为可选子研究，在试验 241 个中心中的 185 个（77%）、原 8 个国家中的 7 个开展。",
+      "claimId": "CLM-067",
+      "denominatorKind": "not_applicable",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "停药后随访的开展范围",
+        "population": "参与停药后随访的中心与参与者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "different"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Post-trial follow-up was an optional substudy conducted at 185 of the trial's 241 centers (77%) in 7 of the original 8 countries.",
+      "uncertainty": "未参加的中心与国家的参与原因不一（含日本全部中心），可能影响外推。"
+    },
+    {
+      "accessLevel": "abstract",
+      "applicability": "进入停药后随访的比例，是停药后期间估计的代表性限定。",
+      "artifactPath": ".evimed-sources/pubmed/PMID39453837/8bd2ed9a6d7abea8572555aa2d17f43ebe3e8a7ba78ded986a4d7937d5c8b0aa/abstract.md",
+      "claim": "在随机化的 6609 例中，有 4891 例（74%）进入了停药后随访期。",
+      "claimId": "CLM-068",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:39453837",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次（随机期）",
+        "outcome": "进入停药后随访的比例",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 2,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "74%",
+            "4891 例"
+          ],
+          "id": "posttrial_subset"
+        },
+        {
+          "forms": [
+            "停药后期间",
+            "停药后随访"
+          ],
+          "id": "offtreatment"
+        }
+      ],
+      "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+      "supportQuote": "Of the 6609 patients who had undergone randomization in the active trial, 4891 (74%) were enrolled in the post-trial period.",
+      "uncertainty": "该比例取自摘要层级；并非失访所导致，而是可选子研究的入组结果。"
+    },
+    {
+      "accessLevel": "official_page",
+      "applicability": "指南对合并 2 型糖尿病的 CKD 患者的 SGLT2 抑制剂推荐。",
+      "artifactPath": ".evimed-sources/web-pages/b18db280f7dc889a/29f61f05ccbbe2a53a513ecbc7de73af87418202279004ab6ab6ae6d128b460d/page.md",
+      "claim": "KDIGO 2024 年 CKD 指南以 1A 推荐对合并 2 型糖尿病、CKD 且 eGFR 至少 20mL/min/1.73 m² 的患者使用 SGLT2 抑制剂。",
+      "claimId": "CLM-069",
+      "denominatorKind": "not_applicable",
+      "identifier": "DOI:10.1016/j.kint.2023.10.018",
+      "pico": {
+        "intervention": "SGLT2 抑制剂（药物类别）",
+        "outcome": "推荐强度",
+        "population": "合并 2 型糖尿病的成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "different",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 8,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "药物类别",
+            "SGLT2 抑制剂"
+          ],
+          "id": "classlevel"
+        }
+      ],
+      "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease.",
+      "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "supportQuote": "| Recommendation 3.7.1: We recommend treating patients with type 2 diabetes(T2D), CKD, and an eGFR ‡20 ml/\tmin per 1.73 m2 with an SGLT2i(1A).|",
+      "uncertainty": "指南针对药物类别；本次未核对指南对具体品种的区分表述。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "试验终点定义，用于理解复合结局的构成，不用于效应估计。",
+      "artifactPath": ".evimed-sources/PMC7614055/69878c5c79396a50d529ae827ed5efff949fa8783c8d133f4b31b73410a41814/fulltext.md",
+      "claim": "肾脏病进展的复合终点包含：开始维持性透析或接受肾移植的终末期肾病；eGFR 持续降至低于 10 mL/min/1.73 m²；eGFR 较基线持续下降至少 40%；或肾脏原因死亡。",
+      "claimId": "CLM-070",
+      "denominatorKind": "not_applicable",
+      "identifier": "PMID:36331190",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "复合终点的构成定义",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "same",
+        "population": "same"
+      },
+      "referenceNumber": 1,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+      "supportQuote": "Kidney disease progression included end-stage kidney disease (ESKD), defined as commencing maintenance dialysis or receipt of a kidney transplant; a sustained decline in eGFR to less than 10 ml per minute per 1.73 m 2 ; a sustained decline in eGFR of at least 40% from baseline; or renal death.",
+      "uncertainty": "“持续”需两次相隔至少 30 天的 eGFR 测量，或为死亡、撤回同意或随访结束前的最后一次值。"
+    },
+    {
+      "accessLevel": "full_text",
+      "applicability": "慢性斜率效应量的亚组异质性，探索性分析。",
+      "artifactPath": ".evimed-sources/PMC7615591/4142b68e2401bfb83662cb0670da1f8bd7da42033ddef91d07dbe5a05e7587da/fulltext.md",
+      "claim": "在把最低 eGFR 分层拆为低于 20 与至少 20 至低于 30 mL/min/1·73m² 的探索性分析中，慢性斜率的相对效应在基线 eGFR 分层之间存在差异只有有限的证据（趋势检验 P=0.01）。",
+      "claimId": "CLM-071",
+      "denominatorKind": "trial_enrollment_share",
+      "identifier": "PMID:38061371",
+      "pico": {
+        "intervention": "恩格列净 10 mg 每日一次",
+        "outcome": "慢性 eGFR 斜率按基线 eGFR 分层的异质性",
+        "population": "接受随机化的 EMPA-KIDNEY 成人 CKD 患者"
+      },
+      "picoMatch": {
+        "intervention": "same",
+        "outcome": "different",
+        "population": "same"
+      },
+      "referenceNumber": 3,
+      "requiredCaveats": [
+        {
+          "forms": [
+            "亚组",
+            "分层",
+            "探索性分析"
+          ],
+          "id": "subgroup"
+        },
+        {
+          "forms": [
+            "符合 EMPA-KIDNEY 入选条件",
+            "eGFR 20 至低于 45 mL/min/1.73 m²",
+            "uACR 至少 200 mg/g"
+          ],
+          "id": "population"
+        }
+      ],
+      "sourceTitle": "Effects of empagliflozin on progression of chronic kidney disease: a prespecified secondary analysis from the EMPA-KIDNEY trial.",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+      "supportQuote": "There was some evidence that the relative effects differed across eGFR categories in exploratory analyses splitting out the lowest eGFR category into <20 and ≥20 to <30 mL/min/1·73m 2 (p for trend 0.01, Figure 2 ).",
+      "uncertainty": "探索性分析、证据仅为「有限」；同一分组的复合结局未见效应修饰证据，分层结论不作为个体化依据。"
+    }
+  ],
+  "questionPico": {
+    "population": "成人慢性肾脏病：eGFR 20 至低于 45 mL/min/1.73 m²，或 eGFR 45 至低于 90 mL/min/1.73 m² 且 uACR 至少 200 mg/g",
+    "intervention": "恩格列净 10 mg 每日一次",
+    "comparator": "安慰剂",
+    "outcome": "肾脏病进展、终末期肾病、心血管死亡与心血管住院，以及停用试验用药后的效应持久性"
+  }
+}

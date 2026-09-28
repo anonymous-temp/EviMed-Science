@@ -1,0 +1,196 @@
+{
+  "capability": "clinical-evidence-synthesis",
+  "brief": "review-001-empa-kidney-report-family",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-ces-0928a",
+  "session": "acc-clinical-evidence-sy-mukkset5",
+  "runId": "run_dc51742c48fd1c2287ee93d081351916",
+  "agentVersion": "2.14.0",
+  "dispatchedAt": "2026-09-28T02:03:01Z",
+  "prompt": "In adults with chronic kidney disease, what do the active EMPA-KIDNEY trial and its post-trial follow-up establish about the durability of empagliflozin's kidney and cardiovascular effects?\n\nReview design: systematic.\n\nInclude: Reports of EMPA-KIDNEY (NCT03594110) with clinical or kidney-function outcomes; Current CKD guidance used only for practice context.\nExclude: Commentaries without new EMPA-KIDNEY outcome data; Trials of different investigational medicines.\n\nStarting sources (retrieve and preserve the current text of each; this list is not evidence):\n- PMID 36331190 — https://pubmed.ncbi.nlm.nih.gov/36331190/ — role: active randomized trial report — study: NCT03594110\n- PMID 39453837 — https://pubmed.ncbi.nlm.nih.gov/39453837/ — role: post-trial follow-up report — study: NCT03594110\n- PMID 38061371 — https://pubmed.ncbi.nlm.nih.gov/38061371/ — role: prespecified kidney-function analysis — study: NCT03594110\n- KDIGO 2024 CKD Guideline — https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf — role: guideline context",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/empa-kidney-durability/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「empa-kidney-durability」有 4 条审查发现（已修 4，不改并说明 0，未回应 0）。",
+        "text": "独立审查：交付物「empa-kidney-durability」有 4 条审查发现（已修 4，不改并说明 0，未回应 0）。"
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "claim-numeric-support",
+        "severity": "advice",
+        "title": "数值未出现在引文中",
+        "detail": "证据矩阵第 3 条结论",
+        "text": "claims[2].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "claim-numeric-support",
+        "severity": "advice",
+        "title": "数值未出现在引文中",
+        "detail": "证据矩阵第 46 条结论",
+        "text": "claims[45].claim numeric fact 3 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "claim-numeric-support",
+        "severity": "advice",
+        "title": "数值未出现在引文中",
+        "detail": "证据矩阵第 50 条结论",
+        "text": "claims[49].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 14 行",
+        "text": "Report line 14 numeric facts 42, 58 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 66 行",
+        "text": "Report line 66 numeric facts 3, 11.6, 15.2, 0.71, 0.62 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 70 行",
+        "text": "Report line 70 numeric facts 5, 42, 58, 33, 15, 23, 3, 1.83 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 72 行",
+        "text": "Report line 72 numeric facts 50, 73, 29, 51, 32, 120, 19, 38, 23, 77, 1.23 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 76 行",
+        "text": "Report line 76 numeric facts 2.1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 80 行",
+        "text": "Report line 80 numeric facts 0.1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 90 行",
+        "text": "Report line 90 numeric facts 40 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 94 行",
+        "text": "Report line 94 numeric facts 32, 120, 19, 38 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 126 行",
+        "text": "Report line 126 numeric facts 21 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 148 行",
+        "text": "Report line 148 numeric facts 3 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 152 行",
+        "text": "Report line 152 numeric facts 4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 156 行",
+        "text": "Report line 156 numeric facts 45, 90, 200, 74 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 165 行",
+        "text": "Report line 165 numeric facts 74 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "attributed-stance",
+        "severity": "advice",
+        "title": "所称来源立场缺少引文支撑",
+        "detail": "结论 CLM-010，报告第 72 行",
+        "text": "报告第 72 行以「该分析同时提示」把立场归属给来源，但该行引用的 CLM-010、CLM-066、CLM-013、CLM-014、CLM-012，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。"
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "claim-numeric-support",
+        "severity": "advice",
+        "title": "数值未出现在引文中",
+        "detail": "证据矩阵第 21 条结论",
+        "text": "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure. 另有 2 处是同一条（claims[30]、claims[47]）：这是一处决定，改一次就能全部修好。"
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unsupported",
+        "severity": "advice",
+        "title": "报告数值未见于所引证据",
+        "detail": "报告第 24 行",
+        "text": "Report line 24 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 26、Report line 130）：这是一处决定，改一次就能全部修好。"
+      },
+      {
+        "code": "clinical_evidence_notice",
+        "check": "report-number-unanchored",
+        "severity": "advice",
+        "title": "报告数值缺少引用出处",
+        "detail": "报告第 56 行",
+        "text": "Report line 56 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them. 另有 2 处是同一条（Report line 57、Report line 60）：这是一处决定，改一次就能全部修好。"
+      }
+    ],
+    "effectiveAgentId": "clinical-evidence-synthesis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1643118,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}
