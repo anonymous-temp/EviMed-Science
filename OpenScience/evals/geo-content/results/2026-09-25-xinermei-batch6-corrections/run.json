@@ -1,0 +1,228 @@
+{
+  "capability": "geo-content",
+  "brief": null,
+  "briefCorrespondence": "geo-006-semaglutide-correction: the same kind of work — correction materials for 讲错我方 the platform measured — on 信尔美 rather than 诺和盈. Dispatched with the orchestrator's batch brief (prompt below, verbatim).",
+  "base": "https://82.156.128.153",
+  "project": "geo",
+  "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1 (信尔美 / 玛仕度肽注射液, the 循证 GEO acceptance project of the acceptance account)",
+  "session": "session_2a5424b2dba8c3d4d49d3530c7ddd3ac",
+  "runId": "run_61dd779a9ce5edf666793ada6104ef2e",
+  "dispatchId": "geo-content-6-a1",
+  "agentVersion": "2.0.2",
+  "dispatchedAt": "2026-09-25T20:54:56.325Z",
+  "finishedAt": "2026-09-25T21:08:34.622Z",
+  "surface": "platform-job",
+  "dispatchedBy": "The 循证 GEO orchestrator (schedule mark run:content:6, attempt 1).",
+  "release": "A 2026-09-25 evening release before the 21:15Z switch to evimed-e5e78fc830c9-1 (PROGRESS.md@2026-09-25 21:20); the run ledger does not record the release id.",
+  "prompt": "「循证 GEO」自动运行 · 第 6 步（内容）· 第 6 批\n产品：信尔美（通用名：玛仕度肽注射液）。\n这一批最多 5 篇，先写主战场语义群，再写纠错材料：\n· 纠错材料：Kimi讲错「有自杀意念/重度抑郁等精神风险者需谨慎评估。」\n· 纠错材料：千问讲错「妊娠期及哺乳期女性、终末期肾病患者、重度肝功能不全患者、18岁以下儿童和青少年不适用。」\n· 纠错材料：千问讲错「减重效果：在48周的GLORY-1研究中，6mg剂量组平均体重降幅达14.84%，82.8%的患者减重≥5%；在60周的GLORY-2研究中，9mg剂量组平均体重降幅达18.55%。」\n· 纠错材料：DeepSeek讲错「针对中重度肥胖人群（9mg剂量）：治疗60周后，受试者平均体重下降 18.55%；在不合并2型糖尿病的人群中，平均体重降幅达 20.08%」\n· 纠错材料：DeepSeek讲错「针对超重/肥胖人群（4mg/6mg剂量）：治疗48周后，体重较基线分别下降 12.05% 和 14.84%」\n语义群的 groupId 用 geo_read questions 查，讲错我方的依据用 geo_read errors 查。每篇过交付闸门后用 geo_write articles 登记（path、layer、groupId、claimIds、gate、safety、contentSha256）。有临床安全问题就如实标 safety: open，不要自己放行。\n项目里已有的数据用 geo_read 读（做过且没有过期的不要重做），产出用 geo_write 写回项目。测量由平台自己跑，不要在运行里批量探测。",
+  "promptNote": "Verbatim: the workspace's .evimed-brief/research-brief.md, which this run was the last to write.",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      ".work/geo6f/build_articles_json.py",
+      ".work/geo6f/mkclaims.py",
+      ".work/geo6f/quote_check.py",
+      "deliverables/geo-content-b6/articles.json",
+      "deliverables/geo-content-b6/articles/correction-glory-numbers-qianwen.md",
+      "deliverables/geo-content-b6/articles/correction-glory1-48week-deepseek.md",
+      "deliverables/geo-content-b6/articles/correction-glory2-9mg-deepseek.md",
+      "deliverables/geo-content-b6/articles/correction-not-applicable-populations-qianwen.md",
+      "deliverables/geo-content-b6/articles/correction-suicidal-ideation-kimi.md",
+      "deliverables/geo-content-b6/geo-content.md",
+      "deliverables/geo-content-b6/records/correction-glory-numbers-qianwen.md",
+      "deliverables/geo-content-b6/records/correction-glory1-48week-deepseek.md",
+      "deliverables/geo-content-b6/records/correction-glory2-9mg-deepseek.md",
+      "deliverables/geo-content-b6/records/correction-not-applicable-populations-qianwen.md",
+      "deliverables/geo-content-b6/records/correction-suicidal-ideation-kimi.md",
+      "deliverables/geo-content-b6/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "text": "独立审查：交付物「geo-content-b6」有 1 条审查发现（已修 1，不改并说明 0，未回应 0）。",
+        "detail": "独立审查：交付物「geo-content-b6」有 1 条审查发现（已修 1，不改并说明 0，未回应 0）。"
+      }
+    ],
+    "effectiveAgentId": "geo-content",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 818297,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash",
+    "deliverables": [
+      {
+        "id": "geo-content-b6",
+        "capability": "geo-content",
+        "status": "delivered",
+        "attempts": 3,
+        "lastVerdict": "pass"
+      }
+    ],
+    "usage": {
+      "requests": 93,
+      "inputTokens": 16341321,
+      "cachedInputTokens": 16122368,
+      "outputTokens": 107619,
+      "costCny": 1.780514
+    }
+  },
+  "gateRuns": [
+    {
+      "attempt": 1,
+      "at": "2026-09-25T21:02:04.713Z",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoProbeRounds": 0,
+        "geoMeasuredRounds": 0,
+        "geoFailedRounds": 0,
+        "geoUnreadableLedgerLines": 0,
+        "geoPlatformsMeasured": [],
+        "geoQuestionsMeasured": 0,
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "correction": 5
+        },
+        "geoArticlesSafetyOpen": 0
+      }
+    },
+    {
+      "attempt": 2,
+      "at": "2026-09-25T21:05:13.704Z",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoProbeRounds": 0,
+        "geoMeasuredRounds": 0,
+        "geoFailedRounds": 0,
+        "geoUnreadableLedgerLines": 0,
+        "geoPlatformsMeasured": [],
+        "geoQuestionsMeasured": 0,
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "correction": 5
+        },
+        "geoArticlesSafetyOpen": 0
+      }
+    },
+    {
+      "attempt": 3,
+      "at": "2026-09-25T21:08:15.031Z",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoProbeRounds": 0,
+        "geoMeasuredRounds": 0,
+        "geoFailedRounds": 0,
+        "geoUnreadableLedgerLines": 0,
+        "geoPlatformsMeasured": [],
+        "geoQuestionsMeasured": 0,
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "correction": 5
+        },
+        "geoArticlesSafetyOpen": 0
+      }
+    }
+  ],
+  "regate": {
+    "at": "2026-09-28",
+    "what": "packages/domain runGate('geo-content-pack') over the copied deliverable, release 76962a63df30 code.",
+    "atRelease76962a63df30": {
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "correction": 5
+        }
+      }
+    }
+  },
+  "platformOutcome": {
+    "articles": "Five correction articles registered in evimed_geo.articles with gate passed, safety clear, status publishable; each file's sha256 equals its registered contentSha256.",
+    "step": "Step 6 (content) done with this runId; schedule mark run:content:6 done. This was the sixth and last first-round batch (32 articles over six batches, all publishable).",
+    "independentReview": "review_summary: 1 finding, 1 fixed."
+  },
+  "copiedFiles": {
+    "verifiedBy": "Every copied deliverable file's sha256 equals the digest in the run's own delivery-receipt.json (copied beside them; runId run_61dd779a9ce5…, accepted 2026-09-25T21:08:15Z, attempt 3, no notices).",
+    "files": [
+      {
+        "path": "delivery-receipt.json",
+        "sha256": "cfbb73fda33baf1ff11d554ea6c759e1fd1dc70d1ebe774cadb8bef6bc2c93b5",
+        "bytes": 3328
+      },
+      {
+        "path": "deliverables/geo-content-b6/geo-content.md",
+        "sha256": "c3910dc879ace9dacc05964a6076e4df934be1d2f7dfbcb7478bf7a2fd35f107",
+        "bytes": 15946
+      },
+      {
+        "path": "deliverables/geo-content-b6/articles.json",
+        "sha256": "18bd79d59c5f6d073a91a2be4e71e1e544ff3d0665dc1d2f60a2a71be86e8b30",
+        "bytes": 11806
+      },
+      {
+        "path": "deliverables/geo-content-b6/revision-notes.md",
+        "sha256": "882240a72f15946bd782bcc62e1441a729f01c18d659bf36b49c29f78ae9f345",
+        "bytes": 7519
+      },
+      {
+        "path": "deliverables/geo-content-b6/articles/correction-glory-numbers-qianwen.md",
+        "sha256": "73cdb662c5f4f422937f844deac30a7d4fa9bef68ade8e13aaa7e81ca7195d43",
+        "bytes": 7410
+      },
+      {
+        "path": "deliverables/geo-content-b6/articles/correction-glory1-48week-deepseek.md",
+        "sha256": "043178f00d4ad7ed9f3cb5485fded9fe35d74db5a22263e3c8b8ae3a59073d0f",
+        "bytes": 5524
+      },
+      {
+        "path": "deliverables/geo-content-b6/articles/correction-glory2-9mg-deepseek.md",
+        "sha256": "6b360445fb0fa9f8754ffad4282d5a3223d56ed357876d42f440a26092e90735",
+        "bytes": 6428
+      },
+      {
+        "path": "deliverables/geo-content-b6/articles/correction-not-applicable-populations-qianwen.md",
+        "sha256": "960af0c40e1025b4ca96b4d320642eaa71f83492d8997220a5ae96b7e304346b",
+        "bytes": 7954
+      },
+      {
+        "path": "deliverables/geo-content-b6/articles/correction-suicidal-ideation-kimi.md",
+        "sha256": "b301f2793ada1068fd34a143217218ae5fda6f80d5f6854b24bd4ee30222ea0d",
+        "bytes": 5961
+      },
+      {
+        "path": "deliverables/geo-content-b6/records/correction-glory-numbers-qianwen.md",
+        "sha256": "53d263df2ca7b0b02e0e4a016fc09a87c4734a52ada007a5aeaf5f7599560fd5",
+        "bytes": 6659
+      },
+      {
+        "path": "deliverables/geo-content-b6/records/correction-glory1-48week-deepseek.md",
+        "sha256": "34428794f3946f1d7f321d0f5fd5bd58473093eae69be8d6280260295d56cb50",
+        "bytes": 5784
+      },
+      {
+        "path": "deliverables/geo-content-b6/records/correction-glory2-9mg-deepseek.md",
+        "sha256": "5cf0b664c702fe09a0ba55da47cf776ae3f4d310823f012f881557d48d958859",
+        "bytes": 6487
+      },
+      {
+        "path": "deliverables/geo-content-b6/records/correction-not-applicable-populations-qianwen.md",
+        "sha256": "2c6f8fefb217523a9c369d7542556b2fb39b317c75e4034e03f4dd375fcc5b4c",
+        "bytes": 6284
+      },
+      {
+        "path": "deliverables/geo-content-b6/records/correction-suicidal-ideation-kimi.md",
+        "sha256": "bb417094b2a0c22d15693c56b148dc5fbeaa9e063a6ed6933c70645a5a0c9046",
+        "bytes": 6280
+      }
+    ]
+  },
+  "notCopied": [
+    ".work/geo6f/build_articles_json.py, mkclaims.py, quote_check.py — run scratch files listed among the run's artifacts, not part of the geo-content-pack contract."
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "runId": "run_750263e09fae435a34ce38518be8ce16",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "entries": [
+    {
+      "deliverableId": "method-relation-decisions",
+      "contractKind": "method-relations",
+      "capability": "method-relations",
+      "files": [
+        {
+          "path": "deliverables/method-relation-decisions/method-relations.json",
+          "sha256": "f30316696c8a0878dc187620582a8a9e37d5a5f244923eae3e24485e0181d59e",
+          "bytes": 8165
+        },
+        {
+          "path": "deliverables/method-relation-decisions/revision-notes.md",
+          "sha256": "0ad0e4bbb2abab5c6ab50d7d9924af7d22eb4ada8a5402d660f684656c196a5c",
+          "bytes": 6890
+        }
+      ],
+      "acceptedAt": "2026-09-26T03:55:19.845Z",
+      "attempt": 1,
+      "notices": []
+    }
+  ]
+}

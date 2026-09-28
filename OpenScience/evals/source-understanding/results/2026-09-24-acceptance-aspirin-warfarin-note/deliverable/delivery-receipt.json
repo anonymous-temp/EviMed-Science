@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "runId": "run_f3acd23a1a7728702d5f5dd22783b4b2",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "entries": [
+    {
+      "deliverableId": "source-understanding",
+      "contractKind": "source-understanding",
+      "capability": "source-understanding",
+      "files": [
+        {
+          "path": "deliverables/source-understanding/source-understanding.json",
+          "sha256": "98c552bcb97b12cab14823722057c2e591614527760ca4d507849e147cc6b229",
+          "bytes": 5075
+        },
+        {
+          "path": "deliverables/source-understanding/source-understanding-input.json",
+          "sha256": "726240beebb15513aaa71dc19a30e7f314ee130bb16fc639377c8a8037989642",
+          "bytes": 1010
+        },
+        {
+          "path": "deliverables/source-understanding/revision-notes.md",
+          "sha256": "f45526a201aa112fb80cd5aed6d7e03f02d41d3646d92cefacd66036377469b2",
+          "bytes": 4399
+        }
+      ],
+      "acceptedAt": "2026-09-24T11:26:06.021Z",
+      "attempt": 1,
+      "notices": []
+    }
+  ]
+}

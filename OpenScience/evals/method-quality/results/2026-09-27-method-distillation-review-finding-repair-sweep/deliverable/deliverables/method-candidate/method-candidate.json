@@ -1,0 +1,126 @@
+{
+ "schemaVersion": 1,
+ "operation": "create",
+ "baseDigest": null,
+ "targetMethodId": null,
+ "mergedMethodIds": [],
+ "evidence": [
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    496,
+    496
+   ],
+   "quote": "So the 3 mismatches are likely 5, 12, 13 (case-sensitive). Let me fix all three to match exactly."
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    554,
+    554
+   ],
+   "quote": "Both verified exact matches in the preserved full text. So F01/F02 are false positives"
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    559,
+    559
+   ],
+   "quote": "already uses 泌尿生殖道感染 → change claim text and caveat forms to 尿路感染"
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    569,
+    569
+   ],
+   "quote": "随访超过 1 年的研究仍保留效应，提示获益不依赖随访时长"
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    608,
+    608
+   ],
+   "quote": "I only edited 摘要结论 and 结果 and 实践要点 and 讨论. Let me fix 结论第三 too."
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    611,
+    611
+   ],
+   "quote": "is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure."
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    615,
+    615
+   ],
+   "quote": "CLM-039 now has a required issue: duplicate supporting source (same document twice). I need to fix: keep one entry per document."
+  },
+  {
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "seqRange": [
+    615,
+    615
+   ],
+   "quote": "Hmm. One document, one quote. The checker requires each supporting source to have a quote that supports the claim."
+  }
+ ],
+ "applicability": "一次已提交的、句子挂主张登记且主张挂保留来源的报告被退回意见之后：发现逐条分诊，在真正出错的载体上修，主张重新登记，并让同一主张出现的每一处说法在下次提交前一致。",
+ "counterexamples": [
+  "还没有拿到任何意见、报告刚要首次提交时——那时要跑的是冻结前的字节与指针守卫。",
+  "报告不把句子绑到主张登记上时——没有可解析的支持跨度，就无从判断发现该落在哪个载体。",
+  "被质疑的支持来源在工作区已经不再保留时——该发现只能记为未解决，不能据以修改引文。"
+ ],
+ "risk": {
+  "touchesSafety": true,
+  "widensTools": false
+ },
+ "testScenarios": [
+  {
+   "id": "T1",
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "situation": "参考文献条目的题名与主张登记里的来源题名不一致（大小写与副题名差异各一处），登记核对报出条目身份不符。",
+   "expected": "把条目题名逐字对齐到主张登记的来源题名，包括大小写，并在下一轮重新核对条目身份与引注指向。"
+  },
+  {
+   "id": "T2",
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "situation": "主张陈述里用到的数字并不出现在它自己的支持引文里，检查逐条报出「数字不在其直接支撑中」。",
+   "expected": "把引文扩到覆盖该数字的连续原文段，或把该数字移入主张的不确定性并写明来源未给出，二者之一，不得静默删除数字。"
+  },
+  {
+   "id": "T3",
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "situation": "一条主张把同一份文献列了两次作为支持来源，检查报出「支持来源重复（同一文献两次）」。",
+   "expected": "同一文献只留一条登记，并用一段同时覆盖两个事实的连续引文，或把第二个事实改挂到别的来源。"
+  },
+  {
+   "id": "T4",
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "situation": "正文把来源的原词换成了外延更大的近义词，而该主张的限定条件写法仍按来源原词匹配。",
+   "expected": "正文改用来源原词，并在同一次修改里同步该主张的限定条件写法，随后扫过并修改所有复述该主张的载体。"
+  },
+  {
+   "id": "T5",
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "situation": "正文把来源只对某个亚组给出的结果写成整体结论，并加了一句来源没有的因果性表述。",
+   "expected": "把句子收回到来源亚组的范围，改用来源自己的措辞，不保留超出引文的推论。"
+  },
+  {
+   "id": "T6",
+   "runId": "run_8fb04c2f0e1496227bb29bda6035ccd6",
+   "situation": "审查发现称某条引文在来源中不存在（与来源矛盾）。",
+   "expected": "先在保留的原文里定位该句；逐字命中即作为「不改」回应并写明位置，保留该引文，不因被质疑而删除。"
+  }
+ ],
+ "display": {
+  "title": "审查意见的分诊与跨载体修复",
+  "summary": "收到审查意见后先回原文核实再动手：把每条意见归到真正出错的载体上修，并让同一主张出现的每一处说法都改成一致，而不是只改被点名的那一句。",
+  "steps": "1. 收到审查意见后，先到保留下来的来源原文里定位该条发现引的那段话，按主张实际读到的层级核对，再决定它是不是真的缺陷。\n2. 核不实的发现不改：引文若在保留来源里逐字存在，就作为「不改」回应并写明依据，不删除仍然成立的引文。\n3. 把发现归到真正出错的载体：主张自身的数字、句子的范围、正文的用词，还是支持来源的登记，然后只在该处修。\n4. 主张里的数字不在它自己引文范围内时，把引文扩到一段连续原文使其覆盖全部数字；原文没有这个数字时，移入该主张的不确定性并写明来源未给出。\n5. 句子范围比引文宽（把亚组结果写成整体、把原文的保留措辞写成断言）时，把句子收回到引文的范围，并保留原文的限定词。\n6. 正文用词与来源不一致时，改用来源的用词，并在同一次修改里同步该主张的限定条件写法。\n7. 同一份文献不在同一主张下重复登记；一份文献支撑两个事实时，用一段覆盖二者的连续引文，或把第二个事实改挂到另一份来源。\n8. 改完主张后同步更新主张登记，再扫过该主张在摘要、结果、讨论、结论、要点和派生文件里的每一处，全部改成一致说法。\n9. 重跑不消耗提交次数的提交前检查，读它的提示清单而不只看结论；本轮修过的类别不应再出现，仍在的类别写明保留理由。\n10. 核对参考文献表与主张登记：每条正文引注只落到一条条目，条目题名与主张登记的来源题名逐字一致，标识符是主张所指的那条记录。\n11. 提交后逐条回应需要回应的发现：改了的回「已修改」，没改的回「不改」并附一句依据。\n12. 最后把本轮修了什么、扫过哪些载体、哪些发现以何依据不改，写进修订说明；没有任何临床结论或阈值由这套做法本身写出来。"
+ }
+}

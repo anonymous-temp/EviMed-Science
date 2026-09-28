@@ -1,0 +1,84 @@
+{
+  "formatVersion": 1,
+  "runId": "run_61dd779a9ce5edf666793ada6104ef2e",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "entries": [
+    {
+      "deliverableId": "geo-content-b6",
+      "contractKind": "geo-content-pack",
+      "capability": "geo-content",
+      "files": [
+        {
+          "path": "deliverables/geo-content-b6/geo-content.md",
+          "sha256": "c3910dc879ace9dacc05964a6076e4df934be1d2f7dfbcb7478bf7a2fd35f107",
+          "bytes": 15946
+        },
+        {
+          "path": "deliverables/geo-content-b6/articles.json",
+          "sha256": "18bd79d59c5f6d073a91a2be4e71e1e544ff3d0665dc1d2f60a2a71be86e8b30",
+          "bytes": 11806
+        },
+        {
+          "path": "deliverables/geo-content-b6/revision-notes.md",
+          "sha256": "882240a72f15946bd782bcc62e1441a729f01c18d659bf36b49c29f78ae9f345",
+          "bytes": 7519
+        },
+        {
+          "path": "deliverables/geo-content-b6/articles/correction-suicidal-ideation-kimi.md",
+          "sha256": "b301f2793ada1068fd34a143217218ae5fda6f80d5f6854b24bd4ee30222ea0d",
+          "bytes": 5961
+        },
+        {
+          "path": "deliverables/geo-content-b6/records/correction-suicidal-ideation-kimi.md",
+          "sha256": "bb417094b2a0c22d15693c56b148dc5fbeaa9e063a6ed6933c70645a5a0c9046",
+          "bytes": 6280
+        },
+        {
+          "path": "deliverables/geo-content-b6/articles/correction-not-applicable-populations-qianwen.md",
+          "sha256": "960af0c40e1025b4ca96b4d320642eaa71f83492d8997220a5ae96b7e304346b",
+          "bytes": 7954
+        },
+        {
+          "path": "deliverables/geo-content-b6/records/correction-not-applicable-populations-qianwen.md",
+          "sha256": "2c6f8fefb217523a9c369d7542556b2fb39b317c75e4034e03f4dd375fcc5b4c",
+          "bytes": 6284
+        },
+        {
+          "path": "deliverables/geo-content-b6/articles/correction-glory-numbers-qianwen.md",
+          "sha256": "73cdb662c5f4f422937f844deac30a7d4fa9bef68ade8e13aaa7e81ca7195d43",
+          "bytes": 7410
+        },
+        {
+          "path": "deliverables/geo-content-b6/records/correction-glory-numbers-qianwen.md",
+          "sha256": "53d263df2ca7b0b02e0e4a016fc09a87c4734a52ada007a5aeaf5f7599560fd5",
+          "bytes": 6659
+        },
+        {
+          "path": "deliverables/geo-content-b6/articles/correction-glory2-9mg-deepseek.md",
+          "sha256": "6b360445fb0fa9f8754ffad4282d5a3223d56ed357876d42f440a26092e90735",
+          "bytes": 6428
+        },
+        {
+          "path": "deliverables/geo-content-b6/records/correction-glory2-9mg-deepseek.md",
+          "sha256": "5cf0b664c702fe09a0ba55da47cf776ae3f4d310823f012f881557d48d958859",
+          "bytes": 6487
+        },
+        {
+          "path": "deliverables/geo-content-b6/articles/correction-glory1-48week-deepseek.md",
+          "sha256": "043178f00d4ad7ed9f3cb5485fded9fe35d74db5a22263e3c8b8ae3a59073d0f",
+          "bytes": 5524
+        },
+        {
+          "path": "deliverables/geo-content-b6/records/correction-glory1-48week-deepseek.md",
+          "sha256": "34428794f3946f1d7f321d0f5fd5bd58473093eae69be8d6280260295d56cb50",
+          "bytes": 5784
+        }
+      ],
+      "acceptedAt": "2026-09-25T21:08:15.045Z",
+      "attempt": 3,
+      "notices": [],
+      "revisedAt": "2026-09-25T21:08:34.024Z"
+    }
+  ]
+}

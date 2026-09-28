@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "action": "screen",
+  "jobId": null,
+  "screened": {
+    "selected": [
+      {
+        "group": "pair-1",
+        "methods": [
+          "pre-submission-freeze-check",
+          "reporting-checklist-addressability"
+        ],
+        "reason": "两条方法落在同一份多文档交付物的最后一次通读上，且疑似互相咬合：一条在定稿前 pins a copy of every artefact before the first edit of the final pass，并要求每次保全比对都发生在两个确实不同的产物之间；另一条把内容写进一份数字、引用与标题已被 a protected-content check had already frozen 的文档，并且它构建的正是一张表（清单）。正文要核对的是：先固定副本、再编辑、再比对，是否是这两条共同执行的一个具体操作——即另一条产出的表与那次编辑，是否正好落进这一条的保全范围——还是两者只是同处一个环节。"
+      },
+      {
+        "group": "pair-3",
+        "methods": [
+          "reporting-checklist-addressability",
+          "claim-verdict-audit"
+        ],
+        "reason": "两条方法都在同一种绑定上做工：让文档里的一个标记能解到它点名的目标，并要求那个目标确实承载所说的内容。一条 makes every row point at a place a reader can open，并把包内别的文档才有的内容写进被审文档；另一条逐条判 which citation marks route to the wrong entry，以及哪个数字坐在并不承载它的来源上。正文要核对的是：标记到目标的解析与判定，在两边是否是同一个具体操作（一边负责让它成立，一边负责判它是否成立），还是各做各的。"
+      }
+    ],
+    "rejected": [
+      {
+        "method": "pre-submission-freeze-check + claim-verdict-audit",
+        "pair": "pair-2",
+        "methods": [
+          "pre-submission-freeze-check",
+          "claim-verdict-audit"
+        ],
+        "reason": "重叠的只是交付阶段的通用词汇——artefact、citation、numbers、notice 与 verdict、frozen——不是同一个操作。时机相反：一条在字节冻结之前跑最后一轮 guard，另一条在 an already delivered evidence pack 上重核。对象也不同：一边查的是保全比对本身有没有空转（requires each preservation comparison to run between two genuinely different artefacts）和表产物是否以表头行开头，另一边查的是每句陈述能否在它自己引的来源上站住（one claim instance at a time against the sources that pack itself cites）。找不到一个两边以同样方式执行的具体操作，读在一起只会得到一个关于交付阶段的判断，而不是一条关系。"
+      }
+    ]
+  },
+  "pairs": [
+    {
+      "pair": "pair-1",
+      "methods": [
+        "pre-submission-freeze-check",
+        "reporting-checklist-addressability"
+      ],
+      "verdict": "selected",
+      "group": "pair-1"
+    },
+    {
+      "pair": "pair-2",
+      "methods": [
+        "pre-submission-freeze-check",
+        "claim-verdict-audit"
+      ],
+      "verdict": "rejected",
+      "reason": "只共享交付阶段词汇，两边在不同时机对不同对象做工。"
+    },
+    {
+      "pair": "pair-3",
+      "methods": [
+        "reporting-checklist-addressability",
+        "claim-verdict-audit"
+      ],
+      "verdict": "selected",
+      "group": "pair-3"
+    }
+  ]
+}

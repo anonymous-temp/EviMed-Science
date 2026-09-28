@@ -1,0 +1,189 @@
+{
+  "capability": "geo-strategy",
+  "brief": null,
+  "briefCorrespondence": "Closest brief: geo-strategy-004-mazdutide-conditions-written (same product and step). The run was dispatched with the orchestrator's own step-5 brief, not with that brief's text.",
+  "base": "https://82.156.128.153",
+  "project": "geo",
+  "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1 (信尔美 / 玛仕度肽注射液, the 循证 GEO acceptance project of the acceptance account)",
+  "session": "session_e6b4d7edcc3e1da6a123175bef510c07",
+  "runId": "run_3576ce426c20ba98d4f14d820184222e",
+  "dispatchId": "geo-strategy-a1",
+  "agentVersion": "1.0.2",
+  "dispatchedAt": "2026-09-25T17:59:57.799Z",
+  "finishedAt": "2026-09-25T18:22:20.059Z",
+  "surface": "platform-job",
+  "dispatchedBy": "The 循证 GEO orchestrator (apps/server/src/geoOrchestrator.mjs, schedule mark run:strategy, attempt 1), once the program's baseline round had its metrics. The program was started from the 循证 GEO page of the product.",
+  "release": "A 2026-09-25 evening release in the evimed-ef97ff9632aa-1 → evimed-e5e78fc830c9-1 series (PROGRESS.md@2026-09-25 21:20); the run ledger does not record the release id.",
+  "prompt": "「循证 GEO」自动运行 · 第 5 步（信源） 产品：信尔美（通用名：玛仕度肽注射液）。 覆盖周期 90 天；AI 引擎：豆包、千问、DeepSeek、元宝、Kimi。 诊断已经测完（基线）。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。 这次要做：…",
+  "promptNote": "As the run ledger recorded it, truncated there. The brief was rendered by geoOrchestrator.strategyBrief() of that release; the workspace copy was overwritten by the next run.",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      ".work/geo5/build.py",
+      ".work/geo5/build_write.py",
+      ".work/geo5/gaps.json",
+      ".work/geo5/gpage.py",
+      ".work/geo5/gread.py",
+      ".work/geo5/gread2.py",
+      "deliverables/geo-strategy/geo-strategy.md",
+      "deliverables/geo-strategy/revision-notes.md",
+      "deliverables/geo-strategy/strategy.json"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "text": "独立审查：交付物「geo-strategy」有 11 条审查发现（已修 11，不改并说明 0，未回应 0）。",
+        "detail": "独立审查：交付物「geo-strategy」有 11 条审查发现（已修 11，不改并说明 0，未回应 0）。"
+      },
+      {
+        "code": "geo_strategy_notice",
+        "severity": "advice",
+        "text": "strategy.json: no battlefield group; no source table.",
+        "file": "strategy.json"
+      }
+    ],
+    "effectiveAgentId": "geo-strategy",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1342260,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash",
+    "deliverables": [
+      {
+        "id": "geo-strategy",
+        "capability": "geo-strategy",
+        "status": "delivered",
+        "attempts": 3,
+        "lastVerdict": "pass"
+      }
+    ],
+    "usage": {
+      "requests": 171,
+      "inputTokens": 35666268,
+      "cachedInputTokens": 35152768,
+      "outputTokens": 139261,
+      "costCny": 2.95697
+    }
+  },
+  "gateRuns": [
+    {
+      "attempt": 1,
+      "at": "2026-09-25T18:10:37.887Z",
+      "ok": true,
+      "issues": [
+        {
+          "severity": "advisory",
+          "code": "geo_strategy_notice",
+          "check": "geo-strategy-shape",
+          "message": "strategy.json: no battlefield group; no source table."
+        }
+      ],
+      "metrics": {
+        "geoSources": 0,
+        "geoGaps": 20,
+        "geoEnginesExpected": 5,
+        "geoTiers": 3
+      }
+    },
+    {
+      "attempt": 2,
+      "at": "2026-09-25T18:15:41.787Z",
+      "ok": true,
+      "issues": [
+        {
+          "severity": "advisory",
+          "code": "geo_strategy_notice",
+          "check": "geo-strategy-shape",
+          "message": "strategy.json: no battlefield group; no source table."
+        }
+      ],
+      "metrics": {
+        "geoSources": 0,
+        "geoGaps": 20,
+        "geoEnginesExpected": 5,
+        "geoTiers": 3
+      }
+    },
+    {
+      "attempt": 3,
+      "at": "2026-09-25T18:21:59.326Z",
+      "ok": true,
+      "issues": [
+        {
+          "severity": "advisory",
+          "code": "geo_strategy_notice",
+          "check": "geo-strategy-shape",
+          "message": "strategy.json: no battlefield group; no source table."
+        }
+      ],
+      "metrics": {
+        "geoSources": 0,
+        "geoGaps": 20,
+        "geoEnginesExpected": 5,
+        "geoTiers": 3
+      }
+    }
+  ],
+  "regate": {
+    "at": "2026-09-28",
+    "what": "packages/domain runGate('geo-strategy-pack') over the copied files, with the manifest's declared outputs.",
+    "atRelease76962a63df30": {
+      "ok": true,
+      "issues": [
+        {
+          "severity": "advisory",
+          "code": "geo_strategy_notice",
+          "message": "strategy.json: no battlefield group; no source table."
+        }
+      ],
+      "metrics": {
+        "geoSources": 0,
+        "geoGaps": 20,
+        "geoEnginesExpected": 5,
+        "geoTiers": 3
+      }
+    },
+    "withCommit_a6286df48": {
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoSources": 28,
+        "geoGaps": 20,
+        "geoEnginesExpected": 5,
+        "geoTiers": 3
+      }
+    },
+    "reading": "The notice was the contract not reading the method pack's shape (the source table under sources.table, the battlefield as its one chosen group). The table has 28 sources and the battlefield names 「P1-03 与其他减重药怎么选」."
+  },
+  "platformOutcome": {
+    "step": "The orchestrator folded the run into step 5: project step `sources` done with this runId (strategy and targets both registered, which is what #finishRun requires).",
+    "scheduleMark": "run:strategy done, attempts 1, runStatus succeeded.",
+    "independentReview": "review_summary: 11 findings, 11 fixed."
+  },
+  "copiedFiles": {
+    "verifiedBy": "File times: the three files were last written 2026-09-25T18:21:46Z–18:22:09Z, before the run finished at 18:22:20Z, and no later run wrote under deliverables/geo-strategy. The run's own delivery-receipt.json was overwritten by the next run, so no digest from the run itself survives; the sha256 below is of the bytes as copied on 2026-09-28.",
+    "files": [
+      {
+        "path": "deliverables/geo-strategy/geo-strategy.md",
+        "sha256": "87f28ad3d44814bfde3a70edccbb931a0ba9a114904825676d09c3575cc71722",
+        "bytes": 23234
+      },
+      {
+        "path": "deliverables/geo-strategy/strategy.json",
+        "sha256": "2d4d911a0d89fd12ac349a48cfd80672d28b58ec08888f821c64e667f1206e40",
+        "bytes": 324758
+      },
+      {
+        "path": "deliverables/geo-strategy/revision-notes.md",
+        "sha256": "5777c7a840d1d583faa25ffa5d14b3fcd0a70d81c35b3b65a45510206d612b15",
+        "bytes": 7985
+      }
+    ]
+  },
+  "notCopied": [
+    ".work/geo5/build.py, build_write.py, gaps.json, gpage.py, gread.py, gread2.py — run scratch files listed among the run's artifacts, not part of the geo-strategy-pack contract."
+  ]
+}

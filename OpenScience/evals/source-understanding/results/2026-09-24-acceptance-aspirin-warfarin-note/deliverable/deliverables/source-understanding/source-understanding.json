@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+  "generation": 1,
+  "docType": "note-memo",
+  "depth": "structured",
+  "summary": "这是一份简短的中文研究笔记，标题是「阿司匹林与华法林联用」，正文只记了两条内容。一条是荟萃分析的结论：纳入 12 项研究的荟萃分析显示，华法林联用低剂量阿司匹林使大出血风险升高约 1.5 倍，RR 1.5（95% CI 1.3–1.8）。另一条是指南建议：房颤合并稳定冠心病的患者，单用口服抗凝药。笔记围绕标题所示的这个用药组合，把一条荟萃分析结果和一条指南建议记在一起，没有标注这篇荟萃分析的文献出处。",
+  "slots": {
+    "topic": {
+      "state": "known",
+      "value": "阿司匹林与华法林联用",
+      "evidence": [
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 2,
+          "end": 12,
+          "quote": "阿司匹林与华法林联用"
+        },
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 33,
+          "end": 45,
+          "quote": "华法林联用低剂量阿司匹林"
+        }
+      ]
+    },
+    "decisions": {
+      "state": "known",
+      "value": "对于房颤合并稳定冠心病的患者，指南建议单用口服抗凝药。",
+      "evidence": [
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 86,
+          "end": 113,
+          "quote": "对于房颤合并稳定冠心病的患者，指南建议单用口服抗凝药。"
+        },
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 101,
+          "end": 112,
+          "quote": "指南建议单用口服抗凝药"
+        }
+      ]
+    },
+    "actions": {
+      "state": "unknown",
+      "reason": "原文未记录行动项。"
+    },
+    "openQuestions": {
+      "state": "unknown",
+      "reason": "原文未提出待解决的问题。"
+    }
+  },
+  "claims": [
+    {
+      "id": "CLM-01",
+      "statement": "一项纳入 12 项研究的荟萃分析显示，华法林联用低剂量阿司匹林使大出血风险升高约 1.5 倍，效应量为 RR 1.5（95% CI 1.3–1.8）。",
+      "evidence": [
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 14,
+          "end": 32,
+          "quote": "一项纳入 12 项研究的荟萃分析显示"
+        },
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 33,
+          "end": 60,
+          "quote": "华法林联用低剂量阿司匹林使大出血风险升高约 1.5 倍"
+        },
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 60,
+          "end": 83,
+          "quote": "（RR 1.5，95% CI 1.3–1.8）"
+        }
+      ]
+    },
+    {
+      "id": "CLM-02",
+      "statement": "对于房颤合并稳定冠心病的患者，指南建议单用口服抗凝药。",
+      "evidence": [
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 86,
+          "end": 113,
+          "quote": "对于房颤合并稳定冠心病的患者，指南建议单用口服抗凝药。"
+        },
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 101,
+          "end": 112,
+          "quote": "指南建议单用口服抗凝药"
+        }
+      ]
+    },
+    {
+      "id": "CLM-03",
+      "statement": "该笔记的主题是阿司匹林与华法林联用，标题即点明这一主题。",
+      "evidence": [
+        {
+          "sourceId": "src_1c3a3a0f7129a3b6a80207a7adda1968",
+          "generation": 1,
+          "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+          "start": 2,
+          "end": 12,
+          "quote": "阿司匹林与华法林联用"
+        }
+      ]
+    }
+  ],
+  "methods": [],
+  "omissionAudit": {
+    "status": "audited",
+    "reason": "按抽样列出的 1 个单元逐一核对，该单元已被本记录的证据锚点代表。",
+    "omissionRate": 0.0,
+    "samples": [
+      {
+        "unitId": "src_1c3a3a0f7129a3b6a80207a7adda1968:g1:u1",
+        "represented": true
+      }
+    ]
+  }
+}

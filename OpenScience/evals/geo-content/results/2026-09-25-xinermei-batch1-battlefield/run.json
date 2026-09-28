@@ -1,0 +1,208 @@
+{
+  "capability": "geo-content",
+  "brief": null,
+  "briefCorrespondence": "geo-005-mazdutide-first-batch: the same product and the same case — the first battlefield batch after the strategy step (card, Q&A, popular and deep articles for the battlefield groups). Dispatched with the orchestrator's batch brief, not with that brief's text.",
+  "base": "https://82.156.128.153",
+  "project": "geo",
+  "geoProject": "geo_46a709c7e4f73d5d2e019df6b6d418a1 (信尔美 / 玛仕度肽注射液, the 循证 GEO acceptance project of the acceptance account)",
+  "session": "session_2e114dd75f9732355016506cf3c294a0",
+  "runId": "run_963e1b37275233d91d5113d76b402976",
+  "dispatchId": "geo-content-1-a2",
+  "agentVersion": "2.0.1",
+  "dispatchedAt": "2026-09-25T18:23:33.947Z",
+  "finishedAt": "2026-09-25T18:42:39.066Z",
+  "surface": "platform-job",
+  "dispatchedBy": "The 循证 GEO orchestrator (schedule mark run:content:1, attempt 2; attempt 1 at 10:30:50Z was cancelled with the conversation it was dispatched into).",
+  "release": "A 2026-09-25 evening release in the evimed-ef97ff9632aa-1 → evimed-e5e78fc830c9-1 series (PROGRESS.md@2026-09-25 21:20); the run ledger does not record the release id.",
+  "prompt": "「循证 GEO」自动运行 · 第 6 步（内容）· 第 1 批 产品：信尔美（通用名：玛仕度肽注射液）。 这一批最多 5 篇，先写主战场语义群，再写纠错材料： · 语义群「P1-01 品牌身份、规格与厂家」（品牌明确类）：典型问句「信尔美和玛仕度肽是同一个药吗？有几个规格？」 · 语义群「P1-03 与其他减重药怎么选…",
+  "promptNote": "As the run ledger recorded it, truncated there. Rendered by geoOrchestrator.contentBrief() of that release; the batch's five groups are in schedule mark run:content:1.",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/geo-content/articles.json",
+      "deliverables/geo-content/articles/maz-bmi-eligibility-qa.md",
+      "deliverables/geo-content/articles/maz-contraindications-redflags-popular.md",
+      "deliverables/geo-content/articles/maz-identity-spec-card.md",
+      "deliverables/geo-content/articles/maz-price-access-qa.md",
+      "deliverables/geo-content/articles/maz-vs-semaglutide-tirzepatide-deep.md",
+      "deliverables/geo-content/geo-content.md",
+      "deliverables/geo-content/records/maz-bmi-eligibility-qa.md",
+      "deliverables/geo-content/records/maz-contraindications-redflags-popular.md",
+      "deliverables/geo-content/records/maz-identity-spec-card.md",
+      "deliverables/geo-content/records/maz-price-access-qa.md",
+      "deliverables/geo-content/records/maz-vs-semaglutide-tirzepatide-deep.md",
+      "deliverables/geo-content/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "text": "独立审查：交付物「geo-content」有 3 条审查发现（已修 3，不改并说明 0，未回应 0）。",
+        "detail": "独立审查：交付物「geo-content」有 3 条审查发现（已修 3，不改并说明 0，未回应 0）。"
+      }
+    ],
+    "effectiveAgentId": "geo-content",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1145119,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash",
+    "deliverables": [
+      {
+        "id": "geo-content",
+        "capability": "geo-content",
+        "status": "delivered",
+        "attempts": 2,
+        "lastVerdict": "pass"
+      }
+    ],
+    "usage": {
+      "requests": 164,
+      "inputTokens": 29058275,
+      "cachedInputTokens": 28822784,
+      "outputTokens": 135692,
+      "costCny": 2.192938
+    }
+  },
+  "gateRuns": [
+    {
+      "attempt": 1,
+      "at": "2026-09-25T18:38:15.955Z",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoProbeRounds": 0,
+        "geoMeasuredRounds": 0,
+        "geoFailedRounds": 0,
+        "geoUnreadableLedgerLines": 0,
+        "geoPlatformsMeasured": [],
+        "geoQuestionsMeasured": 0,
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "card": 1,
+          "deep": 1,
+          "qa": 2,
+          "popular": 1
+        },
+        "geoArticlesSafetyOpen": 0
+      }
+    },
+    {
+      "attempt": 2,
+      "at": "2026-09-25T18:42:22.156Z",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoProbeRounds": 0,
+        "geoMeasuredRounds": 0,
+        "geoFailedRounds": 0,
+        "geoUnreadableLedgerLines": 0,
+        "geoPlatformsMeasured": [],
+        "geoQuestionsMeasured": 0,
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "card": 1,
+          "deep": 1,
+          "qa": 2,
+          "popular": 1
+        },
+        "geoArticlesSafetyOpen": 0
+      }
+    }
+  ],
+  "regate": {
+    "at": "2026-09-28",
+    "what": "packages/domain runGate('geo-content-pack') over the copied deliverable, release 76962a63df30 code.",
+    "atRelease76962a63df30": {
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "geoArticles": 5,
+        "geoArticlesByLayer": {
+          "card": 1,
+          "deep": 1,
+          "qa": 2,
+          "popular": 1
+        }
+      }
+    }
+  },
+  "platformOutcome": {
+    "articles": "Five articles registered in evimed_geo.articles with gate passed, safety clear, status publishable.",
+    "step": "Step 6 (content) moved to done; schedule mark run:content:1 done.",
+    "independentReview": "review_summary: 3 findings, 3 fixed."
+  },
+  "copiedFiles": {
+    "verifiedBy": "The five article files' sha256 equal the contentSha256 this run registered for them in evimed_geo.articles. The other eight files were last written before the run's final accepted gate (2026-09-25T18:42:22Z). The run's own receipt was overwritten by later runs.",
+    "files": [
+      {
+        "path": "deliverables/geo-content/geo-content.md",
+        "sha256": "757df080eb6f5eabe11e6b2189e3aaa0fba2feac960e193d2d667c981ae6760f",
+        "bytes": 11321
+      },
+      {
+        "path": "deliverables/geo-content/articles.json",
+        "sha256": "3bc6e916a1fdbf82cb7c06b4a22605785442a760738a7b0cb0c9d1ded4ac76ed",
+        "bytes": 10699
+      },
+      {
+        "path": "deliverables/geo-content/revision-notes.md",
+        "sha256": "ae37a5a58acd512c415ce80e7dc57e2aae929c723f0466cc55e7ac877aa7e009",
+        "bytes": 5709
+      },
+      {
+        "path": "deliverables/geo-content/articles/maz-bmi-eligibility-qa.md",
+        "sha256": "89c5a952a45c2807dcaf4ac7e68b9e869a0c32b44eb2fd0ebb9c1b00a143d370",
+        "bytes": 1410
+      },
+      {
+        "path": "deliverables/geo-content/articles/maz-contraindications-redflags-popular.md",
+        "sha256": "598a2c10595a8a4659e4bd2005bb4038197bcf8a91ecd8c95b9d9b43b69e36e7",
+        "bytes": 6105
+      },
+      {
+        "path": "deliverables/geo-content/articles/maz-identity-spec-card.md",
+        "sha256": "ee3b5ba3043089deed12475f62d50a3aaf38fa140419a0f38e998d8b6501cb7e",
+        "bytes": 6114
+      },
+      {
+        "path": "deliverables/geo-content/articles/maz-price-access-qa.md",
+        "sha256": "d5b16639958cf0ee1b7b7ff551381f860397e2e69e1df095a37a0ffd8e808871",
+        "bytes": 1360
+      },
+      {
+        "path": "deliverables/geo-content/articles/maz-vs-semaglutide-tirzepatide-deep.md",
+        "sha256": "a7dc706d6674157a893603804e6992b866e52a8e4a9fb31e20c2514fad4434c8",
+        "bytes": 11435
+      },
+      {
+        "path": "deliverables/geo-content/records/maz-bmi-eligibility-qa.md",
+        "sha256": "c7cab8349a5204567601dc49f7e991f314a28a3c59dbcdd623280f600cd0f42c",
+        "bytes": 4304
+      },
+      {
+        "path": "deliverables/geo-content/records/maz-contraindications-redflags-popular.md",
+        "sha256": "baec22671a86f3840945340f452ae7a5c6649b4d82a7fdb60a4662c6e5a5b200",
+        "bytes": 5395
+      },
+      {
+        "path": "deliverables/geo-content/records/maz-identity-spec-card.md",
+        "sha256": "da84ba21a3b224b6301d3d9cbba0c8e5706840282537428a333b1fe9d9d07ea7",
+        "bytes": 5330
+      },
+      {
+        "path": "deliverables/geo-content/records/maz-price-access-qa.md",
+        "sha256": "1b14f3d226f65e28cf3004e7c566adaa9eda49b569d12a59e7ac1d2086d3c550",
+        "bytes": 4968
+      },
+      {
+        "path": "deliverables/geo-content/records/maz-vs-semaglutide-tirzepatide-deep.md",
+        "sha256": "9828c7d1ef5d1cff37bd6a90ef48a225464de0fc00bb8b57f001e47f1d60759a",
+        "bytes": 5559
+      }
+    ]
+  },
+  "notCopied": []
+}

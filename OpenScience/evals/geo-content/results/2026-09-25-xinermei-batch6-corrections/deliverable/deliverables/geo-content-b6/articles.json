@@ -1,0 +1,213 @@
+{
+ "minimal": false,
+ "articles": [
+  {
+   "id": "correction-suicidal-ideation-kimi",
+   "layer": "correction",
+   "title": "更正请求：有自杀企图史或有自杀意念者「应避免使用」玛仕度肽，不是「需谨慎评估」",
+   "question": "玛仕度肽的禁忌人群有哪些？",
+   "questionId": "gq_cad6fb02c50b4b88ac399d781651385b",
+   "errorId": "ge_c4de7529cc66d69da7f5049184d92754",
+   "engine": "kimi",
+   "groupKey": null,
+   "groupId": null,
+   "claimKeys": [
+    "MAZ-AE-08",
+    "MAZ-CTR-01"
+   ],
+   "claimIds": [
+    "gcl_65486fc235809be9b9fe6300605474d0",
+    "gcl_df5a1e713358022a033e7d842df2893d"
+   ],
+   "path": "articles/correction-suicidal-ideation-kimi.md",
+   "recordPath": "records/correction-suicidal-ideation-kimi.md",
+   "audience": "发布该错误说法的回答渠道与平台编辑（纠错材料，不含推广内容）",
+   "channel": "向该回答渠道/平台提交的更正材料（不投放于公众渠道）",
+   "author": "待甲方提供（专业医学编辑署名与资质）",
+   "reviewer": "待甲方提供（医学审核人署名）",
+   "updatedAt": "2026-09-25",
+   "safety": {
+    "status": "clear",
+    "findings": [],
+    "note": "clear 的含义是材料内安全与事实内容与 2026-09-25 逐字核对的两类来源一致：说明书正文转录页（信尔美 4mg，国药准字 H20250037，https://www.315jiage.cn/n584320 ，第三方公开转录页，非官方原件）与两篇试验的 PubMed 摘要（PMID 40421736、PMID 42251595，全文均非开放获取）；尚未对国家药监局官方说明书原件核验，取得可读的官方页面后应替换引用、重核并升版。"
+   },
+   "contentSha256": "b301f2793ada1068fd34a143217218ae5fda6f80d5f6854b24bd4ee30222ea0d"
+  },
+  {
+   "id": "correction-not-applicable-populations-qianwen",
+   "layer": "correction",
+   "title": "更正请求：把四类人群并成一句「不适用」，会把禁用、不得使用、尚无研究数据与未获批混为一谈",
+   "question": "玛仕度肽是什么？",
+   "questionId": "gq_11a9c2489cf83c6346aeddc16a64d71e",
+   "errorId": "ge_5809aa6823504e54f051f31d4ed96901",
+   "engine": "qianwen",
+   "groupKey": null,
+   "groupId": null,
+   "claimKeys": [
+    "MAZ-SP-01",
+    "MAZ-SP-02",
+    "MAZ-SP-04",
+    "MAZ-SP-05",
+    "MAZ-CTR-01"
+   ],
+   "claimIds": [
+    "gcl_97811cd31970a0044bc944b930ce4257",
+    "gcl_1977e4f0cffa44a6074f6517de47c576",
+    "gcl_76ecf4ef6dc9581247a7f38888c64621",
+    "gcl_2afe4623cbfb70a47d970b6e1d1bfc0b",
+    "gcl_df5a1e713358022a033e7d842df2893d"
+   ],
+   "path": "articles/correction-not-applicable-populations-qianwen.md",
+   "recordPath": "records/correction-not-applicable-populations-qianwen.md",
+   "audience": "发布该错误说法的回答渠道与平台编辑（纠错材料，不含推广内容）",
+   "channel": "向该回答渠道/平台提交的更正材料（不投放于公众渠道）",
+   "author": "待甲方提供（专业医学编辑署名与资质）",
+   "reviewer": "待甲方提供（医学审核人署名）",
+   "updatedAt": "2026-09-25",
+   "safety": {
+    "status": "clear",
+    "findings": [],
+    "note": "clear 的含义是材料内安全与事实内容与 2026-09-25 逐字核对的两类来源一致：说明书正文转录页（信尔美 4mg，国药准字 H20250037，https://www.315jiage.cn/n584320 ，第三方公开转录页，非官方原件）与两篇试验的 PubMed 摘要（PMID 40421736、PMID 42251595，全文均非开放获取）；尚未对国家药监局官方说明书原件核验，取得可读的官方页面后应替换引用、重核并升版。"
+   },
+   "contentSha256": "960af0c40e1025b4ca96b4d320642eaa71f83492d8997220a5ae96b7e304346b"
+  },
+  {
+   "id": "correction-glory-numbers-qianwen",
+   "layer": "correction",
+   "title": "更正请求：GLORY-1 第 48 周写的是 14.01% 与 11.00%，GLORY-2 第 60 周写的是 16.65%——不是 14.84%、12.05% 与 18.55%",
+   "question": "玛仕度肽是什么？",
+   "questionId": "gq_11a9c2489cf83c6346aeddc16a64d71e",
+   "errorId": "ge_5aa524ba2eb3473fda8426a99877af9a",
+   "engine": "qianwen",
+   "groupKey": null,
+   "groupId": null,
+   "claimKeys": [
+    "MAZ-EFF-04",
+    "MAZ-EFF-03",
+    "MAZ-EFF-05",
+    "MAZ-EFF-01",
+    "MAZ-EFF-08",
+    "MAZ-OFF-01",
+    "MAZ-DOS-02",
+    "MAZ-IND-01"
+   ],
+   "claimIds": [
+    "gcl_71eb328fb59908c385ea058a74265b7b",
+    "gcl_116a35284ae0e915fa3e34e8326b0d9b",
+    "gcl_2aae408b1c56e8d34f7779bb02dd50ba",
+    "gcl_3173beda3077c5d30eb79591ecf5bf08",
+    "gcl_220833cf5de9284da834f53d5d6b8ada",
+    "gcl_89fa0885a0ef761c25d2282bf20a9e55",
+    "gcl_42e21e8faab391a7246118063b870f41",
+    "gcl_e3a0dd18bf5a675c69cb23b62e66ce2e"
+   ],
+   "path": "articles/correction-glory-numbers-qianwen.md",
+   "recordPath": "records/correction-glory-numbers-qianwen.md",
+   "audience": "发布该错误说法的回答渠道与平台编辑（纠错材料，不含推广内容）",
+   "channel": "向该回答渠道/平台提交的更正材料（不投放于公众渠道）",
+   "author": "待甲方提供（专业医学编辑署名与资质）",
+   "reviewer": "待甲方提供（医学审核人署名）",
+   "updatedAt": "2026-09-25",
+   "safety": {
+    "status": "clear",
+    "findings": [],
+    "note": "clear 的含义是材料内安全与事实内容与 2026-09-25 逐字核对的两类来源一致：说明书正文转录页（信尔美 4mg，国药准字 H20250037，https://www.315jiage.cn/n584320 ，第三方公开转录页，非官方原件）与两篇试验的 PubMed 摘要（PMID 40421736、PMID 42251595，全文均非开放获取）；尚未对国家药监局官方说明书原件核验，取得可读的官方页面后应替换引用、重核并升版。"
+   },
+   "contentSha256": "73cdb662c5f4f422937f844deac30a7d4fa9bef68ade8e13aaa7e81ca7195d43"
+  },
+  {
+   "id": "correction-glory2-9mg-deepseek",
+   "layer": "correction",
+   "title": "更正请求：GLORY-2 第 60 周的平均降幅是 16.65%，不是 18.55%；「不合并 2 型糖尿病者 20.08%」在可核验来源里查不到",
+   "question": "玛仕度肽是什么？",
+   "questionId": "gq_11a9c2489cf83c6346aeddc16a64d71e",
+   "errorId": "ge_5e2f2fd4015bd48cfe67961eed91efb3",
+   "engine": "deepseek",
+   "groupKey": null,
+   "groupId": null,
+   "claimKeys": [
+    "MAZ-OFF-01",
+    "MAZ-OFF-02",
+    "MAZ-OFF-03",
+    "MAZ-OFF-04",
+    "MAZ-OFF-05",
+    "MAZ-DOS-02",
+    "MAZ-IND-01"
+   ],
+   "claimIds": [
+    "gcl_89fa0885a0ef761c25d2282bf20a9e55",
+    "gcl_c842086fc5b61867b334b583f71f22ab",
+    "gcl_7931fa0b11d5e80ad99a5421a29b5bd7",
+    "gcl_438d043f0c165883870b0c98baedc031",
+    "gcl_5a07fbfc16119f6404952cf4aef2bbaa",
+    "gcl_42e21e8faab391a7246118063b870f41",
+    "gcl_e3a0dd18bf5a675c69cb23b62e66ce2e"
+   ],
+   "path": "articles/correction-glory2-9mg-deepseek.md",
+   "recordPath": "records/correction-glory2-9mg-deepseek.md",
+   "audience": "发布该错误说法的回答渠道与平台编辑（纠错材料，不含推广内容）",
+   "channel": "向该回答渠道/平台提交的更正材料（不投放于公众渠道）",
+   "author": "待甲方提供（专业医学编辑署名与资质）",
+   "reviewer": "待甲方提供（医学审核人署名）",
+   "updatedAt": "2026-09-25",
+   "safety": {
+    "status": "clear",
+    "findings": [],
+    "note": "clear 的含义是材料内安全与事实内容与 2026-09-25 逐字核对的两类来源一致：说明书正文转录页（信尔美 4mg，国药准字 H20250037，https://www.315jiage.cn/n584320 ，第三方公开转录页，非官方原件）与两篇试验的 PubMed 摘要（PMID 40421736、PMID 42251595，全文均非开放获取）；尚未对国家药监局官方说明书原件核验，取得可读的官方页面后应替换引用、重核并升版。"
+   },
+   "contentSha256": "6b360445fb0fa9f8754ffad4282d5a3223d56ed357876d42f440a26092e90735"
+  },
+  {
+   "id": "correction-glory1-48week-deepseek",
+   "layer": "correction",
+   "title": "更正请求：GLORY-1 第 48 周 4mg 组是 11.00%、6mg 组是 14.01%，不是 12.05% 与 14.84%",
+   "question": "玛仕度肽是什么？",
+   "questionId": "gq_11a9c2489cf83c6346aeddc16a64d71e",
+   "errorId": "ge_8ab30ea71dc3582ef75285579a0e14d0",
+   "engine": "deepseek",
+   "groupKey": null,
+   "groupId": null,
+   "claimKeys": [
+    "MAZ-EFF-04",
+    "MAZ-EFF-02",
+    "MAZ-EFF-01",
+    "MAZ-EFF-08",
+    "MAZ-DOS-02",
+    "MAZ-IND-01"
+   ],
+   "claimIds": [
+    "gcl_71eb328fb59908c385ea058a74265b7b",
+    "gcl_ecae35ceb0ad02fb4312e43014f2425a",
+    "gcl_3173beda3077c5d30eb79591ecf5bf08",
+    "gcl_220833cf5de9284da834f53d5d6b8ada",
+    "gcl_42e21e8faab391a7246118063b870f41",
+    "gcl_e3a0dd18bf5a675c69cb23b62e66ce2e"
+   ],
+   "path": "articles/correction-glory1-48week-deepseek.md",
+   "recordPath": "records/correction-glory1-48week-deepseek.md",
+   "audience": "发布该错误说法的回答渠道与平台编辑（纠错材料，不含推广内容）",
+   "channel": "向该回答渠道/平台提交的更正材料（不投放于公众渠道）",
+   "author": "待甲方提供（专业医学编辑署名与资质）",
+   "reviewer": "待甲方提供（医学审核人署名）",
+   "updatedAt": "2026-09-25",
+   "safety": {
+    "status": "clear",
+    "findings": [],
+    "note": "clear 的含义是材料内安全与事实内容与 2026-09-25 逐字核对的两类来源一致：说明书正文转录页（信尔美 4mg，国药准字 H20250037，https://www.315jiage.cn/n584320 ，第三方公开转录页，非官方原件）与两篇试验的 PubMed 摘要（PMID 40421736、PMID 42251595，全文均非开放获取）；尚未对国家药监局官方说明书原件核验，取得可读的官方页面后应替换引用、重核并升版。"
+   },
+   "contentSha256": "043178f00d4ad7ed9f3cb5485fded9fe35d74db5a22263e3c8b8ae3a59073d0f"
+  }
+ ],
+ "assumptions": [
+  "题面点名的 5 条全部是纠错材料，故本批 5 篇均为纠错材料层（correction）；题面未点名任何主战场语义群，本批不写语义群稿件。",
+  "纠错材料的判型与确认沿用平台已有判定：5 条错误的台账状态均为 open，本批只写更正材料，不做复问、不复测、不关闭。",
+  "纠错材料不绑语义群：question 字段填被更正答案当时回答的问句原文（用于溯源，不是绑定的测量问句组），groupKey 与 groupId 留空（与第 3、4、5 批纠错材料一致）。",
+  "说明书事实取自 2026-09-25 逐字核对的说明书正文页（信尔美 4mg，国药准字 H20250037，信达生物制药(苏州)有限公司）；该页为第三方公开转录页，尚未取得可读的国家药监局官方原件。",
+  "GLORY-1 与 GLORY-2 的事实以本项目留存的 PubMed 摘要为可核验层级（PMID 40421736、PMID 42251595）；两篇论文全文均非开放获取，摘要层面没有的数字不做推断，按「本项目可核验来源查不到」写。",
+  "为支撑本批引入的 GLORY-2 设计与结果口径，本批向主张库补登记 5 条主张：MAZ-EFF-08（GLORY-1 主要终点与估计目标）、MAZ-OFF-02（GLORY-2 设计与人群体样）、MAZ-OFF-03（分析集与样本构成）、MAZ-OFF-04（第 60 周减重≥5% 共同主要终点）、MAZ-OFF-05（随机比例、剂量与疗程）；引文逐字取自对应摘要。",
+  "撰写与医学审核署名不在题面与项目资料中，按方法不编人名，写「待甲方提供」。",
+  "纠错材料属公文体例，按表达优化方法不作文风改写：受保护片段比对登记为同一份文件逐字节一致。",
+  "登记按题面送 path、layer、groupId、claimIds、gate、safety、contentSha256；gate 取本交付物提交时的门禁裁定。",
+  "测量、复测与错误关闭由平台执行，本运行不做任何批量探测。"
+ ]
+}

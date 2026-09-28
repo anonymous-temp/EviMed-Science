@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "runId": "run_7ce89c98b111f68a0b287bddec823721",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "entries": [
+    {
+      "deliverableId": "method-candidate",
+      "contractKind": "method-candidate",
+      "capability": "method-distillation",
+      "files": [
+        {
+          "path": "deliverables/method-candidate/SKILL.md",
+          "sha256": "8067d151301769adeb6d4ccb47359deef7e7164ed101676a0376b0f2ea5d5bc8",
+          "bytes": 13458
+        },
+        {
+          "path": "deliverables/method-candidate/method-candidate.json",
+          "sha256": "35c55185cc9ad39a7e1778ba7a6f1335720b0625b9a36fde045f9baceb3ef501",
+          "bytes": 7211
+        },
+        {
+          "path": "deliverables/method-candidate/distillation-notes.md",
+          "sha256": "985a902e5ad95fc9af46388c13e9fc1a87ecc558409092fd656062181aa4f07b",
+          "bytes": 10024
+        }
+      ],
+      "acceptedAt": "2026-09-27T09:19:32.945Z",
+      "attempt": 2,
+      "notices": []
+    }
+  ]
+}

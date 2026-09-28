@@ -1,0 +1,273 @@
+{
+  "minimal": false,
+  "articles": [
+    {
+      "id": "maz-identity-spec-card",
+      "layer": "card",
+      "title": "信尔美和玛仕度肽是同一个药吗？有几个规格？",
+      "question": "信尔美和玛仕度肽是同一个药吗？有几个规格？",
+      "groupKey": "P1-01",
+      "claimKeys": [
+        "MAZ-ID-01",
+        "MAZ-ID-02",
+        "MAZ-ID-03",
+        "MAZ-ID-04",
+        "MAZ-ID-05",
+        "MAZ-IND-01",
+        "MAZ-IND-02",
+        "MAZ-IND-03",
+        "MAZ-MOA-01",
+        "MAZ-CTR-01",
+        "MAZ-WRN-01",
+        "MAZ-WRN-02",
+        "MAZ-SP-01",
+        "MAZ-SP-02",
+        "MAZ-SP-03",
+        "MAZ-SP-05",
+        "MAZ-AE-01",
+        "MAZ-AE-03",
+        "MAZ-AE-04",
+        "MAZ-AE-05",
+        "MAZ-AE-08",
+        "MAZ-AE-11",
+        "MAZ-STO-01",
+        "MAZ-STO-02",
+        "MAZ-STO-03",
+        "CMP-01"
+      ],
+      "path": "articles/maz-identity-spec-card.md",
+      "recordPath": "records/maz-identity-spec-card.md",
+      "audience": "药师、临床医生等专业读者（处方药产品内容进专业渠道）",
+      "channel": "专业渠道与自有官网；公众渠道仅可使用其中的说明书安全信息与疾病教育内容",
+      "author": "待甲方提供（专业医学编辑署名与资质）",
+      "reviewer": "待甲方提供（医学审核人署名）",
+      "updatedAt": "2026-09-25",
+      "safety": {
+        "status": "clear",
+        "findings": []
+      }
+    },
+    {
+      "id": "maz-vs-semaglutide-tirzepatide-deep",
+      "layer": "deep",
+      "title": "玛仕度肽和司美格鲁肽、替尔泊肽有什么区别？",
+      "question": "玛仕度肽和司美格鲁肽、替尔泊肽有什么区别？",
+      "groupKey": "P1-03",
+      "claimKeys": [
+        "MAZ-MOA-01",
+        "MAZ-IND-01",
+        "MAZ-IND-03",
+        "MAZ-CTR-01",
+        "MAZ-SP-01",
+        "MAZ-SP-02",
+        "MAZ-SP-03",
+        "MAZ-SP-05",
+        "MAZ-DOS-02",
+        "MAZ-AE-01",
+        "MAZ-AE-02",
+        "MAZ-AE-03",
+        "MAZ-AE-04",
+        "MAZ-AE-05",
+        "MAZ-AE-07",
+        "MAZ-AE-08",
+        "MAZ-AE-12",
+        "MAZ-AE-13",
+        "MAZ-CLIN-03",
+        "MAZ-CLIN-04",
+        "MAZ-EFF-01",
+        "MAZ-EFF-02",
+        "MAZ-EFF-03",
+        "MAZ-EFF-04",
+        "MAZ-EFF-05",
+        "MAZ-EFF-06",
+        "MAZ-EFF-07",
+        "CMP-01",
+        "CMP-02",
+        "CMP-03",
+        "CMP-04",
+        "CMP-05",
+        "MAZ-GL-01",
+        "MAZ-GL-02",
+        "MAZ-GL-03",
+        "MAZ-GL-14"
+      ],
+      "path": "articles/maz-vs-semaglutide-tirzepatide-deep.md",
+      "recordPath": "records/maz-vs-semaglutide-tirzepatide-deep.md",
+      "audience": "医生、药师、医学事务等专业读者",
+      "channel": "专业渠道（学术与专业媒体）；其中比较部分不得作为面向公众的推广内容",
+      "author": "待甲方提供（专业医学编辑署名与资质）",
+      "reviewer": "待甲方提供（医学审核人署名）",
+      "updatedAt": "2026-09-25",
+      "safety": {
+        "status": "clear",
+        "findings": []
+      }
+    },
+    {
+      "id": "maz-bmi-eligibility-qa",
+      "layer": "qa",
+      "title": "BMI 多少才能用玛仕度肽？",
+      "question": "BMI 多少才能用玛仕度肽？",
+      "groupKey": "P2-03",
+      "claimKeys": [
+        "MAZ-IND-01",
+        "MAZ-CTR-01",
+        "MAZ-SP-01",
+        "MAZ-SP-02",
+        "MAZ-SP-03",
+        "MAZ-SP-05",
+        "MAZ-EFF-01",
+        "MAZ-EFF-02"
+      ],
+      "path": "articles/maz-bmi-eligibility-qa.md",
+      "recordPath": "records/maz-bmi-eligibility-qa.md",
+      "audience": "患者与家属（公众层）",
+      "channel": "公众科普与问答渠道；只讲说明书适应症与安全信息，不出现推广、购买链接与联系方式",
+      "author": "待甲方提供（专业医学编辑署名与资质）",
+      "reviewer": "待甲方提供（医学审核人署名）",
+      "updatedAt": "2026-09-25",
+      "safety": {
+        "status": "clear",
+        "findings": []
+      }
+    },
+    {
+      "id": "maz-contraindications-redflags-popular",
+      "layer": "popular",
+      "title": "玛仕度肽有哪些禁忌人群？出现什么情况必须就医？",
+      "question": "玛仕度肽有哪些禁忌人群？出现什么情况必须就医？",
+      "groupKey": "P4-04",
+      "claimKeys": [
+        "MAZ-CTR-01",
+        "MAZ-WRN-01",
+        "MAZ-WRN-02",
+        "MAZ-WRN-04",
+        "MAZ-SP-01",
+        "MAZ-SP-02",
+        "MAZ-SP-03",
+        "MAZ-SP-05",
+        "MAZ-INT-01",
+        "MAZ-AE-01",
+        "MAZ-AE-02",
+        "MAZ-AE-03",
+        "MAZ-AE-04",
+        "MAZ-AE-05",
+        "MAZ-AE-07",
+        "MAZ-AE-08",
+        "MAZ-AE-10",
+        "MAZ-AE-11",
+        "MAZ-AE-12",
+        "MAZ-AE-13",
+        "MAZ-AE-14",
+        "MAZ-OD-01",
+        "MAZ-OD-02",
+        "MAZ-ID-05"
+      ],
+      "path": "articles/maz-contraindications-redflags-popular.md",
+      "recordPath": "records/maz-contraindications-redflags-popular.md",
+      "audience": "患者与家属（公众层）",
+      "channel": "公众科普渠道；只做说明书安全信息与疾病教育，不出现推广、购买链接与联系方式",
+      "author": "待甲方提供（专业医学编辑署名与资质）",
+      "reviewer": "待甲方提供（医学审核人署名）",
+      "updatedAt": "2026-09-25",
+      "safety": {
+        "status": "clear",
+        "findings": []
+      }
+    },
+    {
+      "id": "maz-price-access-qa",
+      "layer": "qa",
+      "title": "玛仕度肽一盒多少钱，一个月大概花多少？",
+      "question": "玛仕度肽一盒多少钱，一个月大概花多少？",
+      "groupKey": "P1-02",
+      "claimKeys": [
+        "MAZ-ID-01",
+        "MAZ-ID-02",
+        "MAZ-ID-03",
+        "MAZ-ID-04",
+        "MAZ-DOS-01",
+        "MAZ-STO-01",
+        "MAZ-STO-02",
+        "MAZ-STO-03"
+      ],
+      "path": "articles/maz-price-access-qa.md",
+      "recordPath": "records/maz-price-access-qa.md",
+      "audience": "患者与家属、以及回答用药咨询的药师（公众层，价格与医保部分只写未核实）",
+      "channel": "公众科普与问答渠道；只写说明书事实与官方查询入口，不出现购买链接、联系方式与价格口径",
+      "author": "待甲方提供（专业医学编辑署名与资质）",
+      "reviewer": "待甲方提供（医学审核人署名）",
+      "updatedAt": "2026-09-25",
+      "safety": {
+        "status": "clear",
+        "findings": []
+      }
+    }
+  ],
+  "assumptions": [
+    {
+      "field": "本批篇目",
+      "value": "题面指定的 5 个语义群各写 1 篇，共 5 篇，达到本批上限",
+      "reason": "题面写明「这一批最多 5 篇，先写主战场语义群」并逐条列出 5 个语义群",
+      "basis": "本轮题面",
+      "howToChange": "下一批按剩余语义群与纠错材料继续",
+      "affects": "articles.json 与 geo-content.md 的篇目清单"
+    },
+    {
+      "field": "纠错材料留到下一批",
+      "value": "本批不写纠错材料；诊断产出的 44 条讲错我方（S3 4 条、S2 29 条、S1 11 条）留到纠错流程发出覆盖简报后另批产出",
+      "reason": "本批 5 个名额已由题面指定的 5 个语义群占满，且方法规定纠错覆盖稿按覆盖简报写、S3 以上优先",
+      "basis": "题面 + 项目诊断的 errors",
+      "howToChange": "收到覆盖简报后按问句逐条写覆盖稿",
+      "affects": "下一批内容计划"
+    },
+    {
+      "field": "受众通道",
+      "value": "5 篇均含本品说明书事实，按处方药规则以专业渠道为主；其中 P2-03 与 P4-04 为说明书安全信息与疾病教育，可用于公众渠道，且不放购买链接",
+      "reason": "处方药产品内容只进专业渠道，公众层只做疾病教育与说明书安全口径",
+      "basis": "渠道合规规则与项目信源布局",
+      "howToChange": "甲方合规政策不同时按甲方政策重标通道",
+      "affects": "articles.json 的 audience 与 channel 字段"
+    },
+    {
+      "field": "署名与审核人",
+      "value": "author 与 reviewer 写「待甲方提供」占位，不编造人名",
+      "reason": "题面与项目资料中没有作者、资质与医学审核人信息；方法规定不许编人名",
+      "basis": "方法规定",
+      "howToChange": "甲方提供署名与资质后替换，并补齐发布主体与广审号需求",
+      "affects": "articles.json 与各篇正文末尾的署名行"
+    },
+    {
+      "field": "价格与医保口径",
+      "value": "不写具体价格与报销结论；按证据空白 GAP-03 处理为「未从官方目录文件核实」",
+      "reason": "主张库无价格主张，官方目录未取得一手文件；说明书未载价格",
+      "basis": "项目证据空白 GAP-03",
+      "howToChange": "取得官方定价或医保目录文件后按新证据改写并把该条升为可核实主张",
+      "affects": "P1-02 篇全文与 articles.json 的 claimKeys"
+    },
+    {
+      "field": "推算式",
+      "value": "「一盒约覆盖 2 周、一个月约需 2 盒」标为推算，写明输入、方法、假设与敏感性",
+      "reason": "规格与给药频次是说明书事实，盒数不是说明书文字，属本稿推算",
+      "basis": "规格主张 + 用法主张",
+      "howToChange": "有实际处方用量数据时改用实际用量",
+      "affects": "P1-02 篇正文"
+    },
+    {
+      "field": "说明书核对页",
+      "value": "说明书正文以公开转录页逐字核对，正文中标注为转录页并说明不是购买渠道",
+      "reason": "国家药监局站点对本部署的读取方式返回 JavaScript 挑战，无法取得官方页面快照；转录页是本项目第 1 步核对说明书事实时实际读到的页面",
+      "basis": "本轮读取记录与项目主张库的 sourceRef",
+      "howToChange": "取得可读的官方说明书页面或纸质说明书扫描件后替换引用",
+      "affects": "5 篇的出处小节与工作记录"
+    },
+    {
+      "field": "安全判定",
+      "value": "5 篇 safety 均为 clear：稿中安全内容逐句照录说明书，未发现无法解释或与说明书冲突的临床安全发现",
+      "reason": "实测讲错我方中的安全类说法（禁忌范围、停药时间、BMI 门槛）均能在说明书中找到明确对错依据",
+      "basis": "说明书禁忌与注意事项章节、项目 errors",
+      "howToChange": "若审评或甲方提出无法在说明书中闭合的安全问题，该篇改为 safety: open 并交人工",
+      "affects": "articles.json 的 safety 字段"
+    }
+  ]
+}

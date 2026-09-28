@@ -1,0 +1,75 @@
+{
+  "capability": "method-relations",
+  "brief": null,
+  "base": "https://82.156.128.153",
+  "project": "evimed-learning (the account's internal learning project)",
+  "session": "session_9c908e9f6bc62383486ea13e5d9d8b7f",
+  "runId": "run_aba2ab612b912a285dc1b98f6a587c4d",
+  "dispatchId": "method-relations-screen-efe89f5e3f6e3a0ec7e28d5e4a1ae663",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-09-27T05:50:48.150Z",
+  "finishedAt": "2026-09-27T05:53:08.104Z",
+  "surface": "platform-job",
+  "dispatchedBy": "The learning worker's hourly consolidate (sleep) job bb03844b-bba1-45a1-84e5-3e3f5da7d8d5 (2026-09-27T05:50Z), SCREEN step over the account's three learned methods.",
+  "release": "evimed-c07742d02485-1 (PROGRESS.md@2026-09-27 04:50), the release live at 05:50Z.",
+  "prompt": "Screen the pairs in method-relations-input.json with the method-relations capability using action `screen`. For each pair say whether the two methods plausibly describe related work, and drop the ones that merely share vocabulary. Keeping a pair costs a later, more expensive reading; keeping every pair is the same as not screening. You may only judge the pairs you are given — do not propose new ones.",
+  "promptNote": "Rendered by methodConsolidation.mjs (screenPairs), unchanged between 2026-09-27T01:45Z and this branch; the run ledger keeps a truncated copy.",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/method-relations-screen/method-relations.json",
+      "deliverables/method-relations-screen/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [],
+    "effectiveAgentId": "method-relations",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 139954,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash",
+    "deliverables": [
+      {
+        "id": "method-relations-screen",
+        "capability": "method-relations",
+        "status": "delivered",
+        "attempts": 1,
+        "lastVerdict": "pass"
+      }
+    ],
+    "usage": {
+      "requests": 31,
+      "inputTokens": 1511792,
+      "cachedInputTokens": 1461248,
+      "outputTokens": 19382,
+      "costCny": 0.157297
+    }
+  },
+  "platformOutcome": {
+    "job": "consolidate job bb03844b succeeded: screened true, screenDropped 3 — the three candidate pairs were judged not to describe related work, so no DECIDE or BUILD step followed; every hourly sleep since reports screened true, relations 0."
+  },
+  "copiedFiles": {
+    "verifiedBy": "Every copied deliverable file's sha256 equals the digest in the run's own delivery-receipt.json, archived by the learning worker under .openscience/learning-results/method-relations-screen-efe89f5e…/ (accepted 2026-09-27T05:53:00Z, attempt 1, no notices).",
+    "files": [
+      {
+        "path": "delivery-receipt.json",
+        "sha256": "807d3679d18ef9668b5d002993847ce268f4588befa3d62b1ff70d0f7eb397c0",
+        "bytes": 831
+      },
+      {
+        "path": "deliverables/method-relations-screen/method-relations.json",
+        "sha256": "cc7a63aaa4d251389c267c81e2e4345ef7b09932bbebce7a4d0aba581c67279e",
+        "bytes": 3417
+      },
+      {
+        "path": "deliverables/method-relations-screen/revision-notes.md",
+        "sha256": "0aed068cec702f27a0868a6d2b4d2a4ed65d0e21cdd1131711fd917f6bb558dc",
+        "bytes": 6345
+      }
+    ]
+  },
+  "notCopied": [
+    "method-relations-input.json — the run's frozen input (the account's method names and descriptions); not archived by the worker."
+  ]
+}
