@@ -49,6 +49,11 @@ def test_the_plan_decisions_hold(document):
     # read on production on the evening of 2026-09-22 after their first polls failed: the two Google
     # blogs through the Tokyo node, MIT News's AI feed through the browser
     verified_on_production = {"google-deepmind-blog", "google-keyword-ai", "mit-news-ai"}
+    # read from the Tokyo node on 2026-09-28 after Beijing's polls kept timing out (research/probe-2026-09-28.jsonl)
+    verified_on_production |= {json.loads(line)["id"] for line in (ROOT / "registry/research/probe-2026-09-28.jsonl")
+                               .read_text(encoding="utf-8").splitlines()
+                               if line.strip() and json.loads(line)["verdict"] == "feed-ok"}
+    assert "google-health-blog" in verified_on_production
     for s in sources:
         if s["enabled"]:
             assert s["egress"] in model.IMPLEMENTED_EGRESSES and s["access"] in model.IMPLEMENTED_ACCESSES
@@ -75,7 +80,7 @@ def test_the_plan_decisions_hold(document):
                     "cidrap-news", "mit-news-ai", "pubmed-trending-page")
     for sid in browser_read:
         assert by_id[sid]["egress"] == "browser" and by_id[sid]["enabled"], sid
-    for sid in ("google-deepmind-blog", "google-keyword-ai"):
+    for sid in ("google-deepmind-blog", "google-keyword-ai", "google-health-blog"):
         assert by_id[sid]["egress"] == "relay" and by_id[sid]["enabled"], sid
     star = by_id["star-guideline-rating-cn"]
     assert star["poll_floor_s"] == 86400 and star["config"]["max_pages"] == 3           # a daily poll reads 3 pages

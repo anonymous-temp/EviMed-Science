@@ -20363,7 +20363,7 @@
    "lane": "ai",
    "source_type": "company",
    "access": "rss",
-   "egress": "direct",
+   "egress": "relay",
    "authority": 2,
    "safety_feed": false,
    "owner_entity": "Google",

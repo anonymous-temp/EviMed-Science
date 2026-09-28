@@ -844,6 +844,11 @@
   "enabled": true,
   "_why": "Beijing's TLS to Google's blogs is reset or times out (curl exit 35, 2026-09-22); the Tokyo node read the feed with the honest identity the same day"
  },
+ "google-health-blog": {
+  "egress": "relay",
+  "enabled": true,
+  "_why": "the same Google blog host as google-keyword-ai, left on the direct exit: 40 of its 50 polls from Beijing since 2026-09-22 ended timeout or robots_unreachable (TLS reset), 22 of 24 since 2026-09-24; the Tokyo node read the feed 200 with the honest identity, 20 items, on 2026-09-28 (registry/research/probe-2026-09-28.jsonl)"
+ },
  "aga-clinical-guidance": {
   "enabled": false,
   "disabled_reason": "robots_disallow",
