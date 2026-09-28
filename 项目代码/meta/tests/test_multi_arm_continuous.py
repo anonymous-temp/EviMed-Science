@@ -101,6 +101,30 @@ def test_arm_summaries_give_each_multi_arm_row_its_precision_and_shared_control_
     assert effect["variance"] == pytest.approx(252.0 ** 2 / 31 + 336.0 ** 2 / 30)
 
 
+def test_a_derived_covariance_is_re_derived_by_verification_not_looked_for_in_the_source() -> None:
+    """Run 5 of ma-001 (2026-09-28): the verifier asked for a quotation of the
+    shared-control covariance on every multi-arm row and failed each one with
+    numeric_quote_not_anchored. No paper states it; the row's own verified
+    control SD and size determine it."""
+    from new_meta.core.extraction_verification import numeric_fields
+
+    protocol, studies = _protocol(), _studies()
+    reconcile_extracted_rct_designs(protocol, studies)
+    first, second = studies[0].outcomes
+    assert first.covariance_basis == {second.contrast_id: "derived:shared_control_arm_summaries"}
+    fields = numeric_fields(first)
+    assert not any(name.startswith("covariance_with[") for name in fields)
+    assert fields["sd_control"] == 336.0 and fields["n_control"] == 30
+
+    # A value the row does not determine is a number to anchor like any other.
+    first.covariance_with[second.contrast_id] = 1234.5
+    assert f"covariance_with[{second.contrast_id}]" in numeric_fields(first)
+    # And so is a covariance with no recorded derivation.
+    first.covariance_with[second.contrast_id] = 336.0 ** 2 / 30
+    first.covariance_basis = {}
+    assert f"covariance_with[{second.contrast_id}]" in numeric_fields(first)
+
+
 def test_a_mismatched_control_summary_leaves_the_dependency_unresolved() -> None:
     protocol, studies = _protocol(), _studies()
     studies[0].outcomes[1].sd_control = 335.0  # not the same control arm as reported

@@ -37,7 +37,12 @@ NUMERIC_MAP_FIELDS = tuple(name for name, schema in _PROPERTIES.items()
                            if schema.get("type") == "object" and _numeric_schema(schema.get("additionalProperties", {})))
 
 CHECKER_HIDDEN_FIELDS = frozenset({"primary_analysis_alignment", "source_quote_verified", "source_quote_match",
-    "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication", "override_revision"})
+    "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication", "override_revision",
+    "covariance_basis"})
+#: Covariance entries this code derives rather than reads (see
+#: rct_design_reconciliation): no source states them, so none can be quoted.
+#: Each is re-derived from its own row instead, and verified only by that.
+_DERIVED_COVARIANCE_BASIS = "derived:shared_control_arm_summaries"
 REFINABLE_FIELDS = frozenset(NUMERIC_FIELDS) | frozenset(NUMERIC_MAP_FIELDS) | {
     "source_quote", "source_location", "source_page", "source_section", "reported_effect_measure",
     "reported_effect_scale", "reported_effect_adjusted", "adjustment_covariates",
@@ -48,8 +53,23 @@ def numeric_fields(outcome: OutcomeData) -> dict[str, int | float]:
     values = {name: getattr(outcome, name) for name in NUMERIC_FIELDS
               if getattr(outcome, name, None) is not None}
     for name in NUMERIC_MAP_FIELDS:
-        values.update({f"{name}[{key}]": value for key, value in sorted(getattr(outcome, name, {}).items())})
+        values.update({f"{name}[{key}]": value for key, value in sorted(getattr(outcome, name, {}).items())
+                       if not (name == "covariance_with" and _is_derived_covariance(outcome, key, value))})
     return values
+
+
+def _is_derived_covariance(outcome: OutcomeData, key: str, value: float) -> bool:
+    """A shared-control MD covariance that equals SD_c^2 / n_c of this very row.
+
+    Any other value, or the same value without the derivation recorded, stays a
+    numeric field that has to be anchored in the source like every other one.
+    """
+    if outcome.covariance_basis.get(key) != _DERIVED_COVARIANCE_BASIS:
+        return False
+    if outcome.sd_control is None or outcome.n_control is None or float(outcome.n_control) <= 1:
+        return False
+    expected = float(outcome.sd_control) ** 2 / float(outcome.n_control)
+    return math.isclose(float(value), expected, rel_tol=1e-9, abs_tol=1e-12)
 
 
 def validate_data_issues(study: ExtractedStudy, indices: list[int], issues: list[ExtractionDataIssue],

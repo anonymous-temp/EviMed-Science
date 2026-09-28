@@ -26,6 +26,7 @@ _COUNT_MEASURES = {"OR", "RR", "RD"}
 #: (mean, SD, n per arm). Only MD: its shared-control covariance is exact
 #: (the control mean's variance, SD_c^2 / n_c); an SMD's is not.
 _ARM_SUMMARY_MEASURES = {"MD"}
+ARM_SUMMARY_COVARIANCE_BASIS = "derived:shared_control_arm_summaries"
 _REPORTED_RATIO_MEASURES = {"OR", "RR", "HR", "IRR"}
 _Z_975 = 1.959963984540054
 
@@ -199,6 +200,11 @@ def reconcile_extracted_rct_designs(
                     if right.covariance_with.get(left_id) != covariance:
                         right.covariance_with[left_id] = covariance
                         changed = True
+                    if str(protocol.effect_measure or "").upper() in _ARM_SUMMARY_MEASURES:
+                        for row, other in ((left, right_id), (right, left_id)):
+                            if row.covariance_basis.get(other) != ARM_SUMMARY_COVARIANCE_BASIS:
+                                row.covariance_basis[other] = ARM_SUMMARY_COVARIANCE_BASIS
+                                changed = True
 
     return {
         "schema_version": 1,

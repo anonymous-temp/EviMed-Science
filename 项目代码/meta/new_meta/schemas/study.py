@@ -672,6 +672,11 @@ class OutcomeData(BaseModel):
     estimand_id: str = ""
     precision_basis: str = ""
     covariance_with: dict[str, float] = {}
+    # How a covariance entry was obtained, keyed like covariance_with. Only
+    # "derived:shared_control_arm_summaries" exists: written by reconciliation
+    # from this row's own verified control-arm SD and size, and re-derived by
+    # verification instead of being looked for as a quotation it cannot be.
+    covariance_basis: dict[str, str] = {}
     paired_analysis: bool = False
     intracluster_correlation: float | None = None
     mean_cluster_size: float | None = None
