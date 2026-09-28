@@ -96,7 +96,7 @@ test('submission writes the platform record into the snapshot and keeps what the
 test('a link a reader cannot follow is named in the run\'s own gate, where it used to reach only the delivered package', () => {
   const report = [
     '# 评价',
-    '来源见内部记录 http://10.0.0.5:8080/record/1 与 https://user:pw@example.org/x。',
+    '来源见内部记录 http://10.0.0.5:8080/record/1 与 https://reader:placeholder-token@example.org/x。',
     '公开记录 http://example.org/label 可以打开。',
   ].join('\n')
   const files = new Map([['r.md', report]])
