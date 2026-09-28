@@ -43,14 +43,62 @@ import { toSkillName } from "@evimed/harness-port";
 
 import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
 
-/** A mounted learned method's own file, as the `read` tool is handed it. */
-const MOUNTED_METHOD_FILE = /\/(_lm[0-9a-f]{32})\/SKILL\.md$/;
+/** A mounted learned method's own file, as the `read` tool is handed it:
+ *  absolute (`/runtime/capsule-methods/_lm…/SKILL.md`) or relative to the
+ *  methods directory. */
+const MOUNTED_METHOD_FILE = /(?:^|\/)(_lm[0-9a-f]{32})\/SKILL\.md$/;
+
+/** The same file named anywhere inside a shell command. */
+const MOUNTED_METHOD_FILE_IN_COMMAND = /(?:^|[\s/'"=])(_lm[0-9a-f]{32})\/SKILL\.md(?=$|[\s'";|&)<>])/g;
+
+/**
+ * The shell programs that print a file's text, a closed vocabulary. A command
+ * that names a method's file with anything else — `ls`, `wc -l`, `stat`,
+ * `sha256sum` — looked at the file and did not read it. Under-counting a use
+ * costs a method one observation of its harm test; over-counting charges it
+ * with a run it never shaped, which is the worse error.
+ */
+const READING_PROGRAMS = new Set([
+  "cat", "head", "tail", "sed", "awk", "less", "more", "nl", "grep", "egrep", "rg", "cut", "tac", "bat", "python", "python3", "node",
+]);
+
+/**
+ * The mounted methods a shell command read, by directory name.
+ *
+ * Split on the shell's own separators, and each segment judged by the program
+ * it runs (past `sudo`, `env` and leading `VAR=value` assignments). The model
+ * reaches for `bash` as often as for `read`: on the 2026-09-28 production runs
+ * it opened its capability's own method with `wc -l` through the shell and
+ * then read it with `read` — so both tools have to be understood, and `wc -l`
+ * must not be mistaken for the reading.
+ * @param {unknown} command @returns {string[]}
+ */
+export function methodFilesReadByCommand(command) {
+  const text = String(command ?? "");
+  if (!text.includes("/SKILL.md")) return [];
+  /** @type {Set<string>} */
+  const read = new Set();
+  for (const segment of text.split(/&&|\|\||[;|\n]/)) {
+    const directories = [...segment.matchAll(MOUNTED_METHOD_FILE_IN_COMMAND)].map((match) => match[1]);
+    if (!directories.length) continue;
+    const words = segment.trim().split(/\s+/);
+    let index = 0;
+    while (index < words.length && (words[index] === "sudo" || words[index] === "env" || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]))) index += 1;
+    const program = (words[index] ?? "").split("/").pop() ?? "";
+    if (!READING_PROGRAMS.has(program)) continue;
+    for (const directory of directories) read.add(directory);
+  }
+  return [...read];
+}
 
 /**
  * Whether a session used a method: called it through the `skill` tool, or
- * read its mounted file. The plugin lists mounted methods and the model reads
- * the one that applies (2026-09-21: an agent-scoped row cannot register a
- * skill at this pin); a read of the file is the same use a skill call was.
+ * opened its mounted file — with `read`, or with a shell program that prints
+ * it. A learned method reaches the model as a card naming that file
+ * (`packages/socket/src/learnedMethods.mjs`), never as its body, so opening
+ * the file is the model deciding the method applies: the same act a skill call
+ * was in the spec (§8.5), and the one an agent-scoped row can offer at this
+ * pin (2026-09-21).
  * @param {Set<string>} invoked @param {{id?: string, name: string}} method @returns {boolean}
  */
 function usedIn(invoked, method) {
@@ -91,11 +139,17 @@ export function deliverableOutcome(item) {
  * Reads the normalized transcript vocabulary — a completed tool part named
  * `skill` carrying `input.name`. `agentRuns` scans for the same thing one level
  * deeper because it reads ledger messages, which are a different shape of the
- * same facts. A method reaches
- * the model twice: inlined into the child's prompt by the delegation, and
- * registered as a callable skill by the capsule plugin. Only the second leaves
- * a trace, so `invoked` means "the model went and read it deliberately", which
- * is a stronger claim than `loaded` and is why they are separate counters.
+ * same facts. A learned method reaches the model as a card — in the session's
+ * system prompt and in the delegation or inline method block — that names its
+ * file, and the body only when the model opens that file. So `invoked` means
+ * "the model judged it applied and went and read it", which is a stronger claim
+ * than `loaded` and is why they are separate counters.
+ *
+ * Until 2026-09-28 the delegation and the inline method carried every learned
+ * body whole, the model had no reason to open a file it already held, and this
+ * reader found nothing to count: all three approved methods in production were
+ * `loaded` 34 times and `invoked` 0 while the transcripts show the model
+ * working by them (evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json).
  *
  * @param {readonly {sessionId?: string, transcript?: any}[]} sessions
  * @returns {Map<string, Set<string>>}
@@ -120,6 +174,10 @@ export function invokedSkillsBySession(sessions) {
           const target = String(part?.input?.path ?? part?.input?.file_path ?? part?.input?.filePath ?? "");
           const mounted = MOUNTED_METHOD_FILE.exec(target);
           if (mounted) names.add(`file:${mounted[1]}`);
+          continue;
+        }
+        if (part?.tool === "bash") {
+          for (const directory of methodFilesReadByCommand(part?.input?.command ?? part?.input?.cmd)) names.add(`file:${directory}`);
           continue;
         }
         if (part?.tool !== "skill") continue;

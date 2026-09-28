@@ -4,11 +4,13 @@
 // anything it cannot stand behind: no verdict, no evidence; a digest that moved,
 // no evidence; a name that belongs to something else's mount, not ours to count.
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { toSkillName } from "@evimed/harness-port";
 
-import { deliverableOutcome, invokedSkillsBySession, runMethodObservations } from "../src/methodObservations.mjs";
+import { deliverableOutcome, invokedSkillsBySession, methodFilesReadByCommand, runMethodObservations } from "../src/methodObservations.mjs";
 
 const DIGEST_A = `sha256:${"a".repeat(64)}`;
 const DIGEST_B = `sha256:${"b".repeat(64)}`;
@@ -299,4 +301,77 @@ test("a deliverable the root session made itself is attributed to the methods it
   });
   assert.deepEqual(moved.observations, []);
   assert.deepEqual(moved.mismatched, [{ name: "triage", mounted: DIGEST_B, current: DIGEST_A }]);
+});
+
+test("a method file printed through the shell is opened; one only listed, counted or hashed is not", () => {
+  const dir = `_lm${"a".repeat(32)}`;
+  const other = `_lm${"b".repeat(32)}`;
+  const file = `/runtime/capsule-methods/${dir}/SKILL.md`;
+  for (const command of [
+    `cat ${file}`,
+    `sed -n '1,120p' ${file}`,
+    `head -200 "${file}"`,
+    `sudo cat ${file} | head -50`,
+    `cd /runtime/capsule-methods && cat ${dir}/SKILL.md`,
+    `LC_ALL=C grep -n Workflow ${file}`,
+    `python3 -c "print(open('${file}').read())"`,
+  ]) {
+    assert.deepEqual(methodFilesReadByCommand(command), [dir], command);
+  }
+  for (const command of [
+    `wc -l ${file}`,
+    `ls -la /runtime/capsule-methods/${dir}/`,
+    `stat ${file}`,
+    `sha256sum ${file}`,
+    "cat /workspace/notes/SKILL.md",
+    `cat /runtime/capsule-methods/${dir}/SKILL.md.bak`,
+    "",
+    undefined,
+  ]) {
+    assert.deepEqual(methodFilesReadByCommand(command), [], String(command));
+  }
+  assert.deepEqual(methodFilesReadByCommand(`wc -l ${file} && cat /runtime/capsule-methods/${other}/SKILL.md`), [other],
+    "each segment is judged by the program it runs");
+});
+
+test("the 2026-09-28 incident: carrying is not using, and opening the card's file is", async () => {
+  // evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json:
+  // production recorded `loaded` 34 and `invoked` 0 while the model visibly
+  // worked by the inlined methods. The case's scenarios are the production
+  // shape and the card shape; each must attribute exactly what it says.
+  const { learnedMethodDirectoryName } = await import("../src/learnedMethodMount.mjs");
+  const incident = JSON.parse(await readFile(new URL("../../../evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json", import.meta.url), "utf8"));
+  assert.ok(incident.scenarios.length >= 3, "the case carries its scenarios");
+  const digestOf = (/** @type {string} */ name) => `sha256:${Buffer.from(name).toString("hex").padEnd(64, "0").slice(0, 64)}`;
+  const idOf = (/** @type {string} */ name) => `method:learned:${name}`;
+  const fill = (/** @type {string} */ text) => text.replace(/\{([a-z0-9-]+)\}/g, (_, name) => learnedMethodDirectoryName(idOf(name)));
+  for (const scenario of incident.scenarios) {
+    const names = [...new Set([...scenario.mounted, ...(scenario.delegations ?? []).flatMap((/** @type {any} */ entry) => entry.methods)])];
+    const methods = names.map((name) => ({ id: idOf(name), name, digest: digestOf(name) }));
+    const sessions = scenario.sessions.map((/** @type {any} */ entry) => ({
+      sessionId: entry.sessionId,
+      transcript: { messages: entry.tools.map((/** @type {any} */ call, /** @type {number} */ index) => ({ role: "tool", turn: 0, parts: [{
+        type: "tool", tool: call.tool, callId: `c${index}`, status: "completed",
+        input: JSON.parse(fill(JSON.stringify(call.input))), output: "", error: null,
+      }] })) },
+    }));
+    const derived = runMethodObservations({
+      run: { id: "run_incident", sessionId: "root" },
+      projection: {
+        plan: { items: scenario.deliverables },
+        subagents: (scenario.delegations ?? []).map((/** @type {any} */ entry) => ({ deliverableId: entry.deliverableId, childSessionId: entry.childSessionId,
+          methods: entry.methods.map((/** @type {string} */ name) => ({ name, digest: digestOf(name) })) })),
+        mountedMethods: scenario.mounted.map((/** @type {string} */ name) => ({ name, digest: digestOf(name) })),
+      },
+      methods,
+      sessions,
+    });
+    assert.deepEqual(derived.methodsInvoked.map((entry) => entry.name).sort(), [...scenario.expect.invoked].sort(), scenario.name);
+    for (const [name, expected] of Object.entries(scenario.expect.observations)) {
+      const found = derived.observations.filter((entry) => entry.methodId === idOf(name));
+      assert.equal(found.length, 1, `${scenario.name}: one observation for ${name}`);
+      assert.equal(found[0].observation.outcome, /** @type {any} */ (expected).outcome, `${scenario.name}: ${name} outcome`);
+      assert.equal(found[0].observation.invoked, /** @type {any} */ (expected).invoked, `${scenario.name}: ${name} invoked`);
+    }
+  }
 });
