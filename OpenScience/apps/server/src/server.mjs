@@ -2946,8 +2946,10 @@ export function createWebApiApp(overrides = {}) {
           : { id: item.id, kind: item.kind ?? "note", scope: item.scope ?? "user" })),
       }),
     } : null });
-  // 「最近变化」, derived when read from the records, the ledger and the methods.
-  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context });
+  // The timeline and the capsule page's growth line, derived when read from
+  // the records, the ledger, the methods and the researcher's own capsules.
+  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
+    capsules: capsuleService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,

@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { MEMORY_TIMELINE_RECORDS, createMemoryTimelineRoutes, feedbackTimelineEvents, memoryTimeline, methodEvents, recordEvents, runEvents } from "../src/memoryTimeline.mjs";
+import {
+  MEMORY_GROWTH_MONTHS, MEMORY_TIMELINE_RECORDS, createMemoryTimelineRoutes, feedbackTimelineEvents, growthBuckets, memoryGrowth, memoryTimeline,
+  methodEvents, recordEvents, runEvents,
+} from "../src/memoryTimeline.mjs";
 import { sendError } from "../src/security.mjs";
 
 const user = { id: "usr_1" };
@@ -140,4 +143,156 @@ test("the route is read-only and answers only its own path", async (t) => {
   assert.equal(page.data.timeZone, "UTC");
   assert.equal((await fetch(`${base}/api/memory/timeline`, { method: "POST" })).status, 405);
   assert.equal((await fetch(`${base}/api/memory/other`)).status, 404);
+});
+
+// 「成长」: the capsule page's one chart. It counts the rows the page lists,
+// from the day each began to hold to the day it stopped, over every one of
+// them — never a page of a list.
+
+/**
+ * A product document store as the growth read uses it: pages of at most
+ * `limit`, newest first, a filter matched on the payload, and a cursor.
+ * @param {Record<string, any[]>} byKind
+ */
+function documentStore(byKind) {
+  /** @type {Array<{ kind: string, filter: any, fields: any }>} */
+  const asked = [];
+  return {
+    asked,
+    /** @param {string} _userId @param {string} kind @param {any} options */
+    async list(_userId, kind, { limit, cursor = null, filter = {}, fields } = {}) {
+      asked.push({ kind, filter, fields });
+      const matching = (byKind[kind] ?? []).filter((item) => Object.entries(filter).every(([key, value]) => item.payload?.[key] === value));
+      const from = cursor ? Number(cursor) : 0;
+      const items = matching.slice(from, from + limit);
+      return { items, nextCursor: from + limit < matching.length ? String(from + limit) : null };
+    },
+  };
+}
+
+test("the line is weekly for a short history, monthly for a long one, and starts at zero when the whole history fits", () => {
+  // 2026-09-10 is a Thursday; its week starts on Monday 09-07.
+  assert.deepEqual(growthBuckets("2026-09-10", "2026-09-28"), {
+    unit: "week", starts: ["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"],
+  });
+  assert.deepEqual(growthBuckets("2026-09-28", "2026-09-28"), { unit: "week", starts: ["2026-09-21", "2026-09-28"] });
+  const months = growthBuckets("2026-01-15", "2026-09-28");
+  assert.equal(months.unit, "month");
+  assert.deepEqual([months.starts[0], months.starts.at(-1), months.starts.length], ["2025-12-01", "2026-09-01", 10]);
+  const long = growthBuckets("2020-03-02", "2026-09-28");
+  assert.equal(long.starts.length, MEMORY_GROWTH_MONTHS + 1, "the furthest back it reaches is two years");
+  assert.equal(long.starts.at(-1), "2026-09-01");
+});
+
+function growthSources({ failMethods = false } = {}) {
+  const learning = { documents: documentStore({
+    method: [
+      { id: "method:learned:grade", createdAt: "2026-09-16T02:00:00Z", updatedAt: "2026-09-16T02:00:00Z",
+        payload: { recordType: "learned-method", status: "approved", provenance: { origin: "inferred" },
+          display: { title: "Meta 分析先报 GRADE 再报效应量", summary: "先给证据确定性，再给效应量。" } } },
+      { id: "method:learned:gone", createdAt: "2026-09-08T02:00:00Z", updatedAt: "2026-09-20T02:00:00Z",
+        payload: { recordType: "learned-method", status: "retired", statusChangedAt: "2026-09-20T02:00:00Z", provenance: { origin: "inferred" },
+          frontmatter: { name: "screen-in-batches" } } },
+    ],
+  }) };
+  if (failMethods) learning.documents.list = async () => { throw new Error("product store"); };
+  const notes = Array.from({ length: 150 }, (_, index) => ({ id: `note_${index}`, createdAt: "2026-09-22T02:00:00Z", updatedAt: "2026-09-22T02:00:00Z",
+    payload: { capsuleId: "cap_own", status: "approved", layer: "knowledge" } }));
+  const capsules = { documents: documentStore({
+    capsule: [
+      { id: "cap_own", createdAt: "2026-09-01T00:00:00Z", payload: { title: "我的胶囊" } },
+      { id: "cap_li", createdAt: "2026-09-23T00:00:00Z", payload: { imported: true, title: "李主任的工作方式", transfer: { importedAt: "2026-09-24T03:00:00Z" } } },
+    ],
+    fact: [
+      ...notes,
+      // A document's facts are the document's, and a note waiting for review is not on the page.
+      { id: "note_source", createdAt: "2026-09-22T02:00:00Z", payload: { capsuleId: "cap_own", status: "approved", layer: "sources" } },
+      { id: "note_waiting", createdAt: "2026-09-22T02:00:00Z", payload: { capsuleId: "cap_own", status: "candidate", layer: "knowledge" } },
+      { id: "note_retired", createdAt: "2026-09-15T02:00:00Z", updatedAt: "2026-09-17T02:00:00Z", payload: { capsuleId: "cap_own", status: "retired", layer: "methods" } },
+      // What someone else's capsule holds is theirs, not a row of this page.
+      { id: "pack_note", createdAt: "2026-09-24T03:00:00Z", payload: { capsuleId: "cap_li", status: "approved", layer: "methods" } },
+    ],
+  }) };
+  /** @type {any[]} */ const zones = [];
+  const researchMemory = { configured: true, growthDays: async (/** @type {string} */ _userId, /** @type {any} */ options) => {
+    zones.push(options.timeZone);
+    return [
+      { day: "2026-09-10", added: 3, ended: 0 },
+      // A fact replaced on 09-15 by a new one: one ended, one added, the line flat.
+      { day: "2026-09-15", added: 1, ended: 1 },
+      { day: "2026-09-21", added: 0, ended: 2 },
+    ];
+  } };
+  return { researchMemory, learning, capsules, zones, now: () => new Date("2026-09-28T04:00:00Z") };
+}
+
+test("each point is what the page listed at the end of its week, a moment is a method learned or a capsule received", async () => {
+  const sources = growthSources();
+  const growth = await memoryGrowth(sources, user, { timeZone: "Asia/Shanghai" });
+  assert.equal(growth.unit, "week");
+  assert.equal(growth.first, "2026-09-08", "the retired method was the first row");
+  assert.equal(growth.fromStart, true);
+  assert.deepEqual(growth.points, [
+    { start: "2026-08-31", known: 0 },
+    // 3 memories and the method learned on 09-08.
+    { start: "2026-09-07", known: 4 },
+    // + the GRADE method, − the method stood down on 09-20; the replaced fact
+    // is carried by its replacement; a note came and went.
+    { start: "2026-09-14", known: 4 },
+    // − two forgotten memories, + 150 notes.
+    { start: "2026-09-21", known: 152 },
+    { start: "2026-09-28", known: 152 },
+  ]);
+  assert.deepEqual(growth.moments, [
+    { day: "2026-09-08", kind: "method", title: "screen-in-batches" },
+    { day: "2026-09-16", kind: "method", title: "Meta 分析先报 GRADE 再报效应量" },
+    { day: "2026-09-24", kind: "capsule", title: "李主任的工作方式" },
+  ]);
+  assert.deepEqual(sources.zones, ["Asia/Shanghai"], "the memories are grouped by day in the researcher's zone");
+  // Every note was read, not the first page of them.
+  const factReads = sources.capsules.documents.asked.filter((read) => read.kind === "fact");
+  assert.equal(factReads.length, 2, "two pages of the own capsule, none of the received one");
+  assert.ok(factReads.every((read) => read.filter.capsuleId === "cap_own"));
+  // The methods are read light: never a method's whole body.
+  const methodRead = sources.learning.documents.asked.find((read) => read.kind === "method");
+  assert.equal(methodRead?.fields?.body, undefined);
+  assert.ok(methodRead?.fields, "a projection, not the whole document");
+  assert.deepEqual(methodRead?.filter, { recordType: "learned-method" });
+});
+
+test("an account with nothing has no line, a bad zone is refused, and a source that cannot be read fails the read", async () => {
+  const empty = await memoryGrowth({ researchMemory: { growthDays: async () => [] }, now: () => new Date("2026-09-28T00:00:00Z") }, user, {});
+  assert.deepEqual(empty, { unit: null, first: null, fromStart: false, points: [], moments: [], timeZone: "Asia/Shanghai" });
+  await assert.rejects(() => memoryGrowth(growthSources(), user, { timeZone: "Mars/Olympus" }), { code: "memory_timeline_invalid" });
+  // A line missing the methods would look exactly like a true one.
+  await assert.rejects(() => memoryGrowth(growthSources({ failMethods: true }), user, {}), /product store/);
+});
+
+test("a long history is counted in months and reaches back at most two years, carrying what held before it", async () => {
+  const growth = await memoryGrowth({
+    researchMemory: { growthDays: async () => [{ day: "2023-05-04", added: 7, ended: 0 }, { day: "2026-08-20", added: 2, ended: 1 }] },
+    now: () => new Date("2026-09-28T04:00:00Z"),
+  }, user, { timeZone: "UTC" });
+  assert.equal(growth.unit, "month");
+  assert.equal(growth.fromStart, false);
+  assert.equal(growth.points.length, MEMORY_GROWTH_MONTHS + 1);
+  assert.deepEqual(growth.points[0], { start: "2024-09-01", known: 7 });
+  assert.deepEqual(growth.points.slice(-2), [{ start: "2026-08-01", known: 8 }, { start: "2026-09-01", known: 8 }]);
+});
+
+test("the growth route answers its own path, read-only", async (t) => {
+  const sources = growthSources();
+  const routes = createMemoryTimelineRoutes({ ...sources, config: {}, context: async () => ({ user, project }) });
+  const server = createServer((req, res) => {
+    routes(req, res).then((handled) => { if (!handled) { res.statusCode = 404; res.end(); } }).catch((error) => sendError(res, error));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const growth = await (await fetch(`${base}/api/memory/growth?timeZone=UTC`)).json();
+  assert.equal(growth.data.unit, "week");
+  assert.equal(growth.data.timeZone, "UTC");
+  assert.equal(growth.data.points.at(-1).known, 152);
+  assert.equal((await fetch(`${base}/api/memory/growth`, { method: "DELETE" })).status, 405);
+  assert.equal((await fetch(`${base}/api/memory/growth?timeZone=Mars%2FOlympus`)).status, 400);
 });

@@ -819,6 +819,31 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * How many memories began to hold, and how many stopped, on each calendar
+   * day in a zone: what the capsule page's growth line is drawn from. The
+   * memories are the ones the page lists (the account's and its projects',
+   * never a run summary). One stops holding when it is forgotten — its last
+   * change is the archiving — or replaced (`invalid_since`). Grouped in the
+   * database, so an account of any size costs one row per day it changed,
+   * never a read of every memory.
+   * @param {string} userId @param {{ timeZone?: string }} [options]
+   * @returns {Promise<Array<{ day: string, added: number, ended: number }>>}
+   */
+  async growthDays(userId, { timeZone = "UTC" } = {}) {
+    const owner = assertUserId(userId);
+    const result = await this.#query(`SELECT day, sum(added)::integer AS added, sum(ended)::integer AS ended FROM (
+        SELECT to_char(created_at AT TIME ZONE $2, 'YYYY-MM-DD') AS day, 1 AS added, 0 AS ended
+          FROM evimed_memory.records WHERE user_id=$1 AND kind <> 'run_summary' AND scope IN ('user','project')
+        UNION ALL
+        SELECT to_char((CASE WHEN status='superseded' THEN coalesce(invalid_since, updated_at) ELSE updated_at END) AT TIME ZONE $2,
+            'YYYY-MM-DD'), 0, 1
+          FROM evimed_memory.records WHERE user_id=$1 AND kind <> 'run_summary' AND scope IN ('user','project')
+            AND status IN ('archived','superseded')
+      ) AS changes GROUP BY day ORDER BY day`, [owner, String(timeZone)]);
+    return result.rows.map((/** @type {any} */ row) => ({ day: String(row.day), added: Number(row.added) || 0, ended: Number(row.ended) || 0 }));
+  }
+
+  /**
    * Create or atomically update the memory that owns a canonical key.
    *
    * The canonical key — owner, scope, scope id, kind, key — is the identity, not

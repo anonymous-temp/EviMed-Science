@@ -18,6 +18,8 @@
 
 import { cleanMethodDisplay } from "@evimed/domain";
 
+import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
+import { LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { HttpError, sendJson } from "./security.mjs";
 
 /** The kinds of event a timeline shows. */
@@ -253,19 +255,220 @@ export async function memoryTimeline({ researchMemory, agentRuns = null, feedbac
 }
 
 /**
- * `GET /api/memory/timeline?before=&limit=&timeZone=`.
+ * 「成长」 — how much of the researcher EviMed has come to hold, over time: the
+ * capsule page's one chart (the owner's timeline of change and growth,
+ * 2026-08-23).
  *
- * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any,
+ * Hidden knowledge: the line counts exactly the rows the capsule page lists —
+ * the memories (never a run summary), the learned methods, and the notes in the
+ * researcher's own capsules outside the document layer — and it counts each
+ * from the day it began to hold until the day it stopped: forgotten, replaced,
+ * or a method stood down. So the line's last point is what the page shows
+ * today, a fact that was replaced is carried on by the fact that replaced it
+ * rather than dropping out and coming back, and a reset, which deletes, takes
+ * its history with it. Nothing here is a counter of use or a pipeline state;
+ * the only other things it names are two kinds of moment the researcher can
+ * see on the page — a method learned, a capsule received.
+ *
+ * Every source is read whole, never a page of it: the memories grouped by day
+ * in the database, the methods and notes paged through to the end under a
+ * bound far above any account (`MEMORY_GROWTH_DOCUMENTS`). The browser used to
+ * be the only place such a line could be drawn, from lists capped at 50 and
+ * 300. A source that cannot be read fails the read: a line with a third of the
+ * capsule missing would look exactly like a true one.
+ */
+
+/** Weekly points while the history is at most this many weeks long; months after that. */
+export const MEMORY_GROWTH_WEEKS = 26;
+/** The furthest back the line reaches, in months. */
+export const MEMORY_GROWTH_MONTHS = 24;
+/** The documents one growth read pages through per kind — an account's methods number in the tens. */
+export const MEMORY_GROWTH_DOCUMENTS = 5000;
+/** The moments a read returns at most. */
+export const MEMORY_GROWTH_MOMENTS = 50;
+
+/** @param {string} day YYYY-MM-DD @param {number} count */
+function addDays(day, count) {
+  const at = new Date(`${day}T00:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + count);
+  return at.toISOString().slice(0, 10);
+}
+
+/** The Monday a day's week starts on. @param {string} day */
+function weekOf(day) {
+  const weekday = (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7;
+  return addDays(day, -weekday);
+}
+
+/** The first of a day's month, moved by whole months. @param {string} day @param {number} [count] */
+function monthOf(day, count = 0) {
+  const at = new Date(`${day.slice(0, 7)}-01T00:00:00Z`);
+  at.setUTCMonth(at.getUTCMonth() + count);
+  return at.toISOString().slice(0, 10);
+}
+
+/** Whole weeks between two Mondays. @param {string} from @param {string} to */
+function weeksBetween(from, to) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / (7 * 86_400_000));
+}
+
+/**
+ * Where each point of the line starts: weeks for a short history, months for
+ * a long one, and — when the whole history fits — one point before the first
+ * memory, at zero, so a capsule a week old is a line that starts somewhere
+ * rather than a lone dot.
+ * @param {string} first the day the first row began @param {string} today
+ * @returns {{ unit: "week" | "month", starts: string[] }}
+ */
+export function growthBuckets(first, today) {
+  const firstWeek = weekOf(first);
+  const thisWeek = weekOf(today);
+  if (weeksBetween(firstWeek, thisWeek) < MEMORY_GROWTH_WEEKS) {
+    const starts = [];
+    for (let start = addDays(firstWeek, -7); start <= thisWeek; start = addDays(start, 7)) starts.push(start);
+    return { unit: "week", starts };
+  }
+  const starts = [];
+  for (let start = monthOf(first, -1); start <= monthOf(today); start = monthOf(start, 1)) starts.push(start);
+  return { unit: "month", starts: starts.slice(-(MEMORY_GROWTH_MONTHS + 1)) };
+}
+
+/** Every document of a kind the filter matches, paged to the end under the bound.
+ *  @param {any} documents @param {string} userId @param {string} kind @param {{ filter?: object, fields?: object }} options */
+async function everyDocument(documents, userId, kind, { filter = {}, fields } = {}) {
+  /** @type {any[]} */
+  const items = [];
+  /** @type {string | null} */
+  let cursor = null;
+  do {
+    const page = await documents.list(userId, kind, { limit: 100, cursor, filter, ...(fields ? { fields } : {}) });
+    items.push(...(page.items ?? []));
+    cursor = page.nextCursor ?? null;
+  } while (cursor && items.length < MEMORY_GROWTH_DOCUMENTS);
+  return items;
+}
+
+/**
+ * The line and its moments, in the researcher's zone.
+ *
+ * @param {{ researchMemory: any, learning?: any, capsules?: any, now?: () => Date }} sources
+ * @param {{ id: string }} user
+ * @param {{ timeZone?: string | null }} [options]
+ * @returns {Promise<{ unit: "week" | "month" | null, first: string | null, fromStart: boolean, points: Array<{ start: string, known: number }>,
+ *   moments: Array<{ day: string, kind: "method" | "capsule", title: string }>, timeZone: string }>}
+ */
+export async function memoryGrowth({ researchMemory, learning = null, capsules = null, now = () => new Date() }, user, { timeZone = null } = {}) {
+  const zone = timeZoneOrDefault(timeZone);
+  const format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const day = (/** @type {unknown} */ value) => {
+    const at = instant(value);
+    return at ? dayOf(at, format) : null;
+  };
+  /** @type {Map<string, { added: number, ended: number }>} */
+  const changes = new Map();
+  const note = (/** @type {string | null} */ at, /** @type {"added" | "ended"} */ field, count = 1) => {
+    if (!at || count <= 0) return;
+    const entry = changes.get(at) ?? { added: 0, ended: 0 };
+    entry[field] += count;
+    changes.set(at, entry);
+  };
+
+  for (const row of await researchMemory.growthDays(user.id, { timeZone: zone })) {
+    note(row.day, "added", row.added);
+    note(row.day, "ended", row.ended);
+  }
+
+  /** @type {Array<{ day: string, kind: "method" | "capsule", title: string }>} */
+  const moments = [];
+  if (learning?.documents) {
+    const methods = await everyDocument(learning.documents, user.id, "method", {
+      filter: { recordType: LEARNED_METHOD_RECORD_TYPE },
+      fields: { status: true, statusChangedAt: true, origin: true, provenance: true, display: true, frontmatter: true },
+    });
+    for (const method of methods) {
+      const payload = method.payload ?? {};
+      const began = day(method.createdAt);
+      note(began, "added");
+      if (payload.status === "retired") note(day(payload.statusChangedAt) ?? day(method.updatedAt), "ended");
+      if (began && (payload.origin ?? payload.provenance?.origin) === "inferred") {
+        moments.push({ day: began, kind: "method", title: excerpt(cleanMethodDisplay(payload.display)?.title ?? payload.frontmatter?.name ?? "", 80) });
+      }
+    }
+  }
+  if (capsules?.documents) {
+    const all = await everyDocument(capsules.documents, user.id, "capsule", { fields: { imported: true, title: true, transfer: true } });
+    for (const capsule of all) {
+      if (capsule.payload?.imported !== true) continue;
+      const received = day(capsule.payload.transfer?.importedAt) ?? day(capsule.createdAt);
+      if (received) moments.push({ day: received, kind: "capsule", title: excerpt(capsule.payload.title ?? "", 80) });
+    }
+    // The researcher's own capsules' notes, as the page lists them: approved,
+    // outside the document layer (a document's facts are the document's).
+    for (const capsule of all.filter((item) => item.payload?.imported !== true)) {
+      const notes = await everyDocument(capsules.documents, user.id, "fact", { filter: { capsuleId: capsule.id }, fields: { status: true, layer: true } });
+      for (const item of notes) {
+        const status = item.payload?.status;
+        if (item.payload?.layer === DOCUMENT_MEMORY_LAYER || (status !== "approved" && status !== "retired")) continue;
+        note(day(item.createdAt), "added");
+        if (status === "retired") note(day(item.updatedAt), "ended");
+      }
+    }
+  }
+
+  const days = [...changes.keys()].filter((key) => (changes.get(key)?.added ?? 0) > 0).sort();
+  const first = days[0] ?? null;
+  if (!first) return { unit: null, first: null, fromStart: false, points: [], moments: [], timeZone: zone };
+  const today = dayOf(now().toISOString(), format);
+  const { unit, starts } = growthBuckets(first, today < first ? first : today);
+  const ordered = [...changes.entries()].sort(([left], [right]) => left.localeCompare(right));
+  let known = 0;
+  let cursor = 0;
+  const points = starts.map((start, index) => {
+    // A point is what held at the end of its week or month: everything that
+    // began on or before that day, less everything that had stopped.
+    const end = index + 1 < starts.length ? addDays(starts[index + 1], -1) : (today < first ? first : today);
+    while (cursor < ordered.length && ordered[cursor][0] <= end) {
+      known += ordered[cursor][1].added - ordered[cursor][1].ended;
+      cursor += 1;
+    }
+    return { start, known: Math.max(0, known) };
+  });
+  return {
+    unit,
+    first,
+    // Whether the first point is the zero before the first memory: the line
+    // starts at the start, rather than partway through a longer history.
+    fromStart: starts[0] < first,
+    points,
+    moments: moments
+      .filter((moment) => moment.day >= starts[0] && moment.title)
+      .sort((left, right) => left.day.localeCompare(right.day))
+      .slice(-MEMORY_GROWTH_MOMENTS),
+    timeZone: zone,
+  };
+}
+
+/**
+ * `GET /api/memory/timeline?before=&limit=&timeZone=` and
+ * `GET /api/memory/growth?timeZone=`.
+ *
+ * @param {{ config: any, researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, capsules?: any,
  *   context: (req: any, res: any) => Promise<any> }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, context }) {
+export function createMemoryTimelineRoutes({ researchMemory, agentRuns = null, feedbackEvents = null, learning = null, capsules = null, context }) {
   return async function memoryTimelineRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
-    if (url.pathname !== "/api/memory/timeline") return false;
+    if (url.pathname !== "/api/memory/timeline" && url.pathname !== "/api/memory/growth") return false;
     if (req.method !== "GET") throw new HttpError(405, "method_not_allowed", "The timeline is read-only.");
     if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
     const ctx = await context(req, res);
+    if (url.pathname === "/api/memory/growth") {
+      sendJson(res, 200, { data: await memoryGrowth({ researchMemory, learning, capsules }, ctx.user, {
+        timeZone: url.searchParams.get("timeZone"),
+      }) });
+      return true;
+    }
     sendJson(res, 200, { data: await memoryTimeline({ researchMemory, agentRuns, feedbackEvents, learning }, ctx.user, ctx.project, {
       before: url.searchParams.get("before"),
       limit: Number(url.searchParams.get("limit") ?? 50),
