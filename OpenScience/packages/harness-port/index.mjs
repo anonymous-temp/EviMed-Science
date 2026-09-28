@@ -502,14 +502,31 @@ export function onTurnEnd(ctx, fn) {
 }
 
 /**
- * Session lifecycle start. The only place the run brief may be injected: a
- * later injection would race the first model request.
+ * Session lifecycle start: one agent, configured and entered, before its loop
+ * takes queued input. The place a registration in the agent's own scope must
+ * be made, because it then precedes the agent's first request.
+ *
+ * The seam is `agent/created` since 0.1.7, which folded the retired
+ * `agent/session-start` into it (same `{ agent, source }` payload, plus an
+ * optional `signal`). One property did NOT carry over: `agent/session-start`
+ * was a notification, and `agent/created` is a `serial` dispatch whose failed
+ * listener fails the agent's creation — so a defect in a registration of ours
+ * would have become a session that cannot be created. The listener keeps the
+ * old contract: it answers `undefined`, and what it throws is reported on
+ * stderr (the runtime's log) instead of vetoing the agent.
  * @param {any} ctx
  * @param {(agent: any, source: string) => void} fn
  * @returns {() => void}
  */
 export function onSessionStart(ctx, fn) {
-  return ctx.on(SEAMS.events.sessionStart, (/** @type {any} */ payload) => fn(payload?.agent, String(payload?.source ?? '')))
+  return ctx.on(SEAMS.events.sessionStart, (/** @type {any} */ payload) => {
+    try {
+      fn(payload?.agent, String(payload?.source ?? ''))
+    } catch (error) {
+      console.error(`evimed: a session-start registration failed and the session continued without it: ${errorMessage(error)}`)
+    }
+    return undefined
+  })
 }
 
 /**
@@ -657,7 +674,7 @@ export function withdrawPromptSection(ctx, key) {
 
 /**
  * Makes text model-visible by logging it. Not a side channel: it becomes a
- * first-class `user/message` with a plugin source, which is what preserves the
+ * first-class `user/message` with a producer source of ours (`pluginSource`), which preserves the
  * runtime's "model-visible ⟺ logged" invariant and lets the UI show exactly
  * what the system injected (§18.2).
  * @param {any} agent @param {string} text @param {string} plugin
@@ -697,8 +714,25 @@ function pluginMessage(text, plugin) {
     id: globalThis.crypto.randomUUID(),
     role: 'user',
     content: [{ type: 'text', text }],
-    source: { kind: 'plugin', plugin },
+    source: pluginSource(plugin),
   }
+}
+
+/**
+ * The source a message of ours carries: its producer, as its own kind.
+ *
+ * Session format 4 (DSH 0.1.7) has no shared catch-all `plugin` kind — each
+ * producer declares its own, and the log refuses a message whose kind is the
+ * bare word `plugin` ("format v4 message requires a producer-owned source
+ * kind"). `plugin:<name>` is the kind the kernel's own V3->V4 migration gives
+ * the messages we wrote before, so a session's history and its new messages
+ * name one producer the same way; every reader here tells machine text from
+ * the researcher's by `kind !== 'user'` and keeps doing so.
+ * @param {string} plugin
+ * @returns {{ kind: string }}
+ */
+export function pluginSource(plugin) {
+  return { kind: `plugin:${plugin}` }
 }
 
 /**

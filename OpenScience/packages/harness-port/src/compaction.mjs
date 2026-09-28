@@ -902,7 +902,8 @@ function appendUserText(input, text) {
         id: randomUUID(),
         role: 'user',
         content: [{ type: 'text', text }],
-        source: { kind: 'plugin', plugin: COMPACTION_PLUGIN },
+        // Session format 4 refuses the bare `plugin` kind; see `pluginSource`.
+        source: { kind: `plugin:${COMPACTION_PLUGIN}` },
       },
     ],
   }
