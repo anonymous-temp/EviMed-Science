@@ -1041,10 +1041,13 @@ release archives. The image verifies each archive against an
 architecture-specific SHA-256 build argument before extraction, verifies the
 selected uv MIT license text, and preserves those texts under
 `/usr/share/licenses`. The npm install is additionally pinned in time by
-`DSH_PUBLISHED_BEFORE`: `@deepseek-ai/dsh` declares its 61 subpackages as a caret
-range, so naming an exact version pins one package and floats the rest — asking
-the registry for the tree as it stood at that instant is the only way to install
-what the pin was tested against. When changing any version, update every matching
+`DSH_PUBLISHED_BEFORE`: since 0.1.7 `@deepseek-ai/dsh` declares its 73 kernel
+subpackages exactly, but cordis, its loader plugins and schemastery are still
+ranges, so naming an exact version still floats part of the tree — asking the
+registry for the tree as it stood at that instant is the only way to install
+what the pin was tested against. The cutoff is written once, as `dsh.publishedBefore`
+in `deps-version.json`; both runtime Dockerfiles and the nightly seam check
+(`scripts/ops/kernel-install.mjs`) read the same instant. When changing any version, update every matching
 archive and license digest in the same reviewed release change; a mismatched
 asset fails the image build. For a production release, prepare it on the verified
 isolated builder through `release:images`; do not run a Compose build here.
