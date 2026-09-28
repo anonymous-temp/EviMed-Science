@@ -44,6 +44,7 @@
  *   node scripts/build/generate-capability-manifests.mjs [--source dir] [--out dir] [--check]
  */
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,6 +244,10 @@ async function readEvaluations(root) {
   }
   /** @type {Map<string, { succeeded: boolean, minutes: number | null }[]>} */
   const runs = new Map();
+  // A result recorded on this machine but not committed is counted here and
+  // absent in CI, so the committed table fails `--check` there and passes
+  // here (2026-09-28: five red CI runs from one uncommitted run.json).
+  const untracked = new Set(untrackedEvalFiles(root));
   const harnesses = await fs.readdir(path.join(root, "evals"), { withFileTypes: true }).catch(() => []);
   for (const harness of harnesses.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()) {
     const resultsDir = path.join(root, "evals", harness, "results");
@@ -250,6 +255,10 @@ async function readEvaluations(root) {
     for (const result of results.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()) {
       const record = JSON.parse(await fs.readFile(path.join(resultsDir, result, "run.json"), "utf8").catch(() => "null"));
       if (typeof record?.capability !== "string" || !record.outcome || typeof record.outcome.status !== "string") continue;
+      const relative = path.posix.join("evals", harness, "results", result, "run.json");
+      if (untracked.has(relative)) {
+        process.stderr.write(`counted but not committed: ${relative} (commit it, or CI will read a different table)\n`);
+      }
       const durationMs = Number(record.outcome.durationMs);
       const list = runs.get(record.capability) ?? [];
       list.push({
@@ -273,6 +282,20 @@ async function readEvaluations(root) {
     });
   }
   return evaluations;
+}
+
+/**
+ * Eval files git does not track, relative to `root`; empty outside a checkout.
+ * @param {string} root
+ * @returns {string[]}
+ */
+function untrackedEvalFiles(root) {
+  try {
+    return execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", "evals"], { cwd: root, encoding: "utf8" })
+      .split("\n").filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 /**
