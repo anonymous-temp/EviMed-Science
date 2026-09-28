@@ -2123,6 +2123,10 @@ SOURCE_QUERY_HINTS = {
     "myvariant": "expects an rsID or HGVS identifier, not a gene name.",
     "ncbi-taxonomy": "expects an organism name such as 'Homo sapiens'.",
     "who-gho": "matches indicator names by substring; use a short indicator phrase.",
+    # 2026-09-27: 'FARXIGA dapagliflozin tablets label' returned nothing, twice,
+    # in a drug evaluation that needed a China label all along.
+    "dailymed": "matches a drug name (brand or generic, such as 'dapagliflozin'), not a phrase such as 'tablets label'; it holds US labels only. For a label in another jurisdiction use drug_label_search.",
+    "openfda": "matches a drug name (generic or brand) exactly; pass the name alone ('dapagliflozin'). It holds US labels only. For a label in another jurisdiction use drug_label_search.",
 }
 
 

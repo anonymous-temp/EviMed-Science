@@ -202,6 +202,19 @@ class ToolContractTests(unittest.TestCase):
         self.assertTrue(all(item.get("blocker") for item in blocked["data"]["items"]))
         self.assertNotIn("sources", blocked)
 
+    def test_an_empty_us_label_search_says_what_the_source_matches_and_where_labels_are(self):
+        # 2026-09-27: a drug evaluation asked DailyMed for "FARXIGA dapagliflozin
+        # tablets label" twice and was told only that nothing matched.
+        for source in ("dailymed", "openfda"):
+            with mock.patch.object(self.server.public_sources, "_get_json", return_value={"data": [], "results": []}):
+                result = self.server.call_tool(
+                    "biomedical_source_search", {"source": source, "query": "FARXIGA dapagliflozin tablets label"}
+                )
+            self.assertNotEqual(result["status"], "error", result)
+            warnings = " ".join(result.get("warnings", []))
+            self.assertIn("drug name", warnings, source)
+            self.assertIn("drug_label_search", warnings, source)
+
     def test_biomedical_search_rejects_unregistered_source_before_network(self):
         result = self.server.call_tool(
             "biomedical_source_search", {"source": "unreviewed-web-scraper", "query": "observed"}
