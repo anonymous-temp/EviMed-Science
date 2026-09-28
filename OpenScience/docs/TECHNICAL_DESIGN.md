@@ -6,10 +6,12 @@
 > then the release target moved to the hosted multi-tenant SaaS (desktop packaging is
 > optional), and the agent kernel became **DeepSeek Harness (DSH)** — OpenCode was deleted
 > on 2026-09-01, with no rollback lever and no second code path kept alive. §5 below has
-> been rewritten for the current kernel; the rest of the document still describes the
-> desktop shell as it was designed, and every sentence that says "the bundled OpenCode
-> sidecar" should be read in that past tense. `AGENTS.md`, `docs/WEB_DEPLOYMENT.md` and
-> `docs/REQUEST_PATH.md` are authoritative on the system as it runs today.
+> been rewritten for the current kernel, §5.6 lists the control-plane modules and seams
+> added from 2026-09-22 to 09-28, and §16 is the repository as it is; the rest of the
+> document still describes the desktop shell as it was designed, and every sentence that
+> says "the bundled OpenCode sidecar" should be read in that past tense. `AGENTS.md`,
+> `docs/WEB_DEPLOYMENT.md` and `docs/REQUEST_PATH.md` are authoritative on the system as it
+> runs today.
 >
 > **Original implementation status (v0.1, 2026-07-02).** Built and verified: Tauri 2 shell
 > + React UI; OpenCode bundled as an isolated sidecar (auto-started, app-private
@@ -195,11 +197,10 @@ rather than a restart.
 
 ### 5.5 The desktop shell's own sidecar (historical, still in the tree)
 
-The desktop shell predates the hosted service and still starts its own sidecar from
-`src-tauri/src/runtime.rs` and `src-tauri/src/opencode_config.rs`. That path is described
-here because it is still in the repository, not because it is the product: it retires
-together with the desktop shell and `packages/sdk`, and nothing in the hosted deployment
-goes through it.
+The desktop shell predated the hosted service and started its own sidecar from
+`src-tauri/src/runtime.rs` and `src-tauri/src/opencode_config.rs`. Both, with the shell
+and `packages/sdk`, were deleted on 2026-09-04; this section is kept as the record of the
+design, and nothing in the hosted deployment goes through it.
 
 How it was designed, and why the shape is worth keeping if the shell is ever repointed at
 DSH: the sidecar ran the **bundled** binary rather than the user's `PATH`, on a
@@ -211,6 +212,81 @@ into the sandbox at startup so the workbench could answer out of the box without
 separate login. We only ever read that file; we never modified it or the user's sessions.
 The provider key entered in Settings went into the app-private config by a Rust command,
 never into the user's global config, logs, or git.
+
+### 5.6 Modules and seams added 2026-09-22 → 09-28
+
+The frontier feed, GEO and the login, credits and handoff seams are layer-2 feature
+modules (`<x>Service.mjs` + routes + an optional leased worker + one
+`OPEN_SCIENCE_<X>_ENABLED`, registered by one line in `createWebApiApp`), each off unless
+its switch is on; the rest are changes inside existing layers.
+
+- **「前沿动态」, the medical frontier feed** (`frontier*.mjs`, schema `evimed_frontier`,
+  `OPEN_SCIENCE_FRONTIER_ENABLED`). Every source it reads belongs to the knowledge-source
+  plugin — `项目代码/knowledge-plugin`, the team's own Python service with its own database,
+  contract `packages/contracts/knowledge-plugin`, pinned in `deps-version.json` (1.2.0). The
+  control plane pulls the plugin's `seq`-cursor stream (`knowledgePluginClient.mjs`, its only
+  caller; the plugin never calls the platform), screens and writes each item on
+  `deepseek-flash` under purpose `frontier` and the module's own daily budget, builds events,
+  the hot list, the 07:30 daily and 与你相关, and serves the runtime a read-only
+  `frontier_search` (`frontierGateway.mjs`).
+- **「循证 GEO」** (`geo*.mjs`, schema `evimed_geo`, `OPEN_SCIENCE_GEO_ENABLED`, opened per
+  account): one row per GEO project on top of an ordinary project, `/api/geo/*`; the consumer
+  AI engines are measured server side through the probe host and the metrics computed from
+  `@evimed/domain`'s `geo/metrics.json`; the eight-step program runs the four GEO capabilities
+  inside the project; media orders are placed and settled in code. The owner's proprietary
+  skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`.
+- **Fusion seams with EviMed's own platform** (fusion plan 2026-09-26 §9); login, credits
+  and handoff are off by default and answer 404 when off:
+  - *login* (`evimedAuthService.mjs`, `OPEN_SCIENCE_EVIMED_AUTH_ENABLED`): the shell's EviMed
+    credential is introspected server side and exchanged for an ordinary session of ours on
+    an account kind `evimed`, whose id is a one-way hash of EviMed's user id; the credential
+    is never stored. The account row also keeps EviMed's own user id (`evimed_user_id`,
+    schema version 4), rewritten at every exchange and read only by the credits client;
+  - *灵豆 credits* (`evimedCredits*.mjs`, schema `evimed_credits`,
+    `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED`): after a run ends its recorded CNY cost is charged
+    once to EviMed, idempotent on the run id, retried on a bounded backoff, never interrupting
+    a run; a start is refused (402 `credits_exhausted`) only on a balance read as short. The
+    deduction and balance calls name the EviMed user id, and an account without one is never
+    charged under our hash;
+  - *handoff* (`researchHandoff.mjs`, `OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED`): 「转为深度研究」
+    binds a new research session with the quick answer's question, sources and premises as
+    its first-message draft; the person's send starts the run through the one prompt path;
+  - *routing decision* (`routingDecision.mjs`, `POST /api/routing/decision`, always on):
+    advice before a send — quick answer or deep research, which capability, estimated
+    minutes and, with credits on, 灵豆. It runs the dispatch's own router and decides
+    nothing.
+- **Design tokens are one package**, `@evimed/design-tokens`: one table generated into the
+  CSS variables, the Tailwind preset both front ends extend, the Element Plus and ECharts
+  themes, the kernel frame's `overrideTokens` and the Figma/DTCG files; `pnpm tokens:check`
+  and `designTokens.test.ts` fail on a stale artifact.
+- **Web reading renders in the deployment's own browser** (`webRender.mjs`): with
+  `OPEN_SCIENCE_WEB_RENDER_ENABLED` on and `OPEN_SCIENCE_WEB_RENDER_CDP_URL` set, a page
+  drawn in script is rendered by the host's headless Chromium (`frontier-browser`,
+  `localBrowser.mjs`) through a per-render forward
+  proxy that resolves each host, refuses private addresses and connects only to the address
+  it checked (`webRenderEgress.mjs`); AgentBay's cloud browser remains the other provider.
+  Direct reads — and, since 09-28, open-access PDFs — go over the pinned socket of
+  `webReadNetwork.mjs`.
+- **Alertmanager delivers to the control plane**: `POST /api/ops/alerts`
+  (`alertReceiver.mjs`, its own bearer credential `OPEN_SCIENCE_ALERT_RECEIVER_TOKEN_FILE`)
+  writes one inbox item per alert instance for each operator, pushed to Feishu where bound.
+  The previous public receiver was answered `204` by nginx and dropped every alert.
+- **Learned methods travel as cards.** A method EviMed learned from the researcher's runs is
+  handed to a run as a card — when it applies and the path of its file — and read when it
+  applies; what the researcher wrote or enabled is still inlined whole. The mount's byte
+  budget (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`, 32 KiB) is spent on what is injected: a
+  learned method costs its card, and what the budget leaves out is counted
+  (`open_science_mounted_methods_left_out_total`).
+- **The run answers its review at delivery** (`packages/socket/src/review.mjs`): the
+  independent reviewer's findings come back to the run's submission with ids, and the run
+  answers each answer-required one in the next submission's `responses` — `fixed`, or
+  `declined` with a reason — which the control plane records (`/responses`,
+  `open_science_review_responses_total`).
+- **A run cannot read the gate.** The run policy (`packages/socket/src/runPolicy.mjs`)
+  refuses any file tool call or shell command that names the gate's implementation —
+  `@evimed/domain`'s sources and the socket's `src`/`plugins`, including the image's copy
+  under `/opt/evimed/socket` — with or without a separator after the directory
+  (`gate_source_denied`, `isGateImplementationPath`); skills and presets stay readable.
 
 ## 6. Skills & MCP
 
@@ -503,17 +579,18 @@ the cause, a fallback suggestion, a retry button, and an edit-plan button.
 Monorepo:
 
 ```text
-ai4s-workbench/
+OpenScience/
   apps/web/                        # the React single-page frontend
   apps/server/                     # the hosted web boundary and control plane
-  packages/{domain,harness-port,socket,contracts,shared,ui}/
+  packages/{domain,harness-port,socket,contracts,shared,design-tokens}/
   capabilities/  capability-skills/
-  runtime/{mcp,kernel,skills}/
-  deploy/{web,runtime-dsh,specialist-adapter,tooluniverse}/
+  runtime/{mcp,skills}/
+  deploy/{web,runtime-dsh,specialist-adapter,tooluniverse,openlist,host}/
   deps-version.json                # the one place an upstream pin is written
   docs/{PRD.md,TECHNICAL_DESIGN.md}
   examples/bci-trends/
   scripts/{build,dev,ops,release}/
+../项目代码/                        # the six Python specialist engines and the knowledge-source plugin
 ```
 
 - `apps/server` — the hosted web boundary; owns the only connection to a kernel.
@@ -522,7 +599,11 @@ ai4s-workbench/
 - `packages/harness-port` — the anti-corruption layer; the only importer of
   `@deepseek-ai/*`.
 - `packages/socket` — the `evimed-universal` plugin composition.
+- `packages/design-tokens` — the one token table and its generated artifacts (§5.6).
 - `runtime/skills` — self-authored scientific skills.
+- `项目代码/<engine>/requirements.lock` — each engine image's fully pinned dependencies,
+  resolved for its Python through the production PyPI mirror
+  (`scripts/ops/compile-engine-locks.sh`); the images install the lock when present.
 - `examples` — the complete demo project.
 
 ## 17. v0.1 task breakdown
