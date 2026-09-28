@@ -82,3 +82,35 @@ def test_pdf_export_lays_out_the_ma001_source_appendix(tmp_path: Path) -> None:
     pdf_path = export_manuscript_pdf(project)
 
     assert pdf_path is not None and pdf_path.exists()
+
+
+# Verbatim Table 1 of a ma-001 narrative draft (fresh run 13, attempt 4): with
+# content-sized columns reportlab gave one column a negative width and the
+# export raised ValueError, so the run ended without a package.
+_MA001_TEN_COLUMN_TABLE = [
+    "| 研究 | 年份 | 研究设计 | 国家 | N（干预/对照） | 人群 | 干预措施 | 对照措施 | 随访 | 主要终点 |",
+    "|---|---|---|---|---|---|---|---|---|---|",
+    "| Helito et al. | 2019 | RCT（前瞻性、随机、三臂） | 巴西 | 30/30（TXA/对照；三臂共90） | "
+    "拟行初次单侧全膝关节置换术的成人（年龄>21岁；排除炎症性关节炎、膝关节僵硬、肾功能不全、凝血功能障碍及血栓栓塞病史等） | "
+    "氨甲环酸（TXA）静脉给药，于充气止血带前至少20分钟给予10 mg/kg，止血带松开前再给予10 mg/kg | "
+    "不予TXA及Floseal®，仅接受常规手术处理 | 至少12个月（并发症随访90天） | 出血控制（引流量、输血率；主要终点未明确标注） |",
+]
+
+
+def test_pdf_export_lays_out_a_ten_column_characteristics_table(tmp_path: Path) -> None:
+    from new_meta.core.document_export import _pdf_column_widths, _split_table_row
+
+    rows = [_split_table_row(line) for line in _MA001_TEN_COLUMN_TABLE[::2]]
+    widths = _pdf_column_widths(rows, 10, 492.0)
+    assert len(widths) == 10 and min(widths) > 20 and abs(sum(widths) - 492.0) < 1e-6
+
+    project = Project("ten column export", output_dir=tmp_path / uuid4().hex)
+    project.save_text(
+        "draft.md",
+        "\n".join(["# 标题", "", "## 表格", "### 表1. 纳入研究基本特征", "", *_MA001_TEN_COLUMN_TABLE]),
+        subdir="manuscript",
+    )
+
+    pdf_path = export_manuscript_pdf(project)
+
+    assert pdf_path is not None and pdf_path.exists()

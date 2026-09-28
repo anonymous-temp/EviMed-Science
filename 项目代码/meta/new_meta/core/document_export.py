@@ -128,7 +128,7 @@ def export_manuscript_pdf(project: Project, output_name: str = "draft.pdf") -> P
             while i < len(lines) and lines[i].strip().startswith("|"):
                 table_lines.append(lines[i].strip())
                 i += 1
-            _add_pdf_markdown_table(story, table_lines, styles)
+            _add_pdf_markdown_table(story, table_lines, styles, available_width=document.width)
             continue
 
         image = IMAGE_RE.search(line)
@@ -199,8 +199,27 @@ def _add_markdown_table(document: Document, table_lines: list[str]) -> None:
             table.cell(row_idx, col_idx).text = _clean_inline(row[col_idx]) if col_idx < len(row) else ""
 
 
-def _add_pdf_markdown_table(story: list, table_lines: list[str], styles) -> None:
+def _pdf_column_widths(rows: list[list[str]], width: int, available_width: float) -> list[float]:
+    """Share the frame width among columns by content length, each with a floor.
+
+    Left to itself reportlab sizes columns from their content, and a table with
+    many columns and long cells (a ten-column study-characteristics table)
+    leaves some columns a negative width and aborts the export.
+    """
+    weights = []
+    for col_idx in range(width):
+        longest = max((len(row[col_idx]) for row in rows if col_idx < len(row)), default=0)
+        weights.append(min(max(longest, 4), 60))
+    total = float(sum(weights)) or 1.0
+    floor = available_width / (2.0 * width)
+    raw = [max(floor, available_width * weight / total) for weight in weights]
+    scale = available_width / sum(raw)
+    return [value * scale for value in raw]
+
+
+def _add_pdf_markdown_table(story: list, table_lines: list[str], styles, *, available_width: float | None = None) -> None:
     from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.platypus import Paragraph, Spacer, Table as PdfTable, TableStyle
 
@@ -209,13 +228,19 @@ def _add_pdf_markdown_table(story: list, table_lines: list[str], styles) -> None
     if not rows:
         return
     width = max(len(row) for row in rows)
+    # CJK text has no spaces to break at; let those cells wrap between characters.
+    cjk_cell = ParagraphStyle("TableCellCJK", parent=styles["BodyText"], wordWrap="CJK")
     data = []
     for row in rows:
         data.append([
-            Paragraph(_pdf_text(row[col_idx]), styles["BodyText"]) if col_idx < len(row) else ""
+            Paragraph(
+                _pdf_text(row[col_idx]),
+                cjk_cell if re.search(r"[\u4e00-\u9fff]", row[col_idx]) else styles["BodyText"],
+            ) if col_idx < len(row) else ""
             for col_idx in range(width)
         ])
-    table = PdfTable(data, repeatRows=1)
+    col_widths = _pdf_column_widths(rows, width, available_width) if available_width else None
+    table = PdfTable(data, repeatRows=1, colWidths=col_widths)
     table.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
         ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
