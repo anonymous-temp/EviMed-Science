@@ -243,7 +243,7 @@ Any change to conversation behavior — persona, guidance, a socket plugin, a to
 
 ## Security notes
 
-- **Committed secrets exist in Java source**: hardcoded tokens/API keys in `constants/Constants.java` (循证, 超说明书, 安全性分析), `ERNIE_Bot.java` (循证, 超说明书), and `TencentTranSmartApi.java` (安全性分析). The `application-*.yml` files themselves use env-var references with empty defaults, but they do commit infra hosts/URLs. (Archived tree, but the exposure stands.)
+- **Hardcoded keys in the archived Java source**: `constants/Constants.java` (循证, 超说明书, 安全性分析), `ERNIE_Bot.java` (循证, 超说明书), `TencentTranSmartApi.java`, `TransApi.java` and `VerticalTransApi.java` (安全性分析, 药品遴选) hold hardcoded tokens/API keys in the on-disk copies. The five Java service directories were removed from the whole public git history on 2026-09-28 (`git filter-repo`, force-pushed), but anything fetched before that date may still hold them, so every key they name must still be rotated by its owner. Never re-add these directories to the repository.
 - **Python agents**: `文献剂量分析/deploy.env` contains real keys; other agents have local `.env` files. The six specialist directories are ordinary tracked directories (not submodules); their real `.env`/`deploy.env`/credential files are ignored by `.gitignore`. Keep every real `.env`, `deploy.env`, and credential file ignored; only example files may be committed.
 - `.evimed-local/secrets/` holds the local DeepSeek and DashScope keys, the signing keys, and the bootstrap password — never commit, never echo.
 - OpenScience ships a secret scanner in CI: `pnpm audit:source-secrets` (part of `pnpm ci:web`) — run it before committing there.

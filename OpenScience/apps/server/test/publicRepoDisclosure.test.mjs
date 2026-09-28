@@ -1,9 +1,10 @@
 // The repository is public. On 2026-09-26 it carried wording about open issues
 // of the host platform we are fused with, in the deployment guide, a service's
-// header comment and a test (fusion audit F-G1). The ruling: say what an operator must
-// do ("switch only after the platform's P0 items have shipped"), never what is
-// open. This holds the tracked tree to it with the closed list of phrases that
-// described them. History is not rewritten; this keeps new text out.
+// header comment and a test (fusion audit F-G1). The ruling: say what an
+// operator must do ("switch only after the platform's security items have
+// shipped"), never what is open. History was rewritten on 2026-09-28 to take
+// the wording out of every past commit; this keeps it out of new ones. The
+// phrases are stored encoded so that this file does not restate them.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -23,12 +24,8 @@ const DISCLOSURES = [
   ["5Yet5o2u5pS55oiQIEh0dHBPbmx5", ""],
 ].map(([source, flags]) => new RegExp(Buffer.from(source, "base64").toString("utf8"), flags));
 
-/**
- * Left to their owners, named rather than silently skipped: the specs tree is
- * never committed from here, and PROGRESS.md is the lead's (its 2026-09-26
- * 11:17 line still carries one phrase; reported for the lead to reword).
- */
-const OWNED_ELSEWHERE = [/^docs\/superpowers\/specs\//, /^OpenScience\/PROGRESS\.md$/];
+/** The specs tree is never committed from here, so it is not scanned. */
+const OWNED_ELSEWHERE = [/^docs\/superpowers\/specs\//];
 
 test("no tracked text describes the host platform's open security defects", (t) => {
   let files;
