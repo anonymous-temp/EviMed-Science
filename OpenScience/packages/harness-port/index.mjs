@@ -79,6 +79,81 @@ const enteringStepContext = new WeakMap()
 const KERNEL_SINGLETON_PACKAGES = new Set(['@deepseek-ai/dsh-scope'])
 
 /**
+ * The file a kernel package resolves to inside the running kernel's OWN
+ * install, or null when this process is not a kernel or the kernel does not
+ * carry the package.
+ *
+ * Why this exists. In the runtime image the kernel runs from the CLI's global
+ * install (`/usr/local/lib/node_modules/@deepseek-ai/dsh`), while this package
+ * sits inside the profile seed, whose pnpm store holds a second copy of every
+ * kernel package. A bare `import()` from here resolves by this file's
+ * location, so it reached the seed's copies: at 0.1.5-rc.2, measured on a seed
+ * projected the way a container boots, `dsh-storage-domain`,
+ * `dsh-typert-protocol` and `schemastery` all came from the seed while the
+ * kernel used the CLI's. Anything compared by identity then fails quietly — a
+ * `defineTool` parameter error is the seed's `HarnessError`, which the
+ * kernel's `errorInfo` does not recognise, so the tool result loses its
+ * `{ name, code }`. 0.1.7's loader happens to hand plugin code the kernel's
+ * `dsh-*` copies (same measurement, 2026-09-28) but still not `schemastery`,
+ * and nothing documents it; resolving from the kernel's install is what makes
+ * one copy a property of this code rather than of the loader.
+ *
+ * The kernel is found from the process entry (`process.argv[1]`, the `dsh`
+ * bin), whose nearest `package.json` must name `@deepseek-ai/dsh`. The
+ * package's own `package.json` is resolved there and its `exports["."]` read
+ * the way an ESM `import` reads it (`import`, then `node`, then `default`), so
+ * the file is the one the kernel itself imports — not a CommonJS twin.
+ *
+ * @param {string} specifier a bare package name
+ * @param {string | undefined} [entry] the process entry; injectable for tests
+ * @returns {Promise<string | null>} a `file:` URL
+ */
+export async function kernelModuleUrl(specifier, entry = globalThis.process?.argv?.[1]) {
+  if (!entry || typeof entry !== 'string') return null
+  try {
+    const [{ createRequire }, fs, path, { pathToFileURL }] = await Promise.all([
+      import('node:module'), import('node:fs'), import('node:path'), import('node:url'),
+    ])
+    let dir = path.dirname(fs.realpathSync(entry))
+    /** @type {string | null} */
+    let kernel = null
+    for (;;) {
+      const manifest = path.join(dir, 'package.json')
+      if (fs.existsSync(manifest)) {
+        if (JSON.parse(fs.readFileSync(manifest, 'utf8')).name === '@deepseek-ai/dsh') kernel = manifest
+        break
+      }
+      const up = path.dirname(dir)
+      if (up === dir) break
+      dir = up
+    }
+    if (!kernel) return null
+    const packageJson = createRequire(kernel).resolve(`${specifier}/package.json`)
+    const pkg = JSON.parse(fs.readFileSync(packageJson, 'utf8'))
+    if (pkg.name !== specifier) return null
+    /** @param {unknown} node @returns {string | null} */
+    const pick = (node) => {
+      if (typeof node === 'string') return node
+      if (node && typeof node === 'object') {
+        for (const condition of ['import', 'node', 'default']) {
+          const found = pick(/** @type {Record<string, unknown>} */ (node)[condition])
+          if (found) return found
+        }
+      }
+      return null
+    }
+    const exported = pkg.exports && typeof pkg.exports === 'object' && '.' in pkg.exports ? pkg.exports['.'] : pkg.exports
+    const target = pick(exported) ?? pkg.module ?? pkg.main ?? 'index.js'
+    return pathToFileURL(path.join(path.dirname(packageJson), target)).href
+  } catch {
+    // Not resolvable from the kernel: the package is not part of its install
+    // (a profile-only row), or this is not a kernel. The bare import below is
+    // then the same resolution the kernel's loader makes for the profile.
+    return null
+  }
+}
+
+/**
  * @param {string} specifier
  * @returns {Promise<any>}
  */
@@ -90,10 +165,12 @@ export async function loadHarnessModule(specifier) {
     throw new Error(`evimed: ${specifier} holds kernel state in module-local symbols; importing it here reaches a second copy in the runtime image -- read it through the kernel's own objects`)
   }
   if (!loaded.has(specifier)) {
-    loaded.set(specifier, import(specifier).catch((error) => {
-      loaded.delete(specifier)
-      throw new Error(`evimed: seam package ${specifier} is unavailable: ${error?.message ?? error}`)
-    }))
+    loaded.set(specifier, kernelModuleUrl(specifier)
+      .then((url) => import(/* @vite-ignore */ url ?? specifier))
+      .catch((error) => {
+        loaded.delete(specifier)
+        throw new Error(`evimed: seam package ${specifier} is unavailable: ${error?.message ?? error}`)
+      }))
   }
   return loaded.get(specifier)
 }
