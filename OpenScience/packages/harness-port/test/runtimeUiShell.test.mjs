@@ -77,7 +77,13 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
   // One hosted permission preset: the access-mode chip chooses nothing.
   assert.ok(css.includes('button[aria-label^="访问模式"],button[aria-label^="Access mode"]{display:none'));
   // The reading width is the kernel's formula, not a width a stray drag set.
-  assert.ok(css.includes('.wSkVaW_root{--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}'));
+  // Pinned on the element that defines the variable, found by the kernel's
+  // own data attribute; the embedded body keeps its narrower formula.
+  assert.ok(css.includes('[data-conversation-content]:not([class*="_embeddedBody"]){--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}'));
+  // No rule names a CSS-module hash: those change with every client build.
+  // A suffix (`[class$="_x"]`) or substring (`[class*="_x"]`) of a module's
+  // local name is what the kernel keeps; `.<6 chars>_name` is a build's.
+  assert.doesNotMatch(css, /\.[A-Za-z0-9]{6}_[A-Za-z]/, 'a selector names a hashed class');
   assert.match(css, /aria-label="添加工作区"/);
   assert.match(css, /_previewBadge"\]:empty/);
   // The hero's workspace chip is hidden as a button — not the whole row, whose

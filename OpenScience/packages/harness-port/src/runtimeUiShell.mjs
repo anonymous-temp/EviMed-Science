@@ -48,7 +48,7 @@ export const inject = ['slots'];
  * moving the kernel forces someone to re-read the layout before the rules ship
  * against markup they were not written for.
  */
-export const GEOMETRY_KERNEL_PIN = '0.1.5-rc.2';
+export const GEOMETRY_KERNEL_PIN = '0.1.7-rc.2';
 
 /**
  * The product's mark as a data URL, for the document's icon.
@@ -180,10 +180,14 @@ export function shellStylesheet(pin) {
     // handles beside the composer (`--dsh-chat-user-width`, kept in local
     // storage), and on 2026-09-22 the owner's composer spanned a 2520 px
     // screen edge to edge (「首页进去的输入框那么宽」) — a drag nobody meant.
-    // Pinned by the conversation root's own class, because the variable is
-    // defined on that element and only an equal-specificity `!important` on
-    // it wins; the hash is this kernel's, and the pin test above holds it.
-    '.wSkVaW_root{--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}',
+    // Pinned on the element that defines the variable, found by the data
+    // attribute the kernel puts there (`data-conversation-content`), not by a
+    // CSS-module hash. The hash was how this rule was written until 0.1.7, and
+    // it failed silently there: the class `wSkVaW_root` survived, but the
+    // variable moved to its child (`_body`), so the pin set a value every
+    // descendant was already shadowing. The embedded conversation body carries
+    // the same attribute with its own narrower formula, and keeps it.
+    '[data-conversation-content]:not([class*="_embeddedBody"]){--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}',
   ].join('\n');
 }
 

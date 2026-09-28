@@ -2,9 +2,11 @@
  * The kernel client's slot contracts this frame layer occupies, and the
  * services it reaches, as the pinned client declares them.
  *
- * Transcribed from the `.d.ts` and the registration calls of the 0.1.5-rc.2
- * browser client (the packages the production runtime image serves), not
- * inferred from names. Three rules of that registry decide whether an occupant
+ * Transcribed from the `.d.ts` and the registration calls of the browser
+ * client (the packages the production runtime image serves), not inferred
+ * from names — first at 0.1.5-rc.2, re-read at 0.1.7-rc.2 (every slot below is
+ * declared by the same package with the same kind; `conversation.hero.agentPreset`
+ * widened to `session-maybe`, the chat node and tool-view slots gained hooks). Three rules of that registry decide whether an occupant
  * appears at all, and each has already cost this codebase a shipped no-op:
  *
  *  - A list slot takes `options.id`; a keyed slot takes `options.key`; a chain
@@ -38,7 +40,7 @@
  */
 
 /** The kernel client version these contracts were read from. */
-export const RUNTIME_UI_KERNEL_PIN = '0.1.5-rc.2';
+export const RUNTIME_UI_KERNEL_PIN = '0.1.7-rc.2';
 
 /**
  * The chat node kinds `ui-chat` registers (`registerChatNodeRenderers`). A
@@ -46,7 +48,7 @@ export const RUNTIME_UI_KERNEL_PIN = '0.1.5-rc.2';
  */
 const CHAT_NODE_KINDS = Object.freeze([
   'user', 'steering', 'context', 'system-prompt', 'assistant-step', 'command', 'manual-compaction',
-  'compaction', 'model-retry', 'turn-error', 'turn-max-tokens', 'turn-process', 'turn-tail', 'unknown',
+  'compaction', 'model-retry', 'turn-error', 'turn-max-tokens', 'turn-process', 'turn-tail', 'turn-trigger', 'unknown',
 ]);
 
 /**
@@ -56,8 +58,14 @@ const CHAT_NODE_KINDS = Object.freeze([
  * future takeover is made deliberately, below the shipped entry.
  */
 const SHIPPED_TOOL_VIEW_KEYS = Object.freeze([
-  'ask_user_question', 'bash', 'cordis_define', 'cordis_run', 'cordis_stop', 'cordis_undefine', 'edit', 'glob',
-  'grep', 'present', 'read', 'read_image', 'skill', 'todo_write', 'web_fetch', 'web_search', 'write',
+  'ask_user_question', 'bash', 'cordis_define', 'cordis_inspect_list', 'cordis_inspect_query', 'cordis_inspect_self',
+  'cordis_run', 'cordis_stop', 'cordis_undefine', 'create_goal', 'edit', 'get_goal', 'glob', 'grep', 'interrupt_agent',
+  'job_kill', 'job_list', 'job_output', 'list_agents', 'list_subagent_models', 'lsp', 'present', 'ralph', 'read',
+  'read_image', 'schedule_create', 'schedule_delete', 'schedule_list', 'schedule_update', 'send_message',
+  'session_event_read', 'session_event_search', 'session_event_trace', 'session_search', 'session_trace', 'skill',
+  'spawn_teammate', 'subagent', 'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update',
+  'terminal_close', 'terminal_list', 'terminal_open', 'terminal_read', 'terminal_signal', 'todo_write',
+  'update_goal', 'wait_agent', 'web_fetch', 'web_search', 'workflow', 'write',
 ]);
 
 /**
@@ -79,7 +87,7 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   // The blank-session hero: `main.conversation`'s children table.
   'conversation.hero.brand.mark': Object.freeze({ kind: 'single', scope: 'root', declaredBy: 'ui-conversation' }),
   'conversation.hero.workspace': Object.freeze({ kind: 'single', scope: 'root', declaredBy: 'ui-conversation' }),
-  'conversation.hero.agentPreset': Object.freeze({ kind: 'single', scope: 'root', declaredBy: 'ui-conversation' }),
+  'conversation.hero.agentPreset': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   // The conversation's own view ring: one entry per tab, rendered one at a
   // time, with the tab strip in the session header. `ui-chat` holds `chat` at
   // order 0 and `ui-trajectory` holds `trajectory` (operator-only here), so an
