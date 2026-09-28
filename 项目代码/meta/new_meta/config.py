@@ -170,6 +170,8 @@ FULLTEXT_MAX_ATTEMPTS_PER_PAPER = max(1, int(os.getenv("FULLTEXT_MAX_ATTEMPTS_PE
 FULLTEXT_PAPER_DEADLINE_SECONDS = max(5.0, float(os.getenv("FULLTEXT_PAPER_DEADLINE_SECONDS", "45")))
 FULLTEXT_MAX_WORKERS = max(1, int(os.getenv("FULLTEXT_MAX_WORKERS", "8")))
 # Unpaywall identifies callers by a contact address, not a key. The deployment
-# passes the operator's Unpaywall address as PUBMED_EMAIL; with no address the
+# passes the operator's Unpaywall address as PUBMED_EMAIL, and that is the only
+# variable read: a second name compose does not hand over is a route that is
+# silently off in production (audit:hosted-compliance). With no address the
 # Unpaywall route is skipped. The address is never logged.
-UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "").strip() or PUBMED_EMAIL
+UNPAYWALL_EMAIL = PUBMED_EMAIL
