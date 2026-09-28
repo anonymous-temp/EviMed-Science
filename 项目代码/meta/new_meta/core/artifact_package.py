@@ -71,6 +71,12 @@ from new_meta.core.artifact_package_diagnostics import (
     _render_llm_reliability_audit_html,
     _render_risk_of_bias_completeness_html,
 )
+from new_meta.core.readability import (
+    OVERLONG_SENTENCE_SECTIONS,
+    OVERLONG_SENTENCE_THRESHOLDS,
+    readability_language_for_text,
+    readability_sentence_segments,
+)
 from new_meta.core.artifact_package_manifest import (
     _ascii_numeric_citation_marker_number_count_outside_code,
     _citation_fix_human_review_required,
@@ -85,6 +91,7 @@ from new_meta.core.artifact_package_manifest import (
     _main_article_text_before_supplement,
     _main_manuscript_word_count,
     _main_text_before_reference_section,
+    _main_text_before_tables_and_figures,
     _numbered_heading_refs,
     _numbered_heading_pattern,
     _numbered_text_refs,
@@ -97,6 +104,7 @@ from new_meta.core.artifact_package_manifest import (
     _reference_entry_count,
     _reference_heading_match,
     _references_section_text,
+    _section_boundary_pattern,
     _requires_publication_length_gate,
     _requires_publication_reference_depth_gate,
     _review_language_from_text,
@@ -1044,18 +1052,9 @@ _READABILITY_INTERPRETIVE_SECTIONS = {
     "结论",
 }
 
-_READABILITY_OVERLONG_SENTENCE_SECTIONS = {
-    "discussion",
-    "conclusion",
-    "conclusions",
-    "讨论",
-    "结论",
-}
-
-_READABILITY_OVERLONG_SENTENCE_THRESHOLDS = {
-    "en": 55,
-    "zh": 100,
-}
+# The sentence-length rule is shared with the writer (new_meta.core.readability).
+_READABILITY_OVERLONG_SENTENCE_SECTIONS = OVERLONG_SENTENCE_SECTIONS
+_READABILITY_OVERLONG_SENTENCE_THRESHOLDS = OVERLONG_SENTENCE_THRESHOLDS
 
 _CLINICAL_INTERPRETATION_MIN_DOMAINS = 5
 _CLINICAL_DISCUSSION_MAX_UNITS_BY_LANGUAGE = {
@@ -1497,32 +1496,8 @@ def _clinical_discussion_redundant_domain_rows(
     return rows
 
 
-def _readability_language_for_text(text: str) -> str:
-    raw = str(text or "")
-    cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", raw))
-    latin_words = len(re.findall(r"\b[A-Za-z][A-Za-z'-]*\b", raw))
-    return "zh" if cjk_chars >= max(1, latin_words * 2) else "en"
-
-
-def _readability_sentence_segments(text: str) -> list[str]:
-    raw = str(text or "")
-    kept_lines: list[str] = []
-    for line in raw.splitlines():
-        stripped = line.strip()
-        if (
-            not stripped
-            or stripped.startswith("#")
-            or stripped.startswith("|")
-            or stripped.startswith("![")
-            or re.match(r"^[-*]\s+", stripped)
-        ):
-            continue
-        kept_lines.append(stripped)
-    plain = " ".join(kept_lines)
-    if not plain:
-        return []
-    parts = re.split(r"(?<=[。！？])|(?<=[!?])\s+|(?<=[.])\s+(?=[A-Z0-9])", plain)
-    return [re.sub(r"\s+", " ", part).strip() for part in parts if part and part.strip()]
+_readability_language_for_text = readability_language_for_text
+_readability_sentence_segments = readability_sentence_segments
 
 
 def _readability_sentence_excerpt(sentence: str, *, radius: int = 140) -> str:
@@ -2606,47 +2581,6 @@ def _table_block_abbreviations(block: str) -> list[str]:
         if re.search(pattern, text, flags=re.I):
             detected.append(label)
     return detected
-
-
-def _main_text_before_tables_and_figures(text: str) -> str:
-    raw = str(text or "")
-    positions = [
-        match.start()
-        for match in re.finditer(_section_boundary_pattern(), raw, flags=re.I | re.M)
-    ]
-    reference_match = _reference_heading_match(raw)
-    if reference_match:
-        positions.append(reference_match.start())
-    if not positions:
-        return raw
-    return raw[:min(positions)]
-
-
-def _section_boundary_pattern(exclude: tuple[str, ...] = ()) -> str:
-    headings = [
-        "Tables?",
-        "Figures?",
-        "Supplementary\\s+Materials",
-        "Supplementary",
-        "Declarations?",
-        "References?",
-        "Bibliography",
-        "Literature\\s+Cited",
-        "Works\\s+Cited",
-        "表格",
-        "图表",
-        "表",
-        "图",
-        "补充材料",
-        "声明",
-        "参考文献",
-        "参考资料",
-        "引用文献",
-        "文献",
-    ]
-    excluded = {item.lower() for item in exclude}
-    active = [heading for heading in headings if heading.lower() not in excluded]
-    return rf"^##\s+(?:{'|'.join(active)})\s*[:：]?\s*$"
 
 
 def _markdown_image_refs(text: str, manuscript_dir: Path) -> list[dict[str, Any]]:

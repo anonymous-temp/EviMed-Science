@@ -80,6 +80,15 @@ class ManuscriptTitleCandidate(BaseModel):
     rationale: str = Field(default="", description="Brief explanation of why the title fits the structured facts.")
 
 
+class SentenceSplitRewrite(BaseModel):
+    index: int = Field(description="Index of the overlong sentence in the request list.")
+    replacement: str = Field(description="The same content written as two or more shorter consecutive sentences.")
+
+
+class SentenceSplitRevision(BaseModel):
+    rewrites: list[SentenceSplitRewrite] = Field(default_factory=list)
+
+
 class SemanticParagraphPatch(BaseModel):
     heading: str = Field(description="H2 section heading containing the paragraph.")
     paragraph_index: int = Field(description="One-based index of the target paragraph within the H2 section body.")

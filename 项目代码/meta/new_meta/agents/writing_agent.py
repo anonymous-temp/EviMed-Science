@@ -40,6 +40,7 @@ from new_meta.agents.writing import (
     FallbackContentMixin,
     SectionWritersMixin,
     ConsistencyGuardsMixin,
+    ReleaseConformanceMixin,
 )
 from new_meta.agents.writing.contracts import (
     CitationGroundingPatch,
@@ -94,6 +95,7 @@ class WritingAgent(
     FallbackContentMixin,
     SectionWritersMixin,
     ConsistencyGuardsMixin,
+    ReleaseConformanceMixin,
     BaseAgent,
 ):
 
@@ -242,6 +244,14 @@ class WritingAgent(
         the same artifacts that passed the smoke gate.
         """
         base_validation = dict(validation or {})
+        # Cross-references and sentence length are made to meet the release
+        # gate here, on the text about to be saved, after every model pass.
+        manuscript, _conformance = self._apply_release_conformance(
+            manuscript,
+            facts,
+            project=project,
+            allow_model=project is not None,
+        )
         self._quality_checked_manuscript = manuscript
         style_audit = manuscript_style_audit(manuscript)
         quality_gate = manuscript_quality_gate(manuscript, facts, style_audit=style_audit)

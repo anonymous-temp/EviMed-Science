@@ -10,6 +10,7 @@ from new_meta.core.llm import parse_source_json
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.core.manuscript_polish import preservation_guard_issues
+from new_meta.core.readability import sentence_length_rule
 from new_meta.core.manuscript_text_metrics import (
     main_publication_word_count,
     manuscript_quality_gate,
@@ -229,6 +230,7 @@ class SemanticReviewMixin:
             "count affects interpretation, write the clinical consequence once in the limitations paragraph without "
             "restating I², Q, p-value, and tau² together. "
             "Use the study cards to write concrete clinical interpretation rather than template-like meta-analysis commentary. "
+            + sentence_length_rule(self._lang) + " "
             "Each replacement_markdown must be the complete body for that H2 section and must not include the H2 heading.\n\n"
             "AUTHORING INPUT:\n"
             f"{json.dumps(prompt_payload, ensure_ascii=False, indent=2)[:30000]}"
@@ -506,6 +508,7 @@ class SemanticReviewMixin:
             "You are revising a rejected claim-map-authored manuscript section after an evidence-grounding review. "
             "This is a revision loop, not a new rule-based cleanup.\n\n"
             f"Write in {language_rule}. Return JSON only using the ClaimMapSectionDraft schema.\n"
+            + sentence_length_rule(self._lang) + "\n"
             "Keep the same heading. Treat EVIDENCE REVIEW REJECTION REASON as the reviewer checklist for this revision: "
             "remove or narrow only the unsupported assertions it identifies, then preserve the supported argument "
             "rather than compressing the section into a generic summary. Rewrite from SECTION CLAIMS and STRUCTURED "
@@ -2325,6 +2328,7 @@ class SemanticReviewMixin:
                 "new studies, new references, new subgroup data, new component-outcome results, or unprovided source details. "
                 "If an issue asks for unavailable source data, revise the wording to acknowledge the limit rather than inventing it.\n\n"
                 f"Write in {language_rule}. Return JSON only using the requested schema.\n"
+                + sentence_length_rule(self._lang) + "\n"
                 "Patch only Abstract, Introduction, Methods, Results, Discussion, or Conclusion. Preserve every numeric result, "
                 "confidence interval, p value, study count, participant count, citation marker, table/figure reference, drug name, "
                 "outcome name, and GRADE certainty unless the exact sentence is removed as unsupported or redundant. Prefer concise "

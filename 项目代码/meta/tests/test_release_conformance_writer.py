@@ -5,13 +5,29 @@ blocked on PRISMA flow, cross-references, readability and calculation detail.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
+
+import new_meta.config as config
+from new_meta.agents.writing.contracts import SentenceSplitRevision, SentenceSplitRewrite
 from new_meta.agents.writing_agent import WritingAgent
-from new_meta.core.artifact_package import _build_prisma_audit_review
+from new_meta.core.artifact_package import (
+    _build_cross_reference_audit_review,
+    _build_prisma_audit_review,
+    _build_readability_audit_review,
+)
+from new_meta.core.artifact_package_citation_audit import _sentence_has_numeric_effect_claim
 from new_meta.core.artifact_package_manifest import _has_calculation_detail
+from new_meta.core.manuscript_cross_references import generate_table_figure_cross_references
 from new_meta.core.manuscript_facts import _prisma_facts
 from new_meta.core.project import Project
+from new_meta.core.readability import (
+    overlong_interpretive_sentences,
+    sentence_split_issues,
+    split_overlong_sentences,
+)
 
 MA001_PRISMA_FLOW = {
     "identification": {
@@ -125,3 +141,281 @@ def test_calculation_appendix_is_rendered_from_the_engine_record() -> None:
 
 def test_calculation_appendix_falls_back_without_an_engine_record() -> None:
     assert WritingAgent(lang="en")._computation_record_notes({}, MA001_ROWS) == []
+
+
+# ── cross_references ──────────────────────────────────────────────────────
+
+
+def _ma001_like_manuscript() -> str:
+    return "\n".join([
+        "# 氨甲环酸Meta分析",
+        "",
+        "## 结果",
+        "",
+        "检索与筛选：共检索到400条记录，最终3项随机对照试验符合纳入标准。",
+        "",
+        "纳入研究与人群：3项随机对照试验共266名成年患者进入主要分析。",
+        "",
+        "主要合并效应：合并均数差（MD）为-303.23 mL（95% CI -504.52 至 -101.93）。",
+        "",
+        "证据确定性：该比较的GRADE证据确定性为极低。",
+        "",
+        "## 讨论",
+        "",
+        "本Meta分析纳入3项随机对照试验。",
+        "",
+        "## 表格",
+        "### 表1. 选定主要分析行的基本特征",
+        "| 研究 | 报告位置 |",
+        "|---|---|",
+        "| Alexandru 2016 | Table 3 |",
+        "",
+        "### 表2. 设计校正后的研究层效应",
+        "| 研究 | MD |",
+        "|---|---:|",
+        "| Alexandru 2016 | -329.70 |",
+        "",
+        "### 表3. GRADE证据概要",
+        "| 结局 | 确定性 |",
+        "|---|---|",
+        "| 总失血量 | 极低 |",
+        "",
+        "## 图表",
+        "### 图1. PRISMA流程图",
+        "![图1. PRISMA流程图](../figures/prisma_diagram.png)",
+        "### 图2. 总失血量森林图",
+        "![图2. 总失血量森林图](../figures/forest_plot.png)",
+        "### 图3. 偏倚风险概要",
+        "![图3. 偏倚风险概要](../figures/rob_summary.png)",
+        "",
+        "## 参考文献",
+        "［1］ Example.",
+        "",
+    ])
+
+
+MA001_FACTS = {
+    "prisma": {"records_identified": 400},
+    "primary_effect": {"pooled_effect": -303.2265806852571, "effect_measure": "MD"},
+    "primary_population": {"selected_total_participants": 266},
+}
+
+
+def test_every_defined_table_and_figure_gets_a_generated_reference(tmp_path: Path) -> None:
+    text, records = generate_table_figure_cross_references(_ma001_like_manuscript(), MA001_FACTS)
+    project = Project("cross references", output_dir=tmp_path)
+    project.save_text("draft.md", text, subdir="manuscript")
+
+    audit = _build_cross_reference_audit_review(project)
+
+    assert audit["passed"] is True, audit["issues"]
+    assert len(records) == 6
+    paragraphs = {line.split("：")[0]: line for line in text.splitlines() if "：" in line}
+    assert paragraphs["检索与筛选"].endswith("检索与筛选流程见图1。")
+    assert paragraphs["纳入研究与人群"].endswith("纳入研究的基本特征见表1。")
+    assert paragraphs["主要合并效应"].endswith("各研究的效应量、标准误和权重见表2。各研究结果的森林图见图2。")
+    assert paragraphs["证据确定性"].endswith("证据确定性（GRADE）概要见表3。偏倚风险评价见图3。")
+    # Generated, and idempotent: a second pass adds nothing.
+    assert generate_table_figure_cross_references(text, MA001_FACTS) == (text, [])
+
+
+def test_generated_references_carry_no_quantitative_claim() -> None:
+    _text, records = generate_table_figure_cross_references(_ma001_like_manuscript(), MA001_FACTS)
+
+    assert records
+    assert not [record["sentence"] for record in records if _sentence_has_numeric_effect_claim(record["sentence"])]
+
+
+def test_items_already_cited_in_the_text_are_left_alone() -> None:
+    manuscript = _ma001_like_manuscript().replace(
+        "最终3项随机对照试验符合纳入标准。",
+        "最终3项随机对照试验符合纳入标准（图1）。纳入研究见表1，效应量见表2，GRADE见表3，森林图见图2，偏倚风险见图3。",
+    )
+
+    assert generate_table_figure_cross_references(manuscript, MA001_FACTS) == (manuscript, [])
+
+
+# ── readability ───────────────────────────────────────────────────────────
+
+# Verbatim from the ma-001 Discussion (116 units; gate limit 100).
+MA001_SEMICOLON_SENTENCE = (
+    "本综述未获得绝对效应数据，因此无法量化氨甲环酸减少围手术期总失血量的绝对临床获益；"
+    "GRADE 不精确性判断要求将置信区间与预测区间同预设的最小重要效应或决策阈值进行比较［13］，"
+    "而本综述未报告此类阈值，因此该合并效应量是否达到临床可感知的差异幅度仍无法判断。"
+)
+# Verbatim from the ma-001 Discussion (119 units): a colon-led list.
+MA001_COLON_LIST_SENTENCE = (
+    "在适用性方面，纳入研究在干预方案与对照定义上并不一致：一项研究采用按体重给药的局部方案（15 mg/kg 溶于100 mL生理盐水），"
+    "而非常用的固定关节腔内剂量［3］；另一项研究的治疗组在氨甲环酸之外合并使用双极电凝作为共同干预［1］；"
+    "部分研究的对照为不使用氨甲环酸而非安慰剂［3］。"
+)
+
+
+def test_top_level_semicolon_between_clauses_is_split_without_changing_a_word() -> None:
+    body, splits = split_overlong_sentences(f"\n{MA001_SEMICOLON_SENTENCE}\n", language="zh")
+
+    assert len(splits) == 1
+    assert body == "\n" + MA001_SEMICOLON_SENTENCE.replace("获益；GRADE", "获益。GRADE") + "\n"
+    assert overlong_interpretive_sentences(f"## 讨论\n{body}") == []
+
+
+def test_colon_led_list_and_bracketed_semicolons_are_not_split() -> None:
+    parenthetical = (
+        "在成年初次单侧全膝关节置换术患者中，与安慰剂或不使用氨甲环酸相比，围手术期经静脉、局部或联合途径使用氨甲环酸"
+        "可能减少围手术期总失血量（MD -303.23，95% CI -504.52 至 -101.93；原研究未报告单位），"
+        "该合并估计基于3项随机对照试验、共266例受试者［1，2］。"
+    )
+    body = f"{MA001_COLON_LIST_SENTENCE}\n\n{parenthetical}\n"
+
+    assert split_overlong_sentences(body, language="zh") == (body, [])
+
+
+def test_english_semicolon_split_capitalizes_the_next_clause() -> None:
+    sentence = (
+        "The pooled estimate favoured tranexamic acid across three trials that differed in dose, route, timing, "
+        "and the definition of blood loss used by each report, and in the populations that were enrolled; the "
+        "prediction interval was wide and crossed the line of no effect, so the size of benefit in a new surgical "
+        "setting remains uncertain for surgeons and for the patients they treat."
+    )
+
+    body, splits = split_overlong_sentences(sentence, language="en")
+
+    assert len(splits) == 1
+    assert "were enrolled. The prediction interval" in body
+
+
+def test_a_split_is_accepted_only_when_it_changes_no_fact() -> None:
+    faithful = MA001_COLON_LIST_SENTENCE.replace("不一致：", "不一致。").replace("［3］；", "［3］。").replace("［1］；", "［1］。")
+
+    assert sentence_split_issues(MA001_COLON_LIST_SENTENCE, faithful, language="zh") == []
+    assert "negation_or_hedge_changed" in sentence_split_issues(
+        MA001_COLON_LIST_SENTENCE, faithful.replace("不使用", "使用"), language="zh"
+    )
+    assert "numbers_changed" in sentence_split_issues(
+        MA001_COLON_LIST_SENTENCE, faithful.replace("15 mg/kg", "20 mg/kg"), language="zh"
+    )
+    assert "citations_changed_or_moved" in sentence_split_issues(
+        MA001_COLON_LIST_SENTENCE, faithful.replace("双极电凝作为共同干预［1］", "双极电凝［1］作为共同干预"), language="zh"
+    )
+    assert "not_split" in sentence_split_issues(
+        MA001_COLON_LIST_SENTENCE, MA001_COLON_LIST_SENTENCE.replace("；", "，"), language="zh"
+    )
+
+
+def _discussion_manuscript() -> str:
+    return "\n".join([
+        "# 标题",
+        "## 结果",
+        "主要合并效应为MD -303.23。",
+        "## 讨论",
+        MA001_SEMICOLON_SENTENCE,
+        "",
+        MA001_COLON_LIST_SENTENCE,
+        "## 结论",
+        "氨甲环酸可能减少总失血量。",
+        "## 参考文献",
+        "［1］ Example.",
+        "",
+    ])
+
+
+class _StubSplitter(WritingAgent):
+    def __init__(self, replacement: str):
+        super().__init__(lang="zh")
+        self.replacement = replacement
+        self.prompts: list[str] = []
+
+    def call_llm_structured(self, prompt, schema, **kwargs):  # noqa: D401 - test double
+        assert schema is SentenceSplitRevision
+        self.prompts.append(prompt)
+        return SentenceSplitRevision(rewrites=[SentenceSplitRewrite(index=0, replacement=self.replacement)])
+
+
+def test_residual_overlong_sentence_takes_the_models_faithful_split(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(config, "LLM_API_KEY", "test-key")
+    faithful = MA001_COLON_LIST_SENTENCE.replace("不一致：", "不一致。").replace("［3］；", "［3］。").replace("［1］；", "［1］。")
+    agent = _StubSplitter(faithful)
+    project = Project("sentence split", output_dir=tmp_path)
+
+    text, audit = agent._apply_release_conformance(_discussion_manuscript(), {}, project=project)
+
+    assert len(audit["deterministic_sentence_splits"]) == 1
+    assert [item["replacement"] for item in audit["model_sentence_splits"]["accepted"]] == [faithful]
+    assert audit["remaining_overlong_sentences"] == []
+    assert "100 counted units" in agent.prompts[0]
+    project.save_text("draft.md", text, subdir="manuscript")
+    assert _build_readability_audit_review(project)["passed"] is True
+    saved = json.loads((project.base_dir / "manuscript" / "release_conformance_audit.json").read_text())
+    assert saved["model_sentence_splits"]["status"] == "ok"
+
+
+def test_an_unfaithful_split_is_rejected_and_left_as_the_gates_finding(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(config, "LLM_API_KEY", "test-key")
+    unfaithful = MA001_COLON_LIST_SENTENCE.replace("不一致：", "不一致。").replace("［3］；", "［3］。").replace(
+        "［1］；", "［1］。"
+    ).replace("不使用", "使用")
+    agent = _StubSplitter(unfaithful)
+
+    text, audit = agent._apply_release_conformance(_discussion_manuscript(), {}, project=None)
+
+    assert MA001_COLON_LIST_SENTENCE in text
+    assert audit["model_sentence_splits"]["rejected"][0]["issues"] == ["negation_or_hedge_changed"]
+    assert [item["units"] for item in audit["remaining_overlong_sentences"]] == [119]
+
+
+def test_no_model_call_without_a_configured_key(monkeypatch) -> None:
+    monkeypatch.setattr(config, "LLM_API_KEY", "")
+    agent = _StubSplitter("unused")
+
+    _text, audit = agent._apply_release_conformance(_discussion_manuscript(), {}, project=None)
+
+    assert agent.prompts == []
+    assert audit["model_sentence_splits"] == {"status": "skipped", "reason": "missing_llm_api_key"}
+
+
+# ── the save-time hook ────────────────────────────────────────────────────
+
+
+def _no_model(*_args, **_kwargs):
+    raise RuntimeError("no model in offline tests")
+
+
+def test_saved_draft_carries_generated_references(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(config, "LLM_API_KEY", "")
+    monkeypatch.setattr(WritingAgent, "call_llm_structured", _no_model)
+    monkeypatch.setattr(WritingAgent, "call_llm", _no_model)
+    project = Project("save hook", output_dir=tmp_path)
+    agent = WritingAgent(lang="zh")
+
+    agent._quality_checked_validation(_ma001_like_manuscript(), MA001_FACTS, {"passed": True, "issues": []}, project=project)
+
+    saved = project.load_text("draft.md", subdir="manuscript")
+    assert agent._quality_checked_manuscript == saved
+    assert "检索与筛选流程见图1。" in saved
+    assert _build_cross_reference_audit_review(project)["passed"] is True
+
+
+def test_cli_finalization_saves_the_conformed_text(tmp_path: Path, monkeypatch) -> None:
+    import new_meta.main as main_module
+
+    monkeypatch.setattr(config, "LLM_API_KEY", "")
+    monkeypatch.setattr(WritingAgent, "call_llm_structured", _no_model)
+    monkeypatch.setattr(WritingAgent, "call_llm", _no_model)
+    project = Project("cli finalize", output_dir=tmp_path)
+    project.save_json("manuscript_facts.json", MA001_FACTS, subdir="manuscript")
+
+    finalized, _validation = main_module._finalize_manuscript_after_postprocessing(
+        project,
+        _ma001_like_manuscript(),
+        lang="zh",
+    )
+
+    assert "纳入研究的基本特征见表1。" in finalized
+
+
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_writer_prompts_carry_the_gate_limit(language: str) -> None:
+    from new_meta.core.readability import sentence_length_rule
+
+    rule = sentence_length_rule(language)
+    assert ("100 counted units" if language == "zh" else "55 words") in rule

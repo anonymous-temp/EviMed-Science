@@ -11,5 +11,6 @@ from new_meta.agents.writing.publication_polish import PublicationPolishMixin
 from new_meta.agents.writing.fallback_content import FallbackContentMixin
 from new_meta.agents.writing.section_writers import SectionWritersMixin
 from new_meta.agents.writing.consistency_guards import ConsistencyGuardsMixin
+from new_meta.agents.writing.release_conformance import ReleaseConformanceMixin
 
-__all__ = ["CitationRepairMixin", "GradeTablesMixin", "SemanticReviewMixin", "CitationGroundingMixin", "ClaimMapMixin", "FallbackReportsMixin", "PublicationPolishMixin", "FallbackContentMixin", "SectionWritersMixin", "ConsistencyGuardsMixin"]
+__all__ = ["CitationRepairMixin", "GradeTablesMixin", "SemanticReviewMixin", "CitationGroundingMixin", "ClaimMapMixin", "FallbackReportsMixin", "PublicationPolishMixin", "FallbackContentMixin", "SectionWritersMixin", "ConsistencyGuardsMixin", "ReleaseConformanceMixin"]

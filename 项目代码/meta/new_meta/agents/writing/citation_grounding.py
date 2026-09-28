@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 
+from new_meta.core.readability import sentence_length_rule
 from new_meta.core.manuscript_polish import preservation_guard_issues
 
 from new_meta.agents.writing.contracts import (
@@ -707,6 +708,7 @@ class CitationGroundingMixin:
             "(Abstract narrative fields, Introduction, Methods prose, Results prose, Discussion, Conclusion). Do not edit tables, GRADE, figures, "
             "declarations, or references.\n\n"
             f"{language_rule}\n"
+            + sentence_length_rule(self._lang) + "\n"
             "Your job is conservative clinical editing, not a fresh rewrite. Start from each original section and keep "
             "the same factual coverage. Make the manuscript read like a clinical meta-analysis rather than a template: "
             "sharpen the clinical argument, remove generic method self-commentary, make limitations concrete, and "

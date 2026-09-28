@@ -1497,12 +1497,16 @@ def _finalize_manuscript_after_postprocessing(project: Project, manuscript: str,
     project.save_json("final_claim_map_citation_plan.json", citation_plan_audit, subdir="manuscript")
     citation_agent._save_citation_contract(project, facts)
     finalized, validation = validate_and_repair_manuscript(finalized, facts)
-    validation, _, _ = WritingAgent(lang=lang)._quality_checked_validation(
+    quality_agent = WritingAgent(lang=lang)
+    validation, _, _ = quality_agent._quality_checked_validation(
         finalized,
         facts,
         validation,
         project=project,
     )
+    # The save-time check can repair the text it validates (citation grounding,
+    # generated cross-references, split sentences); the caller saves this text.
+    finalized = getattr(quality_agent, "_quality_checked_manuscript", finalized)
     try:
         from new_meta.core.real_smoke import write_real_smoke_manifest
         write_real_smoke_manifest(project.base_dir)

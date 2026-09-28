@@ -272,6 +272,47 @@ def _main_article_text_before_supplement(text: str) -> str:
     return raw[: min(cut_points)] if cut_points else raw
 
 
+def _main_text_before_tables_and_figures(text: str) -> str:
+    raw = str(text or "")
+    positions = [
+        match.start()
+        for match in re.finditer(_section_boundary_pattern(), raw, flags=re.I | re.M)
+    ]
+    reference_match = _reference_heading_match(raw)
+    if reference_match:
+        positions.append(reference_match.start())
+    if not positions:
+        return raw
+    return raw[:min(positions)]
+
+
+def _section_boundary_pattern(exclude: tuple[str, ...] = ()) -> str:
+    headings = [
+        "Tables?",
+        "Figures?",
+        "Supplementary\\s+Materials",
+        "Supplementary",
+        "Declarations?",
+        "References?",
+        "Bibliography",
+        "Literature\\s+Cited",
+        "Works\\s+Cited",
+        "表格",
+        "图表",
+        "表",
+        "图",
+        "补充材料",
+        "声明",
+        "参考文献",
+        "参考资料",
+        "引用文献",
+        "文献",
+    ]
+    excluded = {item.lower() for item in exclude}
+    active = [heading for heading in headings if heading.lower() not in excluded]
+    return rf"^##\s+(?:{'|'.join(active)})\s*[:：]?\s*$"
+
+
 def _main_manuscript_word_count(text: str) -> int:
     return main_publication_word_count(text)
 
