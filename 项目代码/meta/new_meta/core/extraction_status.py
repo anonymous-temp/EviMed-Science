@@ -81,7 +81,9 @@ def exclude_unusable_sources(project, failures):
         criterion=UNUSABLE_SOURCE_CRITERION, remedy="Supply the article to include it.",
     )
     project.add_warning(
-        "extraction",
+        # A named full-text exclusion, not a failed extraction: the EviMed
+        # adapter reads an "extraction" warning as a failed module.
+        "screening",
         f"{len(unusable)} included stud{'y was' if len(unusable) == 1 else 'ies were'} excluded because the "
         "retrieved full text could not be extracted; the review reports them as full-text exclusions.",
         code="unusable_full_text_excluded",
@@ -126,7 +128,9 @@ def exclude_unresolved_design_studies(project, studies):
         data["excluded_unresolved_design"] = sorted(unresolved)
         project.save_json("extraction_status.json", status, subdir="extraction")
     project.add_warning(
-        "extraction",
+        # A named full-text exclusion, not a failed extraction: the EviMed
+        # adapter reads an "extraction" warning as a failed module.
+        "screening",
         f"{len(unresolved)} included stud{'y was' if len(unresolved) == 1 else 'ies were'} left out of the "
         "synthesis because the randomized design could not be resolved from the full text.",
         code="unresolved_design_excluded",

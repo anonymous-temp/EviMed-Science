@@ -417,6 +417,8 @@ def test_an_unattended_review_leaves_out_a_study_whose_design_is_unknown(tmp_pat
     kept = project.load_json("all_extractions.json", subdir="extraction")
     assert [row["characteristics"]["pmid"] for row in kept] == ["S1"]
     assert project.load_json("prisma_flow.json")["eligibility"]["exclusion_reasons"][UNRESOLVED_DESIGN_CRITERION] == 1
+    warning = next(item for item in project.load_json("pipeline_warnings.json") if item["code"] == "unresolved_design_excluded")
+    assert warning["stage"] == "screening"  # an exclusion, not a failed extraction module
     plan = admit_project_protocol(project, protocol, enforce=True)
     assert plan.study_designs == ["parallel_rct"]
     # Idempotent on resume, and never the whole review.

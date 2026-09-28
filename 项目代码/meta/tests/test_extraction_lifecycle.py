@@ -216,7 +216,7 @@ def test_unattended_run_excludes_an_unusable_source_and_extracts_the_rest(tmp_pa
     assert status["data"]["required_study_ids"] == ["S2"]
     assert status["data"]["excluded_unusable_sources"] == ["S1"]
     warnings = project.load_json("pipeline_warnings.json") or []
-    assert any(item.get("code") == "unusable_full_text_excluded" for item in warnings)
+    assert any(item.get("code") == "unusable_full_text_excluded" and item.get("stage") == "screening" for item in warnings)
     require_complete_extraction(project, results, [papers[1]])
 
 
