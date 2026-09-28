@@ -73,9 +73,11 @@ TASK_FIXTURES = {
     # project the write is a platform step a run may not mark, refused item by
     # item. The social search is one small real crawl. A deployment that does
     # not run the module declares all three not offered (`OPTIONAL_TOOLS`).
+    # The search asks one platform per call since 2026-09-25 (`platform`, not
+    # `platforms`); the old shape was refused as invalid input before any crawl.
     "geo_read": {"what": "project"},
     "geo_write": {"what": "step", "data": {"step": "diagnosis", "status": "none"}},
-    "social_posts_search": {"query": "降糖药", "platforms": ["xhs"], "limit": 3},
+    "social_posts_search": {"query": "降糖药", "platform": "xhs", "limit": 3},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,
@@ -105,6 +107,11 @@ TASK_FIXTURES = {
         "query": "aspirin cardiovascular prevention randomized trial", "limit": 2,
         "databases": ["pubmed", "crossref"],
     },
+    # Added 2026-09-28: the tool had been declared and model-facing since it
+    # shipped with no fixture, so the probe refused to start at all. A PMID of
+    # a paper with a long reference list, read through Europe PMC's citation
+    # network -- the same record the tool's own unit test is written around.
+    "reference_list": {"identifier": "30153985", "limit": 5},
     "guideline_search": {"query": "hypertension clinical practice guideline", "limit": 2},
     "clinical_trial_search": {"query": "type 2 diabetes metformin", "limit": 2},
     "patent_search": {"query": "pembrolizumab biomarker", "limit": 2},
@@ -470,6 +477,10 @@ def main():
     parser.add_argument("--receipt-workspace", action="append", default=[])
     parser.add_argument("--max-receipt-age-days", type=float, default=14)
     parser.add_argument("--output-dir", type=Path, default=RESULTS)
+    parser.add_argument(
+        "--record-incomplete", action="store_true",
+        help="write the document and its evidence to the new --output-dir even when some tools are uncertified",
+    )
     args = parser.parse_args()
     if (args.output_dir / "tool-probe-v3.json").exists() or (args.output_dir / "evidence").exists():
         raise SystemExit("audit output already exists; use a new --output-dir to preserve prior evidence")
@@ -518,6 +529,8 @@ def main():
     by_tool = {item["tool"]: item for item in results}
     ordered = [by_tool[name] for name in declared]
     certified = sum(bool(item["operational"]) for item in ordered)
+    complete = certified == len(declared)
+    uncertified = [item["tool"] for item in ordered if not item.get("operational")]
     document = {
         "schemaVersion": 3,
         "probedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -530,6 +543,7 @@ def main():
         "unverified": len(declared) - certified,
         "operational": certified,
         "errors": sum(item["status"] == "error" for item in ordered),
+        "complete": complete,
         "criteria": {
             "ordinaryTool": "A real task call must return success or warning and all declared artifacts must exist and be non-empty.",
             "specialistTool": "A capabilities response never qualifies; a fresh terminal managed job and hashed non-empty artifacts are required. Operational execution and publication readiness are reported separately.",
@@ -537,17 +551,29 @@ def main():
         "results": ordered,
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    complete = certified == len(declared)
     # A partial run publishes a document and an evidence tree that look whole
     # while covering less than the last one. Report it and leave the recorded
     # evidence alone rather than replacing certification with its absence.
-    if complete:
+    #
+    # `--record-incomplete` is the one exception, for when the last complete
+    # recording has itself expired: there is then no certification left to
+    # protect, and the release gate refuses the expired document and a partial
+    # one alike. What differs is what they say. The expired one describes a
+    # deployment and a registry that no longer exist; a fresh partial one
+    # records what the live deployment answered today and names every tool it
+    # could not certify, and `complete: false` says so on its first screen.
+    # The output directory must still be new, so the script overwrites nothing;
+    # promoting the result over the previous recording is a separate step.
+    if complete or args.record_incomplete:
         snapshot_evidence(ordered, args.output_dir / "evidence")
         payload = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
         for filename in ("tool-probe-v2.json", "tool-probe-v3.json"):
             (args.output_dir / filename).write_text(payload, encoding="utf-8")
+        if not complete:
+            print("recorded incomplete: %d of %d tools uncertified (%s); the release gate refuses this document "
+                  "until every one is certified" % (len(uncertified), len(declared), ", ".join(uncertified)),
+                  file=sys.stderr)
     else:
-        uncertified = [item["tool"] for item in ordered if not item.get("operational")]
         print("not written: %d of %d tools uncertified (%s)" % (
             len(uncertified), len(declared), ", ".join(uncertified[:8])), file=sys.stderr)
     print(json.dumps({

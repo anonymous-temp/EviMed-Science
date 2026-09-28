@@ -20,12 +20,18 @@ widened and that a fresh probe covering too few tools is still refused.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
+import json
 import sys
+import tempfile
 import unittest
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -97,6 +103,141 @@ class ToolProbeCurrency(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             audit.tool_probe_currency(probe(days_ago=41, tools=REGISTRY), REGISTRY, set())
         self.assertIn("tool-probe-v3.json", str(raised.exception))
+
+
+class UncertifiedToolsAreNamed(unittest.TestCase):
+    """A fresh probe that falls short says which tools, and what they said.
+
+    The refusal itself is unchanged -- every offered tool must be certified --
+    but "all 40 tools are not execution-certified" made the reader open the
+    document to learn which. Run against the real registry, so the document
+    below passes every currency check and reaches the count.
+    """
+
+    def _document(self):
+        server = audit.load_module("evimed_release_tool_registry", audit.REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+        registry = sorted(item["name"] for item in server.TOOL_DEFINITIONS)
+        self.assertGreater(len(registry), 30, "the registry did not load; this test proved nothing")
+        results = [{"tool": name, "operational": True, "probeType": "executed_tool_call", "status": "success"} for name in registry]
+        for row in results:
+            if row["tool"] == "mendelian_randomization":
+                row.update(operational=False, probeType="no_completed_job_receipt", status="unverified",
+                           summary="No fresh terminal managed job with verified artifacts was found.")
+        return {
+            "schemaVersion": 3,
+            "probedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "registered": len(registry),
+            "notOffered": [],
+            "executionCertified": len(registry) - 1,
+            "operational": len(registry) - 1,
+            "unverified": 1,
+            "errors": 0,
+            "complete": False,
+            "results": results,
+        }, len(registry)
+
+    def test_a_short_count_names_each_uncertified_tool_and_its_reason(self):
+        document, expected = self._document()
+        real_read = audit.read
+        audit.read = lambda name: document if name == "tool-probe-v3.json" else real_read(name)
+        try:
+            with self.assertRaises(SystemExit) as raised:
+                audit.verify_tools()
+        finally:
+            audit.read = real_read
+        message = str(raised.exception)
+        self.assertIn("%d of %d tools are execution-certified" % (expected - 1, expected), message)
+        self.assertIn("mendelian_randomization (no_completed_job_receipt", message)
+        self.assertIn("No fresh terminal managed job", message)
+        # Only the one that failed: a certified tool named here would be noise.
+        self.assertNotIn("health (", message)
+
+
+class ProbeFixturesCoverTheRegistry(unittest.TestCase):
+    """Every declared tool has a probe fixture or a receipt harvester.
+
+    `reference_list` shipped with neither, so `run_tool_audit.py` refused to
+    start against any deployment -- a defect only a live run could find, which
+    is why the refresh stayed undone. Checked here offline instead.
+    """
+
+    def test_fixtures_and_specialists_are_exactly_the_registry(self):
+        import run_tool_audit as runner
+
+        server = audit.load_module("evimed_release_tool_registry", audit.REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+        registry = {item["name"] for item in server.TOOL_DEFINITIONS}
+        self.assertGreater(len(registry), 30, "the registry did not load; this test proved nothing")
+        fixtured = set(runner.TASK_FIXTURES) | set(runner.SPECIALISTS)
+        self.assertEqual(sorted(registry - fixtured), [], "declared but never probed")
+        self.assertEqual(sorted(fixtured - registry), [], "fixtured but no longer declared")
+        self.assertFalse(set(runner.TASK_FIXTURES) & set(runner.SPECIALISTS))
+
+    def test_every_fixture_matches_its_tools_published_schema(self):
+        # `social_posts_search` changed to one platform per call and its
+        # fixture kept `platforms`, so the live probe got `invalid_input`
+        # before any crawl -- a refusal the schema alone predicts. The same
+        # validator the server runs before dispatch, over every fixture.
+        import run_tool_audit as runner
+
+        server = audit.load_module("evimed_release_tool_registry", audit.REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+        schemas = {item["name"]: item["inputSchema"] for item in server.TOOL_DEFINITIONS}
+        checked = 0
+        for tool, arguments in runner.TASK_FIXTURES.items():
+            with self.subTest(tool=tool):
+                server._validate(arguments, schemas[tool], "arguments")
+                checked += 1
+        self.assertEqual(checked, len(runner.TASK_FIXTURES))
+        self.assertGreater(checked, 30, "no fixture was validated; this test proved nothing")
+
+
+class IncompleteProbeRecording(unittest.TestCase):
+    """What `run_tool_audit.py` writes when a tool cannot be certified.
+
+    By default nothing: a partial document must not quietly stand in for a
+    complete one. `--record-incomplete` writes it, and says so in the document
+    rather than only on stderr.
+    """
+
+    def _run(self, *extra):
+        import run_tool_audit as runner
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repo = Path(temporary.name)
+        server = SimpleNamespace(
+            list_tools=lambda: [{"name": "health"}, {"name": "peer_review"}],
+            disabled_tools=lambda: set(),
+            call_tool=lambda name, arguments: {"status": "success", "summary": "answered"},
+        )
+        argv = ["run_tool_audit.py", "--probe-workspace", str(repo / "ws"), "--output-dir", str(repo / "out"), *extra]
+        with patch.object(runner, "REPO", repo), patch.object(runner, "load_server", return_value=server), \
+                patch.dict(runner.TASK_FIXTURES, {"health": {}}, clear=True), \
+                patch.dict(runner.SPECIALISTS, {"peer_review": ("peer-review-runs", "review-")}, clear=True), \
+                patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as raised:
+                runner.main()
+        return raised.exception.code, repo / "out", stderr.getvalue()
+
+    def test_by_default_an_incomplete_probe_writes_nothing(self):
+        code, output, stderr = self._run()
+        self.assertEqual(code, 1)
+        self.assertFalse((output / "tool-probe-v3.json").exists())
+        self.assertFalse((output / "evidence").exists())
+        self.assertIn("not written", stderr)
+
+    def test_record_incomplete_writes_a_document_that_says_it_is_incomplete(self):
+        code, output, stderr = self._run("--record-incomplete")
+        self.assertEqual(code, 1, "an incomplete probe still exits non-zero")
+        document = json.loads((output / "tool-probe-v3.json").read_text(encoding="utf-8"))
+        self.assertIs(document["complete"], False)
+        self.assertEqual((document["registered"], document["executionCertified"], document["unverified"]), (2, 1, 1))
+        rows = {row["tool"]: row for row in document["results"]}
+        self.assertIs(rows["health"]["operational"], True)
+        self.assertEqual(rows["peer_review"]["probeType"], "no_completed_job_receipt")
+        self.assertTrue((output / "evidence" / ".evimed-audit" / "tool-responses" / "health.json").is_file())
+        self.assertIn("recorded incomplete", stderr)
+        self.assertIn("peer_review", stderr)
 
 
 class SourceCountsAreDerived(unittest.TestCase):

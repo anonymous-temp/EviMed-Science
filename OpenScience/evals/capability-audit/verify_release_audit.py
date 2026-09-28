@@ -144,6 +144,22 @@ def tool_probe_currency(document, registry, not_offered):
     )
 
 
+def uncertified_tools(document):
+    """Name every tool the probe could not certify, and what it said.
+
+    "all 40 tools are not execution-certified" was the whole message, which
+    sends the reader into the document to find out which ones and why. The
+    probe already records both on each row; this only reads them out. It does
+    not decide anything: the counts below are still what refuses.
+    """
+    rows = [item for item in document.get("results", []) if item.get("operational") is not True]
+    return "; ".join(
+        "%s (%s: %s)" % (item.get("tool"), item.get("probeType") or item.get("status"),
+                         str(item.get("errorCode") or item.get("summary") or "no reason recorded")[:200])
+        for item in rows
+    )
+
+
 def verify_tools():
     document = read("tool-probe-v3.json")
     require(document.get("schemaVersion") == 3, "tool audit schema is stale")
@@ -184,7 +200,11 @@ def verify_tools():
     # the useful message needs the registry this line has just finished reading.
     tool_probe_currency(document, registry, not_offered)
     require(document.get("registered") == expected, "tool registry count is not %d" % expected)
-    require(document.get("executionCertified") == expected, "all %d tools are not execution-certified" % expected)
+    require(
+        document.get("executionCertified") == expected,
+        "%s of %d tools are execution-certified; not certified: %s"
+        % (document.get("executionCertified"), expected, uncertified_tools(document) or "none named in the results"),
+    )
     require(document.get("operational") == expected, "tool operational count is not %d" % expected)
     require(document.get("unverified") == 0 and document.get("errors") == 0, "tool audit contains unverified or errored tools")
     results = document.get("results", [])
