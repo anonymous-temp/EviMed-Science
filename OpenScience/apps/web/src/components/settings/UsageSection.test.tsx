@@ -91,14 +91,15 @@ describe("用量", () => {
     expect(await screen.findByText("¥116.96")).toBeInTheDocument();
   });
 
-  it("shows an operator the tokens and the per-model split", async () => {
+  it("shows an operator the per-model split in calls and money, and no token counts", async () => {
     const user = userEvent.setup();
     mocks.operator = true;
     open();
     expect(await screen.findByText("deepseek-v4-pro")).toBeInTheDocument();
-    expect(screen.getByText("1,300,914,220 / 89,012 token")).toBeInTheDocument();
+    expect(screen.queryByText(/token/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "明细" }));
-    expect(await screen.findByText("171 次调用 · 读入 40,100,000 · 生成 90,000 token")).toBeInTheDocument();
+    expect(await screen.findByText("171 次调用")).toBeInTheDocument();
+    expect(screen.queryByText(/token/)).not.toBeInTheDocument();
   });
 
   it("says one sentence when the month has no spend", async () => {

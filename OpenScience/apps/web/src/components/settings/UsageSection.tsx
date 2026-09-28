@@ -36,7 +36,10 @@ function shortDate(value: string | null): string {
  * What went: three token totals in a monospaced title font, the orange
  * paragraph about calls cut off before the provider reported their usage (now
  * one small line at the foot of the detail), and the sentence that the amount
- * is not a bill. An operator still sees tokens and the per-model split. A
+ * is not a bill. An operator still sees the per-model split, in calls and
+ * money; token counts are nobody's here (the 2026-09-23 ruling: no token
+ * figures on a page — the owner's own account is an operator since 09-28,
+ * and the release walk failed the page on them). A
  * refused request's ceiling is said in one line above, in the dictionary's own
  * words — never as a reset time, because the windows roll.
  */
@@ -85,7 +88,6 @@ export function UsageSection() {
         // One model serves every run; its id is an engine internal a
         // researcher's bill does not need (DESIGN.md: no model names in the body).
         <Panel title="模型调用">
-          <PanelRow label="读入 / 生成" control={<span className="tabular-nums">{count(usage.promptTokens)} / {count(usage.completionTokens)} token</span>} />
           {usage.byModel.map((row) => (
             <PanelRow key={row.model} label={<span className="font-mono">{row.model}</span>} control={<span className="tabular-nums">{row.calls} 次 · {formatCny(row.cost) || "¥0.00"}</span>} />
           ))}
@@ -128,7 +130,7 @@ function UsageDetail({ usage, operator, onBack }: { usage: WebUsageSummary | nul
                       leading={<span className="w-20 pt-px text-caption tabular-nums text-text-3">{shortDate(item.at)}</span>}
                       title={item.title ?? "未命名的研究"}
                       to={`/app/runs?run=${encodeURIComponent(item.runId)}`}
-                      meta={operator ? `${count(item.calls)} 次调用 · 读入 ${count(item.inputTokens)} · 生成 ${count(item.outputTokens)} token` : undefined}
+                      meta={operator ? `${count(item.calls)} 次调用` : undefined}
                       trailing={<span className="text-ui tabular-nums text-text-2">{formatCny(item.cost)}</span>}
                     />
                   ))}
