@@ -60,6 +60,9 @@ Do not expand a renal composite into its individual components or add alternativ
 composites unless the protocol requests them. Preserve an eligible secondary
 endpoint of the paper when it is the review's requested primary endpoint.
 Keep genuine ambiguity explicit; never relabel a source result to fit this scope.
+Set protocol_outcome_role on every row: primary when the row reports the Primary
+Outcome above (the protocol and the paper may use different languages or wording),
+secondary for a listed Secondary Outcome, other otherwise.
 
 ## Paper Content
 The paper text contains [PAGE N] markers indicating page boundaries.

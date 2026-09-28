@@ -212,3 +212,23 @@ def test_a_row_names_the_primary_outcome_without_its_bracketed_definition(name, 
                "measured blood loss, in mL or g/dL as reported)")
     assert _matches_primary_outcome(name, primary) is matches
 
+
+def test_a_row_the_extractor_calls_primary_is_typed_across_languages():
+    """ma-001 run 10 (2026-09-28): the protocol named the primary outcome in
+    Chinese, the rows in English, and no row was typed for synthesis."""
+    from new_meta.core.rct_design_reconciliation import canonical_outcome_name, is_primary_outcome_row
+    protocol = _protocol()
+    protocol.pico.outcome_primary = "总失血量（total blood loss，以mL计的围手术期失血量）"
+    studies = _studies()
+    row = studies[0].outcomes[0]
+    row.outcome_name = "Total blood loss (perioperative, mL)"
+    assert not is_primary_outcome_row(row, protocol)
+    for outcome in (*studies[0].outcomes, *studies[1].outcomes):
+        outcome.outcome_name = "Total blood loss (perioperative, mL)"
+        outcome.protocol_outcome_role = "primary"
+    assert is_primary_outcome_row(row, protocol)
+    assert canonical_outcome_name(row, protocol) == protocol.pico.outcome_primary
+    report = reconcile_extracted_rct_designs(protocol, studies)
+    assert report["multi_arm_studies"] == ["29410968", "39673144"]
+    assert row.precision_basis == "computed_from_source_verified_arm_summaries"
+

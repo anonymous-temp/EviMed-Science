@@ -439,6 +439,9 @@ class OutcomeData(BaseModel):
     """Outcome data extracted from a study, supporting multiple outcome types."""
     outcome_name: str = ""
     outcome_type: str = ""  # "continuous" / "dichotomous" / "time-to-event" / "proportion" / "correlation"
+    # Which protocol outcome this row reports, as the extractor judged it:
+    # "primary", "secondary", "other", or "" (not stated, older rows).
+    protocol_outcome_role: str = ""
 
     @model_validator(mode="before")
     @classmethod

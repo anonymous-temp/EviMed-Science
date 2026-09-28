@@ -18,6 +18,16 @@ class ExtractedOutcomeData(OutcomeData):
             "in the existing outcome description fields. Do not invent type suffixes or aliases."
         ),
     )
+    protocol_outcome_role: Literal["primary", "secondary", "other", ""] = Field(
+        "",
+        description=(
+            "Which protocol outcome this source result reports: primary when it is the "
+            "protocol's Primary Outcome (whatever language or wording either uses), "
+            "secondary when it is one of the listed Secondary Outcomes, otherwise other "
+            "(empty only for a row carried over from before this field). "
+            "A clinical judgment about the endpoint; keep outcome_name as the source names it."
+        ),
+    )
     comparative_design: Literal[
         "", "unknown", "parallel_rct", "cluster_rct", "crossover_rct", "multi_arm_rct",
     ] = Field(

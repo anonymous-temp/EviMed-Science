@@ -63,7 +63,7 @@ def reconcile_extracted_rct_designs(
         if not source_text:
             continue
         for outcome in study.outcomes:
-            if _matches_primary_outcome(outcome.outcome_name, protocol.pico.outcome_primary):
+            if is_primary_outcome_row(outcome, protocol):
                 recovered_effects += int(
                     _recover_protocol_effect_from_source(outcome, source_text, protocol)
                 )
@@ -220,7 +220,7 @@ def reconcile_extracted_rct_designs(
 
 def canonical_outcome_name(outcome: OutcomeData, protocol: ResearchProtocol) -> str:
     """Return the protocol label for a clearly matching primary outcome."""
-    if _matches_primary_outcome(outcome.outcome_name, protocol.pico.outcome_primary):
+    if is_primary_outcome_row(outcome, protocol):
         return str(protocol.pico.outcome_primary or outcome.outcome_name).strip()
     return str(outcome.outcome_name or "").strip()
 
@@ -367,7 +367,7 @@ def _recover_protocol_effect_from_source(
 
 def _is_source_backed_primary_contrast(outcome: OutcomeData, protocol: ResearchProtocol) -> bool:
     return (
-        _matches_primary_outcome(outcome.outcome_name, protocol.pico.outcome_primary)
+        is_primary_outcome_row(outcome, protocol)
         and outcome.source_quote_verified is True
         and (
             _has_complete_2x2(outcome)
@@ -687,6 +687,21 @@ def _outcome_head(text: str) -> str:
     while previous != text:
         previous, text = text, _PARENTHETICAL.sub("", text)
     return " ".join(text.casefold().replace("-", " ").split()).strip(" .;:,")
+
+
+def is_primary_outcome_row(outcome: OutcomeData, protocol: ResearchProtocol) -> bool:
+    """Whether a row reports the protocol's primary outcome, for typing and naming it.
+
+    The extractor states it (protocol_outcome_role, a clinical judgment in any
+    language); the name matcher covers rows from before that field. On
+    2026-09-28 a ma-001 protocol named the primary outcome in Chinese and every
+    row named it in English, and no row was typed for synthesis. Only typing and
+    naming: the checker's outcome judgment still decides whether the row
+    belongs in the analysis.
+    """
+    if str(outcome.protocol_outcome_role or "").strip().lower() == "primary":
+        return True
+    return _matches_primary_outcome(outcome.outcome_name, protocol.pico.outcome_primary)
 
 
 def _matches_primary_outcome(name: str, primary: str) -> bool:
