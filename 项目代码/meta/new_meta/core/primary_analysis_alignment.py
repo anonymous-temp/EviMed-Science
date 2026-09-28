@@ -662,11 +662,10 @@ def cached_alignment_is_current(project) -> bool:
                 return False
         from new_meta.core.method_planning import infer_review_family
         from new_meta.schemas.method_policy import ReviewFamily
-        from new_meta.core.extraction_verification import trial_unit_issues
         if infer_review_family(protocol) is ReviewFamily.INTERVENTION_RCT:
             candidates = [(row_id, current[row_id][0].outcomes[current[row_id][1]].primary_analysis_alignment.assessment)
                           for row_id in binding["selected_row_ids"]]
-            if trial_unit_issues(candidates):
+            if project_trial_unit_issues(project, candidates):
                 return False
         effects = project.load_json("effect_sizes.json", subdir="analysis")
         return isinstance(effects, list) and digest(effects) == binding["effects_sha256"]
@@ -746,10 +745,59 @@ def save_method_pool_binding(project, plan, execution, envelope, source_studies,
     }, subdir="analysis")
 
 
+UNATTENDED_RUN_FILE = "unattended_run.json"
+
+
+def project_publication_units(project) -> dict[str, str] | None:
+    """Primary publications that may stand for their own unregistered trial.
+
+    Only in an unattended run (``--skip-confirm``, as the EviMed adapter runs
+    it). Small single-centre trials often report neither a registry ID nor a
+    trial name, and then no row of theirs can prove it is independent of the
+    others: on 2026-09-28 not one of the eight trials a ma-001 run included
+    did. Unattended, a publication that full-text screening recorded as a
+    primary publication identifies its trial; the rows it admits are reported
+    as an assumption (``trial_identity_assumed_from_publication``).
+    Interactively the refusal stands for a person to resolve.
+    """
+    from new_meta.tools.utils import paper_identity
+    marker = project.load_json(UNATTENDED_RUN_FILE) or {}
+    if marker.get("unattended") is not True:
+        return None
+    units = {}
+    for record in project.load_json("full_text_screening.json", subdir="screening") or []:
+        paper = record.get("paper") if isinstance(record, dict) else None
+        if (isinstance(paper, dict) and record.get("decision") == "include"
+                and record.get("publication_role") == "primary_publication"):
+            identity = paper_identity(paper)
+            if identity:
+                units[identity] = identity
+    return units
+
+
+def project_trial_unit_issues(project, candidates, *, assumed: list | None = None):
+    from new_meta.core.extraction_verification import trial_unit_issues
+    return trial_unit_issues(candidates, publication_units=project_publication_units(project), assumed=assumed)
+
+
+def report_assumed_trial_identities(project, assumed: list) -> None:
+    """One current warning naming the rows a synthesis pooled under the assumption."""
+    project.clear_warnings(code="trial_identity_assumed_from_publication")
+    if not assumed:
+        return
+    publications = sorted({row_id.rsplit(":", 1)[0] for row_id in assumed})
+    project.add_warning(
+        "synthesis",
+        f"{len(publications)} pooled stud{'y reports' if len(publications) == 1 else 'ies report'} neither a trial "
+        "registration nor a trial name; each primary publication was taken as its own independent trial.",
+        code="trial_identity_assumed_from_publication",
+        context={"studies": publications, "rows": sorted(assumed)},
+    )
+
+
 def require_method_source_alignment(project, plan, result_ids, *, entities):
     """Enforce current literature provenance at the actual executor boundary."""
     from new_meta.core.extraction_ledger import current_extraction_matches_result, result_entity_id
-    from new_meta.core.extraction_verification import trial_unit_issues
     from new_meta.schemas.method_policy import ReviewFamily
     from new_meta.schemas.protocol import ResearchProtocol
     from new_meta.schemas.study import ExtractedStudy
@@ -775,7 +823,7 @@ def require_method_source_alignment(project, plan, result_ids, *, entities):
             else:
                 candidates.append((row_id, row[0].outcomes[row[1]].primary_analysis_alignment.assessment))
         if not unresolved and plan.family is ReviewFamily.INTERVENTION_RCT:
-            unresolved.extend(trial_unit_issues(candidates))
+            unresolved.extend(project_trial_unit_issues(project, candidates))
     except (OSError, ValueError, TypeError, AttributeError):
         unresolved = [{"row_id": result_id, "alignment": {"status": "unknown", "reason": "source_row_provenance_required"}}
                       for result_id in result_ids]
@@ -820,11 +868,10 @@ def require_current_compiled_alignment(project):
             valid = valid and all(result_id in rows and alignment_status(project, protocol, *rows[result_id])["status"] == "match"
                                   for result_id in execution.input_result_ids)
             from new_meta.schemas.method_policy import ReviewFamily
-            from new_meta.core.extraction_verification import trial_unit_issues
             if valid and plan.family is ReviewFamily.INTERVENTION_RCT:
                 candidates = [(f"{rows[key][0].characteristics.pmid or rows[key][0].characteristics.study_id}:{rows[key][1]}",
                     rows[key][0].outcomes[rows[key][1]].primary_analysis_alignment.assessment) for key in execution.input_result_ids]
-                valid = not trial_unit_issues(candidates)
+                valid = not project_trial_unit_issues(project, candidates)
         else:
             valid = False
         if valid:

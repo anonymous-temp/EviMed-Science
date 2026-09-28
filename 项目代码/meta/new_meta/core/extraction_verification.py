@@ -659,11 +659,20 @@ def validate_check_batch(
     return errors
 
 
-def trial_unit_issues(candidates: list[tuple[str, PrimaryAlignmentAssessment]]) -> list[VerificationIssue]:
+def trial_unit_issues(candidates: list[tuple[str, PrimaryAlignmentAssessment]], *,
+                      publication_units: dict[str, str] | None = None,
+                      assumed: list | None = None) -> list[VerificationIssue]:
     """Require known independent contributing units; publications are not trials.
 
     candidates contains (row_id, assessment). Aliases are joined only where one
     verified unit explicitly co-reports an ID and a name. No reference scanning.
+
+    ``publication_units`` (unattended runs only, see
+    primary_analysis_alignment.project_publication_units) names, per
+    publication, the primary publication that stands for its own trial when
+    the source reports neither a registry ID nor a trial name for it and the
+    checker saw no uncertain unit. That independence is an assumption, not a
+    verified fact: such rows are appended to ``assumed`` for the caller to report.
     """
     from new_meta.core.primary_analysis_alignment import _normalized_quote
     parent = {}
@@ -678,6 +687,17 @@ def trial_unit_issues(candidates: list[tuple[str, PrimaryAlignmentAssessment]]) 
     records, issues = [], []
     for row_id, assessment in candidates:
         details = assessment.verification
+        publication = row_id.rsplit(":", 1)[0]
+        if (publication_units and publication in publication_units and details is not None
+                and details.trial_coverage in {"complete", "uncertain"}
+                and not any(unit.role == "uncertain" or unit.registry_id.strip() or unit.trial_name.strip()
+                            for unit in details.trial_units)):
+            key = "publication:" + publication_units[publication]
+            root(key)
+            records.append((row_id, [key]))
+            if assumed is not None:
+                assumed.append(row_id)
+            continue
         contributing = [unit for unit in details.trial_units if unit.role == "contributing"] if details else []
         if (not details or details.trial_coverage != "complete" or not contributing
                 or any(unit.role == "uncertain" for unit in details.trial_units)):
@@ -698,7 +718,7 @@ def trial_unit_issues(candidates: list[tuple[str, PrimaryAlignmentAssessment]]) 
     registry_groups = {root(key) for key in list(parent) if key.startswith("registry:")}
     if len({row_id.rsplit(":", 1)[0] for row_id, _ in records}) > 1:
         for row_id, units in records:
-            if any(root(unit) not in registry_groups for unit in units):
+            if any(root(unit) not in registry_groups and not unit.startswith("publication:") for unit in units):
                 issues.append({"row_id": row_id, "reason": "trial_identity_required",
                                "detail": "An unresolved trial-name/registry-ID relationship cannot establish disjoint cohorts."})
     by_unit = {}

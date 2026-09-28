@@ -913,3 +913,65 @@ def test_a_source_conflict_about_an_unread_p_value_does_not_hold_the_row(tmp_pat
     project, result, calls = run_verifier(tmp_path / "read", monkeypatch, [response] * 3, candidate=candidate)
     assert alignment_status(project, protocol(), result, 0)["status"] == "unknown"
 
+
+# ma-001 (2026-09-28): none of the eight included TXA trials reported a registry
+# ID or a trial name, so no row could prove its trial independent of the others.
+def _unregistered(row_id_units=None, coverage="uncertain", role="contributing"):
+    from new_meta.schemas.study import PrimaryAlignmentAssessment
+    item = checked_row()
+    item["verification"]["trial_coverage"] = coverage
+    item["verification"]["trial_units"] = [] if role is None else [
+        {**item["verification"]["trial_units"][0], "registry_id": "", "trial_name": "", "role": role}]
+    return PrimaryAlignmentAssessment.model_validate(item)
+
+
+def test_unregistered_primary_publications_stand_for_their_trials_only_when_allowed():
+    from new_meta.core.extraction_verification import trial_unit_issues
+    candidates = [("34668331:0", _unregistered()), ("26894222:1", _unregistered(coverage="complete")),
+                  ("21253725:0", _unregistered(role=None))]
+    issues = trial_unit_issues(candidates)
+    assert {item["row_id"] for item in issues if item["reason"] == "trial_identity_required"} == {
+        "34668331:0", "26894222:1", "21253725:0"}
+    assumed = []
+    units = {"34668331": "34668331", "26894222": "26894222", "21253725": "21253725"}
+    assert trial_unit_issues(candidates, publication_units=units, assumed=assumed) == []
+    assert assumed == ["34668331:0", "26894222:1", "21253725:0"]
+
+
+def test_a_publication_stands_for_its_trial_only_without_any_named_or_uncertain_unit():
+    from new_meta.core.extraction_verification import trial_unit_issues
+    units = {"paperA": "paperA", "paperB": "paperB"}
+    # An uncertain unit is the checker saying it cannot tell which trials contribute.
+    assert trial_unit_issues([("paperA:0", _unregistered(role="uncertain"))], publication_units=units)
+    # A publication outside the allowed set (not a primary publication) keeps the refusal.
+    assert trial_unit_issues([("paperC:0", _unregistered())], publication_units=units)
+    # A registered trial beside an unregistered publication: both stand.
+    assert trial_unit_issues([("paperA:0", _registered()), ("paperB:0", _unregistered())],
+                             publication_units=units) == []
+    # A name-only unit still cannot be told apart from a registered one.
+    named = checked_row(); named["verification"]["trial_units"][0].update(registry_id="", trial_name="CREDENCE")
+    from new_meta.schemas.study import PrimaryAlignmentAssessment
+    assert trial_unit_issues([("paperA:0", PrimaryAlignmentAssessment.model_validate(named)),
+                              ("paperB:0", _unregistered())], publication_units=units)
+
+
+def _registered():
+    from new_meta.schemas.study import PrimaryAlignmentAssessment
+    return PrimaryAlignmentAssessment.model_validate(checked_row())
+
+
+def test_publication_units_exist_only_in_an_unattended_run(tmp_path):
+    from new_meta.core.primary_analysis_alignment import UNATTENDED_RUN_FILE, project_publication_units
+    from new_meta.core.project import Project
+    project = Project("trial identity", output_dir=tmp_path)
+    project.save_json("full_text_screening.json", [
+        {"paper": {"pmid": "34668331"}, "decision": "include", "publication_role": "primary_publication"},
+        {"paper": {"pmid": "11111111"}, "decision": "include", "publication_role": "secondary_publication"},
+        {"paper": {"pmid": "22222222"}, "decision": "exclude", "publication_role": "primary_publication"},
+    ], subdir="screening")
+    assert project_publication_units(project) is None
+    project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": False})
+    assert project_publication_units(project) is None
+    project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": True})
+    assert project_publication_units(project) == {"34668331": "34668331"}
+

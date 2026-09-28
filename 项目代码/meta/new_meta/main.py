@@ -4104,6 +4104,10 @@ def main():
         args.run_mode = configure_project_run_mode(project, args.run_mode)
     except ValueError as exc:
         parser.error(str(exc))
+    # Whether nobody is there to answer: the unattended policies (named
+    # exclusions, publication-level trial identity) read this, per run.
+    from new_meta.core.primary_analysis_alignment import UNATTENDED_RUN_FILE
+    project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": bool(args.skip_confirm)})
 
     setup_logging()
     logger = logging.getLogger("metaagent.main")

@@ -349,18 +349,21 @@ class PipelineRunner:
                 )
             if verdict["status"] != "match":
                 unresolved.append({"row_id": f"{source_row[0].characteristics.pmid or source_row[0].characteristics.study_id}:{source_row[1]}" if source_row else result_id, "result_id": result_id, "alignment": verdict})
+        assumed_trials = []
         if not direct_ipd and plan.family is ReviewFamily.INTERVENTION_RCT and not unresolved:
-            from new_meta.core.extraction_verification import trial_unit_issues
+            from new_meta.core.primary_analysis_alignment import project_trial_unit_issues
             trial_candidates = []
             for result_id in result_ids:
                 study, index = source_rows[result_id]
                 trial_candidates.append((f"{study.characteristics.pmid or study.characteristics.study_id}:{index}",
                                          study.outcomes[index].primary_analysis_alignment.assessment))
-            unresolved.extend(trial_unit_issues(trial_candidates))
+            unresolved.extend(project_trial_unit_issues(self.project, trial_candidates, assumed=assumed_trials))
         if unresolved:
             phase = needs_input_phase(self.project, unresolved)
             self.project.save_json("primary_alignment_status.json", phase, subdir="analysis")
             return phase
+        from new_meta.core.primary_analysis_alignment import report_assumed_trial_identities
+        report_assumed_trial_identities(self.project, assumed_trials)
         try:
             execution = executor.execute_project(
                 plan,
@@ -693,10 +696,15 @@ class PipelineRunner:
 
         from new_meta.core.method_planning import infer_review_family
         from new_meta.schemas.method_policy import ReviewFamily
-        from new_meta.core.extraction_verification import trial_unit_issues
+        from new_meta.core.primary_analysis_alignment import (
+            project_trial_unit_issues, report_assumed_trial_identities,
+        )
         rct_review = infer_review_family(protocol) is ReviewFamily.INTERVENTION_RCT
         if rct_review:
-            trial_issues = trial_unit_issues(verified_trial_candidates)
+            assumed_trials = []
+            trial_issues = project_trial_unit_issues(self.project, verified_trial_candidates, assumed=assumed_trials)
+            report_assumed_trial_identities(
+                self.project, [row_id for row_id in assumed_trials if row_id not in {item["row_id"] for item in trial_issues}])
             by_row = {}
             for item in trial_issues:
                 by_row.setdefault(item["row_id"], []).append(item)
