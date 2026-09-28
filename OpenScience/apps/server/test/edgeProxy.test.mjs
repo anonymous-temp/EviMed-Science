@@ -259,8 +259,17 @@ test("a web read refused from Beijing is read once more through the node; anythi
 });
 
 test("an unroutable host spends only the direct attempt's own deadline before the node is tried", async () => {
+  // A hung request holds its socket, and the socket holds the event loop; the
+  // stand-in holds it the same way until it is aborted. Without that, the only
+  // thing pending is the transport's own deadline — an `AbortSignal.timeout`,
+  // whose timer Node never refs — and Node 22's test runner (CI's, and
+  // production's Node) cancels the file there; Node 24's waits.
   const hang = ({ signal }) => new Promise((_, reject) => {
-    signal.addEventListener("abort", () => reject(webReadError(504, "web_read_timeout", "no answer", { retryable: true })), { once: true });
+    const socket = setInterval(() => {}, 60_000);
+    signal.addEventListener("abort", () => {
+      clearInterval(socket);
+      reject(webReadError(504, "web_read_timeout", "no answer", { retryable: true }));
+    }, { once: true });
   });
   const transport = webTransportWithEdgeFallback(hang, async () => ({ status: 200, headers: {}, body: Buffer.from("from Tokyo") }), { directTimeoutMs: 1_000 });
   const started = Date.now();

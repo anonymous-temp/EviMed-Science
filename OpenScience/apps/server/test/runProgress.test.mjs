@@ -25,6 +25,7 @@ import {
   progressChildren,
   runDeliverables,
 } from "../src/runProgress.mjs";
+import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 
 const ITEMS = [
@@ -288,7 +289,7 @@ test("F4 on the monitor: the plan is published as rejected at attempt 2, and a c
     },
   });
   store.scheduleMonitor(project, run.id);
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
 
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_timeout", "the run ran out its window; nothing ended it on a guess");
@@ -330,7 +331,7 @@ test("a child nothing named is found through the kernel, and its work keeps the 
   await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify(f4Projection({ subagents: [] })), "utf8");
   store.childDiscoveryIntervalMs = 0;
   store.scheduleMonitor(project, run.id);
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
   const [finished] = await store.list(project);
   assert.equal(finished.qualityNotices.some((notice) => /没有可观测的进展/.test(String(notice?.text ?? notice))), false);
 });
@@ -338,7 +339,7 @@ test("a child nothing named is found through the kernel, and its work keeps the 
 test("the stall notice names only what the monitor measured", async (t) => {
   const { project, store, run } = await f4Store(t, { stallPolls: 3, maxPolls: 12 });
   store.scheduleMonitor(project, run.id);
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
   const [finished] = await store.list(project);
   const stall = finished.qualityNotices.map((notice) => String(notice?.text ?? notice)).find((line) => /没有可观测的进展/.test(line));
   assert.ok(stall, "a run with no observable movement is still told so");

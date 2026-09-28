@@ -61,9 +61,20 @@ test("a failing Crossref says nothing, is not remembered, and is counted", async
   const [family] = sourceUpdateMetricFamilies(sources.stats());
   assert.equal(family.series.find((item) => item.labels.outcome === "failed").value, 2);
 
+  // A hung request holds its socket, and the socket holds the event loop; the
+  // stand-in holds it the same way until it is aborted. Without that, the only
+  // thing pending is the lookup's own deadline — an `AbortSignal.timeout`,
+  // whose timer Node never refs — and Node 22's test runner (CI's, and
+  // production's Node) cancels the file there; Node 24's waits.
   const hanging = createSourceUpdateLookup({
     userAgent: "x", timeoutMs: 50,
-    fetchImpl: (_url, init) => new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason))),
+    fetchImpl: (_url, init) => new Promise((_resolve, reject) => {
+      const socket = setInterval(() => {}, 60_000);
+      init.signal.addEventListener("abort", () => {
+        clearInterval(socket);
+        reject(init.signal.reason);
+      }, { once: true });
+    }),
   });
   const started = Date.now();
   assert.equal((await hanging.lookup(["10.1016/s0140-6736(97)11096-0"])).size, 0);
