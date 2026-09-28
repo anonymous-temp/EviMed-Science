@@ -13,11 +13,13 @@
 # write (/agent and /adapter/evimed_specialist_adapter; /app/new_meta for the
 # MetaAgent; /mcp for the drug-evidence adapter). A requirements file that
 # differs from what the running image was built with is refused by name: that
-# is a full build, not a delta. So is a requirements.lock (the pinned set a
-# full build installs, compile-engine-locks.sh) that the release carries and
-# the running image does not hold byte for byte -- an image built before its
-# engine had a lock included, which is how the first build after a lock
-# lands is always a full one.
+# is a full build, not a delta. A requirements.lock (the pinned set a full
+# build installs, compile-engine-locks.sh) that the running image does not hold
+# byte for byte is installed over it in the delta: pip moves only the packages
+# whose pinned version differs, from the mirror, so the first release after the
+# locks landed (2026-09-28) did not have to rebuild R and the CRAN packages of
+# the MR engine to adopt a pin. The lock stays in the image, so the next delta
+# compares against it.
 #
 # Run after host-delta-release.sh has seeded <RELEASE_DIR> (with the engine
 # sources in the delta archive) and before host-release-switch.sh; the switch
@@ -57,10 +59,16 @@ same_requirements() { # image path-in-image path-in-release: unreadable counts a
   rm -f "$tmp"; return "$status"
 }
 
-same_inputs() { # image dir-in-image dir-in-release: requirements.txt, and the lock when the release has one
-  same_requirements "$1" "$2/requirements.txt" "$3/requirements.txt" || return 1
-  if [ -f "$3/requirements.lock" ]; then same_requirements "$1" "$2/requirements.lock" "$3/requirements.lock" || return 1; fi
+same_inputs() { # image dir-in-image dir-in-release: requirements.txt; a differing lock is installed, not refused
+  same_requirements "$1" "$2/requirements.txt" "$3/requirements.txt"
 }
+
+lock_differs() { # image dir-in-image dir-in-release: the release carries a lock the image does not hold
+  [ -f "$3/requirements.lock" ] || return 1
+  ! same_requirements "$1" "$2/requirements.lock" "$3/requirements.lock"
+}
+
+PIP_INDEX_URL="${EVIMED_PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}"
 
 set_env() { # variable value
   if grep -q "^$1=" "$ENVF"; then sed -i "s|^$1=.*|$1=$2|" "$ENVF"; else printf '%s=%s\n' "$1" "$2" >> "$ENVF"; fi
@@ -75,14 +83,17 @@ while IFS='|' read -r service variable fallback agent extra; do
   # stay are the ones under /agent and /adapter.
   if [ "$agent" != "-" ]; then
     same_inputs "$base" /agent "${agent}" \
-      || { echo "${service}: ${agent}/requirements.txt or its lock differs from the running image's; build it in full"; exit 1; }
+      || { echo "${service}: ${agent}/requirements.txt differs from the running image's; build it in full"; exit 1; }
     same_requirements "$base" /adapter/requirements.txt OpenScience/deploy/specialist-adapter/requirements.txt \
       || { echo "${service}: the adapter's requirements differ from the running image's; build it in full"; exit 1; }
   else
     # The drug-evidence adapter installs the adapter's lock itself.
     same_inputs "$base" /adapter OpenScience/deploy/specialist-adapter \
-      || { echo "${service}: the adapter's requirements or lock differ from the running image's; build it in full"; exit 1; }
+      || { echo "${service}: the adapter's requirements differ from the running image's; build it in full"; exit 1; }
   fi
+  agent_lock=0; adapter_lock=0
+  if [ "$agent" != "-" ] && lock_differs "$base" /agent "${agent}"; then agent_lock=1; fi
+  if [ "$agent" = "-" ] && lock_differs "$base" /adapter OpenScience/deploy/specialist-adapter; then adapter_lock=1; fi
   {
     printf 'FROM %s\n' "$base"
     if [ "$agent" != "-" ]; then printf 'COPY %s /agent\n' "$agent"; fi
@@ -91,13 +102,18 @@ while IFS='|' read -r service variable fallback agent extra; do
     # build does: the MR engine compares the two before admitting a job, and a
     # changed package under the base image's manifest refuses every MR start
     # with audit_adapter_manifest_changed.
+    if [ "$agent_lock" = 1 ]; then printf 'RUN pip install --index-url %s --no-cache-dir -r /agent/requirements.lock\n' "$PIP_INDEX_URL"; fi
     printf 'COPY OpenScience/deploy/specialist-adapter/Dockerfile OpenScience/deploy/specialist-adapter/Dockerfile.evidence OpenScience/deploy/specialist-adapter/requirements.txt /adapter/\n'
+    if [ "$adapter_lock" = 1 ]; then
+      printf 'COPY OpenScience/deploy/specialist-adapter/requirements.lock /adapter/requirements.lock\n'
+      printf 'RUN pip install --index-url %s --no-cache-dir -r /adapter/requirements.lock\n' "$PIP_INDEX_URL"
+    fi
     printf 'RUN rm -f /adapter/adapter-evidence.json && python -m evimed_specialist_adapter.audit_receipt --write-adapter-manifest /adapter/adapter-evidence.json\n'
     if [ -n "$extra" ]; then printf '%s\n' "$extra"; fi
   } > "/tmp/engine-delta-${service}.Dockerfile"
   docker build -q -f "/tmp/engine-delta-${service}.Dockerfile" -t "$target" . > /dev/null
   set_env "$variable" "$target"
-  echo "${service}: ${base} -> ${target} ($(docker image inspect -f '{{.Id}}' "$target" | cut -c1-19))"
+  echo "${service}: ${base} -> ${target} ($(docker image inspect -f '{{.Id}}' "$target" | cut -c1-19))$([ "$agent_lock$adapter_lock" != 00 ] && echo ' lock installed')"
 done <<< "$ENGINES"
 
 # The MetaAgent is its own image (项目代码/meta, Dockerfile.evimed): only its
@@ -105,9 +121,12 @@ done <<< "$ENGINES"
 base=$(current_image EVIMED_META_AGENT_IMAGE evimed-meta-agent:0.9.0)
 docker image inspect "$base" > /dev/null || { echo "evimed-meta-agent: running image ${base} is not on this host; refusing"; exit 1; }
 same_inputs "$base" /app 项目代码/meta \
-  || { echo "evimed-meta-agent: requirements.txt or its lock differs from the running image's; build it in full"; exit 1; }
+  || { echo "evimed-meta-agent: requirements.txt differs from the running image's; build it in full"; exit 1; }
 target=$(next_tag "$base")
 printf 'FROM %s\nCOPY new_meta /app/new_meta\n' "$base" > /tmp/engine-delta-evimed-meta-agent.Dockerfile
+if lock_differs "$base" /app 项目代码/meta; then
+  printf 'COPY requirements.lock /app/requirements.lock\nRUN pip install --index-url %s --no-cache-dir -r /app/requirements.lock\n' "$PIP_INDEX_URL" >> /tmp/engine-delta-evimed-meta-agent.Dockerfile
+fi
 docker build -q -f /tmp/engine-delta-evimed-meta-agent.Dockerfile -t "$target" 项目代码/meta > /dev/null
 set_env EVIMED_META_AGENT_IMAGE "$target"
 echo "evimed-meta-agent: ${base} -> ${target} ($(docker image inspect -f '{{.Id}}' "$target" | cut -c1-19))"

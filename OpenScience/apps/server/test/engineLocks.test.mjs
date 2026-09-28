@@ -93,7 +93,7 @@ test("the MetaAgent's and the evidence adapter's locks pin what their images ins
   }
 });
 
-test("every image that has a lock installs it, and the delta refuses a lock the running image does not hold", async () => {
+test("every image that has a lock installs it, and the delta installs a lock the running image does not hold", async () => {
   const engine = await read(path.join(adapterDir, "Dockerfile"));
   assert.match(engine, /COPY \$\{AGENT_DIR\}\/requirements\.txt \$\{AGENT_DIR\}\/requirements\.loc\[k\] \/tmp\/agent-requirements\//);
   assert.match(engine, /if \[ -f \/tmp\/agent-requirements\/requirements\.lock \]; then agent_requirements=\/tmp\/agent-requirements\/requirements\.lock; fi/);
@@ -106,4 +106,13 @@ test("every image that has a lock installs it, and the delta refuses a lock the 
   for (const call of ['same_inputs "$base" /agent "${agent}"', 'same_inputs "$base" /adapter OpenScience/deploy/specialist-adapter', 'same_inputs "$base" /app 项目代码/meta']) {
     assert.ok(delta.includes(call), `host-engine-delta.sh compares ${call}`);
   }
+  // 2026-09-28: a lock the running image does not hold is installed over it
+  // (pip moves only what differs), rather than forcing a full rebuild of every
+  // engine — the MR engine's R and CRAN packages among them — to adopt a pin.
+  for (const call of ['lock_differs "$base" /agent "${agent}"', 'lock_differs "$base" /adapter OpenScience/deploy/specialist-adapter', 'lock_differs "$base" /app 项目代码/meta']) {
+    assert.ok(delta.includes(call), `host-engine-delta.sh checks ${call}`);
+  }
+  assert.match(delta, /RUN pip install --index-url %s --no-cache-dir -r \/agent\/requirements\.lock/);
+  assert.match(delta, /RUN pip install --index-url %s --no-cache-dir -r \/adapter\/requirements\.lock/);
+  assert.match(delta, /RUN pip install --index-url %s --no-cache-dir -r \/app\/requirements\.lock/);
 });
