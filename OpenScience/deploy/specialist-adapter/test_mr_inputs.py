@@ -122,7 +122,7 @@ def test_uploaded_mr_sources_reach_the_fixed_runner_as_standardized_job_files(
     assert all(not item["path"].startswith("/") for item in result["artifacts"])
 
 
-def queue_job(service, client, secret, monkeypatch, *, user="user1", local=True):
+def queue_job(service, client, secret, monkeypatch, *, user="user1", local=True, sources=None):
     commands = []
 
     class QueuedWorker:
@@ -135,7 +135,9 @@ def queue_job(service, client, secret, monkeypatch, *, user="user1", local=True)
         "outcome": "CHD",
         "analysisDirection": "forward",
     }
-    if local:
+    if sources is not None:
+        request.update(exposureSource=sources[0], outcomeSource=sources[1])
+    elif local:
         request.update(
             exposureSource=local_source("data/exposure.csv"),
             outcomeSource=local_source("data/outcome.csv", clumped=False),

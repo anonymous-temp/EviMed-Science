@@ -45,6 +45,18 @@ _HEARTBEAT_SECONDS = 30.0
 #: Where an engine that knows its own stage says so: `{"stage", "percent"}`.
 _PROGRESS_ENV = "EVIMED_JOB_PROGRESS_FILE"
 _PROGRESS_LIMIT = 4 * 1024
+#: The failure codes a failed MR runner may hand the run: its closed families
+#: and three named delivery codes. `mr_open_` is the token-free GWAS Catalog
+#: path. Until it was added here (2026-09-28) every one of its refusals — a
+#: PubMed id with two studies, a study EBI has no harmonised file for, the same
+#: study on both sides — reached the run as "The fixed MR runner failed." with
+#: no code, and three production jobs in a row read as a broken engine.
+_MR_RUNNER_CODE = re.compile(r"mr_(?:input|analysis|open)_[a-z_]{1,80}")
+_MR_RUNNER_NAMED_CODES = frozenset({
+    "mr_interpretation_failed", "mr_interpretation_incomplete", "mr_plot_generation_failed",
+})
+_MR_RUNNER_FAILED = "The fixed MR runner failed."
+_MR_RUNNER_MESSAGE_LIMIT = 2000
 
 
 SPECS: dict[str, dict[str, Any]] = {
@@ -1094,6 +1106,37 @@ def _report_usage(state: dict[str, Any], log_path: Path | None) -> None:
     _log_line(log_path, f"usage report: {outcome}")
 
 
+def _mr_runner_failure(result: dict[str, Any], secrets: list[bytes]) -> tuple[str | None, str]:
+    """The code and message a failed runner's result may give the run.
+
+    The runner's text is withheld by default: an interpretation failure's
+    message can carry a model provider's error body. An open-data refusal
+    (`mr_open_*`) is raised before any model is called, and its text is the
+    catalogue's and EBI's facts — the studies to choose from, the study with no
+    harmonised file, the HTTP status and the route — which is what the run needs
+    to correct its request. It is shown on one line, bounded, and not at all if
+    it holds a credential the runner was given. A code this adapter does not
+    forward is still named in the message when it is a plain identifier.
+    """
+    code = result.get("errorCode")
+    if not isinstance(code, str) or not (
+        _MR_RUNNER_CODE.fullmatch(code) or code in _MR_RUNNER_NAMED_CODES
+    ):
+        named = isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code)
+        return None, (f"{_MR_RUNNER_FAILED[:-1]} ({code})." if named else _MR_RUNNER_FAILED)
+    message = result.get("error")
+    if not code.startswith("mr_open_") or not isinstance(message, str):
+        return code, _MR_RUNNER_FAILED
+    text = "".join(character for character in " ".join(message.split()) if character.isprintable())
+    if not text or any(
+        secret in candidate.encode("utf-8", "replace") for secret in secrets for candidate in (message, text)
+    ):
+        return code, _MR_RUNNER_FAILED
+    if len(text) > _MR_RUNNER_MESSAGE_LIMIT:
+        text = text[: _MR_RUNNER_MESSAGE_LIMIT - 1] + "…"
+    return code, text
+
+
 def _run_isolated_mr(
     state_path: Path, state: dict[str, Any], root: Path, data_root: Path
 ) -> int:
@@ -1160,12 +1203,10 @@ def _run_isolated_mr(
                 state.pop("auditReceipt", None)
                 raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
         if not success:
-            code = result.get("errorCode")
-            if isinstance(code, str) and (re.fullmatch(r"mr_(?:input|analysis)_[a-z_]{1,80}", code) or code in {
-                "mr_interpretation_failed", "mr_interpretation_incomplete", "mr_plot_generation_failed",
-            }):
+            code, message = _mr_runner_failure(result, jobs.sensitive_values(environment))
+            if code:
                 state["errorCode"] = code
-            state["error"] = "The fixed MR runner failed."
+            state["error"] = message
             if outcome.get("failureDiagnosticReceipt"):
                 state["failureDiagnosticReceipt"] = outcome["failureDiagnosticReceipt"]
         _write_state(state_path, state)

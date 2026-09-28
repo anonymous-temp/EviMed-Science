@@ -93,3 +93,77 @@ def test_diagnostic_directory_refuses_existing_or_symlink_destination(tmp_path, 
         with service._mr_store().diagnostic_directory(state_path):
             pytest.fail("unsafe diagnostic destination accepted")
     assert list(victim.iterdir()) == []
+
+
+# The three open-data refusals production returned on 2026-09-28, in shape:
+# until the adapter admitted `mr_open_*`, each reached the run as "The fixed MR
+# runner failed." with no code.
+AMBIGUOUS = (
+    "PubMed 30124842 has 2 GWAS Catalog studies with full summary statistics: "
+    "GCST006900 (Body mass index; 456,426 European ancestry individuals); "
+    "GCST006901 (Height; 456,426 European ancestry individuals). Choose one and give its accession."
+)
+CATALOG = ({"type": "gwas_catalog", "pubmedId": "30124842"}, {"type": "gwas_catalog", "pubmedId": "26343387"})
+
+
+def refusing_runner(tmp_path, code, message):
+    result = {"status": "failed", "errorCode": code, "error": message,
+              "modules": {"primaryEstimate": {"status": "failed", "reason": code, "fatal": True}}}
+    (tmp_path / "agent/evimed_runner.py").write_text(
+        "import json,os,sys\nfrom pathlib import Path\n"
+        "os.fchdir(int(sys.argv[-1]))\n"
+        "Path('result.json').write_text(" + repr(json.dumps(result)) + ")\n"
+        "print(" + repr(f"MR runner failed ({code}): {message}") + ", file=sys.stderr)\n"
+        "sys.exit(1)\n"
+    )
+
+
+def run_refused(tmp_path, monkeypatch, code, message):
+    service, client, secret, workspace = setup_mr(tmp_path, monkeypatch)
+    refusing_runner(tmp_path, code, message)
+    state_path, job_id = queue_job(service, client, secret, monkeypatch, sources=CATALOG)
+    assert service.run_job(str(state_path)) == 1
+    state = json.loads(state_path.read_text())
+    retained = state_path.parent / f"{job_id}.diagnostics"
+    return state, service._status({"jobId": job_id}, workspace), retained
+
+
+def test_an_open_data_refusal_reaches_the_run_with_its_code_and_its_reason(tmp_path, monkeypatch):
+    state, response, retained = run_refused(tmp_path, monkeypatch, "mr_open_source_ambiguous", AMBIGUOUS)
+
+    assert state["status"] == "failed" and state["artifacts"] == []
+    assert state["errorCode"] == "mr_open_source_ambiguous"
+    assert response["error"]["code"] == "mr_open_source_ambiguous"
+    # The studies to choose from are what the run corrects its request with.
+    assert "GCST006900" in response["error"]["message"] and "GCST006901" in response["error"]["message"]
+    assert "data" not in response
+
+
+def test_an_open_data_refusal_holding_a_credential_is_shown_by_code_only(tmp_path, monkeypatch):
+    # "test-model-key" is the model credential the worker hands the runner.
+    state, response, retained = run_refused(
+        tmp_path, monkeypatch, "mr_open_source_unavailable", "EBI answered 401 for key test-model-key")
+
+    assert response["error"]["code"] == "mr_open_source_unavailable"
+    assert response["error"]["message"] == "The fixed MR runner failed."
+    assert "test-model-key" not in json.dumps(state)
+
+
+def test_a_code_the_adapter_does_not_forward_is_still_named(tmp_path, monkeypatch):
+    state, response, _ = run_refused(tmp_path, monkeypatch, "mr_no_instruments", "no valid instruments")
+
+    assert "errorCode" not in state
+    assert response["error"]["code"] == "specialist_execution_failed"
+    assert response["error"]["message"] == "The fixed MR runner failed (mr_no_instruments)."
+    assert "no valid instruments" not in json.dumps(state)
+
+
+def test_an_open_data_refusal_is_one_bounded_line(tmp_path, monkeypatch):
+    _, response, _ = run_refused(
+        tmp_path, monkeypatch, "mr_open_source_invalid",
+        "Exposure and outcome\n\tare the same\x1b[31m study. " + "x" * 5000)
+
+    message = response["error"]["message"]
+    assert message.startswith("Exposure and outcome are the same[31m study. ")
+    assert len(message) == 2000 and message.endswith("…")
+    assert "\n" not in message and "\x1b" not in message

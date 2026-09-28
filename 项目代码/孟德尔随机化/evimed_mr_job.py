@@ -31,6 +31,11 @@ MAX_PUBLISHED_BYTES = 384 * 1024 * 1024
 MAX_DIAGNOSTIC_BYTES = 32 * 1024 * 1024
 MAX_DIAGNOSTIC_FILE_BYTES = 8 * 1024 * 1024
 MAX_DIAGNOSTIC_FILES = 32
+#: The credentials the worker hands the runner. None may leave the job in a
+#: diagnostic or in a message shown to the run.
+SENSITIVE_ENVIRONMENT = frozenset({
+    "LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "OPENGWAS_JWT", "EVIMED_WORKLOAD_TOKEN",
+})
 _FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "function_call"}
 _CATEGORIES = {"http_error", "timeout", "connection", "response_error", "truncated", "empty_content", "completed", "application_error", "client_error"}
 _PLOTS = {name + suffix for name in ("forest_plot", "scatter_plot", "funnel_plot", "loo_plot") for suffix in (".pdf", ".png")}
@@ -123,6 +128,12 @@ def _numeric_projection(body):
     return output.getvalue().encode()
 
 
+def sensitive_values(environment):
+    """The byte strings a diagnostic or a message must never contain."""
+    return [value.encode() for key, value in environment.items()
+            if key in SENSITIVE_ENVIRONMENT and isinstance(value, str) and len(value) >= 8]
+
+
 def _retain_failure(inputs, stage, directory, result, environment, *, artifacts_safe=True):
     """Persist bounded diagnostics before scratch cleanup, never into workspace output."""
     record = {"failed": True, "diagnosticOnly": True, "artifacts": []}
@@ -131,9 +142,7 @@ def _retain_failure(inputs, stage, directory, result, environment, *, artifacts_
     except (ValueError, TypeError):
         record["failureDiagnostics"] = {"schema_version": 1, "phase": "unknown", "failures": []}
         record["diagnosticProjectionError"] = "mr_failure_diagnostic_invalid"
-    secrets = [value.encode() for key, value in environment.items() if key in {
-        "LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "OPENGWAS_JWT", "EVIMED_WORKLOAD_TOKEN"
-    } and isinstance(value, str) and len(value) >= 8]
+    secrets = sensitive_values(environment)
     encoded = json.dumps(record, allow_nan=False, sort_keys=True).encode()
     if any(secret in encoded for secret in secrets):
         record = {"failed": True, "diagnosticOnly": True, "artifacts": [],
