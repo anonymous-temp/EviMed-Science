@@ -381,6 +381,37 @@ function measuredWithoutDenominator(cell) {
 }
 
 /**
+ * The source table's rows, in the platform's shape (`sources: [...]`) or the
+ * method pack's (`sources: { table: [...], layout, index, … }`, the shape
+ * geo-skills' source-expectation step writes). `geo_write` has read the
+ * method's words since 2026-09-27; read here only in the platform's shape, the
+ * first 信尔美 strategy (2026-09-25) — 28 sources in `sources.table` — was told
+ * on every attempt that it had no source table.
+ * @param {unknown} value @returns {Record<string, any>[]}
+ */
+function strategySourceRows(value) {
+  if (Array.isArray(value)) return value.filter(isRecord)
+  if (!isRecord(value)) return []
+  const rows = Array.isArray(value.table) ? value.table : Array.isArray(value.items) ? value.items : []
+  return rows.filter(isRecord)
+}
+
+/**
+ * The battlefield's groups, in the platform's shape (`{ groups, reason }`) or
+ * the method pack's: the one group its battlefield step chose, written as that
+ * group (`{ id, name, why, action }`). The same run's battlefield named 「P1-03
+ * 与其他减重药怎么选」 and was told it had no battlefield group.
+ * @param {unknown} value @returns {string[]}
+ */
+function battlefieldGroups(value) {
+  if (Array.isArray(value)) return value.map((entry) => (isRecord(entry) ? text(entry.id ?? entry.groupId ?? entry.name) : text(entry))).filter(Boolean)
+  if (!isRecord(value)) return []
+  if (Array.isArray(value.groups)) return value.groups.map((entry) => (isRecord(entry) ? text(entry.id ?? entry.groupId ?? entry.name) : text(entry))).filter(Boolean)
+  const one = text(value.groupId ?? value.id ?? value.name)
+  return one ? [one] : []
+}
+
+/**
  * `geo-strategy-pack`: sources, expectations per engine, the battlefield, the
  * layout and three tiers of targets (step 5).
  * @param {GeoInput} input @returns {GeoFindings}
@@ -390,7 +421,7 @@ export function geoStrategyFindings(input) {
   const issues = []
   const path = GEO_CONTRACT_FILES.strategy.strategy
   const strategy = readIndex(input, path, () => null, issues)
-  const sources = Array.isArray(strategy?.sources) ? strategy.sources.filter(isRecord) : []
+  const sources = strategySourceRows(strategy?.sources)
   const gaps = Array.isArray(strategy?.gaps) ? strategy.gaps.filter(isRecord) : []
   const expectations = Array.isArray(strategy?.expectations) ? strategy.expectations.filter(isRecord) : []
   const tiers = Array.isArray(strategy?.tiers) ? strategy.tiers.filter(isRecord) : []
@@ -417,7 +448,7 @@ export function geoStrategyFindings(input) {
     const tierIds = tiers.map((tier) => String(tier.tier ?? ''))
     if (tierIds.length !== TIERS.length || !TIERS.every((tier) => tierIds.includes(tier))) notes.push(`tiers are [${tierIds.join(', ')}], where the targets come in exactly three: 1, 2, 3`)
     if (!expectations.length) notes.push('no per-engine expectation')
-    if (!isRecord(strategy.battlefield) || !Array.isArray(strategy.battlefield.groups) || !strategy.battlefield.groups.length) notes.push('no battlefield group')
+    if (!battlefieldGroups(strategy.battlefield).length) notes.push('no battlefield group')
     if (!sources.length) notes.push('no source table')
     if (notes.length) issues.push(finding('geo_strategy_notice', `${path}: ${notes.join('; ')}.`, { path, check: 'geo-strategy-shape' }))
   }

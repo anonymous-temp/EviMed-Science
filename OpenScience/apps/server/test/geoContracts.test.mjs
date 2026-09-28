@@ -281,6 +281,37 @@ test("geo-strategy: a gap outside the seven classes, or two tiers, is advice", a
   assert.match(raised[0].message, /exactly three/);
 });
 
+test("geo-strategy: a strategy in the method pack's shape is read as one, and an empty one still is not", async () => {
+  // The shape the first 信尔美 strategy delivered (2026-09-25, run
+  // run_3576ce426c20…): the source table under `sources.table` beside its
+  // layout, and the battlefield written as the one group the method chose. The
+  // contract read neither and noted "no battlefield group; no source table" on
+  // all three attempts, for a table of 28 sources and a named battlefield.
+  const pack = strategyPack();
+  const strategy = JSON.parse(pack["strategy.json"]);
+  strategy.sources = {
+    checkedOn: "2026-09-25",
+    table: [{ sourceKey: "src-1", domain: "example-health.cn", displayName: "某健康网", layer: "coverage", threeConditions: { icp: true } }],
+    layout: { layers: { anchor: [], owned: [] }, byEngine: [], constraints: [] },
+  };
+  strategy.battlefield = { id: "P1-03", name: "P1-03 与其他减重药怎么选", why: ["证据最硬"], action: "先写深度稿" };
+  pack["strategy.json"] = JSON.stringify(strategy);
+  const verdict = gate("geo-strategy-pack", pack, await declaredOutputs("geo-strategy"));
+  assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
+  assert.deepEqual(verdict.issues.filter((entry) => entry.code === "geo_strategy_notice"), [], JSON.stringify(verdict.issues));
+  assert.equal(verdict.metrics.geoSources, 1);
+
+  // Negative control: the same shapes with nothing in them are still absent.
+  strategy.sources = { checkedOn: "2026-09-25", table: [] };
+  strategy.battlefield = { why: ["证据最硬"], action: "先写深度稿" };
+  pack["strategy.json"] = JSON.stringify(strategy);
+  const empty = gate("geo-strategy-pack", pack, await declaredOutputs("geo-strategy"));
+  const raised = empty.issues.filter((entry) => entry.code === "geo_strategy_notice");
+  assert.equal(raised.length, 1, JSON.stringify(empty.issues));
+  assert.match(raised[0].message, /no battlefield group; no source table/);
+  assert.equal(empty.metrics.geoSources, 0);
+});
+
 // ----------------------------------------------------------- geo-proposal
 
 function proposalPack() {
