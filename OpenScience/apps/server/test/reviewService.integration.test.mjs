@@ -273,6 +273,54 @@ test("a second pass reads the repaired package with the last findings and their 
   }
 });
 
+test("a finding the writer declined and the next review raises word for word stays declined; one called fixed that comes back does not", options, async () => {
+  // The answer to review N travels with the submission that starts review
+  // N+1, and a reader is shown N+1: before this, a declined deterministic
+  // finding came back as a new unanswered row on every pass (2026-09-27, the
+  // missed-dialysis topic run: 32 declined, 0 in the ledger).
+  const { review } = service({ modelAnswers: [QUIET, QUIET] });
+  const identity = { userId, projectId };
+  const input = { runId: "native_declined", sessionId: "s-declined", deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1 };
+  const first = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, input)).reviewId);
+  const unresolvable = first.findings.find((/** @type {any} */ finding) => finding.kind === "reference_unresolvable");
+  assert.ok(unresolvable, JSON.stringify(first.findings));
+  const reason = "The registry lacks this record; the trial report was read in full.";
+  const answered = await review.recordResponses(identity, { reviewId: first.reviewId, answers: [{ id: unresolvable.id, response: "declined", reason }] });
+  assert.equal(answered?.recorded, 1);
+
+  const second = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 2 })).reviewId);
+  const again = second.findings.find((/** @type {any} */ finding) => finding.kind === "reference_unresolvable");
+  assert.deepEqual([again?.response, again?.responseReason], ["declined", reason], "the decline stands on the pass the reader is shown");
+
+  // Called fixed, raised again unchanged: it was not fixed, and is not carried.
+  await review.recordResponses(identity, { reviewId: second.reviewId, answers: [{ id: again.id, response: "fixed" }] });
+  const third = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 3 })).reviewId);
+  const onceMore = third.findings.find((/** @type {any} */ finding) => finding.kind === "reference_unresolvable");
+  assert.equal(onceMore?.response, "declined", "the newest decline still stands; the unfounded fixed did not replace it");
+});
+
+test("only ids an engine wrote a job directory for are traced against, never a word of the same shape", options, async () => {
+  // 2026-09-27: the topic review traced 「meta-analysis」, 「topic-run-receipt」
+  // and 「topic-report-specialist-scan」 as jobs, and named them in every
+  // finding; the real job was the fourth match, and only four were read.
+  const jobId = "topic-20260927132630-8ccbf68d5210";
+  await fs.mkdir(path.join(workspace, "deliverables/d-topic"), { recursive: true });
+  await fs.mkdir(path.join(workspace, "research-topic-runs", jobId, "output"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "research-topic-runs", jobId, "output", "portfolio.json"), JSON.stringify({ records: 16, candidates: 3 }));
+  await fs.writeFile(path.join(workspace, "deliverables/d-topic/research-topic-report.md"), [
+    "# Topic agenda",
+    "",
+    "A meta-analysis, the topic-run-receipt, the topic-report-specialist-scan and the topic-review-notes-draft are not jobs.",
+    `The engine job ${jobId} returned 16 records.`,
+    "",
+  ].join("\n"));
+  const { review } = service({ modelAnswers: [QUIET], outputs: [{ path: "research-topic-report.md" }] });
+  const done = await settled(review, /** @type {any} */ (await review.startDeliverableReview({ userId, projectId }, {
+    runId: "native_jobs", sessionId: "s-jobs", deliverableId: "d-topic", contractKind: "research-topic-report", capability: "research-topic-selection", attempt: 1,
+  })).reviewId);
+  assert.deepEqual(done.deterministic.jobs, [jobId]);
+});
+
 test("a transient provider failure is retried once; a second leaves the deterministic review standing and says the editor failed", options, async () => {
   const unavailable = () => new Response(JSON.stringify({ error: { code: "ServiceUnavailable", message: "busy" } }), { status: 503, headers: { "content-type": "application/json" } });
   const identity = { userId, projectId };

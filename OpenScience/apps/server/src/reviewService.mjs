@@ -126,6 +126,8 @@ const ENGINE_JOB_DIRECTORIES = Object.freeze({
   "meta-": "meta-analysis-runs",
 });
 const JOB_ID = /\b(mr|bibliometric|topic|review|safety|meta)-[a-z0-9-]{8,80}\b/g;
+/** Job-id-shaped words considered before the ones with an output directory are kept. */
+const JOB_CANDIDATE_LIMIT = 40;
 
 /** The pause before the editor's one retry; long enough to outlast a brief network drop. */
 const EDITOR_RETRY_DELAY_MS = 5_000;
@@ -473,7 +475,12 @@ export class ReviewService {
     /** @type {{ findings: any[], metrics: any, jobs: string[] }} */
     let numeric = { findings: [], metrics: null, jobs: [] };
     if (tier.tier === "L3" && input.contractKind !== "dataset-scoping-package") {
-      const jobs = [...new Set(packageText.match(JOB_ID) ?? [])].slice(0, 4);
+      // Only ids an engine actually wrote a job directory for. The pattern
+      // alone also matches words — 「meta-analysis」, a file called
+      // 「topic-run-receipt」 — and the first four matches were all that was
+      // read: the 2026-09-27 topic review traced against three words and one
+      // job, and told the run so in every finding.
+      const jobs = (await existingJobs(root, [...new Set(packageText.match(JOB_ID) ?? [])].slice(0, JOB_CANDIDATE_LIMIT))).slice(0, 4);
       const jobFiles = await readJobOutputs(root, jobs);
       const numbers = outputNumbers(jobFiles);
       const traced = numericTraceFindings({ reportText: report, outputs: numbers, outputLabel: jobs.length ? `作业 ${jobs.join("、")} 的输出` : "引擎输出" });
@@ -611,12 +618,23 @@ export class ReviewService {
     }));
     for (const finding of numbered) this.counts.findings[`${finding.origin}:${finding.kind}`] = (this.counts.findings[`${finding.origin}:${finding.kind}`] ?? 0) + 1;
     for (const entry of dropped) this.counts.dropped[entry.reason] = (this.counts.dropped[entry.reason] ?? 0) + 1;
+    // A finding the writer declined, raised again word for word, stays
+    // declined. The answer to review N is sent with the submission that
+    // starts review N+1, and a reader is shown N+1: a deterministic finding
+    // the writer declined with a reason — a literature figure the numeric
+    // trace cannot find in an engine's output — came back as a new, unanswered
+    // row on every pass, so it could never read as anything but ignored
+    // (2026-09-27: 32 declined in the notes, 0 in the ledger). `fixed` is not
+    // carried: a finding that comes back identical was not fixed.
+    const declined = await this.#declinedAnswers(previous);
 
     await this.database.transaction(async (/** @type {any} */ client) => {
       for (const finding of numbered) {
-        await client.query(`INSERT INTO evimed_review.findings (review_id,finding_id,kind,severity,origin,location,evidence,fix,message)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [id, finding.id, finding.kind, finding.severity, finding.origin, finding.location, finding.evidence, finding.fix, finding.message]);
+        const reason = declined.get(`${finding.kind}\u0000${finding.evidence}`);
+        await client.query(`INSERT INTO evimed_review.findings (review_id,finding_id,kind,severity,origin,location,evidence,fix,message,response,response_reason,responded_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text,$11::text,CASE WHEN $10::text IS NULL THEN NULL ELSE clock_timestamp() END)`,
+        [id, finding.id, finding.kind, finding.severity, finding.origin, finding.location, finding.evidence, finding.fix, finding.message,
+          reason === undefined ? null : "declined", reason === undefined ? null : reason]);
       }
       await client.query(`UPDATE evimed_review.reviews SET status='done', pass=$2, model=$3, package_digest=$4, report_text=$5, deterministic=$6,
           checklist=$7, acceptance=$8, dropped=$9, usage=$10, cost=$11, error_code=$12, finished_at=clock_timestamp() WHERE id=$1`,
@@ -647,6 +665,27 @@ export class ReviewService {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * What the writer declined in this deliverable's earlier reviews, by kind
+   * and the words the finding rests on; the newest decline wins.
+   * @param {readonly any[]} previous the earlier reviews, newest first
+   * @returns {Promise<Map<string, string>>}
+   */
+  async #declinedAnswers(previous) {
+    const ids = previous.filter((row) => row.status === "done").map((row) => String(row.id));
+    if (!ids.length) return new Map();
+    const rows = await this.database.query(`SELECT review_id, kind, evidence, response_reason FROM evimed_review.findings
+      WHERE review_id = ANY($1::text[]) AND response = 'declined' AND evidence <> ''`, [ids]);
+    const order = new Map(ids.map((reviewId, index) => [reviewId, index]));
+    /** @type {Map<string, string>} */
+    const declined = new Map();
+    for (const row of [...rows.rows].sort((left, right) => (order.get(left.review_id) ?? 0) - (order.get(right.review_id) ?? 0))) {
+      const key = `${row.kind}\u0000${row.evidence}`;
+      if (!declined.has(key)) declined.set(key, String(row.response_reason ?? ""));
+    }
+    return declined;
   }
 
   /** A previous review's findings, with what the writer answered. @param {string} reviewId */
@@ -1146,6 +1185,27 @@ export async function claimsWithSources(root, matrixText) {
     for (const source of claim.sources) if (source.sourceId && !shownIds.has(source.sourceId)) source.sourceId = null;
   }
   return { claims, sources };
+}
+
+/**
+ * The job ids, of those named, that an engine wrote an output directory for.
+ * @param {string} root @param {readonly string[]} candidates @returns {Promise<string[]>}
+ */
+async function existingJobs(root, candidates) {
+  /** @type {string[]} */
+  const found = [];
+  for (const jobId of candidates) {
+    const prefix = Object.keys(ENGINE_JOB_DIRECTORIES).find((candidate) => jobId.startsWith(candidate));
+    if (!prefix) continue;
+    const directory = path.join(root, ENGINE_JOB_DIRECTORIES[/** @type {keyof typeof ENGINE_JOB_DIRECTORIES} */ (prefix)], jobId, "output");
+    try {
+      const entry = await fsp.lstat(directory);
+      if (entry.isDirectory()) found.push(jobId);
+    } catch {
+      // Not a job this workspace holds.
+    }
+  }
+  return found;
 }
 
 /**
