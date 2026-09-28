@@ -2311,6 +2311,28 @@ function numericTokens(value) {
       .join("-")) ?? [];
 }
 
+/**
+ * The numbers a support text offers, in the spellings a faithful restatement
+ * uses. An interval written with a separator other than a dash is the
+ * interval it is: 「0.64 to 0.82」, 「15% to 23%」 and 「15~23」 state the same
+ * interval as 「0.64–0.82」. The Lancet's decimal point is a raised dot:
+ * 「0·78」 is 0.78. (A Chinese 「至」 is left out: a CJK pattern in this file is
+ * frozen by `vocabulary.test.mjs`, and the frozen count is not raised for it.)
+ * Journals write the first forms and summaries the second, so a claim that
+ * restated a quoted estimate faithfully was reported as unsupported — sixteen
+ * advisory findings on eleven of fifty-three claims of the 2026-09-08
+ * EMPA-KIDNEY package, every one a correct transcription. Support only: what a
+ * claim is asked to show is unchanged, and every number must be the quote's own.
+ * @param {unknown} value @returns {string[]}
+ */
+function supportNumericTokens(value) {
+  const text = String(value ?? "").replace(/(\d)[\u00b7\u22c5](?=\d)/g, "$1.");
+  const tokens = numericTokens(text);
+  if (!/\d\s*%?\s*(?:\bto\b|~|〜|～)\s*\d/i.test(text)) return tokens;
+  const spelled = numericTokens(text.replace(/(\d)\s*%?\s*(?:\bto\b|~|〜|～)\s*(?=\d)/gi, "$1–"));
+  return [...tokens, ...spelled.filter((token) => token.includes("-"))];
+}
+
 // --- Conclusory quantity extraction (item 8) -------------------------------
 // The report-wide audit checks only *conclusory* quantitative statements — a
 // number (Arabic or Chinese) carrying a unit or statistical marker — instead of
@@ -3089,7 +3111,7 @@ function validateSynthesizedClaim(
         issues.push(`${sourceLabel}.sourceUrl is an internal API route, not a public evidence citation.`);
       }
     }
-    for (const token of numericTokens([source.supportQuote, source.sourceTitle, source.identifier].join(" "))) {
+    for (const token of supportNumericTokens([source.supportQuote, source.sourceTitle, source.identifier].join(" "))) {
       supportNumbers.add(token);
     }
   }
@@ -3294,7 +3316,7 @@ function auditClaimEvidence(value, label, context) {
   issues.region("claim-numeric-support");
   const directSupport = [value.supportQuote, value.sourceTitle, value.identifier].join(" ");
   const directSupportNumbers = new Set([
-    ...numericTokens(directSupport),
+    ...supportNumericTokens(directSupport),
     ...conclusoryQuantities(directSupport),
   ]);
   // The same standard the report lines are held to: a figure that carries a
@@ -3754,7 +3776,7 @@ export function validateClinicalEvidencePackage({
       // Arabic numbers in support match by value; conclusoryQuantities resolves
       // conclusory Chinese and English numerals in the support to the same
       // canonical value symmetrically, so 15 / 十五 / "fifteen trials" agree.
-      return [...numericTokens(claimEvidenceText(claim)), ...conclusoryQuantities(claimEvidenceText(claim))];
+      return [...supportNumericTokens(claimEvidenceText(claim)), ...conclusoryQuantities(claimEvidenceText(claim))];
     }));
     const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
     if (unsupportedNumbers.length) {
