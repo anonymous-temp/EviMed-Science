@@ -1,6 +1,7 @@
 """Research Planner agent — converts natural language question to PICO + research protocol."""
 
 import json
+import re
 from new_meta.core.agent_base import BaseAgent
 from new_meta.core.method_planning import (
     ProtocolInputRequired, method_catalogue, normalize_protocol_method_fields,
@@ -79,9 +80,52 @@ class _ScopeDiagnostics:
         return error
 
 
+#: Canonical effect measures a primary outcome of each type can be pooled on.
+_MEASURES_BY_OUTCOME_TYPE = {
+    "continuous": {"MD", "SMD"},
+    "dichotomous": {"OR", "RR", "RD"},
+    "binary": {"OR", "RR", "RD"},
+    "time_to_event": {"HR"},
+    "count": {"IRR"},
+}
+_CANONICAL_MEASURES = {"OR", "RR", "RD", "MD", "SMD", "HR", "IRR", "PROP", "COR"}
+
+
+def _primary_measure_from_composite(measure, outcome_type):
+    """The primary outcome's measure out of a combined token such as ``MD_RR``.
+
+    The planner names one measure per review, for the primary outcome, and on a
+    question whose outcomes mix types (TKA blood loss in mL, transfusion events)
+    it wrote ``MD_RR`` — the production acceptance brief ma-001 failed its
+    planning on exactly that three times, on 2026-09-09 and again 2026-09-28.
+    Every part is a closed-vocabulary token and the primary outcome's type is
+    declared, so choosing the one part that type can be pooled on is a
+    deterministic step, not a judgment. Anything else (an unknown part, no
+    declared type, two compatible parts) is left for the validator to refuse.
+    """
+    parts = [part for part in re.split(r"[^A-Z0-9]+", str(measure or "").upper()) if part]
+    compatible = _MEASURES_BY_OUTCOME_TYPE.get(str(outcome_type or "").strip().lower())
+    if len(parts) < 2 or not compatible or any(part not in _CANONICAL_MEASURES for part in parts):
+        return None
+    chosen = sorted({part for part in parts if part in compatible})
+    return chosen[0] if len(chosen) == 1 else None
+
+
 def _correction_feedback(error):
     """Replanning needs actionable conflicts, not accumulated checker quotations."""
     feedback = {"error_code": error.phase.error_code, "summary": error.phase.summary[:1600]}
+    # A compiler refusal names the field, the rejected value and the canonical
+    # choices; without them the planner resubmitted the same token (ma-001).
+    for issue in error.phase.issues:
+        context = issue.context or {}
+        if context.get("field") and "supported" in context:
+            feedback["field"] = str(context["field"])[:200]
+            feedback["rejected"] = str(context.get("requested", ""))[:200]
+            feedback["supported"] = [str(value)[:64] for value in list(context["supported"])[:32]]
+            if context["field"] == "effect_measure":
+                feedback["rule"] = ("effect_measure is ONE canonical token for the primary outcome only; "
+                                    "secondary outcomes of another type are not combined into it.")
+            break
     findings = [finding for issue in error.phase.issues
                 for finding in issue.context.get("scope_findings", [])]
     if findings:
@@ -113,7 +157,11 @@ class ResearchPlanner(BaseAgent):
             try:
                 protocol = self.call_llm_structured(prompt, ResearchProtocol, max_tokens=8192)
                 self._normalize_supported_databases(protocol)
+                proposed_measure = protocol.effect_measure
                 self._apply_effect_measure_rules(protocol, question)
+                if protocol.effect_measure != proposed_measure:
+                    self.log(f"Effect measure {proposed_measure!r} resolved to {protocol.effect_measure!r} "
+                             f"for the {protocol.primary_outcome_type or 'declared'} primary outcome", level="warning")
                 normalize_protocol_method_fields(protocol)
                 validate_protocol_method(protocol)
                 protocol._scope_receipt = self.check_scope(question, protocol)
@@ -311,6 +359,10 @@ class ResearchPlanner(BaseAgent):
         """
         if ResearchPlanner._endpoint_prefers_hr(protocol, question):
             protocol.effect_measure = "HR"
+            return
+        resolved = _primary_measure_from_composite(protocol.effect_measure, protocol.primary_outcome_type)
+        if resolved is not None:
+            protocol.effect_measure = resolved
 
     @staticmethod
     def _apply_language_scope_rules(protocol: ResearchProtocol, question: str = "") -> None:

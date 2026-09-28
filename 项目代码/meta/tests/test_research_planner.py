@@ -158,3 +158,63 @@ def test_valid_type_for_wrong_review_family_still_fails_method_compilation(tmp_p
     protocol = ResearchProtocol.model_validate(_typed_protocol_payload("diagnostic_accuracy"))
     with pytest.raises(MethodCompilationError, match="not supported by intervention_rct"):
         compile_project_method_plan(Project("wrong family", output_dir=tmp_path), protocol)
+
+
+def _txa_protocol(effect_measure, outcome_type="continuous"):
+    return ResearchProtocol.model_validate({
+        "research_question": "Tranexamic acid versus placebo in primary total knee arthroplasty",
+        "pico": {
+            "population": "Adults undergoing primary unilateral total knee arthroplasty",
+            "intervention": "Tranexamic acid (intravenous, topical or combined)",
+            "comparator": "Placebo or no tranexamic acid",
+            "outcome_primary": "Total blood loss (mL)",
+            "outcomes_secondary": ["Transfusion rate", "Symptomatic venous thromboembolism"],
+        },
+        "review_family": "intervention_rct", "study_designs": ["parallel_rct"],
+        "effect_measure": effect_measure, "primary_outcome_type": outcome_type,
+    })
+
+
+@pytest.mark.parametrize("proposed, outcome_type, resolved", [
+    ("MD_RR", "continuous", "MD"),        # ma-001, 2026-09-09 and again 2026-09-28
+    ("RR/MD", "continuous", "MD"),
+    ("MD_RR", "dichotomous", "RR"),
+    ("MD, OR", "binary", "OR"),
+    ("MD_SMD", "continuous", "MD_SMD"),   # two compatible parts: not the code's choice
+    ("MD_RR", "", "MD_RR"),               # no declared primary type: not the code's choice
+    ("MD_WMD", "continuous", "MD_WMD"),   # a part outside the vocabulary
+    ("MD", "continuous", "MD"),
+])
+def test_a_combined_effect_measure_resolves_to_the_primary_outcomes_part(proposed, outcome_type, resolved):
+    protocol = _txa_protocol(proposed, outcome_type)
+    ResearchPlanner._apply_effect_measure_rules(protocol, protocol.research_question)
+    assert protocol.effect_measure == resolved
+
+
+def test_ma001_plans_on_the_first_attempt_when_the_planner_combines_measures(monkeypatch):
+    planner = ResearchPlanner()
+    calls = []
+
+    def fake_structured(*args, **kwargs):
+        calls.append(args)
+        return _txa_protocol("MD_RR")
+
+    monkeypatch.setattr(planner, "call_llm_structured", fake_structured)
+    protocol = planner.run("氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析")
+    assert len(calls) == 1
+    assert protocol.effect_measure == "MD"
+
+
+def test_a_compiler_refusal_tells_the_planner_the_field_and_its_canonical_choices():
+    from new_meta.agents.research_planner import _correction_feedback
+    from new_meta.core.method_planning import ProtocolInputRequired
+
+    error = ProtocolInputRequired(
+        "effect measure 'MD_SMD' is not supported by intervention_rct",
+        context={"field": "effect_measure", "requested": "MD_SMD", "supported": ["MD", "RR", "SMD"]},
+    )
+    feedback = json.loads(_correction_feedback(error))
+    assert feedback["field"] == "effect_measure"
+    assert feedback["rejected"] == "MD_SMD"
+    assert feedback["supported"] == ["MD", "RR", "SMD"]
+    assert "primary outcome only" in feedback["rule"]

@@ -24,7 +24,8 @@ Your task:
 2. Include secondary outcomes only within the scope-design rules
 3. Determine the most suitable study design to include (RCT only, observational only, or both)
 4. Write explicit inclusion and exclusion criteria
-5. Choose the appropriate effect measure:
+5. Choose the appropriate effect measure for the PRIMARY outcome — exactly one canonical token,
+   never a combination such as "MD_RR" even when secondary outcomes are of another type:
    - For dichotomous outcomes (events): OR (Odds Ratio) or RR (Risk Ratio)
    - For continuous outcomes (means): MD (Mean Difference) or SMD (Standardized Mean Difference)
 6. Recommend fixed or random effects model (random is default unless high clinical/methodological homogeneity expected)
