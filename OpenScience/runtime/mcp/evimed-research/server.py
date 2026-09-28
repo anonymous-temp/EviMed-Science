@@ -107,6 +107,21 @@ MR_SOURCE_SCHEMA = {
             },
             ("type", "gwasId"),
         ),
+        # Open NHGRI-EBI GWAS Catalog summary statistics: no credential.
+        object_schema(
+            {
+                "type": {"type": "string", "enum": ["gwas_catalog"]},
+                "accession": {"type": "string", "pattern": r"^GCST\d{6,9}$"},
+            },
+            ("type", "accession"),
+        ),
+        object_schema(
+            {
+                "type": {"type": "string", "enum": ["gwas_catalog"]},
+                "pubmedId": {"type": "string", "pattern": r"^\d{1,9}$"},
+            },
+            ("type", "pubmedId"),
+        ),
     ],
 }
 NUMBER = {"type": "number"}
@@ -748,12 +763,15 @@ TOOL_DEFINITIONS = [
         'the same-container fallback accepts legacy text only. For '
         'uploaded CSV/TSV supply both exposureSource and '
         'outcomeSource with explicit roles and seven-column mappings. '
-        'No-JWT execution requires two local files and preclumped '
-        'instruments with provenance for every analyzed exposure '
-        '(both sides for bidirectional). Mixed OpenGWAS inputs '
-        'require the existing configured credential. Omit both '
-        'sources for legacy remote text selection. Statistics come '
-        'only from the installed MR engines.',
+        'Without an OpenGWAS token, give both sources as open GWAS '
+        'Catalog studies ({"type": "gwas_catalog", "accession": '
+        '"GCST..."}, or "pubmedId" for a paper with one such study; '
+        'forward only, one direction per job), or two local files '
+        'with preclumped instruments and provenance for every '
+        'analyzed exposure. Mixed OpenGWAS inputs require the '
+        'existing configured credential. Omit both sources for '
+        'legacy remote text selection. Statistics come only from '
+        'the installed MR engines.',
         "inputSchema": object_schema(
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},

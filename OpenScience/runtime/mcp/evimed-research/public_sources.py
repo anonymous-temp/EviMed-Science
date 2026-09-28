@@ -3066,7 +3066,12 @@ def _gwas_catalog(query, limit):
         identifier = _first_text(record.get("accession_id"))
         title = _first_text(record.get("disease_trait"), identifier)
         record_url = "https://www.ebi.ac.uk/gwas/studies/%s" % urllib.parse.quote(identifier)
-        items.append({"id": identifier, "title": title, "url": record_url, "pubmedId": record.get("pubmed_id"), "initialSampleSize": record.get("initial_sample_size")})
+        # Whether full summary statistics exist, and for whom, is what decides
+        # if a study can be an MR source (mendelian_randomization gwas_catalog).
+        items.append({"id": identifier, "title": title, "url": record_url, "pubmedId": record.get("pubmed_id"),
+                      "initialSampleSize": record.get("initial_sample_size"),
+                      "fullSummaryStatistics": record.get("full_summary_stats_available"),
+                      "discoveryAncestry": record.get("discovery_ancestry")})
         sources.append(_source(identifier, title, record_url, "gwas-catalog-ebi"))
     return _metadata_result("gwas-catalog-ebi", items, sources, "GWAS associations require ancestry, phenotype, harmonization, and multiple-testing context.")
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "mendelian-randomization",
-  "version": "sha256:f7d2469cd1ebf56650fd03ca9acb98dafc25d3e74d6584eef891de1b255ea2b5",
+  "version": "sha256:9281f855b08764d288cd1e8e0a1ed91c99140ffeea7604b0aedb2c77e29bc5dc",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 21,
@@ -831,7 +831,7 @@
     {
       "name": "mcp__evimed__mendelian_randomization",
       "source": "mcp",
-      "description": "Start or inspect a managed Mendelian-randomization job. Uploaded sources require the configured isolated MR adapter; the same-container fallback accepts legacy text only. For uploaded CSV/TSV supply both exposureSource and outcomeSource with explicit roles and seven-column mappings. No-JWT execution requires two local files and preclumped instruments with provenance for every analyzed exposure (both sides for bidirectional). Mixed OpenGWAS inputs require the existing configured credential. Omit both sources for legacy remote text selection. Statistics come only from the installed MR engines.",
+      "description": "Start or inspect a managed Mendelian-randomization job. Uploaded sources require the configured isolated MR adapter; the same-container fallback accepts legacy text only. For uploaded CSV/TSV supply both exposureSource and outcomeSource with explicit roles and seven-column mappings. Without an OpenGWAS token, give both sources as open GWAS Catalog studies ({\"type\": \"gwas_catalog\", \"accession\": \"GCST...\"}, or \"pubmedId\" for a paper with one such study; forward only, one direction per job), or two local files with preclumped instruments and provenance for every analyzed exposure. Mixed OpenGWAS inputs require the existing configured credential. Omit both sources for legacy remote text selection. Statistics come only from the installed MR engines.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -989,6 +989,46 @@
                   "type",
                   "gwasId"
                 ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "gwas_catalog"
+                    ]
+                  },
+                  "accession": {
+                    "type": "string",
+                    "pattern": "^GCST\\d{6,9}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "accession"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "gwas_catalog"
+                    ]
+                  },
+                  "pubmedId": {
+                    "type": "string",
+                    "pattern": "^\\d{1,9}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "pubmedId"
+                ]
               }
             ]
           },
@@ -1104,6 +1144,46 @@
                 "required": [
                   "type",
                   "gwasId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "gwas_catalog"
+                    ]
+                  },
+                  "accession": {
+                    "type": "string",
+                    "pattern": "^GCST\\d{6,9}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "accession"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "gwas_catalog"
+                    ]
+                  },
+                  "pubmedId": {
+                    "type": "string",
+                    "pattern": "^\\d{1,9}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "pubmedId"
                 ]
               }
             ]

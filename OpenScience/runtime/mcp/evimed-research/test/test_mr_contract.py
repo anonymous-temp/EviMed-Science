@@ -65,6 +65,23 @@ class MRContractTests(unittest.TestCase):
             dict(action="start", exposure="BMI", outcome="CHD"), schema, "request"
         )
 
+    def test_gwas_catalog_sources_name_one_catalogue_identifier(self):
+        schema = self.server.TOOLS["mendelian_randomization"]["inputSchema"]
+        request = dict(
+            action="start", exposure="BMI", outcome="CAD",
+            exposureSource={"type": "gwas_catalog", "accession": "GCST002783"},
+            outcomeSource={"type": "gwas_catalog", "pubmedId": "36474045"},
+        )
+        self.server._validate(request, schema, "request")
+        for source in (
+            {"type": "gwas_catalog", "accession": "body mass index"},
+            {"type": "gwas_catalog", "accession": "GCST002783", "pubmedId": "25673413"},
+            {"type": "gwas_catalog"},
+            {"type": "gwas_catalog", "pubmedId": "PMID25673413"},
+        ):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                self.server._validate({**request, "exposureSource": source}, schema, "request")
+
     def test_missing_adapter_never_executes_uploaded_sources_in_the_shared_runtime(
         self,
     ):

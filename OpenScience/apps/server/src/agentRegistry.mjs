@@ -63,6 +63,7 @@ export const EVIMED_AGENT_DATA_SOURCES = new Set([
   "uploaded-files",
   "metaagent",
   "opengwas",
+  "gwas-catalog",
   "local-gwas",
   "bibliometric-records",
   "reporting-guidelines",
