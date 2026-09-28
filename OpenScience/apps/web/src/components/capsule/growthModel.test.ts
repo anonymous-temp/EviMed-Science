@@ -65,10 +65,19 @@ describe("the capsule's growth line", () => {
   });
 
   it("names at most three moments, kept apart, a method by its own words and a capsule by its title", () => {
-    const view = growthView(growth())!;
-    expect(view.input.markers).toEqual([
-      { index: 2, label: "学会“Meta 分析先报…”" },
-      { index: 3, label: "收到“李主任的工作方式”" },
+    // On a short line two neighbouring moments would face each other and
+    // meet: the newer is named. On a longer one both fit.
+    expect(growthView(growth())!.input.markers).toEqual([{ index: 3, label: "收到“李主任的工作方式”" }]);
+    const longer = growth({ points: [
+      "2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27", "2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24",
+      "2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21",
+    ].map((start, index) => ({ start, known: index * 3 })), moments: [
+      { day: "2026-08-05", kind: "method", title: "Meta 分析先报 GRADE 再报效应量" },
+      { day: "2026-09-24", kind: "capsule", title: "李主任的工作方式" },
+    ] });
+    expect(growthView(longer)!.input.markers).toEqual([
+      { index: 4, label: "学会“Meta 分析先报…”" },
+      { index: 11, label: "收到“李主任的工作方式”" },
     ]);
     // A name is cut by the width it takes, and never inside a Latin word.
     expect(cutName("李主任的工作方式")).toBe("李主任的工作方式");
@@ -78,6 +87,9 @@ describe("the capsule's growth line", () => {
     const many = starts.slice(1).map((day, index) => ({ day, kind: "method" as const, title: `做法 ${index}` }));
     const marked = growthMarkers(starts, many);
     expect(marked).toHaveLength(GROWTH_MARKERS);
+    // A phone's card holds one label; three would sit on top of each other.
+    expect(growthMarkers(starts, many, 300)).toEqual([{ index: 26, label: "学会“做法 25”" }]);
+    expect(growthView(growth(), 300)!.input.markers).toEqual([{ index: 3, label: "收到“李主任的工作方式”" }]);
     // The newest first, and never two within a sixth of the line of each other.
     expect(marked.at(-1)!.index).toBe(26);
     for (let index = 1; index < marked.length; index += 1) expect(marked[index].index - marked[index - 1].index).toBeGreaterThanOrEqual(5);

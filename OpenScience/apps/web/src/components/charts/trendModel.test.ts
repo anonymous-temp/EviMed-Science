@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CHART_STROKES } from "@evimed/design-tokens";
 import { decalOption } from "./echartsBase";
 import { heatStep } from "./HeatGrid";
-import { chartOption, ruleLabelPlaces } from "./TrendChart";
+import { chartOption, markerAlign, ruleLabelPlaces } from "./TrendChart";
 import { MAX_RIVALS, OWN_COLOR, RIVAL_COLORS, rivalColor, trendModel } from "./trendModel";
 
 const labels = ["9/25", "10/2", "10/9"];
@@ -134,6 +134,22 @@ describe("a trend's labels and lines (E8)", () => {
     expect(series.filter((entry) => entry.silent).every((entry) => entry.lineStyle?.type === undefined && entry.symbol === "none")).toBe(true);
     // The weights are still the token table's.
     expect(byName("信尔美").lineStyle?.width).toBe(CHART_STROKES.own);
+  });
+
+  it("writes an action's label at the top of its rule, towards the middle, and clear of the latest value (spec §32.7 rule 4)", () => {
+    type Rule = { xAxis?: number; label: { position: string; align: string; padding: unknown } };
+    const option = chartOption(trendModel({
+      labels: ["1", "2", "3", "4", "5", "6"],
+      own: { name: "记忆", values: [0, 3, 5, 8, 9, 12] },
+      markers: [{ index: 1, label: "学会“甲”" }, { index: 5, label: "收到“乙”" }],
+    }), format) as unknown as { grid: { top: number }; series: Array<{ name?: string; markLine?: { data: Rule[] } }> };
+    const rules = option.series.find((series) => series.name === "记忆")!.markLine!.data.filter((rule) => rule.xAxis !== undefined);
+    expect(rules.map((rule) => [rule.xAxis, rule.label.position, rule.label.align])).toEqual([[1, "end", "left"], [5, "end", "right"]]);
+    // At its foot the label met the axis dates; at the top the plot makes room for it.
+    expect(option.grid.top).toBeGreaterThan(16);
+    expect(rules[0].label.padding).toBe(0);
+    expect(rules[1].label.padding).not.toBe(0);
+    expect(markerAlign(0, 1)).toBe("left");
   });
 
   it("steps a count's axis by whole numbers, and leaves every other axis to the library", () => {

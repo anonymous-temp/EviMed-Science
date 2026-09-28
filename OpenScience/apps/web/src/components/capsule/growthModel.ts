@@ -27,6 +27,10 @@ import type { MemoryGrowth, MemoryGrowthMoment } from "@/lib/memoryClient";
 export const GROWTH_MARKERS = 3;
 /** A moment's name on the line is cut to this width: eight Chinese characters, sixteen Latin. */
 const MARKER_NAME_WIDTH = 16;
+/** How wide one moment's label is drawn, in CSS px: 「收到“” + eight characters at 12 px, with room. */
+const MARKER_LABEL_PX = 160;
+/** The plot width assumed before the card has been measured. */
+export const GROWTH_DEFAULT_WIDTH = 960;
 
 export interface GrowthView {
   /** The conclusion: the card's heading and the chart's accessible name. */
@@ -96,9 +100,16 @@ function momentLabel(moments: readonly MemoryGrowthMoment[]): string {
 /**
  * The moments the line marks: grouped by the point they fall in, the newest
  * first, each kept only if it is far enough from those already kept for two
- * labels not to meet, and at most `GROWTH_MARKERS`.
+ * labels not to meet, and as many as the plot's width holds — three on a
+ * desktop card, one on a phone. Two labels may face each other across the
+ * middle (the left half writes rightwards, the right half leftwards), so the
+ * distance kept is two labels' width, counted in points of the line.
  */
-export function growthMarkers(starts: readonly string[], moments: readonly MemoryGrowthMoment[]): TrendMarker[] {
+export function growthMarkers(
+  starts: readonly string[],
+  moments: readonly MemoryGrowthMoment[],
+  width: number = GROWTH_DEFAULT_WIDTH,
+): TrendMarker[] {
   const byIndex = new Map<number, MemoryGrowthMoment[]>();
   for (const moment of moments) {
     let index = -1;
@@ -106,10 +117,13 @@ export function growthMarkers(starts: readonly string[], moments: readonly Memor
     if (index < 0) continue;
     byIndex.set(index, [...(byIndex.get(index) ?? []), moment]);
   }
-  const gap = Math.max(1, Math.ceil(starts.length / 6));
+  const plot = width > 0 ? width : GROWTH_DEFAULT_WIDTH;
+  const most = Math.max(1, Math.min(GROWTH_MARKERS, Math.floor(plot / (MARKER_LABEL_PX * 1.75))));
+  const step = plot / Math.max(1, starts.length - 1);
+  const gap = Math.max(1, Math.ceil((MARKER_LABEL_PX * 2) / step));
   const kept: TrendMarker[] = [];
   for (const index of [...byIndex.keys()].sort((left, right) => right - left)) {
-    if (kept.length >= GROWTH_MARKERS) break;
+    if (kept.length >= most) break;
     if (kept.some((marker) => Math.abs(marker.index - index) < gap)) continue;
     kept.push({ index, label: momentLabel(byIndex.get(index) ?? []) });
   }
@@ -121,8 +135,8 @@ export function growthCount(value: number): string {
   return formatApproxCount(Math.round(value));
 }
 
-/** The sentence the chart proves; null when there is no line to draw yet. */
-export function growthView(growth: MemoryGrowth | null | undefined): GrowthView | null {
+/** The sentence the chart proves; null when there is no line to draw yet. `width` is the plot's, in CSS px. */
+export function growthView(growth: MemoryGrowth | null | undefined, width: number = GROWTH_DEFAULT_WIDTH): GrowthView | null {
   if (!growth || !growth.unit || !Array.isArray(growth.points)) return null;
   const points = growth.points;
   const held = points.findIndex((point) => point.known > 0);
@@ -147,7 +161,7 @@ export function growthView(growth: MemoryGrowth | null | undefined): GrowthView 
     input: {
       labels: growthLabels(growth.unit, starts),
       own: { name: "记忆", values: points.map((point) => point.known) },
-      markers: growthMarkers(starts, growth.moments ?? []),
+      markers: growthMarkers(starts, growth.moments ?? [], width),
     },
   };
 }

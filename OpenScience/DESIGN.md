@@ -106,7 +106,12 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
 - **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
   A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
-  look cheap, and un-banning them without a budget is how a product gets loud.
+  look cheap, and un-banning them without a budget is how a product gets loud. **One list page
+  carries one chart:** 记忆胶囊's growth line (2026-09-28, `CapsuleGrowth`) — the owner's timeline
+  of how the capsule grew, which the list cannot show. It is a single brand line whose heading is
+  the sentence it proves, with at most three moments; it has no tile, legend or metric rung, and it
+  is not drawn until the history spans two weeks. No peer's memory page has a chart, so a second
+  chart there, or a first on another list page, needs the same argument.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -469,6 +474,12 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
   Inter until the frame's stylesheet carries the face too.
 - ECharts does not read `prefers-reduced-motion`; the chart host has to set `animation: false`
   itself (spec §9.5).
+- `CHART_COLORS.own` has one value for both themes, and `contrast.mjs` measures only the rival
+  greys. In dark, our line `#0a5dc1` is 2.76:1 on a card (`#161b21`) and 2.97:1 on the canvas,
+  under the 3:1 a graphic needs, although spec §32.4 gives the dark theme `brand-400` (the dark
+  accent `#5f97e0`, 5.76:1). Every trend chart shares this — 循证 GEO's and the capsule's growth
+  line. The fix is a dark `--chart-own` in the table plus a measured pair in `contrast.mjs`: a
+  token change, so a version bump and regenerated artifacts.
 - The DTCG files are validated structurally by the package test, not yet against the official
   2025.10 JSON Schema (it is not vendored, and CI does not fetch).
 - The reader's print copy is mounted on `beforeprint`; a headless PDF renderer that does not fire

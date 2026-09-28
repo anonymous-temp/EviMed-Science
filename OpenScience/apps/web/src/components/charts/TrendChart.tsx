@@ -88,6 +88,16 @@ export function TrendChart({
 
 /** A rule's label, inside the plot and clear of the axis numbers (spec §32.7: at least 8 px). */
 const RULE_LABEL_GAP = 8;
+/** The band above the plot a marker's label is written in. */
+const MARKER_BAND = 32;
+/** How far a marker's label on the latest reading stops short of that reading's number. */
+const LAST_VALUE_CLEARANCE = 36;
+
+/** Which way a marker's label runs from its rule: rightwards in the left half, leftwards in the right. */
+export function markerAlign(index: number, slots: number): "left" | "right" {
+  return slots > 1 && index / (slots - 1) > 0.5 ? "right" : "left";
+}
+
 /** The latest reading is the hollow dot, drawn larger than a plain point so its ring reads. */
 const LAST_MARKER = CHART_STROKES.marker + 4;
 
@@ -144,7 +154,16 @@ export function chartOption(
     ...model.markers.map((marker) => ({
       xAxis: marker.index,
       // A vertical rule's label is drawn along it unless it is told not to.
-      label: { show: true, position: "start" as const, rotate: 0, formatter: marker.label, color: target, padding: [0, 0, 2, 0] },
+      // It sits at the rule's top (spec §32.7 rule 4): at its foot it met the
+      // axis dates. A rule in the right half writes its label leftwards from
+      // itself, so the label never runs off the plot or over the latest value.
+      label: {
+        show: true, position: "end" as const, rotate: 0, distance: 4, formatter: marker.label, color: target,
+        align: markerAlign(marker.index, model.labels.length),
+        // On the latest reading, the reading's own number is written above
+        // the same point: the label stops short of it.
+        padding: marker.index === model.lastIndex && model.baseline === null ? [0, LAST_VALUE_CLEARANCE, 0, 0] : 0,
+      },
       // An action is a 1 px dashed rule in the graphics grey (spec §32.7).
       lineStyle: { color: resolvedColor("var(--text-graphic)"), width: 1, type: "dashed" as const },
     })),
@@ -157,7 +176,8 @@ export function chartOption(
 
   return {
     animation: false,
-    grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
+    // A marker's label is written above the plot, so the plot starts lower.
+    grid: { left: 8, right: 8, top: model.markers.length > 0 ? MARKER_BAND : 16, bottom: 8, containLabel: true },
     tooltip: { trigger: "axis", valueFormatter: (value: unknown) => (typeof value === "number" ? format(value) : "—") },
     xAxis: { type: "category", boundaryGap: false, data: model.labels },
     yAxis: { type: "value", scale: true, ...(integer ? { minInterval: 1 } : {}), axisLabel: { formatter: (value: number) => format(value) } },
