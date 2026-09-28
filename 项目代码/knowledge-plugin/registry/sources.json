@@ -6345,8 +6345,8 @@
    "region": "CN",
    "poll_floor_s": 7200,
    "poll_ceiling_s": 21600,
-   "enabled": true,
-   "disabled_reason": null,
+   "enabled": false,
+   "disabled_reason": "waf_refuses_crawler_identity",
    "category": "regulator",
    "config": {
     "url": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c",
@@ -9118,8 +9118,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": true,
-   "disabled_reason": null,
+   "enabled": false,
+   "disabled_reason": "challenge_cloudflare",
    "category": "industry-media",
    "config": {
     "url": "https://www.fiercepharma.com/rss/xml",
@@ -9145,8 +9145,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": true,
-   "disabled_reason": null,
+   "enabled": false,
+   "disabled_reason": "challenge_cloudflare",
    "category": "industry-media",
    "config": {
     "url": "https://www.fiercebiotech.com/rss/xml",

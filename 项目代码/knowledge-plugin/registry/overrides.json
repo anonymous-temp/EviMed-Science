@@ -599,7 +599,10 @@
    "summary_template": "注册申请人：{summary}",
    "min_title_chars": 2
   },
-  "_why_config": "P2: rendered 200 (2026-09-22): the default tab is 纳入突破性治疗品种名单, 10 rows (序号, 受理号, 药品名称, 注册申请人, 申请日期, 公示日期, 公示截止日期, 罕见病). A row has no link (ondblclick opens an in-page layer through list.js, which answered 403 to this box), so the link — and the key — is the list page with ?acceptid=<受理号>&date=<公示截止日期> (link-derived): a #fragment would collapse every row into one canonical URL, and one acceptance number is listed twice (CXSL2300094 SYS6010: 2026-08-31 and 2026-09-14, one inclusion per indication). The date is 公示截止日期: a row joins the inclusion list only after its publicity closes. The 拟突破性治疗品种 tab loads on click and is not read"
+  "_why_config": "P2: rendered 200 (2026-09-22): the default tab is 纳入突破性治疗品种名单, 10 rows (序号, 受理号, 药品名称, 注册申请人, 申请日期, 公示日期, 公示截止日期, 罕见病). A row has no link (ondblclick opens an in-page layer through list.js, which answered 403 to this box), so the link — and the key — is the list page with ?acceptid=<受理号>&date=<公示截止日期> (link-derived): a #fragment would collapse every row into one canonical URL, and one acceptance number is listed twice (CXSL2300094 SYS6010: 2026-08-31 and 2026-09-14, one inclusion per indication). The date is 公示截止日期: a row joins the inclusion list only after its publicity closes. The 拟突破性治疗品种 tab loads on click and is not read",
+  "enabled": false,
+  "disabled_reason": "waf_refuses_crawler_identity",
+  "_why_disabled": "every poll since 2026-09-25T06:03Z (15) ended 403. Not the Beijing address and not a moved page: CDE's WAF page (请不要使用非法的URL地址访问) answers the plugin's browser identity — a Chrome UA with the 'EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)' suffix — 403 in 4 of 6 spaced requests from the dev box, and the same UA without the suffix 202 (the Ruishu page a browser runs) in 6 of 6 (registry/research/probe-2026-09-28.jsonl). The Tokyo relay would not help (no browser there, and it is the header that is refused). Reading CDE again means presenting it a browser without the crawler's name, which the plugin's identity rule (browser.py, fetch.py) does not do: the owner's decision, not a registry edit. Off so it stops hitting a WAF every few hours; 药审中心 stays unread until then"
  },
  "cde-marketed-drug-info": {
   "poll_floor_s": 7200,
@@ -848,6 +851,16 @@
   "egress": "relay",
   "enabled": true,
   "_why": "the same Google blog host as google-keyword-ai, left on the direct exit: 40 of its 50 polls from Beijing since 2026-09-22 ended timeout or robots_unreachable (TLS reset), 22 of 24 since 2026-09-24; the Tokyo node read the feed 200 with the honest identity, 20 items, on 2026-09-28 (registry/research/probe-2026-09-28.jsonl)"
+ },
+ "fierce-biotech": {
+  "enabled": false,
+  "disabled_reason": "challenge_cloudflare",
+  "_why": "a Cloudflare managed challenge on the feed path since 2026-09-24T21:14Z (16 relay polls in a row), met from the Tokyo node, a residential line and a headless Chromium alike while the home page answers 200: no exit this build has passes it (registry/research/probe-2026-09-28.jsonl). Off so it stops polling a wall, not to lift the health rate; re-enable when the feed answers again"
+ },
+ "fierce-pharma": {
+  "enabled": false,
+  "disabled_reason": "challenge_cloudflare",
+  "_why": "as fierce-biotech: the feed path is behind a Cloudflare managed challenge since its last read at 2026-09-24T19:16Z (16 relay polls in a row), for every client this build has (registry/research/probe-2026-09-28.jsonl); fierce-healthcare, same publisher, still answers and stays on. Off so it stops polling a wall, not to lift the health rate"
  },
  "aga-clinical-guidance": {
   "enabled": false,

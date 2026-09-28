@@ -82,13 +82,22 @@ def test_the_plan_decisions_hold(document):
         assert by_id[sid]["egress"] == "browser" and by_id[sid]["enabled"], sid
     for sid in ("google-deepmind-blog", "google-keyword-ai", "google-health-blog"):
         assert by_id[sid]["egress"] == "relay" and by_id[sid]["enabled"], sid
+    # 2026-09-28: walls no exit of this build passes, each with its measurement in research/probe-2026-09-28.jsonl
+    research = {json.loads(line)["id"]: json.loads(line) for line in (ROOT / "registry/research/probe-2026-09-28.jsonl")
+                .read_text(encoding="utf-8").splitlines() if line.strip()}
+    for sid, reason in (("fierce-biotech", "challenge_cloudflare"), ("fierce-pharma", "challenge_cloudflare"),
+                        ("cde-breakthrough-therapy", "waf_refuses_crawler_identity")):
+        assert by_id[sid]["enabled"] is False and by_id[sid]["disabled_reason"] == reason, sid
+        assert research[sid]["verdict"] == "blocked", sid
+    assert by_id["fierce-healthcare"]["enabled"] and by_id["fierce-healthcare"]["egress"] == "relay"
     star = by_id["star-guideline-rating-cn"]
     assert star["poll_floor_s"] == 86400 and star["config"]["max_pages"] == 3           # a daily poll reads 3 pages
     assert star["config"]["full_walk_every_s"] == 604800 and star["config"]["full_walk_max_pages"] == 160
     assert by_id["evimed-chictr"]["access"] == by_id["evimed-guides"]["access"] == "evimed-api"
     assert len(by_id["evimed-chictr"]["config"]["terms"]) == 20 and len(by_id["evimed-guides"]["config"]["publisher_groups"]) == 30
     assert by_id["nmpa-label-revision-announcements"]["poll_floor_s"] == 1800 and by_id["cde-guidance-principles"]["poll_floor_s"] == 7200
-    assert sum(1 for s in sources if s["enabled"] and s["egress"] == "relay") >= 30
+    # 30 on 2026-09-22; 2026-09-28: the two Fierce feeds off behind Cloudflare, google-health-blog on
+    assert sum(1 for s in sources if s["enabled"] and s["egress"] == "relay") >= 29
     # round 3: the general NMPA 药品公告通告 column is mixed, so it is not a safety feed (the edit's
     # safety-notice type makes an item an alert); label revisions stay one; 21 pure safety feeds
     other = by_id["nmpa-other-drug-announcements"]
