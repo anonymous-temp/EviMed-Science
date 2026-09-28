@@ -268,3 +268,11 @@ def test_the_planner_writes_the_protocol_in_the_literatures_language():
     from new_meta.prompts.planner_prompts import PICO_EXTRACTION_PROMPT
     assert "Write every protocol value (PICO, outcomes, criteria) in English" in PICO_EXTRACTION_PROMPT
 
+
+def test_a_plain_rct_request_is_planned_with_every_randomized_design():
+    """ma-001 run 11 (2026-09-28): all four planning attempts listed parallel and
+    multi-arm designs only, and the independent scope check refused each as a
+    narrowing of the question's "randomized controlled trials"."""
+    from new_meta.prompts.planner_prompts import PICO_EXTRACTION_PROMPT
+    assert "list all study_designs the catalogue gives for that family" in PICO_EXTRACTION_PROMPT
+
