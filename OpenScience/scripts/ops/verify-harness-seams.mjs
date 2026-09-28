@@ -27,10 +27,10 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { closureDrift, installKernel } from "./kernel-install.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const seamPath = path.join(repoRoot, "packages/harness-port/seam-manifest.json");
@@ -95,26 +95,6 @@ function appearsInCode(packages, needle) {
   return false;
 }
 
-/** @param {string} version @returns {string} a temp node_modules with a real install */
-function install(version) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "evimed-seam-"));
-  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "evimed-seam-probe", private: true }, null, 2));
-  // pnpm, not npm: npm's resolver runs out of heap on this dependency graph on
-  // a small host, which reads as a flaky check rather than as a memory limit.
-  const direct = Object.keys(REQUIRED_EXPORTS).filter((name) => name.startsWith("@deepseek-ai/dsh-"));
-  // `--ignore-scripts`, for two reasons that point the same way. pnpm 10 and
-  // later exit **non-zero** on ERR_PNPM_IGNORED_BUILDS after a successful
-  // install, so without this the probe reported "Command failed: pnpm add" on
-  // an install that had in fact just written 501 packages — a check that cannot
-  // run reads exactly like a check that has nothing to say. And an audit that
-  // reads upstream code should not also execute upstream install scripts.
-  execFileSync("pnpm", ["add", "--ignore-scripts", `@deepseek-ai/dsh@${version}`, ...direct.map((name) => `${name}@${version}`)], {
-    cwd: dir,
-    stdio: "inherit",
-  });
-  return path.join(dir, "node_modules");
-}
-
 /**
  * A package's entry file.
  *
@@ -152,7 +132,11 @@ function packageEntry(dir) {
 
 const args = process.argv.slice(2);
 const modulesArg = args.indexOf("--modules");
-const modulesDir = modulesArg >= 0 ? path.resolve(String(args[modulesArg + 1])) : install(pins.dsh.version);
+// `--install` installs the closure the runtime image installs — npm, the pin,
+// and the image's `--before` cutoff (`kernel-install.mjs`). The `pnpm add` this
+// replaced had no cutoff, so from 2026-09-22 it verified a closure no image had
+// ever held and failed on cordis every night for that reason alone.
+const modulesDir = modulesArg >= 0 ? path.resolve(String(args[modulesArg + 1])) : installKernel(pins);
 
 const installed = indexInstall(modulesDir);
 /** @type {string[]} */
@@ -169,6 +153,13 @@ report("dsh version matches deps-version.json", dsh?.version === pins.dsh.versio
 report("dsh version matches seam-manifest", dsh?.version === seams.dsh, `${dsh?.version} vs ${seams.dsh}`);
 const cordis = installed.get("@deepseek-ai/cordis");
 report("cordis version matches seam-manifest", cordis?.version === seams.cordis, `${cordis?.version} vs ${seams.cordis}`);
+report("cordis version matches deps-version.json", cordis?.version === pins.dsh.cordis, `${cordis?.version} vs ${pins.dsh.cordis}`);
+// The whole closure, not only the root: the image asserts every kernel package
+// it installed is the pin, and a subpackage a range let drift is a kernel the
+// seams were never checked against.
+const drift = closureDrift(installed, pins);
+report(`every kernel package in the closure is the pin (${drift.count} packages)`, drift.count > 0 && drift.drifted.length === 0,
+  drift.drifted.length ? drift.drifted.join(", ") : "");
 
 const missingPackages = Object.keys(seams.packages).filter((name) => !installed.has(name));
 report(`all ${Object.keys(seams.packages).length} seam packages present`, missingPackages.length === 0, missingPackages.join(", "));

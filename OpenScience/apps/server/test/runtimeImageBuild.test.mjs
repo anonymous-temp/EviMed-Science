@@ -67,6 +67,25 @@ test("both images pin every shared tool to the same version, and the kernel to d
   assert.match(agentbay, /^ARG TARGETARCH$/m);
 });
 
+test("the image and the nightly seam check install the kernel under one cutoff", async () => {
+  // The seam check used to `pnpm add` the pin with no cutoff, so every range
+  // inside the pinned release resolved to whatever was newest that night; from
+  // 2026-09-22 it verified a cordis no image held and was red for that alone.
+  const { docker, agentbay, pins } = await sources();
+  assert.ok(Number.isFinite(Date.parse(pins.dsh.publishedBefore)), "deps-version.json carries no dsh.publishedBefore");
+  assert.equal(arg(docker, "DSH_PUBLISHED_BEFORE"), pins.dsh.publishedBefore);
+  assert.equal(arg(agentbay, "DSH_PUBLISHED_BEFORE"), pins.dsh.publishedBefore);
+  const { kernelInstallArgs } = await import("../../../scripts/ops/kernel-install.mjs");
+  const install = kernelInstallArgs(pins, "/tmp/probe");
+  assert.ok(install.includes(`--before=${pins.dsh.publishedBefore}`));
+  assert.ok(install.includes(`${pins.dsh.npmPackage}@${pins.dsh.version}`));
+  assert.ok(install.includes("--ignore-scripts"));
+  assert.throws(() => kernelInstallArgs({ dsh: { ...pins.dsh, publishedBefore: undefined } }, "/tmp/probe"), /publishedBefore/);
+  const seams = await read("scripts/ops/verify-harness-seams.mjs");
+  assert.match(seams, /import \{ closureDrift, installKernel \} from "\.\/kernel-install\.mjs"/);
+  assert.doesNotMatch(seams, /"pnpm", \["add"/, "the seam check must not install the kernel a second way");
+});
+
 test("each community bundle is installed at the version its record says was booted, with its peers pinned", async () => {
   const { docker, agentbay, pins, support, baseline } = await sources();
   const cite = support.communityToolBundles.find((row) => row.name === "dsh-cite");
