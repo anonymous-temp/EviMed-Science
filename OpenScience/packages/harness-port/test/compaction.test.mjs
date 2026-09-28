@@ -159,7 +159,8 @@ test('a summary that keeps every handle is returned on the first call, with no r
   assert.deepEqual(augmented.tools, INPUT.tools)
   assert.equal(augmented.messages.length, INPUT.messages.length + 1)
   assert.deepEqual(augmented.messages[0], INPUT.messages[0])
-  assert.deepEqual(augmented.messages[1].source, { kind: 'plugin', plugin: COMPACTION_PLUGIN })
+  // Session format 4 refuses the bare `plugin` kind (DSH 0.1.7).
+  assert.deepEqual(augmented.messages[1].source, { kind: `plugin:${COMPACTION_PLUGIN}` })
   assert.ok(appendedText(augmented).includes('task-plan.json'))
 })
 

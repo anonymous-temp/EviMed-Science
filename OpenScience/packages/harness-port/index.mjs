@@ -1089,9 +1089,17 @@ async function probeSandbox(ctx, required) {
   if (typeof shell.resolve !== 'function') {
     return { error: 'seam missing: ctx.shell.resolve', enforcement: 'none' }
   }
+  // 0.1.7 replaced `run(spec)` and `start(spec)` with one `execute(spec)`,
+  // which resolves to a process handle once the command is prepared; awaiting
+  // its `result()` is what running it in the foreground means now. The result
+  // carries the same `sandbox` facts `run()` returned.
+  if (typeof shell.execute !== 'function') {
+    return { error: 'seam missing: ctx.shell.execute', enforcement: 'none' }
+  }
   try {
     const spec = shell.resolve({ command: 'true', signal: AbortSignal.timeout(10_000) })
-    const result = await shell.run(spec)
+    const execution = await shell.execute(spec)
+    const result = await execution.result()
     // The harness reports this as `{ mode, denied, enforcement?, runnerFailed? }`
     // under `sandbox`; the flat read is a fallback for a shape that moves.
     const sandbox = result?.sandbox && typeof result.sandbox === 'object' ? result.sandbox : {}

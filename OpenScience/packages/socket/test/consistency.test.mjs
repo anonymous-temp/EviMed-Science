@@ -880,8 +880,7 @@ test("each session-scoped dispatch revision is logged once before its model step
   setRevision("run_first", "req_first", "<required-skills>clinical-evidence-synthesis</required-skills>");
   await f.step(1);
   assert.equal(f.injected.length, 1);
-  assert.equal(f.injected[0].source.kind, "plugin");
-  assert.equal(f.injected[0].source.plugin, "evimed-run-policy");
+  assert.equal(f.injected[0].source.kind, "plugin:evimed-run-policy");
   assert.match(f.injected[0].content[0].text, /clinical-evidence-synthesis/);
 
   // More steps in the same request must not repeat the trusted context.

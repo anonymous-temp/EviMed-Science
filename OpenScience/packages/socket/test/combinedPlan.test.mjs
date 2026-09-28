@@ -1492,7 +1492,7 @@ test("a root turn about to close with children outstanding is steered back to co
   assert.equal(f.steered.length, 3, "three reminders, then the turn may close");
   const reminder = f.steered[0];
   assert.equal(reminder.role, "user");
-  assert.deepEqual(reminder.source, { kind: "plugin", plugin: "evimed-run-policy" }, "machine text is marked as the plugin's, never as the researcher's");
+  assert.deepEqual(reminder.source, { kind: "plugin:evimed-run-policy" }, "machine text is marked as the plugin's, never as the researcher's");
   assert.match(reminder.content[0].text, /d-bib#1/);
   assert.match(reminder.content[0].text, /evimed_await/);
   // A result that settled but was never collected is outstanding too.
@@ -1521,7 +1521,7 @@ test("a root that ended its turn while its child worked is woken with the child'
   await steeredAtLeast(f, 1);
   assert.equal(f.steered.length, 1);
   const wake = f.steered[0];
-  assert.deepEqual(wake.source, { kind: "plugin", plugin: "evimed-run-policy" });
+  assert.deepEqual(wake.source, { kind: "plugin:evimed-run-policy" });
   const handed = JSON.parse(/\{[\s\S]*\}/.exec(wake.content[0].text)?.[0] ?? "{}");
   assert.deepEqual(handed.results.map((/** @type {any} */ result) => [result.handle, result.status]).sort(), [["d-appraise#1", "completed"], ["d-bib#1", "completed"]]);
   assert.equal(handed.results.find((/** @type {any} */ result) => result.handle === "d-bib#1").summary, "计量完成。");

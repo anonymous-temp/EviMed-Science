@@ -38,7 +38,16 @@ import {
   withdrawPromptSection,
 } from "../index.mjs";
 
-test("injected context is an identified user message accepted by session format v3", () => {
+/**
+ * Session format 4's admission rule for a message source, as the kernel ships
+ * it (`@deepseek-ai/dsh-session-format-v3-to-v4`, 0.1.7-rc.2): a nonempty
+ * string kind that is not the bare word `plugin`. A live 0.1.7-rc.2 kernel
+ * accepted `plugin:evimed-run-policy` on 2026-09-28 and refuses `plugin`.
+ * @param {any} source
+ */
+const admittedByFormat4 = (source) => Boolean(source) && typeof source.kind === "string" && source.kind.length > 0 && source.kind !== "plugin";
+
+test("injected context is an identified user message accepted by session format 4", () => {
   /** @type {Array<{id: string, role: string, source: unknown, content: unknown}>} */
   const messages = [];
   const agent = { inject: (/** @type {any} */ message) => messages.push(message) };
@@ -48,7 +57,8 @@ test("injected context is an identified user message accepted by session format 
   assert.equal(typeof messages[0].id, "string");
   assert.ok(messages[0].id.length > 0);
   assert.notEqual(messages[0].id, messages[1].id);
-  assert.deepEqual(messages[0].source, { kind: "plugin", plugin: "evimed-guidance" });
+  assert.deepEqual(messages[0].source, { kind: "plugin:evimed-guidance" });
+  assert.ok(admittedByFormat4(messages[0].source));
   assert.deepEqual(messages[0].content, [{ type: "text", text: "Retain the research constraints." }]);
 });
 
@@ -66,7 +76,8 @@ test("steered context is the same identified plugin message, handed to the kerne
   assert.equal(steered.length, 1);
   assert.equal(steered[0].role, "user");
   assert.ok(typeof steered[0].id === "string" && steered[0].id.length > 0);
-  assert.deepEqual(steered[0].source, { kind: "plugin", plugin: "evimed-run-policy" });
+  assert.deepEqual(steered[0].source, { kind: "plugin:evimed-run-policy" });
+  assert.ok(admittedByFormat4(steered[0].source));
   assert.deepEqual(steered[0].content, [{ type: "text", text: "Collect the children's results." }]);
 });
 
@@ -208,16 +219,22 @@ function fakeContext(overrides = {}) {
   // exercised by any test.
   // Two methods, not one, because the executor's contract is two methods:
   // `resolve()` turns a request into a spec — filling `sandboxPolicy` from the
-  // deployment's policy service — and `run()` accepts only a resolved spec,
-  // destructuring that policy without a default. A double offering just `run`
-  // let the probe call it with a raw request and pass, while the real container
-  // died on "Cannot destructure property 'mode' of 'policy'". The double now
-  // refuses a raw request the same way the real one does.
+  // deployment's policy service — and `execute()` accepts only a resolved
+  // spec, destructuring that policy without a default. A double offering just
+  // the second let the probe call it with a raw request and pass, while the
+  // real container died on "Cannot destructure property 'mode' of 'policy'".
+  // The double refuses a raw request the same way the real one does.
+  //
+  // `execute()` is 0.1.7's: it replaced `run()` and `start()` and resolves to
+  // a process handle whose `result()` is the foreground outcome. There is no
+  // `run` here on purpose — the probe calling the retired method is exactly
+  // what failed on the first 0.1.7 boot ("shell.run is not a function").
   services.set("shell", {
-    resolve: (/** @type {any} */ request) => ({ ...request, workdir: "/workspace", timeoutMs: 10_000, sandboxPolicy: { mode: "workspace-write" } }),
-    run: async (/** @type {any} */ spec) => {
+    resolve: (/** @type {any} */ request) => ({ ...request, workdir: "/workspace", timeoutMs: 10_000, onExpiry: "kill", sandboxPolicy: { mode: "workspace-write" } }),
+    execute: async (/** @type {any} */ spec) => {
       if (!spec?.sandboxPolicy) throw new TypeError("Cannot destructure property 'mode' of 'policy' as it is undefined.");
-      return {
+      const outcome = {
+        exitCode: 0, signal: null, timedOut: false, aborted: false, timeoutMs: spec.timeoutMs,
         sandbox: {
           mode: "workspace-write",
           denied: overrides.denied ?? false,
@@ -225,6 +242,7 @@ function fakeContext(overrides = {}) {
           ...(overrides.runnerFailed == null ? {} : { runnerFailed: overrides.runnerFailed }),
         },
       };
+      return { done: Promise.resolve(), result: async () => outcome };
     },
   });
   // A real cordis Context exposes each service as `ctx.<key>` as well as through
