@@ -1021,6 +1021,62 @@ test("a run whose files drifted from its receipt does not ship, container alive 
   });
 });
 
+test("a run stopped after its files drifted from the receipt stays a stopped run and keeps its accepted files", async () => {
+  // Production, 2026-09-25 (信尔美, geo-insight): the child's package was
+  // accepted at 10:20:17, it appended a section to revision-notes.md at
+  // 10:20:30, and the conversation was stopped from the kernel frame at
+  // 10:30:47. A stopped turn never reaches run-policy's end-of-turn receipt
+  // refresh, so the receipt still named the older notes — and the ledger turned
+  // the cancel into `failed / specialist_receipt_digest_mismatch` with no
+  // artifacts, dropping the four files that still matched their digests.
+  await withAnswerModeRun(async ({ project, binding, dispatch, store }) => {
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    const report = "# accepted and unchanged\n";
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), report, "utf8");
+    await writeFile(path.join(deliverableDir, "revision-notes.md"), "# notes appended after acceptance\n", "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_stopped",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [
+          { path: "deliverables/d1/clinical-evidence-report.md", sha256: createHash("sha256").update(report).digest("hex"), bytes: Buffer.byteLength(report) },
+          { path: "deliverables/d1/revision-notes.md", sha256: "0".repeat(64), bytes: 1 },
+        ],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 2,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+
+    const dispatched = await dispatch("turn_stopped_after_drift");
+    await relabelReceipt(project, dispatched.id);
+    // The history of a stopped turn: its last message carries the kernel's
+    // `aborted` ending, mapped the way dshRuntimeAdapter maps it.
+    const stoppedHistory = [{
+      info: { id: "msg_stopped", role: "assistant", time: { completed: Date.now() + 10 }, turnEnd: { kind: "aborted", code: "runtime_canceled" } },
+      parts: [{ type: "text", text: "正在核对第 4–5 步。" }],
+    }];
+    store.readSessionHistory = async () => stoppedHistory;
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "canceled", `a stop is the reason the run ended: ${noticeTexts(run).join(" | ")}`);
+    assert.equal(run.errorCode, "runtime_canceled");
+    assert.deepEqual(run.artifacts, ["deliverables/d1/clinical-evidence-report.md"],
+      "the file still matching its receipt is the accepted bytes and stays listed");
+    assert.deepEqual(run.unverifiedArtifacts, ["deliverables/d1/revision-notes.md"],
+      "the file that moved is listed as never judged");
+    assert.ok(
+      noticeTexts(run).some((line) => /revision-notes\.md with a digest the file no longer matches, and the run was stopped/.test(String(line))),
+      `the ledger must say which file moved and why nothing judged it: ${noticeTexts(run).join(" | ")}`,
+    );
+  });
+});
+
 test("a receipt whose digests still match does not block an ordinary success", async () => {
   // Negative control: the check must bite only on drift. Without it this pair
   // would pass with the verification stubbed out entirely.

@@ -5423,6 +5423,31 @@ export class AgentRunStore {
         const drift = amendable || terminal.status !== "failed" ? null : await revisionDrift(project, verified);
         if (drift?.explained) {
           terminal.qualityNotices = [revisionNotAcceptedNotice(verified, drift.revising), ...(terminal.qualityNotices ?? [])];
+        } else if (!amendable && terminal.status === "canceled") {
+          // A stopped run is a stopped run. The receipt is refreshed over the
+          // final bytes only when a turn completes (run-policy's `sealTurn`),
+          // so a turn stopped after an accepted deliverable was touched always
+          // leaves a receipt behind its files, and that says nothing about
+          // tampering. Reported as a digest mismatch, the cancel vanished from
+          // the ledger and the accepted package went with it: the first
+          // 信尔美 geo-insight run (2026-09-25) was stopped from the kernel
+          // frame twelve minutes after its package was accepted, one optional
+          // notes file had been appended to since, and the ledger said
+          // `failed / specialist_receipt_digest_mismatch` with no artifacts.
+          // The files that still match their receipt are the accepted bytes;
+          // the ones that moved are said to have moved, and were never judged.
+          return this.finishInternal(project, run.id, {
+            ...terminal,
+            artifacts: verified.artifacts,
+            unverifiedArtifacts: verified.mismatched,
+            qualityNotices: [
+              ...verified.mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
+                `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the run was stopped before its turn ended, so no gate judged the bytes now on disk`,
+                { file: entry, detail: "回执记下的文件在通过之后被改动；运行在本轮结束前被停止，改动后的内容没有经过核验。" })),
+              ...(terminal.qualityNotices ?? []),
+            ].slice(0, 20),
+            ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
+          });
         } else if (!amendable) {
           return this.finishInternal(project, run.id, {
             status: "failed",
