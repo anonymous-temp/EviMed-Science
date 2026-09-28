@@ -12,13 +12,13 @@ FROM ${RUNTIME_BASE_IMAGE}
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
-ARG DSH_VERSION=0.1.5-rc.2
-ARG DSH_CORDIS_VERSION=4.0.2
-# Registry cutoff adopted by the rc.2 upgrade; CI verifies that every
+ARG DSH_VERSION=0.1.7-rc.2
+ARG DSH_CORDIS_VERSION=4.0.4
+# Registry cutoff adopted by the 0.1.7-rc.2 upgrade; CI verifies that every
 # required subpackage is available and resolves to the exact same version.
 # npm's cutoff bounds dependency resolution; the whole-tree version assertion
 # below verifies the resulting kernel closure rather than trusting the date.
-ARG DSH_PUBLISHED_BEFORE=2026-09-10T15:57:10.790Z
+ARG DSH_PUBLISHED_BEFORE=2026-09-24T15:18:11.337Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
 # Where to fetch the Node tarball. The default is upstream; a deployment behind

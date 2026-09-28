@@ -159,7 +159,7 @@ services:
   # container is the sandbox (no capabilities, read-only root, its own networks,
   # 1 GB). No published port.
   frontier-browser:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26}
     user: "10003:10003"
     entrypoint: ["python3", "-c"]
     command:

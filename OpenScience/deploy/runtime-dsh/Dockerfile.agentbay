@@ -23,9 +23,9 @@ USER root
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json, as in
 # `Dockerfile`; the same test holds them equal.
-ARG DSH_VERSION=0.1.5-rc.2
-ARG DSH_CORDIS_VERSION=4.0.2
-ARG DSH_PUBLISHED_BEFORE=2026-09-10T15:57:10.790Z
+ARG DSH_VERSION=0.1.7-rc.2
+ARG DSH_CORDIS_VERSION=4.0.4
+ARG DSH_PUBLISHED_BEFORE=2026-09-24T15:18:11.337Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
 ARG NODE_DIST_BASE=https://nodejs.org/dist
