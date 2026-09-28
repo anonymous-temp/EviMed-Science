@@ -2901,6 +2901,19 @@ def _claim_sentence_mentions_certainty(sentence: str) -> bool:
     )
 
 
+def _certainty_phrase_present(sentence: str, phrase: str) -> bool:
+    """Match a Chinese certainty-rating phrase, not the verb that contains it.
+
+    "降低确定性" (to downgrade certainty) and "提高确定性" (to raise it) contain
+    "低确定性" / "高确定性" as substrings but name no rating; a Methods sentence
+    such as "则不因字段缺失单独降低确定性" states a rule, not a certainty level.
+    """
+    lead = phrase[:1]
+    if lead in {"低", "高"}:
+        return re.search(rf"(?<![降减提升]){re.escape(phrase)}", sentence) is not None
+    return phrase in sentence
+
+
 def _sentence_contains_any_certainty_rating(sentence: str) -> bool:
     lowered = sentence.lower()
     if re.search(r"\b(?:very low|low|moderate|high)\b", lowered):
@@ -2924,7 +2937,7 @@ def _sentence_contains_any_certainty_rating(sentence: str) -> bool:
         "极低质量",
         "很低确定性",
     ]
-    return any(phrase in sentence for phrase in rating_phrases)
+    return any(_certainty_phrase_present(sentence, phrase) for phrase in rating_phrases)
 
 
 def _sentence_contains_certainty(sentence: str, certainty: str) -> bool:
@@ -2938,7 +2951,7 @@ def _sentence_contains_certainty(sentence: str, certainty: str) -> bool:
         "low": ["低确定性", "确定性为低", "确定性评为低", "低质量"],
         "very low": ["极低确定性", "很低确定性", "确定性为极低", "确定性评为极低", "极低质量"],
     }
-    return any(term in sentence for term in zh_terms.get(normalized, []))
+    return any(_certainty_phrase_present(sentence, term) for term in zh_terms.get(normalized, []))
 
 
 def _sentence_contains_compatible_certainty_floor(sentence: str, certainty: str) -> bool:

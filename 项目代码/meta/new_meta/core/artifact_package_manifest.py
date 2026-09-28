@@ -415,7 +415,11 @@ def _has_search_query_in_manuscript(text: str) -> bool:
 
 def _has_calculation_detail(text: str) -> bool:
     lower = str(text or "").lower()
-    has_effect = bool(re.search(r"\b(?:or|rr|hr|md|smd)\s+\d", lower))
+    # A difference measure is signed: "MD -303.23" reports an effect exactly as
+    # "HR 0.81" does, so the sign (ASCII hyphen, Unicode minus or plus) is part
+    # of the value.  The label may follow a CJK character ("为MD -303.23"),
+    # which a word boundary does not separate from Latin letters.
+    has_effect = bool(re.search(r"(?<![a-z])(?:or|rr|hr|md|smd)\s*[-+−]?\s?\d", lower))
     has_ci = "95% ci" in lower or "95% confidence interval" in lower
     has_model_or_heterogeneity = any(term in lower for term in ("heterogeneity", "i²", "i2", "tau", "cochran", "inverse-variance"))
     has_calculation_label = any(term in lower for term in ("calculation notes", "pooled estimate", "meta-analysis", "统计模型", "合并效应"))
