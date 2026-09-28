@@ -220,11 +220,11 @@
         "有未处理安全问题的稿件会标出来，不自动投放，需要人看一眼。"
       ],
       "evaluation": {
-        "lastStatus": "failed",
-        "lastRunAt": "2026-09-10",
-        "runs": 3,
-        "delivered": 0,
-        "typicalMinutes": null
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-25",
+        "runs": 5,
+        "delivered": 2,
+        "typicalMinutes": 16
       }
     },
     "geo-insight": {
@@ -302,8 +302,11 @@
         "只解读平台实测的数；样本不足的格子不出百分数。"
       ],
       "evaluation": {
-        "lastStatus": "not-run",
-        "lastRunAt": null
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-25",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 22
       }
     },
     "manuscript-support": {
