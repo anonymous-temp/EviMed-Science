@@ -146,6 +146,10 @@ class Origin:
     context: ssl.SSLContext
     files: dict[str, bytes | Redirect] = field(default_factory=dict)
     requests: list[dict] = field(default_factory=list)
+    #: Answer more than one request per connection unless the client says ``Connection: close``.
+    keep_alive: bool = False
+    #: With ``keep_alive``: promise the connection, then close it anyway (an idle timeout on EBI's side).
+    drop_kept: bool = False
     server: asyncio.base_events.Server | None = None
     port: int = 0
 
@@ -159,33 +163,36 @@ class Origin:
             self.server.close()
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        head = await _head(reader)
-        if head is None:
-            writer.close()
-            return
-        line, headers = head
-        path = line.split(" ")[1]
-        url = f"https://{headers.get('host', '')}{path}"
-        self.requests.append({"url": url, "line": line, "headers": headers})
-        body = self.files.get(url)
-        extra = b""
-        if isinstance(body, Redirect):
-            status, content, extra = b"302 Found", b"", f"Location: {body.location}\r\n".encode()
-        elif body is None:
-            status, content = b"404 Not Found", b"no such file"
-        elif headers.get("range", "").startswith("bytes="):
-            first, _, last = headers["range"].removeprefix("bytes=").partition("-")
-            content = body[int(first):int(last) + 1]
-            status = b"206 Partial Content"
-            extra = f"Content-Range: bytes {first}-{int(first) + len(content) - 1}/{len(body)}\r\n".encode()
-        else:
-            status, content = b"200 OK", body
-        writer.write(b"HTTP/1.1 " + status + b"\r\n" + extra
-                     + f"Content-Length: {len(content)}\r\nConnection: close\r\n\r\n".encode() + content)
-        try:
-            await writer.drain()
-        except ConnectionError:
-            pass
+        while True:
+            head = await _head(reader)
+            if head is None:
+                break
+            line, headers = head
+            path = line.split(" ")[1]
+            url = f"https://{headers.get('host', '')}{path}"
+            self.requests.append({"url": url, "line": line, "headers": headers})
+            body = self.files.get(url)
+            extra = b""
+            if isinstance(body, Redirect):
+                status, content, extra = b"302 Found", b"", f"Location: {body.location}\r\n".encode()
+            elif body is None:
+                status, content = b"404 Not Found", b"no such file"
+            elif headers.get("range", "").startswith("bytes="):
+                first, _, last = headers["range"].removeprefix("bytes=").partition("-")
+                content = body[int(first):int(last) + 1]
+                status = b"206 Partial Content"
+                extra = f"Content-Range: bytes {first}-{int(first) + len(content) - 1}/{len(body)}\r\n".encode()
+            else:
+                status, content = b"200 OK", body
+            keep = self.keep_alive and headers.get("connection", "").lower() != "close"
+            writer.write(b"HTTP/1.1 " + status + b"\r\n" + extra + f"Content-Length: {len(content)}\r\n".encode()
+                         + (b"" if keep else b"Connection: close\r\n") + b"\r\n" + content)
+            try:
+                await writer.drain()
+            except ConnectionError:
+                break
+            if not keep or self.drop_kept:
+                break
         writer.close()
 
 

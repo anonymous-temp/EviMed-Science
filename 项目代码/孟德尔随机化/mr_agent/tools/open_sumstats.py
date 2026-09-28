@@ -17,8 +17,10 @@ Two ways to read a study's file, chosen by what the catalogue publishes:
 * a bgzip file with a tabix index (every study harmonised since 2023): single
   variants are read with HTTP Range requests (about 70 KB each), so a 1.3 GB
   file is never downloaded;
-* any other harmonised file: streamed once and filtered as it arrives, keeping
-  only the rows asked for; a byte ceiling bounds the stream.
+* any other harmonised file: read once and filtered as it is parsed, keeping
+  only the rows asked for; a byte ceiling bounds it. When the server states the
+  file's size and serves byte ranges, the file is fetched as parallel ranges
+  into a spool file first (``read_whole_file``); otherwise it is streamed.
 
 Instrument selection for the exposure: every variant at p < 5e-8 (a genome scan
 of a streamed file; for a tabix file, the study's curated lead associations in
@@ -40,6 +42,7 @@ from __future__ import annotations
 
 import base64
 import bisect
+import contextlib
 import csv
 import errno
 import gzip
@@ -57,16 +60,23 @@ import stat
 import struct
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http import client as http_client
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
+
+try:
+    import fcntl
+except ImportError:  # not POSIX: files are streamed, never spooled (see _Spool)
+    fcntl = None  # type: ignore[assignment]
 
 CATALOG_API = os.getenv("EVIMED_GWAS_CATALOG_API", "https://www.ebi.ac.uk/gwas/rest/api/v2").rstrip("/")
 FTP_ROOT = os.getenv(
@@ -124,6 +134,28 @@ def _stream_limit() -> int:
 
 def _timeout() -> int:
     return _int_env("EVIMED_MR_OPEN_HTTP_TIMEOUT_SECONDS", 60)
+
+
+#: Bounds of the parallel ranged fetch (see "Whole files" below): at most 16
+#: connections per file, and chunks between one tabix-sized read and 64 MiB.
+_FETCH_WORKERS_MAX = 16
+_FETCH_CHUNK_MIN, _FETCH_CHUNK_MAX = 64 * 1024, 64 * 1024 * 1024
+
+
+def _fetch_workers() -> int:
+    """Range requests in flight per file (EVIMED_MR_OPEN_FETCH_WORKERS, 1-16, default 6)."""
+    return min(_int_env("EVIMED_MR_OPEN_FETCH_WORKERS", 6), _FETCH_WORKERS_MAX)
+
+
+def _fetch_chunk_bytes() -> int:
+    """Bytes per range request (EVIMED_MR_OPEN_FETCH_CHUNK_BYTES, 64 KiB-64 MiB, default 8 MiB)."""
+    chunk = _int_env("EVIMED_MR_OPEN_FETCH_CHUNK_BYTES", 8 * 1024 * 1024)
+    return max(_FETCH_CHUNK_MIN, min(chunk, _FETCH_CHUNK_MAX))
+
+
+def _spool_wait_seconds() -> int:
+    """How long a job waits for another job's download of the same file (EVIMED_MR_OPEN_SPOOL_WAIT_SECONDS)."""
+    return _int_env("EVIMED_MR_OPEN_SPOOL_WAIT_SECONDS", 3600)
 
 
 # --- Reuse across jobs ------------------------------------------------------------
@@ -205,14 +237,38 @@ def _cache_write(key: str, suffix: str, content: bytes) -> None:
 # way and why the node failed, and each read says which way it went. The
 # credentials are sent to the node in the CONNECT request and nowhere else:
 # never logged, never recorded, never in an error message.
+#
+# "In a row" with parallel requests: a whole file is fetched by several range
+# requests at once, so one passing outage of the node is met by every request in
+# flight, and counting each as a failure in a row would turn the node off after
+# one blip. A failure therefore counts toward the run only when its attempt began
+# after the last counted failure: attempts that were already under way when the
+# node was seen failing are the same observation, not new evidence. With one
+# request at a time (tabix reads, the catalogue API) this is exactly the old
+# count; with N workers each retry round counts once, so the node goes off after
+# about as long a failing stretch as before. A refusal a retry cannot change
+# (403/407/certificate) still turns it off at once.
+#
+# Requests that read their whole answer (``_Http.read``: the catalogue API,
+# listings, tabix index and the ~70 KB tabix ranges) keep their tunnel open for
+# the next request to the same host, one idle tunnel per host and thread, when
+# the answer was read to its last byte and EBI did not say ``Connection: close``:
+# a tabix outcome is dozens of small reads, and each new tunnel is TLS to the
+# node, CONNECT and TLS to EBI across the Beijing-Tokyo link. A kept tunnel that
+# EBI has closed in the meantime is replaced by a fresh one without counting as
+# a node failure (GET is idempotent), and a tunnel idle longer than
+# ``_KEEP_ALIVE_IDLE_SECONDS`` is not reused. Range requests of a whole-file
+# fetch use a fresh tunnel each: fresh flows are the point of that fetch.
 
 EDGE_PROXY_DOMAIN = "ebi.ac.uk"
 ROUTE_PROXY = "edge_proxy"
 ROUTE_DIRECT = "direct"
 #: The node's own connect budget, as the control plane's (OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS).
 _PROXY_CONNECT_SECONDS = 10
-#: Transient node failures in a row (no success between) that turn it off.
+#: Transient node failures in a row (no success between, parallel attempts counted once) that turn it off.
 _PROXY_FAILURES_BEFORE_OFF = 6
+#: A kept tunnel idle longer than this is closed rather than reused.
+_KEEP_ALIVE_IDLE_SECONDS = 15
 #: Waits before trying the node again for the same request after a transient failure.
 _PROXY_RETRY_WAITS = (2, 5, 12)
 _PROXY_FAILURES_RECORDED = 20
@@ -303,6 +359,36 @@ class _TunnelConnection(http_client.HTTPConnection):
         self.sock = self._transport
 
 
+class _KeptResponse:
+    """An answer on a tunnel that may carry the next request once this one is read to its last byte."""
+
+    def __init__(self, response: http_client.HTTPResponse, release: Callable[[bool], None]):
+        self._response = response
+        self._release: Callable[[bool], None] | None = release
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._response, name)
+
+    def read(self, *args: Any) -> bytes:
+        return self._response.read(*args)
+
+    def close(self) -> None:
+        release, self._release = self._release, None
+        if release is None:
+            return
+        # length reaches 0 only when the body (Content-Length) was read to its end;
+        # anything else leaves bytes in the tunnel and it is closed, never reused.
+        whole = self._response.length == 0 and not self._response.will_close
+        self._response.close()
+        release(whole)
+
+    def __enter__(self) -> "_KeptResponse":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+
 class _Egress:
     """Which way each request goes; what the source record says about it."""
 
@@ -320,6 +406,10 @@ class _Egress:
         self.failure_count = 0
         self.consecutive_failures = 0
         self.off = False
+        self.tunnels_reused = self.tunnels_found_closed = 0
+        self._lock = threading.Lock()
+        self._counted_at = float("-inf")
+        self._idle = threading.local()
 
     @classmethod
     def _unusable(cls, issue: str) -> "_Egress":
@@ -361,41 +451,115 @@ class _Egress:
             and (host == EDGE_PROXY_DOMAIN or host.endswith("." + EDGE_PROXY_DOMAIN))
         )
 
-    def failed(self, failure: _ProxyFailure, host: str) -> None:
-        self.failure_count += 1
-        if len(self.failures) < _PROXY_FAILURES_RECORDED:
-            self.failures.append({"code": failure.code, "httpStatus": failure.status, "host": host, "at": _now()})
+    def failed(self, failure: _ProxyFailure, host: str, started: float | None = None) -> None:
+        """Count a node failure; ``started`` is when the failed attempt began (``time.monotonic``)."""
+        with self._lock:
+            self.failure_count += 1
+            if len(self.failures) < _PROXY_FAILURES_RECORDED:
+                self.failures.append({"code": failure.code, "httpStatus": failure.status, "host": host, "at": _now()})
+            # An attempt already under way when the last counted failure was seen
+            # met the same outage: it is not another failure in a row.
+            if started is None or started >= self._counted_at:
+                self.consecutive_failures += 1
+                self._counted_at = time.monotonic()
+            turned_off = not self.off and (
+                failure.final or self.consecutive_failures >= _PROXY_FAILURES_BEFORE_OFF
+            )
+            if turned_off:
+                self.off = True
         _LOG.warning(
             "The edge proxy failed for %s (%s%s); the request goes direct.",
             host, failure.code, f", HTTP {failure.status}" if failure.status else "",
         )
-        self.consecutive_failures += 1
-        if not self.off and (failure.final or self.consecutive_failures >= _PROXY_FAILURES_BEFORE_OFF):
-            self.off = True
+        if turned_off:
             _LOG.warning("The edge proxy is off for the rest of this job after %d failure(s).", self.failure_count)
 
     def succeeded(self) -> None:
-        self.consecutive_failures = 0
+        with self._lock:
+            self.consecutive_failures = 0
 
-    def open(self, url: str, headers: dict[str, str], timeout: float) -> http_client.HTTPResponse:
-        """One GET through the node; the answer whatever its status, or ``_ProxyFailure``."""
+    def open(
+        self, url: str, headers: dict[str, str], timeout: float, *, keep_alive: bool = False,
+    ) -> http_client.HTTPResponse | _KeptResponse:
+        """One GET through the node; the answer whatever its status, or ``_ProxyFailure``.
+
+        With ``keep_alive`` the tunnel may be one kept from an earlier request to
+        the same host, and is kept for the next one when this answer is read whole.
+        """
         parts = urllib.parse.urlsplit(url)
         host, port = parts.hostname or "", parts.port or 443
+        target = urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, ""))
+        if keep_alive:
+            kept = self._take_idle((host, port))
+            if kept is not None:
+                try:
+                    kept.request("GET", target, headers=headers)
+                    response = kept.getresponse()
+                except (OSError, http_client.HTTPException):
+                    kept.close()  # EBI closed the idle tunnel: a fresh one, not a node failure
+                    with self._lock:
+                        self.tunnels_found_closed += 1
+                else:
+                    with self._lock:
+                        self.tunnels_reused += 1
+                    return self._kept(kept, response, (host, port))
         transport = self._tunnel(host, port, timeout)
         connection = _TunnelConnection(host, port, transport, timeout)
         try:
-            connection.request(
-                "GET", urllib.parse.urlunsplit(("", "", parts.path or "/", parts.query, "")),
-                headers={**headers, "Connection": "close"},
-            )
+            connection.request("GET", target, headers=headers if keep_alive else {**headers, "Connection": "close"})
             response = connection.getresponse()
         except (OSError, http_client.HTTPException):
             transport.close()
             raise _ProxyFailure("edge_proxy_upstream_failed") from None
+        if keep_alive:
+            return self._kept(connection, response, (host, port))
         # The response's file now holds the tunnel open until it is read or closed.
         connection.sock = None
         transport.close()
         return response
+
+    def _kept(
+        self, connection: _TunnelConnection, response: http_client.HTTPResponse, key: tuple[str, int],
+    ) -> http_client.HTTPResponse | _KeptResponse:
+        if response.will_close:
+            return response  # http.client has already handed the tunnel to the response
+
+        def release(whole: bool) -> None:
+            if whole:
+                self._put_idle(key, connection)
+            else:
+                connection.close()
+
+        return _KeptResponse(response, release)
+
+    def _pool(self) -> dict[tuple[str, int], tuple[_TunnelConnection, float]]:
+        pool = getattr(self._idle, "pool", None)
+        if pool is None:
+            pool = self._idle.pool = {}
+        return pool
+
+    def _take_idle(self, key: tuple[str, int]) -> _TunnelConnection | None:
+        entry = self._pool().pop(key, None)
+        if entry is None:
+            return None
+        connection, since = entry
+        if time.monotonic() - since > _KEEP_ALIVE_IDLE_SECONDS:
+            connection.close()
+            return None
+        return connection
+
+    def _put_idle(self, key: tuple[str, int], connection: _TunnelConnection) -> None:
+        previous = self._pool().pop(key, None)
+        if previous is not None:
+            previous[0].close()
+        self._pool()[key] = (connection, time.monotonic())
+
+    def close_idle(self) -> None:
+        """Close this thread's kept tunnels."""
+        pool = self._pool()
+        while pool:
+            _, (connection, _since) = pool.popitem()
+            connection.close()
 
     def _tunnel(self, host: str, port: int, timeout: float) -> Any:
         """TLS to the node, CONNECT, then TLS to ``host`` inside it."""
@@ -466,6 +630,8 @@ class _Egress:
             "proxyFailureCount": self.failure_count,
             "proxyFailures": list(self.failures),
             "proxyTurnedOff": self.off,
+            **({"tunnelsReused": self.tunnels_reused} if self.tunnels_reused else {}),
+            **({"keptTunnelsFoundClosed": self.tunnels_found_closed} if self.tunnels_found_closed else {}),
         }
 
 
@@ -479,6 +645,10 @@ class _Http:
         self.bytes = 0
         self.routes = {ROUTE_PROXY: 0, ROUTE_DIRECT: 0}
         self.last_route: str | None = None
+        # Range requests of one file run on several threads: counters under a
+        # lock, and the way each thread's last request went kept per thread.
+        self._lock = threading.Lock()
+        self._local = threading.local()
 
     def routes_since(self, mark: dict[str, int]) -> dict[str, int]:
         """Requests per route since ``mark`` (a copy of ``routes`` taken earlier)."""
@@ -486,17 +656,28 @@ class _Http:
             route: count - mark.get(route, 0) for route, count in self.routes.items() if count > mark.get(route, 0)
         }
 
-    def _send(self, url: str, headers: dict[str, str]):
+    def add_bytes(self, count: int) -> None:
+        with self._lock:
+            self.bytes += count
+
+    def _went(self, route: str) -> None:
+        with self._lock:
+            self.routes[route] += 1
+            self.last_route = route
+        self._local.route = route
+
+    def _send(self, url: str, headers: dict[str, str], keep_alive: bool = False):
         """Through the node when it carries this host, else (or when it fails) direct."""
         for _ in range(_REDIRECTS + 1):
             if not self.egress.routes(url):
                 break
             response = None
             for attempt in range(len(_PROXY_RETRY_WAITS) + 1):
+                started = time.monotonic()
                 try:
-                    response = self.egress.open(url, headers, _timeout())
+                    response = self.egress.open(url, headers, _timeout(), keep_alive=keep_alive)
                 except _ProxyFailure as failure:
-                    self.egress.failed(failure, urllib.parse.urlsplit(url).hostname or "")
+                    self.egress.failed(failure, urllib.parse.urlsplit(url).hostname or "", started)
                     if failure.final or self.egress.off or attempt == len(_PROXY_RETRY_WAITS):
                         break
                     _sleep(_PROXY_RETRY_WAITS[attempt])
@@ -505,8 +686,7 @@ class _Http:
                 break
             if response is None:
                 break
-            self.routes[ROUTE_PROXY] += 1
-            self.last_route = ROUTE_PROXY
+            self._went(ROUTE_PROXY)
             location = response.headers.get("Location")
             if response.status in (301, 302, 303, 307, 308) and location:
                 response.close()
@@ -522,16 +702,18 @@ class _Http:
                 "mr_open_source_unavailable",
                 f"{urllib.parse.urlsplit(url).netloc} redirected more than {_REDIRECTS} times.",
             )
-        self.routes[ROUTE_DIRECT] += 1
-        self.last_route = ROUTE_DIRECT
+        self._went(ROUTE_DIRECT)
         return self._open(urllib.request.Request(url, headers=headers), timeout=_timeout())
 
-    def open(self, url: str, *, headers: dict[str, str] | None = None, attempts: int = 3):
+    def open(
+        self, url: str, *, headers: dict[str, str] | None = None, attempts: int = 3, keep_alive: bool = False,
+    ):
         merged = {"User-Agent": USER_AGENT, **(headers or {})}
         for attempt in range(attempts):
-            self.requests += 1
+            with self._lock:
+                self.requests += 1
             try:
-                return self._send(url, merged)
+                return self._send(url, merged, keep_alive)
             except urllib.error.HTTPError as error:
                 if error.code in (429, 500, 502, 503, 504) and attempt < attempts - 1:
                     time.sleep(2 ** attempt)
@@ -552,14 +734,16 @@ class _Http:
         raise AssertionError("unreachable")
 
     def _way(self) -> str:
-        return "through the edge proxy" if self.last_route == ROUTE_PROXY else "direct"
+        route = getattr(self._local, "route", None) or self.last_route
+        return "through the edge proxy" if route == ROUTE_PROXY else "direct"
 
     def read(self, url: str, *, headers: dict[str, str] | None = None, limit: int = 64 * 1024 * 1024) -> bytes:
-        with self.open(url, headers=headers) as response:
+        """A whole (bounded) answer; its tunnel, when it went through the node, may carry the next request."""
+        with self.open(url, headers=headers, keep_alive=True) as response:
             body = response.read(limit + 1)
         if len(body) > limit:
             raise OpenSourceError("mr_open_source_too_large", f"{url} exceeded {limit} bytes.")
-        self.bytes += len(body)
+        self.add_bytes(len(body))
         return body
 
     def json(self, url: str) -> Any:
@@ -843,14 +1027,20 @@ class _CountingReader(io.RawIOBase):
         return len(data)
 
 
-def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> tuple[list[Variant], dict[str, Any]]:
-    """Read a whole gzip file once, keeping the rows ``keep`` accepts."""
+def stream_variants(
+    url: str, http: _Http, keep: Callable[[Variant], bool], *, source: Any = None,
+) -> tuple[list[Variant], dict[str, Any]]:
+    """Read a whole gzip file once, keeping the rows ``keep`` accepts.
+
+    ``source`` is a complete local copy of ``url`` (a spool file from
+    ``read_whole_file``) to parse instead of streaming ``url``.
+    """
     started = time.monotonic()
     kept: list[Variant] = []
     rows = unreadable = 0
     digest = hashlib.sha256()
     mark = dict(http.routes)
-    with http.open(url) as response:
+    with contextlib.nullcontext(source) if source is not None else http.open(url) as response:
         counter = _CountingReader(response, _stream_limit(), url)
 
         class _Hashing(io.RawIOBase):
@@ -877,11 +1067,13 @@ def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> t
         except (OSError, EOFError, zlib.error, http_client.HTTPException) as error:
             # A connection that drops mid-file, or a file that is not gzip: named, with
             # the way it was read, rather than escaping as a bare socket error.
+            way = "its local copy" if source is not None else http._way()
             raise OpenSourceError(
                 "mr_open_source_unavailable",
-                f"Reading {url} stopped after {counter.count} bytes ({type(error).__name__}, {http._way()}).",
+                f"Reading {url} stopped after {counter.count} bytes ({type(error).__name__}, {way}).",
             ) from None
-    http.bytes += counter.count
+    if source is None:
+        http.add_bytes(counter.count)
     return kept, {
         "mode": "streamed",
         "url": url,
@@ -892,6 +1084,368 @@ def stream_variants(url: str, http: _Http, keep: Callable[[Variant], bool]) -> t
         "seconds": round(time.monotonic() - started, 1),
         "egress": http.routes_since(mark),
     }
+
+
+# --- Whole files: parallel byte ranges ----------------------------------------------
+#
+# Measured on the Beijing production host on 2026-09-28, in the China evening: one
+# long stream of GCST005195's 388 MB harmonised file through the Tokyo node fell to
+# ~30 KB/s -- on a lossy link a long-lived TCP flow's window collapses and stays
+# small -- while a fresh 4 MB range through the same node moved 150-350 KB/s here
+# (710 KB/s with curl), and direct to EBI gave 14-25 KB/s: hours streamed, minutes
+# as parallel ranges. So a file whose size the server stated
+# (``locate_harmonised_file`` probes ``bytes=0-0``) and that spans more than one
+# chunk is fetched as byte ranges, each on a fresh connection, by a few workers,
+# into a spool file, and then parsed by ``stream_variants`` as if it were the
+# stream. Each range goes the way any request goes (``_Http``: the node, its
+# retries, direct) and is retried on its own; every answer must be exactly the
+# range asked for, of a file of the size first stated. A range that cannot be
+# read fails the read with the stream's error codes: a partial file is never
+# parsed as whole. The spool goes on the scan cache's volume when there is one
+# (production: a named volume; the container's /tmp is a 512 MB tmpfs), else in
+# the temp directory, and only where all of it fits; with no room, or a server
+# that answers a range with anything but that range, the file is streamed as
+# before, and the read record says why (``rangedSkipped``). The spool is deleted
+# after the scan: what the scan found is what the cache keeps.
+
+_SPAN_ATTEMPTS = 3
+_SPAN_READ = 1024 * 1024
+_SPOOL_HEADROOM = 64 * 1024 * 1024
+_SPOOL_POLL_SECONDS = 0.2
+_RETRY_STATUSES = (429, 500, 502, 503, 504)
+_CONTENT_RANGE = re.compile(r"bytes (\d+)-(\d+)/(\d+)")
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+
+class _SpoolUnusable(Exception):
+    """The ranged fetch cannot be used for this file; ``reason`` says why, and the file is streamed."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+class _Stopped(Exception):
+    """Another range of the same file failed; this one stops."""
+
+
+class _Tally:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.requests = self.retries = self.bytes = 0
+
+    def add(self, *, requests: int = 0, retries: int = 0, count: int = 0) -> None:
+        with self._lock:
+            self.requests += requests
+            self.retries += retries
+            self.bytes += count
+
+
+def _check_span(response: Any, first: int, last: int, total: int, url: str) -> None:
+    stated = _CONTENT_RANGE.fullmatch(str(response.headers.get("Content-Range") or "").strip())
+    if stated is None:
+        raise _SpoolUnusable("range_not_honoured")  # the whole file, or no statement of the range
+    if int(stated.group(3)) != total:
+        raise OpenSourceError(
+            "mr_open_source_unavailable",
+            f"{url} is {stated.group(3)} bytes by its range answer, not the {total} first stated: "
+            "it changed while being read, or its size was misreported. Nothing of it was used.",
+        )
+    if (int(stated.group(1)), int(stated.group(2))) != (first, last):
+        raise _SpoolUnusable("range_not_honoured")
+
+
+def _write_at(descriptor: int, data: bytes, offset: int) -> None:
+    view = memoryview(data)
+    while view:
+        try:
+            written = os.pwrite(descriptor, view, offset)
+        except OSError as error:
+            full = error.errno in (errno.ENOSPC, errno.EDQUOT)
+            raise _SpoolUnusable("no_room" if full else "spool_write_failed") from None
+        view, offset = view[written:], offset + written
+
+
+def _fetch_span(
+    http: _Http, url: str, first: int, last: int, total: int, descriptor: int, stop: threading.Event, tally: _Tally,
+) -> None:
+    """Bytes ``first``..``last`` of ``url`` into the spool at the same offset, retried on their own."""
+    want = last - first + 1
+    for attempt in range(_SPAN_ATTEMPTS):
+        if stop.is_set():
+            raise _Stopped()
+        tally.add(requests=1, retries=1 if attempt else 0)
+        written = 0
+        try:
+            with http.open(url, headers={"Range": f"bytes={first}-{last}"}, attempts=1) as response:
+                _check_span(response, first, last, total, url)
+                while written < want:
+                    if stop.is_set():
+                        raise _Stopped()
+                    data = response.read(min(_SPAN_READ, want - written))
+                    if not data:
+                        raise http_client.IncompleteRead(b"", want - written)
+                    _write_at(descriptor, data, first + written)
+                    written += len(data)
+            http.add_bytes(want)
+            tally.add(count=want)
+            return
+        except OpenSourceError as error:
+            # http.open with one attempt: retried when a retry can change the answer, or there was none.
+            if error.status not in (None, *_RETRY_STATUSES) or attempt == _SPAN_ATTEMPTS - 1:
+                raise
+        except (OSError, http_client.HTTPException) as error:
+            if attempt == _SPAN_ATTEMPTS - 1:
+                raise OpenSourceError(
+                    "mr_open_source_unavailable",
+                    f"Bytes {first}-{last} of {url} could not be read in {_SPAN_ATTEMPTS} attempts "
+                    f"({type(error).__name__} after {written} of {want} bytes, {http._way()}).",
+                ) from None
+        _sleep(2 ** attempt)
+    raise AssertionError("unreachable")
+
+
+def _fetch_ranges(url: str, size: int, http: _Http, descriptor: int, chunk: int, workers: int) -> dict[str, Any]:
+    """All of ``url`` into ``descriptor`` as parallel ranges, or an exception and nothing to use."""
+    started = time.monotonic()
+    spans = [(start, min(start + chunk, size) - 1) for start in range(0, size, chunk)]
+    workers = min(workers, len(spans))
+    stop, tally = threading.Event(), _Tally()
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="evimed-mr-range")
+    try:
+        futures = [pool.submit(_fetch_span, http, url, a, b, size, descriptor, stop, tally) for a, b in spans]
+        for future in as_completed(futures):
+            future.result()
+    except BaseException:
+        stop.set()  # the first failure is the one reported; the others stop at their next read
+        raise
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+    if tally.bytes != size or os.fstat(descriptor).st_size != size:
+        raise OpenSourceError(
+            "mr_open_source_unavailable",
+            f"{url}: {tally.bytes} bytes were assembled, not the {size} stated. Nothing of it was used.",
+        )
+    return {
+        "workers": workers, "chunkBytes": chunk, "chunks": len(spans),
+        "rangeRequests": tally.requests, "rangeRetries": tally.retries,
+        "bytesFetched": tally.bytes, "fetchSeconds": round(time.monotonic() - started, 1),
+    }
+
+
+def _free_bytes(directory: Path) -> int:
+    try:
+        return shutil.disk_usage(directory).free
+    except OSError:
+        return 0
+
+
+def _flock(path: Path, wait: float) -> int | None:
+    """An exclusive flock on ``path`` within ``wait`` seconds: its descriptor, or None."""
+    assert fcntl is not None
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | _NOFOLLOW, 0o600)
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return descriptor
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                os.close(descriptor)
+                return None
+            time.sleep(_SPOOL_POLL_SECONDS)
+
+
+class _Spool:
+    """A complete local copy of one remote file, shared by the jobs that read it at the same time.
+
+    In the spool directory, keyed by URL and size: ``<key>.spool`` is a complete
+    copy (renamed into place only after every byte was checked);
+    ``.<key>.*.part`` one being written; ``<key>.spool.lock`` is held (flock,
+    exclusive) while the copy is looked for, written or deleted, so a job that
+    finds another one downloading waits for it (at most
+    EVIMED_MR_OPEN_SPOOL_WAIT_SECONDS, then streams) and reads its copy;
+    ``<key>.spool.users`` is held shared by every job that wants the copy, from
+    before it waits, so only the last one out deletes it. flock locks die with
+    their process: a crashed job never leaves one held, its part file is removed
+    by the next writer, and a complete copy it left is read and deleted by the
+    next job on the same file.
+    """
+
+    def __init__(self, file: Any, users: int, directory: Path, key: str, record: dict[str, Any]):
+        self.file, self.record = file, record
+        self._users, self._directory, self._key = users, directory, key
+
+    @staticmethod
+    def _place(key: str, size: int) -> tuple[str, Path] | None:
+        """The cache volume, else the temp directory: the first that has the copy, its writer, or room."""
+        places: list[tuple[str, Path]] = []
+        cache = _cache_dir()
+        if cache is not None:
+            places.append(("cache_volume", cache))
+        places.append(("temp_dir", Path(tempfile.gettempdir())))
+        for label, directory in places:
+            if not os.access(directory, os.W_OK | os.X_OK):
+                continue
+            if (directory / f"{key}.spool").is_file() or _Spool._busy(directory / f"{key}.spool.lock"):
+                return label, directory
+            if _free_bytes(directory) >= size + _SPOOL_HEADROOM:
+                return label, directory
+        return None
+
+    @staticmethod
+    def _busy(lock: Path) -> bool:
+        assert fcntl is not None
+        try:
+            descriptor = os.open(lock, os.O_RDWR | _NOFOLLOW)
+        except OSError:
+            return False
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return False
+        except BlockingIOError:
+            return True
+        finally:
+            os.close(descriptor)
+
+    @staticmethod
+    def _complete(final: Path, size: int) -> Any:
+        try:
+            descriptor = os.open(final, os.O_RDONLY | _NOFOLLOW)
+        except OSError:
+            return None
+        info = os.fstat(descriptor)
+        if stat.S_ISREG(info.st_mode) and info.st_size == size:
+            return os.fdopen(descriptor, "rb")
+        os.close(descriptor)
+        return None
+
+    @classmethod
+    def fetch(cls, url: str, size: int, http: _Http, *, chunk: int, workers: int) -> "_Spool | str":
+        """The copy (fetched now, or completed by another job), or why there is none."""
+        if fcntl is None:
+            return "spool_unavailable"
+        key = _cache_key("spool", url, size)
+        place = cls._place(key, size)
+        if place is None:
+            return "no_room"
+        label, directory = place
+        final = directory / f"{key}.spool"
+        try:
+            users = os.open(directory / f"{key}.spool.users", os.O_RDWR | os.O_CREAT | _NOFOLLOW, 0o600)
+        except OSError:
+            return "spool_unavailable"
+        try:
+            fcntl.flock(users, fcntl.LOCK_SH)
+            lock = _flock(directory / f"{key}.spool.lock", _spool_wait_seconds())
+        except OSError:
+            os.close(users)
+            return "spool_unavailable"
+        if lock is None:
+            os.close(users)
+            return "spool_busy"
+        try:
+            file = cls._complete(final, size)
+            if file is not None:
+                record: dict[str, Any] = {"spool": label, "spoolReused": True, "bytesFetched": 0}
+            else:
+                for stale in directory.glob(f".{key}.*.part"):
+                    stale.unlink(missing_ok=True)
+                if _free_bytes(directory) < size + _SPOOL_HEADROOM:
+                    raise _SpoolUnusable("no_room")
+                part = directory / f".{key}.{os.getpid()}.{threading.get_ident()}.part"
+                descriptor = os.open(part, os.O_RDWR | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o600)
+                try:
+                    try:
+                        os.posix_fallocate(descriptor, 0, size)  # the room, taken now
+                    except AttributeError:
+                        pass
+                    except OSError as error:
+                        if error.errno in (errno.ENOSPC, errno.EDQUOT):
+                            raise _SpoolUnusable("no_room") from None
+                        # A file system that cannot reserve space: the free-space check stands.
+                    record = {"spool": label, "spoolReused": False,
+                              **_fetch_ranges(url, size, http, descriptor, chunk, workers)}
+                    os.replace(part, final)
+                except BaseException:
+                    part.unlink(missing_ok=True)
+                    raise
+                finally:
+                    os.close(descriptor)
+                file = cls._complete(final, size)
+                if file is None:
+                    raise _SpoolUnusable("spool_write_failed")
+        except _SpoolUnusable as unusable:
+            os.close(users)
+            return unusable.reason
+        except BaseException:
+            os.close(users)
+            raise
+        finally:
+            os.close(lock)  # releases it
+        return cls(file, users, directory, key, record)
+
+    def close(self) -> None:
+        """Stop reading; the last job reading this copy deletes it."""
+        assert fcntl is not None
+        inode = os.fstat(self.file.fileno()).st_ino
+        self.file.close()
+        final = self._directory / f"{self._key}.spool"
+        try:
+            lock = _flock(self._directory / f"{self._key}.spool.lock", 60)
+        except OSError:
+            lock = None
+        try:
+            fcntl.flock(self._users, fcntl.LOCK_UN)
+            try:
+                fcntl.flock(self._users, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return  # another job reads or waits for this copy; the last one deletes it
+            try:
+                if os.stat(final, follow_symlinks=False).st_ino == inode:
+                    final.unlink()
+            except FileNotFoundError:
+                pass
+        finally:
+            os.close(self._users)
+            if lock is not None:
+                os.close(lock)
+
+
+def read_whole_file(
+    url: str, http: _Http, keep: Callable[[Variant], bool], *, size: int | None = None,
+) -> tuple[list[Variant], dict[str, Any]]:
+    """A whole harmonised file, keeping the rows ``keep`` accepts: parallel ranges into a
+    spool when the server stated its ``size`` and serves ranges, else one stream."""
+    limit = _stream_limit()
+    if size is not None and size > limit:
+        raise OpenSourceError(
+            "mr_open_source_too_large",
+            f"{url} is {size} bytes, larger than the {limit}-byte limit (EVIMED_MR_OPEN_STREAM_MAX_BYTES).",
+        )
+    chunk, workers = _fetch_chunk_bytes(), _fetch_workers()
+    if not size:
+        skipped = "size_unknown"
+    elif size <= chunk:
+        skipped = "single_chunk"
+    else:
+        started, mark = time.monotonic(), dict(http.routes)
+        spool = _Spool.fetch(url, size, http, chunk=chunk, workers=workers)
+        if isinstance(spool, _Spool):
+            try:
+                kept, read = stream_variants(url, http, keep, source=spool.file)
+            finally:
+                spool.close()
+            read.update(
+                mode="ranged", seconds=round(time.monotonic() - started, 1),
+                egress=http.routes_since(mark), ranged=spool.record,
+            )
+            return kept, read
+        skipped = spool
+        _LOG.info("%s is streamed, not fetched by ranges (%s).", url, skipped)
+    kept, read = stream_variants(url, http, keep)
+    read["rangedSkipped"] = skipped
+    return kept, read
 
 
 # --- Remote tabix ---------------------------------------------------------------
@@ -1133,7 +1687,9 @@ def _scan_significant(
             return variants, {**stored["read"], "reusedFromCache": True}
         except (ValueError, TypeError, KeyError):
             pass
-    variants, read = stream_variants(study.harmonised_url, http, lambda variant: variant.pval < p_threshold)
+    variants, read = read_whole_file(
+        study.harmonised_url, http, lambda variant: variant.pval < p_threshold, size=study.harmonised_bytes,
+    )
     read["candidateSource"] = "genome-wide scan of the harmonised file"
     read["readAt"] = _now()
     if key:
@@ -1162,6 +1718,15 @@ def build_pair(
 ) -> OpenPair:
     """Exposure instruments and their outcome rows, read from two catalogue studies."""
     http = http or _Http()
+    try:
+        return _build_pair(exposure_source, outcome_source, http, p_threshold)
+    finally:
+        http.egress.close_idle()
+
+
+def _build_pair(
+    exposure_source: dict[str, Any], outcome_source: dict[str, Any], http: _Http, p_threshold: float,
+) -> OpenPair:
     started = time.monotonic()
     exposure = locate_harmonised_file(resolve_study(exposure_source, http), http)
     outcome = locate_harmonised_file(resolve_study(outcome_source, http), http)
@@ -1220,7 +1785,9 @@ def build_pair(
                         "rangeRequests": reader.ranges, "egress": http.routes_since(mark)}
     else:
         names = {variant.snp for variant in instruments}
-        rows, outcome_read = stream_variants(outcome.harmonised_url, http, lambda variant: variant.snp in names)
+        rows, outcome_read = read_whole_file(
+            outcome.harmonised_url, http, lambda variant: variant.snp in names, size=outcome.harmonised_bytes,
+        )
         matches = {}
         for variant in rows:
             matches.setdefault(variant.snp, variant)

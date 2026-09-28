@@ -10,11 +10,13 @@ HTTP Range.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
 import shutil
 import socket
+import threading
 
 import pytest
 
@@ -67,6 +69,7 @@ def node(rig, monkeypatch, tmp_path):
     rig.proxy.credentials = CREDENTIALS
     rig.origin.requests.clear()
     rig.origin.files = _ebi_files()
+    rig.origin.keep_alive = rig.origin.drop_kept = False
     secret = tmp_path / "edge-proxy.credentials"
     secret.write_text(CREDENTIALS + "\n")
     secret.chmod(0o440)  # production: root:10002 0440, shared with the knowledge plugin
@@ -282,11 +285,11 @@ def test_a_passing_node_failure_is_retried_through_the_node_not_sent_direct(node
     failures_left = {"n": 2}
     real_open = osm._Egress.open
 
-    def flaky(self, url, headers, timeout):
+    def flaky(self, url, headers, timeout, **options):
         if failures_left["n"] > 0:
             failures_left["n"] -= 1
             raise osm._ProxyFailure("edge_proxy_unreachable")
-        return real_open(self, url, headers, timeout)
+        return real_open(self, url, headers, timeout, **options)
 
     monkeypatch.setattr(osm._Egress, "open", flaky)
     http = osm._Http(opener=_no_direct, egress=osm._Egress.from_env(ssl_context=node.trust))
@@ -296,3 +299,82 @@ def test_a_passing_node_failure_is_retried_through_the_node_not_sent_direct(node
     assert "direct" not in egress["requests"], egress
     assert egress["proxyTurnedOff"] is False and egress["proxyFailureCount"] == 2
     assert waits == list(osm._PROXY_RETRY_WAITS[:2])
+
+
+def test_whole_answers_share_a_kept_tunnel_and_tabix_reads_open_no_new_ones(node):
+    # A tabix outcome is dozens of ~70 KB reads; each new tunnel is TLS to the
+    # node, CONNECT and TLS to EBI across the Beijing-Tokyo link.
+    node.origin.keep_alive = True
+    http = osm._Http(opener=_no_direct, egress=osm._Egress.from_env(ssl_context=node.trust))
+    pair = osm.build_pair(*SOURCES, http=http)
+
+    assert [row.snp for row in pair.outcome_rows] == ["rs1", "rs3", "rs4"]
+    assert len(node.origin.requests) == http.requests
+    reused = len(node.origin.requests) - len(node.proxy.seen)
+    egress = pair.record["http"]["egress"]
+    assert reused > 0 and egress["tunnelsReused"] == reused
+    assert egress["requests"] == {"edge_proxy": http.requests} and egress["proxyFailureCount"] == 0
+    ranged = [r for r in node.origin.requests if r["url"].endswith("GCST000002.h.tsv.gz")]
+    assert len(ranged) > 2
+    # The size probe and the stream are not read to their end by design: each asks
+    # for its own tunnel and says so.
+    closing = [r for r in node.origin.requests if r["headers"].get("connection") == "close"]
+    assert {r["url"].rsplit("/", 1)[-1] for r in closing} == {
+        "111-GCST000001-EFO_1.h.tsv.gz", "GCST000002.h.tsv.gz"}
+    assert all(r["headers"].get("range") in (None, "bytes=0-0") for r in closing)
+    _assert_no_secret(json.dumps(pair.record))
+
+
+def test_a_kept_tunnel_ebi_has_closed_is_replaced_not_counted_as_a_node_failure(node):
+    node.origin.keep_alive = node.origin.drop_kept = True  # promises the connection, then closes it
+    http = osm._Http(opener=_no_direct, egress=osm._Egress.from_env(ssl_context=node.trust))
+    pair = osm.build_pair(*SOURCES, http=http)
+
+    assert [row.snp for row in pair.outcome_rows] == ["rs1", "rs3", "rs4"]
+    egress = pair.record["http"]["egress"]
+    assert egress["requests"] == {"edge_proxy": http.requests}
+    assert egress["proxyFailureCount"] == 0 and egress["proxyTurnedOff"] is False
+    assert "tunnelsReused" not in egress  # every kept tunnel was found closed and replaced
+    assert egress["keptTunnelsFoundClosed"] > 0
+    # The stale tunnel carried nothing to EBI: every answered request had a fresh tunnel of its own.
+    assert len(node.proxy.seen) == len(node.origin.requests) == http.requests
+
+
+def test_one_blip_met_by_every_parallel_range_does_not_turn_the_node_off(node, monkeypatch, tmp_path):
+    from test_open_sumstats_ranged import BIG, CHUNK, SPANS, significant
+
+    url = "https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/big.h.tsv.gz"
+    node.origin.files[url] = BIG
+    monkeypatch.setenv("EVIMED_MR_OPEN_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("EVIMED_MR_OPEN_FETCH_CHUNK_BYTES", str(CHUNK))
+    monkeypatch.setenv("EVIMED_MR_OPEN_FETCH_WORKERS", "4")
+    waits = []
+    monkeypatch.setattr(osm, "_sleep", waits.append)
+    in_flight = threading.Barrier(4, timeout=10)
+    blips = {"left": 4}
+    lock = threading.Lock()
+    real_open = osm._Egress.open
+
+    def blip(self, url, headers, timeout, **options):
+        with lock:
+            hit = blips["left"] > 0
+            blips["left"] -= hit
+        if hit:
+            in_flight.wait()  # all four requests are under way before the node fails any of them
+            raise osm._ProxyFailure("edge_proxy_unreachable")
+        return real_open(self, url, headers, timeout, **options)
+
+    monkeypatch.setattr(osm._Egress, "open", blip)
+    http = osm._Http(opener=_no_direct, egress=osm._Egress.from_env(ssl_context=node.trust))
+    kept, read = osm.read_whole_file(url, http, significant, size=len(BIG))
+
+    assert read["mode"] == "ranged" and read["sha256"] == hashlib.sha256(BIG).hexdigest()
+    assert len(kept) > 100
+    # Four failures seen, one outage counted: the node stays on and nothing went direct.
+    assert (http.egress.failure_count, http.egress.consecutive_failures, http.egress.off) == (4, 0, False)
+    assert read["egress"] == {"edge_proxy": len(SPANS)}
+    assert waits == [osm._PROXY_RETRY_WAITS[0]] * 4
+    # One fresh tunnel per range: a whole-file fetch never reuses one.
+    assert len(node.proxy.seen) == len(SPANS)
+    assert read["ranged"]["spool"] == "cache_volume" and read["ranged"]["workers"] == 4
+    _assert_no_secret(json.dumps(read))

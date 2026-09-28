@@ -84,8 +84,16 @@ paper with exactly one study with full summary statistics; forward only, one
 direction per job). `mr_agent/tools/open_sumstats.py` resolves each study
 through the GWAS Catalog REST API v2 and reads its harmonised file from EBI FTP:
 a bgzip file with a tabix index is read variant by variant with HTTP Range
-requests; any other file is streamed once (`EVIMED_MR_OPEN_STREAM_MAX_BYTES`,
-default 512 MiB). Exposure instruments are the variants at p < 5e-8, clumped by
+requests; any other file is read once (`EVIMED_MR_OPEN_STREAM_MAX_BYTES`,
+default 512 MiB): when EBI states its size and serves ranges it is fetched as
+parallel byte ranges (`EVIMED_MR_OPEN_FETCH_WORKERS`, default 6, at most 16;
+`EVIMED_MR_OPEN_FETCH_CHUNK_BYTES`, default 8 MiB, 64 KiB–64 MiB) into a spool
+file on the `EVIMED_MR_OPEN_CACHE_DIR` volume (else the temp directory, only
+where the whole file fits), each range checked against its `Content-Range` and
+retried on its own, then parsed and deleted; jobs that need the same file at the
+same time share one download (`EVIMED_MR_OPEN_SPOOL_WAIT_SECONDS`, default
+3600). Otherwise — no stated size, no room, ranges not honoured — it is streamed
+as before, and the read record's `rangedSkipped` says why. Exposure instruments are the variants at p < 5e-8, clumped by
 PLINK 1.9 (r² < 0.001, 10,000 kb) when `EVIMED_MR_LD_BFILE` (and a `plink` on
 PATH or `EVIMED_MR_PLINK_BIN`) name a local LD reference, otherwise pruned to
 the most significant variant per 10,000 kb window; `instrument-selection.json`
@@ -102,6 +110,10 @@ the proxy, CONNECT, TLS to EBI inside the tunnel. A proxy that fails
 (unreachable, TLS, 407/403/5xx to CONNECT, timeout) sends the request direct,
 and `http.egress` in the provenance file (and `egress` on each read) records
 which way every request went; the credential is never logged or recorded.
+Parallel range requests met by one passing outage count as one failure toward
+turning the proxy off. Requests read to their end (catalogue API, listings,
+tabix index and ranges) keep their tunnel for the next request to the same
+host (`tunnelsReused` in `http.egress`).
 The adapter reports
 `ready` with `openDataSources: ["gwas_catalog"]`; the `opengwas` block still
 says whether OpenGWAS itself is usable.
