@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: mendelian-randomization
-version: 1.1.1
+version: 1.2.0
 title: 孟德尔随机化
 category: 因果推断
 description: 使用 GWAS 工具变量开展可追溯的孟德尔随机化、敏感性分析和 STROBE-MR 报告，并生成完整研究包。
@@ -54,6 +54,7 @@ estimatedMinutes:
 - 180
 dataSources:
 - opengwas
+- gwas-catalog
 - local-gwas
 - literature
 - uploaded-files
@@ -77,5 +78,5 @@ display:
   - "STROBE-MR 研究报告"
   - "分析记录与工具变量清单"
   knownLimits:
-  - "在线 GWAS 汇总数据需要在「数据源」里配置 OpenGWAS 令牌，令牌每 14 天过期。"
+  - "GWAS Catalog 公开的汇总数据无需令牌即可使用；OpenGWAS 数据需要在「数据源」里配置令牌，令牌每 14 天过期。"
   - "结论依赖工具变量假设；敏感性分析能检验部分假设，但不能替代随机对照试验。"

@@ -13,7 +13,7 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
 
 ## Execute the managed analysis
 
-1. Call `mcp__evimed__mendelian_randomization` with `action=capabilities`. Report missing R, model or Python runtime explicitly. Missing OpenGWAS credentials blocks remote data and online LD clumping; it does not block two supplied local files with declared preclumped instruments.
+1. Call `mcp__evimed__mendelian_randomization` with `action=capabilities`. Report missing R, model or Python runtime explicitly. Missing OpenGWAS credentials blocks OpenGWAS data, text-based GWAS selection and online LD clumping; it does not block open GWAS Catalog studies (below) or two supplied local files with declared preclumped instruments.
 2. Start the job with the normalized exposure, outcome, language, direction and the explicit source objects below when using uploaded files.
    Record the job id and poll it with `waitSeconds=45` until terminal.
    The job alone can take most of this capability's 30–180 minutes. Keep polling while `updatedAt` advances (every 30 s); treat the job as failed only on a terminal failure or when `updatedAt` has not moved for 10 minutes, and record the state you observed either way.
@@ -24,6 +24,32 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
    harmonization failure, and missing sensitivity checks as analysis limits or
    blockers. Statistical significance does not by itself establish a valid
    causal interpretation.
+
+## Open GWAS Catalog sources (no OpenGWAS token)
+
+When OpenGWAS is blocked, or the requested study is on the NHGRI-EBI GWAS
+Catalog, give both sides as catalogue studies:
+`{"type": "gwas_catalog", "accession": "GCST..."}`. Find the study from its
+paper (`literature_search`), then pass that PubMed id as
+`{"type": "gwas_catalog", "pubmedId": "..."}` or an accession a tool result
+showed you; a paper with several studies is refused with the list to choose
+from. Never write an accession or PubMed id you have not seen in a tool result.
+One direction per job: for the reverse direction start a second forward job
+with the roles swapped.
+
+The engine reads the catalogue's harmonised files itself: exposure variants at
+p < 5e-8, clumped by PLINK against an LD reference when the deployment has one,
+otherwise one variant per 10,000 kb window (stricter than r² < 0.001 clumping,
+but no LD was measured — say so), and the outcome's rows for the same variants;
+a variant missing from the outcome is dropped, never proxied. Report both
+accessions and PubMed ids, and the ancestry and sample size as the catalogue
+states them (`mendelian-randomization-open-sources.json`), the selection method
+and counts (`instrument-selection.json`), and the variants unavailable in the
+outcome. On every path, `harmonisation.json` in the analysis data gives the
+instruments retained, dropped as palindromic-ambiguous and missing from the
+outcome: report those numbers, not your own count. The catalogue cannot tell whether two studies share participants:
+name the cohorts the papers report and never claim independent samples.
+Keep `inputs/open-*.csv` and the replay package: they are the rows analysed.
 
 ## Uploaded local GWAS inputs
 
@@ -47,9 +73,9 @@ and instrument-selection method. Do not invent this statement or change a false
 flag merely to make a failed request pass.
 
 Whenever a local source is used, specify both `exposureSource` and
-`outcomeSource`. For forward analysis without an OpenGWAS credential, both must
-be local and the exposure instruments must be declared preclumped with their
-provenance. For bidirectional analysis, each side becomes an exposure and must
+`outcomeSource`. For forward analysis without an OpenGWAS credential, use
+GWAS Catalog sources, or both must be local and the exposure instruments must be
+declared preclumped with their provenance. For bidirectional analysis, each side becomes an exposure and must
 independently satisfy that condition. The input manifest retains
 `provided_local_data`, `supplied_not_independently_verified`, and
 `ld_rechecked: false`; supplied selection is not an LD verification performed by

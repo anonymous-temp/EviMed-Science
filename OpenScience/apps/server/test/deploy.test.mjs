@@ -1880,6 +1880,10 @@ test("a capability's two skill copies never drift apart by more than their known
   // in the report comes from (+8); the three drug-evaluation skills say the
   // snapshot carries the platform's `retrieved` record and a portal is not a
   // source (+1 each), and the evaluation skill names the label tools (+1).
+  // Raised on 2026-09-28, same direction: Mendelian randomization gained the
+  // token-free GWAS Catalog source (+27: its section, the harmonisation counts
+  // and the two sentences that named OpenGWAS as the only remote path), and meta-analysis says what a
+  // repeated start and a failed job return (+7).
   const knownDivergence = {
     "adr-analysis": 32,
     "bibliometric-analysis": 32,
@@ -1891,8 +1895,8 @@ test("a capability's two skill copies never drift apart by more than their known
     // revision-notes lines into the retained copy; none was removed, and the
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
-    "mendelian-randomization": 11,
-    "meta-analysis": 32,
+    "mendelian-randomization": 38,
+    "meta-analysis": 39,
     "off-label-analysis": 25,
     "peer-review": 22,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are

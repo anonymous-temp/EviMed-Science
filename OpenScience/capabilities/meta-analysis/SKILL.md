@@ -38,6 +38,10 @@ full text.
    stop and report the exact deployment precondition.
 2. Call it with `action=start`, the complete topic, language, and only the
    applicable optional inputs. Record the returned job id immediately.
+   A start with exactly the same request returns the job already running or
+   finished for it, and resumes a failed one from its last completed step; if
+   you lose the job id, repeat the identical request rather than a reworded one.
+   While a job runs, a different request is refused with the running job's id.
 3. Poll with `action=status`, that job id, and `waitSeconds=45`. A queued or
    running response is not a completed review. Do not manufacture interim study counts,
    effects, GRADE ratings, figures, or conclusions.
@@ -48,7 +52,9 @@ full text.
 4. At the terminal response, preserve the exact `releaseStatus`, artifact paths,
    warnings, blockers, and next actions. `blocked` means the package is not
    submission-ready. `ready_with_warnings` means the warnings still require
-   review; it is not equivalent to an unconditional pass.
+   review; it is not equivalent to an unconditional pass. A failed job names
+   the steps it completed and the files it wrote; report them as partial work,
+   resume once as its next action says, and never present them as a review.
 
 MetaAgent may legitimately conclude that quantitative synthesis is impossible
 or that direct evidence is absent. Report that result as an evidence gap, not as
