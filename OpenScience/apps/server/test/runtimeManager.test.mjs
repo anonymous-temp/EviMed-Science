@@ -148,8 +148,10 @@ const present = fs.existsSync(patch) && fs.existsSync(credentials);
 fs.writeFileSync(process.env.RUNTIME_ORDER_LOG, present ? "present" : "absent");
 if (!present) process.exit(0);
 const rows = parse(fs.readFileSync(patch, "utf8"));
-const preset = rows.find((row) => row.id === "agent-presets").config;
-if (preset.default !== "evimed-universal" || !preset.roots.length) process.exit(3);
+// 0.1.7: presets are rows, and the registry row names the default. There are
+// no preset roots any more; the preset itself ships in the socket bundle.
+const preset = rows.find((row) => row.id === "agent-preset-registry").config;
+if (preset.default !== "evimed-universal" || rows.some((row) => row.id === "agent-presets")) process.exit(3);
 if (!rows.flatMap((row) => row.insert ?? []).some((row) => row.id === "mcp-evimed")) process.exit(4);
 const store = parse(fs.readFileSync(credentials, "utf8"));
 const secret = Buffer.from(store.records["client-connection/browser-session"].payload.secret, "base64url");
