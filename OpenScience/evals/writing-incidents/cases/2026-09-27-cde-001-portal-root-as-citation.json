@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-27-cde-001-portal-root-as-citation",
+  "genre": "backstage-prose",
+  "observedIn": "evals/comprehensive-drug-evaluation/results/2026-09-27-cde-001-dapagliflozin-ckd/deliverable/deliverables/dapagliflozin-ckd-evaluation/comprehensive-evaluation-report.md",
+  "line": 311,
+  "verbatim": "登记状态：索引候选记录，需核对官方现行版本。官方核对入口：国家药品监督管理局药品查询平台 https://www.nmpa.gov.cn/",
+  "whyItIsWrong": "A reference entry that tells the reader how to verify instead of naming what was read: the label came from the EviMed label index, and the link is the regulator's home page, which no tool of the run retrieved.",
+  "caughtBy": "gate",
+  "note": "Caught only by the control plane after the run (specialist_cited_source_unrecorded), so the run never saw it. Since 2026-09-28 the run's own gate raises it at submission, with the line and the ways out, and the snapshot carries the platform's retrieval record. A fix has to cite the label by its approval number and label id."
+}

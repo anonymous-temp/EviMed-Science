@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-08-review-001-comparison-contradicts-its-numbers",
+  "genre": "number-prose-divergence",
+  "observedIn": "evals/clinical-review-quality/results/2026-09-08-review-001-empa-kidney-report-family/deliverable/deliverables/empa-kidney-durability/clinical-evidence-report.md",
+  "line": 97,
+  "verbatim": "报告明确将其表述为携带效应：试验后风险比 0.87 小于试验内 0.72",
+  "whyItIsWrong": "0.87 is larger than 0.72; the sentence inverts the direction the report's own figures and its cited source state (the post-trial effect was the smaller one).",
+  "caughtBy": "reviewer",
+  "note": "A comparison written in words is language, so no pattern may catch it (principle 5); it is the independent reviewer's contradiction finding, which the run must now answer before its turn ends (2026-09-28)."
+}

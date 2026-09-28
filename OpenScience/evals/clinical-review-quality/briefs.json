@@ -48,11 +48,13 @@
       "mustDo": [
         "Declare the review design, actual searches, eligibility and protocol status.",
         "Keep three publications as separate reports but count NCT03594110 as one primary study.",
-        "Keep the guideline outside the primary-study count and distinguish randomized from post-trial observation."
+        "Keep the guideline outside the primary-study count and distinguish randomized from post-trial observation.",
+        "Restate each quoted estimate with the quote's own numbers, and answer every review finding marked 需回应 in the submission's responses."
       ],
       "mustNotDo": [
         "Add the same randomized participants three times.",
-        "Describe post-trial treatment exposure as randomized after the active trial ended."
+        "Describe post-trial treatment exposure as randomized after the active trial ended.",
+        "State a comparison its own numbers contradict: the 2026-09-08 run wrote that the post-trial hazard ratio of 0.87 was smaller than the in-trial 0.72."
       ],
       "generated": {
         "authoredAt": "2026-09-05",

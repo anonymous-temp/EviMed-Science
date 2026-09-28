@@ -34,13 +34,15 @@
         "Trace the landmark outcome trial and the newest KDIGO guideline through reference_list rather than keyword search alone, and read the trial report, not its bibliographic record, before any effectiveness claim.",
         "State that the pivotal trial was stopped early for efficacy and what that does to the reported effect size, in the effectiveness domain rather than in a limitations footnote.",
         "Keep the with-diabetes and without-diabetes results separate with their own denominators, and say which of them the committee's population resembles.",
-        "Leave economics unscored with its missing inputs named; describe what a local price, price date and perspective would let the committee compute."
+        "Leave economics unscored with its missing inputs named; describe what a local price, price date and perspective would let the committee compute.",
+        "Read the label the evaluation rests on through drug_label_search (search by the medicine, then read the one used by its labelId) and cite it by its approval number and label id; add only scope, evidence access and observed fields to evidence-snapshot.json, whose `retrieved` record each submission writes from what the run's tools returned."
       ],
       "mustNotDo": [
         "Rate certainty high, or convert it into recommendation strength, because the evidence is a randomized trial; certainty is not_rated unless a formal assessment with named judgements is supplied.",
         "Report a cost-effectiveness ratio, budget impact or price from another country, another year or memory as if it answered this committee's economics question.",
         "Compute or imply a composite score — none was requested.",
-        "Write that the hospital should list, prescribe or prefer the medicine."
+        "Write that the hospital should list, prescribe or prefer the medicine.",
+        "Link a page the run did not retrieve as a source — a regulator's portal or home page offered as a verification entry, or the DOI link of a guideline read only through a summary. The 2026-09-27 run did both, passed every submission, and was delivered unverified for them (results/2026-09-27-cde-001-dapagliflozin-ckd)."
       ],
       "gradedOn": "Whether a committee member can trace every domain finding to a frozen source, see the early stop weighed where the benefit is stated, and see economics as an explicit gap rather than a number.",
       "generated": {

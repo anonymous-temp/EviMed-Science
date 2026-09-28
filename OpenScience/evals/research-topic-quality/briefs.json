@@ -21,7 +21,9 @@
         "Discuss missing covariates and achievable retrospective designs",
         "Do not recommend omics acquisition as already feasible",
         "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
-        "Distinguish proposed hypotheses and registered plans from established findings"
+        "Distinguish proposed hypotheses and registered plans from established findings",
+        "Answer every review finding marked 需回应 in the submission's responses (fixed, or declined with a one-sentence reason); none is delivered unanswered, and no answer lives only in revision-notes.md (2026-09-27: 32 declines written there, 0 recorded)",
+        "Put each literature figure in the same sentence as the [n] of the work it comes from, copy any figure from the specialist job at the precision its output states, and state design choices and projections as the proposal's own"
       ],
       "generated": {
         "authoredAt": "2026-09-05",

@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-27-topic-ordinary-conventions-note-to-the-checker",
+  "genre": "backstage-prose",
+  "observedIn": "evals/research-topic-quality/results/2026-09-27-ordinary-constrained-cohort/deliverable/deliverables/missed-dialysis-topics/research-topic-report.md",
+  "line": 59,
+  "verbatim": "No value here is an output of an automated analysis of the topic: the first-pass scan of the direction returned 16 records and is used as a first map only, and the publication-shape analysis is reported as degraded in §6 rather than quoted.",
+  "whyItIsWrong": "A note to the numeric check, not to the reader: added after the review traced cited literature figures to the engine's output, it describes the run's pipeline in the report's opening section.",
+  "caughtBy": "nobody",
+  "note": "Provoked by a false positive: the review read citations line by line and the report wraps sentences, so every figure whose [n] sat on the next line was 'untraced' (fixed 2026-09-28, sentence-scoped). The run's answers belonged in `responses`, where the review reads them; it wrote them in revision-notes.md and this paragraph instead."
+}
