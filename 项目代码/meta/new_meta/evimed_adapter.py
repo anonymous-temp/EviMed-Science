@@ -652,6 +652,8 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
     previous = next(((path, state) for path, state in jobs if state.get("requestDigest") == digest), None)
     if previous is not None:
         path, state = previous
+        if state.get("status") == "succeeded" and _stopped_before_manuscript(state):
+            return _resume_job(path, state)
         if state.get("status") == "succeeded":
             return _existing_job(path, state, "reused-succeeded")
         if state.get("status") == "failed" and _resumable_project(Path(str(state.get("outputRoot") or ""))):
@@ -749,8 +751,30 @@ def _existing_job(state_path: Path, state: dict[str, Any], outcome: str) -> dict
     }
 
 
+def _stopped_before_manuscript(state: dict[str, Any]) -> bool:
+    """A "blocked" job whose pipeline stopped before writing its manuscript.
+
+    MetaAgent exits 2 both for a finished review its release gate blocks and
+    for a refusal that stops the pipeline part-way (a method-admission refusal,
+    a synthesis that needs input); the job reads "succeeded" with release
+    status "blocked" either way. Only the second is resumable: its checkpoint
+    stops short of the manuscript, and the refusal cleared the steps it named.
+    """
+    if state.get("releaseStatus") != "blocked":
+        return False
+    project = _resumable_project(Path(str(state.get("outputRoot") or "")))
+    if project is None:
+        return False
+    try:
+        recorded = json.loads((project / ".checkpoint").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    completed = recorded.get("completed") if isinstance(recorded, dict) else recorded
+    return isinstance(completed, list) and "manuscript" not in completed
+
+
 def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
-    """Run a failed job again from its own checkpoint, within the attempt limit."""
+    """Run a failed or part-way blocked job again from its own checkpoint, within the attempt limit."""
     job_id = str(state.get("jobId"))
     limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
     runs = 1 + int(state.get("attempts") or 0)
@@ -768,8 +792,10 @@ def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
             artifacts=state.get("artifacts") or None,
             stop_reason="Stop retrying this request; its partial results are preserved.",
         )
-    previous_error = state.get("error")
-    for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid"):
+    previous_error = state.get("error") or (
+        "blocked: " + ", ".join(state.get("blockingReasons") or []) if state.get("releaseStatus") == "blocked" else None)
+    for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid",
+                "releaseStatus", "blockingReasons", "nextActions", "modules"):
         state.pop(key, None)
     state.update({
         "status": "queued",
@@ -785,8 +811,8 @@ def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "warning",
         "summary": (
-            f"MetaAgent job {job_id} failed earlier and is resuming from its last completed step "
-            f"(run {runs + 1} of at most {limit})."
+            f"MetaAgent job {job_id} stopped earlier without a review and is resuming from its last "
+            f"completed step (run {runs + 1} of at most {limit})."
         ),
         "data": {
             "jobId": job_id,

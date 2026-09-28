@@ -466,3 +466,41 @@ def test_a_finished_request_returns_its_job_instead_of_running_again(tmp_path, m
     other_language = _post(client, {**request, "outputLanguage": "zh"}).json()
     assert other_language["data"]["jobId"] != job_id
     assert len(launched) == 2
+
+
+def test_a_request_blocked_part_way_resumes_but_a_blocked_review_is_returned(tmp_path, monkeypatch) -> None:
+    """MetaAgent exits 2 both for a refusal part-way (ma-001, 2026-09-28: a
+    method-admission refusal after extraction) and for a finished review its
+    release gate blocks; both read succeeded/blocked. Only the first stopped
+    short of its manuscript, and the same request resumes it."""
+    client, workspace = _fixture(tmp_path, monkeypatch)
+    launched = _launches(monkeypatch)
+    request = {"action": "start", "topic": "Blocked part-way"}
+    job_id = _post(client, request).json()["data"]["jobId"]
+    state_file = workspace / "meta-analysis-runs" / ".jobs" / f"{job_id}.json"
+    project = workspace / "meta-analysis-runs" / job_id / "output" / "project"
+    project.mkdir(parents=True)
+    checkpoint = project / ".checkpoint"
+    checkpoint.write_text(json.dumps({"schema_version": 2, "completed": ["protocol", "search", "ft_screening"]}),
+                          encoding="utf-8")
+    _mark(state_file, status="succeeded", releaseStatus="blocked", returnCode=2,
+          blockingReasons=["protocol_method_input_required"], modules={"screening": {"status": "degraded"}})
+    evimed_adapter._WORKERS.clear()
+
+    resumed = _post(client, request).json()
+    assert resumed["data"]["jobId"] == job_id and resumed["data"]["resumed"] is True
+    assert len(launched) == 2
+    requeued = json.loads(state_file.read_text(encoding="utf-8"))
+    assert requeued["status"] == "queued"
+    assert "releaseStatus" not in requeued and "modules" not in requeued
+    assert requeued["previousError"] == "blocked: protocol_method_input_required"
+
+    # A review that was written and then blocked is the answer, not a resume.
+    checkpoint.write_text(json.dumps({"schema_version": 2, "completed": ["protocol", "figures", "manuscript"]}),
+                          encoding="utf-8")
+    _mark(state_file, status="succeeded", releaseStatus="blocked", returnCode=2)
+    evimed_adapter._WORKERS.clear()
+    again = _post(client, request).json()
+    assert again["data"]["reused"] is True and again["data"]["jobStatus"] == "succeeded"
+    assert len(launched) == 2
+
