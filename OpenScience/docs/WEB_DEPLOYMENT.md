@@ -1521,8 +1521,17 @@ base64 envelope.
 `deploy/web/docker-compose.monitoring.yml` adds version-pinned Prometheus,
 Blackbox Exporter, Alertmanager, and Grafana services. Prometheus scrapes the
 protected metrics endpoint, probes `/api/health` and `/api/ready`, evaluates the
-rules in `deploy/web/monitoring/open-science.rules.json`, and sends alerts to an
-operator-owned Alertmanager webhook. Grafana provisions the
+rules in `deploy/web/monitoring/open-science.rules.json`, and Alertmanager
+delivers every alert to the Web service's own receiver
+(`/api/ops/alerts`, over the compose network, with a bearer credential of its
+own), which writes it into the inbox of each account in
+`OPEN_SCIENCE_OPERATOR_USERS` — and to Feishu for an operator who bound it —
+firing and resolved folded into one item per incident. An operator-owned HTTPS
+webhook (`OPEN_SCIENCE_ALERT_WEBHOOK_URL`) is optional and receives the same
+alerts beside it. `configure-monitoring.mjs --alert-receiver` writes the
+credential pair and the route without asking for the other monitoring secrets,
+touches nothing that would not change, and the release switch runs it on every
+release. Grafana provisions the
 `Open Science Operations` dashboard. Prometheus, Alertmanager, and Grafana
 consoles bind to `127.0.0.1` by default; expose them only through an authenticated
 operator path such as a VPN or SSH tunnel.

@@ -46,7 +46,12 @@
 #      link count 0 means it still reads a deleted file, and the switch stops.
 #   7. The probe targets follow `.env` (configure-monitoring.mjs --targets):
 #      the public certificate probe was empty for as long as nobody re-ran the
-#      generator with OPEN_SCIENCE_PUBLIC_HEALTH_URL set.
+#      generator with OPEN_SCIENCE_PUBLIC_HEALTH_URL set. Alertmanager's route
+#      to the control plane's alert receiver is written the same way
+#      (--alert-receiver, 2026-09-28): until then its only receiver was a
+#      public path nginx answered 204, and every alert was dropped. Written only
+#      where it changes; a changed configuration restarts an Alertmanager the
+#      recreate step left running, which would otherwise read the old inode.
 #   8. The runtime image carries the skill trees the manifest records
 #      (check-runtime-skill-digests.mjs): a delta that forgot a tree shipped
 #      the base's copy under a manifest that said otherwise.
@@ -97,6 +102,11 @@ echo "=== probe targets follow .env ==="
 # In the new release's own tree and before anything moves: an invalid URL in
 # `.env` stops the switch while the old release is still in front.
 node --env-file="${REL}/OpenScience/deploy/web/.env" "${REL}/OpenScience/scripts/ops/configure-monitoring.mjs" --targets
+echo "=== alert receiver follows the release ==="
+ALERT_RECEIVER_RESULT=$(node --env-file="${REL}/OpenScience/deploy/web/.env" "${REL}/OpenScience/scripts/ops/configure-monitoring.mjs" --alert-receiver --json)
+echo "  ${ALERT_RECEIVER_RESULT}"
+alert_config_changed=0
+if printf '%s' "$ALERT_RECEIVER_RESULT" | grep -q '"changed":\[".*alertmanager\.json'; then alert_config_changed=1; fi
 
 echo "=== current -> ${NEW} ==="
 ln -sfn "$REL" "${ROOT}/current.next" && mv -T "${ROOT}/current.next" "${ROOT}/current"
@@ -169,6 +179,18 @@ while read -r container; do
   echo "  restarted: ${container}"
 done < <(stale_binders)
 echo "  ${#restarted[@]} container(s) restarted"
+# Alertmanager reads its configuration from the shared secrets directory, not
+# through `current`, so the loop above never sees it: a configuration the
+# receiver step rewrote reaches a container that was not recreated only by a
+# restart.
+if [ "$alert_config_changed" -eq 1 ] && ! printf '%s\n' "${changed[@]:-}" | grep -qx alertmanager; then
+  alertmanager_container=$(docker ps --filter "label=com.docker.compose.project=${PROJECT}" --filter "label=com.docker.compose.service=alertmanager" --format '{{.Names}}' | head -1)
+  if [ -n "$alertmanager_container" ]; then
+    docker restart "$alertmanager_container" >/dev/null
+    restarted+=("$alertmanager_container")
+    echo "  restarted: ${alertmanager_container} (its configuration changed)"
+  fi
+fi
 
 echo "=== mint the release receipt once web serves evimed-${NEW}-1 ==="
 for _ in $(seq 1 60); do

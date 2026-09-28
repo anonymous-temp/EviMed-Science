@@ -3,8 +3,14 @@ services:
     environment:
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ""
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: /run/secrets/operator_metrics_token
+      # Alertmanager's credential for the control plane's alert receiver
+      # (/api/ops/alerts, alertReceiver.mjs): its own, not the scrape token.
+      # Written by `configure-monitoring.mjs --alert-receiver`.
+      OPEN_SCIENCE_ALERT_RECEIVER_TOKEN: ""
+      OPEN_SCIENCE_ALERT_RECEIVER_TOKEN_FILE: /run/secrets/alert_receiver_token
     secrets:
       - operator_metrics_token
+      - alert_receiver_token
 
   prometheus:
     image: prom/prometheus:${OPEN_SCIENCE_PROMETHEUS_VERSION:-v3.13.0}
@@ -79,8 +85,14 @@ services:
     command:
       - --config.file=/run/secrets/alertmanager_config
       - --storage.path=/alertmanager
+    # Every alert is delivered to the control plane over this network
+    # (http://open-science-web:8787/api/ops/alerts) with the bearer credential
+    # below; until 2026-09-28 the only receiver was a public path nginx
+    # answered with 204, so every alert was dropped.
     secrets:
       - alertmanager_config
+      - source: alertmanager_receiver_token
+        target: alert_receiver_token
     volumes:
       - alertmanager-data:/alertmanager
     ports:
@@ -118,6 +130,10 @@ secrets:
     file: ${OPEN_SCIENCE_MONITORING_SECRETS_DIR:-./secrets}/grafana-admin-password.txt
   alertmanager_config:
     file: ${OPEN_SCIENCE_MONITORING_SECRETS_DIR:-./secrets}/alertmanager.json
+  alert_receiver_token:
+    file: ${OPEN_SCIENCE_MONITORING_SECRETS_DIR:-./secrets}/alert-receiver-token.txt
+  alertmanager_receiver_token:
+    file: ${OPEN_SCIENCE_MONITORING_SECRETS_DIR:-./secrets}/alertmanager-receiver-token.txt
 
 volumes:
   prometheus-data:

@@ -84,6 +84,7 @@ import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./acc
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
+import { ALERT_RECEIVER_PATH, createAlertReceiver } from "./alertReceiver.mjs";
 import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
@@ -504,6 +505,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (pathname.startsWith("/api/auth/evimed")) return evimedAuthRoutePattern(pathname);
@@ -864,6 +866,8 @@ export function createWebApiApp(overrides = {}) {
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
+  // Alertmanager's deliveries, into the operators' inbox (alertReceiver.mjs).
+  const alertReceiver = createAlertReceiver({ config, notificationService });
   let notificationTimer = null;
   let notificationRun = null;
   let inboxPrunedAt = 0;
@@ -3552,6 +3556,14 @@ export function createWebApiApp(overrides = {}) {
         sendJson(res, 200, { data });
         return;
       }
+      // Alertmanager's deliveries (alertReceiver.mjs), before the CSRF gate
+      // and the maintenance admission for the same reason as the route below:
+      // no cookie, a bearer credential of its own — and an alert raised while
+      // the service drains is exactly one an operator must still receive.
+      if (pathname === ALERT_RECEIVER_PATH) {
+        await alertReceiver.handle(req, res);
+        return;
+      }
       // Before the CSRF gate, deliberately. This surface carries no cookie: it
       // is authenticated by an account API key in an Authorization header, and
       // a browser cannot be made to attach one cross-site the way it attaches
@@ -3629,6 +3641,7 @@ export function createWebApiApp(overrides = {}) {
           review,
           geo,
           learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
+          alertReceiver,
         });
         return;
       }
@@ -6321,7 +6334,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, learning = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, learning = null, alertReceiver = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -6464,6 +6477,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   });
   // Web reading's outcomes and limits (webRead.mjs).
   for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of alertReceiver?.metricFamilies() ?? []) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of edgeMetricFamilies(edgeProxy)) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_task_total", "Known task records in the current process.", "gauge", {

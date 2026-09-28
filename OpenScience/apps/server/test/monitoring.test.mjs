@@ -97,12 +97,21 @@ test("monitoring configuration generator writes private validated secrets", asyn
     assert.equal((await readFile(passwordFile, "utf8")).trim(), validEnv.OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD);
     const alertmanager = JSON.parse(await readFile(alertmanagerFile, "utf8"));
     assert.equal(alertmanager.route.receiver, "operator-webhook");
-    assert.equal(alertmanager.receivers[0].webhook_configs[0].url, validEnv.OPEN_SCIENCE_ALERT_WEBHOOK_URL);
-    assert.equal(alertmanager.receivers[0].webhook_configs[0].send_resolved, true);
+    const [controlPlane, external] = alertmanager.receivers[0].webhook_configs;
+    assert.equal(controlPlane.url, "http://open-science-web:8787/api/ops/alerts", "every alert reaches the control plane's receiver");
+    assert.deepEqual(controlPlane.http_config.authorization, { type: "Bearer", credentials_file: "/run/secrets/alert_receiver_token" });
+    assert.equal(external.url, validEnv.OPEN_SCIENCE_ALERT_WEBHOOK_URL, "and the operator's own webhook beside it");
+    for (const hook of alertmanager.receivers[0].webhook_configs) assert.equal(hook.send_resolved, true);
+    const receiverTokenFile = path.join(outputDir, "alert-receiver-token.txt");
+    const alertmanagerTokenFile = path.join(outputDir, "alertmanager-receiver-token.txt");
+    const receiverToken = (await readFile(receiverTokenFile, "utf8")).trim();
+    assert.ok(receiverToken.length >= 32);
+    assert.equal((await readFile(alertmanagerTokenFile, "utf8")).trim(), receiverToken);
+    assert.equal(generated.stdout.includes(receiverToken), false);
 
     if (process.platform !== "win32") {
       assert.equal((await lstat(outputDir)).mode & 0o077, 0);
-      for (const file of [tokenFile, prometheusTokenFile, passwordFile, alertmanagerFile]) {
+      for (const file of [tokenFile, prometheusTokenFile, passwordFile, alertmanagerFile, receiverTokenFile, alertmanagerTokenFile]) {
         assert.equal((await lstat(file)).mode & 0o077, 0);
       }
     }
@@ -117,8 +126,55 @@ test("monitoring configuration generator writes private validated secrets", asyn
         "prometheus-operator-metrics-token.txt",
         "grafana-admin-password.txt",
         "alertmanager.json",
+        "alert-receiver-token.txt",
+        "alertmanager-receiver-token.txt",
       ],
     });
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("the alert receiver is written on its own, keeps what is configured, and touches nothing unchanged", async () => {
+  // Until 2026-09-28 the only receiver was an operator webhook nginx answered
+  // with 204: every alert was accepted and dropped. The release switch runs
+  // this mode on every release, so a rerun must leave identical files alone —
+  // a running Alertmanager keeps reading the inode it started with.
+  const tmp = await temporaryDirectory();
+  const outputDir = path.join(tmp, "secrets");
+  try {
+    await runMonitoring(outputDir, [], validEnv);
+    const alertmanagerFile = path.join(outputDir, "alertmanager.json");
+    const tokenFile = path.join(outputDir, "alert-receiver-token.txt");
+    const before = { config: await lstat(alertmanagerFile), token: await lstat(tokenFile) };
+    const again = JSON.parse((await runMonitoring(outputDir, ["--alert-receiver", "--json"], { OPEN_SCIENCE_ALERT_WEBHOOK_URL: "" })).stdout);
+    assert.equal(again.mode, "alert-receiver");
+    assert.deepEqual(again.changed, [], "nothing to change, nothing rewritten");
+    assert.equal((await lstat(alertmanagerFile)).ino, before.config.ino);
+    assert.equal((await lstat(tokenFile)).ino, before.token.ino);
+    const kept = JSON.parse(await readFile(alertmanagerFile, "utf8"));
+    assert.equal(kept.receivers[0].webhook_configs[1].url, validEnv.OPEN_SCIENCE_ALERT_WEBHOOK_URL, "the external webhook already configured is kept");
+    const probe = kept.route.routes.find((route) => route.matchers.includes('audit_probe="true"'));
+    assert.equal(probe.receiver, "control-plane-probe");
+    assert.deepEqual(kept.receivers.find((item) => item.name === "control-plane-probe").webhook_configs.map((hook) => hook.url),
+      ["http://open-science-web:8787/api/ops/alerts"], "a probe never reaches a person's webhook");
+
+    // A configuration from before the receiver existed is brought up to date.
+    const legacy = { global: {}, route: { receiver: "operator-webhook" }, receivers: [{ name: "operator-webhook", webhook_configs: [
+      { url: validEnv.OPEN_SCIENCE_ALERT_WEBHOOK_URL, send_resolved: true, http_config: { follow_redirects: false } }] }] };
+    await writeFile(alertmanagerFile, `${JSON.stringify(legacy)}\n`, { mode: 0o600 });
+    await chmod(alertmanagerFile, 0o600);
+    await assert.rejects(runMonitoring(outputDir, ["--check"]), (err) => /alertmanager_receiver_missing/.test(err.stderr));
+    const upgraded = JSON.parse((await runMonitoring(outputDir, ["--alert-receiver", "--json"], { OPEN_SCIENCE_ALERT_WEBHOOK_URL: "" })).stdout);
+    assert.deepEqual(upgraded.changed, ["alertmanager.json"]);
+    await runMonitoring(outputDir, ["--check"]);
+
+    // A fresh directory with no webhook at all still gets a working receiver.
+    const bare = path.join(tmp, "bare");
+    const written = JSON.parse((await runMonitoring(bare, ["--alert-receiver", "--json"], { OPEN_SCIENCE_ALERT_WEBHOOK_URL: "" })).stdout);
+    assert.deepEqual(written.changed.sort(), ["alert-receiver-token.txt", "alertmanager-receiver-token.txt", "alertmanager.json"]);
+    const config = JSON.parse(await readFile(path.join(bare, "alertmanager.json"), "utf8"));
+    assert.equal(config.receivers[0].webhook_configs.length, 1);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -270,13 +326,15 @@ test("container secret preparation assigns only fixed readers and preserves priv
   const assignments = [];
   try {
     await runMonitoring(outputDir, [], validEnv);
-    const names = ["operator-metrics-token.txt", "prometheus-operator-metrics-token.txt", "grafana-admin-password.txt", "alertmanager.json"];
+    const names = ["operator-metrics-token.txt", "prometheus-operator-metrics-token.txt", "grafana-admin-password.txt", "alertmanager.json",
+      "alert-receiver-token.txt", "alertmanager-receiver-token.txt"];
     const before = new Map(await Promise.all(names.map(async (name) => [name, await readFile(path.join(outputDir, name))])));
     const prepared = await prepareContainerSecrets({ directory: outputDir, targetsFile: path.join(tmp, "targets/tls.json"),
       platform: "linux", uid: 0, openFile: simulatedOwnership(assignments) });
     assert.deepEqual(assignments, [
       { file: names[0], uid: 0, gid: 0 }, { file: names[1], uid: 65534, gid: 65534 },
       { file: names[2], uid: 472, gid: -1 }, { file: names[3], uid: 65534, gid: 65534 },
+      { file: names[4], uid: 0, gid: 0 }, { file: names[5], uid: 65534, gid: 65534 },
     ]);
     for (const row of prepared) {
       assert.equal(row.mode, "0600");

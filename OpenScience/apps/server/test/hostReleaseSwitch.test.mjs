@@ -205,6 +205,11 @@ test("the switch restarts what still reads the previous release through current,
     // The probe targets were written from the release's `.env` before the move.
     const tls = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/tls.json"), "utf8"));
     assert.deepEqual(tls[0], { targets: ["https://evimed.example.org/api/health"], labels: { probe: "public-tls" } });
+    // ...and Alertmanager's route to the control plane's alert receiver, the
+    // one delivery every alert has (until 2026-09-28 they were all dropped).
+    assert.match(result.stdout, /=== alert receiver follows the release ===/);
+    const alertmanager = JSON.parse(await readFile(path.join(rel, "deploy/web/secrets/alertmanager.json"), "utf8"));
+    assert.equal(alertmanager.receivers[0].webhook_configs[0].url, "http://open-science-web:8787/api/ops/alerts");
     assert.match(result.stdout, /every skill tree the manifest records is in open-science-runtime:x-1cf308956b6e/);
     assert.match(result.stdout, /UI WALK NOT RUN: .*ui-walk\.env is missing/);
   } finally {

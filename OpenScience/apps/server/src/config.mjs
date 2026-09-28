@@ -1004,6 +1004,17 @@ export function loadConfig(overrides = {}) {
     defaultFile: localSecretFile("bootstrap-password"),
   });
   const metricsSecret = operatorMetricsSecret(overrides);
+  // Alertmanager's credential for the alert receiver (alertReceiver.mjs):
+  // its own, not the scrape token — reading metrics and writing to the
+  // operators' inbox are different permissions. Unset, the receiver answers
+  // 404 like the metrics route does without its token.
+  const alertReceiverSecret = configuredSecret(overrides, {
+    overrideValue: "alertReceiverToken",
+    overrideFile: "alertReceiverTokenFile",
+    valueEnv: "OPEN_SCIENCE_ALERT_RECEIVER_TOKEN",
+    fileEnv: "OPEN_SCIENCE_ALERT_RECEIVER_TOKEN_FILE",
+    codePrefix: "alert_receiver_token",
+  });
   const oidcClientSecret = configuredSecret(overrides, {
     overrideValue: "oidcClientSecret",
     overrideFile: "oidcClientSecretFile",
@@ -1090,6 +1101,9 @@ export function loadConfig(overrides = {}) {
     operatorMetricsToken: metricsSecret.value,
     operatorMetricsTokenSource: metricsSecret.source,
     operatorMetricsTokenError: metricsSecret.error,
+    alertReceiverToken: alertReceiverSecret.value,
+    alertReceiverTokenSource: alertReceiverSecret.source,
+    alertReceiverTokenError: alertReceiverSecret.error,
     releaseManifest: release.manifest,
     releaseManifestSource: release.source,
     releaseManifestError: release.error,

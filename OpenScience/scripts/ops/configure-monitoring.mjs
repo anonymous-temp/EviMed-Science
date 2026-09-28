@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -24,7 +25,28 @@ const prepareReaders = process.argv.includes("--prepare-container-secrets");
  *  the release switch runs it for every release, so the certificate probes
  *  follow `.env` instead of whoever last ran the generator and with what. */
 const targetsOnly = process.argv.includes("--targets");
+/** Write the alert receiver's credential and Alertmanager's routes to it, and
+ *  nothing else: no metrics token, Grafana password or external webhook is
+ *  asked for (an external webhook already configured is kept). Idempotent — a
+ *  file whose content would not change is not touched, because a running
+ *  container still reads the inode it started with — so the release switch
+ *  runs it on every release, like `--targets`. As root on Linux it then assigns
+ *  the container readers, exactly as `--prepare-container-secrets` does. */
+const alertReceiverOnly = process.argv.includes("--alert-receiver");
 const jsonOutput = process.argv.includes("--json");
+
+/**
+ * Where Alertmanager delivers: the control plane's own receiver
+ * (apps/server/src/alertReceiver.mjs), over the compose network. Until
+ * 2026-09-28 the only receiver was an operator webhook on the public host,
+ * which nginx answered `return 204`: every alert was accepted and dropped.
+ */
+export const DEFAULT_ALERT_RECEIVER_URL = "http://open-science-web:8787/api/ops/alerts";
+/** Where the Alertmanager container reads its bearer credential for it. */
+export const ALERT_RECEIVER_CREDENTIALS_FILE = "/run/secrets/alert_receiver_token";
+/** The label a synthetic probe alert carries (the integration audit's): routed
+ *  to the control plane alone and recorded there as a probe, never pushed. */
+export const ALERT_PROBE_MATCHER = 'audit_probe="true"';
 
 function monitoringFiles(directory) {
   return {
@@ -32,6 +54,10 @@ function monitoringFiles(directory) {
     prometheusMetricsToken: path.join(directory, "prometheus-operator-metrics-token.txt"),
     grafanaPassword: path.join(directory, "grafana-admin-password.txt"),
     alertmanager: path.join(directory, "alertmanager.json"),
+    // One credential, two readers, as for the metrics token: the web container
+    // (root) and Alertmanager (65534) each get a 0600 copy they own.
+    alertReceiverToken: path.join(directory, "alert-receiver-token.txt"),
+    alertmanagerReceiverToken: path.join(directory, "alertmanager-receiver-token.txt"),
   };
 }
 const files = monitoringFiles(outputDir);
@@ -76,6 +102,25 @@ function validateWebhook(value) {
   }
   if (["localhost", "127.0.0.1", "::1"].includes(url.hostname.toLowerCase())) {
     fail("alert_webhook_local_forbidden", "Alert webhook URLs must not target the local monitoring container.");
+  }
+  return url.toString();
+}
+
+/** The control plane's receiver: reached over the compose network, so plain
+ *  http to a service name is what it is; still no userinfo, fragment or
+ *  loopback (loopback is Alertmanager's own container). */
+function validateReceiverUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    fail("alert_receiver_url_invalid", "OPEN_SCIENCE_ALERT_RECEIVER_URL must be an absolute URL.");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) {
+    fail("alert_receiver_url_invalid", "The alert receiver URL must be http(s) without userinfo or fragments.");
+  }
+  if (["localhost", "127.0.0.1", "::1"].includes(url.hostname.toLowerCase())) {
+    fail("alert_webhook_local_forbidden", "The alert receiver URL must not target the local monitoring container.");
   }
   return url.toString();
 }
@@ -154,7 +199,53 @@ async function writePrivateFile(file, content) {
   }
 }
 
-function alertmanagerConfig(webhookUrl) {
+/** A private file rewritten only when its content would change; true when it
+ *  was. A running container keeps reading the inode it started with, so an
+ *  identical rewrite would leave it on a deleted file for nothing. */
+async function writePrivateFileIfChanged(file, content) {
+  const existing = await readRegularFile(file).catch((err) => {
+    if (err?.code === "ENOENT") return null;
+    throw err;
+  });
+  if (existing === content) return false;
+  await writePrivateFile(file, content);
+  return true;
+}
+
+/**
+ * The receiver's shared credential: from the environment when given, else the
+ * one already written, else a new random one — so a rerun keeps it.
+ * @param {typeof files} secretFiles
+ */
+async function alertReceiverToken(secretFiles = files) {
+  const supplied = process.env.OPEN_SCIENCE_ALERT_RECEIVER_TOKEN ?? "";
+  if (supplied) return validateSecret(supplied, "Alert receiver token", 32);
+  const existing = await readRegularFile(secretFiles.alertReceiverToken).catch((err) => {
+    if (err?.code === "ENOENT") return null;
+    throw err;
+  });
+  if (existing != null) return validateSecret(existing.replace(/\r?\n$/, ""), "Alert receiver token", 32);
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * Every alert reaches the control plane's receiver, which writes it into the
+ * operators' inbox (and Feishu, for an operator who bound it); an operator's
+ * external webhook, when one is configured, receives the same alerts beside
+ * it. The integration audit's probe alert (`audit_probe="true"`) goes to the
+ * control plane alone, so a check never pages a person.
+ * @param {{ receiverUrl: string, externalUrl?: string | null }} targets
+ */
+export function alertmanagerConfig({ receiverUrl, externalUrl = null }) {
+  const controlPlane = {
+    url: receiverUrl,
+    send_resolved: true,
+    max_alerts: 20,
+    http_config: {
+      follow_redirects: false,
+      authorization: { type: "Bearer", credentials_file: ALERT_RECEIVER_CREDENTIALS_FILE },
+    },
+  };
   return {
     global: { resolve_timeout: "5m" },
     route: {
@@ -163,27 +254,68 @@ function alertmanagerConfig(webhookUrl) {
       group_wait: "30s",
       group_interval: "5m",
       repeat_interval: "4h",
+      routes: [{ receiver: "control-plane-probe", matchers: [ALERT_PROBE_MATCHER], group_wait: "5s", group_interval: "1m", repeat_interval: "4h" }],
     },
     receivers: [
       {
         name: "operator-webhook",
         webhook_configs: [
-          {
-            url: webhookUrl,
-            send_resolved: true,
-            max_alerts: 20,
-            http_config: { follow_redirects: false },
-          },
+          controlPlane,
+          ...(externalUrl ? [{ url: externalUrl, send_resolved: true, max_alerts: 20, http_config: { follow_redirects: false } }] : []),
         ],
       },
+      { name: "control-plane-probe", webhook_configs: [controlPlane] },
     ],
   };
+}
+
+/** The external webhook an existing configuration already names, if any. */
+async function existingExternalWebhook(secretFiles = files) {
+  let config;
+  try {
+    config = JSON.parse(await readRegularFile(secretFiles.alertmanager));
+  } catch (err) {
+    if (err?.code === "ENOENT") return null;
+    if (err?.code) throw err;
+    fail("alertmanager_config_invalid", "alertmanager.json must contain valid JSON-compatible YAML.");
+  }
+  const receiver = config?.receivers?.find((item) => item?.name === config?.route?.receiver);
+  const external = (receiver?.webhook_configs ?? []).find((hook) => !hook?.http_config?.authorization);
+  return typeof external?.url === "string" ? validateWebhook(external.url) : null;
+}
+
+/**
+ * The receiver's credential files and Alertmanager's configuration, each
+ * written only if it changes. Returns the names of the files that changed.
+ * @param {{ externalUrl?: string | null, secretFiles?: typeof files }} [options]
+ */
+export async function writeAlertReceiver({ externalUrl, secretFiles = files } = {}) {
+  const directory = path.dirname(secretFiles.alertmanager);
+  await assertNoSymlinkPath(directory, { allowMissingTail: true });
+  await fsp.mkdir(directory, { recursive: true, mode: 0o700 });
+  await assertNoSymlinkPath(directory);
+  const token = await alertReceiverToken(secretFiles);
+  const receiverUrl = validateReceiverUrl(process.env.OPEN_SCIENCE_ALERT_RECEIVER_URL || DEFAULT_ALERT_RECEIVER_URL);
+  const external = externalUrl === undefined
+    ? (process.env.OPEN_SCIENCE_ALERT_WEBHOOK_URL ? validateWebhook(process.env.OPEN_SCIENCE_ALERT_WEBHOOK_URL) : await existingExternalWebhook(secretFiles))
+    : externalUrl;
+  const changed = [];
+  for (const [key, content] of [
+    ["alertReceiverToken", `${token}\n`],
+    ["alertmanagerReceiverToken", `${token}\n`],
+    ["alertmanager", `${JSON.stringify(alertmanagerConfig({ receiverUrl, externalUrl: external }), null, 2)}\n`],
+  ]) {
+    if (await writePrivateFileIfChanged(secretFiles[key], content)) changed.push(path.basename(secretFiles[key]));
+  }
+  return changed;
 }
 
 async function generate() {
   const metricsToken = validateSecret(requiredEnv("OPEN_SCIENCE_OPERATOR_METRICS_TOKEN"), "Metrics token", 32);
   const grafanaPassword = validateSecret(requiredEnv("OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD"), "Grafana password", 24);
-  const webhookUrl = validateWebhook(requiredEnv("OPEN_SCIENCE_ALERT_WEBHOOK_URL"));
+  // Optional since 2026-09-28: the control plane's own receiver is always
+  // configured; an operator webhook, when named, receives the alerts too.
+  const webhookUrl = process.env.OPEN_SCIENCE_ALERT_WEBHOOK_URL ? validateWebhook(process.env.OPEN_SCIENCE_ALERT_WEBHOOK_URL) : null;
 
   await assertNoSymlinkPath(outputDir, { allowMissingTail: true });
   await fsp.mkdir(outputDir, { recursive: true, mode: 0o700 });
@@ -192,7 +324,7 @@ async function generate() {
   await writePrivateFile(files.metricsToken, `${metricsToken}\n`);
   await writePrivateFile(files.prometheusMetricsToken, `${metricsToken}\n`);
   await writePrivateFile(files.grafanaPassword, `${grafanaPassword}\n`);
-  await writePrivateFile(files.alertmanager, `${JSON.stringify(alertmanagerConfig(webhookUrl), null, 2)}\n`);
+  await writeAlertReceiver({ externalUrl: webhookUrl });
   await writeTlsTargets();
 }
 
@@ -270,6 +402,24 @@ async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile
     fail("monitoring_metrics_token_mismatch", "Web and Prometheus metrics token files must contain the same value.");
   }
   validateSecret(grafanaPassword, "Grafana password", 24);
+  const receiver = await checkAlertReceiver(secretFiles, readFile);
+  const { publicTls } = await checkTlsTargets(targetsFile, readFile);
+  return { ...receiver, tlsTargets: publicTls };
+}
+
+/**
+ * The alert receiver's half of the check: both credential copies agree, and
+ * Alertmanager delivers every alert — resolved ones too — to the control
+ * plane, with the audit's probe routed there alone.
+ * @returns {Promise<{ receiverName: string, receiverUrl: string, webhookUrl: string | null }>}
+ */
+async function checkAlertReceiver(secretFiles = files, readFile = readRegularFile) {
+  const receiverToken = (await readFile(secretFiles.alertReceiverToken)).replace(/\r?\n$/, "");
+  const alertmanagerReceiverToken = (await readFile(secretFiles.alertmanagerReceiverToken)).replace(/\r?\n$/, "");
+  validateSecret(receiverToken, "Alert receiver token", 32);
+  if (alertmanagerReceiverToken !== receiverToken) {
+    fail("monitoring_alert_receiver_token_mismatch", "Web and Alertmanager alert-receiver token files must contain the same value.");
+  }
   let config;
   try {
     config = JSON.parse(await readFile(secretFiles.alertmanager));
@@ -278,14 +428,25 @@ async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile
     fail("alertmanager_config_invalid", "alertmanager.json must contain valid JSON-compatible YAML.");
   }
   const receiver = config?.receivers?.find((item) => item?.name === config?.route?.receiver);
-  const webhookUrl = receiver?.webhook_configs?.[0]?.url;
-  if (typeof webhookUrl !== "string") fail("alertmanager_receiver_missing", "Alertmanager must route to a webhook receiver.");
-  validateWebhook(webhookUrl);
-  if (receiver.webhook_configs[0].send_resolved !== true) {
+  const hooks = Array.isArray(receiver?.webhook_configs) ? receiver.webhook_configs : [];
+  // The control plane's receiver is the one delivery every alert must have:
+  // authenticated with the credential file, resolved notices included.
+  const controlPlane = hooks.find((hook) => hook?.http_config?.authorization?.credentials_file === ALERT_RECEIVER_CREDENTIALS_FILE);
+  if (!controlPlane || typeof controlPlane.url !== "string") {
+    fail("alertmanager_receiver_missing", "Alertmanager must deliver every alert to the control plane's alert receiver; run configure:monitoring --alert-receiver.");
+  }
+  const receiverUrl = validateReceiverUrl(controlPlane.url);
+  const external = hooks.filter((hook) => hook !== controlPlane);
+  for (const hook of external) validateWebhook(String(hook?.url ?? ""));
+  if (hooks.some((hook) => hook?.send_resolved !== true)) {
     fail("alertmanager_resolved_disabled", "Alertmanager must notify when alerts resolve.");
   }
-  const { publicTls } = await checkTlsTargets(targetsFile, readFile);
-  return { receiverName: receiver.name, webhookUrl, tlsTargets: publicTls };
+  const probeRoute = (config?.route?.routes ?? []).find((route) => (route?.matchers ?? []).includes(ALERT_PROBE_MATCHER));
+  const probeReceiver = config?.receivers?.find((item) => item?.name === probeRoute?.receiver);
+  if (!probeReceiver || (probeReceiver.webhook_configs ?? []).some((hook) => hook?.url !== receiverUrl)) {
+    fail("alertmanager_probe_route_invalid", "The audit probe must be routed to the control plane's receiver alone.");
+  }
+  return { receiverName: receiver.name, receiverUrl, webhookUrl: external[0]?.url ?? null };
 }
 
 /**
@@ -348,7 +509,8 @@ export async function prepareContainerSecrets({
   }
   const secretFiles = monitoringFiles(path.resolve(directory));
   const readers = [["metricsToken", 0, 0], ["prometheusMetricsToken", 65534, 65534],
-    ["grafanaPassword", 472, -1], ["alertmanager", 65534, 65534]];
+    ["grafanaPassword", 472, -1], ["alertmanager", 65534, 65534],
+    ["alertReceiverToken", 0, 0], ["alertmanagerReceiverToken", 65534, 65534]];
   const opened = new Map();
   const assertMetadata = (stat) => {
     if (!stat.isFile() || stat.nlink !== 1 || stat.size <= 0 || stat.size > 16 * 1024) {
@@ -480,6 +642,19 @@ async function main() {
       : `monitoring probe targets written: ${counts.publicTls} public, ${counts.edgeTls} edge proxy (${tlsTargetsFile})\n`);
     return;
   }
+  if (alertReceiverOnly) {
+    if (checkOnly || probeOnly || prepareReaders) fail("monitoring_mode_conflict", "The alert receiver must be written on its own.");
+    const changed = await writeAlertReceiver();
+    // Root on Linux is how the release switch runs it: the files it rewrote
+    // are given back to their container readers, or Alertmanager (65534)
+    // could not read its own configuration.
+    const readers = process.platform === "linux" && process.getuid?.() === 0 ? await prepareContainerSecrets() : null;
+    if (!readers) await checkAlertReceiver();
+    const result = { ok: true, mode: "alert-receiver", directory: outputDir, changed, readersPrepared: Boolean(readers) };
+    process.stdout.write(jsonOutput ? `${JSON.stringify(result)}\n`
+      : `alert receiver ${changed.length ? `written (${changed.join(", ")})` : "unchanged"}: ${outputDir}\n`);
+    return;
+  }
   let checked;
   let readers;
   if (prepareReaders) {
@@ -490,13 +665,17 @@ async function main() {
     await generate();
     checked = await check();
   }
-  if (probeOnly) await probeAlertDelivery(checked);
+  // The control plane's receiver is not reachable from the host by its compose
+  // name; the integration audit probes it end to end through Alertmanager.
+  // What is probed here is the operator's external webhook, when there is one.
+  const probed = probeOnly && checked?.webhookUrl ? await probeAlertDelivery(checked) : null;
   const result = {
     ok: true,
     mode: prepareReaders ? "prepare-container-secrets" : probeOnly ? "probe" : checkOnly ? "check" : "generate",
     directory: outputDir,
     files: Object.values(files).map((file) => path.basename(file)),
     ...(readers ? { readers } : {}),
+    ...(probeOnly ? { externalWebhookProbed: Boolean(probed) } : {}),
   };
   process.stdout.write(jsonOutput ? `${JSON.stringify(result)}\n` : `monitoring configuration ${result.mode} ok: ${outputDir}\n`);
 }
