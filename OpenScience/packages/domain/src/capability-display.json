@@ -366,9 +366,9 @@
       "evaluation": {
         "lastStatus": "not-run",
         "lastRunAt": null,
-        "runs": 2,
-        "delivered": 0,
-        "typicalMinutes": null
+        "runs": 3,
+        "delivered": 1,
+        "typicalMinutes": 60
       }
     },
     "meta-analysis": {
