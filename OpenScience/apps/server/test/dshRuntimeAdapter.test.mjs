@@ -354,7 +354,9 @@ test("the live session/page records normalize into a transcript the gate can rea
   const users = transcript.messages.filter((message) => message.role === "user");
   assert.ok(users.length >= 2, "the recording must carry the typed and the injected message this asserts about");
   assert.equal(users[0].source, "user");
-  assert.match(users[0].parts[0].text, /^Create a file named recorded\.txt/);
+  // The prompt the recording sent, read off the recording's own request.
+  const recordedPrompt = golden.unary.find((entry) => entry.method === "session/prompt").request.args.request.content[0].text;
+  assert.equal(users[0].parts[0].text, recordedPrompt);
   // What the source field is for: telling an injected context apart from
   // something the user typed. Asserted as "at least one of each kind that is
   // not `user`", because the composition decides how many injections a run
@@ -362,8 +364,10 @@ test("the live session/page records normalize into a transcript the gate can rea
   const injected = users.slice(1);
   assert.ok(injected.length > 0 && injected.every((message) => message.source !== "user"),
     "every message after the typed one is an injection and must say so");
-  assert.ok(injected.some((message) => message.source === "plugin" && /Current runtime context/.test(message.parts[0].text)),
-    "the runtime context arrives as a plugin-sourced user message, not a side channel");
+  // Format 4 names each producer: the runtime context is `runtime-context`,
+  // where format 3 said `plugin` for every producer alike.
+  assert.ok(injected.some((message) => message.source === "runtime-context" && /Current runtime context/.test(message.parts[0].text)),
+    "the runtime context arrives as a user message its producer names, not a side channel");
 
   // How many assistant turns a model takes is the model's business; that each
   // decodes, and that the last one carries the answer, is the decoder's.
@@ -387,22 +391,25 @@ test("the live session/page records normalize into a transcript the gate can rea
   // thinking on, a `reasoning` block) contributes no text and no tool part: the
   // call arrives as its own `tool/call` event, and counting it here as well
   // would double every tool in the transcript.
-  assert.deepEqual(
-    assistants[0].parts.map((part) => part.type),
-    ["reasoning"],
-    "the tool call must not also appear as a part of the message that made it",
-  );
+  assert.ok(assistants[0].parts.length > 0 && assistants[0].parts.every((part) => ["text", "reasoning"].includes(part.type)),
+    "the tool call must not also appear as a part of the message that made it");
   // The answer, and only the answer, as text. A reasoning block may sit beside
   // it — `assistants[0]` above asserts reasoning blocks are ordinary — so this
   // pins what the gate reads as prose rather than the block count, which is the
   // model's business and changed between recordings.
-  assert.deepEqual(assistants.at(-1).parts.filter((part) => part.type === "text"), [{ type: "text", text: "done" }]);
+  const lastWire = golden.history.filter((record) => record?.event?.type === "assistant/message").at(-1).event.data.message.content;
+  assert.deepEqual(assistants.at(-1).parts.filter((part) => part.type === "text"),
+    lastWire.filter((block) => block.type === "text").map((block) => ({ type: "text", text: block.text })));
   assert.ok(assistants.at(-1).parts.every((part) => ["text", "reasoning"].includes(part.type)),
     "the settled answer carries prose and reasoning only; a tool part here would double the call");
 
   const tools = transcript.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool");
-  assert.deepEqual(tools.map((part) => part.tool), ["write", "subagent"],
+  assert.deepEqual(tools.map((part) => part.tool),
+    golden.history.filter((record) => record?.event?.type === "tool/call").map((record) => record.event.data.name),
+    "every recorded call, once, in order");
+  assert.ok(tools.some((part) => part.tool === "write") && tools.some((part) => part.tool === "evimed_delegate"),
     "one run, both shapes: a file write and a delegation");
+  assert.ok(tools.every((part) => part.status === "completed"), "every call's format-4 result paired with its call");
   assert.equal(tools[0].callId, RECORDED_WRITE.callId);
   // The pairing that matters, and the one a hand-authored fixture got wrong:
   // the live call id hangs off `message.source.callId` and the text sits inside
@@ -505,7 +512,11 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // `data.stream`. The delta path still has coverage — the synthesized section
   // below, and the `assistant/attempt` case that a failed attempt produces —
   // but a live recording of a run that succeeds no longer contains one.
+  // `assistant/delta` is back at 0.1.7: the recording follows with
+  // `assistantStream: true` and the kernel now streams the live deltas as
+  // `assistant-stream` frames beside the durable events.
   assert.deepEqual([...produced].sort(), [
+    "assistant/delta",
     "message/assistant",
     "message/user",
     "step/end",
@@ -530,9 +541,20 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // kernel sent may decode to nothing except for reasons named here. A decoder
   // that started returning null for a whole class would still satisfy the set
   // above while losing most of the run.
+  // `assistant-stream` frames are not events: they are read by the stateful
+  // stream reader in `watchSession` (attempt, revision, index), not by the
+  // per-frame decoder, and what they carry is accounted for below instead.
   const dropped = golden.session
-    .filter((frame) => frame?.type !== "snapshot" && !decodeSessionFrame(RECORDED_SESSION, frame))
+    .filter((frame) => frame?.type !== "snapshot" && frame?.type !== "assistant-stream" && !decodeSessionFrame(RECORDED_SESSION, frame))
     .map((frame) => String(frame?.event?.type ?? "?"));
+  // Every live text delta the kernel streamed arrives as an `assistant/delta`,
+  // in order: the stream reader drops only structure (start, block edges,
+  // tool-call argument deltas, usage, finish, end), never text.
+  const streamedText = golden.session
+    .filter((frame) => frame?.type === "assistant-stream" && frame.frame?.chunk?.type === "text-delta")
+    .map((frame) => frame.frame.chunk.text).join("");
+  assert.ok(streamedText.length > 0, "the recording must carry streamed text, or this proves nothing");
+  assert.equal(decoded.filter((item) => item.event.type === "assistant/delta" && item.event.kind === "text").map((item) => item.event.text).join(""), streamedText);
   // Empty at 0.1.5, where it used to be the five structural `assistant/chunk`
   // markers. Those frames do not exist any more, so the list they populated is
   // empty — and an exact empty is a stronger assertion than the list was: any
@@ -585,7 +607,10 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   assert.equal(attempt([{ type: "text-delta", text: "" }]), null, "an attempt that carried no text decodes to nothing");
   // The live half of the same claim: the recorded run's answer arrives whole on
   // the settled message, which is where 0.1.5 puts it.
-  assert.equal(decoded.filter((item) => item.event.type === "message/assistant").at(-1).event.text, "done");
+  const settledText = golden.session.filter((frame) => frame?.event?.type === "assistant/message").at(-1)
+    .event.data.message.content.filter((block) => block.type === "text").map((block) => block.text).join("");
+  assert.ok(settledText, "the recording must end on an answer");
+  assert.equal(decoded.filter((item) => item.event.type === "message/assistant").at(-1).event.text, settledText);
   assert.equal(decoded.at(-1).event.type, "turn/end");
   assert.equal(decoded.at(-1).event.endKind, "completed");
 
@@ -834,13 +859,20 @@ test("running state comes from the $events stream, and 'we were not told' is not
   assert.equal(busyAdapter.runningStatus(RECORDED_SESSION), "busy", "a running session must read busy, not idle and not unknown");
 
   // A removal forgets the session rather than pinning it to a stale answer.
-  // Taken off the live stream rather than the synthesized section: the recorded
-  // run delegates, so a child session is added, runs, and is removed — the
-  // whole lifecycle, in frames the kernel actually sent.
-  const removedIndex = golden.events.findIndex((frame) => frame.event === "api-session/removed");
-  assert.ok(removedIndex > 0, "the recording must contain the removal this asserts about");
-  const removedSession = String(golden.events[removedIndex].args[0]);
-  const throughRemoval = golden.events.slice(0, removedIndex + 1);
+  // Until 0.1.5 the recorded run's delegated child was added, ran and was
+  // removed inside the recording. 0.1.7 keeps a finished one-shot child
+  // resident (`agentAvailable: true`, recorded 2026-09-28), so no live removal
+  // is in a run's recording any more: the child is the live one the recording
+  // added, and the removal is the synthesized section's frame — the kernel's
+  // declared signature, `api-session/removed(sessionId)`, positional — pointed
+  // at it.
+  const liveChild = golden.events.find((frame) => frame.event === "api-session/added" && frame.args[0]?.origin === "subagent");
+  assert.ok(liveChild, "the recording must contain the delegated child this asserts about");
+  const removedSession = String(liveChild.args[0].sessionId);
+  const synthesizedRemoval = golden.synthesized.events.find((frame) => frame.event === "api-session/removed");
+  assert.ok(synthesizedRemoval, "the synthesized section must keep its removal frame");
+  const throughRemoval = [...golden.events, { ...synthesizedRemoval, args: [removedSession] }];
+  const removedIndex = throughRemoval.length - 1;
   const removedAdapter = new DshRuntimeAdapter(scriptedTransport({ $events: throughRemoval }));
   await removedAdapter.watchHost({ signal: AbortSignal.timeout(2_000) });
   // The control, and it has to be a replay: an adapter that was never told

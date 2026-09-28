@@ -378,7 +378,7 @@ async function main() {
     $comment: "Verbatim frames from one live run. Re-record with scripts/ops/record-dsh-golden-frames.mjs; never hand-author.",
     dsh: pin,
     $recorded: {
-      procedure: `Booted @deepseek-ai/dsh@${pin} and recorded by scripts/ops/record-dsh-golden-frames.mjs against ${url}: authenticated with a control-plane-minted browser-session cookie, opened /api/remote.mux, subscribed $events + workspace/follow + session/follow, created a session, sent one session/prompt, and let a real turn run to ${settled ? "completion" : "the settle deadline"}, then paged its history. Prompt: ${JSON.stringify(prompt)}.`,
+      procedure: `Booted @deepseek-ai/dsh@${pin} and recorded by scripts/ops/record-dsh-golden-frames.mjs against ${url}: authenticated with a control-plane-minted browser-session cookie, opened /api/remote.mux, subscribed $events + workspace/follow + session/follow, created a session, sent one session/prompt, and let a real turn run to ${settled ? "completion" : "the settle deadline"}, then paged its history. Prompt: ${JSON.stringify(prompt)}.${args.model ? ` Model endpoint: ${args.model}.` : ""}`,
       unary: `verbatim request/response pairs from that run, POST /api/<endpoint> (${today})`,
       history: `verbatim \`records\` of the live session/page response for that run (${today})`,
       session: `verbatim \`session/follow\` stream items for that run, in arrival order (${today})`,

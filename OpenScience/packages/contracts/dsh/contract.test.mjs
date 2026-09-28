@@ -129,16 +129,19 @@ test("the port's conversions still produce the port's shapes, replayed from gold
     "the recording must carry a cache hit, or the mapping above proves nothing");
 
   // Replayed from the recorded `tool/result`, not from a hand-made envelope.
-  // The live kernel nests the payload one level below where the old fixture put
-  // it: the block under `message.content[]` is what the converter is handed.
+  // Session format 4 (0.1.7) made the result its own `tool`-role message, with
+  // `content` and `isError` on it — the `ToolExecutionResult` fields the
+  // converter reads — where format 3 nested them one level down in a
+  // `tool-result` block.
   const result = golden.history.find((entry) => entry.event.type === "tool/result");
-  const outcome = toToolOutcome(result.event.data.message.content[0]);
+  assert.equal(result.event.data.message.role, "tool");
+  const outcome = toToolOutcome(result.event.data.message);
   assert.equal(outcome.status, "completed");
-  // Compared against the block it was handed, so what is asserted is the
-  // extraction — the nesting — rather than one recording's workspace path.
+  // Compared against the message it was handed, so what is asserted is the
+  // extraction rather than one recording's workspace path.
   assert.equal(
     outcome.text,
-    result.event.data.message.content[0].content.map((block) => block.text).join(""),
+    result.event.data.message.content.map((block) => block.text).join(""),
   );
   assert.match(outcome.text, /^<path>.+<\/path>\n<type>file<\/type>/, "the write's own report shape survives the conversion");
   assert.equal(outcome.error, null);
