@@ -17,17 +17,31 @@ type Listener = () => void;
 type Component = (props: Record<string, unknown>) => React.ReactElement | null;
 type Registration = { options: { name: string; key?: string; id?: string; priority?: number }; component: Component };
 
+/**
+ * A 0.1.7 session list: the session on screen is the row the main view
+ * retains, and a parent's catalogue is its `subagentCatalog` projection.
+ */
+function mainView(sessionId: string, catalogue?: Array<Record<string, unknown>>) {
+  return {
+    ids: [sessionId], phase: "ready",
+    byId: { [sessionId]: { id: sessionId, retainedBy: { mainView: 1 } } },
+    projectionsBySession: catalogue ? { [sessionId]: { state: "idle", values: { subagentCatalog: catalogue } } } : {},
+  };
+}
+
 function frame(entries: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}) {
   const registrations: Registration[] = [];
   const listeners = new Set<Listener>();
-  let snapshot = { current: "session-a", subagentsByParent: { "session-a": { entries } } };
+  let snapshot = mainView("session-a", entries);
   const sessions = {
     list: { getSnapshot: () => snapshot, subscribe: (fn: Listener) => { listeners.add(fn); return () => listeners.delete(fn); } },
-    refreshSubagents: vi.fn(),
-    openSubagent: vi.fn(),
+    refreshProjections: vi.fn(async () => {}),
   };
+  // Where 0.1.7 opens a session, a child's catalogue address included.
+  const uiWorkspace = { openSession: vi.fn() };
   const ctx: Record<string, unknown> = {
     sessions,
+    uiWorkspace,
     slots: {
       inject: (_name: string, setup: () => unknown) => setup(),
       register: (options: Registration["options"], component: Component) => { registrations.push({ options, component }); return () => {}; },
@@ -53,8 +67,8 @@ function frame(entries: Array<Record<string, unknown>>, extra: Record<string, un
     .filter((entry) => entry.options.name === name && (key === undefined || entry.options.key === key))
     .sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0))[0]?.component;
   return {
-    sessions, kit, registrations, find, card: find("tool.call.toolview", "evimed_delegate")!,
-    publish(next: Array<Record<string, unknown>>) { snapshot = { ...snapshot, subagentsByParent: { "session-a": { entries: next } } }; act(() => { for (const fn of [...listeners]) fn(); }); },
+    sessions, uiWorkspace, kit, registrations, find, card: find("tool.call.toolview", "evimed_delegate")!,
+    publish(next: Array<Record<string, unknown>>) { snapshot = mainView("session-a", next); act(() => { for (const fn of [...listeners]) fn(); }); },
   };
 }
 
@@ -69,12 +83,12 @@ describe("the subtask card's link to the child", () => {
   afterEach(() => { cleanup(); });
 
   it("opens the kernel's own subagent view at the address the parent's catalogue lists", () => {
-    const f = frame([{ id: "child-1", kind: "child", mode: "one-shot" }]);
+    const f = frame([{ id: "child-1", mode: "one-shot", label: "证据", createdAt: 1 }]);
     const Card = f.card;
     render(<Card block={started} />);
     fireEvent.click(screen.getByRole("button", { name: /^查看/ }));
-    expect(f.sessions.openSubagent).toHaveBeenCalledWith({ parentSessionId: "session-a", childSessionId: "child-1", mode: "one-shot" });
-    expect(f.sessions.refreshSubagents).not.toHaveBeenCalled();
+    expect(f.uiWorkspace.openSession).toHaveBeenCalledWith({ parentSessionId: "session-a", childSessionId: "child-1", mode: "one-shot" });
+    expect(f.sessions.refreshProjections).not.toHaveBeenCalled();
   });
 
   it("waits for the catalogue, asks for it once, and comes alive when the child is listed", () => {
@@ -84,18 +98,18 @@ describe("the subtask card's link to the child", () => {
     const button = screen.getByRole("button", { name: /^查看/ });
     expect(button).toBeDisabled();
     fireEvent.click(button);
-    expect(f.sessions.openSubagent).not.toHaveBeenCalled();
+    expect(f.uiWorkspace.openSession).not.toHaveBeenCalled();
     view.rerender(<Card block={{ ...started }} />);
-    expect(f.sessions.refreshSubagents).toHaveBeenCalledTimes(1);
-    expect(f.sessions.refreshSubagents).toHaveBeenCalledWith("session-a");
-    f.publish([{ id: "child-1", kind: "child", mode: "continuable" }]);
+    expect(f.sessions.refreshProjections).toHaveBeenCalledTimes(1);
+    expect(f.sessions.refreshProjections).toHaveBeenCalledWith("session-a");
+    f.publish([{ id: "child-1", mode: "continuable", label: "证据", createdAt: 1 }]);
     expect(button).not.toBeDisabled();
     fireEvent.click(button);
-    expect(f.sessions.openSubagent).toHaveBeenCalledWith({ parentSessionId: "session-a", childSessionId: "child-1", mode: "continuable" });
+    expect(f.uiWorkspace.openSession).toHaveBeenCalledWith({ parentSessionId: "session-a", childSessionId: "child-1", mode: "continuable" });
   });
 
   it("follows the run state the shell sends with its title and state, and nothing else", () => {
-    const f = frame([{ id: "child-1", kind: "child", mode: "one-shot" }]);
+    const f = frame([{ id: "child-1", mode: "one-shot", label: "证据", createdAt: 1 }]);
     const Card = f.card;
     const view = render(<Card block={started} />);
     expect(screen.getByText("已启动")).toBeInTheDocument();
@@ -191,7 +205,7 @@ describe("the tools on a blank conversation", () => {
     const ctx: Record<string, unknown> = {
       slots: { inject: (_name: string, setup: () => unknown) => setup(),
         register: (options: { name: string; id?: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.id ?? options.name, component); return () => {}; } },
-      sessions: { list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
+      sessions: { list: { getSnapshot: () => mainView("session-a"), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
       conversation: { input: { for: () => ({ setDraft: () => {}, state: { getSnapshot: () => ({ draft: "老年房颤该不该抗凝？" }) } }) } },
       effect: (setup: () => unknown) => setup(),
       on: () => () => {},
@@ -246,7 +260,7 @@ describe("the 循证 GEO chip", () => {
     const ctx: Record<string, unknown> = {
       slots: { inject: (_name: string, setup: () => unknown) => setup(),
         register: (options: { name: string; id?: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.id ?? options.name, component); return () => {}; } },
-      sessions: { list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
+      sessions: { list: { getSnapshot: () => mainView("session-a"), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
       conversation: { input: { for: () => ({ setDraft: (text: string) => { drafts.push(text); }, state: { getSnapshot: () => ({ draft: "" }) } }) } },
       effect: (setup: () => unknown) => setup(),
       on: () => () => {},

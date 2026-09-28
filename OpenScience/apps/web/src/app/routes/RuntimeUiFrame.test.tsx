@@ -170,7 +170,7 @@ describe("native frame identity and readiness", () => {
     let generationChanged = () => {};
     let dispose = () => {};
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const create = vi.fn(); const draft = vi.fn();
+    const create = vi.fn(); const draft = vi.fn(); const openSession = vi.fn();
     const parent = { postMessage: (data: Record<string, unknown>) => {
       window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: mocks.profile.uiOrigin, data }));
     } };
@@ -179,8 +179,11 @@ describe("native frame identity and readiness", () => {
       applyNativeBridge({
         loader: { await: async () => {} },
         connection: { generation: { getSnapshot: () => generation, subscribe: (fn: () => void) => { generationChanged = fn; return () => {}; } } },
-        sessions: { refresh, create, open: vi.fn(), scope: () => ({}),
-          list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} } },
+        // 0.1.7: the session on screen is the row the main view retains, and
+        // opening one is the workspace UI's.
+        sessions: { refresh, create, scope: () => ({}),
+          list: { getSnapshot: () => ({ byId: { "session-a": { id: "session-a", retainedBy: { mainView: 1 } } } }), subscribe: () => () => {} } },
+        uiWorkspace: { openSession },
         workspaces: { create: vi.fn(), list: { getSnapshot: () => ({ items: [] }) } },
         conversation: { input: { for: () => ({ setDraft: draft }) } },
         effect: (setup: () => () => void) => { dispose = setup(); },
@@ -192,6 +195,7 @@ describe("native frame identity and readiness", () => {
     });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(1);
+    expect(openSession).toHaveBeenCalledWith("session-a");
     refresh.mockRejectedValueOnce(new Error("temporary unary 401"));
     await act(async () => { generation = {}; generationChanged(); });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
@@ -591,7 +595,8 @@ describe("the shell's theme in the frame", () => {
     const ctx: Record<string, unknown> = {
       loader: { await: () => new Promise(() => {}) },
       connection: { generation: { getSnapshot: () => ({}), subscribe: () => () => {} } },
-      sessions: { refresh: vi.fn(), create: vi.fn(), open: vi.fn(), scope: () => ({}), list: { getSnapshot: () => ({ current: null }), subscribe: () => () => {} } },
+      sessions: { refresh: vi.fn(), create: vi.fn(), scope: () => ({}), list: { getSnapshot: () => ({ byId: {} }), subscribe: () => () => {} } },
+      uiWorkspace: { openSession: vi.fn() },
       workspaces: { create: vi.fn(), list: { getSnapshot: () => ({ items: [] }) } },
       conversation: { input: { for: () => ({ setDraft: vi.fn() }) } },
       theme: { setTheme, overrideTokens },
