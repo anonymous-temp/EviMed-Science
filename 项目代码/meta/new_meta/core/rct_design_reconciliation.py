@@ -677,8 +677,34 @@ def _count_shared_control_covariance(
     return None
 
 
+_PARENTHETICAL = re.compile(r"\s*[(（\[][^()（）\[\]]*[)）\]]")
+
+
+def _outcome_head(text: str) -> str:
+    """The outcome's name without its bracketed qualifiers, units and definitions."""
+    previous = None
+    text = str(text or "")
+    while previous != text:
+        previous, text = text, _PARENTHETICAL.sub("", text)
+    return " ".join(text.casefold().replace("-", " ").split()).strip(" .;:,")
+
+
 def _matches_primary_outcome(name: str, primary: str) -> bool:
-    return outcome_matches(name, primary)
+    """Whether a row reports the protocol's primary outcome, for typing it.
+
+    The planner writes the primary outcome with its definition in brackets
+    ("Total perioperative blood loss (calculated total blood loss or ...)"),
+    and a row names it with its unit ("Total perioperative blood loss (mL)").
+    On 2026-09-28 the lexical matcher said no, and the only ma-001 trial with
+    poolable arm summaries was never typed. Besides the existing matcher, the
+    row's name without brackets now matches when it contains the primary's
+    name without brackets. The checker's outcome judgment still decides
+    whether the row belongs in the analysis.
+    """
+    if outcome_matches(name, primary):
+        return True
+    head, primary_head = _outcome_head(name), _outcome_head(primary)
+    return bool(head and primary_head) and primary_head in head
 
 
 def _arm_matches_intervention(arm: str | None, intervention: str) -> bool:

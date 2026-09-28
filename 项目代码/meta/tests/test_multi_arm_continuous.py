@@ -195,3 +195,20 @@ def test_an_unattended_synthesis_leaves_out_a_result_nobody_verified(tmp_path: P
     warnings = [item for item in project.load_json("pipeline_warnings.json") if item["code"] == "unverified_results_left_out"]
     assert len(warnings) == 1 and list(warnings[0]["context"]["results"]) == ["result:30000001:0"]
 
+
+@pytest.mark.parametrize("name,matches", [
+    ("Total perioperative blood loss (mL)", True),
+    ("Total perioperative blood loss at postoperative day 3 (Gross formula)", True),
+    ("Total Perioperative Blood-Loss", True),
+    ("Blood loss (intraoperative)", False),
+    ("Maximum postoperative decrease in hemoglobin (g/dL)", False),
+])
+def test_a_row_names_the_primary_outcome_without_its_bracketed_definition(name, matches):
+    """ma-001 run 8 (2026-09-28): the protocol's primary outcome carried its
+    definition in brackets and the trial's row its unit; the only trial with
+    poolable arm summaries was never typed for synthesis."""
+    from new_meta.core.rct_design_reconciliation import _matches_primary_outcome
+    primary = ("Total perioperative blood loss (calculated total blood loss or hemoglobin/drain-based "
+               "measured blood loss, in mL or g/dL as reported)")
+    assert _matches_primary_outcome(name, primary) is matches
+
