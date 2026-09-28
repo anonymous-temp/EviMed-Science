@@ -26,8 +26,9 @@
 //
 // 「循证 GEO」 capabilities work on a GEO project's data, which a plain
 // acceptance project does not have (geo_read answers `geo_no_project`):
-//   --geo-create <brand> [--geo-engines qianwen,kimi] [--geo-coverage-days 90]
-//       make a GEO project for the brand and dispatch into its first conversation;
+//   --geo-create <brand> [--geo-engines qianwen,kimi] [--geo-coverage-days 90] [--geo-paused]
+//       make a GEO project for the brand and dispatch into its first conversation
+//       (`--geo-paused` holds the platform's own program while the run works);
 //   --geo-project <geo id> --geo-export proposal|weekly | --geo-step <step>
 //       ask the GEO module itself for the run (导出 / 让 AI 做) and watch the run
 //       its orchestrator dispatches, with the orchestrator's own brief;
@@ -224,6 +225,17 @@ async function main() {
     if (read.status !== 200) throw new Error(`GEO project read failed: ${read.status} ${JSON.stringify(read.body).slice(0, 300)}`);
     geo = { id: geoProjectId, projectId: String(read.body.data.projectId), sessionId: read.body.data.sessionId ?? null };
     say(`GEO project ${geo.id} is project ${geo.projectId}`);
+  }
+  // `--geo-paused`: hold the platform's own program while this run works. A
+  // conversation that locks a full question set starts the whole program on
+  // the next tick (baseline, strategy, six content batches); an acceptance of
+  // one capability should not buy the other seven. The run's own geo_read and
+  // geo_write work on a paused project; resume it from its page.
+  if (geo && args["geo-paused"] === true) {
+    if (geoTrigger) throw new Error("--geo-paused holds the GEO module's runs; it cannot be combined with --geo-export or --geo-step");
+    const paused = await api(`/api/geo/projects/${encodeURIComponent(geo.id)}`, { method: "PATCH", body: JSON.stringify({ status: "paused" }) });
+    if (paused.status !== 200) throw new Error(`GEO project pause failed: ${paused.status} ${JSON.stringify(paused.body).slice(0, 200)}`);
+    say(`GEO project ${geo.id} paused: the platform will not start its own steps while this run works`);
   }
 
   const projectId = String(geo?.projectId ?? args.project ?? `acceptance-${capabilityId}`.slice(0, 60));
