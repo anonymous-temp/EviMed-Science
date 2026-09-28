@@ -18,6 +18,7 @@
 import {
   BREAKPOINTS,
   CHART_COLORS,
+  CHART_OWN,
   CHART_SERIES,
   CHART_STROKES,
   CJK_PUNCT_FACES,
@@ -131,7 +132,6 @@ function staticDeclarations() {
   // An error has no duration: it stays until it is closed.
   lines.push(declaration('toast-success', `${TOAST_DURATIONS.success}ms`))
   lines.push(declaration('toast-action', `${TOAST_DURATIONS.action}ms`))
-  lines.push(declaration('chart-own', CHART_COLORS.own))
   CHART_COLORS.rivals.forEach((value, index) => lines.push(declaration(`chart-rival-${index + 1}`, value)))
   lines.push(declaration('chart-line', `${CHART_STROKES.line}px`))
   lines.push(declaration('chart-line-own', `${CHART_STROKES.own}px`))
@@ -166,6 +166,7 @@ function themeDeclarations() {
     for (const [alias, role] of Object.entries(COLOR_ROLE_ALIASES)) {
       lines.push(declaration(alias, `var(--${role})`, scheme === 'light' ? `retired name of --${role}` : undefined))
     }
+    lines.push(declaration('chart-own', CHART_OWN[scheme]))
     CHART_SERIES[scheme].forEach((value, index) => lines.push(declaration(`series-${index + 1}`, value)))
     lines.push('}')
     lines.push('')

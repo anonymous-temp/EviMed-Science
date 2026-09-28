@@ -13,6 +13,7 @@
 import {
   BREAKPOINTS,
   CHART_COLORS,
+  CHART_OWN,
   CHART_SERIES,
   CHART_STROKES,
   COLOR_RAMPS,
@@ -489,6 +490,7 @@ export function dtcgFiles() {
     role: Object.fromEntries(
       Object.entries(COLOR_ROLES).map(([role, entry]) => [role, dtcgColorToken(colorRole(role, scheme), entry.note)]),
     ),
+    own: dtcgColorToken(CHART_OWN[scheme], 'ours, in every comparison'),
     series: Object.fromEntries(CHART_SERIES[scheme].map((value, index) => [String(index + 1), dtcgColorToken(value)])),
   })
   /** @param {'full' | 'reduced'} setting */

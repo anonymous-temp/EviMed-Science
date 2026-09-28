@@ -92,7 +92,7 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
 - **`ok` is not the verified mark.** A verified claim is the brand colour, on purpose.
 - **One accent.** Links wear it too (2026-09-23): a second hue for links was an accent on every
   screen. A primary button stands apart by being solid, not by hue.
-- **A comparison puts us in the brand and every rival in grey.** `CHART_COLORS.own` is the brand;
+- **A comparison puts us in the brand and every rival in grey.** `CHART_OWN` is the brand per scheme (`#0a5dc1` light, brand-400 `#5f97e0` dark — one value for both was 2.76:1 on a dark card before 2.1.2, measured now in `contrast.mjs`);
   `CHART_COLORS.rivals` is three greys, darkest for the highest rank — `#5a626b` / `#737c85` /
   `#8a939c`, 6.19 / 4.24 / 3.12:1 on white, every one a graphic a reader can see (2.1; the third
   was 1.92:1 before). At most one rival may take a colour, and only when the reader pins it. A
@@ -474,12 +474,6 @@ and `pnpm --filter @ai4s/web exec vitest run src/app/designTokens.test.ts`.
   Inter until the frame's stylesheet carries the face too.
 - ECharts does not read `prefers-reduced-motion`; the chart host has to set `animation: false`
   itself (spec §9.5).
-- `CHART_COLORS.own` has one value for both themes, and `contrast.mjs` measures only the rival
-  greys. In dark, our line `#0a5dc1` is 2.76:1 on a card (`#161b21`) and 2.97:1 on the canvas,
-  under the 3:1 a graphic needs, although spec §32.4 gives the dark theme `brand-400` (the dark
-  accent `#5f97e0`, 5.76:1). Every trend chart shares this — 循证 GEO's and the capsule's growth
-  line. The fix is a dark `--chart-own` in the table plus a measured pair in `contrast.mjs`: a
-  token change, so a version bump and regenerated artifacts.
 - The DTCG files are validated structurally by the package test, not yet against the official
   2025.10 JSON Schema (it is not vendored, and CI does not fetch).
 - The reader's print copy is mounted on `beforeprint`; a headless PDF renderer that does not fire

@@ -50,7 +50,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '2.1.1'
+export const DESIGN_TOKENS_VERSION = '2.1.2'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -399,6 +399,17 @@ export const CHART_COLORS = Object.freeze({
  * Eight categorical chart slots in a fixed order, per scheme.
  * @type {Readonly<{ light: readonly string[], dark: readonly string[] }>}
  */
+/**
+ * Our own series, per scheme. One value served both until 2.1.2, and on a dark
+ * card `#0a5dc1` measured 2.76:1 — under the 3:1 a line or a mark needs (WCAG
+ * 1.4.11, spec §32.4); the dark scheme takes brand-400, its accent everywhere
+ * else. `CHART_COLORS.own` stays the light value for single-scheme exports.
+ */
+export const CHART_OWN = Object.freeze({
+  light: CHART_COLORS.own,
+  dark: COLOR_RAMPS.brand[400],
+})
+
 export const CHART_SERIES = Object.freeze({
   light: CHART_COLORS.series,
   dark: Object.freeze(['#5690dd', '#e8975f', '#3fb5a2', '#9b82e2', '#d7749a', '#d4b551', '#8a939c', '#c8cfd6']),

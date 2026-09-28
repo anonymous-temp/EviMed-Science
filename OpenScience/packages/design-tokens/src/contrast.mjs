@@ -10,7 +10,7 @@
  *
  * @module @evimed/design-tokens/contrast
  */
-import { CHART_COLORS, COLOR_ROLES, COLOR_ROLES_MORE_CONTRAST, colorRole, resolveColor } from './index.mjs'
+import { CHART_COLORS, CHART_OWN, COLOR_ROLES, COLOR_ROLES_MORE_CONTRAST, colorRole, resolveColor } from './index.mjs'
 
 /**
  * sRGB hex → relative luminance (WCAG 2.1 §relative luminance).
@@ -125,8 +125,11 @@ export const CONTRAST_RULES = Object.freeze([
  *
  * @type {readonly DataContrastRule[]}
  */
-export const DATA_CONTRAST_RULES = Object.freeze(
-  CHART_COLORS.rivals.flatMap((color, index) =>
+export const DATA_CONTRAST_RULES = Object.freeze([
+  ...(/** @type {const} */ ([['bg', 'light'], ['surface', 'light'], ['bg', 'dark'], ['surface', 'dark']])).map(([bg, scheme]) => ({
+    name: 'chart-own', color: CHART_OWN[scheme], bg, scheme, min: 3, what: 'our own series as a line or mark',
+  })),
+  ...CHART_COLORS.rivals.flatMap((color, index) =>
     /** @type {const} */ ([
       ['bg', 'light'],
       ['surface', 'light'],
@@ -140,7 +143,7 @@ export const DATA_CONTRAST_RULES = Object.freeze(
       what: `rival ${index + 1} as a line or mark`,
     })),
   ),
-)
+])
 
 /**
  * One measured result.

@@ -1,5 +1,5 @@
 {
-  "$description": "EviMed 2.1.1 — the dark theme: every role resolved to a value. One Figma mode.",
+  "$description": "EviMed 2.1.2 — the dark theme: every role resolved to a value. One Figma mode.",
   "role": {
     "bg": {
       "$type": "color",
@@ -651,6 +651,20 @@
         "hex": "#bac2ca"
       }
     }
+  },
+  "own": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.3725,
+        0.5922,
+        0.8784
+      ],
+      "alpha": 1,
+      "hex": "#5f97e0"
+    },
+    "$description": "ours, in every comparison"
   },
   "series": {
     "1": {

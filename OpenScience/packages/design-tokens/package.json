@@ -1,6 +1,6 @@
 {
   "name": "@evimed/design-tokens",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "type": "module",
   "description": "EviMed design language 2.1: one token table, generated into CSS, a Tailwind preset, an Element Plus theme, an ECharts theme, the conversation kernel's theme override, a Figma token file and a DTCG 2025.10 export. Zero dependencies, browser-safe.",
   "license": "MIT",
