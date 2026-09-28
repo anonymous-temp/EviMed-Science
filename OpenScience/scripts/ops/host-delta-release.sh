@@ -70,6 +70,24 @@ case "$OLD_RUNTIME_IMAGE" in
   open-science-runtime:*-"${OLD}") RUNTIME_TAG_PREFIX="${OLD_RUNTIME_IMAGE#open-science-runtime:}"; RUNTIME_TAG_PREFIX="${RUNTIME_TAG_PREFIX%-"${OLD}"}" ;;
   *) echo "the live release's runtime image '${OLD_RUNTIME_IMAGE}' is not tagged for ${OLD}; refusing"; exit 1 ;;
 esac
+# The pins of the source being released, off its own runtime Dockerfile (whose
+# ARGs a test holds equal to deps-version.json). A release that moves the kernel
+# (0.1.5-rc.2 -> 0.1.7-rc.2, 2026-09-28) must not inherit the live image's
+# prefix or the live .env's OPEN_SCIENCE_DSH_VERSION: the control plane prefers
+# that variable over the release manifest, and readiness refuses the pair when
+# they disagree. A delta keeps the base's kernel by definition, so a moved pin
+# is a full build or nothing.
+SRC_DOCKERFILE="$DST/OpenScience/deploy/runtime-dsh/Dockerfile"
+NEW_DSH=$(sed -n 's/^ARG DSH_VERSION=//p' "$SRC_DOCKERFILE")
+NEW_CORDIS=$(sed -n 's/^ARG DSH_CORDIS_VERSION=//p' "$SRC_DOCKERFILE")
+NEW_UV=$(sed -n 's/^ARG UV_VERSION=//p' "$SRC_DOCKERFILE")
+[ -n "$NEW_DSH" ] && [ -n "$NEW_CORDIS" ] && [ -n "$NEW_UV" ] || { echo "cannot read the kernel pins from ${SRC_DOCKERFILE}; refusing"; exit 1; }
+NEW_TAG_PREFIX="dsh-${NEW_DSH}-uv-${NEW_UV}"
+if [ "$NEW_TAG_PREFIX" != "$RUNTIME_TAG_PREFIX" ]; then
+  [ "${EVIMED_RUNTIME_BUILD:-delta}" = "full" ] || { echo "the source pins ${NEW_TAG_PREFIX} and the live image ${RUNTIME_TAG_PREFIX}: a pin move is a full runtime build (EVIMED_RUNTIME_BUILD=full); refusing"; exit 1; }
+  echo "pin move: ${RUNTIME_TAG_PREFIX} -> ${NEW_TAG_PREFIX}"
+  RUNTIME_TAG_PREFIX="$NEW_TAG_PREFIX"
+fi
 cp -a "$ENVF" "${ROOT}/shared/env-backup-.env.$(date -u +%Y%m%dT%H%M%SZ)"
 sed -i \
   -e "s|^OPEN_SCIENCE_RELEASE_ID=.*|OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1|" \
@@ -77,12 +95,14 @@ sed -i \
   -e "s|^OPEN_SCIENCE_BUILD_CREATED=.*|OPEN_SCIENCE_BUILD_CREATED=${CREATED}|" \
   -e "s|^OPEN_SCIENCE_WEB_CONTAINER_IMAGE=.*|OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:${NEW}|" \
   -e "s|^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=.*|OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:${RUNTIME_TAG_PREFIX}-${NEW}|" \
+  -e "s|^OPEN_SCIENCE_DSH_VERSION=.*|OPEN_SCIENCE_DSH_VERSION=${NEW_DSH}|" \
+  -e "s|^OPEN_SCIENCE_DSH_CORDIS_VERSION=.*|OPEN_SCIENCE_DSH_CORDIS_VERSION=${NEW_CORDIS}|" \
   -e "s|releases/${OLD}/|releases/${NEW}/|g" \
   "$ENVF"
 cp -a "$OPS_OLD" "$OPS_NEW"
 sed -i "s|releases/${OLD}/|releases/${NEW}/|g" "$OPS_NEW/compose.builtin.override.yml"
 echo "stale ${OLD} references in .env: $(grep -c "${OLD}" "$ENVF" || true)"
-grep -E "^OPEN_SCIENCE_(RELEASE_ID|SOURCE_REVISION|BUILD_CREATED)=" "$ENVF"
+grep -E "^OPEN_SCIENCE_(RELEASE_ID|SOURCE_REVISION|BUILD_CREATED|DSH_VERSION|DSH_CORDIS_VERSION|RUNTIME_CONTAINER_IMAGE)=" "$ENVF"
 
 echo "=== build ==="
 cd "$DST/OpenScience"

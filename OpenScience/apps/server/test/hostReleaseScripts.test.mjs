@@ -61,6 +61,25 @@ test("a release whose kernel profile changed builds the runtime in full, through
   }
 });
 
+test("a release that moves the kernel pin carries it from its own source, and only as a full build", async () => {
+  // 2026-09-28, the 0.1.7-rc.2 move: the runtime tag's pin prefix was read off
+  // the live image, and the copied .env kept OPEN_SCIENCE_DSH_VERSION at the old
+  // pin -- which the control plane prefers over the release manifest, so
+  // readiness would have refused the release it had just built.
+  const text = await code("host-delta-release.sh");
+  assert.match(text, /NEW_DSH=\$\(sed -n 's\/\^ARG DSH_VERSION=\/\/p' "\$SRC_DOCKERFILE"\)/);
+  assert.match(text, /s\|\^OPEN_SCIENCE_DSH_VERSION=\.\*\|OPEN_SCIENCE_DSH_VERSION=\$\{NEW_DSH\}\|/);
+  assert.match(text, /s\|\^OPEN_SCIENCE_DSH_CORDIS_VERSION=\.\*\|OPEN_SCIENCE_DSH_CORDIS_VERSION=\$\{NEW_CORDIS\}\|/);
+  const move = text.slice(text.indexOf('if [ "$NEW_TAG_PREFIX" != "$RUNTIME_TAG_PREFIX" ]'), text.indexOf("cp -a \"$ENVF\""));
+  assert.match(move, /EVIMED_RUNTIME_BUILD:-delta\}" = "full" \] \|\| \{ echo "[^"]*refusing"; exit 1; \}/, "a delta across a pin move is refused");
+  assert.match(move, /RUNTIME_TAG_PREFIX="\$NEW_TAG_PREFIX"/);
+  // Read before the .env is rewritten, which is where the prefix is used.
+  assert.ok(text.indexOf("NEW_TAG_PREFIX=") < text.indexOf('sed -i \\'));
+  // The ARG names it reads are the ones the Dockerfile declares.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  for (const name of ["DSH_VERSION", "DSH_CORDIS_VERSION", "UV_VERSION"]) assert.match(dockerfile, new RegExp(`^ARG ${name}=\\S+$`, "m"));
+});
+
 test("an engine delta re-pins the adapter manifest for the package it ships", async () => {
   // 2026-09-27: the MR engine compares the adapter package with the manifest
   // the full build pinned at /adapter/adapter-evidence.json before it admits a
