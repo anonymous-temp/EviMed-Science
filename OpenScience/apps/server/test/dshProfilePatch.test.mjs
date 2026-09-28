@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import YAML from "yaml";
 
 import { RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
-import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
+import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, MODEL_RETRY_POLICY, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
@@ -525,4 +525,26 @@ test("the container is given both halves of the web registry, or neither", async
   // which is the documented "no backend" value.
   const withoutSearch = runtimeEnvironment({ ...input, publicSourceGatewayUrl: "http://open-science-web:8787/internal/sources/v1/fetch" });
   assert.equal(withoutSearch.EVIMED_WEB_SEARCH_GATEWAY_URL, "");
+});
+
+test("a model call whose tool arguments do not parse is asked again, in the runtime and in the build smoke", async () => {
+  // Production 2026-09-28: DSH 0.1.7 ended an MR run's turn on
+  // MALFORMED_RESPONSE ("tool input is invalid JSON"), which the adapter's
+  // default retry codes leave out.
+  const rows = YAML.parse(renderProfilePatch(input));
+  const provider = rows.find((row) => row.id === "llm-deepseek");
+  assert.equal(provider.config.retryPolicy.mode, "normal");
+  assert.ok(provider.config.retryPolicy.retryableCodes.includes("MALFORMED_RESPONSE"));
+  for (const code of ["EMPTY_RESPONSE", "RATE_LIMIT", "SERVER", "TIMEOUT", "TRANSPORT"]) {
+    assert.ok(provider.config.retryPolicy.retryableCodes.includes(code), `the adapter's default ${code} is kept`);
+  }
+  assert.ok(provider.config.retryPolicy.maxRetries > 0 && provider.config.retryPolicy.maxRetries <= 5, "bounded");
+  const smoke = YAML.parse(await readFile(new URL("../../../deploy/runtime-dsh/build-smoke-patch.yml", import.meta.url), "utf8"));
+  const smokeProvider = smoke.find((row) => row.id === "llm-deepseek");
+  assert.deepEqual(smokeProvider.config.retryPolicy, {
+    mode: "normal",
+    maxRetries: MODEL_RETRY_POLICY.maxRetries,
+    retryableCodes: [...MODEL_RETRY_POLICY.retryableCodes],
+    backoff: { ...MODEL_RETRY_POLICY.backoff },
+  }, "the image's boot smoke validates the same policy the runtime gets");
 });

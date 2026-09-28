@@ -125,6 +125,18 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
 export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
 
 /**
+ * The model provider's retry policy: the adapter's own defaults (5 retries,
+ * 0.5–10 s backoff, 10% jitter; EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT,
+ * TRANSPORT) plus MALFORMED_RESPONSE. Written whole because a provider's
+ * `retryPolicy` replaces the default list rather than extending it.
+ */
+export const MODEL_RETRY_POLICY = Object.freeze({
+  maxRetries: 5,
+  retryableCodes: Object.freeze(["EMPTY_RESPONSE", "RATE_LIMIT", "SERVER", "TIMEOUT", "TRANSPORT", "MALFORMED_RESPONSE"]),
+  backoff: Object.freeze({ initialDelayMs: 500, maxDelayMs: 10000, jitterRatio: 0.1 }),
+});
+
+/**
  * Renders the patch.
  *
  * @param {ProfilePatchInput} input
@@ -163,6 +175,21 @@ export function renderProfilePatch(input) {
     // image input" (2026-09-22). Said for the models the adapter's default
     // catalog marks image-capable.
     ...(IMAGE_INPUT_MODELS.has(String(input.model)) ? ["        inputModalities: [text, image]"] : []),
+    // The adapter's default retry codes leave out MALFORMED_RESPONSE, and
+    // 0.1.7's Messages stream raises it when the model's tool call arguments
+    // do not parse: the turn then ends as a session error instead of the
+    // model call being asked again (production, 2026-09-28: an MR run died
+    // two minutes in on "tool input is invalid JSON"). A retry is a second
+    // sample of the same request, bounded like every other retried code; the
+    // policy is executed by the composition's `llm-retry` row.
+    "    retryPolicy:",
+    "      mode: normal",
+    `      maxRetries: ${MODEL_RETRY_POLICY.maxRetries}`,
+    `      retryableCodes: [${MODEL_RETRY_POLICY.retryableCodes.join(", ")}]`,
+    "      backoff:",
+    `        initialDelayMs: ${MODEL_RETRY_POLICY.backoff.initialDelayMs}`,
+    `        maxDelayMs: ${MODEL_RETRY_POLICY.backoff.maxDelayMs}`,
+    `        jitterRatio: ${MODEL_RETRY_POLICY.backoff.jitterRatio}`,
     "",
     "- id: agent-default-model",
     "  config:",

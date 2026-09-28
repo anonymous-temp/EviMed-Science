@@ -33,6 +33,14 @@
       - id: 'deepseek-flash'
         contextWindow: 1000000
         inputModalities: [text, image]
+    retryPolicy:
+      mode: normal
+      maxRetries: 5
+      retryableCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT, MALFORMED_RESPONSE]
+      backoff:
+        initialDelayMs: 500
+        maxDelayMs: 10000
+        jitterRatio: 0.1
 
 - id: agent-default-model
   config:
