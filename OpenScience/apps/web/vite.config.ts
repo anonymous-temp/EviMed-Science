@@ -24,6 +24,19 @@ export default defineConfig({
   },
   build: {
     target: BUILD_TARGET,
+    rollupOptions: {
+      output: {
+        // React, its scheduler and the router: about 290 KB of the ~550 KB
+        // every page loads before its first paint, and code that changes only
+        // when their pins do, while this shell ships several releases a day.
+        // In a chunk of their own (preloaded beside the entry) a returning
+        // reader keeps them across releases instead of downloading them with
+        // every new entry chunk.
+        manualChunks: {
+          react: ["react", "react/jsx-runtime", "react-dom", "react-dom/client", "react-router", "react-router/dom"],
+        },
+      },
+    },
   },
   test: {
     globals: true,
