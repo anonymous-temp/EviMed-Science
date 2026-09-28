@@ -292,9 +292,9 @@ export async function selectLearnedMethods(learning, scope) {
       document: rendered,
       // A code skill's scripts, tests and tool schema, which the validator has
       // already checked against each other and against the prefix rules. They
-      // ride in the byte budget with the body: the container is what has to
-      // hold them, and a method whose body is small and whose scripts are not
-      // taxes the launch exactly as much.
+      // count in `bytes` with the body, which is what a caller handing the
+      // text out pays; a mount's run is shown only the card (`promptBytes`),
+      // and reads the body and the scripts from the directory.
       files: methodFiles(payload),
       bytes,
       promptBytes: cardDirectory ? learnedMethodCardBytes(payload, directoryName, cardDirectory) : bytes,
