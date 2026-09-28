@@ -75,6 +75,49 @@ def test_downgrade_rule_in_methods_is_not_read_as_a_low_certainty_claim(tmp_path
     assert all("降低确定性" not in claim["sentence"] for claim in audit["claims"])
 
 
+def _grade_facts_project(tmp_path: Path, body: str) -> Project:
+    project = Project("claim support starting certainty", output_dir=tmp_path)
+    project.save_text("draft.md", body, subdir="manuscript")
+    project.save_json(
+        "manuscript_facts.json",
+        {
+            "report_type": "meta",
+            "primary_effect": {"effect_measure": "MD", "n_studies": 3, "pooled_effect": -303.23},
+            "grade": {"outcomes": [{"certainty": "very low", "starting_certainty": "high"}]},
+        },
+        subdir="manuscript",
+    )
+    return project
+
+
+# Verbatim from the ma-001 run-14 Discussion: GRADE starts RCT evidence at high.
+MA001_STARTING_CERTAINTY = (
+    "本结局的起始确定性为高，偏倚风险、间接性、不精确性与发表偏倚四个域均被评为严重，"
+    "不一致性被评为非常严重［8］。"
+)
+
+
+def test_a_starting_certainty_statement_is_checked_against_the_starting_level(tmp_path: Path) -> None:
+    audit = _build_claim_support_audit_review(
+        _grade_facts_project(tmp_path, f"# 标题\n## 讨论\n{MA001_STARTING_CERTAINTY}\n")
+    )
+
+    [claim] = audit["claims"]
+    assert claim["claim_type"] == "grade_starting_certainty"
+    assert claim["status"] == "supported"
+
+
+def test_a_wrong_starting_level_or_a_wrong_final_rating_is_still_unsupported(tmp_path: Path) -> None:
+    wrong_start = MA001_STARTING_CERTAINTY.replace("起始确定性为高", "起始确定性为中等")
+    wrong_final = MA001_STARTING_CERTAINTY.replace("［8］。", "［8］，最终证据确定性为低。")
+
+    for index, body in enumerate((wrong_start, wrong_final)):
+        audit = _build_claim_support_audit_review(
+            _grade_facts_project(tmp_path / str(index), f"# 标题\n## 讨论\n{body}\n")
+        )
+        assert audit["summary"]["unsupported_claims"] == 1, body
+
+
 def test_a_wrong_low_certainty_rating_is_still_unsupported(tmp_path: Path) -> None:
     body = "\n".join(["# 标题", "## 结论", "与对照相比，本比较的GRADE证据确定性为低，结论仍需进一步的随机对照试验验证。"])
 

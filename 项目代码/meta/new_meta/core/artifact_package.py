@@ -2749,6 +2749,37 @@ def _claim_support_primary_effect_claim(sentence: str, primary: dict[str, Any]) 
     }
 
 
+# GRADE starts randomized evidence at "high" and rates down; a sentence naming
+# that starting level ("起始确定性为高", "certainty started at high") states the
+# starting_certainty fact, not the final rating.
+_STARTING_CERTAINTY_PATTERNS = (
+    r"(?:起始|初始)的?(?:证据)?(?:GRADE)?确定性(?:等级|水平)?(?:为|评为|是|定为|均为)?\s*[“\"]?(极低|很低|中等|高|低)",
+    r"(?:起始|初始)(?:为|于|评为)\s*(极低|很低|中等|高|低)(?:确定性)?",
+    r"(?:从|自)\s*(极低|很低|中等|高|低)(?:确定性)?(?:起始|开始|起评)",
+    r"\b(?:starting|initial)\s+(?:grade\s+)?certainty(?:\s+(?:level|rating))?\s+(?:was|is|of|at)?\s*(very low|low|moderate|high)\b",
+    r"\bcertainty\s+(?:started|starts|begins|began)\s+(?:at|as|from)\s+(very low|low|moderate|high)\b",
+)
+_STARTING_CERTAINTY_LEVELS = {
+    "高": "high",
+    "中等": "moderate",
+    "低": "low",
+    "极低": "very low",
+    "很低": "very low",
+}
+
+
+def _starting_certainty_statements(sentence: str) -> tuple[list[str], str]:
+    """Return the starting-certainty levels a sentence states and the sentence without them."""
+    levels: list[str] = []
+    remainder = sentence
+    for pattern in _STARTING_CERTAINTY_PATTERNS:
+        for match in re.finditer(pattern, remainder, flags=re.I):
+            raw = match.group(1).strip().lower()
+            levels.append(_STARTING_CERTAINTY_LEVELS.get(raw, raw))
+        remainder = re.sub(pattern, " ", remainder, flags=re.I)
+    return levels, remainder
+
+
 def _claim_support_grade_certainty_claim(sentence: str, grade: dict[str, Any]) -> dict[str, Any] | None:
     lowered = sentence.lower()
     if "robis" in lowered and "certainty" not in lowered and "确定性" not in sentence:
@@ -2759,13 +2790,38 @@ def _claim_support_grade_certainty_claim(sentence: str, grade: dict[str, Any]) -
         return None
     outcomes = grade.get("outcomes") if isinstance(grade.get("outcomes"), list) else []
     certainty = ""
+    starting = ""
     for outcome in outcomes:
         if isinstance(outcome, dict) and outcome.get("certainty"):
             certainty = str(outcome.get("certainty") or "").strip()
+            starting = str(outcome.get("starting_certainty") or "").strip()
             break
     if not certainty:
         return None
-    supported = _sentence_contains_certainty(sentence, certainty) or _sentence_contains_compatible_certainty_floor(sentence, certainty)
+    starting_levels, remainder = _starting_certainty_statements(sentence)
+    if starting_levels:
+        if not starting or any(level != starting.lower() for level in starting_levels):
+            return {
+                "claim_type": "grade_starting_certainty",
+                "status": "unsupported",
+                "sentence": sentence,
+                "support_source": "manuscript_facts.grade.starting_certainty",
+                "expected": starting or "not recorded",
+                "reason": f"unsupported GRADE starting certainty; expected {starting or 'not recorded'}",
+            }
+        if not (_claim_sentence_mentions_certainty(remainder) and _sentence_contains_any_certainty_rating(remainder)):
+            return {
+                "claim_type": "grade_starting_certainty",
+                "status": "supported",
+                "sentence": sentence,
+                "support_source": "manuscript_facts.grade.starting_certainty",
+                "expected": starting,
+                "reason": f"matches expected GRADE starting certainty {starting}",
+            }
+    supported = (
+        _sentence_contains_certainty(remainder, certainty)
+        or _sentence_contains_compatible_certainty_floor(remainder, certainty)
+    )
     return {
         "claim_type": "grade_certainty",
         "status": "supported" if supported else "unsupported",

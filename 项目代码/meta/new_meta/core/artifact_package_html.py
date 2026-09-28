@@ -939,6 +939,7 @@ def _localized_claim_support_type(claim_type: str, language: str) -> str:
     return {
         "primary_effect": "主效应主张",
         "grade_certainty": "证据确定性主张",
+        "grade_starting_certainty": "起始证据确定性主张",
     }.get(claim_type, claim_type)
 
 
@@ -971,6 +972,8 @@ def _localized_claim_support_message(message: str, language: str) -> str:
     text = str(message or "")
     text = text.replace("unsupported primary-effect claim; expected", "主效应主张不受支持；预期")
     text = text.replace("unsupported GRADE certainty claim; expected", "证据确定性主张不受支持；预期")
+    text = text.replace("unsupported GRADE starting certainty; expected", "起始证据确定性主张不受支持；预期")
+    text = text.replace("GRADE starting certainty", "GRADE起始证据确定性")
     text = text.replace("matches expected", "匹配预期")
     text = text.replace("GRADE certainty", "GRADE证据确定性")
     return text
