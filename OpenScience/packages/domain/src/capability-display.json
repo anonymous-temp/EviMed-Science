@@ -394,9 +394,9 @@
       "evaluation": {
         "lastStatus": "failed",
         "lastRunAt": "2026-09-28",
-        "runs": 2,
-        "delivered": 1,
-        "typicalMinutes": 47
+        "runs": 3,
+        "delivered": 2,
+        "typicalMinutes": 54
       }
     },
     "off-label-analysis": {

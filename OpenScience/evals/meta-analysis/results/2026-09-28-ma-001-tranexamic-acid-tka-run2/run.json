@@ -1,0 +1,44 @@
+{
+  "capability": "meta-analysis",
+  "brief": "ma-001-tranexamic-acid-tka",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-meta-0928b",
+  "session": "acc-meta-analysis-mulf6im9",
+  "runId": "run_c470eb15c8f2ba467026475ae85d97c1",
+  "agentVersion": "1.1.3",
+  "dispatchedAt": "2026-09-28T16:46:52Z",
+  "prompt": "topic: 氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析\npopulation: 接受初次单侧全膝关节置换术的成年患者\nintervention: 氨甲环酸（静脉、局部或联合给药）\ncomparator: 安慰剂或不使用氨甲环酸\noutcomes: [\"总失血量\",\"输血率\",\"症状性静脉血栓栓塞事件\"]\nstudyDesign: 随机对照试验\nanalysisType: pairwise",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/txa-tka-meta/meta-analysis-report.md",
+      "deliverables/txa-tka-meta/meta-analysis-run.json",
+      "deliverables/txa-tka-meta/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「txa-tka-meta」有 4 条审查发现（已修 3，不改并说明 0，未回应 1）。",
+        "text": "独立审查：交付物「txa-tka-meta」有 4 条审查发现（已修 3，不改并说明 0，未回应 1）。"
+      },
+      {
+        "code": "review_number_untraced",
+        "severity": "advice",
+        "title": "结果数字溯源不到计算输出",
+        "detail": "第 121 行写的 696 在作业 meta-20260928154619-5648056dfa3d 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。",
+        "text": "第 121 行写的 696 在作业 meta-20260928154619-5648056dfa3d 的输出里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。"
+      }
+    ],
+    "effectiveAgentId": "meta-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 3638216,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

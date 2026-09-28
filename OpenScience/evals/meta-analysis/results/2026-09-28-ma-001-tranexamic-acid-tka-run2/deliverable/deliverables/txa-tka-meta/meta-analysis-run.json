@@ -1,0 +1,353 @@
+{
+  "schema_version": 1,
+  "jobId": "meta-20260928154619-5648056dfa3d",
+  "status": "succeeded",
+  "releaseStatus": "blocked",
+  "blockingReasons": [
+    "method_execution_blocked"
+  ],
+  "nextActions": [
+    "Resolve method input blockers"
+  ],
+  "workspace": "/data/users/cdss-access/projects/acceptance-meta-0928b/workspace",
+  "projectRelativePath": "meta-analysis-runs/meta-20260928154619-5648056dfa3d/output/20260928_154624_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析人群接受初次单侧全膝关节置换术",
+  "artifacts": [
+    {
+      "kind": "release_decision",
+      "path": "meta-analysis-runs/meta-20260928154619-5648056dfa3d/output/20260928_154624_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析人群接受初次单侧全膝关节置换术/package/release_decision.json"
+    }
+  ],
+  "deliverable_id": "txa-tka-meta",
+  "contract_kind": "meta-analysis-report",
+  "title": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析",
+  "study_type": "systematic-review",
+  "retrieved_at": "2026-09-28T16:26:00Z",
+  "job": {
+    "job_id": "meta-20260928154619-5648056dfa3d",
+    "topic": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析。人群：接受初次单侧全膝关节置换术的成年患者。干预：氨甲环酸（静脉给药、局部关节腔内给药或联合给药）。对照：安慰剂或不使用氨甲环酸。结局：总失血量、输血率、症状性静脉血栓栓塞事件。研究设计：仅纳入随机对照试验。分析类型：成对（pairwise）Meta 分析。按给药途径（静脉/局部/联合）与剂量方案作亚组或敏感性分析，按 GRADE 评估证据确定性。",
+    "output_language": "zh",
+    "analysis_type": "pairwise",
+    "terminal_status": "succeeded",
+    "return_code": 2,
+    "created_at": "2026-09-28T15:46:19.252895Z",
+    "started_at": "2026-09-28T16:21:15.914475Z",
+    "finished_at": "2026-09-28T16:21:23.408526Z",
+    "elapsed_seconds": 1200,
+    "progress_at_end": {
+      "stage": "evidence_understanding",
+      "percent": 60
+    },
+    "resume": {
+      "start_requests": 2,
+      "max_start_requests": 3,
+      "resumed_from_run": "20260928_154624_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析人群接受初次单侧全膝关节置换术",
+      "previous_error": "blocked: method_execution_blocked",
+      "outcome": "以完全相同的请求续跑一次，运行至同一阶段后在同一位置再次终止；判定与首次一致"
+    },
+    "usage": {
+      "requests": 137,
+      "cache_hit_tokens": 1229952,
+      "cache_miss_tokens": 918991,
+      "output_tokens": 698128,
+      "model": "deepseek-flash"
+    }
+  },
+  "release_status": {
+    "status": "blocked",
+    "ready_for_submission": false,
+    "requires_review": true,
+    "blocker_codes": [
+      "method_execution_blocked"
+    ],
+    "next_actions": [
+      "Resolve method input blockers"
+    ],
+    "summary": "Complex RCT synthesis requires at least 2 contrasts from at least 2 independent studies; the selected analysis set has 1 contrast(s) from 1 study/studies. Supply eligible independent studies for the same outcome, timepoint and estimand before quantitative synthesis.",
+    "source_record": "package/release_decision.json"
+  },
+  "method_delivery_status": {
+    "phase": "synthesis",
+    "status": "blocked",
+    "error_code": "method_execution_blocked",
+    "retryable": false,
+    "message": "Complex RCT synthesis requires at least 2 contrasts from at least 2 independent studies; the selected analysis set has 1 contrast(s) from 1 study/studies. Supply eligible independent studies for the same outcome, timepoint and estimand before quantitative synthesis.",
+    "source_record": "analysis/method_delivery_status.json"
+  },
+  "project": {
+    "project_id": "acceptance-meta-0928b",
+    "owner_user_id": "cdss-access",
+    "run_id": "20260928_154624_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析人群接受初次单侧全膝关节置换术",
+    "project_relative_path": "meta-analysis-runs/meta-20260928154619-5648056dfa3d/output/20260928_154624_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析人群接受初次单侧全膝关节置换术",
+    "run_directory_status": "存在且可读；analysis/、evidence/、extraction/、risk_of_bias/、screening/、package/ 有产物；manuscript/ 为空"
+  },
+  "returned_artifacts": [
+    {
+      "kind": "release_decision",
+      "path": "package/release_decision.json",
+      "status": "present",
+      "declared_by_job": true
+    },
+    {
+      "kind": "method_delivery_status",
+      "path": "analysis/method_delivery_status.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "method_plan",
+      "path": "analysis/method_plan.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "synthesis_route",
+      "path": "analysis/synthesis_route.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "method_validation_snapshot",
+      "path": "analysis/method_validation_snapshot.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "protocol_scope",
+      "path": "analysis/protocol_scope.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "analysis_set",
+      "path": "analysis/analysis_set.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "analysis_set_candidates",
+      "path": "analysis/analysis_set_candidates.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "prisma_flow",
+      "path": "prisma_flow.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "search_source_counts",
+      "path": "search_source_counts.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "search_query",
+      "path": "search_query.txt",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "extraction_audit",
+      "path": "extraction/extraction_audit.md",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "extraction_records",
+      "path": "extraction/all_extractions.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "evidence_understanding",
+      "path": "extraction/evidence_understanding.md",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "source_verification_records",
+      "path": "extraction/verification/",
+      "status": "present",
+      "declared_by_job": false,
+      "record_count": 117
+    },
+    {
+      "kind": "risk_of_bias_summary",
+      "path": "risk_of_bias/rob_summary.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "evidence_ledger",
+      "path": "evidence/ledger.jsonl",
+      "status": "present",
+      "declared_by_job": false,
+      "event_count": 56
+    },
+    {
+      "kind": "pipeline_warnings",
+      "path": "pipeline_warnings.json",
+      "status": "present",
+      "declared_by_job": false,
+      "warning_count": 29
+    },
+    {
+      "kind": "fulltext_retrieval_summary",
+      "path": "fulltext_retrieval_summary.json",
+      "status": "present",
+      "declared_by_job": false
+    },
+    {
+      "kind": "step_manifest",
+      "path": "step_manifest.json",
+      "status": "present",
+      "declared_by_job": false
+    }
+  ],
+  "artifacts_not_produced": [
+    {
+      "artifact": "合并效应量结果表",
+      "reason": "定量合成被前置条件阻断，效应量阶段与合并阶段未执行"
+    },
+    {
+      "artifact": "森林图与其他图件",
+      "reason": "无合并估计值，图件阶段未执行"
+    },
+    {
+      "artifact": "GRADE 确定性评级表",
+      "reason": "GRADE 评级对象不存在（无合并估计值），确定性评估阶段未执行"
+    },
+    {
+      "artifact": "综述稿件与摘要",
+      "reason": "稿件阶段未执行；manuscript/ 目录为空"
+    }
+  ],
+  "blockers": [
+    {
+      "code": "method_execution_blocked",
+      "stage": "synthesis",
+      "severity": "blocking",
+      "retryable": false,
+      "message": "Complex RCT synthesis requires at least 2 contrasts from at least 2 independent studies; the selected analysis set has 1 contrast(s) from 1 study/studies. Supply eligible independent studies for the same outcome, timepoint and estimand before quantitative synthesis.",
+      "analysis_set": {
+        "outcome_id": "outcome:total-blood-loss-continuous-measured-in-ml:b248d07e72",
+        "outcome_name": "Total blood loss (continuous, measured in mL).",
+        "timepoint": "postoperative day 4",
+        "subgroup": "topical intra-articular; dose 500 mg",
+        "effect_measure": "MD",
+        "result_ids": [
+          "result:24308672:1"
+        ],
+        "contrasts": 1,
+        "independent_studies": 1,
+        "selected_by": "deterministic:protocol-primary-ranking"
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "stage": "extraction",
+      "code": "dependency_metadata_incomplete",
+      "severity": "warning",
+      "occurrences": 28,
+      "message": "A multi_arm_rct result was excluded from the meta-analysis because it is missing estimand_id, precision_basis; pooling it as an ordinary two-arm aggregate would overstate its precision.",
+      "affected_result_ids": [
+        "result:24308672:2",
+        "result:24308672:3",
+        "result:24308672:4",
+        "result:24308672:5",
+        "result:26514221:0",
+        "result:26514221:1",
+        "result:26514221:2",
+        "result:26514221:3",
+        "result:26514221:4",
+        "result:26514221:5",
+        "result:28760121:0",
+        "result:28760121:1",
+        "result:28760121:2",
+        "result:28760121:3",
+        "result:28760121:4",
+        "result:28760121:5",
+        "result:31778430:0",
+        "result:31778430:1",
+        "result:31778430:2",
+        "result:39673144:1",
+        "result:39673144:2",
+        "result:39673144:3",
+        "result:39673144:4",
+        "result:39673144:5",
+        "result:39673144:6",
+        "result:39673144:7",
+        "result:39673144:8",
+        "result:39673144:9"
+      ],
+      "missing_metadata": [
+        "contrast_id",
+        "estimand_id",
+        "precision_basis"
+      ]
+    },
+    {
+      "stage": "synthesis",
+      "code": "unverified_results_left_out",
+      "severity": "warning",
+      "occurrences": 1,
+      "message": "2 extracted result(s) from 2 studies were left out of the synthesis because their independent source verification did not complete or did not match.",
+      "affected_results": {
+        "result:39064612:0": "verification_not_completed",
+        "result:39673144:0": "verification_not_completed"
+      }
+    },
+    {
+      "stage": "search",
+      "code": "source_unavailable",
+      "severity": "warning",
+      "message": "一个文献来源本次因触发频率限制未返回结果，检索覆盖相应减少"
+    },
+    {
+      "stage": "search",
+      "code": "merged_result_truncation",
+      "severity": "warning",
+      "message": "多来源合并结果超出上限后在筛选前被截取为 200 条（保留 100 条 PubMed 来源记录），其余 195 条未进入题名／摘要筛选",
+      "counts": {
+        "records_after_dedup": 395,
+        "records_screened": 200,
+        "records_not_screened": 195
+      }
+    },
+    {
+      "stage": "extraction",
+      "code": "source_verification_text_mismatch",
+      "severity": "warning",
+      "message": "全部 117 条独立来源核验记录中被检查文本的哈希值与提取所依据文本的哈希值均不相同；对其中 4 项研究，提取所依据全文文本的哈希与记录中的来源哈希一致，而被检查文本的哈希在本次运行的可读产物中无对应文件或记录。成因未能在运行产物内确证，按未解释处理",
+      "verification_records": 117,
+      "records_with_hash_mismatch": 117
+    }
+  ],
+  "counts": {
+    "records_identified": 400,
+    "records_after_dedup": 395,
+    "duplicates_removed": 5,
+    "records_not_screened": 195,
+    "title_abstract_screened": 200,
+    "title_abstract_excluded": 163,
+    "full_text_assessed": 10,
+    "full_text_excluded": 4,
+    "studies_included": 6,
+    "randomized_participants_total": 696,
+    "randomized_participants_note": "六项研究随机化例数合计：135＋60＋90＋90＋96＋225，含各项研究的全部随机臂。",
+    "outcomes_extracted": 34,
+    "results_verified_in_ledger": 6,
+    "results_excluded_multi_arm_metadata": 28,
+    "results_withheld_verification_incomplete": 2,
+    "poolable_contrasts": 1,
+    "poolable_independent_studies": 1,
+    "pooled_estimates_produced": 0
+  },
+  "notes": [
+    "本次交付的正文位于同目录 meta-analysis-report.md；本文件只记录运行事实与产物去向，不重复报告正文。",
+    "路径均相对于本次运行的项目路径；项目路径见 project.project_relative_path。",
+    "同一运行的记录中，一项研究的试验注册号存在一位数字的书写不一致，一处分析的运行标识在不同记录中指向同一项工作；核验时以研究题名、DOI 与 PMID 为准进行匹配。"
+  ]
+}
