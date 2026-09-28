@@ -260,3 +260,11 @@ def test_the_planner_has_a_fourth_attempt_by_default(monkeypatch, limit, plans):
             planner.run("氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析")
         assert len(calls) == 3
 
+
+def test_the_planner_writes_the_protocol_in_the_literatures_language():
+    """ma-001 (2026-09-28): one run's protocol came back in Chinese; extraction
+    names rows and arms in English, and no row matched the primary outcome or
+    the comparator. The manuscript language is set separately."""
+    from new_meta.prompts.planner_prompts import PICO_EXTRACTION_PROMPT
+    assert "Write every protocol value (PICO, outcomes, criteria) in English" in PICO_EXTRACTION_PROMPT
+

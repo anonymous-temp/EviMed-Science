@@ -42,6 +42,9 @@ Manuscript output language is separate from publication eligibility. "Write in E
 does not mean "include English-language publications only". With no source-language
 restriction requested, use "No language restriction" and consistent inclusion/exclusion
 criteria. Do not impose arbitrary full-text language exclusions.
+Write every protocol value (PICO, outcomes, criteria) in English, the language of the
+indexed literature it is matched against, even when the question and the manuscript
+are in another language; translate faithfully, adding and dropping nothing.
 Keep each protocol value a concise clinical criterion. Do not append generated
 "Source anchor (original request)" prose or fabricate quote strings inside values;
 quotation evidence belongs in the separate independent scope assessment.
