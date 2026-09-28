@@ -176,6 +176,16 @@
     fetch: false
     searchTimeoutMs: 60000
 
+# Uploads the session log itself — every message, tool call and tool result,
+# incrementally — as a `dsh_session_log` field on every model request. Its
+# default moved from `enabled: false` (0.1.5) to `enabled: true` (0.1.7), so
+# this composition would have started sending whole research sessions, patient
+# material included, to the model provider without a line of ours changing.
+# Disabled as a row, like telemetry, so a later default cannot flip it back on;
+# the model gateway refuses the field as well.
+- id: session-log-deepseek
+  disabled: true
+
 # Reports the deployment's enabled plugin list to the model provider on every
 # request, new in 0.1.2. The plugin list is this platform's composition — which
 # capability packages exist, which gates are mounted — and it is not the
