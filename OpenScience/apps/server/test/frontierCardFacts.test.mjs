@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { frontierSelectThreshold } from "../src/frontierPipeline.mjs";
+import { FRONTIER_SELECT_THRESHOLD_DEFAULT, frontierSelectThreshold } from "../src/frontierPipeline.mjs";
 import { frontierCardFacts, frontierScoreBand } from "../src/frontierService.mjs";
 
 test("a card's facts: every enrichment key but the ones another part of the card says, bounded again", () => {
@@ -29,10 +29,11 @@ test("a card's score band: at or above the selection line high, from 60 medium, 
   for (const nothing of [null, undefined, "", "n/a"]) assert.equal(frontierScoreBand(nothing, 70), null, String(nothing));
 });
 
-test("the selection line is the config's, 70 when it says nothing", () => {
+test("the selection line is the config's, the calibrated default when it says nothing", () => {
   assert.equal(frontierSelectThreshold({ frontierSelectThreshold: 75 }), 75);
   assert.equal(frontierSelectThreshold({ frontierSelectThreshold: 0 }), 0);
+  assert.equal(FRONTIER_SELECT_THRESHOLD_DEFAULT, 82);
   for (const unset of [{}, null, { frontierSelectThreshold: null }, { frontierSelectThreshold: "" }, { frontierSelectThreshold: "x" }]) {
-    assert.equal(frontierSelectThreshold(unset), 70, JSON.stringify(unset));
+    assert.equal(frontierSelectThreshold(unset), FRONTIER_SELECT_THRESHOLD_DEFAULT, JSON.stringify(unset));
   }
 });

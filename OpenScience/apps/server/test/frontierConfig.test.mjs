@@ -28,10 +28,21 @@ test("the defaults are the build spec's: off, open to all once on, and no plugin
   }, {
     frontierEnabled: false, frontierAudience: "all", frontierPreviewUsers: [], frontierPollMs: 5_000, frontierLeaseMs: 600_000,
     frontierModel: "deepseek-flash", frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai", frontierDailyBudgetCny: 10,
-    frontierProcessConcurrency: 2, frontierOffpeak: true, frontierSelectThreshold: 70, knowledgePluginUrl: "",
+    frontierProcessConcurrency: 2, frontierOffpeak: true, frontierSelectThreshold: 82, knowledgePluginUrl: "",
     knowledgePluginTokenFile: "/run/secrets/knowledge-plugin-token", knowledgePluginPollMs: 60_000, knowledgePluginTimeoutMs: 8_000,
     knowledgePluginMinContract: "1.0",
   });
+});
+
+test("the selection line has one default: the config's, the pipeline's fallback and the example .env agree", async () => {
+  const { FRONTIER_SELECT_THRESHOLD_DEFAULT, frontierSelectThreshold } = await import("../src/frontierPipeline.mjs");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(configUnder({}).frontierSelectThreshold, FRONTIER_SELECT_THRESHOLD_DEFAULT);
+  assert.equal(frontierSelectThreshold({}), FRONTIER_SELECT_THRESHOLD_DEFAULT);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const lines = [...example.matchAll(/^OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD=(\d+)$/gm)];
+  assert.equal(lines.length, 1, "the example names the line once");
+  assert.equal(Number(lines[0][1]), FRONTIER_SELECT_THRESHOLD_DEFAULT);
 });
 
 test("every lever is read from the environment, and an empty value reads as unset", () => {

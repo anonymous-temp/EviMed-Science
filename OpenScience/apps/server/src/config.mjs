@@ -289,7 +289,8 @@ function frontierSettings(overrides) {
     frontierDailyBudgetCny: budget,
     frontierProcessConcurrency: integer("frontierProcessConcurrency", "OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY", 2, 1, 8),
     frontierOffpeak: overrides.frontierOffpeak ?? boolEnv("OPEN_SCIENCE_FRONTIER_OFFPEAK", true),
-    frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 70, 0, 100),
+    // FRONTIER_SELECT_THRESHOLD_DEFAULT (frontierPipeline.mjs, where its calibration is written).
+    frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 82, 0, 100),
     knowledgePluginUrl: pluginUrl,
     knowledgePluginTokenFile: tokenFile,
     knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),

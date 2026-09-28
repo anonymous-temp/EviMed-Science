@@ -115,6 +115,20 @@ const PROVIDER_BALANCE_REFUSAL = "model_gateway_payment_required";
 export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
 /** A lane with an item at or above this score today gets at least one selected. */
 export const FRONTIER_LANE_FLOOR_SCORE = 60;
+/**
+ * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset
+ * (config.mjs holds the same number; frontierConfig.test.mjs holds them
+ * equal). Calibrated 2026-09-28 from production's first week against the
+ * plan's 15-30 selected a day (acceptance 1.4): at 75 the weekdays of
+ * 09-23..26 selected 29/56/50/37. Replaying their 2,259 published items
+ * through `frontierSelectionDecision`, the source caps and the lane floor
+ * gives 22/46/43/32 at 75 (production runs ~19% above the replay: selection
+ * is sticky when a re-edit lowers a score, and the floor runs every round),
+ * 15/26/30/22 at 80 and 12/22/24/20 at 82 — about 14-29 once that margin is
+ * added. Weekends and quiet days fall under 15 whatever the line; the daily
+ * never pads (§14.8 #6). Re-read a week's distribution before moving it.
+ */
+export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
 /** Published items still owed an edit are edited only this long after publication. */
 export const FRONTIER_DEFERRED_EDIT_WINDOW_MS = 7 * DAY;
 /** Items embedded by the pipeline (older ones are the rebuild script's). */
@@ -183,14 +197,16 @@ export function frontierBudgetState(spentCny, budgetCny) {
 }
 
 /**
- * The selection line (`OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD`, 70 unless
- * set): what the pipeline selects by and what a card's score band is read
- * against (`frontierService.mjs`), from one reading of the config.
+ * The selection line (`OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD`,
+ * `FRONTIER_SELECT_THRESHOLD_DEFAULT` unless set): what the pipeline selects
+ * by and what a card's score band is read against (`frontierService.mjs`),
+ * from one reading of the config.
  * @param {Record<string, any> | null | undefined} config @returns {number}
  */
 export function frontierSelectThreshold(config) {
   const value = Number(config?.frontierSelectThreshold);
-  return config?.frontierSelectThreshold != null && config.frontierSelectThreshold !== "" && Number.isFinite(value) ? value : 70;
+  return config?.frontierSelectThreshold != null && config.frontierSelectThreshold !== "" && Number.isFinite(value)
+    ? value : FRONTIER_SELECT_THRESHOLD_DEFAULT;
 }
 
 /** Safety feeds, regulators and authority-5 journals: edited at peak and past 80%, never waiting for an abstract.
