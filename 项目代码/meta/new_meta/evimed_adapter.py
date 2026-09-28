@@ -37,6 +37,7 @@ _SAFE_JOB = re.compile(r"^meta-[a-z0-9-]{8,80}$")
 _STATE_LIMIT = 256 * 1024
 _LOG_TAIL_LIMIT = 16 * 1024
 _WORKERS: dict[str, subprocess.Popen] = {}
+_START_LOCK = threading.Lock()
 #: Upper bound on a status poll's bounded wait, in seconds.
 MAX_STATUS_WAIT_SECONDS = 60
 _STATUS_POLL_INTERVAL_SECONDS = 1.0
@@ -45,6 +46,22 @@ _STATUS_POLL_INTERVAL_SECONDS = 1.0
 #: the end, a job hours into retrieval looked exactly like one whose worker died.
 _HEARTBEAT_SECONDS = 30.0
 _MANIFEST_LIMIT = 256 * 1024
+#: The request fields that make two starts the same review. Everything a start
+#: accepts except `action`/`jobId`/`waitSeconds`, which say how to ask, not what.
+_REQUEST_FIELDS = ("topic", "outputLanguage", "maxPapers", "analysisType", "userPdfDirectory", "ipdData")
+#: How many MetaAgent jobs one project workspace may run at once
+#: (EVIMED_META_MAX_ACTIVE_JOBS). A job is hours of model spend and competes with
+#: its siblings for the same provider throughput; the one production acceptance
+#: run (2026-09-09, ma-001) had a second job start while the first was still
+#: extracting, and each then took longer. A start over the limit is answered with
+#: the running job, never queued behind it.
+_DEFAULT_MAX_ACTIVE_JOBS = 1
+#: How many times one request may run in total, counting resumes from its own
+#: checkpoint (EVIMED_META_MAX_ATTEMPTS). A worker killed by a release or a
+#: crash resumes where it stopped instead of starting over; a request that keeps
+#: failing at the same step stops being retried and says so.
+_DEFAULT_MAX_ATTEMPTS = 3
+_MAX_SCANNED_JOBS = 200
 
 #: The engine's terminal release vocabulary (new_meta/core/release_contract.py).
 #: The adapter reports these values verbatim; anything else is named as unknown
@@ -387,18 +404,132 @@ def _source(job_id: str) -> dict[str, str]:
     return {"id": f"meta-job:{job_id}", "source": "MetaAgent", "retrievedAt": _now()}
 
 
-def _error(code: str, message: str, retryable: bool = False) -> dict[str, Any]:
+def _error(
+    code: str,
+    message: str,
+    retryable: bool = False,
+    *,
+    next_actions: list[str] | None = None,
+    artifacts: list[dict[str, str]] | None = None,
+    stop_reason: str = "Stop until the MetaAgent precondition is satisfied.",
+) -> dict[str, Any]:
+    # An error result carries no `data` (the runtime's tool contract refuses
+    # evidence data on an error), but it may name the files a failed job left.
     return {
         "status": "error",
         "summary": message,
-        "next_actions": ["Correct the reported MetaAgent precondition before retrying."],
+        "next_actions": next_actions or ["Correct the reported MetaAgent precondition before retrying."],
         "error": {
             "code": code,
             "message": message,
             "retryable": retryable,
-            "stopReason": "Stop until the MetaAgent precondition is satisfied.",
+            "stopReason": stop_reason,
         },
+        **({"artifacts": artifacts} if artifacts else {}),
     }
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if value >= 1 else default
+
+
+def request_digest(arguments: dict[str, Any]) -> str:
+    """What makes two starts the same review: the request, whitespace aside."""
+    request: dict[str, Any] = {}
+    for field in _REQUEST_FIELDS:
+        value = arguments.get(field)
+        if value is None:
+            continue
+        request[field] = " ".join(value.split()) if isinstance(value, str) else value
+    canonical = json.dumps(request, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _workspace_jobs(workspace: Path) -> list[tuple[Path, dict[str, Any]]]:
+    """This workspace's job states, newest first; unreadable ones are skipped."""
+    root = workspace / "meta-analysis-runs" / ".jobs"
+    try:
+        if root.is_symlink() or not root.is_dir():
+            return []
+        entries = sorted(
+            (
+                entry for entry in root.iterdir()
+                if entry.suffix == ".json" and _SAFE_JOB.fullmatch(entry.stem) and not entry.is_symlink()
+            ),
+            key=lambda entry: entry.stat().st_mtime_ns,
+            reverse=True,
+        )[:_MAX_SCANNED_JOBS]
+    except OSError:
+        return []
+    jobs = []
+    for entry in entries:
+        try:
+            state = _read_state(entry)
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+            continue
+        if state.get("jobId") != entry.stem or Path(state.get("workspace", "")).resolve() != workspace.resolve():
+            continue
+        jobs.append((entry, state))
+    return jobs
+
+
+def _record_start_request(state_path: Path, outcome: str) -> int:
+    """Append one start request to the job's own ledger; return how many it has had.
+
+    A side file, not the state: while a worker runs, the state has exactly one
+    writer (the worker), and a second writer here could revert its terminal
+    write. The count is the observable answer to "did the run start this twice".
+    """
+    ledger = state_path.with_name(f"{state_path.stem}.starts.jsonl")
+    line = json.dumps({"at": _now(), "outcome": outcome}, ensure_ascii=False) + "\n"
+    try:
+        descriptor = os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(descriptor, "ab", buffering=0) as handle:
+            handle.write(line.encode("utf-8"))
+        descriptor = os.open(ledger, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(descriptor, "rb") as handle:
+            return sum(1 for _ in handle.read(_STATE_LIMIT).splitlines())
+    except OSError:
+        return 0
+
+
+def _job_active(state: dict[str, Any]) -> bool:
+    """A queued or running job whose worker is still there."""
+    status = state.get("status")
+    if status == "running":
+        return _worker_alive(state)
+    if status != "queued":
+        return False
+    worker = _WORKERS.get(str(state.get("jobId") or ""))
+    if worker is not None:
+        poll = getattr(worker, "poll", None)
+        return poll is None or poll() is None
+    # Queued by an adapter process that has since gone: its worker, if any,
+    # writes `running` within a second. Past a minute nobody will.
+    created = _seconds_since(state.get("createdAt"), datetime.now(timezone.utc))
+    return created is not None and created < 60
+
+
+def _settle_orphan(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
+    """Record the end of a job whose worker vanished without writing one."""
+    state.update({
+        "status": "failed",
+        "updatedAt": _now(),
+        "finishedAt": _now(),
+        "retryable": True,
+        "error": "MetaAgent worker exited without recording a terminal state.",
+    })
+    output_root = Path(str(state.get("outputRoot") or ""))
+    workspace = Path(str(state.get("workspace") or ""))
+    project = _resumable_project(output_root) if state.get("outputRoot") else None
+    if project is not None and workspace in project.parents:
+        state.update(_partial_record(workspace, project))
+    _atomic_json(state_path, state)
+    return state
 
 
 def _workspace_input(workspace: Path, value: str | None, *, directory: bool, suffix: str | None = None) -> Path | None:
@@ -472,6 +603,13 @@ def call(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | Non
 
 
 def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
+    # One start at a time per adapter process: deciding "is this request
+    # already running?" and launching its worker must not interleave.
+    with _START_LOCK:
+        return _start_locked(arguments, workspace, owner)
+
+
+def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
     topic = str(arguments.get("topic") or "").strip()
     if not topic:
         return _error("meta_topic_required", "A concrete meta-analysis topic is required.")
@@ -482,6 +620,42 @@ def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | N
         ipd = _workspace_input(workspace, arguments.get("ipdData"), directory=False, suffix=".json")
     except ValueError as exc:
         return _error("meta_input_path_invalid", str(exc))
+    digest = request_digest(arguments)
+    jobs = _workspace_jobs(workspace)
+    active: list[tuple[Path, dict[str, Any]]] = []
+    for path, state in jobs:
+        if state.get("status") not in {"queued", "running"}:
+            continue
+        if _job_active(state):
+            active.append((path, state))
+        elif state.get("status") == "running":
+            _settle_orphan(path, state)
+    # The same request while its job runs is that job: a run that lost the id
+    # (or asked twice) gets it back instead of paying for a second review.
+    for path, state in active:
+        if state.get("requestDigest") == digest:
+            return _existing_job(path, state, "reused-running")
+    limit = _positive_int_env("EVIMED_META_MAX_ACTIVE_JOBS", _DEFAULT_MAX_ACTIVE_JOBS)
+    if len(active) >= limit:
+        running = ", ".join(str(state.get("jobId")) for _, state in active[:5])
+        return _error(
+            "meta_job_already_running",
+            f"This project already has {len(active)} MetaAgent job(s) running ({running}); "
+            f"the limit is {limit} at a time (EVIMED_META_MAX_ACTIVE_JOBS).",
+            False,
+            next_actions=[
+                f"Poll the running job ({running}) with action=status until it is terminal.",
+                "Start a different review only after it ends; the same request returns the running job.",
+            ],
+            stop_reason="Stop starting jobs until the running MetaAgent job is terminal.",
+        )
+    previous = next(((path, state) for path, state in jobs if state.get("requestDigest") == digest), None)
+    if previous is not None:
+        path, state = previous
+        if state.get("status") == "succeeded":
+            return _existing_job(path, state, "reused-succeeded")
+        if state.get("status") == "failed" and _resumable_project(Path(str(state.get("outputRoot") or ""))):
+            return _resume_job(path, state)
     job_id = f"meta-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
     run_root = workspace / "meta-analysis-runs"
     _ensure_managed_directory(workspace, run_root)
@@ -503,6 +677,7 @@ def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | N
         "ipdData": str(ipd) if ipd else None,
         "workspace": str(workspace),
         "outputRoot": str(output_root),
+        "requestDigest": digest,
         # Whose spend this job is, from the token that admitted it: the usage
         # report at the end names the account and project, and by then the
         # token is long expired.
@@ -512,6 +687,22 @@ def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | N
         "artifacts": [],
     }
     _atomic_json(state_path, state)
+    failure = _launch_worker(state_path, state)
+    if failure is not None:
+        return failure
+    starts = _record_start_request(state_path, "started")
+    return {
+        "status": "warning",
+        "summary": f"MetaAgent job {job_id} has started.",
+        "data": {"jobId": job_id, "jobStatus": "queued", "startRequests": starts},
+        "sources": [_source(job_id)],
+        "warnings": ["The synthesis is still running; interim files are not final results."],
+        "next_actions": ["Poll evimed_meta_analysis with action=status and this jobId."],
+    }
+
+
+def _launch_worker(state_path: Path, state: dict[str, Any]) -> dict[str, Any] | None:
+    job_id = str(state["jobId"])
     try:
         worker = subprocess.Popen(
             [sys.executable, "-m", "new_meta.evimed_adapter", "--run-job", str(state_path)],
@@ -527,13 +718,86 @@ def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | N
         state.update({"status": "failed", "updatedAt": _now(), "error": "MetaAgent worker could not start."})
         _atomic_json(state_path, state)
         return _error("meta_agent_worker_unavailable", "MetaAgent worker could not start.", True)
+    return None
+
+
+def _existing_job(state_path: Path, state: dict[str, Any], outcome: str) -> dict[str, Any]:
+    """Answer a repeated start with the job that already answers it."""
+    job_id = str(state.get("jobId"))
+    starts = _record_start_request(state_path, outcome)
+    job_status = str(state.get("status"))
+    running = outcome == "reused-running"
     return {
         "status": "warning",
-        "summary": f"MetaAgent job {job_id} has started.",
-        "data": {"jobId": job_id, "jobStatus": "queued"},
+        "summary": (
+            f"MetaAgent job {job_id} is already {job_status} for this exact request; no second job was started."
+        ),
+        "data": {
+            "jobId": job_id,
+            "jobStatus": job_status,
+            "reused": True,
+            "startRequests": starts,
+            **(_liveness(state) if running else {}),
+        },
+        "sources": [_source(job_id)],
+        "warnings": [
+            "The synthesis is still running; interim files are not final results."
+            if running else
+            "This request already finished; its terminal status carries the release decision."
+        ],
+        "next_actions": [f"Poll evimed_meta_analysis with action=status and jobId {job_id}."],
+    }
+
+
+def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
+    """Run a failed job again from its own checkpoint, within the attempt limit."""
+    job_id = str(state.get("jobId"))
+    limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
+    runs = 1 + int(state.get("attempts") or 0)
+    if runs >= limit:
+        _record_start_request(state_path, "attempts-exhausted")
+        return _error(
+            "meta_job_attempts_exhausted",
+            f"MetaAgent job {job_id} has already run {runs} time(s) for this request and failed each time "
+            f"(limit {limit}, EVIMED_META_MAX_ATTEMPTS). Last error: {state.get('error') or 'unknown'}",
+            False,
+            next_actions=[
+                "Report the failure and the partial files it left; do not start this request again.",
+                "Change the request (topic, scope or inputs) only if the error says what to change.",
+            ],
+            artifacts=state.get("artifacts") or None,
+            stop_reason="Stop retrying this request; its partial results are preserved.",
+        )
+    previous_error = state.get("error")
+    for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid"):
+        state.pop(key, None)
+    state.update({
+        "status": "queued",
+        "updatedAt": _now(),
+        "resumeRequestedAt": _now(),
+        "previousError": previous_error,
+    })
+    _atomic_json(state_path, state)
+    failure = _launch_worker(state_path, state)
+    if failure is not None:
+        return failure
+    starts = _record_start_request(state_path, "resumed")
+    return {
+        "status": "warning",
+        "summary": (
+            f"MetaAgent job {job_id} failed earlier and is resuming from its last completed step "
+            f"(run {runs + 1} of at most {limit})."
+        ),
+        "data": {
+            "jobId": job_id,
+            "jobStatus": "queued",
+            "resumed": True,
+            "startRequests": starts,
+            "completedSteps": state.get("completedSteps") or [],
+        },
         "sources": [_source(job_id)],
         "warnings": ["The synthesis is still running; interim files are not final results."],
-        "next_actions": ["Poll evimed_meta_analysis with action=status and this jobId."],
+        "next_actions": [f"Poll evimed_meta_analysis with action=status and jobId {job_id}."],
     }
 
 
@@ -595,14 +859,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         state = _await_terminal_state(state_path, state, wait_seconds)
     job_status = state.get("status")
     if job_status == "running" and not _worker_alive(state):
-        state.update({
-            "status": "failed",
-            "updatedAt": _now(),
-            "finishedAt": _now(),
-            "retryable": True,
-            "error": "MetaAgent worker exited without recording a terminal state.",
-        })
-        _atomic_json(state_path, state)
+        state = _settle_orphan(state_path, state)
         job_status = "failed"
     if job_status in {"queued", "running"}:
         return {
@@ -628,9 +885,37 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             if descriptor is not None:
                 os.close(descriptor)
         message = str(state.get("error") or "MetaAgent execution failed.")
+        completed = [str(step) for step in state.get("completedSteps") or []]
+        if completed:
+            message = f"{message} Completed steps kept: {', '.join(completed)}."
         if tail:
             message = f"{message} Log tail: {tail}"
-        return _error("meta_agent_execution_failed", message, bool(state.get("retryable")))
+        # What the job wrote before it failed stays in the workspace and is
+        # named here (principle 19); the same request resumes from it.
+        limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
+        runs = 1 + int(state.get("attempts") or 0)
+        resumable = bool(completed) and runs < limit
+        next_actions = (
+            [
+                "Call start again with exactly the same request: the job resumes from its last completed "
+                f"step (run {runs + 1} of at most {limit}) instead of starting over.",
+                "Report the failure with the partial files listed if it fails again.",
+            ]
+            if resumable else
+            ["Report the failure and the partial files it left; do not present them as a finished review."]
+        )
+        return _error(
+            "meta_agent_execution_failed",
+            message,
+            bool(state.get("retryable")) or resumable,
+            next_actions=next_actions,
+            artifacts=state.get("artifacts") or None,
+            stop_reason=(
+                "Resume this request once; stop if it fails again at the same step."
+                if resumable else
+                "Stop until the MetaAgent precondition is satisfied."
+            ),
+        )
     if job_status != "succeeded":
         return _error("meta_job_state_invalid", "The MetaAgent job state is invalid.")
     release_status = str(state.get("releaseStatus") or "unknown")
@@ -731,6 +1016,40 @@ def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
         for kind, candidate in candidates
         if candidate.is_file()
     ]
+
+
+#: Intermediate files a failed job may already have written, in pipeline order.
+#: Named in the failure so the run can report and keep them; none is a result.
+_PARTIAL_FILES = (
+    ("protocol", "protocol.json"),
+    ("prisma_flow", "prisma_flow.json"),
+    ("screening", "screening/full_text_screening.json"),
+    ("extraction", "extraction/all_extractions.json"),
+    ("extraction_audit", "extraction/extraction_audit.md"),
+    ("risk_of_bias", "risk_of_bias/rob_results.json"),
+    ("pipeline_warnings", "pipeline_warnings.json"),
+)
+
+
+def _partial_record(workspace: Path, project: Path) -> dict[str, Any]:
+    """What a failed job left: its steps done and the files a reader can open."""
+    manifest = _step_manifest(project / "step_manifest.json") or {}
+    steps, records = manifest.get("pipeline_steps"), manifest.get("steps")
+    completed = [
+        step for step in steps
+        if isinstance(step, str) and isinstance(records, dict)
+        and isinstance(records.get(step), dict) and records[step].get("status") == "complete"
+    ] if isinstance(steps, list) else []
+    artifacts = [
+        {"kind": kind, "path": (project / relative).relative_to(workspace).as_posix()}
+        for kind, relative in _PARTIAL_FILES
+        if (project / relative).is_file() and not (project / relative).is_symlink()
+    ]
+    return {
+        "projectRelativePath": project.relative_to(workspace).as_posix(),
+        "completedSteps": completed,
+        "artifacts": artifacts + _artifact_list(workspace, project),
+    }
 
 
 def _resumable_project(output_root: Path) -> Path | None:
@@ -858,6 +1177,8 @@ def run_job(state_file: str) -> int:
         reverse=True,
     )
     if completed.returncode not in {0, 2} or not projects:
+        latest = projects[0].resolve() if projects else None
+        inside = latest if latest is not None and output_root in latest.parents else None
         state.update({
             "status": "failed",
             "updatedAt": _now(),
@@ -865,12 +1186,13 @@ def run_job(state_file: str) -> int:
             "returnCode": completed.returncode,
             "retryable": completed.returncode in {75, 137, 143},
             "error": f"MetaAgent exited with code {completed.returncode}.",
+            # Principle 19: what it finished before failing stays named.
+            **(_partial_record(workspace, inside) if inside is not None else {}),
         })
         _atomic_json(state_path, state)
         # A failed attempt's tokens were paid for too. Only a project inside
         # this job's output counts, as for a finished one below.
-        latest = projects[0].resolve() if projects else None
-        _report_usage(state_path, state, latest if latest is not None and output_root in latest.parents else None, log_path)
+        _report_usage(state_path, state, inside, log_path)
         return completed.returncode or 1
     project = projects[0].resolve()
     if output_root not in project.parents:
