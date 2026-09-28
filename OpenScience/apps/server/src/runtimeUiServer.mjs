@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
@@ -452,6 +452,23 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     // on is not ours to assume.
     if (isDeniedRuntimeUiHostRoute(pathname) || isDeniedRuntimeUiHostRoute(decodedPath)) {
       sendDenied(res, pathname);
+      return;
+    }
+    // A denied method this surface answers itself (`RUNTIME_UI_ANSWERED_METHODS`
+    // in `@evimed/domain`): the kernel's own reply for "nothing to do", so the
+    // page is not told of a failure it did not have. Never forwarded; anything
+    // but a well-formed request for it is refused as the deny list refuses it.
+    if (method && req.method === "POST" && Object.hasOwn(RUNTIME_UI_ANSWERED_METHODS, method)) {
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      /** @type {any} */ let call = null;
+      try { call = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      if (call?.type !== "client-request" || call.method !== method || typeof call.rpcId !== "string" || !call.rpcId || call.rpcId.length > 128) {
+        sendDenied(res, method);
+        return;
+      }
+      const payload = JSON.stringify({ type: "server-response", rpcId: call.rpcId, result: RUNTIME_UI_ANSWERED_METHODS[/** @type {keyof typeof RUNTIME_UI_ANSWERED_METHODS} */ (method)] });
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": String(Buffer.byteLength(payload)), "Cache-Control": "no-store" });
+      res.end(payload);
       return;
     }
     let workspaceBody = null;

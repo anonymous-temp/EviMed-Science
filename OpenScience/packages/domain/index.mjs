@@ -459,8 +459,9 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
-// runtimeUiSurface — 9 exports
+// runtimeUiSurface — 10 exports
 export {
+  RUNTIME_UI_ANSWERED_METHODS,
   RUNTIME_UI_DENIED_HOST_ROUTES,
   RUNTIME_UI_DENIED_METHODS,
   RUNTIME_UI_DENIED_NAMESPACES,

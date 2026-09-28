@@ -15,7 +15,7 @@ import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
-import { RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
+import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 
 const UI_ORIGIN = "https://science.example:8443";
 const SHELL_ORIGIN = "https://science.example";
@@ -430,6 +430,25 @@ test("every deployment method uses the same denial policy on HTTP and mux", { ti
     assert.equal((await c.next()).type, "end");
   }
   assert.deepEqual(f.received, []);
+});
+
+test("a new project's first open is told there is no default workspace to make, not refused", { timeout: 5000 }, async (t) => {
+  // 0.1.7's page asks for a default workspace under the host's Documents
+  // directory when the runtime has no workspace and no session. The kernel
+  // never sees it; the page gets the kernel's own "ineligible" reply.
+  const f = await fixture(t);
+  const call = { type: "client-request", rpcId: "rpc-1", method: "workspace/initializeDefault", payload: { args: {} } };
+  const response = await fetch(`${f.base}/api/workspace/initializeDefault`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(call),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { type: "server-response", rpcId: "rpc-1", result: { ok: true } });
+  assert.ok(isDeniedRuntimeUiMethod("workspace/initializeDefault"), "still never forwarded");
+  assert.deepEqual(f.started, [], "the kernel was not reached, nor started");
+  for (const body of ["", "{", JSON.stringify({ ...call, method: "workspace/create" }), JSON.stringify({ ...call, rpcId: "" })]) {
+    const refused = await fetch(`${f.base}/api/workspace/initializeDefault`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN }, body });
+    assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", body);
+  }
 });
 
 test("a kernel route that is not a method is refused by path, and ordinary assets still pass", { timeout: 5000 }, async (t) => {

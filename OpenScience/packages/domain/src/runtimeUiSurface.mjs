@@ -245,6 +245,26 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
 ]);
 
 /**
+ * Denied methods the control plane answers itself, with the reply the kernel
+ * gives when there is nothing to do. Each is also in the deny list, so it is
+ * never forwarded, and a call that is not a well-formed request for it gets
+ * the ordinary refusal.
+ *
+ * `workspace/initializeDefault` (0.1.7): the page, opened on a runtime with no
+ * workspace and no session yet -- a new project's first open -- asks the
+ * kernel to create a default workspace under the host's Documents directory.
+ * That is outside the project, so it stays denied. But a refusal is a failure
+ * the page reports ("无法创建默认工作区，请通过'选择工作区'选择文件夹", pointing
+ * at a picker this surface hides), while the kernel's own answer when first-use
+ * initialization is ineligible -- `{ ok: true }` and no workspace, captured
+ * from a live 0.1.7-rc.2 kernel on 2026-09-28 -- leaves the page waiting for
+ * the workspace the frame bridge binds, which is what happens next.
+ */
+export const RUNTIME_UI_ANSWERED_METHODS = Object.freeze({
+  "workspace/initializeDefault": Object.freeze({ ok: true }),
+});
+
+/**
  * Kernel HTTP routes that are not method calls, and are refused by path.
  *
  * Everything above this classifies `/api/<namespace>/<method>`. That is not the
