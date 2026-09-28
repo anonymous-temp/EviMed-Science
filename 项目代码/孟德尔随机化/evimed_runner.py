@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 import traceback
 from pathlib import Path
@@ -62,6 +63,11 @@ def _write_result(output_dir: Path, value: dict) -> None:
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    if value.get("status") != "succeeded":
+        # The log says why the runner stopped, not only result.json: a failure
+        # handled here printed nothing, and a failed job's log was empty.
+        print(f"MR runner failed ({value.get('errorCode') or 'no error code'}): {value.get('error') or ''}",
+              file=sys.stderr, flush=True)
 
 
 def _module(status: str, reason: str = "", *, fatal: bool = False) -> dict:

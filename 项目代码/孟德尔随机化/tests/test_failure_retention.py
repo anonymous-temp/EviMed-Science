@@ -1,4 +1,5 @@
 """Bounded private retention does not preserve free-text metadata or unsafe paths."""
+import io
 import json
 
 import pytest
@@ -90,3 +91,29 @@ def test_unconfirmed_process_shutdown_never_reads_its_artifacts(directories, mon
     result = jobs._retain_failure(inputs, source, destination, {"status": "failed"}, {}, artifacts_safe=False)
     assert result["artifactRetentionError"] == "mr_analysis_group_unconfirmed"
     assert (retained / "diagnostic.json").exists()
+
+
+def test_the_runner_log_tail_is_kept_privately_from_a_whole_line(directories, monkeypatch):
+    _, retained, source, destination = directories
+    monkeypatch.setattr(jobs, "MAX_RUNNER_LOG_BYTES", 33)
+    log = io.BytesIO(b"401 for synthetic-provider-secret\nMR runner failed\n")
+    result = jobs._retain_failure(inputs, source, destination, {"errorCode": "mr_open_source_ambiguous"},
+                                  {"LLM_API_KEY": "synthetic-provider-secret"}, runner_log=jobs._log_tail(log))
+    # The 33-byte tail begins "provider-secret": the cut split a credential,
+    # and the part left would pass the credential check. The partial first line
+    # is dropped; the whole lines after it are kept.
+    assert (retained / "runner.log").read_bytes() == b"MR runner failed\n"
+    assert result["runnerLog"]["truncated"] is True and result["runnerLog"]["bytes"] == 17
+    assert result["runnerErrorCode"] == "mr_open_source_ambiguous"
+    assert json.loads((retained / "diagnostic.json").read_text())["runnerLog"] == result["runnerLog"]
+
+
+def test_a_runner_log_holding_a_credential_is_withheld(directories):
+    _, retained, source, destination = directories
+    log = io.BytesIO(b"Traceback: 401 for synthetic-provider-secret\n")
+    result = jobs._retain_failure(inputs, source, destination, {"errorCode": "free text, not a code"},
+                                  {"LLM_API_KEY": "synthetic-provider-secret"}, runner_log=jobs._log_tail(log))
+    assert result["runnerLogWithheld"] == "mr_sensitive_diagnostic_withheld"
+    assert "runnerLog" not in result and "runnerErrorCode" not in result
+    assert not (retained / "runner.log").exists()
+    assert "synthetic-provider-secret" not in (retained / "diagnostic.json").read_text()

@@ -428,6 +428,36 @@ def test_fixed_runner_reads_a_gwas_catalog_pair_without_any_token(tmp_path, monk
     assert row["outcome_metadata"]["study_url"] == "https://www.ebi.ac.uk/gwas/studies/GCST000002"
 
 
+def test_an_open_data_refusal_is_in_the_result_and_in_the_log(tmp_path, monkeypatch, capsys):
+    """A refusal the runner handles printed nothing, so a failed job's log was
+    empty (three production jobs on 2026-09-28): the log now says why too."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output = workspace / "mendelian-randomization-runs/mr-runner-refused/output"
+    output.mkdir(parents=True)
+    request = {
+        "exposure": "Body mass index", "outcome": "Coronary artery disease", "outputLanguage": "en",
+        "exposureSource": {"type": "gwas_catalog", "pubmedId": "30124842"},
+        "outcomeSource": {"type": "gwas_catalog", "pubmedId": "26343387"},
+    }
+    binding = inputs.capture_bindings(workspace, request, tmp_path)
+    authority = inputs.prepare_sources(workspace, output, request, binding, tmp_path, token_available=False)
+    request_path = output / "request.json"
+    request_path.write_text(json.dumps(authority["request"]))
+    from mr_agent.tools import open_sumstats
+
+    def refuse(exposure, outcome):
+        raise open_sumstats.OpenSourceError(
+            "mr_open_source_ambiguous", "PubMed 30124842 has 2 GWAS Catalog studies: GCST006900; GCST006901.")
+
+    monkeypatch.setattr(open_sumstats, "build_pair", refuse)
+    assert evimed_runner.run(request_path, output, input_authority=authority) == 1
+    result = json.loads((output / "result.json").read_text())
+    assert result["errorCode"] == "mr_open_source_ambiguous" and "GCST006901" in result["error"]
+    logged = capsys.readouterr().err
+    assert "MR runner failed (mr_open_source_ambiguous): PubMed 30124842 has 2" in logged
+
+
 def test_a_paper_that_omits_a_catalog_accession_is_not_released():
     result = MRAnalysisResult(
         exposure_id="GCST000001", outcome_id="GCST000002", n_instruments=3,

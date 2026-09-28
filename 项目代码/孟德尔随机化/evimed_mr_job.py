@@ -31,11 +31,14 @@ MAX_PUBLISHED_BYTES = 384 * 1024 * 1024
 MAX_DIAGNOSTIC_BYTES = 32 * 1024 * 1024
 MAX_DIAGNOSTIC_FILE_BYTES = 8 * 1024 * 1024
 MAX_DIAGNOSTIC_FILES = 32
+#: How much of the runner's own stdout/stderr a failed job keeps, from the end.
+MAX_RUNNER_LOG_BYTES = 64 * 1024
 #: The credentials the worker hands the runner. None may leave the job in a
 #: diagnostic or in a message shown to the run.
 SENSITIVE_ENVIRONMENT = frozenset({
     "LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "OPENGWAS_JWT", "EVIMED_WORKLOAD_TOKEN",
 })
+_RUNNER_CODE = re.compile(r"[a-z][a-z0-9_]{0,79}")
 _FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "function_call"}
 _CATEGORIES = {"http_error", "timeout", "connection", "response_error", "truncated", "empty_content", "completed", "application_error", "client_error"}
 _PLOTS = {name + suffix for name in ("forest_plot", "scatter_plot", "funnel_plot", "loo_plot") for suffix in (".pdf", ".png")}
@@ -134,15 +137,54 @@ def sensitive_values(environment):
             if key in SENSITIVE_ENVIRONMENT and isinstance(value, str) and len(value) >= 8]
 
 
-def _retain_failure(inputs, stage, directory, result, environment, *, artifacts_safe=True):
-    """Persist bounded diagnostics before scratch cleanup, never into workspace output."""
+def _log_tail(log):
+    """The end of what the runner wrote to stdout/stderr, and whether more came before it."""
+    size = log.seek(0, os.SEEK_END)
+    log.seek(max(0, size - MAX_RUNNER_LOG_BYTES))
+    return log.read(MAX_RUNNER_LOG_BYTES), size > MAX_RUNNER_LOG_BYTES
+
+
+def _runner_log(runner_log, secrets, record):
+    """The runner's log for the private diagnostics, described in ``record``; never a credential."""
+    if runner_log is None:
+        return None
+    body, truncated = runner_log
+    if truncated:
+        # The cut can fall inside a line, and a credential it splits would
+        # pass the check below in part: the partial first line goes.
+        newline = body.find(b"\n")
+        body = body[newline + 1:] if newline >= 0 else b""
+    if not body:
+        return None
+    if any(secret in body for secret in secrets):
+        record["runnerLogWithheld"] = "mr_sensitive_diagnostic_withheld"
+        return None
+    record["runnerLog"] = {"name": "runner.log", "bytes": len(body),
+                           "sha256": hashlib.sha256(body).hexdigest(), "truncated": truncated}
+    return body
+
+
+def _retain_failure(inputs, stage, directory, result, environment, *, artifacts_safe=True, runner_log=None):
+    """Persist bounded diagnostics before scratch cleanup, never into workspace output.
+
+    Besides the typed projection, the private directory keeps the tail of the
+    runner's own stdout/stderr. Until 2026-09-28 that log was a scratch file
+    deleted with the job, so a runner that exited 1 left nothing anywhere to
+    say why: three production jobs failed that way in one morning.
+    """
     record = {"failed": True, "diagnosticOnly": True, "artifacts": []}
     try:
         record["failureDiagnostics"] = _failure_projection(result)
     except (ValueError, TypeError):
         record["failureDiagnostics"] = {"schema_version": 1, "phase": "unknown", "failures": []}
         record["diagnosticProjectionError"] = "mr_failure_diagnostic_invalid"
+    code = result.get("errorCode")
+    if isinstance(code, str) and _RUNNER_CODE.fullmatch(code):
+        # What the runner named as its reason: a closed identifier, so it may
+        # travel with the job state even when the adapter does not forward it.
+        record["runnerErrorCode"] = code
     secrets = sensitive_values(environment)
+    log_body = _runner_log(runner_log, secrets, record)
     encoded = json.dumps(record, allow_nan=False, sort_keys=True).encode()
     if any(secret in encoded for secret in secrets):
         record = {"failed": True, "diagnosticOnly": True, "artifacts": [],
@@ -153,11 +195,16 @@ def _retain_failure(inputs, stage, directory, result, environment, *, artifacts_
     facts = os.fstat(directory)
     if not stat.S_ISDIR(facts.st_mode) or facts.st_uid != os.geteuid() or facts.st_mode & 0o077 or os.listdir(directory):
         raise ValueError("unsafe diagnostic directory")
+    kept_log = log_body if "runnerLog" in record else None
+    if kept_log is not None:
+        # The worker's own scratch file, not the analysis-writable stage: kept
+        # even when the analysis group could not be confirmed stopped.
+        inputs._write_new(directory, "runner.log", kept_log)
     inputs._write_new(directory, "diagnostic.json", encoded)
     if not artifacts_safe:
         record["artifactRetentionError"] = "mr_analysis_group_unconfirmed"
         return record
-    total = len(encoded)
+    total = len(encoded) + (len(kept_log) if kept_log is not None else 0)
     pairs = {}
     try:
         candidates = [(parts, size) for parts, size in _inventory(inputs, stage)
@@ -588,6 +635,10 @@ def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_creden
                                 stdout=log,
                                 stderr=subprocess.STDOUT,
                             )
+                            try:
+                                runner_log = _log_tail(log)
+                            except OSError:
+                                runner_log = None
                         if interruption and interruption.get("errorCode") == "mr_analysis_stop_failed":
                             cleanup_errors.append("process_running")
                         result = interruption or _read_result(inputs, stage)
@@ -596,6 +647,7 @@ def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_creden
                                 diagnostic = _retain_failure(
                                     inputs, stage, failure_directory, result, environment,
                                     artifacts_safe=not interruption or interruption.get("errorCode") != "mr_analysis_stop_failed",
+                                    runner_log=runner_log,
                                 )
                             except (OSError, ValueError, inputs.MRInputError):
                                 diagnostic = {"failed": True, "diagnosticOnly": True,

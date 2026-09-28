@@ -97,7 +97,7 @@ def test_diagnostic_directory_refuses_existing_or_symlink_destination(tmp_path, 
 
 # The three open-data refusals production returned on 2026-09-28, in shape:
 # until the adapter admitted `mr_open_*`, each reached the run as "The fixed MR
-# runner failed." with no code.
+# runner failed." with no code, and the runner's log was deleted with the job.
 AMBIGUOUS = (
     "PubMed 30124842 has 2 GWAS Catalog studies with full summary statistics: "
     "GCST006900 (Body mass index; 456,426 European ancestry individuals); "
@@ -137,6 +137,16 @@ def test_an_open_data_refusal_reaches_the_run_with_its_code_and_its_reason(tmp_p
     # The studies to choose from are what the run corrects its request with.
     assert "GCST006900" in response["error"]["message"] and "GCST006901" in response["error"]["message"]
     assert "data" not in response
+    # The runner's own log is kept privately beside the state; the state
+    # carries only its description.
+    log = (retained / "runner.log").read_text()
+    assert "MR runner failed (mr_open_source_ambiguous)" in log
+    summary = json.loads((retained / "diagnostic.json").read_text())
+    assert summary["runnerErrorCode"] == "mr_open_source_ambiguous"
+    assert summary["runnerLog"]["bytes"] == len(log.encode()) and summary["runnerLog"]["truncated"] is False
+    assert state["failureDiagnosticReceipt"]["runnerLog"] == summary["runnerLog"]
+    assert "MR runner failed" not in json.dumps(state["failureDiagnosticReceipt"])
+    assert (retained / "runner.log").stat().st_mode & 0o777 == 0o600
 
 
 def test_an_open_data_refusal_holding_a_credential_is_shown_by_code_only(tmp_path, monkeypatch):
@@ -147,6 +157,10 @@ def test_an_open_data_refusal_holding_a_credential_is_shown_by_code_only(tmp_pat
     assert response["error"]["code"] == "mr_open_source_unavailable"
     assert response["error"]["message"] == "The fixed MR runner failed."
     assert "test-model-key" not in json.dumps(state)
+    assert not (retained / "runner.log").exists()
+    summary = json.loads((retained / "diagnostic.json").read_text())
+    assert summary["runnerLogWithheld"] == "mr_sensitive_diagnostic_withheld"
+    assert "test-model-key" not in json.dumps(summary)
 
 
 def test_a_code_the_adapter_does_not_forward_is_still_named(tmp_path, monkeypatch):
