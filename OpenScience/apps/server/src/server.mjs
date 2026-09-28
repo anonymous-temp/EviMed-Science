@@ -47,7 +47,7 @@ import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
@@ -553,7 +553,7 @@ function routePattern(pathname) {
   // than sharing the source gateway's: it is metered and audited separately
   // because it is a different kind of traffic with a different failure mode.
   if (
-    pathname === MODEL_GATEWAY_PATH ||
+    isModelGatewayPath(pathname) ||
     pathname === PUBLIC_SOURCE_GATEWAY_PATH ||
     pathname === WEB_SEARCH_GATEWAY_PATH ||
     pathname === GEO_PROBE_GATEWAY_PATH ||
@@ -3527,7 +3527,7 @@ export function createWebApiApp(overrides = {}) {
     };
     const gateway = pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
-      : pathname === MODEL_GATEWAY_PATH
+      : isModelGatewayPath(pathname)
       ? modelGatewayHandler
       : pathname === REVISION_GATEWAY_PATH
         ? revisionGatewayHandler

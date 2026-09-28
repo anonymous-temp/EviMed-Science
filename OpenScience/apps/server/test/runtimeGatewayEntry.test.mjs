@@ -148,6 +148,12 @@ test("only an active runtime's token passes, and the request goes on to its gate
 
   const model = await fetch(`${base}/runtime-gateway/model/v1/chat/completions`, { method: "POST", headers: { authorization: "Bearer model-alice" } });
   assert.deepEqual(await model.json(), { dispatched: "/internal/model/v1/chat/completions" });
+  // DSH 0.1.7's model route is Messages, which carries the token in `x-api-key`.
+  const messages = await fetch(`${base}/runtime-gateway/model/v1/messages`, { method: "POST", headers: { "x-api-key": "model-alice" } });
+  assert.deepEqual(await messages.json(), { dispatched: "/internal/model/v1/messages" });
+  const strangerKey = await fetch(`${base}/runtime-gateway/model/v1/messages`, { method: "POST", headers: { "x-api-key": "model-mallory" } });
+  assert.equal(strangerKey.status, 401);
+  await strangerKey.body?.cancel();
   const sources = await fetch(`${base}/runtime-gateway/sources/v1/fetch`, { method: "POST", headers: { authorization: "Bearer workload-alice" } });
   assert.deepEqual(await sources.json(), { dispatched: "/internal/sources/v1/fetch" }, "the workload token is the other one a runtime holds");
 

@@ -38,6 +38,24 @@ export function certifiedDeepSeekModel(env = process.env) {
 }
 
 const gatewayPath = "/internal/model/v1/chat/completions";
+/**
+ * The kernel's own route since DSH 0.1.7.
+ *
+ * Its DeepSeek adapter speaks one protocol, Anthropic Messages, to DeepSeek's
+ * `/anthropic` API ("Configuration accepts Messages only and has no `protocol`
+ * field"). Given our `baseURL` — `/internal/model/v1`, whose final `/v1` it
+ * reuses — it posts to `<base>/messages` with the workload token in
+ * `x-api-key`. The chat-completions path above stays for the control plane's
+ * own callers.
+ */
+const messagesGatewayPath = "/internal/model/v1/messages";
+/**
+ * Where the adapter uploads a request's images first. Refused: an uploaded
+ * file lives under the deployment's one provider key, where every tenant's
+ * requests could name it. The adapter treats any upload failure as a reason to
+ * send the images inline, which is what the chat route has always carried.
+ */
+const filesGatewayPrefix = "/internal/model/v1/files";
 const budgetMarkerPattern = /<evimed-budget-scope>([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)<\/evimed-budget-scope>/g;
 const autopilotIntentPattern = /<evimed-autopilot-episode>[a-zA-Z0-9_-]{1,160}<\/evimed-autopilot-episode>/g;
 const allowedRequestFields = new Set([
@@ -96,6 +114,22 @@ function verifiedBudgetScope(encoded, signature, caller, config) {
   return { runId: payload.runId, dailyLimit: payload.dailyLimit, weeklyLimit: payload.weeklyLimit, runLimit: payload.runLimit };
 }
 
+/**
+ * The newest message the person wrote. In chat completions a tool result is
+ * its own `tool` role, so it is the last `user` message; in Messages a tool
+ * result rides in a `user` message too, and a turn's third step would read the
+ * tool results as the person's words and the prompt as history.
+ * @param {any[]} messages @returns {number}
+ */
+function currentUserMessageIndex(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "user") continue;
+    if (!Array.isArray(message.content) || message.content.some((part) => part?.type !== "tool_result")) return index;
+  }
+  return -1;
+}
+
 function consumeBudgetScope(request, caller, config) {
   const scopes = [];
   let requiresScope = false;
@@ -106,7 +140,7 @@ function consumeBudgetScope(request, caller, config) {
   // budget_scope_invalid. History is stripped and neither honoured nor
   // refused: the turn is the user's, under the user's own caps. In the newest
   // user message they belong to this turn and are held to the rules below.
-  const current = caller.runId == null ? request.messages.map((message) => message.role).lastIndexOf("user") : -1;
+  const current = caller.runId == null ? currentUserMessageIndex(request.messages) : -1;
   const scrub = (value, index) => {
     if (typeof value !== "string") return value;
     if (caller.runId == null && index !== current) return value.replace(autopilotIntentPattern, "").replace(budgetMarkerPattern, "");
@@ -375,6 +409,185 @@ function normalizedRequest(body, config) {
   };
 }
 
+/** The kernel's credential on the Messages route: the workload token, in
+ *  `x-api-key` rather than a bearer header. @param {any} req @returns {string} */
+function apiKeyToken(req) {
+  const raw = req.headers["x-api-key"];
+  const token = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof token !== "string" || !token || token.length > 8 * 1024 || /[\r\n\0]/.test(token)) {
+    throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
+  }
+  return token;
+}
+
+/**
+ * Top-level fields a Messages request may carry, as DSH 0.1.7's adapter writes
+ * them (`serialize` in `@deepseek-ai/dsh-llm-deepseek`). Anything else is
+ * refused, not stripped: the adapter adds provider-side extension fields to
+ * this same body \u2014 `dsh_session_log`, a copy of the whole session log, and
+ * `dsh_plugin_packages`, the composition \u2014 and a gateway that dropped them
+ * quietly would hide the day one was switched back on.
+ */
+const allowedMessagesRequestFields = new Set([
+  "model",
+  "messages",
+  "system",
+  "max_tokens",
+  "stream",
+  "thinking",
+  "output_config",
+  "temperature",
+  "top_p",
+  "stop_sequences",
+  "tools",
+]);
+
+/** Content blocks the adapter sends: text and images from the person and from
+ *  tool results, the model's own text, thinking and tool calls replayed. */
+const allowedMessagesBlockTypes = new Set(["text", "image", "thinking", "redacted_thinking", "tool_use", "tool_result"]);
+
+/** @param {any} block @param {number} depth */
+function validateMessagesBlock(block, depth) {
+  assertPlainObject(block, "model_gateway_messages_invalid", "Message content blocks must be objects.");
+  if (!allowedMessagesBlockTypes.has(block.type)) {
+    throw gatewayError(400, "model_gateway_messages_invalid", "A message content block has an unsupported type.");
+  }
+  if (block.type === "image") {
+    // Inline only. A `file` source names a provider-side upload, and every
+    // tenant's uploads would live under the deployment's one key.
+    const source = assertPlainObject(block.source, "model_gateway_messages_invalid", "An image needs a source.");
+    if (source.type !== "base64") {
+      throw gatewayError(400, "model_gateway_messages_invalid", "Images must be sent inline.");
+    }
+  }
+  if (block.type === "tool_result" && Array.isArray(block.content)) {
+    if (depth > 0 || block.content.length > 128) {
+      throw gatewayError(400, "model_gateway_messages_invalid", "A tool result contains invalid content.");
+    }
+    for (const inner of block.content) validateMessagesBlock(inner, depth + 1);
+  }
+}
+
+/** @param {any} message */
+function validateMessagesMessage(message) {
+  assertPlainObject(message, "model_gateway_messages_invalid", "Each message must be an object.");
+  if (Object.keys(message).some((key) => key !== "role" && key !== "content")) {
+    throw gatewayError(400, "model_gateway_messages_invalid", "A message contains an unsupported field.");
+  }
+  if (message.role !== "user" && message.role !== "assistant") {
+    throw gatewayError(400, "model_gateway_messages_invalid", "A message contains an unsupported role.");
+  }
+  if (typeof message.content === "string") return;
+  if (!Array.isArray(message.content) || message.content.length > 256) {
+    throw gatewayError(400, "model_gateway_messages_invalid", "A message contains invalid content.");
+  }
+  for (const block of message.content) validateMessagesBlock(block, 0);
+}
+
+/** @param {any} tool */
+function validateMessagesTool(tool) {
+  assertPlainObject(tool, "model_gateway_tools_invalid", "Each tool must be an object.");
+  if (Object.keys(tool).some((key) => !["name", "description", "input_schema", "defer_loading"].includes(key))) {
+    throw gatewayError(400, "model_gateway_tools_invalid", "A tool contains an unsupported field.");
+  }
+  if (typeof tool.name !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(tool.name)) {
+    throw gatewayError(400, "model_gateway_tools_invalid", "A tool name is invalid.");
+  }
+  if (tool.description != null && (typeof tool.description !== "string" || tool.description.length > 8 * 1024)) {
+    throw gatewayError(400, "model_gateway_tools_invalid", "A tool description is invalid.");
+  }
+  assertPlainObject(tool.input_schema, "model_gateway_tools_invalid", "A tool needs an input schema.");
+  if (tool.defer_loading != null && typeof tool.defer_loading !== "boolean") {
+    throw gatewayError(400, "model_gateway_tools_invalid", "A tool's defer_loading must be a boolean.");
+  }
+}
+
+/**
+ * A kernel request on the Messages route, checked and held to the model and
+ * reasoning the deployment certifies \u2014 the same holds `normalizedRequest`
+ * places on the chat route, in this protocol's field names.
+ * @param {any} body @param {Record<string, any>} config
+ */
+function normalizedMessagesRequest(body, config) {
+  assertPlainObject(body, "model_gateway_body_invalid", "The model request body must be an object.");
+  if (Object.keys(body).some((key) => !allowedMessagesRequestFields.has(key))) {
+    throw gatewayError(400, "model_gateway_field_invalid", "The model request contains an unsupported field.");
+  }
+  const maxMessages = Math.max(1, Number(config.modelGatewayMaxMessages) || 1024);
+  if (!Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > maxMessages) {
+    throw gatewayError(400, "model_gateway_messages_invalid", `The model request must contain 1 to ${maxMessages} messages.`);
+  }
+  body.messages.forEach(validateMessagesMessage);
+  if (body.system != null && typeof body.system !== "string") {
+    throw gatewayError(400, "model_gateway_field_invalid", "system must be a string.");
+  }
+  if (body.tools != null) {
+    if (!Array.isArray(body.tools) || body.tools.length > 128) {
+      throw gatewayError(400, "model_gateway_tools_invalid", "The model request contains too many tools.");
+    }
+    body.tools.forEach(validateMessagesTool);
+  }
+  if (body.stream != null && typeof body.stream !== "boolean") {
+    throw gatewayError(400, "model_gateway_stream_invalid", "stream must be a boolean.");
+  }
+  if (body.max_tokens != null && (!Number.isSafeInteger(body.max_tokens) || body.max_tokens < 1 || body.max_tokens > 384_000)) {
+    throw gatewayError(400, "model_gateway_field_invalid", "max_tokens must be an integer between 1 and 384000.");
+  }
+  if (body.stop_sequences != null && (!Array.isArray(body.stop_sequences) || body.stop_sequences.length > 16
+    || body.stop_sequences.some((/** @type {unknown} */ stop) => typeof stop !== "string" || stop.length > 256))) {
+    throw gatewayError(400, "model_gateway_field_invalid", "stop_sequences is invalid.");
+  }
+  const configuredOutputLimit = Number(config.modelGatewayReservationMaxOutputTokens ?? 65_536);
+  if (!Number.isSafeInteger(configuredOutputLimit) || configuredOutputLimit < 1 || configuredOutputLimit > 384_000) {
+    throw gatewayError(500, "model_gateway_configuration_invalid", "The model output limit is invalid.");
+  }
+  return {
+    ...body,
+    model: config.deepseekModel,
+    thinking: { type: "enabled" },
+    output_config: { effort: config.deepseekReasoningEffort ?? "high" },
+    stream: body.stream === true,
+    max_tokens: body.max_tokens ?? configuredOutputLimit,
+  };
+}
+
+/** @param {string} base @param {boolean} production */
+function messagesUpstreamUrl(base, production = false) {
+  const parsed = new URL(base);
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw gatewayError(500, "model_gateway_configuration_invalid", "The model gateway is not configured correctly.");
+  }
+  if (production && (parsed.origin !== "https://api.deepseek.com" || parsed.pathname !== "/")) {
+    throw gatewayError(500, "model_gateway_configuration_invalid", "The model gateway is not configured correctly.");
+  }
+  // DeepSeek's Messages API lives under `/anthropic` on the same origin.
+  parsed.pathname = `${parsed.pathname.replace(/\/$/, "")}/anthropic/v1/messages`;
+  return parsed;
+}
+
+/**
+ * The two routes the kernel can reach, by path.
+ * @type {Record<string, { protocol: "chat" | "messages", token: (req: any) => string,
+ *   normalize: (body: any, config: Record<string, any>) => any, upstream: (base: string, production: boolean) => URL,
+ *   headers: (apiKey: string) => Record<string, string> }>}
+ */
+const GATEWAY_ROUTES = {
+  [gatewayPath]: {
+    protocol: "chat",
+    token: bearerToken,
+    normalize: normalizedRequest,
+    upstream: (base, production) => upstreamUrl(base, production),
+    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+  },
+  [messagesGatewayPath]: {
+    protocol: "messages",
+    token: apiKeyToken,
+    normalize: normalizedMessagesRequest,
+    upstream: messagesUpstreamUrl,
+    headers: (apiKey) => ({ "x-api-key": apiKey, "anthropic-version": "2023-06-01" }),
+  },
+};
+
 const cjkCharacter = /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
 
 /**
@@ -411,23 +624,32 @@ const IMAGE_PART_TYPES = new Set(["image_url", "input_image", "image", "file"]);
  */
 const IMAGE_PART_TOKENS = 1_024;
 
+/** @param {any} part @returns {number} */
+function contentPartTokens(part) {
+  if (typeof part?.text === "string") return estimatePromptTokens(part.text);
+  // An attached image is priced by its pixels, not by the length of its
+  // base64: read as text, one normalized image was ~450,000 "tokens"
+  // and reserved a whole conversation's worth for a picture.
+  if (IMAGE_PART_TYPES.has(String(part?.type ?? ""))) return IMAGE_PART_TOKENS;
+  // A Messages tool result holds its own blocks — an image among them —
+  // so it is priced block by block, the way a top-level one is.
+  if (part?.type === "tool_result" && Array.isArray(part.content)) {
+    return part.content.reduce((/** @type {number} */ sum, /** @type {any} */ inner) => sum + contentPartTokens(inner), 4);
+  }
+  return estimatePromptTokens(JSON.stringify(part ?? ""));
+}
+
 /** @param {any} body @returns {number} */
 function requestPromptTokens(body) {
-  let tokens = 0;
+  // The Messages route carries the system prompt beside the messages.
+  let tokens = typeof body.system === "string" ? estimatePromptTokens(body.system) : 0;
   for (const message of Array.isArray(body.messages) ? body.messages : []) {
     // A few tokens of framing per message, whatever it carries.
     tokens += 4;
     const content = message?.content;
     if (typeof content === "string") tokens += estimatePromptTokens(content);
     else if (Array.isArray(content)) {
-      for (const part of content) {
-        if (typeof part?.text === "string") tokens += estimatePromptTokens(part.text);
-        // An attached image is priced by its pixels, not by the length of its
-        // base64: read as text, one normalized image was ~450,000 "tokens"
-        // and reserved a whole conversation's worth for a picture.
-        else if (IMAGE_PART_TYPES.has(String(part?.type ?? ""))) tokens += IMAGE_PART_TOKENS;
-        else tokens += estimatePromptTokens(JSON.stringify(part ?? ""));
-      }
+      for (const part of content) tokens += contentPartTokens(part);
     }
     if (typeof message?.reasoning_content === "string") tokens += estimatePromptTokens(message.reasoning_content);
     if (message?.tool_calls != null) tokens += estimatePromptTokens(JSON.stringify(message.tool_calls));
@@ -634,7 +856,16 @@ export function createModelGatewayHandler(config, runtimeManager, {
 } = {}) {
   const prefixes = new PromptPrefixMemo();
   return async function modelGatewayHandler(req, res, onFailure) {
-    if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
+    const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
+    if (requestPath === filesGatewayPrefix || requestPath.startsWith(`${filesGatewayPrefix}/`)) {
+      // Before authentication, and without reading the body: nothing on this
+      // path is ever served, and the adapter falls back to inline images on
+      // any failure here.
+      sendError(res, gatewayError(404, "model_gateway_files_unsupported", "Uploaded files are not supported; send images inline."), onFailure);
+      return;
+    }
+    const route = Object.hasOwn(GATEWAY_ROUTES, requestPath) ? GATEWAY_ROUTES[requestPath] : null;
+    if (req.method !== "POST" || !route) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
       return;
     }
@@ -708,7 +939,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
       if (config.deepseekProviderEnabled === false || !config.deepseekApiKey) {
         throw gatewayError(503, "model_gateway_unavailable", "The model gateway is not configured.");
       }
-      const token = bearerToken(req);
+      const token = route.token(req);
       let caller;
       try {
         caller = runtimeManager.assertActiveModelGatewayToken(token);
@@ -716,7 +947,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
         throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
       }
       const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
-      let normalized = normalizedRequest(body, config);
+      let normalized = route.normalize(body, config);
       const scoped = consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
       modelName = normalized.model;
@@ -769,12 +1000,12 @@ export function createModelGatewayHandler(config, runtimeManager, {
       }
       let upstream;
       try {
-        const providerUrl = upstreamUrl(config.deepseekBaseUrl, config.production);
+        const providerUrl = route.upstream(config.deepseekBaseUrl, config.production);
         providerDisposition = "dispatched";
         upstream = await fetchImpl(providerUrl, {
           method: "POST",
           headers: {
-            authorization: `Bearer ${config.deepseekApiKey}`,
+            ...route.headers(config.deepseekApiKey),
             "content-type": "application/json",
             accept: normalized.stream ? "text/event-stream" : "application/json",
           },
@@ -826,7 +1057,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
       // this is the one place they pass through. The tail is kept rather than
       // the body: `usage` is last in both shapes, and holding a whole response
       // would undo the reason this is a stream.
-      const tail = createUsageTail(16 * 1024, { stream: normalized.stream });
+      const tail = createUsageTail(16 * 1024, { stream: normalized.stream, protocol: route.protocol });
       usageTail = tail;
       await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit, (chunk) => {
         armIdleDeadline();
@@ -1066,3 +1297,18 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
 }
 
 export const MODEL_GATEWAY_PATH = gatewayPath;
+/** The kernel's Messages route (DSH 0.1.7 and later). */
+export const MODEL_GATEWAY_MESSAGES_PATH = messagesGatewayPath;
+/** The Files API prefix the kernel tries before sending images inline; always refused. */
+export const MODEL_GATEWAY_FILES_PREFIX = filesGatewayPrefix;
+
+/**
+ * Whether a request path is the model gateway's: either route, or the refused
+ * Files prefix — which must reach the gateway to be refused by name rather
+ * than fall through to the page server.
+ * @param {string} pathname @returns {boolean}
+ */
+export function isModelGatewayPath(pathname) {
+  return pathname === gatewayPath || pathname === messagesGatewayPath
+    || pathname === filesGatewayPrefix || pathname.startsWith(`${filesGatewayPrefix}/`);
+}

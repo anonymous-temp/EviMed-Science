@@ -133,7 +133,11 @@ export function createRuntimeGatewayEntry({ config, runtimeManager }) {
 
   /** The active runtime a request's token belongs to, or a refusal. */
   async function identify(req) {
-    const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
+    // The kernel's model route since DSH 0.1.7 is Messages, which carries the
+    // token in `x-api-key`; every other caller sends a bearer header.
+    const apiKey = req.headers["x-api-key"];
+    const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1]
+      ?? (typeof apiKey === "string" && /^[^\s]+$/.test(apiKey) ? apiKey : undefined);
     if (!token) throw new HttpError(401, "runtime_gateway_unauthenticated", "A runtime token is required.");
     try {
       const payload = runtimeManager.assertActiveModelGatewayToken(token);

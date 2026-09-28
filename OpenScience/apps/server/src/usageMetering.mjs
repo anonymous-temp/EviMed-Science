@@ -82,6 +82,80 @@ export function parseModelProviderRequestId(text) {
   return null;
 }
 
+/**
+ * Usage out of one Anthropic Messages `usage` object — DeepSeek's `/anthropic`
+ * API, the only route DSH 0.1.7's DeepSeek adapter speaks.
+ *
+ * Messages splits the prompt three ways: `input_tokens` is what was neither
+ * read from nor written to the prompt cache, `cache_read_input_tokens` was
+ * served from it and `cache_creation_input_tokens` was written to it. The
+ * kernel's own adapter reads the same four fields the same way (uncached
+ * input, cache read, cache write, output). DeepSeek prices a prompt token as a
+ * cache hit or a miss, so a read is a hit and the other two are misses.
+ * @param {unknown} raw
+ * @returns {{ promptTokens: number, completionTokens: number, cacheHitTokens: number, cacheMissTokens: number } | null}
+ */
+export function messagesUsage(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const usage = /** @type {Record<string, unknown>} */ (raw);
+  if (usage.input_tokens == null || usage.output_tokens == null) return null;
+  const count = (/** @type {unknown} */ value) => (value == null ? 0 : Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null);
+  const input = count(usage.input_tokens);
+  const read = count(usage.cache_read_input_tokens);
+  const written = count(usage.cache_creation_input_tokens);
+  const output = count(usage.output_tokens);
+  if (input == null || read == null || written == null || output == null) return null;
+  const promptTokens = input + read + written;
+  if (promptTokens === 0 && output === 0) return null;
+  return { promptTokens, completionTokens: output, cacheHitTokens: read, cacheMissTokens: input + written };
+}
+
+/**
+ * The usage and message id a Messages response reported, read from its SSE
+ * events or its JSON body.
+ *
+ * A stream reports usage twice: `message_start` carries the prompt counts at
+ * the very beginning, and `message_delta` carries the output count (and may
+ * repeat the others) at the end. Each field takes the last value reported,
+ * which is also why reading an event twice — the head and tail windows of a
+ * short stream overlap — changes nothing.
+ * @param {string} text
+ * @returns {{ usage: ReturnType<typeof messagesUsage>, id: string | null }}
+ */
+export function parseMessagesReceipt(text) {
+  if (typeof text !== "string" || !text) return { usage: null, id: null };
+  /** @type {Record<string, unknown>} */
+  const merged = {};
+  /** @type {string | null} */
+  let id = null;
+  let seen = false;
+  const take = (/** @type {unknown} */ usage) => {
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return;
+    seen = true;
+    for (const [key, value] of Object.entries(usage)) if (value != null) merged[key] = value;
+  };
+  const acceptId = (/** @type {unknown} */ value) => {
+    if (typeof value === "string" && value.length > 0 && value.length <= 512 && !/[\0\r\n]/.test(value)) id = value;
+  };
+  const direct = safeJson(text);
+  if (direct && typeof direct === "object" && !Array.isArray(direct) && direct.type === "message") {
+    take(direct.usage);
+    acceptId(direct.id);
+  }
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const event = safeJson(line.slice(5).trim());
+    if (!event || typeof event !== "object" || Array.isArray(event)) continue;
+    if (event.type === "message_start" && event.message && typeof event.message === "object") {
+      take(event.message.usage);
+      acceptId(event.message.id);
+    } else if (event.type === "message_delta") {
+      take(event.usage);
+    }
+  }
+  return { usage: seen ? messagesUsage(merged) : null, id };
+}
+
 function safeJson(text) {
   try {
     return JSON.parse(text);
@@ -94,6 +168,10 @@ function safeJson(text) {
  *  dispatches it to the reader. */
 const SSE_DONE_EVENT = /(?:^|\n)data: ?\[DONE\][ \t]*\r?\n\r?\n/;
 
+/** A complete Messages `message_stop` event: its data line and the blank line
+ *  that dispatches it. The Messages stream's own end, the twin of `[DONE]`. */
+const MESSAGES_STOP_EVENT = /(?:^|\n)data: ?\{[^\n]*"type" ?: ?"message_stop"[^\n]*\r?\n\r?\n/;
+
 /**
  * Keeps the tail of a response body so its usage frame can be read once the
  * body has been forwarded.
@@ -104,8 +182,14 @@ const SSE_DONE_EVENT = /(?:^|\n)data: ?\[DONE\][ \t]*\r?\n\r?\n/;
  * a fraction of the response, so a large answer costs the same memory as a
  * small one.
  */
-export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
+export function createUsageTail(maxBytes = 16 * 1024, { stream = false, protocol = "chat" } = {}) {
+  const messages = protocol === "messages";
+  const stopEvent = messages ? MESSAGES_STOP_EVENT : SSE_DONE_EVENT;
   let tail = "";
+  // A Messages stream reports its prompt counts in `message_start`, the first
+  // event, so the tail alone loses them on any answer longer than the window.
+  // The head is kept too, bounded the same way, and read with the tail.
+  let head = "";
   let finished = false;
   let events = 0;
   // The last characters of what came before, so a `data:` split across two
@@ -113,17 +197,18 @@ export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
   // marker, so no marker is counted twice. It starts as a line break because
   // the body's first line opens an event too.
   let lineCarry = "\n";
-  const envelope = stream ? null : createTopLevelReceipt(maxBytes);
+  const envelope = stream ? null : createTopLevelReceipt(maxBytes, messages ? messagesUsage : undefined);
   return {
     /** @param {Uint8Array | string} chunk */
     observe(chunk) {
       const value = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
       tail += value;
       if (tail.length > maxBytes) tail = tail.slice(tail.length - maxBytes);
+      if (messages && stream && head.length < maxBytes) head += value.slice(0, maxBytes - head.length);
       envelope?.observe(value);
       // Only the new bytes and the few before them can complete the sentinel,
       // so a long answer is not re-scanned once per chunk.
-      if (stream && !finished) finished = SSE_DONE_EVENT.test(tail.slice(-(value.length + 32)));
+      if (stream && !finished) finished = stopEvent.test(tail.slice(-(value.length + 64)));
       if (stream) {
         const text = lineCarry + value;
         for (let at = text.indexOf("\ndata:"); at !== -1; at = text.indexOf("\ndata:", at + 1)) events += 1;
@@ -144,19 +229,21 @@ export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
       return events;
     },
     usage() {
-      return envelope ? envelope.usage() : parseModelUsage(tail);
+      if (envelope) return envelope.usage();
+      return messages ? parseMessagesReceipt(`${head}\n${tail}`).usage : parseModelUsage(tail);
     },
     providerRequestId() {
-      return envelope ? envelope.providerRequestId() : parseModelProviderRequestId(tail);
+      if (envelope) return envelope.providerRequestId();
+      return messages ? parseMessagesReceipt(`${head}\n${tail}`).id : parseModelProviderRequestId(tail);
     },
     retainedBytes() {
-      return Buffer.byteLength(tail, "utf8") + (envelope?.retainedBytes() ?? 0);
+      return Buffer.byteLength(tail, "utf8") + Buffer.byteLength(head, "utf8") + (envelope?.retainedBytes() ?? 0);
     },
   };
 }
 
 /** Incrementally retain only top-level `id` and `usage` from a JSON object. */
-function createTopLevelReceipt(maxValueBytes) {
+function createTopLevelReceipt(maxValueBytes, readUsage = (/** @type {any} */ usage) => parseModelUsage(JSON.stringify({ usage }))) {
   let depth = 0;
   let inString = false;
   let escape = false;
@@ -285,7 +372,7 @@ function createTopLevelReceipt(maxValueBytes) {
 
   return {
     observe,
-    usage: () => usage ? parseModelUsage(JSON.stringify({ usage })) : null,
+    usage: () => usage ? readUsage(usage) : null,
     providerRequestId: () => providerRequestId,
     retainedBytes: () => Buffer.byteLength(rawString, "utf8") + Buffer.byteLength(capture ?? "", "utf8"),
   };
