@@ -17,14 +17,11 @@ def test_analysis_owned_private_directories_preserve_outcome_and_cleanup(mode):
 import json,os,signal,sys,threading,time
 from pathlib import Path
 sys.path[:0]=['/src/OpenScience/deploy/specialist-adapter','/src/项目代码/孟德尔随机化']
-from evimed_specialist_adapter import audit_receipt
 import evimed_mr_job as jobs
 import evimed_local_inputs as inputs
 requested_mode=MODE
 with_descendant=requested_mode.endswith("_descendant")
 mode=requested_mode.removesuffix("_descendant")
-key=Path('/run/test-key');key.write_bytes(b'test-only-key');key.chmod(0o400)
-os.environ['EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE']=str(key)
 workspace=Path('/data/users/u/projects/p/workspace');workspace.mkdir(parents=True)
 output=workspace/'mendelian-randomization-runs/mr-cleanup-test/output';output.mkdir(parents=True)
 runner=Path('/agent/evimed_runner.py')
@@ -64,7 +61,7 @@ if mode in {'reaped_leader','identity_check'}:
   return helper(credentials,operation,arguments,**kwargs)
  jobs._analysis_helper=observe_stop
 try:
- outcome=jobs.execute(inputs,job,{},analysis_credentials=audit_receipt.analysis_credentials())
+ outcome=jobs.execute(inputs,job,{},analysis_credentials={'user':65532,'group':65532,'extra_groups':[]})
 except inputs.MRInputError as error:
  assert mode=='preparation_failed'
  assert not getattr(error,'cleanup_error',None)

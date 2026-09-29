@@ -1,5 +1,5 @@
 """Staged outputs cannot follow or race replaced workspace directories."""
-from pathlib import Path
+import os
 
 import pytest
 
@@ -61,3 +61,21 @@ def test_publish_regular_nested_outputs_keeps_existing_files(tmp_path):
     assert (output / "existing.txt").read_text() == "prior result"
     with pytest.raises(FileExistsError):
         isolated_job.publish(source, output, workspace)
+
+
+@pytest.mark.parametrize("replaced", ["parent", "workspace"])
+def test_publish_detects_replacement_after_directory_open(tmp_path, monkeypatch, replaced):
+    source, output, workspace, other = _trees(tmp_path)
+    open_file = os.open
+
+    def replace_before_write(path, flags, *args, **kwargs):
+        if path == "result.txt" and flags & os.O_CREAT and kwargs.get("dir_fd") is not None:
+            directory = output / "figures" if replaced == "parent" else workspace
+            directory.rename(directory.with_name("moved"))
+            directory.symlink_to(other, target_is_directory=True)
+        return open_file(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", replace_before_write)
+    with pytest.raises((OSError, isolated_job.IsolatedJobError)):
+        isolated_job.publish(source, output, workspace)
+    assert list(other.iterdir()) == []

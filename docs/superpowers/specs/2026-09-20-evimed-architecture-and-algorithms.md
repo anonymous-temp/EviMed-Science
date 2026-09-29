@@ -35,7 +35,7 @@
    - 验收与审查项目归为内部项目；
    - 发版切换遇到在跑的工作就拒绝；
    - 引擎可经模型网关调用模型（开关关着）；
-   - 适配器下五个引擎统一签名回执；
+   - Specialist adapters retain schema-2 unsigned worker observations; no operator signing key is required (owner decision, 2026-09-29).
    - 数据库微秒时间改在 SQL 里比较。
 
 ---
@@ -242,7 +242,7 @@
   - **显示规则**：MR、药安、选题、文献计量四个引擎按同一份规则（AMA 手册 §19.4、STROBE-MR、READUS-PV）在原值旁写显示字符串，技能只抄显示值。此前 mr-001 报告里印的是 `OR 1.53311316166586`。
   - **MR 两项诊断**：Steiger 改从 GWAS-SSF 元数据读样本量，mr-001 输入离线复跑为 p=1.9×10⁻¹⁹²、方向支持 BMI→CAD；MR-PRESSO 写出校正估计，去掉 2 个离群位点后 OR 1.59（1.43–1.77）。
   - **药安**：按 FAERS 季度版本缓存，结果写明数据日期。
-  - **签名回执**：五个经共享适配器的引擎统一 Ed25519 签名，隔离运行在 uid 65532 下。生产要开，得等负责人给签名私钥（D14）。
+  - **Specialist job evidence**: shared adapters stage jobs privately and retain request/input/artifact hashes as unsigned worker observations. D14 is cancelled by the owner: no Ed25519 private key or UID switch is an admission prerequisite. Historical signatures remain readable; tenant request authentication and the separate DeepSeek compatibility HMAC remain unchanged.
 - **自身测试**：meta 引擎 pytest 2795 通过 / 4 跳过、test_deep 155/155（09-28）；文献计量 50、MR 145（09-20，这次没重跑）。
 
 ### 5.8 重排（记忆与知识库共用）
@@ -324,7 +324,7 @@
 
 **【已建未开】**：
 - **AgentBay 运行时提供方**：整条已建（镜像构建脚本、会话内桥、wss 传输、Context 同步、令牌续期、443 网关入口、生命周期与出网策略），**缺一把 Pro 密钥**（A12）；网页渲染已不再依赖它。
-- **引擎经模型网关**（5.6）；**引擎签名回执**（缺私钥，D14）。
+- **Engine model gateway** (5.6); specialist job observations need deployment verification, not an owner signing key (D14 cancelled).
 - **融合接缝**：`evimed` 登录、灵豆扣费（汇率 `CREDITS_PER_CNY` 未定，D1）、「转为深度研究」、对外记忆接口（给中医 CDSS）。
 - **渠道**：自有 App 的推送与 Bearer，以及六个预留渠道，全部默认关。
 - **自助注册**：默认关。
@@ -342,7 +342,7 @@
 |---|---|
 | 1 用量账本修复没上生产 | **已关**：`198333969` 09-21 起随版上线（§3） |
 | 2 深度任务两倍时间和成本 | 仍在：基准题 09-21 26 min / ¥5.53（§6）；0.1.7 上没重测 |
-| 3 `audit:capabilities` 红 | 仍红：09-28 按生产重录，工具注册 41 / 提供 40 / 认证 32；6 个专科工具缺签名回执（D14、E9）；连接器 63/64（GtoPdb 要密钥，A17） |
+| 3 `audit:capabilities` 红 | 仍红：09-28 按生产重录，工具注册 41 / 提供 40 / 认证 32；6 specialist tools need current hosted execution evidence (E9; D14 signing-key prerequisite cancelled)；连接器 63/64（GtoPdb 要密钥，A17） |
 | 4 花费上限全是 0 | 仍是 0，负责人 09-21 的要求（D2）；`uncertain` 行虚高已按估计值计（§5.6） |
 | 5 托管凭据连接器空 | 部分仍空：NCBI/openFDA（A7）、Semantic Scholar/OpenAlex（A13）、GtoPdb（A17）；OpenGWAS 已变可选（A8） |
 | 6 五个公开能力从未交付 | **已关**：台账 21/21 accepted |

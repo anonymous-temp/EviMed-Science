@@ -292,9 +292,10 @@ def latest_hosted_receipt(tool, roots, max_age_days):
                 value = json.loads(read_owned(workspace, relative, 1024 * 1024))
                 proof = validate_receipt(value, workspace, tool, max_age_days)
                 ready = proof["jobStatus"] == "succeeded" and proof.get("releaseStatus") in {None, "ready"}
-                candidates.append({"tool": tool, "probeType": "completed_managed_job", "receiptKind": "isolated-adapter-v1",
+                candidates.append({"tool": tool, "probeType": "completed_managed_job",
+                    "receiptKind": "worker-adapter-v2" if proof["schemaVersion"] == 2 else "isolated-adapter-v1",
                     "operation": "start_then_poll_to_terminal", "status": "success" if ready else "warning", "operational": True,
-                    "summary": "An isolated managed adapter completed with current source evidence and verified retained inputs/artifacts.",
+                    "summary": "A managed adapter completed with matching source and retained input/artifact observations.",
                     "jobId": proof["jobId"], "jobStatus": proof["jobStatus"], "releaseStatus": proof.get("releaseStatus"),
                     "publicationReady": ready, "executedAt": proof["completedAt"],
                     "workspace": workspace.relative_to(REPO).as_posix(), "executionEvidence": proof["executionEvidence"],
@@ -407,7 +408,7 @@ def snapshot_evidence(results, evidence_root: Path) -> None:
             else:
                 write_new(staging_root, relative, blob)
         job_id = item.get("jobId")
-        if not job_id or item.get("receiptKind") == "isolated-adapter-v1":
+        if not job_id or item.get("receiptKind") in {"isolated-adapter-v1", "worker-adapter-v2"}:
             continue
         directory = SPECIALISTS[item["tool"]][0]
         state = json.loads(read_owned(workspace, directory + "/.jobs/" + job_id + ".json"))

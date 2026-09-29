@@ -359,6 +359,9 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
     (agent / "mr_agent/models.py").write_bytes(
         (source / "mr_agent/models.py").read_bytes()
     )
+    (agent / "mr_agent/number_display.py").write_bytes(
+        (source / "mr_agent/number_display.py").read_bytes()
+    )
     (agent / "mr_agent/__init__.py").write_text("")
     (agent / "mr_agent/core/__init__.py").write_text("")
     (agent / "mr_agent/analysis").mkdir()

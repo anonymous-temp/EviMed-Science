@@ -1,33 +1,22 @@
-"""Run a shared-adapter engine as the separate analysis UID.
+"""Stage ordinary specialist jobs and observe the files they produce.
 
-A signed receipt is worth only as much as the key behind it, and the engine is
-the one process in this container that handles untrusted input -- a
-manuscript, a retrieved record, a model's answer. So when this adapter holds an
-audit signing key (docker-compose.specialist-audit.yml), no engine runs with
-the adapter's identity: it runs as the analysis UID that
-``audit_receipt.analysis_credentials`` names, in a private stage under /tmp it
-can write, with the inputs it needs copied in by the owner process and no way
-into the workspace or the key. The owner hashes what it hands over and what
-comes back, and publishes the outputs into the workspace itself, so the rows it
-signs are bytes it held and the engine can no longer change. The MR engine does
-the same inside its own ``evimed_mr_job.py``; this is that property for every
-other engine the adapter runs.
-
-Every function here also runs with empty credentials (no UID change), which is
-how the test suite drives it without root; the UID change itself is the one
-thing only a Linux owner process with SETUID/SETGID can exercise.
+Each engine uses a private working directory. The worker copies authorized inputs,
+hashes outputs and publishes regular files after stopping the process group. No
+operator signing key or privilege-changing capability is required. Optional process
+credentials remain a utility argument; deployed ordinary jobs pass an empty mapping.
 """
 from __future__ import annotations
 
 import hashlib
 import os
+import select
 import shutil
 import signal
 import stat
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -128,14 +117,27 @@ def run(command: list[str], *, credentials: dict[str, Any], cwd: str, env: dict[
     The leader is waited for without being reaped, so its process-group id
     cannot be reused while the rest of the group is killed; then it is reaped.
     A child that outlived the engine could otherwise still write into the stage
-    between publication and the signature.
+        between the worker's observation and publication.
     """
     process = subprocess.Popen(
         command, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True, **credentials,
     )
     try:
-        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        if hasattr(os, "waitid"):
+            os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        else:
+            # macOS exposes process-exit notification through kqueue. Like
+            # WNOWAIT, it leaves the child unreaped until its group is stopped.
+            with closing(select.kqueue()) as queue:
+                event = select.kevent(process.pid, filter=select.KQ_FILTER_PROC,
+                                      flags=select.KQ_EV_ADD, fflags=select.KQ_NOTE_EXIT)
+                try:
+                    queue.control([event], 1, None)
+                except ProcessLookupError:
+                    # A very short-lived child can exit before registration.
+                    # This owner has not waited/reaped it, so its PID is held.
+                    pass
     finally:
         if credentials:
             _as_analysis(credentials, _STOP_GROUP, str(process.pid))
@@ -163,31 +165,66 @@ def _walk(directory: int, parts: tuple[str, ...], found: list[tuple[tuple[str, .
             raise IsolatedJobError("the engine produced more files than one job may publish")
 
 
-def publish(source: Path, output_root: Path, workspace: Path) -> list[dict[str, Any]]:
-    """Copy the engine's outputs into the workspace, receipting each as it is written.
+@contextmanager
+def _destination_directory(root: int, parts: tuple[str, ...]) -> Iterator[int]:
+    """Create and open directories relative to a pinned descriptor, never links."""
+    with ExitStack() as stack:
+        parent = stack.enter_context(audit_receipt.directory_fd(root))
+        for part in parts:
+            if audit_receipt._parts(part) != [part]:
+                raise IsolatedJobError("the output directory is invalid")
+            try:
+                os.mkdir(part, mode=0o755, dir_fd=parent)
+            except FileExistsError:
+                pass
+            parent = stack.enter_context(audit_receipt.directory_fd(parent, (part,)))
+        yield parent
 
-    Read through no-follow descriptors, written with O_EXCL: nothing the engine
-    arranged in its stage can make the owner read or overwrite anything else.
-    Returns the rows, workspace-relative.
+
+def _assert_directory_at(root: int, parts: tuple[str, ...], descriptor: int) -> None:
+    """A replaced directory cannot produce a receipt for a different path."""
+    with audit_receipt.directory_fd(root, parts) as current:
+        before, now = os.fstat(descriptor), os.fstat(current)
+        if (before.st_dev, before.st_ino) != (now.st_dev, now.st_ino):
+            raise IsolatedJobError("the output directory changed during publication")
+
+
+def publish(source: Path, output_root: Path, workspace: Path) -> list[dict[str, Any]]:
+    """Publish regular files through pinned, no-follow workspace descriptors.
+
+    O_EXCL preserves existing results. Reopening the descriptor chain before and
+    after each write detects replaced parents before emitting relative receipts.
     """
     found: list[tuple[tuple[str, ...], int]] = []
-    with audit_receipt.directory_fd(source) as directory:
+    output_parts = output_root.relative_to(workspace).parts
+    if not workspace.is_absolute():
+        raise IsolatedJobError("the workspace directory is invalid")
+    workspace_parts = workspace.parts[1:]
+    with (audit_receipt.directory_fd(source) as directory,
+          audit_receipt.directory_fd(workspace.anchor) as filesystem_fd,
+          audit_receipt.directory_fd(filesystem_fd, workspace_parts) as workspace_fd,
+          audit_receipt.directory_fd(workspace_fd, output_parts) as output_fd):
         _walk(directory, (), found)
         if sum(size for _, size in found) > MAX_PUBLISHED_BYTES:
             raise IsolatedJobError("the engine's outputs exceed what one job may publish")
         rows = []
         for parts, _ in found:
             blob = audit_receipt._read_file(directory, "/".join(parts))
-            target = output_root.joinpath(*parts)
-            for parent in reversed(target.relative_to(output_root).parents[:-1]):
-                (output_root / parent).mkdir(mode=0o755, exist_ok=True)
-            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(blob)
-                stream.flush()
-                os.fsync(stream.fileno())
+            _assert_directory_at(filesystem_fd, workspace_parts, workspace_fd)
+            _assert_directory_at(workspace_fd, output_parts, output_fd)
+            parent_parts = (*output_parts, *parts[:-1])
+            with _destination_directory(output_fd, parts[:-1]) as parent:
+                _assert_directory_at(workspace_fd, parent_parts, parent)
+                descriptor = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                     0o644, dir_fd=parent)
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(blob)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                _assert_directory_at(workspace_fd, parent_parts, parent)
+                _assert_directory_at(filesystem_fd, workspace_parts, workspace_fd)
             rows.append({
-                "path": target.relative_to(workspace).as_posix(),
+                "path": "/".join((*output_parts, *parts)),
                 "bytes": len(blob),
                 "sha256": hashlib.sha256(blob).hexdigest(),
             })

@@ -373,7 +373,7 @@ class AuditTests(unittest.TestCase):
     def test_release_verifier_rejects_fresh_legacy_mr_before_the_legacy_branch(self):
         _state, _path, _result, document, registry = self.legacy_release_case("mendelian_randomization")
         with patch.object(release, "read", return_value=document), patch.object(release, "EVIDENCE", self.workspace.resolve()), patch.object(release, "JOB_STATE", self.workspace / "job-state"), patch.object(release, "load_module", return_value=registry), patch.object(release, "SPECIALIST_SOURCES", self.root / "项目代码"):
-            with self.assertRaisesRegex(SystemExit, "MR requires an attested"):
+            with self.assertRaisesRegex(SystemExit, "MR needs its retained public-fixture job record"):
                 release.verify_tools()
 
     def test_legacy_state_artifacts_cannot_be_swapped_omitted_or_extended(self):

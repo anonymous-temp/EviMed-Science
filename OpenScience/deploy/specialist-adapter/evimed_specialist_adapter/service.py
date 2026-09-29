@@ -474,7 +474,7 @@ def _mr_job(root: Path) -> Any:
 def _source_evidence(root: Path) -> dict[str, Any]:
     """The whole auditable engine tree and this adapter, hashed one way for every engine.
 
-    The same evidence a signed receipt carries and a clean checkout recomputes
+    The same evidence a worker observation carries and a clean checkout recomputes
     (audit_receipt.current_evidence). It used to be three files for every
     engine but MR, which no verifier could reproduce, so only MR could ever be
     certified.
@@ -685,23 +685,12 @@ def _start(
         )
     spec = _spec()
     request = {key: arguments[key] for key in spec["inputs"] if key in arguments}
-    # What a signed receipt binds the job to: the request exactly as the caller
+    # What the worker record binds the job to: the request exactly as the caller
     # sent it, before a manuscript path is resolved inside the workspace.
     try:
         request_sha256 = audit_receipt.digest(audit_receipt.canonical(request))
     except ValueError:
-        request_sha256 = None  # not canonical JSON (a NaN): the job runs, nothing can sign it
-    if _kind() != "mendelian-randomization":
-        try:
-            audit_receipt.analysis_credentials()
-        except audit_receipt.AuditReceiptUnavailable:
-            # A signing key is mounted but the engine could not be kept from
-            # it: refused before anything is queued, never run beside the key.
-            return _error(
-                "specialist_audit_isolation_unavailable",
-                "Signed audit receipts need the engine to run as its own user, which this adapter cannot arrange.",
-                True,
-            )
+        request_sha256 = None  # noncanonical input cannot produce a canonical observation
     if _kind() == "mendelian-randomization":
         # A job that can only fail for want of OpenGWAS is refused here, by
         # name, instead of being queued to fail inside the engine.
@@ -1216,10 +1205,7 @@ def _run_isolated_mr(
             runner=root / "evimed_runner.py",
         )
         environment = _child_environment()
-        try:
-            credentials = audit_receipt.analysis_credentials()
-        except audit_receipt.AuditReceiptUnavailable:
-            raise helper.MRInputError("mr_input_isolation_unavailable", "Signed MR audit requires isolated analysis permissions.") from None
+        credentials = None
         try:
             store = _mr_store()
             with store.diagnostic_directory(state_path) as diagnostic_directory:
@@ -1256,7 +1242,7 @@ def _run_isolated_mr(
                 candidate = {**state, "auditReceipt": receipt}
                 if len(json.dumps(candidate, ensure_ascii=False, indent=2).encode("utf-8")) <= _STATE_LIMIT:
                     state["auditReceipt"] = receipt
-            # Full source evidence includes the signing implementation itself.
+            # Full source evidence includes the worker record implementation itself.
             if state.get("sourceEvidence") != _source_evidence(root):
                 state.pop("auditReceipt", None)
                 raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
@@ -1339,15 +1325,9 @@ def run_job(state_file: str) -> int:
     expected_state, log_path = _job_paths(workspace, state["jobId"])
     if expected_state.resolve() != state_path or workspace not in output_root.parents:
         raise RuntimeError("specialist state no longer matches its managed source")
-    # A mounted audit key means the engine runs as the analysis UID and the
-    # job is signed; a key the engine could not be kept from means no run.
-    try:
-        isolation = audit_receipt.analysis_credentials()
-    except audit_receipt.AuditReceiptUnavailable:
-        state.update(status="failed", updatedAt=_now(), finishedAt=_now(), retryable=False, artifacts=[],
-                     error="Signed audit receipts need the engine to run as its own user, which this adapter cannot arrange.")
-        _write_state(state_path, state)
-        return 1
+    # Use a private staging directory for stable input/output observations.
+    # No signing key or privileged UID transition is needed for an ordinary job.
+    isolation = {}
     state.update(
         {
             "status": "running",
@@ -1461,7 +1441,7 @@ def run_job(state_file: str) -> int:
             "artifacts": _collect_artifacts(workspace, output_root),
             **degradation,
             **({"usage": usage} if usage else {}),
-            **({"analysisIsolated": True} if receipt_rows is not None else {}),
+            **({"analysisStaged": True} if receipt_rows is not None else {}),
         }
     )
     if receipt_rows is not None:
@@ -1474,10 +1454,10 @@ def run_job(state_file: str) -> int:
             data_root=data_root,
         )
         if receipt is None:
-            _log_line(log_path, "audit receipt: not signed (the job or its files are not what a receipt may attest)")
+            _log_line(log_path, "job evidence: observation unavailable; completed artifacts remain available")
         elif len(json.dumps({**state, "auditReceipt": receipt}, ensure_ascii=False, indent=2).encode("utf-8")) <= _STATE_LIMIT:
             state["auditReceipt"] = receipt
-        # Full source evidence includes the signing implementation itself.
+        # Full source evidence includes the worker record implementation itself.
         if state.get("sourceEvidence") != _source_evidence(root):
             state.pop("auditReceipt", None)
             raise RuntimeError("specialist source changed while the job was running")

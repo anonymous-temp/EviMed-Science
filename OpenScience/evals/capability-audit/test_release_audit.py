@@ -203,7 +203,7 @@ class IncompleteProbeRecording(unittest.TestCase):
 
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        repo = Path(temporary.name)
+        repo = Path(temporary.name).resolve()
         server = SimpleNamespace(
             list_tools=lambda: [{"name": "health"}, {"name": "peer_review"}],
             disabled_tools=lambda: set(),

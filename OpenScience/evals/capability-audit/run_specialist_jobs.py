@@ -35,16 +35,15 @@ out of band, never written into these commands or the retained evidence):
    --receipt-workspace values and a NEW --output-dir. Verify that staged
    evidence with verify_release_audit.verify_tools before promoting it.
 
-Hosted certification requires data.auditReceipt with current full execution
-evidence, protected request/input hashes, scope and artifact hashes, signed with
-the separately provisioned Ed25519 audit key. It must name the original start
-jobId and bind the exact checked-in public fixture plus raw-source/license
-provenance. The verifier pins the public key; the driver never holds a signing
-private key. The current
-adapter's jobId/jobStatus-only response cannot certify this and produces the
-explicit hosted_receipt_missing:auditReceipt blocker. Never synthesize a legacy
-.jobs file, use the low-level MR engine, or copy a token/private queue to make
-that result look certified. This script does not create an adapter endpoint.
+Hosted evaluation retains schema-2 worker observations with execution evidence,
+request/input hashes, tenant scope and artifact hashes. These observations need
+no separately provisioned signing key and do not claim independent attestation.
+They name the original start jobId; MR observations also bind the checked-in
+public fixture and raw-source/license provenance. The reader can still verify
+historical schema-1 signatures against their pinned public keys. Missing or
+mismatched observations remain explicit evaluation findings; never synthesize a
+legacy .jobs file, copy a token/private queue, or relabel a low-level engine run
+as a hosted run. This script does not create an adapter endpoint.
 """
 
 from __future__ import annotations
