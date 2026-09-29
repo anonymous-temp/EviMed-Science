@@ -1863,3 +1863,45 @@ test("循证 GEO off, or on for operators this account is not, is invisible: no 
   assert.equal(hidden.status, 404);
   assert.equal((await hidden.json()).code, "geo_not_enabled");
 });
+
+test("proactive episodes and verifiers check balance and renewed permission before reserving a runtime", async t => {
+  const { EvimedCreditsService } = await import("../src/evimedCreditsService.mjs");
+  const original = EvimedCreditsService.prototype.assertBalanceForStart;
+  t.after(() => { EvimedCreditsService.prototype.assertBalanceForStart = original; });
+  const fixture = await composedApp(t, { autopilotEnabled: true, evimedCreditsEnabled: true,
+    evimedCreditsUrl: "", evimedCreditsBalanceUrl: "", modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  let balance, reserved = 0, permissions = 0;
+  const checked = [];
+  EvimedCreditsService.prototype.assertBalanceForStart = async function (_userId, capabilityId) {
+    checked.push(capabilityId);
+    if (balance instanceof Error) throw balance;
+    return balance;
+  };
+  app.runtimeManager.reserveBoundedRuntimeSession = async () => {
+    reserved += 1;
+    throw Object.assign(new Error("Runtime reservation probe"), { code: "reservation_probe" });
+  };
+  const common = { userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
+    budgetCny: 0.67, assertDispatchAllowed: async () => { permissions += 1; } };
+  const episode = { ...common, dispatchId: "balance-episode", taskType: "literature-sentinel", prompt: "Track the prior result." };
+  const verification = { ...common, digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one",
+    statement: "A preserved finding.", sources: ["doi:10.1000/one"], effect: { measure: "risk-ratio", value: "0.74" }, artifact: REPORT };
+  for (const [method, input] of [["dispatchEpisode", episode], ["dispatchVerification", verification]]) {
+    balance = Object.assign(new Error("No balance"), { code: "credits_exhausted", status: 402 });
+    await assert.rejects(app.autopilotWorker[method](input), { code: "credits_exhausted" });
+    assert.equal(reserved, 0, "known insufficient balance cannot reserve any runtime");
+  }
+  assert.equal(checked.length, 2);
+  for (const [method, input] of [["dispatchEpisode", episode], ["dispatchVerification", verification]]) {
+    balance = { allowed: true, reason: "unavailable" };
+    await assert.rejects(app.autopilotWorker[method]({ ...input, assertDispatchAllowed: async () => {
+      throw Object.assign(new Error("Paused while checking balance"), { code: "autopilot_paused" });
+    } }), { code: "autopilot_paused" });
+    assert.equal(reserved, 0, "a pause during the balance check cannot reserve a runtime");
+    await assert.rejects(app.autopilotWorker[method](input), { code: "reservation_probe" });
+  }
+  assert.equal(reserved, 2, "unknown balance retains the existing admission policy");
+  assert.ok(permissions >= 2);
+});
