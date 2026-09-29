@@ -230,6 +230,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "registry_not_found",
   "registry_record_unreadable",
   "registry_answer_unreadable",
+  // A read the data plane refused — every table withheld from this principal,
+  // or a document that is not this study's: the guardrail working. The run
+  // carries on without that data and says so.
+  "vcr_snapshot_withheld",
+  "vcr_document_not_found",
   // What a computation's status can tell a run (`vcr_simulate` `status`): the
   // engine was not there, did not answer in time, or answered with something the
   // control plane will not take as a result (a receipt that does not verify, a
@@ -979,6 +984,8 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_referral_not_found',
   'vcr_forbidden',
   'vcr_unavailable',
+  'vcr_action_invalid',
+  'vcr_criterion_state_invalid',
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
@@ -1006,6 +1013,11 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   'registry_id_invalid',
   'registry_record_unreadable',
   'registry_answer_unreadable',
+  // A read the data plane refused: every table of the snapshot is withheld from
+  // this principal, or the subject document is not this study's. The guardrail
+  // working, not the run breaking — the run carries on without it.
+  'vcr_snapshot_withheld',
+  'vcr_document_not_found',
 ])
 
 /**
@@ -1039,6 +1051,19 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
+  // data intake (the data tab and its routes; plan §8.1)
+  'vcr_data_file_name_invalid', 'vcr_data_file_too_large', 'vcr_data_file_unreadable', 'vcr_data_format_unsupported',
+  'vcr_source_file_not_found', 'vcr_source_file_frozen', 'vcr_source_file_changed',
+  'vcr_field_map_invalid', 'vcr_field_map_changed', 'vcr_field_map_unconfirmed',
+  'vcr_snapshot_no_tables', 'vcr_snapshot_profile_timeout', 'vcr_snapshot_profile_too_large',
+  'vcr_grant_invalid', 'vcr_grant_not_found', 'vcr_grant_owner_only',
+  // evidence and matching
+  'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
+  'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
+  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_referral_create_failed',
+  // jobs, derived tables and the orchestrator's step notes
+  'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
+  'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
   // members and access to data
   'vcr_member_role_unknown',
   'vcr_member_user_required',
@@ -1407,6 +1432,44 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   design_not_supported: '引擎没有实现这种设计和终点的组合；已拒绝，不会当成别的设计去算。',
   kind_method_mismatch: '这项计算的类型和它要用的方法对不上；已拒绝。',
   input_location_forbidden: '输入的存放位置、哈希和形态只能由平台从数据快照解析，不接受调用方给出。',
+  vcr_action_invalid: '起点只能是自动，或人群、虚拟患者、对照、试验之一。',
+  vcr_criterion_state_invalid: '条件的判定只能是满足、不满足、未知或待复评。',
+  vcr_snapshot_withheld: '这个快照的数据表对你都不可见（封存、未授权或含标识列），没有交给计算。',
+  vcr_document_not_found: '这份病历文档不属于本研究，或已不存在。',
+  vcr_data_file_name_invalid: '文件名缺失或没有扩展名。',
+  vcr_data_file_too_large: '文件超过了本部署允许的上传大小。',
+  vcr_data_file_unreadable: '文件读不成一张表（列名重复、编码不对或不是表格）。',
+  vcr_data_format_unsupported: '这种文件格式暂不支持上传；请导出为 CSV、TSV、XLSX 或 JSON。',
+  vcr_source_file_not_found: '这个数据文件不存在或已删除。',
+  vcr_source_file_frozen: '这个文件已被冻结进快照，不能删除。',
+  vcr_source_file_changed: '文件内容与上传时记录的哈希不一致，已拒绝使用。',
+  vcr_field_map_invalid: '字段映射有问题，详情见各列的提示。',
+  vcr_field_map_changed: '字段映射在你确认之后又改过了；请重新确认。',
+  vcr_field_map_unconfirmed: '冻结快照前需要先确认字段映射。',
+  vcr_snapshot_no_tables: '这个快照还没有派生出分析表。',
+  vcr_snapshot_profile_timeout: '数据画像超时了；文件可能太大。',
+  vcr_snapshot_profile_too_large: '数据画像的结果超过了上限。',
+  vcr_grant_invalid: '授权的内容不完整或不合法。',
+  vcr_grant_not_found: '这条授权不存在。',
+  vcr_grant_owner_only: '只有登记这个数据源的账号可以授权。',
+  vcr_asof_invalid: '判定时点不是一个合法的日期。',
+  vcr_assessment_not_found: '这个评估不属于本研究。',
+  vcr_criteria_missing: '方案还没有结构化的入排条件，无法匹配。',
+  vcr_pool_endpoint_key_required: '汇总证据需要指明终点。',
+  vcr_precedent_not_in_study: '这个先例不在本研究的证据里。',
+  vcr_protocol_version_not_found: '这个方案版本不存在。',
+  vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
+  vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
+  vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
+  vcr_referral_create_failed: '转诊记录没有生成成功，下一轮会重试。',
+  vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',
+  vcr_derived_table_unsupported: '这种派生数据表不能作为这项计算的输入。',
+  vcr_engine_table_invalid: '统计引擎返回的数据表与它的记录对不上，已拒绝。',
+  vcr_job_attempts_exhausted: '这项计算已重试到上限，不再重跑。',
+  vcr_object_unknown: '研究里没有这个对象。',
+  vcr_scenario_endpoint_missing: '情景没有写明终点类型。',
+  vcr_scenario_grid_empty: '方案网格里没有可比较的设计或真值。',
+  vcr_scenario_unknown_fields: '情景里有这项计算不读取的字段，已拒绝。',
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',

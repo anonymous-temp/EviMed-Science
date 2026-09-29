@@ -383,6 +383,10 @@ export const VCR_DEFAULT_ESTIMAND = 'ATT'
 export const VCR_NOT_ESTIMABLE_RULES = frozen([
   'entropy_balance_infeasible', 'outside_common_support', 'effective_sample_size_below_floor',
   'standardized_difference_above_floor', 'tau_beyond_followup', 'reconstruction_failed_qc', 'map_prior_conflict',
+  // Two the control plane derives before any job runs: the study's data tier
+  // cannot reach the route (§3.2 table), or the route has no method in this
+  // version (the model-predicted comparator) — a verdict in code, never a job.
+  'data_tier_insufficient', 'route_unavailable_in_version',
 ])
 export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   entropy_balance_infeasible: '熵平衡无解（试验人群的协变量均值落在对照人群范围之外）',
@@ -392,6 +396,8 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   tau_beyond_followup: 'RMST 的 τ 超过任一组的最长随访',
   reconstruction_failed_qc: '重建 KM 未过质控',
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
+  data_tier_insufficient: '现有数据档位不足以走这条对照路线',
+  route_unavailable_in_version: '这条对照路线在当前版本还没有可用的方法',
 })
 
 /** The ten comparability dimensions of the FDA externally-controlled-trials draft (§5.3). */

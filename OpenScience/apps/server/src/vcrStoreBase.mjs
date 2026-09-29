@@ -28,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { removeStudyDirectory } from "./vcrDataPlane.mjs";
 import { VCR_SCHEMA, migrateVcr } from "./vcrPersistence.mjs";
 
 /** The module's statement timeout: a page read never holds a connection. */
@@ -142,11 +143,11 @@ export class VcrStoreBase {
  * What a deletion leaves outside the database, collected before the rows go:
  * the data plane's files the study's snapshots and analysis tables name
  * (relative to the plane's root), and the engine's job directories.
- * @typedef {{ locations: string[], engineJobIds: string[] }} VcrArtifacts
+ * @typedef {{ locations: string[], engineJobIds: string[], studyIds: string[] }} VcrArtifacts
  */
 
 /** @returns {VcrArtifacts} */
-const noArtifacts = () => ({ locations: [], engineJobIds: [] });
+const noArtifacts = () => ({ locations: [], engineJobIds: [], studyIds: [] });
 
 /**
  * The files and engine jobs that belong to some studies (and, for an account,
@@ -174,6 +175,10 @@ async function collectArtifacts(client, studyIds, userId = null) {
   return {
     locations: [...new Set(locations)],
     engineJobIds: [...new Set(jobs.rows.map((row) => String(row.engine_job_id)).filter(Boolean))],
+    // A study's own directory holds what no row names: the pseudonym key, the
+    // identity maps, unfrozen uploads, the resolved views and the patient
+    // documents. It goes whole, or a deletion would leave patient-level files.
+    studyIds: [...new Set(studyIds.map((id) => String(id)))],
   };
 }
 
@@ -239,6 +244,24 @@ export async function deleteVcrUserRows(client, userId) {
 }
 
 /**
+ * Remove `derived/<studyId>` — the same guards as the study directory: an id
+ * that is an id, a real directory that is not a symlink, and one that resolves
+ * to a direct child of `derived/`. Answers whether it removed anything.
+ * @param {string} root @param {string} studyId
+ */
+async function removeDerivedDirectory(root, studyId) {
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(String(studyId ?? ""))) return false;
+  const directory = path.join(root, "derived", studyId);
+  const stat = await fs.lstat(directory).catch(() => null);
+  if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) return false;
+  const real = await fs.realpath(directory).catch(() => null);
+  const realParent = await fs.realpath(path.join(root, "derived")).catch(() => null);
+  if (!real || !realParent || path.dirname(real) !== realParent) return false;
+  await fs.rm(directory, { recursive: true, force: true });
+  return true;
+}
+
+/**
  * Remove what a committed deletion left outside the database: the data plane's
  * files, and the engine's job directories through its own `DELETE /jobs/:id`.
  * Best effort and never throwing — the rows are already gone, so a file that
@@ -249,7 +272,7 @@ export async function deleteVcrUserRows(client, userId) {
  *
  * @param {{ dataPlaneDir?: string, artifacts?: VcrArtifacts | null, engineRemove?: ((jobId: string) => Promise<void>) | null,
  *   report?: (code: string) => void }} input
- * @returns {Promise<{ files: number, engineJobs: number }>}
+ * @returns {Promise<{ files: number, engineJobs: number, studyDirectories: number }>}
  */
 export async function removeVcrArtifacts({ dataPlaneDir = "", artifacts = null, engineRemove = null, report = () => {} }) {
   let files = 0;
@@ -281,10 +304,23 @@ export async function removeVcrArtifacts({ dataPlaneDir = "", artifacts = null, 
       }
     }
   }
+  let studyDirectories = 0;
+  if (root) {
+    for (const studyId of artifacts?.studyIds ?? []) {
+      try {
+        if ((await removeStudyDirectory(root, studyId)).removed) studyDirectories += 1;
+        // The tables one job handed the next (a generated population, a
+        // reconstruction's pseudo-patients) live under `derived/<study>/`.
+        if (await removeDerivedDirectory(root, studyId)) studyDirectories += 1;
+      } catch {
+        report("vcr_artifact_remove_failed");
+      }
+    }
+  }
   if (engineRemove) {
     for (const jobId of artifacts?.engineJobIds ?? []) {
       try { await engineRemove(jobId); engineJobs += 1; } catch { report("vcr_engine_job_remove_failed"); }
     }
   }
-  return { files, engineJobs };
+  return { files, engineJobs, studyDirectories };
 }

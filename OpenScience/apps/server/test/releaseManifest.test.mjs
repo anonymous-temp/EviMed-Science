@@ -157,6 +157,7 @@ test("release manifest generator records exact images, tools, skills, and source
         "evals/capability-audit/results/skill-execution-v1-artifacts",
         "scripts/dev/fetch-skills.sh",
         "scripts/dev/patch-ai4s-integrity-auditor.py",
+        "scripts/vcr",
         "examples/climate-trends",
         "deploy/web/Dockerfile",
         "deploy/web/postgres-backup-status",
