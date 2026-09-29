@@ -31,6 +31,15 @@ def test_declared_scale_cannot_upgrade_or_erase_a_conflicting_repository_unit():
     assert DataSource().effect_scale["status"] == "unknown"
 
 
+def test_repository_transformation_does_not_confirm_or_erase_a_declared_unit():
+    from mr_agent.source_context import declared_scale, merge_scale, repository_scale
+    merged = merge_scale(declared_scale({"unit": "SD", "evidence": "Provided dictionary"}),
+                         repository_scale({"transformation": "inverse_normal"}, source="GWAS metadata"))
+    assert merged["unit"] == "SD" and merged["transformation"] == "inverse_normal"
+    assert merged["status"] == "declared"
+    assert merged["sources"][1]["unit"] is None
+
+
 @pytest.mark.parametrize("ids,status", [(("ieu-a-1", "ieu-b-2"), "possible"), (("ieu-a-1", "ukb-b-2"), "unknown")])
 def test_prefix_overlap_never_measures_participants_or_bias_direction(ids, status):
     result = MRAnalysisResult(exposure_id=ids[0], outcome_id=ids[1])
