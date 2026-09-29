@@ -251,3 +251,39 @@ test("a verification that was actually dispatched is never reported to the claim
     "a dispatched verification must not be recorded as one that never ran");
   assert.equal(calls.find((call) => call.method === "jobFail").args[4].retry, false);
 });
+
+test("known exhausted credits defer an undispatched episode without a scientific failure or cancellation", async () => {
+  const f = fixture({ dispatchError: Object.assign(new Error("Not enough credits"), { code: "credits_exhausted" }) });
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => ["failed", "canceled", "cancelDispatched", "queueCancellation"].includes(call.method)), false);
+  const failure = f.calls.find(call => call.method === "jobFail");
+  assert.equal(failure.args[4].retry, true);
+  assert.ok(failure.args[4].delayMs >= 60_000 && failure.args[4].delayMs <= 86_400_000);
+  assert.equal(failure.args[4].refundAttempt, undefined, "the finite resource-check retry budget is not reset");
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[1], "episode-one");
+});
+
+test("exhausted verification credits keep the claim's prior evidence and stop retrying at the bound", async () => {
+  const f = verifyFixture({ attempts: 3, dispatchError: Object.assign(new Error("Not enough credits"), { code: "credits_exhausted" }) });
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => call.method === "record" || call.method === "failed"), false);
+  assert.equal(f.calls.find(call => call.method === "jobFail").args[4].retry, false);
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[2].verificationId, VERIFICATION_ID);
+});
+
+test("the dispatcher can recheck pause and lease after an awaited balance check without starting work", async () => {
+  const f = fixture();
+  let reserved = false;
+  f.worker.dispatchEpisode = async input => {
+    f.service.checkInactivity = async () => ({ payload: { enabled: false, status: "paused" } });
+    await input.assertDispatchAllowed();
+    reserved = true;
+    return { runId: "unexpected", sessionId: "unexpected" };
+  };
+  await f.worker.tick();
+  assert.equal(reserved, false);
+  assert.equal(f.calls.some(call => call.method === "failed"), false);
+  assert.equal(f.calls.find(call => call.method === "finish").args[3].reason, "agenda_inactive");
+});

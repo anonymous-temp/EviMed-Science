@@ -1121,3 +1121,27 @@ test("new episodes freeze prior progress and same-day retries use the exact stor
   assert.equal(jobs.items.at(-1).payload.prompt, first.episode.payload.prompt);
   assert.equal((await service.get("user-one", agenda.id)).payload.followUps[0].consumedBy, undefined);
 });
+
+test("balance receipts preserve disabled and unknown meanings and resource delays do not alter science outcomes", async () => {
+  const { service } = fixture();
+  let agenda = await service.create("user-one", agendaInput);
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  const { episode } = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  const disabled = await service.recordBalanceCheck("user-one", episode.id, { capabilityId: "meta-analysis", checkedAt: "2026-09-06T01:00:00Z", allowed: true, reason: "not_enabled" });
+  assert.equal(disabled.reason, "not_enabled"); assert.equal(disabled.balance, null);
+  const unknown = await service.recordBalanceCheck("user-one", episode.id, { capabilityId: "meta-analysis", checkedAt: "2026-09-06T01:01:00Z", allowed: true, reason: "unavailable" });
+  assert.equal(unknown.reason, "unavailable"); assert.equal(unknown.estimate, null);
+  const known = await service.recordBalanceCheck("user-one", episode.id, { capabilityId: "meta-analysis", checkedAt: "2026-09-06T01:02:00Z", allowed: true, balance: 20, estimate: { low: 2, high: 5 } });
+  assert.equal(known.reason, "sufficient"); assert.equal(known.balance, 20);
+  const before = await service.get("user-one", agenda.id);
+  await service.recordResourceDeferral("user-one", episode.id, { jobId: "job", code: "credits_exhausted", attempts: 1, retrying: true, retryAt: "2026-09-06T01:07:00Z", at: "2026-09-06T01:02:00Z" });
+  const after = await service.get("user-one", agenda.id);
+  assert.deepEqual(after.payload.outcomes, before.payload.outcomes);
+  assert.equal(after.payload.consecutiveFailures, before.payload.consecutiveFailures);
+  assert.equal(after.payload.episodesWithoutGatedClaim, before.payload.episodesWithoutGatedClaim);
+  const saved = await service.getEpisode("user-one", episode.id);
+  assert.equal(saved.payload.status, "queued");
+  assert.equal(saved.payload.resourceDeferrals.episode.code, "credits_exhausted");
+  assert.equal(saved.payload.balanceChecks.episode.reason, "sufficient");
+  await assert.rejects(service.recordBalanceCheck("other-user", episode.id, { allowed: true }), { code: "autopilot_episode_not_found" });
+});
