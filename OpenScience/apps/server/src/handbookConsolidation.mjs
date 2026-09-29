@@ -103,6 +103,11 @@ export class HandbookConsolidation {
     if (!binding.shippedCapabilityDigest) return fail("handbook_capability_unavailable");
     let evaluation = null;
     if (this.evaluate) {
+      const marked = await this.jobs.withLease(job.userId, job.id, job.leaseToken, (client) => this.documents.put(job.userId, "method", candidate.id,
+        { ...payload, dispositions: { ...payload.dispositions, [payload.contentDigest]: {
+          disposition: "evaluating", candidateDigest: payload.contentDigest, jobId: job.id, binding, at: this.now().toISOString(),
+        } } }, { expectedRevision: candidate.revision, transactionClient: client }));
+      if (!marked) throw new HttpError(409, "product_job_lease_lost", "The handbook job lost its lease.");
       evaluation = await this.evaluate({ job, binding, candidate: structuredClone(candidate), baseline: structuredClone(baseline) });
       if (!evaluation || !["better", "non_inferior", "worse", "inconclusive"].includes(evaluation.verdict)
         || typeof evaluation.report !== "string" || !evaluation.report || evaluation.bootstrap === true
