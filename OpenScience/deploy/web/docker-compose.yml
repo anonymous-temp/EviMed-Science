@@ -491,7 +491,8 @@ services:
       # its own currency. Value-less: unset keeps the module off, and off means
       # no routes, no schema, no refused start and no charge. The key is the
       # EviMed one bound above (OPEN_SCIENCE_EVIMED_API_KEY_FILE) — one secret,
-      # one rotation. The rate has no default: without it nothing settles.
+      # one rotation. The owner-approved conversion is one credit per CNY;
+      # settlement still requires its separate enabled switch and real endpoint.
       OPEN_SCIENCE_EVIMED_CREDITS_ENABLED:
       OPEN_SCIENCE_EVIMED_CREDITS_URL:
       OPEN_SCIENCE_EVIMED_CREDITS_BALANCE_URL:
@@ -531,7 +532,7 @@ services:
       OPEN_SCIENCE_SECURITY_HEADERS: ${OPEN_SCIENCE_SECURITY_HEADERS:-true}
       OPEN_SCIENCE_CORS_ORIGINS: ${OPEN_SCIENCE_CORS_ORIGINS:-}
       OPEN_SCIENCE_AUTH_MODE: ${OPEN_SCIENCE_AUTH_MODE:-local}
-      OPEN_SCIENCE_SELF_REGISTRATION_ENABLED: ${OPEN_SCIENCE_SELF_REGISTRATION_ENABLED:-0}
+      OPEN_SCIENCE_SELF_REGISTRATION_ENABLED: ${OPEN_SCIENCE_SELF_REGISTRATION_ENABLED:-1}
       OPEN_SCIENCE_DEV_AUTH: ${OPEN_SCIENCE_DEV_AUTH:-false}
       OPEN_SCIENCE_BOOTSTRAP_USER: ${OPEN_SCIENCE_BOOTSTRAP_USER:-admin}
       OPEN_SCIENCE_BOOTSTRAP_PASSWORD: ${OPEN_SCIENCE_BOOTSTRAP_PASSWORD:-}

@@ -611,7 +611,7 @@ function evimedCreditsSettings(overrides) {
   if (enabled && keyFile && !path.isAbsolute(keyFile)) {
     throw new Error("OPEN_SCIENCE_EVIMED_API_KEY_FILE must be an absolute path when 灵豆 settlement is enabled.");
   }
-  const rateValue = read("evimedCreditsPerCny", "OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY", 0);
+  const rateValue = read("evimedCreditsPerCny", "OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY", 1);
   const rate = Number(rateValue);
   if (!Number.isFinite(rate) || rate < 0 || rate > 100_000) {
     throw new Error(`OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY must be a number from 0 to 100000, got ${JSON.stringify(rateValue)}.`);
@@ -1185,7 +1185,7 @@ export function loadConfig(overrides = {}) {
     // that turns it on is choosing to be open, and that choice belongs to the
     // operator rather than to whichever build happens to be running.
     selfRegistrationEnabled:
-      overrides.selfRegistrationEnabled ?? boolEnv("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED", false),
+      overrides.selfRegistrationEnabled ?? boolEnv("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED", true),
     oidcIssuer: overrides.oidcIssuer ?? process.env.OPEN_SCIENCE_OIDC_ISSUER ?? "",
     oidcClientId: overrides.oidcClientId ?? process.env.OPEN_SCIENCE_OIDC_CLIENT_ID ?? "",
     oidcClientAuthMethod:
