@@ -96,6 +96,13 @@ while IFS='|' read -r service variable fallback agent extra; do
   if [ "$agent" = "-" ] && lock_differs "$base" /adapter OpenScience/deploy/specialist-adapter; then adapter_lock=1; fi
   {
     printf 'FROM %s\n' "$base"
+    if [ "$service" = "evimed-mr-agent" ]; then
+      # Code-only deltas previously left PLINK absent in an otherwise current
+      # MR image. Derive the package pin from the full build's single source.
+      mr_plink_version=$(sed -n 's/^ARG MR_PLINK_VERSION=//p' OpenScience/deploy/specialist-adapter/Dockerfile)
+      [[ "$mr_plink_version" =~ ^[0-9A-Za-z.+:~_-]+$ ]] || { echo 'invalid MR PLINK package pin' >&2; exit 1; }
+      printf 'RUN apt-get update && apt-get install -y --no-install-recommends plink1.9=%s && plink1.9 --version && rm -rf /var/lib/apt/lists/*\n' "$mr_plink_version"
+    fi
     if [ "$agent" != "-" ]; then printf 'COPY %s /agent\n' "$agent"; fi
     printf 'COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter /adapter/evimed_specialist_adapter\n'
     # Re-pin the adapter manifest for the package this delta ships, as the full

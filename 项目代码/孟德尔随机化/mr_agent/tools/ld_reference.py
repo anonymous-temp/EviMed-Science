@@ -179,7 +179,7 @@ def load_reference(choice: dict[str, Any], directory: str | Path | None, binary:
         return None, "ld_reference_not_configured"
     try:
         root = Path(directory).resolve(strict=True)
-        executable = Path(binary).absolute()
+        executable = Path(binary).resolve(strict=True)
         if not os.access(executable, os.X_OK):
             return None, "ld_reference_binary_unavailable"
         manifest_path = root / "manifest.json"

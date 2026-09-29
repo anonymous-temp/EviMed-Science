@@ -1093,6 +1093,8 @@ services:
       # volume, not the tmpfs: every release recreates this container, and on
       # 2026-09-28 each one threw away scans that had cost tens of minutes.
       EVIMED_MR_OPEN_CACHE_DIR: /var/cache/evimed-mr-open
+      EVIMED_MR_PLINK_BIN: /usr/bin/plink1.9
+      EVIMED_MR_LD_REFERENCE_DIR: /opt/evimed/mr-ld-reference
       # EBI through the Tokyo node, the one the web service uses: measured
       # from this host on 2026-09-28, ftp.ebi.ac.uk gave ~19 KB/s direct and
       # ~358 KB/s through the node. Only *.ebi.ac.uk goes through it; empty
@@ -1105,6 +1107,14 @@ services:
     volumes:
       - open-science-data:/data
       - evimed-mr-open-cache:/var/cache/evimed-mr-open
+      # Verified ancestry panels and manifest only. Without a configured
+      # directory the engine records an explicit distance-pruning fallback.
+      - type: bind
+        source: ${OPEN_SCIENCE_MR_LD_REFERENCE_HOST_DIR:-/dev/null}
+        target: /opt/evimed/mr-ld-reference
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
         target: /run/secrets/deepseek-api-key
@@ -1116,9 +1126,8 @@ services:
       # The node's credentials, the web service's host file (root:10002 0440 on
       # the production host). This container runs as root with no capabilities,
       # so it reads the file as its owner, as the web container does; no mode
-      # change is needed. Under docker-compose.specialist-audit.yml the analysis
-      # drops to uid 65532, cannot read it, and records the proxy as unusable
-      # (edge_proxy_credentials_unavailable) and goes direct.
+      # change is needed. The workload's authenticated proxy access is
+      # independent of the unsigned specialist observation record.
       - type: bind
         source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
         target: /run/secrets/edge-proxy-credentials
