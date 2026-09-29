@@ -292,3 +292,74 @@ def test_pdf_export_via_libreoffice(tmp_path):
         pytest.skip("LibreOffice not installed on this machine")
     assert pdf.is_file() and pdf.stat().st_size > 10000
     assert pdf.read_bytes()[:4] == b"%PDF"
+
+
+@pytest.mark.parametrize("cells", [(55, 7902, 49431, 13783147), (0, 50, 10, 940), (5, 0, 100, 895), (7, 17, 31, 109)])
+def test_expected_count_worked_example_uses_raw_row_and_column_margins(cells):
+    from decimal import Decimal
+    from safety_agent.signals import ContingencyTable2x2, analyze
+    a, b, c, d = cells
+    metrics = analyze(ContingencyTable2x2(a=a, b=b, c=c, d=d))
+    row = T1_ROW.model_copy(update={"a": a, "b": b, "c": c, "d": d, "n": sum(cells),
+                                   "expected_count": metrics.ebgm.expected,
+                                   "haldane_anscombe_applied": metrics.haldane_anscombe_applied})
+    calculation = row.expected_count_calculation
+    assert calculation["raw_cells"] == {"a": a, "b": b, "c": c, "d": d, "n": sum(cells)}
+    assert calculation["drug_margin"] == a + b
+    assert calculation["event_margin"] == a + c
+    oracle = Decimal(a + b) * Decimal(a + c) / Decimal(sum(cells))
+    assert calculation["expected_count"] == pytest.approx(float(oracle), rel=1e-14)
+    assert calculation["worked_example"].endswith(row.display["expected_count"])
+    if metrics.haldane_anscombe_applied:
+        assert calculation["drug_margin"] != metrics.table.a + metrics.table.b
+
+
+def test_expected_count_example_and_table_share_the_recorded_value():
+    row = T1_ROW.model_copy(update={"expected_count": 1.5})
+    report = render_markdown(_result(signals=[row]))
+    assert "E = (a+b) × (a+c) / N = 100 × 30 / 2,000 ≈ 1.5" in report
+    assert "| E |" in report
+    assert row.display["expected_count"] in report
+    assert T1_ROW.expected_count_calculation["worked_example"] is None
+
+
+def test_interpretation_distinguishes_yearly_counts_from_an_unperformed_lag_analysis():
+    from safety_agent.analysis.interpret import build_interpretation_context
+    row = T1_ROW.model_copy(update={"expected_count": 1.5})
+    context = build_interpretation_context(drug="atorvastatin", overview=_result().overview,
+        signals=[row], label_check=None, focus_reactions=["myalgia"])
+    assert context["signal_table"][0]["expected_count_calculation"] == row.expected_count_calculation
+    assert context["yearly_count_interpretation"]["reporting_lag_analysis"] == "not_performed"
+    assert context["yearly_count_interpretation"]["causal_explanations"] == "hypotheses_only"
+    assert context["yearly_counts"] == [{"term": "2023", "count": 100}, {"term": "2024", "count": 120}]
+
+
+def test_docx_and_provenance_carry_the_same_worked_example(tmp_path):
+    import json
+    from docx import Document
+    from safety_agent.analysis.runner import write_artifacts
+    row = T1_ROW.model_copy(update={"expected_count": 1.5})
+    artifacts = write_artifacts(_result(signals=[row]), tmp_path)
+    document = Document(artifacts["docx"])
+    assert row.expected_count_calculation["worked_example"] in "\n".join(p.text for p in document.paragraphs)
+    signal_table = next(table for table in document.tables if table.rows[0].cells[0].text == "ADR")
+    headers = [cell.text for cell in signal_table.rows[0].cells]
+    assert signal_table.rows[1].cells[headers.index("E")].text == row.display["expected_count"]
+    provenance = json.loads(artifacts["provenance"].read_text())
+    assert provenance["expected_count_calculations"][0] == {"reaction": row.reaction, **row.expected_count_calculation}
+    assert provenance["yearly_count_interpretation"]["reporting_lag_analysis"] == "not_performed"
+
+
+@pytest.mark.parametrize("expected", [float("nan"), float("inf"), float("-inf"), None, 0.0, 1.5])
+def test_provenance_projection_is_strict_json_with_nonfinite_expected_counts(tmp_path, monkeypatch, expected):
+    import json
+    from safety_agent.analysis import runner
+    # PDF conversion is independently covered; this regression inspects the JSON writer.
+    monkeypatch.setattr(runner, "export_pdf", lambda *args: None)
+    row = T1_ROW.model_copy(update={"expected_count": expected})
+    artifact = runner.write_artifacts(_result(signals=[row]), tmp_path)["provenance"]
+    def reject(value):
+        raise AssertionError(f"Invalid JSON numeric constant: {value}")
+    stored = json.loads(artifact.read_text(), parse_constant=reject)
+    value = stored["expected_count_calculations"][0]["expected_count"]
+    assert value == expected if expected is not None and __import__("math").isfinite(expected) else value is None

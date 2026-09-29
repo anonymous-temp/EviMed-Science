@@ -170,7 +170,7 @@ def _docx_signals(document, result: AnalysisResult) -> None:
         "2×2 定义:a=目标药且目标 ADR,b=目标药其他 ADR,c=其他药目标 ADR,d=N−a−b−c。"
         "信号判定:a≥3 且(ROR 95%CI 下限>1 或(PRR≥2 且 χ²≥4))。"
     )
-    headers = ["ADR", "来源", "a", "ROR [95%CI]", "PRR", "χ²", "IC (IC025)", "EBGM (EB05)", "信号"]
+    headers = ["ADR", "来源", "a", "E", "ROR [95%CI]", "PRR", "χ²", "IC (IC025)", "EBGM (EB05)", "信号"]
     table = document.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
     for cell, text in zip(table.rows[0].cells, headers, strict=True):
@@ -182,6 +182,7 @@ def _docx_signals(document, result: AnalysisResult) -> None:
             row.reaction,
             "指定" if row.source == "user-specified" else "top",
             shown["a"],
+            shown["expected_count"] or "—",
             f"{shown['ror']} [{shown['ror_ci95_lower']}, {shown['ror_ci95_upper']}]",
             shown["prr"],
             shown["chi2"],
@@ -191,6 +192,10 @@ def _docx_signals(document, result: AnalysisResult) -> None:
         ]
         for cell, text in zip(cells, values, strict=True):
             cell.text = text
+    example = next((row for row in result.signals if row.expected_count_calculation["worked_example"] is not None), None)
+    if example is not None:
+        document.add_paragraph(f"期望数演算示例（{example.reaction}）：{example.expected_count_calculation['worked_example']}。")
+        document.add_paragraph("E 使用未经连续性校正的报告数及其行、列边际；比值指标的零格校正不改变这些原始计数。")
     if result.interpretation and result.interpretation.signal_commentary:
         document.add_paragraph(result.interpretation.signal_commentary)
 
