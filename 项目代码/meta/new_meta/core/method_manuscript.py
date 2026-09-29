@@ -128,6 +128,14 @@ def build_method_manuscript(
         raise ValueError(
             f"method manuscript renderer is not implemented for {envelope.family.value}"
         )
+    from new_meta.core.autonomous_analysis import admitted_result_ids
+    if admitted_result_ids(project).intersection(envelope.input_result_ids):
+        # The fixed templates predate model selection with explicit uncertainty.
+        # A supported estimate is not an independently verified estimate.
+        manuscript = re.sub(r"\bverified\b", "source-supported", manuscript)
+        manuscript = manuscript.replace("来源引文未核验且未经人工裁决的结果行不合格", "缺少可用来源支持的数值不进入合并")
+        for phrase in ("经来源核验的", "来源已核验的", "来源已核验", "经核验的", "经核验", "已核验"):
+            manuscript = manuscript.replace(phrase, "有来源支持的" if phrase.endswith("的") else "有来源支持")
     limitations = [row["message"] for row in facts.get("pipeline_warnings", [])
                    if row.get("code") in {"analysis_assumptions", "partial_screening", "partial_extraction",
                                            "risk_of_bias_unavailable", "protocol_scope_unverified"}]
