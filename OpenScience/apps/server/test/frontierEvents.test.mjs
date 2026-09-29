@@ -146,20 +146,20 @@ test("two works that state different identities are asked about, never joined by
   const reading = frontierVectorReading([
     { eventId: "1", cosine: 0.95, otherWork: true }, { eventId: "2", cosine: 0.9 }, { eventId: "3", cosine: 0.93, samePublisher: true },
   ]);
-  assert.deepEqual(reading.strong, ["2"]);
-  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["1", "3"]);
+  assert.deepEqual(reading.strong, []);
+  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["1", "3", "2"]);
 });
 
-test("the vectors: at or above 0.82 is the same event; the band below it is asked, one pair per event, at most three", () => {
+test("vectors only propose candidates at every cosine, one pair per event, at most three", () => {
   const reading = frontierVectorReading([
     { eventId: "1", cosine: 0.9 }, { eventId: "1", cosine: 0.75 }, { eventId: "2", cosine: 0.82 },
     { eventId: "3", cosine: 0.8 }, { eventId: "3", cosine: 0.79 }, { eventId: "4", cosine: 0.74 }, { eventId: "5", cosine: 0.73 },
     { eventId: "6", cosine: 0.72 }, { eventId: "7", cosine: 0.71 }, { eventId: "8", cosine: Number.NaN },
   ]);
-  assert.deepEqual(reading.strong, ["1", "2"]);
-  assert.deepEqual(reading.ask.map((pair) => [pair.eventId, pair.cosine]), [["3", 0.8], ["4", 0.74], ["5", 0.73]]);
+  assert.deepEqual(reading.strong, []);
+  assert.deepEqual(reading.ask.map((pair) => [pair.eventId, pair.cosine]), [["1", 0.9], ["2", 0.82], ["3", 0.8]]);
   assert.equal(reading.ask.length, FRONTIER_CLUSTER_ASK_MAX);
-  assert.equal(reading.ask[0].index, 3, "the index points back at the candidate the pair came from");
+  assert.equal(reading.ask[0].index, 0, "the index points back at the candidate the pair came from");
 });
 
 test("where an item goes: the oldest of the events it is the same as survives the rest; related events are edges", () => {
@@ -212,8 +212,8 @@ test("one publisher's notices above the join cosine are asked about, never joine
     { eventId: "8", cosine: 0.9, samePublisher: false },
     { eventId: "9", cosine: 0.76, samePublisher: false },
   ]);
-  assert.deepEqual(reading.strong, ["8"]);
-  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["7", "9"]);
+  assert.deepEqual(reading.strong, []);
+  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["7", "8", "9"]);
 });
 
 // ───────────────── the hot list's numbers (plan 2026-09-23 §6.5 #1, #2, #4) ─────────────────
