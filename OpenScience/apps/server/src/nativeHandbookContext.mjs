@@ -22,6 +22,7 @@ export class NativeHandbookContext {
   constructor({ route, select, budget, allowed = async () => true, attached = async () => {}, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
     this.route = route; this.select = select; this.budget = budget; this.allowed = allowed; this.attached = attached;
     this.now = now; this.ttlMs = ttlMs; this.timeoutMs = timeoutMs;
+    this.preparing = new Map();
   }
 
   /** @param {any} project @param {string} sessionId @param {string} requestId @param {boolean} [receipt] */
@@ -70,6 +71,19 @@ export class NativeHandbookContext {
     if (!validSession(request?.sessionId) || !validRequestId(request?.requestId)) return null;
     if (!await this.allowed(project, request.sessionId)) return null;
     const fingerprint = digest(JSON.stringify(request));
+    const key = this.file(project, request.sessionId, request.requestId);
+    const pending = this.preparing.get(key);
+    if (pending) {
+      if (pending.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
+      return pending.promise;
+    }
+    if (this.preparing.size >= MAX_ENVELOPES) throw new HttpError(503, "handbook_context_limit", "Supplement preparation is busy.");
+    const promise = this.freeze(project, request, fingerprint);
+    this.preparing.set(key, { fingerprint, promise });
+    try { return await promise; } finally { this.preparing.delete(key); }
+  }
+
+  async freeze(project, request, fingerprint) {
     const existing = await this.envelope(project, request.sessionId, request.requestId);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new HttpError(409, "handbook_request_conflict", "This request identity already names another input.");
