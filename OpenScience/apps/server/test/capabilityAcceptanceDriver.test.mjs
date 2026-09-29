@@ -13,7 +13,7 @@ const driver = fileURLToPath(new URL("../../../scripts/ops/capability-acceptance
 const originalRun = { id: "run-fixture", sessionId: "real-session", status: "running", effectiveAgentId: "meta-analysis", startedAt: "2026-09-29T01:00:00Z", artifacts: [] };
 async function fixture(fn) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "evimed-acceptance-driver-"));
-  const requests = []; let current = { ...originalRun }; let pollFailure = false; let pollTransport = null;
+  const requests = []; let current = { ...originalRun }; let pollFailure = false; let pollTransport = null; let artifactHang = false;
   const server = createServer(async (request, response) => {
     let raw = ""; for await (const chunk of request) raw += chunk;
     requests.push({ method: request.method, url: request.url, body: raw ? JSON.parse(raw) : null });
@@ -30,7 +30,7 @@ async function fixture(fn) {
       else data = [current, { id: "another-run", status: "running", sessionId: "another-session" }];
     } else if (request.url?.startsWith("/api/research-sessions/")) data = {};
     else if (request.url === "/api/agent-runs/dispatch") { status = 202; data = current; }
-    else if (request.url === "/api/commands/read_artifact") data = { encoding: "utf8", data: "Preserved useful partial results." };
+    else if (request.url === "/api/commands/read_artifact") { if (artifactHang) return; data = { encoding: "utf8", data: "Preserved useful partial results." }; }
     else if (request.url === "/api/commands/stop_runtime") data = {};
     else status = 404;
     response.writeHead(status, { "content-type": "application/json" }); response.end(JSON.stringify({ data }));
@@ -43,15 +43,15 @@ async function fixture(fn) {
   await fs.writeFile(path.join(root, "evals/acceptance-ledger.json"), JSON.stringify({ capabilities: [{ id: "meta-analysis", evalHarness: "evals/fixture" }] }));
   await fs.writeFile(path.join(root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{ id: "fixture-case", inputs: { topic: "Offline fixture" } }] }));
   const passwordFile = path.join(root, "fixture-login"); await fs.writeFile(passwordFile, "unused-fixture-value", { mode: 0o600 });
-  const run = async ({ attach = true, timeout = 30 } = {}) => {
-    const args = [script, "--capability", "meta-analysis", "--brief", "fixture-case", "--base", base, "--project", "shared", "--timeout-ms", String(timeout), "--poll-ms", "1", ...(attach ? ["--run", current.id] : [])];
-    try { const result = await execute(process.execPath, args, { timeout: 5000, env: { PATH: process.env.PATH, OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE: passwordFile, OPEN_SCIENCE_ACCEPTANCE_USERNAME: "fixture" } }); return { ...result, code: 0 }; }
+  const run = async ({ attach = true, timeout = 30, artifactTimeout = 40, execTimeout = 5000 } = {}) => {
+    const args = [script, "--capability", "meta-analysis", "--brief", "fixture-case", "--base", base, "--project", "shared", "--timeout-ms", String(timeout), "--poll-ms", "1", "--artifact-timeout-ms", String(artifactTimeout), ...(attach ? ["--run", current.id] : [])];
+    try { const result = await execute(process.execPath, args, { timeout: execTimeout, env: { PATH: process.env.PATH, OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE: passwordFile, OPEN_SCIENCE_ACCEPTANCE_USERNAME: "fixture" } }); return { ...result, code: 0 }; }
     catch (error) { if (typeof error.code !== "number") throw error; return { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
   };
   const records = async () => Promise.all((await fs.readdir(path.join(root, "evals/fixture/results"))).sort().map(async (name) => ({
     directory: path.join(root, "evals/fixture/results", name), record: JSON.parse(await fs.readFile(path.join(root, "evals/fixture/results", name, "run.json"), "utf8")),
   })));
-  try { await fn({ root, run, records, requests, setRun: (value) => { current = value; }, failPolls: () => { pollFailure = true; }, transport: (mode) => { pollTransport = mode; } }); }
+  try { await fn({ root, run, records, requests, setRun: (value) => { current = value; }, failPolls: () => { pollFailure = true; }, transport: (mode) => { pollTransport = mode; }, hangArtifacts: () => { artifactHang = true; } }); }
   finally { await new Promise((resolve) => server.close(resolve)); await fs.rm(root, { recursive: true, force: true }); }
 }
 
@@ -115,4 +115,16 @@ test("a pending observation can be resumed to a terminal one without replacing e
   assert.deepEqual(records.map(({ record }) => record.runId), ["run-fixture", "run-fixture"]);
   assert.deepEqual(new Set(records.map(({ record }) => record.observation.status)), new Set(["pending", "terminal"]));
   assert.equal(f.requests.some((request) => /stop_runtime|cancel|\/dispatch$/.test(request.url)), false);
+}));
+
+for (const status of ["running", "succeeded"]) test(`hanging artifact reads cannot trap a ${status} observation after its deadline`, async () => fixture(async (f) => {
+  f.setRun({ ...originalRun, status, artifacts: ["partial/report.md"] });
+  f.hangArtifacts();
+  const result = await f.run({ artifactTimeout: 40, execTimeout: 800 });
+  assert.equal(result.code, status === "running" ? 3 : 0);
+  assert.equal(f.requests.some((request) => /stop_runtime|cancel/.test(request.url)), false);
+  const [{ record }] = await f.records();
+  assert.equal(record.outcome.status, status);
+  assert.equal(record.observation.status, status === "running" ? "pending" : "terminal");
+  assert.match(result.stdout, /could not read partial\/report.md|artifact capture budget/);
 }));
