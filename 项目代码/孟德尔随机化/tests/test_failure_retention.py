@@ -1,6 +1,7 @@
 """Bounded private retention does not preserve free-text metadata or unsafe paths."""
 import io
 import json
+from pathlib import Path
 
 import pytest
 
@@ -117,3 +118,43 @@ def test_a_runner_log_holding_a_credential_is_withheld(directories):
     assert "runnerLog" not in result and "runnerErrorCode" not in result
     assert not (retained / "runner.log").exists()
     assert "synthetic-provider-secret" not in (retained / "diagnostic.json").read_text()
+
+
+def test_public_partial_science_is_a_new_projection_not_access_to_private_diagnostics(directories, tmp_path):
+    stage, retained, source, destination = directories
+    (stage / "analysis-data/pair/mr_results.csv").write_text("method,nsnp,b,se,pval,prompt\nIVW,8,0.4,0.1,0.001,PRIVATE_BODY\n")
+    (stage / "provider-response.json").write_text('{"body":"PRIVATE_BODY"}')
+    jobs._retain_failure(inputs, source, destination, {"errorCode": "mr_interpretation_failed"}, {}, runner_log=(b"PRIVATE_LOG\n", False))
+    private_before = {p.relative_to(retained).as_posix(): p.read_bytes() for p in retained.rglob("*") if p.is_file()}
+    output = tmp_path / "public"; output.mkdir()
+    with inputs.directory_fd(output) as target:
+        artifacts, receipts = jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_interpretation_failed", {})
+    assert artifacts and receipts
+    public = "\n".join(p.read_text() for p in output.rglob("*") if p.is_file())
+    assert "0.4" in public and "mr_interpretation_failed" in public
+    assert "PRIVATE_" not in public and "runner.log" not in public and "failureDiagnostics" not in public
+    summary = json.loads((output / "partial-research.json").read_text())
+    assert summary["status"] == "partial"
+    assert summary["primary_estimate_available"] is True
+    assert {p.relative_to(retained).as_posix(): p.read_bytes() for p in retained.rglob("*") if p.is_file()} == private_before
+
+
+def test_public_partial_does_not_read_unstopped_analysis(directories, tmp_path, monkeypatch):
+    _, _, source, _ = directories
+    monkeypatch.setattr(jobs, "_inventory", lambda *args: pytest.fail("live files inspected"))
+    output = tmp_path / "public"; output.mkdir()
+    with inputs.directory_fd(output) as target:
+        assert jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_analysis_stop_failed", {}, artifacts_safe=False) == ([], [])
+    assert not list(output.iterdir())
+
+
+@pytest.mark.parametrize("row", ["IVW,8,0.4,,0.001", "IVW,8,NaN,0.1,0.001", "IVW,8,0.4,0.1", "Unknown provider message,8,0.4,0.1,0.001"])
+def test_incomplete_primary_csv_never_becomes_completed_partial_statistics(directories, tmp_path, row):
+    stage, _, source, _ = directories
+    (stage / "analysis-data/pair/mr_results.csv").write_text("method,nsnp,b,se,pval\n" + row + "\n")
+    output = tmp_path / "public"; output.mkdir()
+    with inputs.directory_fd(output) as target:
+        jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_analysis_failed", {})
+    summary = json.loads((output / "partial-research.json").read_text())
+    assert summary["primary_estimate_available"] is False
+    assert not list(output.rglob("mr_results.csv"))
