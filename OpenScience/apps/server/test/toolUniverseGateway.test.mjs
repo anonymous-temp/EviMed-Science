@@ -112,3 +112,13 @@ test("tool information exposes the same safe argument surface execution accepts"
   assert.equal(info.test_examples, undefined);
   assert.deepEqual(result.structuredContent, info);
 });
+
+test("discovery remains bounded literal search and never runs caller regular expressions", async t => {
+  const f = await fixture(t);
+  for (const args of [{ pattern: "(.+)+ZZZZ$", search_mode: "regex" }, { pattern: "x".repeat(1000) },
+    { pattern: "drug", code: "unexpected" }, { pattern: "drug", limit: 1000000 }]) {
+    assert.equal((await f.request({ method: "tools/call", params: { name: "grep_tools", arguments: args } })).status, 400);
+  }
+  assert.equal(f.calls.length, 0);
+  assert.equal((await f.request({ method: "tools/call", params: { name: "grep_tools", arguments: { pattern: "(.+)+ZZZZ$", search_mode: "text" } } })).status, 200);
+});
