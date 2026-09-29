@@ -51,7 +51,7 @@ class AgreementTests(unittest.TestCase):
 
     def test_missing_severity_never_becomes_s0(self):
         dataset = synthetic_dataset()
-        report = agreement.analyze(dataset, "test", bootstrap=50)
+        report = agreement.analyze(dataset, "test", bootstrap=50, split="codebook_pilot")
         pair = report["agreementResults"]["pairs"][0]
         self.assertEqual(pair["verdict"]["n"], 3)
         self.assertEqual(pair["severity"]["n"], 1)
@@ -67,7 +67,7 @@ class AgreementTests(unittest.TestCase):
         dataset["ratings"] = [r for r in dataset["ratings"] if not (r["raterId"] == "model" and r["unitId"] == "u0")]
         for unit in dataset["units"]:
             unit["groupId"] = "one-answer"
-        result = agreement.analyze(dataset, "test", bootstrap=50)
+        result = agreement.analyze(dataset, "test", bootstrap=50, split="codebook_pilot")
         serious = result["modelComparisons"][0]["seriousErrors"]
         self.assertEqual(serious["missingModel"], 1)
         self.assertIsNone(serious["sensitivity"])
@@ -89,6 +89,28 @@ class AgreementTests(unittest.TestCase):
                 data["ratings"][0]["rubricVersion"] = "other"
             with self.subTest(defect=defect), self.assertRaises(ValueError):
                 agreement.validate_relations(data)
+
+
+
+    def test_unassessable_wrong_severity_is_missing_not_a_severe_negative(self):
+        data = synthetic_dataset()
+        model = next(r for r in data["ratings"] if r["ratingId"] == "model-u0")
+        model.update(verdict="wrong", errorType="number", severity=None, severityMissingReason="insufficient_context")
+        result = agreement.analyze(data, "test", bootstrap=0, split="codebook_pilot")
+        serious = result["modelComparisons"][0]["seriousErrors"]
+        self.assertEqual(serious["missingSeverity"], 1)
+        self.assertEqual(serious["assessed"], 0)
+        self.assertEqual(serious["missed"], 0)
+        self.assertIsNone(serious["sensitivity"])
+
+    def test_unresolved_reference_can_keep_one_human_attempt_without_becoming_consensus(self):
+        data = synthetic_dataset()
+        reference = data["references"][0]
+        reference.update(basis="unresolved", sourceRatingIds=["one-u0"], verdict=None, severity=None, disputed=True)
+        agreement.validate_relations(data)
+        result = agreement.analyze(data, "test", bootstrap=0, split="codebook_pilot")
+        self.assertEqual(result["referenceCoverage"], {"provided": 1, "included": 0, "disputedOrUnresolved": 1})
+        self.assertEqual(result["modelComparisons"][0]["references"], 0)
 
 
 def synthetic_dataset():
