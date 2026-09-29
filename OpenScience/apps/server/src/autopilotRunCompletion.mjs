@@ -1,3 +1,4 @@
+import { autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss } from "./autopilotService.mjs";
 import { safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
 
 /** Complete only the durable episode that owns this terminal research run.
@@ -10,7 +11,7 @@ export async function completeOwnedAutopilotRun({ service, runtimeManager, usage
   try {
     episode = await service.episodeForRun(project.userId, project.id, run.id);
     if (!episode && String(run.effectiveRouteReason ?? "").startsWith("autopilot:") && run.dispatchId) {
-      episode = await service.getEpisode(project.userId, run.dispatchId);
+      episode = await service.getEpisode(project.userId, autopilotLogicalDispatchId(run.dispatchId) ?? run.dispatchId);
     }
   } catch (error) {
     await audit("autopilot.run.owner", error);
@@ -20,6 +21,12 @@ export async function completeOwnedAutopilotRun({ service, runtimeManager, usage
     || (episode.payload?.runId && episode.payload.runId !== run.id)
     || (episode.payload?.sessionId && episode.payload.sessionId !== run.sessionId)) return false;
 
+  if (isUnsentAutopilotLeaseLoss(run)) {
+    await service.recordUnsentAttempt(project.userId, episode.id, { projectId: project.id, run });
+    // An expired worker owns no cleanup authority; the next lease or the idle
+    // manager decides whether the old runtime can be reclaimed.
+    return true;
+  }
   if (run.dispatchStatus === "rejected" && ["autopilot_paused", "autopilot_stopped"].includes(run.errorCode)) {
     await service.markEpisodeCanceled(project.userId, episode.id);
     if (runtimeManager.boundedRuntimeScope(project)?.runId === episode.id) {

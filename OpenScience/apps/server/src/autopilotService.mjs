@@ -55,12 +55,29 @@ export const VERIFICATION_ARTIFACT = "verification.json";
 // minting ids this cannot read back.
 const VERIFICATION_ID = /^(episode-[a-f0-9]{32})-v(\d{1,2})$/;
 
+/** Execution identity is per claim of the job; billing remains on the logical episode/verifier. */
+export function autopilotAttemptDispatchId(logicalId, attempt = 1) {
+  if (typeof logicalId !== "string" || !/^[A-Za-z0-9_-]{1,56}$/.test(logicalId)
+    || !Number.isSafeInteger(attempt) || attempt < 1 || attempt > 10) throw new HttpError(400, "autopilot_job_invalid", "Invalid proactive dispatch attempt.");
+  return attempt === 1 ? logicalId : `${logicalId}-a${attempt}`;
+}
+
+/** Only the platform's reserved episode/verifier shape has a logical identity. */
+export function autopilotLogicalDispatchId(dispatchId) {
+  return /^(episode-[a-f0-9]{32}(?:-v\d{1,2})?)(?:-a(?:[1-9]|10))?$/.exec(String(dispatchId ?? ""))?.[1] ?? null;
+}
+
+/** This is proof of no prompt, not a guess from a lease failure after a send. */
+export function isUnsentAutopilotLeaseLoss(run) {
+  return run?.status === "failed" && run.dispatchStatus === "rejected" && run.errorCode === "product_job_lease_lost";
+}
+
 /** @param {string} episodeId @param {number} index */
 export function verificationIdFor(episodeId, index) { return `${episodeId}-v${index}`; }
 
 /** The episode a verification belongs to, or null if this is not a verification id. */
 export function verificationEpisodeId(verificationId) {
-  const match = VERIFICATION_ID.exec(String(verificationId ?? ""));
+  const match = VERIFICATION_ID.exec(autopilotLogicalDispatchId(verificationId) ?? "");
   return match ? match[1] : null;
 }
 
@@ -500,6 +517,34 @@ export class AutopilotService {
       ...episode.payload, resourceDeferrals: { ...episode.payload.resourceDeferrals, episode: null }, status: "running", runId: text(input.runId, "run id", 160),
       sessionId: text(input.sessionId, "session id", 160), updatedAt: this.now().toISOString(),
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
+  }
+
+  /** Persist an observed unsent attempt, never cancel a runtime or reset a newer owner.
+   * @param {string} userId @param {string} episodeId @param {{projectId:string,run:any,verificationId?:string}} input */
+  async recordUnsentAttempt(userId, episodeId, { projectId, run, verificationId }) {
+    const scope = verificationId ?? episodeId;
+    if (!isUnsentAutopilotLeaseLoss(run) || autopilotLogicalDispatchId(run.dispatchId) !== scope
+      || (verificationId && verificationEpisodeId(verificationId) !== episodeId)) {
+      throw new HttpError(409, "autopilot_episode_state_conflict", "The run does not prove an unsent lease-loss attempt.");
+    }
+    const fact = { runId: text(run.id, "run id", 160), sessionId: text(run.sessionId, "session id", 160),
+      dispatchId: text(run.dispatchId, "dispatch id", 64), checkId: scope, code: "product_job_lease_lost", at: this.now().toISOString() };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await this.getEpisode(userId, episodeId);
+      if (episode.projectId !== projectId) throw new HttpError(409, "autopilot_episode_state_conflict", "The run belongs to another project.");
+      if ((episode.payload.unsentAttempts ?? []).some(item => item.runId === run.id)) return episode;
+      if (verificationId) {
+        if (!(episode.payload.claims ?? []).some(claim => claim.verification?.id === verificationId)) throw new HttpError(404, "autopilot_claim_not_found", "The verification is unavailable.");
+      } else if ((episode.payload.runId && episode.payload.runId !== run.id) || episode.payload.digestId || episode.payload.completion
+        || episode.payload.status === "canceled" || episode.payload.status === "merged") return episode;
+      try {
+        return await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+          ...(!verificationId ? { status: "queued", runId: null, sessionId: null, error: null } : {}),
+          unsentAttempts: [...(episode.payload.unsentAttempts ?? []), fact].slice(-10), updatedAt: this.now().toISOString(),
+        }, { expectedRevision: episode.revision, projectId: episode.projectId });
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while recording an unsent attempt.");
   }
 
   /** Persist only the balance admission facts actually returned by the credit service.
