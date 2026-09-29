@@ -15,7 +15,11 @@ test("the platform's background projects are named, and nothing else is", () => 
   assert.equal(isInternalProject(FRONTIER_PROJECT_ID), true, "where the frontier feed's model calls are billed");
   assert.equal(isInternalProject("eval-method-release"), true, "the paired evaluation's own project");
   assert.equal(isInternalProject(`methodeval-${"0a".repeat(12)}`), true, "one evaluation cell's project");
-  for (const id of ["default", "0921a", "evimed-learning-notes", "evimed-frontier-notes", "eval-methods", "my-eval-method-release", "methodeval-notes"]) {
+  assert.equal(isInternalProject("acceptance-meta-analysis"), true, "the capability acceptance battery measures the platform");
+  assert.equal(isInternalProject("acceptance-mr-0928h"), true, "a dated acceptance project");
+  assert.equal(isInternalProject("audit-worker-probe"), true, "the standing integration audit");
+  for (const id of ["default", "0921a", "evimed-learning-notes", "evimed-frontier-notes", "eval-methods", "my-eval-method-release", "methodeval-notes",
+    "acceptance", "audit", "my-acceptance-notes", "audit_2026"]) {
     assert.equal(isInternalProject(id), false, id);
   }
 });

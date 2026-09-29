@@ -56,7 +56,7 @@ WAVE_PACK_BRIEF_COUNTS = {
     "mendelian-randomization": 4,
     "meta-analysis": 4,
     "off-label-analysis": 4,
-    "peer-review": 4,
+    "peer-review": 5,
 }
 
 # A brief carrying any of these is written in the complete schema and owes the

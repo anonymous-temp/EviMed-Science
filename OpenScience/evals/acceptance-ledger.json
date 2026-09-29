@@ -327,7 +327,7 @@
       "id": "peer-review",
       "visibility": "public",
       "evalHarness": "evals/peer-review",
-      "briefCount": 4,
+      "briefCount": 5,
       "realDelivery": {
         "status": "accepted",
         "evidence": "PROGRESS.md@2026-09-27 06:37",

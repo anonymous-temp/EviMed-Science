@@ -35,8 +35,13 @@
 //   --prompt-file <path>
 //       dispatch this text instead of the rendered brief (the brief still names
 //       the results directory), e.g. a GEO step's brief into an existing GEO project.
+//   --inputs <dir>
+//       upload every file under <dir> into the project's workspace at the same
+//       relative path before dispatching — a brief that starts from a dataset
+//       (`data/<export>/…`) or a manuscript (`manuscripts/…`) names files the
+//       run has to find there.
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -249,9 +254,14 @@ async function main() {
   if (existing.status !== 200) throw new Error(`project list failed: ${existing.status}`);
   const already = (existing.body.data ?? []).some((/** @type {any} */ entry) => entry.id === projectId);
   if (!already && geo) throw new Error(`the GEO project's control project ${projectId} is not in this account's project list`);
+  // An acceptance project is one of the platform's own (`isInternalProject`),
+  // so the list never shows it: its existence is the create answering
+  // `project_exists`, which is the resume.
+  let resumed = false;
   if (!already) {
     const created = await api("/api/projects", { method: "POST", body: JSON.stringify({ id: projectId, name: `Acceptance ${capabilityId}` }) });
-    if (created.status !== 201 && created.status !== 200) {
+    if (created.status === 409 && created.body?.code === "project_exists") resumed = true;
+    else if (created.status !== 201 && created.status !== 200) {
       const code = created.body?.code ?? "";
       const hint = code === "project_limit_reached"
         ? ` — pass --project <existing id> to reuse one of the ${(existing.body.data ?? []).length} this account already holds`
@@ -260,7 +270,23 @@ async function main() {
     }
   }
   auth["x-open-science-project"] = projectId;
-  say(`project=${projectId} (${already ? "existing" : "created"})`);
+  if (typeof args.inputs === "string") {
+    const inputRoot = path.resolve(args.inputs);
+    /** @param {string} directory @returns {Promise<string[]>} */
+    const walk = async (directory) => (await Promise.all((await readdir(directory, { withFileTypes: true }))
+      .map((entry) => entry.isDirectory() ? walk(path.join(directory, entry.name)) : Promise.resolve(entry.isFile() ? [path.join(directory, entry.name)] : []))))
+      .flat();
+    const files = await walk(inputRoot);
+    if (!files.length) throw new Error(`--inputs ${inputRoot} holds no files`);
+    for (const file of files) {
+      const relative = path.relative(inputRoot, file).split(path.sep).join("/");
+      const uploaded = await api("/api/files/upload", { method: "POST", body: JSON.stringify({
+        path: relative, data: (await readFile(file)).toString("base64"), encoding: "base64" }) });
+      if (uploaded.status !== 200) throw new Error(`upload of ${relative} failed: ${uploaded.status} ${JSON.stringify(uploaded.body).slice(0, 200)}`);
+    }
+    say(`inputs: ${files.length} file(s) from ${inputRoot} uploaded into the workspace`);
+  }
+  say(`project=${projectId} (${already || resumed ? "existing" : "created"})`);
 
   const agents = await api("/api/agents");
   if (agents.status !== 200) throw new Error(`agent list failed: ${agents.status}`);

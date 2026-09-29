@@ -114,6 +114,33 @@
         "authoredAt": "2026-09-07",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "review-005-tcm-meta-analysis-third-revision",
+      "title": "一篇中医药 Meta 分析稿件第三次修订后的同行评议：先查上一轮的问题改了没有",
+      "why": "A real manuscript the platform itself helped write: a systematic review and meta-analysis of traditional Chinese medicine for childhood 疳证, reviewed on 2026-09-27 as 'major revision' and revised a third time on 2026-09-29. The revision corrected a sentence claiming every sensitivity-analysis interval excluded 1 while its own table showed one that did not, downgraded two comparisons to very-low certainty under a stated optimal-information-size rule, and left seven 【待作者补充】 placeholders for facts only the authors hold. What is graded is whether the review reads the revised text rather than recalling the earlier one, verifies claims against the manuscript's own tables, treats honest placeholders as disclosures rather than defects, and still finds what remains wrong — abstract-only risk-of-bias judgements and a post-hoc eligibility ruling that carries two thirds of one comparison's weight.",
+      "inputs": {
+        "manuscript": "manuscripts/ganzheng-meta-manuscript-r3.pdf（中医药治疗儿童疳证的系统评价与 Meta 分析，第三次修订稿，43 页 PDF，含森林图、漏斗图、PRISMA 流程图与四张表）",
+        "articleType": "systematic-review-meta-analysis",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Check each sensitivity-analysis sentence in the abstract and results against the table it summarises, and say where they agree.",
+        "Name the reporting rubric (PRISMA 2020) and the certainty framework (GRADE) the manuscript uses, and judge the stated imprecision rule on its own terms.",
+        "Say which findings depend on abstract-only data, and what that does to risk-of-bias and certainty judgements.",
+        "Treat 【待作者补充】 placeholders as items the authors must supply, listed once, not as findings about the science.",
+        "Give every finding a location in the manuscript and an actionable revision."
+      ],
+      "mustNotDo": [
+        "Repeat a finding from an earlier review without checking the revised text.",
+        "Call a placeholder a fabrication or an integrity problem.",
+        "Present the review as a journal decision."
+      ],
+      "gradedOn": "Whether every claim the review makes about the manuscript's numbers can be found in the manuscript, and whether an author could act on each major finding without another file.",
+      "generated": {
+        "authoredAt": "2026-09-29",
+        "authoredAtSource": "written for the 2026-09-29 acceptance rerun"
+      }
     }
   ]
 }
