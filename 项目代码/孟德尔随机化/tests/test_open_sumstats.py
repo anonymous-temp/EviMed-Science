@@ -18,6 +18,24 @@ import pytest
 
 from mr_agent.tools import open_sumstats as osm
 
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_low_candidate_count_preserves_only_observed_rows_and_selection_scope(catalogue, monkeypatch, count):
+    original = osm._scan_significant
+    def sparse(*args, **kwargs):
+        rows, record = original(*args, **kwargs)
+        return rows[:count], record
+    monkeypatch.setattr(osm, "_scan_significant", sparse)
+    with pytest.raises(osm.OpenSourceError) as caught:
+        osm.build_pair({"type": "gwas_catalog", "accession": "GCST000001"},
+                       {"type": "gwas_catalog", "pubmedId": "222"}, http=osm._Http(opener=catalogue))
+    partial = caught.value.partial_pair
+    assert len(partial.exposure_rows) == count
+    assert partial.outcome_rows == []
+    assert partial.record["instrumentSelection"]["stage"] == "candidates_before_clumping"
+    assert partial.record["instrumentSelection"]["ldChecked"] is False
+    assert partial.record["analysisStatus"] == "not_computed"
+
 API = osm.CATALOG_API
 FTP = "https://ftp.example/pub/GCST000002"
 

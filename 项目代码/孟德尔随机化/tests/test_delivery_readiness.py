@@ -16,6 +16,31 @@ def numeric_result(**changes):
     )
 
 
+def test_late_r_failure_keeps_completed_primary_numbers_and_original_failure(tmp_path, monkeypatch):
+    from mr_agent.tools import mr_executor
+    from mr_agent.analysis.delivery import MRDeliveryError, require_report_ready
+    def failed(script, output):
+        (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nInverse variance weighted,8,0.3,0.04,0.001\n")
+        (output / "mr_error.json").write_text('{"code":"analysis_failed","error":"Late optional step failed"}')
+        return False
+    monkeypatch.setattr(mr_executor, "_execute_r_script", failed)
+    result = mr_executor.run_mr_analysis("x", "y", tmp_path)
+    assert result.mr_results[0].beta == 0.3 and result.n_instruments == 8
+    assert result.analysis_status == "partial" and result.analysis_error_code == "analysis_failed"
+    with pytest.raises(MRDeliveryError) as caught:
+        require_report_ready([result])
+    assert caught.value.module == "primaryEstimate"
+
+
+@pytest.mark.parametrize("row", ["IVW,8,,0.04,0.001", "IVW,8,0.3,,0.001", "IVW,8,0.3,0.04,", "IVW,8,0.3,0.04"])
+def test_half_written_primary_csv_does_not_fabricate_zero_effect_or_null_p_value(tmp_path, row):
+    from mr_agent.tools import mr_executor
+    (tmp_path / "mr_results.csv").write_text("method,nsnp,b,se,pval\n" + row + "\n")
+    result = mr_executor._parse_results("x", "y", tmp_path)
+    assert result.mr_results == []
+    assert result.module_status["primaryEstimate"]["status"] == "unavailable"
+
+
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])
 def test_interpretation_failure_is_typed_and_retains_numerical_results(response):
     from mr_agent.analysis.delivery import MRDeliveryError
