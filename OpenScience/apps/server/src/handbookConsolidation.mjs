@@ -1,5 +1,6 @@
 /** Consume reviewed lessons as owner-scoped supplements, without claiming a measured benefit. */
 import { createHash } from "node:crypto";
+import { LEARNING_EVALUATION_DISPATCH_PREFIX } from "@evimed/domain";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -57,6 +58,9 @@ export class HandbookConsolidation {
       });
     });
     if (!completed) throw new HttpError(409, "product_job_lease_lost", "The handbook job lost its lease.");
+    if (result.disposition === "stale" && !job.payload.retryOf && current.payload.contentDigest === job.payload.candidateDigest) {
+      await this.learning.enqueueHandbook(job.userId, current, { retryOf: job.id });
+    }
     return { ...result, jobCompleted: true };
   }
 
@@ -79,8 +83,8 @@ export class HandbookConsolidation {
     const capability = this.registry.get(payload.capabilityId);
     if (!capability || capability.visibility === "internal" || payload.capabilityId !== job.payload.capabilityId) return fail("handbook_capability_unavailable");
     const source = await this.resolveSourceRun(job.userId, payload.provenance?.sourceProjectId, payload.provenance?.runId);
-    if (!source || source.id !== payload.provenance?.runId || source.learningEvaluation || source.internal
-      || String(source.dispatchId ?? "").startsWith("learning-eval:")) return fail("handbook_source_unavailable");
+    if (!source || source.id !== payload.provenance?.runId || source.learningEvaluation
+      || String(source.dispatchId ?? "").startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) return fail("handbook_source_unavailable");
     if (source.effectiveAgentId !== capability.id) return fail("handbook_source_capability_mismatch");
     if (payload.provenance?.derivedFrom !== "reviewer") return fail("handbook_source_review_unavailable");
     try {
@@ -127,6 +131,25 @@ export class HandbookConsolidation {
       if (error?.code !== "product_revision_conflict") throw error;
       return this.complete(job, candidate, { ...base, disposition: "stale", reason: "handbook_revision_changed", binding });
     }
+  }
+
+  /** Restore a saved body forward by CAS. Observations belong to a version and never cross the restore.
+   * @param {string} userId @param {string} id @param {{expectedRevision:number,targetRevision:number}} input */
+  async rollback(userId, id, { expectedRevision, targetRevision }) {
+    const current = await this.documents.get(userId, "method", id);
+    if (current?.payload?.recordType !== CAPABILITY_HANDBOOK_RECORD_TYPE) throw new HttpError(404, "handbook_unavailable", "The handbook is unavailable.");
+    if (!Number.isSafeInteger(targetRevision) || targetRevision < 1 || targetRevision >= current.revision) {
+      throw new HttpError(404, "handbook_revision_unavailable", "That handbook revision is unavailable.");
+    }
+    const history = await this.documents.history(userId, "method", id, { beforeRevision: targetRevision + 1, limit: 1 });
+    const saved = history[0];
+    if (!saved || saved.deletedAt || saved.payload?.recordType !== CAPABILITY_HANDBOOK_RECORD_TYPE
+      || saved.payload.capabilityId !== current.payload.capabilityId) throw new HttpError(404, "handbook_revision_unavailable", "That handbook revision is unavailable.");
+    await this.learning.validateHandbook(userId, saved.payload);
+    return this.documents.put(userId, "method", id, { ...saved.payload, version: current.payload.version + 1,
+      verification: "unmeasured", evaluation: null, observations: [], previousRevision: current.revision,
+      restoredFromRevision: saved.revision, appliedAt: this.now().toISOString(),
+    }, { expectedRevision });
   }
 
   /** Reuse the maintenance timer. One bounded page per owner per call, resuming after restart from the beginning.

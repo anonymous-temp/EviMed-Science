@@ -64,6 +64,7 @@ export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "evaluat
  * worker instead of passing on without its answer.
  */
 export const DEFERRED_LEARNING_ERRORS = new Map([
+  ["learning_paused", 60_000],
   ["runtime_busy", 60_000],
   ["runtime_limit_exceeded", 120_000],
   ["runtime_proxy_limit_exceeded", 120_000],
@@ -513,9 +514,8 @@ export class MethodConsolidation {
   }
 
   /**
-   * The platform-handbook arm. It never edits a shipped capability in place —
-   * it produces a staged proposal for a pull request, which is the whole point
-   * of a handbook change being reviewable.
+   * The owner-scoped handbook arm. Its consumer applies validated supplements
+   * without editing a shipped capability or a personal preference.
    * @param {{job: any}} request
    */
   async optimize({ job }) {

@@ -356,15 +356,16 @@ export class LearningService {
   }
 
   /** Queue exactly one application per owner, capability and reviewed content.
-   * @param {string} userId @param {any} candidate */
-  async enqueueHandbook(userId, candidate) {
+   * @param {string} userId @param {any} candidate @param {{retryOf?:string}} [options] */
+  async enqueueHandbook(userId, candidate, { retryOf } = {}) {
     if (!this.jobs || !candidate?.payload?.capabilityId) return null;
     const { capabilityId, contentDigest, provenance } = candidate.payload;
     return this.jobs.enqueue(userId, "consolidate", {
+      ...(retryOf ? { retryOf } : {}),
       action: "optimize", candidateId: candidate.id, candidateDigest: contentDigest,
       candidateRevision: candidate.payload.candidateRevision ?? candidate.revision, capabilityId,
       sourceRunId: provenance?.runId ?? null, sourceProjectId: provenance?.sourceProjectId ?? null,
-    }, { idempotencyKey: `handbook:${sha256(JSON.stringify([userId, candidate.id, capabilityId, contentDigest]))}`, projectId: null });
+    }, { idempotencyKey: `handbook:${sha256(JSON.stringify([userId, candidate.id, capabilityId, contentDigest, retryOf ?? null]))}`, projectId: null });
   }
 
   /** @param {string} userId @param {any} input */
