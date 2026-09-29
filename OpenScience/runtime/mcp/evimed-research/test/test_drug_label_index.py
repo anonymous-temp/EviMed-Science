@@ -65,6 +65,15 @@ class BuiltIndex(unittest.TestCase):
 
 
 class BuilderTests(BuiltIndex):
+    def test_peak_memory_report_respects_operating_system_units(self):
+        import resource
+        for platform, peak in (("darwin", 64 * 1024 * 1024), ("linux", 64 * 1024)):
+            with self.subTest(platform=platform), mock.patch.object(sys, "platform", platform), mock.patch.object(
+                resource, "getrusage", return_value=mock.Mock(ru_maxrss=peak)
+            ):
+                _, report = label_fixtures.build_index(self.directory / ("peak-" + platform))
+                self.assertEqual(report["peakMemoryMB"], 64.0)
+
     def test_rows_are_kept_or_counted_out_with_a_reason(self):
         rows = self.report["rows"]
         self.assertEqual(rows["read"], 10)
