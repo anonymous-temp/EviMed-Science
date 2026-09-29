@@ -6,7 +6,7 @@ import test from "node:test";
 import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 
-async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [] } = {}) {
+async function fixture(t, { memorySubstrate = null, sessions = null, recallItems = [], handbooks = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -27,7 +27,7 @@ async function fixture(t, { memorySubstrate = null, sessions = null, recallItems
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate, sessions, handbooks });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -243,4 +243,22 @@ test("a conversation's first step asks what its own state adds: the pack a trial
   assert.deepEqual(await (await g.request("session", { sessionId: "ses_trial" })).json(), { context: "" });
   const h = await fixture(t);
   assert.deepEqual(await (await h.request("session", { sessionId: "ses_trial" })).json(), { context: "" });
+});
+
+
+test("native handbook reads and acknowledgements keep workload ownership and closed payloads", async t => {
+  const calls = [];
+  const f = await fixture(t, { handbooks: {
+    read: async (project, input) => { calls.push({ action: "read", project, input }); return { contexts: [{ requestId: "A", digest: "a".repeat(64), context: "Scoped lesson" }] }; },
+    acknowledge: async (project, input) => { calls.push({ action: "ack", project, input }); return { attached: ["A"] }; },
+  } });
+  const input = { sessionId: "session", inputs: [{ requestId: "A", textDigest: "b".repeat(64) }] };
+  const read = await f.request("handbook-context", input);
+  assert.equal(read.status, 200); assert.equal((await read.json()).contexts[0].context, "Scoped lesson");
+  assert.deepEqual(calls[0].project, f.project);
+  assert.deepEqual(calls[0].input, input);
+  assert.equal((await f.request("handbook-context", { ...input, userId: "other" })).status, 400);
+  assert.equal((await f.request("handbook-context", input, f.issue({ userId: "other" }))).status, 401);
+  assert.equal((await f.request("handbook-attached", { sessionId: "session", receipts: [{ requestId: "A", digest: "a".repeat(64) }] })).status, 200);
+  assert.equal(calls[1].action, "ack");
 });
