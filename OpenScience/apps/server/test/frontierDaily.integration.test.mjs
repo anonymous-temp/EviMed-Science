@@ -197,6 +197,7 @@ test("the push: one inbox item per reader at their own digest time, only to read
   }
   await database.query("INSERT INTO evimed_frontier.user_prefs (user_id) VALUES ($1)", [users.follower]);
   await database.query("INSERT INTO evimed_frontier.user_follows (user_id, kind, key, label) VALUES ($1, 'drug', 'semaglutide', '司美格鲁肽')", [users.follower]);
+  await database.query("INSERT INTO evimed_frontier.user_follows (user_id,kind,key,label,muted) VALUES ($1,'source','nejm','Muted source',true)", [users.stale]);
   await database.query("UPDATE evimed_frontier.user_prefs SET last_push_day = $2 WHERE user_id = $1", [users.pushed, DAY]);
   await preferences(users.off, { switches: { frontier: false, notify: true, question: true, review: true } });
   await preferences(users.late, { digestTime: "09:00" });
