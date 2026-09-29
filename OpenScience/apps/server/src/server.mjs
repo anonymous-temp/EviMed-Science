@@ -73,7 +73,7 @@ import {
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
-import { ResearchMemoryStore } from "./researchMemory.mjs";
+import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
 import { MEMORY_KIND_LABELS_ZH, migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
@@ -1036,6 +1036,11 @@ export function createWebApiApp(overrides = {}) {
   const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
   const recordMethodUse = async ({ project, run, sessions }) => {
     if (!learningService || !config.learningEnabled) return;
+    // A conversation trying someone else's capsule (「试用一次」) reads that
+    // pack and teaches nothing (build spec §9.4-5): what the researcher's own
+    // methods did in it is not a use of them.
+    if (run.sessionId && (await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId)
+      .catch(() => ({ trial: false }))).trial) return;
     const projection = await agentRuns.runWorkflowProjection(project, run);
     if (!projection) return;
     // The whole library: a researcher's methods follow them across projects

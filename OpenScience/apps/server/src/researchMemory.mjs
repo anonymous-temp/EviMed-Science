@@ -352,8 +352,11 @@ function pausedProjectList(value) {
  * no memory to pause, and the doubles the extraction tests use predate them.
  * Both read as "nothing paused", which is the behaviour before the switches.
  *
- * A conversation trying someone else's capsule (`trial`) writes nothing and
- * still reads. 无痕 used to be the third thing read here; it was deleted on
+ * A conversation trying someone else's capsule (`trial`) neither writes nor
+ * recalls this researcher's memory: it reads the pack alone (build spec
+ * §9.4-5 「该会话只读这个包」), so what it shows is the pack's effect and not
+ * the pack mixed with the researcher's own. It read the researcher's memory
+ * until 2026-09-29. 无痕 used to be the third thing read here; it was deleted on
  * 2026-09-20 with the bar that was its only control, and the account-level
  * recall pause is the remaining switch.
  *
@@ -374,12 +377,12 @@ export async function memoryPausedFor(store, userId, projectId, sessionId = null
       throw error;
     })
     : { trialCapsuleId: null };
-  // A conversation trying someone else's capsule writes nothing into this
-  // researcher's memory (「试用一次」); it still reads it.
+  // A conversation trying someone else's capsule (「试用一次」) writes nothing
+  // into this researcher's memory and reads nothing out of it.
   const trial = Boolean(session.trialCapsuleId);
   return {
     learning: settings.learningPaused || projectPaused || trial,
-    recall: settings.recallPaused || projectPaused,
+    recall: settings.recallPaused || projectPaused || trial,
     trial,
   };
 }

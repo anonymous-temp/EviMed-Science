@@ -339,3 +339,19 @@ test("a routine induction reads every run of the family, each cleaned like the m
   // Every other trigger reads one run.
   assert.deepEqual(buildDistillationInput({ run: { id: "r" }, trigger: "delivered", transcript: null }).peerRuns, []);
 });
+
+test("the distiller sees which related methods were retired, and why", () => {
+  const input = buildDistillationInput({
+    run: { id: "run_4" },
+    trigger: "repair_accepted",
+    transcript: null,
+    relatedMethods: [
+      { id: "method:learned:a", payload: { contentDigest: "sha256:a", frontmatter: { name: "a" }, body: "A", status: "approved" } },
+      { id: "method:learned:b", payload: { contentDigest: "sha256:b", frontmatter: { name: "b" }, body: "B", status: "retired", statusReason: "writes bookkeeping into reports" } },
+    ],
+  });
+  assert.deepEqual(input.relatedMethods.map((method) => [method.id, method.status, method.statusReason ?? null]), [
+    ["method:learned:a", "approved", null],
+    ["method:learned:b", "retired", "writes bookkeeping into reports"],
+  ]);
+});

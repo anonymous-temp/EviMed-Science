@@ -575,9 +575,9 @@ test("a conversation's memory state is the capsule it is trying, and nothing els
     const trying = await store.updateSessionState(owner, "study-one", "ses_a", { trialCapsuleId: "cap_shared" });
     assert.equal(trying.trialCapsuleId, "cap_shared");
     assert.equal((await store.sessionState(owner, "study-one", "ses_a")).trialCapsuleId, "cap_shared");
-    // A trial writes nothing into the researcher's own memory, and still reads it.
+    // A trial neither writes into the researcher's own memory nor reads it (build spec §9.4-5).
     const paused = await memoryPausedFor(store, owner, "study-one", "ses_a");
-    assert.deepEqual([paused.learning, paused.recall, paused.trial], [true, false, true]);
+    assert.deepEqual([paused.learning, paused.recall, paused.trial], [true, true, true]);
 
     // What the conversation lists mark 「试用 ·」: this project's trials, and only while they last.
     await store.updateSessionState(owner, "study-one", "ses_b", { trialCapsuleId: null });

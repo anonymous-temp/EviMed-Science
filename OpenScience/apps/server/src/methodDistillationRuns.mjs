@@ -243,12 +243,22 @@ export function buildDistillationInput(input) {
     transcriptExcerpts: excerpt.messages,
     // The platform reviewer's findings, after everything the researcher did.
     repairIssues: (input.repairIssues ?? []).slice(0, 20),
-    relatedMethods: (input.relatedMethods ?? []).slice(0, 8).map((method) => ({
-      id: method.id,
-      digest: method.payload?.contentDigest ?? method.digest,
-      frontmatter: method.payload?.frontmatter ?? method.frontmatter,
-      body: method.payload?.body ?? method.body,
-    })),
+    // With its status: a retired method reached the distiller looking like a
+    // method on file until 2026-09-29, so the lesson that had been stopped —
+    // two were, for writing package bookkeeping into reports — could be
+    // proposed again from the next run that showed the same habit.
+    relatedMethods: (input.relatedMethods ?? []).slice(0, 8).map((method) => {
+      const status = method.payload?.status ?? method.status ?? null;
+      const statusReason = status === "retired" ? (method.payload?.statusReason ?? method.statusReason ?? null) : null;
+      return {
+        id: method.id,
+        digest: method.payload?.contentDigest ?? method.digest,
+        frontmatter: method.payload?.frontmatter ?? method.frontmatter,
+        body: method.payload?.body ?? method.body,
+        ...(status ? { status } : {}),
+        ...(statusReason ? { statusReason } : {}),
+      };
+    }),
     authoringLimits: {
       maxBodyLines: SKILL_AUTHORING_LIMITS.maxBodyLines,
       maxDescriptionChars: SKILL_AUTHORING_LIMITS.maxDescriptionChars,
