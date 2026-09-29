@@ -132,6 +132,15 @@ class AnalysisExecutionTests(unittest.TestCase):
         self.assertEqual(ledger['executions'][0]['exitCode'], 0)
         self.assertTrue(any(item['code'] == 'receipt_path_unsafe' for item in ledger['executions'][0]['warnings']))
 
+    def test_history_alias_cannot_overwrite_source_during_normalization(self):
+        self.run_script("from pathlib import Path\nPath('analysis-results.json').write_text('{}')")
+        source = "from pathlib import Path\nbackup = max(Path('.analysis-provenance').glob('*-previous-results.json'), key=lambda p: p.stat().st_mtime_ns)\nattempt = backup.name.removesuffix('-previous-results.json')\n(backup.parent / (attempt + '-results.raw.json')).symlink_to('../data.csv')\nPath('analysis-results.json').write_text('{\"estimate\":NaN}')"
+        before = (self.root / 'data.csv').read_bytes()
+        self.run_script(source)
+        self.assertEqual((self.root / 'data.csv').read_bytes(), before)
+        self.assertTrue(self.receipt()[1]['sourcesUnchanged'])
+        self.assertTrue(self.receipt()[1]['warnings'])
+
     @unittest.skipUnless(shutil.which('Rscript'), 'Native R is unavailable')
     def test_native_r_execution_records_observed_versions(self):
         (self.root / 'analysis.R').write_text("cat('{\"analyses\":[{\"estimate\":2}]}', file='analysis-results.json')")
