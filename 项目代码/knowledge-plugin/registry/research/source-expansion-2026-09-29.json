@@ -727,7 +727,10 @@
       "at": "2026-09-29T14:16:41.423257+00:00",
       "outcome": "readable",
       "seconds": 90.42,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 16,
+      "parsedDated": 16
     },
     {
       "id": "cms-newsroom",
@@ -736,7 +739,10 @@
       "at": "2026-09-29T14:18:11.841064+00:00",
       "outcome": "readable",
       "seconds": 5.47,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 6,
+      "parsedDated": 6
     },
     {
       "id": "nice-news",
@@ -745,7 +751,10 @@
       "at": "2026-09-29T14:18:17.309428+00:00",
       "outcome": "readable",
       "seconds": 3.03,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 8,
+      "parsedDated": 8
     },
     {
       "id": "health-canada-news",
@@ -772,7 +781,10 @@
       "at": "2026-09-29T14:18:41.896513+00:00",
       "outcome": "readable",
       "seconds": 6.67,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 10,
+      "parsedDated": 10
     },
     {
       "id": "tga-news",
@@ -792,7 +804,10 @@
       "at": "2026-09-29T14:18:48.564762+00:00",
       "outcome": "readable",
       "seconds": 57.86,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 43,
+      "parsedDated": 42
     },
     {
       "id": "fda-aems-potential-signals",
@@ -879,7 +894,10 @@
       "at": "2026-09-29T14:16:11.589488+00:00",
       "outcome": "readable",
       "seconds": 271.42,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 60,
+      "parsedDated": 60
     },
     {
       "id": "cochrane-clinical-answers",
@@ -899,7 +917,10 @@
       "at": "2026-09-29T14:20:43.008699+00:00",
       "outcome": "readable",
       "seconds": 2.64,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 10,
+      "parsedDated": 10
     },
     {
       "id": "nice-in-consultation",
@@ -908,7 +929,10 @@
       "at": "2026-09-29T14:20:43.484830+00:00",
       "outcome": "readable",
       "seconds": 2.73,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 10,
+      "parsedDated": 0
     },
     {
       "id": "nice-news-05",
@@ -917,7 +941,10 @@
       "at": "2026-09-29T14:20:45.654979+00:00",
       "outcome": "readable",
       "seconds": 2.15,
-      "group": "relay-page"
+      "group": "relay-page",
+      "enabledAfterProbe": true,
+      "parsedEntries": 6,
+      "parsedDated": 6
     },
     {
       "id": "cdc-han",

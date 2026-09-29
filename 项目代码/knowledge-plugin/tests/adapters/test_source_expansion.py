@@ -68,3 +68,17 @@ def test_selector_recovery_refuses_undated_navigation_and_unbounded_candidates()
     assert not parsed.entries
     too_many = replace(configured, config={**configured.config, 'selector_fallbacks': [fallback] * 4})
     assert REGISTRY['html-list'].validate_config(too_many)
+
+
+@pytest.mark.parametrize('record', [row for row in EVIDENCE if row.get('enabledAfterProbe')], ids=lambda row: row['id'])
+def test_recovered_relay_selectors_match_the_actual_captured_entries(record):
+    row = SOURCES[record['id']]
+    assert row.enabled
+    assert not REGISTRY[row.source.access].validate_config(row.source)
+    parsed = REGISTRY[row.source.access].parse(response(record), row.source, datetime.fromisoformat(record['at']))
+    assert len(parsed.entries) == record['parsedEntries']
+    assert sum(entry.published_at is not None for entry in parsed.entries) == record['parsedDated']
+    assert parsed.entries[0].title == record['parsedSamples'][0]['title']
+    if record['id'] == 'nice-in-consultation':
+        assert all(entry.published_at is None for entry in parsed.entries), 'consultation deadlines are not publication dates'
+        assert all(entry.summary.startswith('Consultation closes:') for entry in parsed.entries)

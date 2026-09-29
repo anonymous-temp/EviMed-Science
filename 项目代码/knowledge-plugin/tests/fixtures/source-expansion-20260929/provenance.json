@@ -2020,6 +2020,21 @@
           },
           "file": "fda-cber-whats-new-0.body.gz"
         }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 16,
+      "parsedDated": 16,
+      "parsedSamples": [
+        {
+          "title": "SOPP 8426: Assignment of Biological and Drug Product Proper Names and Biological Suffixes",
+          "url": "https://www.fda.gov/media/96219/download?attachment",
+          "date": "2026-09-29 00:00:00+00:00"
+        },
+        {
+          "title": "September 25, 2026 Approval Letter - ROTARIX",
+          "url": "https://www.fda.gov/media/195058/download?attachment",
+          "date": "2026-09-28 00:00:00+00:00"
+        }
       ]
     },
     {
@@ -2040,6 +2055,21 @@
           },
           "file": "cms-newsroom-0.body.gz"
         }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 6,
+      "parsedDated": 6,
+      "parsedSamples": [
+        {
+          "title": "Trump Administration Announces $8.7 Million for New Ambulances and Lifesaving Medical Equipment Upgrades Across Rural Montana",
+          "url": "https://www.cms.gov/newsroom/press-releases/trump-administration-announces-8-7-million-new-ambulances-lifesaving-medical-equipment-upgrades",
+          "date": "2026-09-29 12:00:00+00:00"
+        },
+        {
+          "title": "Medicare Advantage and Medicare Prescription Drug Programs Expected to Remain Stable in 2027",
+          "url": "https://www.cms.gov/newsroom/press-releases/medicare-advantage-medicare-prescription-drug-programs-expected-remain-stable-2027",
+          "date": "2026-09-28 12:00:00+00:00"
+        }
       ]
     },
     {
@@ -2059,6 +2089,21 @@
             "content-type": "text/html; charset=utf-8"
           },
           "file": "nice-news-0.body.gz"
+        }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 8,
+      "parsedDated": 8,
+      "parsedSamples": [
+        {
+          "title": "NICE recommends Enhertu for people with HER2-low advanced breast cancer",
+          "url": "https://www.nice.org.uk/news/articles/nice-recommends-enhertu-for-people-with-her2-low-advanced-breast-cancer",
+          "date": "2026-09-17 00:00:00+00:00"
+        },
+        {
+          "title": "Draft guidance aims to improve identification of OCD and body dysmorphic disorder",
+          "url": "https://www.nice.org.uk/news/articles/draft-guidance-aims-to-improve-identification-of-ocd-and-body-dysmorphic-disorder",
+          "date": "2026-09-17 00:00:00+00:00"
         }
       ]
     },
@@ -2120,6 +2165,21 @@
           },
           "file": "taiwan-fda-announcements-0.body.gz"
         }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 10,
+      "parsedDated": 10,
+      "parsedSamples": [
+        {
+          "title": "公告廢止「中山醫學大學附設醫院(實驗室名稱：藥物檢測中心)」為本部認證之濫用藥物尿液檢驗機構，並自即日生效。",
+          "url": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=3&id=31735",
+          "date": "2026-09-23 00:00:00+00:00"
+        },
+        {
+          "title": "公告「ICH M12：藥物交互作用研究指引(Drug Interaction Studies)」及「ICH M12：藥物交互作用研究指引問答集(Drug Interaction Studies Q&As)」。",
+          "url": "https://www.fda.gov.tw/TC/newsContent.aspx?cid=3&id=31733",
+          "date": "2026-09-16 00:00:00+00:00"
+        }
       ]
     },
     {
@@ -2151,6 +2211,21 @@
             "content-type": "text/html; charset=UTF-8"
           },
           "file": "fda-drug-safety-communications-0.body.gz"
+        }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 43,
+      "parsedDated": 42,
+      "parsedSamples": [
+        {
+          "title": "FDA Approves Additional Information in Labeling for Kybella (Deoxycholic Acid) Injection Warning of Adverse Reactions Associated with Unapproved Use",
+          "url": "https://www.fda.gov/drugs/drug-safety-communications/fda-approves-additional-information-labeling-kybella-deoxycholic-acid-injection-warning-adverse",
+          "date": "2026-09-15 00:00:00+00:00"
+        },
+        {
+          "title": "FDA Adds Boxed Warning to Labeling for Ferric Carboxymaltose Injection (Injectafer) to Describe Risk of Low Phosphate Levels",
+          "url": "https://www.fda.gov/drugs/drug-safety-communications/fda-adds-boxed-warning-labeling-ferric-carboxymaltose-injection-injectafer-describe-risk-low",
+          "date": "2026-09-01 00:00:00+00:00"
         }
       ]
     },
@@ -2308,6 +2383,21 @@
           },
           "file": "fda-ai-enabled-device-list-0.body.gz"
         }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 60,
+      "parsedDated": 60,
+      "parsedSamples": [
+        {
+          "title": "FDA AI-enabled device: Auto-Seg (SO-0012), Spine Auto-Seg (SO-0012)",
+          "url": "https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfPMN/pmn.cfm?ID=K253628",
+          "date": "2026-06-29 00:00:00+00:00"
+        },
+        {
+          "title": "FDA AI-enabled device: ADAS 3D",
+          "url": "https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfPMN/pmn.cfm?ID=K253969",
+          "date": "2026-06-29 00:00:00+00:00"
+        }
       ]
     },
     {
@@ -2340,6 +2430,21 @@
           },
           "file": "nice-published-guidance-0.body.gz"
         }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 10,
+      "parsedDated": 10,
+      "parsedSamples": [
+        {
+          "title": "Isatuximab with pomalidomide and dexamethasone for treating relapsed and refractory multiple myeloma",
+          "url": "https://www.nice.org.uk/guidance/ta1194",
+          "date": "2026-09-24 12:00:00+00:00"
+        },
+        {
+          "title": "Ibrutinib with R-CHOP for untreated mantle cell lymphoma when a stem cell transplant is suitable",
+          "url": "https://www.nice.org.uk/guidance/ta1193",
+          "date": "2026-09-23 12:00:00+00:00"
+        }
       ]
     },
     {
@@ -2360,6 +2465,21 @@
           },
           "file": "nice-in-consultation-0.body.gz"
         }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 10,
+      "parsedDated": 0,
+      "parsedSamples": [
+        {
+          "title": "Obsessive-compulsive disorder and body dysmorphic disorder: assessment and management",
+          "url": "https://www.nice.org.uk/guidance/gid-ng10435/consultation/html-content-14",
+          "date": "None"
+        },
+        {
+          "title": "Obsessive-compulsive disorder and body dysmorphic disorder",
+          "url": "https://www.nice.org.uk/guidance/gid-qs10200/consultation/html-content-10",
+          "date": "None"
+        }
       ]
     },
     {
@@ -2379,6 +2499,21 @@
             "content-type": "text/html; charset=utf-8"
           },
           "file": "nice-news-05-0.body.gz"
+        }
+      ],
+      "enabledAfterProbe": true,
+      "parsedEntries": 6,
+      "parsedDated": 6,
+      "parsedSamples": [
+        {
+          "title": "NICE recommends Enhertu for people with HER2-low advanced breast cancer",
+          "url": "https://www.nice.org.uk/news/articles/nice-recommends-enhertu-for-people-with-her2-low-advanced-breast-cancer",
+          "date": "2026-09-17 00:00:00+00:00"
+        },
+        {
+          "title": "Draft guidance aims to improve identification of OCD and body dysmorphic disorder",
+          "url": "https://www.nice.org.uk/news/articles/draft-guidance-aims-to-improve-identification-of-ocd-and-body-dysmorphic-disorder",
+          "date": "2026-09-17 00:00:00+00:00"
         }
       ]
     },
