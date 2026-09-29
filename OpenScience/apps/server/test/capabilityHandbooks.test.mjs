@@ -100,3 +100,15 @@ test("concurrent terminal observations keep both runs despite a telemetry CAS co
     run: { id, effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items } })));
   assert.deepEqual((await f.documents.get("alice", "method", applied.handbookId)).payload.observations.map((item) => item.runId).sort(), ["one", "two"]);
 }));
+
+test("an invalid stored supplement is omitted without blocking the authorized research turn", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const row = await f.documents.get("alice", "method", applied.handbookId);
+  await f.documents.put("alice", "method", row.id, { ...row.payload, body: "Invalid legacy body" }, { expectedRevision: row.revision });
+  const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  assert.equal(handbooks.items.length, 0);
+  assert.equal(handbooks.omitted, 1);
+  const prepared = await prepareResearchContext(project, { mode: "specialist" }, config, { routedSpecialist: { agentId: "geo-content" }, handbooks });
+  assert.match(prepared.system, /geo-content/);
+}));
