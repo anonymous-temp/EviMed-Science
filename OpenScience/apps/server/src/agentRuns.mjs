@@ -600,6 +600,7 @@ function foldEvents(events) {
       runs.set(id, Object.freeze({
         ...current,
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
+        ...(event.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(event.capabilityHandbooks) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
@@ -777,6 +778,18 @@ function normalizeRecalledMemories(value) {
   // it over a conversation, and the panel that lists them must list them all.
   // Still bounded — the row is rewritten on every learning write.
   return rows.length > 0 ? rows.slice(0, 40) : undefined;
+}
+
+/** The supplementary body never belongs in the run ledger, only its exact receipt. */
+function normalizeCapabilityHandbooks(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => typeof item?.id === "string" && item.id.startsWith("method:capability-handbook:") && item.id.length <= 256
+    && typeof item.ownerId === "string" && /^[A-Za-z0-9_.:@-]{1,128}$/.test(item.ownerId)
+    && typeof item.capabilityId === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(item.capabilityId)
+    && /^sha256:[a-f0-9]{64}$/.test(item.contentDigest)
+    && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
+    && Number.isSafeInteger(item.version) && item.version > 0)
+    .slice(0, 6).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version }));
 }
 
 function normalizeMethodDigests(value) {
@@ -4399,7 +4412,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -4423,6 +4436,8 @@ export class AgentRunStore {
         id: runId,
         at: this.now().toISOString(),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
+        ...(patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(patch.capabilityHandbooks.filter((item) => item?.ownerId === project.userId)) }
+          : current.capabilityHandbooks ? { capabilityHandbooks: current.capabilityHandbooks } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
