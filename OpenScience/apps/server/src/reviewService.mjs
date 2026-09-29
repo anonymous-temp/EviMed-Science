@@ -910,6 +910,7 @@ export class ReviewService {
       const judged = await judgeCitedSentences({
         sentences, references: cited, readable,
         threshold: Number(this.config.reviewJevSupportConfidence),
+        jevLimits: this.config,
         jev: this.jevEnabled
           ? (request) => callJev({ ...ledger, retryDelayMs: Math.min(this.retryDelayMs, JEV_RETRY_DELAY_MS) }, {
             userId: row.user_id, projectId: row.project_id, runId: row.run_id, purpose: "review", ...request,
@@ -1494,7 +1495,7 @@ export function reviewMetricFamilies(enabled, stats) {
     families.push(
       { name: "open_science_review_jev_enabled", help: "Whether the reply check asks TypeSafe's Jev first: its lever on and its key present.", type: "gauge", series: [{ value: jev.enabled ? 1 : 0 }] },
       { name: "open_science_review_jev_requests_total", help: "Jev requests of the reply check, by outcome: answered, failed, or too_large (not sent: over Jev's per-request ceiling).", type: "counter", series: split(jev.requests, "outcome") },
-      { name: "open_science_review_jev_failures_total", help: "Jev requests that failed or were not sent, by code; each reply fell back to the reviewer model for every sentence.", type: "counter", series: split(jev.failures, "code") },
+      { name: "open_science_review_jev_failures_total", help: "Jev requests that failed or were not sent, by code; only those batches fell back to the reviewer model.", type: "counter", series: split(jev.failures, "code") },
       { name: "open_science_review_jev_sentences_total", help: "Cited sentences by what the first pass did: decided (Jev, confident support), escalated (to the reviewer model), medicine (never put to Jev), failed or too_large (their request failed, or was not sent).", type: "counter", series: split(jev.sentences, "outcome") },
     );
   }
