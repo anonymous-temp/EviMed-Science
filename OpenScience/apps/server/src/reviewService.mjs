@@ -73,6 +73,7 @@ import {
   reviewSeverity,
   statConsistencyFindings,
   studyTypeLabel,
+  workspaceLayout,
 } from "@evimed/domain";
 import { callReviewModel, ReviewModelError } from "./reviewModel.mjs";
 import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
@@ -601,21 +602,36 @@ export class ReviewService {
       }
     }
 
-    // One list, ordered for a reader, numbered once.
+    // One list, ordered for a reader. Ids hold across the deliverable's
+    // reviews: a finding raised again — the same kind on the same words —
+    // keeps the id it was first given, and a new one is numbered after every
+    // id used before. Numbered afresh on each pass, the writer's answers
+    // pointed at findings that had moved: 「第二轮编号已重排」 (2026-09-27
+    // osimertinib), and a topic run's F06–F09 answered against ids that no
+    // longer named them (2026-09-28), so the ledger counted them unanswered.
     const merged = [
       ...codeFindings.map((finding) => ({ ...finding, origin: "code" })),
       ...editorFindings.map((finding) => ({ kind: finding.kind, location: finding.location, evidence: finding.evidence, fix: finding.fix, message: finding.message, origin: "editor" })),
     ].sort((left, right) => KIND_ORDER.indexOf(left.kind) - KIND_ORDER.indexOf(right.kind));
-    const numbered = merged.map((finding, index) => ({
-      id: `F${String(index + 1).padStart(2, "0")}`,
-      kind: finding.kind,
-      severity: reviewSeverity(finding.kind),
-      origin: finding.origin,
-      location: clip(finding.location, 200),
-      evidence: clip(finding.evidence, 600),
-      fix: clip(finding.fix, 400),
-      message: clip(finding.message, 1200),
-    }));
+    const prior = await this.#priorFindingIds(id);
+    let highest = prior.highest;
+    const given = new Set();
+    const numbered = merged.map((finding) => {
+      const evidence = clip(finding.evidence, 600);
+      const earlier = prior.byWhat.get(`${finding.kind}\u0000${evidence}`);
+      const findingId = earlier && !given.has(earlier) ? earlier : `F${String(++highest).padStart(2, "0")}`;
+      given.add(findingId);
+      return {
+        id: findingId,
+        kind: finding.kind,
+        severity: reviewSeverity(finding.kind),
+        origin: finding.origin,
+        location: clip(finding.location, 200),
+        evidence,
+        fix: clip(finding.fix, 400),
+        message: clip(finding.message, 1200),
+      };
+    });
     for (const finding of numbered) this.counts.findings[`${finding.origin}:${finding.kind}`] = (this.counts.findings[`${finding.origin}:${finding.kind}`] ?? 0) + 1;
     for (const entry of dropped) this.counts.dropped[entry.reason] = (this.counts.dropped[entry.reason] ?? 0) + 1;
     // A finding the writer declined, raised again word for word, stays
@@ -688,6 +704,33 @@ export class ReviewService {
     return declined;
   }
 
+  /**
+   * The ids this deliverable's other reviews gave their findings, by what each
+   * finding is (kind and words; the first id given wins), and the highest
+   * number used. Read in SQL against the review's own row, so which reviews
+   * are this deliverable's is the same question `startDeliverableReview` asks.
+   * @param {string} reviewId @returns {Promise<{ byWhat: Map<string, string>, highest: number }>}
+   */
+  async #priorFindingIds(reviewId) {
+    const rows = await this.database.query(`SELECT f.finding_id, f.kind, f.evidence FROM evimed_review.findings f
+      JOIN evimed_review.reviews r ON r.id = f.review_id
+      JOIN evimed_review.reviews self ON self.id = $1
+      WHERE r.id <> self.id AND r.user_id = self.user_id AND r.project_id = self.project_id
+        AND r.socket_run_id = self.socket_run_id AND r.deliverable_id = self.deliverable_id
+      ORDER BY r.created_at, f.finding_id`, [reviewId]);
+    /** @type {Map<string, string>} */
+    const byWhat = new Map();
+    let highest = 0;
+    for (const row of rows.rows) {
+      const number = /^F(\d+)$/.exec(String(row.finding_id))?.[1];
+      if (!number) continue;
+      highest = Math.max(highest, Number(number));
+      const key = `${row.kind}\u0000${row.evidence}`;
+      if (!byWhat.has(key)) byWhat.set(key, String(row.finding_id));
+    }
+    return { byWhat, highest };
+  }
+
   /** A previous review's findings, with what the writer answered. @param {string} reviewId */
   async #findingsWithResponses(reviewId) {
     const rows = await this.database.query(`SELECT finding_id, kind, location, evidence, fix, response, response_reason FROM evimed_review.findings
@@ -730,7 +773,7 @@ export class ReviewService {
     /** @type {{ code: string, severity: string, text: string, detail?: string }[]} */
     const notices = [];
     for (const review of latest.rows) {
-      const findings = await this.#readerFindings(review);
+      const findings = inReaderOrder(await this.#readerFindings(review));
       const fixed = findings.filter((/** @type {any} */ row) => row.response === "fixed" || row.response === "resolved").length;
       const declined = findings.filter((/** @type {any} */ row) => row.response === "declined").length;
       const owed = findings.filter((/** @type {any} */ row) => REVIEW_ANSWER_REQUIRED_KINDS.includes(row.kind) && !row.response);
@@ -1045,6 +1088,24 @@ function readinessError(code, details) {
   return error;
 }
 
+/**
+ * Findings in the order a reader needs them — by kind (`KIND_ORDER`), then by
+ * number — whatever order their ids were given in: an id is kept across
+ * passes, so a pass's safety finding can carry a later number than its
+ * wording one, and the run reads the first `REVIEW_ISSUE_LIMIT` of the list.
+ * @param {readonly any[]} rows @returns {any[]}
+ */
+function inReaderOrder(rows) {
+  /** @param {any} row */
+  const rank = (row) => {
+    const at = KIND_ORDER.indexOf(String(row.kind));
+    return at < 0 ? KIND_ORDER.length : at;
+  };
+  /** @param {any} row */
+  const number = (row) => Number(/(\d+)$/.exec(String(row.finding_id ?? ""))?.[1] ?? 0);
+  return [...rows].sort((left, right) => rank(left) - rank(right) || number(left) - number(right));
+}
+
 /** The public view of a done review. @param {Record<string, any>} row @param {any[]} findings */
 function publicResult(row, findings) {
   const checklist = Array.isArray(row.checklist) ? row.checklist : [];
@@ -1057,7 +1118,7 @@ function publicResult(row, findings) {
     pass: Number(row.pass) || 0,
     editor: deterministic.editor ?? "skipped",
     editorError: row.error_code ?? null,
-    findings: findings.map((finding) => ({
+    findings: inReaderOrder(findings).map((finding) => ({
       id: finding.finding_id,
       kind: finding.kind,
       label: REVIEW_FINDING_KIND_LABELS_ZH[/** @type {keyof typeof REVIEW_FINDING_KIND_LABELS_ZH} */ (finding.kind)] ?? finding.kind,
@@ -1116,6 +1177,11 @@ async function readDeliverable(root, deliverableId, outputs) {
       names = [];
     }
   }
+  // The revision notes are the writer's backstage file, not the submission:
+  // read as package, the editor reviewed them — a finding about the notes'
+  // own list cost a geo-content run a third submission (2026-09-25) — and
+  // their answers already reach it as the writer's responses.
+  names = names.filter((name) => name !== workspaceLayout.revisionNotesFile);
   /** @type {Map<string, string>} */
   const files = new Map();
   for (const name of names) {

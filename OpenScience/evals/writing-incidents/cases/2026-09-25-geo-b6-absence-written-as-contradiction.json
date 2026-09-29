@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-25-geo-b6-absence-written-as-contradiction",
+  "genre": "absence-as-contradiction",
+  "observedIn": "evals/geo-content/results/2026-09-25-xinermei-batch6-corrections/deliverable/deliverables/geo-content-b6/articles/correction-glory1-48week-deepseek.md",
+  "line": 1,
+  "verbatim": "# 更正请求：GLORY-1 第 48 周 4mg 组是 11.00%、6mg 组是 14.01%，不是 12.05% 与 14.84%",
+  "whyItIsWrong": "The batch read only the trial's abstract, which reports the treatment-policy estimand; 12.05% and 14.84% (given alike by three engines) are most likely the efficacy-estimand figures. A public correction request accuses a possibly correct answer of being wrong on abstract-level evidence.",
+  "caughtBy": "nobody",
+  "note": "The same batch applied 「本项目可核验来源查不到」 to 82.8% and 20.08% but not here. Unverified before publication; the owner holds the three 「不是 X」 articles until the full text or the sponsor's release is checked. Skill rule since 2026-09-29 (geo-content, citation-integrity): absence is not contradiction; name the estimand."
+}

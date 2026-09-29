@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-28-ma-001-category-sum-stated-twice",
+  "genre": "number-prose-divergence",
+  "observedIn": "evals/meta-analysis/results/2026-09-28-ma-001-tranexamic-acid-tka-run3/deliverable/deliverables/txa-tka-meta/meta-analysis-report.md",
+  "line": 108,
+  "verbatim": "需要说明的是：下列七类计数相加为 165，大于 141",
+  "whyItIsWrong": "The same report's appendix (line 444) says of the same seven categories 「类别之和等于 141」; 51+37+33+19+11+8+6 is 165. A total the run typed twice, differently, reached the reader.",
+  "caughtBy": "nobody",
+  "note": "The run first wrote 602 for a sum that is 722 (revision-notes.md line 40). A count the run makes itself is computed by a script over the items and written from its output, once (shared 'Before delivering' block, 2026-09-29); traceability-review now recounts self-made totals."
+}

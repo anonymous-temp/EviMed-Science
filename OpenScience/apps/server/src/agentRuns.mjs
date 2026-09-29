@@ -88,6 +88,7 @@ import {
   UNRECORDED_LIMIT,
   auditCitedSources,
   citationUrlDefects,
+  citationUrlDefectsByLine,
   unrecordedCitationMessage,
   unretrievedCitationMessage,
 } from "@evimed/domain";
@@ -2441,9 +2442,16 @@ async function specialistCompletionOutcome(
     return { artifacts, errorCode: "specialist_required_skill_missing", qualityDegradable: true, qualityUnverified: true, qualityIssues: [skillGap] };
   }
   if (agent.completionChecks.includes("citationsResolvable")) {
-    const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
-    const defects = markdown.map((text) => citationUrlDefects(text));
-    advisories.push(...defects.flatMap((defect) => defect.advisory).map((text) => runNotice("citation_plain_http", text)));
+    const markdown = [...files].filter(([relative]) => relative.endsWith(".md"));
+    const defects = markdown.map(([, text]) => citationUrlDefects(text));
+    // Advice by file and line, in the run-side gate's own words: worded
+    // alike, the receipt's copy of the same link is recognised as the notice
+    // already admitted instead of arriving as a second one.
+    for (const [relative, text] of markdown) {
+      for (const { line, message } of citationUrlDefectsByLine(relative, text).advisory) {
+        advisories.push(runNotice("citation_plain_http", message, { file: relative, line }));
+      }
+    }
     const blocking = defects.flatMap((defect) => defect.blocking);
     if (blocking.length > 0) {
       // Naming the URL, as every other gate message here does. This returned a

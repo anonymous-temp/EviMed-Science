@@ -2289,9 +2289,31 @@ function claimEvidenceText(claim) {
   return [claim?.claim, claim?.supportQuote, claim?.sourceTitle, claim?.identifier].join(" ");
 }
 
+/** The Lancet's decimal point, a raised dot between two digits: 「0·78」 is 0.78. */
+const RAISED_DECIMAL_POINT = /(\d)[\u00b7\u22c5](?=\d)/g;
+/** A Chinese interval: 「42% 至 58%」 is the interval 42–58. */
+const CJK_INTERVAL = /(\d)\s*%?\s*至\s*(?=\d)/g;
+
+/**
+ * Two spellings of a number that every side reads the same way — the report
+ * line and the claim as much as the quote. Read on the support side alone, a
+ * raised dot in a report line was no number at all: 「1·37（95% CI 1·16–1·59）」
+ * read as 95 and 1, so the 2026-09-28 EMPA-KIDNEY run silenced its numeric
+ * notices by retyping Chinese prose with raised dots, and nothing was checked.
+ * And 「至」, the interval a Chinese report writes, came back as two endpoints
+ * no quote offers (the same package's 「42, 58 … not present」 on lines 14
+ * and 70). 「至」 raised the frozen CJK pattern count in `vocabulary.test.mjs`
+ * by one: a separator between two numerals is a closed format, not a judgment
+ * about prose.
+ * @param {unknown} value @returns {string}
+ */
+function spelledNumerals(value) {
+  return String(value ?? "").replace(RAISED_DECIMAL_POINT, "$1.").replace(CJK_INTERVAL, "$1–");
+}
+
 /** @param {unknown} value @returns {string[]} */
 function numericTokens(value) {
-  return String(value ?? "")
+  return spelledNumerals(value)
     .replace(/\]\(https?:\/\/[^)\s]+\)/gi, "]")
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/\[claim:CLM-[0-9]{3,6}\]/g, "")
@@ -2317,18 +2339,17 @@ function numericTokens(value) {
  * The numbers a support text offers, in the spellings a faithful restatement
  * uses. An interval written with a separator other than a dash is the
  * interval it is: 「0.64 to 0.82」, 「15% to 23%」 and 「15~23」 state the same
- * interval as 「0.64–0.82」. The Lancet's decimal point is a raised dot:
- * 「0·78」 is 0.78. (A Chinese 「至」 is left out: a CJK pattern in this file is
- * frozen by `vocabulary.test.mjs`, and the frozen count is not raised for it.)
- * Journals write the first forms and summaries the second, so a claim that
- * restated a quoted estimate faithfully was reported as unsupported — sixteen
- * advisory findings on eleven of fifty-three claims of the 2026-09-08
- * EMPA-KIDNEY package, every one a correct transcription. Support only: what a
- * claim is asked to show is unchanged, and every number must be the quote's own.
+ * interval as 「0.64–0.82」. Journals write the first forms and summaries the
+ * second, so a claim that restated a quoted estimate faithfully was reported as
+ * unsupported — sixteen advisory findings on eleven of fifty-three claims of the
+ * 2026-09-08 EMPA-KIDNEY package, every one a correct transcription. Support
+ * only: what a claim is asked to show is unchanged, and every number must be
+ * the quote's own. (The raised decimal point and 「至」 are spellings every side
+ * reads alike; `spelledNumerals`.)
  * @param {unknown} value @returns {string[]}
  */
 function supportNumericTokens(value) {
-  const text = String(value ?? "").replace(/(\d)[\u00b7\u22c5](?=\d)/g, "$1.");
+  const text = String(value ?? "");
   const tokens = numericTokens(text);
   if (!/\d\s*%?\s*(?:\bto\b|~|〜|～)\s*\d/i.test(text)) return tokens;
   const spelled = numericTokens(text.replace(/(\d)\s*%?\s*(?:\bto\b|~|〜|～)\s*(?=\d)/gi, "$1–"));
@@ -2448,7 +2469,7 @@ export function conclusoryQuantities(text) {
   // "98.5%-99.7%" and "98.5–99.7%" are the same interval to it; without the
   // same normalisation here the two extractors disagreed about the same figure,
   // and a claim quoting an interval faithfully was reported as unsupported.
-  const source = String(text ?? "")
+  const source = spelledNumerals(text)
     .replace(/%(\s*[–—-]\s*)(?=\d)/g, "$1")
     // "一次10丸、一日3次" says ten pills, three times a day. The 一 in 一次 and
     // 一日 is the Chinese for "per", not a quantity, but it reads as the CJK

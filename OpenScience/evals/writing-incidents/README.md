@@ -9,7 +9,7 @@ before knowing the question.
 
 Principle #5: no new open-vocabulary prose regex. Every register complaint that
 used to become another word list in `clinicalEvidence.mjs` becomes a case here
-instead. The file is frozen at 117 CJK-bearing patterns
+instead. The file's CJK-bearing patterns are frozen at their current count
 (`packages/domain/test/vocabulary.test.mjs`), so this is the only place a new
 observation can go.
 
@@ -18,7 +18,7 @@ general fix safe to attempt is a corpus that would catch it regressing.
 
 ## What counts as an incident
 
-Three genres, from the text-output review:
+The genres, from the text-output review and the 2026-09-29 quality classes:
 
 - **Backstage prose in the front matter** — revision notes, replies to a
   rejection, retrieval diaries, version scars, or anything about the document
@@ -28,6 +28,10 @@ Three genres, from the text-output review:
   certainty grade, method tools named and never applied, addressing the reader.
 - **Number–prose divergence** — a figure in prose with no source in the
   artifacts, or a number changed in one place and not in its dependents.
+- **Mistranslation** — a term rendered into another language so that it names
+  something else, or nothing.
+- **Absence as contradiction** — a figure the run could not find in what it
+  read, written up as a figure the source contradicts.
 
 ## Case shape
 

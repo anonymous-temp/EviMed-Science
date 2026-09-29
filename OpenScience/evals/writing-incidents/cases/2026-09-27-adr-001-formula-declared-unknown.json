@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-27-adr-001-formula-declared-unknown",
+  "genre": "number-prose-divergence",
+  "observedIn": "evals/adr-analysis/results/2026-09-27-adr-001-osimertinib-cardiac/deliverable/deliverables/osimertinib-cardiac-adr/safety-report.md",
+  "line": 71,
+  "verbatim": "其中 `expected_count` 不等于「目标药报告数 × 背景事件构成比」这一乘积形式（心力衰竭以 (a + b)(c + d)/N 计为 7,665.750，而输出为 27.424），说明该列使用了未随输出展开的中间量。这些列按输出值原样引用，本报告不改写、不反推；其算法细节属该统计路径的实现，本次未取得，记为缺口",
+  "whyItIsWrong": "expected_count equals (a+b)(a+c)/N exactly (7,670 × 49,486 / 13,840,535 = 27.424 for cardiac failure); the run multiplied by (c+d) instead of (a+c), got 7,665.750, and told the reader the method was unknown. It also names a field (`expected_count`) in reader prose.",
+  "caughtBy": "nobody",
+  "note": "The engine's provenance did not state the formula, so the run reconstructed one and got it wrong. Skill rule since 2026-09-29: where a tool does not state how it computed a value, say so; never reconstruct the formula. The engine should publish its formulas."
+}

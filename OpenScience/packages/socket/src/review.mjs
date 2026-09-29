@@ -206,10 +206,17 @@ export function reviewIssues(review) {
   }))
   const rest = findings.length - listed.length
   if (rest > 0) listed.push({ code: 'review_more', severity: 'advisory', message: `另有 ${rest} 条审查发现没有列出；读回请调用 evimed_review_run。` })
+  // Where an unmet item is answered is part of the message. 「补上，或在报告里
+  // 说明不适用」 and a bare 「没有满足」 sent every run's answer into the report:
+  // 验收项对照 sections, number-provenance tables, 「报告规范的适用性」 and
+  // conflict-of-interest statements nobody made, in eight of nineteen accepted
+  // capabilities (quality classes 2026-09-29, C1). The report is the reader's;
+  // an item about the package itself is answered where the package's own
+  // record is kept.
   const absent = review?.checklist?.absent ?? []
-  if (absent.length) listed.push({ code: 'review_missing_item', severity: 'advisory', message: `报告清单中这些条目没有找到：${absent.join('、')}。补上，或在报告里说明不适用。` })
+  if (absent.length) listed.push({ code: 'review_missing_item', severity: 'advisory', message: `报告清单中这些条目没有找到：${absent.join('、')}。读者需要、你又有依据写的内容，补进报告；不适用的条目，以及利益冲突、资助这类没人告诉过你的事实，不写进报告、不代人声明，在 revision-notes.md 里说明。` })
   const unmet = review?.acceptance?.unmet ?? []
-  if (unmet.length) listed.push({ code: 'review_missing_item', severity: 'advisory', message: `计划里的验收项没有满足：${unmet.join('、')}。` })
+  if (unmet.length) listed.push({ code: 'review_missing_item', severity: 'advisory', message: `计划里的验收项没有满足：${unmet.join('、')}。读者需要的内容补进报告；关于文件、字段、数字与产物是否一致或检查过程的验收项，在 revision-notes.md 回应，不在报告里另立小节。` })
   return listed
 }
 

@@ -20,6 +20,12 @@ whether the source directly supports, qualifies, or conflicts with it. Flag
 secondary citations where the primary source is available. Respect license and
 quotation limits; paraphrase while preserving the source's meaning.
 
+Absence is not conflict. A figure you cannot find in what you read — often only
+the abstract — is unverified, not contradicted. A source conflicts with a claim
+only when it states a different value for the same estimand, time point, dose
+and population; name the estimand (treatment-policy or efficacy) whenever a
+trial reports both, and say how much of the source was read.
+
 Write only the citation files your deliverable's contract lists. Where it lists
 `citation-ledger.csv` or `citation-audit.md`, the audit names unresolved,
 duplicate, retracted, corrected, metadata-only, and claim-mismatched references.

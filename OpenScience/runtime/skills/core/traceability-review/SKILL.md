@@ -49,6 +49,10 @@ and fall back to whatever text you can read — do not fabricate identifiers.
    notebook output, or an execution log that produces that value.
 3. Finding: `warn` for any number with no traceable source. Quote the exact
    sentence in the evidence.
+4. A count, sum or share the document makes itself — sources, rows,
+   categories, placeholders — is counted again from the file that holds the
+   items. Finding: `error` when the two differ, or when the document states the
+   same total twice with different values; quote both.
 
 ## Check 3 · Figure ↔ code consistency
 

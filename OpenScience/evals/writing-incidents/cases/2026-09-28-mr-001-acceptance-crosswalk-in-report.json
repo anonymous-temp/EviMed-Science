@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-28-mr-001-acceptance-crosswalk-in-report",
+  "genre": "backstage-prose",
+  "observedIn": "evals/mendelian-randomization/results/2026-09-28-mr-001-bmi-coronary-artery-disease-run4/deliverable/deliverables/mr-bmi-cad/mendelian-randomization-report.md",
+  "line": 225,
+  "verbatim": "| 9 | 验收项对照表本身 | 本节 |",
+  "whyItIsWrong": "Section 7 「验收项对照」 maps the plan's acceptance items to the report, down to a row for the crosswalk itself: the package's bookkeeping in the reader's document. Eight of nineteen accepted capabilities carried the same kind of section (DS §11, CDE §四, ADR §5.1, MA's blocker-code appendix).",
+  "caughtBy": "nobody",
+  "note": "Produced by the pipeline, not the model alone: the plan asked for acceptance items 「交付文件里能核对到」, the review sent unmet ones back without saying where to answer them, and a learned method said to write them into the document. Fixed 2026-09-29 at all three (plan field, review message, method retired); the eval is that a rerun of this brief carries no such section."
+}

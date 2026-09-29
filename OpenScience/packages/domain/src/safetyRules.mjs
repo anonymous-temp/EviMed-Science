@@ -56,6 +56,19 @@ export const CLINICAL_HIGH_RISK_ENTITIES = Object.freeze(
     .sort((left, right) => right.length - left.length),
 )
 
+/**
+ * Whole terms in which a high-alert medicine's name names physiology — 胰岛素抵抗,
+ * dopamine receptor — blanked before the medicines are looked for
+ * (`highRiskEntityPhysiologyTerms`). Longest first, so the most specific term
+ * is the one blanked.
+ */
+const CLINICAL_HIGH_RISK_PHYSIOLOGY_TERMS = Object.freeze(
+  (Array.isArray(clinicalSafetyRulesData?.highRiskEntityPhysiologyTerms) ? clinicalSafetyRulesData.highRiskEntityPhysiologyTerms : [])
+    .filter((term) => typeof term === 'string' && term.trim())
+    .map((term) => term.trim())
+    .sort((left, right) => right.length - left.length),
+)
+
 /** @param {string} value @returns {string} */
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -105,10 +118,16 @@ const ASCII_ENTITY = /^[\x20-\x7e]+$/
  * @returns {string[]}
  */
 export function matchedHighRiskEntities(text) {
-  const value = String(text ?? '')
-  if (!value) return []
+  const raw = String(text ?? '')
+  if (!raw) return []
+  const alreadyTriggered = new Set(matchedClinicalTriggers(raw))
+  // A name inside a physiology term is not the medicine: blanked, each term
+  // compared whole (case-insensitively for Latin script), never as a pattern.
+  let value = raw
+  for (const term of CLINICAL_HIGH_RISK_PHYSIOLOGY_TERMS) {
+    value = value.replace(new RegExp(escapeRegExp(term), ASCII_ENTITY.test(term) ? 'gi' : 'g'), ' ')
+  }
   const lower = value.toLowerCase()
-  const alreadyTriggered = new Set(matchedClinicalTriggers(value))
   return CLINICAL_HIGH_RISK_ENTITIES.filter((entity) => {
     if (alreadyTriggered.has(entity)) return false
     if (!ASCII_ENTITY.test(entity)) return value.includes(entity)

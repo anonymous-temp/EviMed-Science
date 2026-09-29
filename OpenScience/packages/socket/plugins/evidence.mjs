@@ -15,7 +15,7 @@
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { mcpToolBaseName, narrateToolCall } from '@evimed/domain'
+import { mcpToolBaseName } from '@evimed/domain'
 import { configSchema, onToolObserved } from '@evimed/harness-port'
 import { evidenceFromOutcome, isEvidenceCall, mergeEvidence, sourceProbe } from '../src/evidenceIngest.mjs'
 import { advanceEvidence } from '../src/runMirror.mjs'
@@ -129,13 +129,14 @@ export async function apply(ctx, config) {
           // bug survived: the diagnostic that should have caught it described
           // it in the same words as an ordinary empty search.
           const { reason } = sourceProbe(outcome?.structured)
-          if (reason === 'empty-container') {
-            // A notice is read by the researcher — it travels through the run
-            // projection into the inbox, the card and the page — so it is
-            // written in their words, not in ours. This line used to read
-            // `literature_search searched and returned no source`.
-            diagnostics?.notice?.(`${narrateToolCall(call?.name ?? '', call?.args ?? {}).text}——这次检索没有找到可用来源。`)
-          } else {
+          // An empty search is a fact about the literature, and it says
+          // nothing about the delivery: it is no longer a notice. Researchers
+          // read notices on the card, the inbox and the page, and the 09-28
+          // acceptance runs carried up to eight of these lines each (`…——这次
+          // 检索没有找到可用来源。`) beside the findings that mattered
+          // (quality classes 2026-09-29, C13). What was searched and found is
+          // the report's to state, and the platform's evidence record keeps it.
+          if (reason !== 'empty-container') {
             diagnostics?.degrade?.(
               `evidence ingest cannot read a completed ${base} result: no recognised source container (${reason}, structured=${outcome?.structured === undefined ? 'absent' : typeof outcome.structured})`,
             )

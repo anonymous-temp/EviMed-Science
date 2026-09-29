@@ -47,6 +47,11 @@ test('a number close to an output but not equal to it is a near miss, named as s
   const { findings } = numericTraceFindings({ reportText: 'IVW OR = 0.91（P = 0.0068）', outputs: [0.88, 0.0068] })
   assert.deepEqual(findings.map((finding) => [finding.verdict, finding.numbers]), [['mismatched', ['0.91']]])
   assert.match(findings[0].message, /相近而不相同/)
+  // A difference with a reason is answered to the finding, not explained in
+  // the report: the 2026-09-27 osimertinib report grew a provenance table
+  // that existed only to answer these (quality classes 2026-09-29, C1).
+  assert.doesNotMatch(findings[0].message, /在文中说明/)
+  assert.match(findings[0].message, /不在报告里另作说明/)
 })
 
 test('nothing to trace against is nothing found, not everything unsupported', () => {
@@ -86,4 +91,32 @@ test('a citation written after the full stop still covers the sentence before it
   const reportText = 'The pooled estimate across six trials\nwas OR 0.63.\n[17] It held in sensitivity analyses.\nA second estimate, OR 0.71, is uncited.'
   const { findings } = numericTraceFindings({ reportText, outputs: [16] })
   assert.deepEqual(findings.map((finding) => [finding.line, finding.numbers]), [[4, ['0.71']]])
+})
+
+test('a number written in powers of ten is traced as the value it states, held to its mantissa\'s precision', () => {
+  // 2026-09-28 Mendelian randomization report: six p-values written as
+  // a×10⁻ⁿ, each equal digit for digit to the output's e-notation, came back
+  // as 「数字溯源不到」 — the mantissa had been traced alone.
+  const outputs = outputNumbers([{ path: 'mr_results.csv', text: 'method,pval,Q_pval\nIVW,3.54262863158619e-11,9.97081339452979e-06\nsnp,2.17e-158,\n' }])
+  const traced = (/** @type {string} */ reportText) => numericTraceFindings({ reportText, outputs }).findings.map((finding) => [finding.verdict, finding.numbers])
+  assert.deepEqual(traced('IVW p = 3.54262863158619×10⁻¹¹，Q 检验 p = 9.97081339452979×10⁻⁶。'), [])
+  assert.deepEqual(traced('最强变异 p = 2.17×10^-158；另一写法 p = 2.17×10-158。'), [])
+  assert.deepEqual(traced('IVW p = 3.54e-11'), [])
+  assert.deepEqual(traced('IVW p = 3.5×10⁻¹¹'), [], 'rounded to its own precision is still the output')
+  assert.deepEqual(traced('IVW p = 3.6×10⁻¹¹'), [['mismatched', ['3.6']]], 'rounded wrong is still a near miss')
+  assert.deepEqual(traced('IVW p = 3.54×10⁻¹²'), [['unsupported', ['3.54']]], 'the wrong power of ten is not the output')
+})
+
+test('a category label the engine writes as a range or an open bound holds its bounds', () => {
+  // 2026-09-27 osimertinib package, report line 49: the age bands came back as
+  // 「44、45、64、65、74、75 … 只有相近而不相同的值」.
+  const outputs = outputNumbers([{
+    path: 'overview.json',
+    text: JSON.stringify({ age: [{ term: '<18', count: 2 }, { term: '18-44', count: 139 }, { term: '45-64', count: 1044 }, { term: '65-74', count: 1137 }, { term: '75+', count: 1105 }] }),
+  }, { path: 'bands.csv', text: 'band,n\n"≥80",12\n' }])
+  for (const value of [18, 44, 45, 64, 65, 74, 75, 80]) assert.ok(outputs.includes(value), `${value} missing`)
+  const reportText = '年龄：<18 岁 2、18–44 岁 139、45–64 岁 1,044、65–74 岁 1,137、≥75 岁 1,105'
+  assert.deepEqual(numericTraceFindings({ reportText, outputs }).findings, [])
+  // Only the closed label shapes: a word with digits in it is not a label.
+  assert.deepEqual(outputNumbers([{ path: 'x.json', text: JSON.stringify({ a: 'rs1421085', b: 'age 18-44 years', c: 'COVID-19' }) }]), [])
 })

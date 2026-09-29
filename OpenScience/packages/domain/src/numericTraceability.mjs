@@ -56,7 +56,8 @@ const NAMED_PER_FINDING = 8
  * Every number an output file holds. JSON: every number and every numeric
  * string, at any depth. CSV: every cell that is a number once its quotes and
  * digit-grouping commas are gone (the drug-safety engine writes counts as
- * `"20,328,575"`).
+ * `"20,328,575"`). A category label written as a range or an open bound —
+ * the age band `18-44`, `<18`, `75+` — holds its bounds.
  * @param {readonly { path: string, text: string }[]} files
  * @returns {number[]}
  */
@@ -88,8 +89,7 @@ function collectJsonNumbers(value, into, depth) {
     return
   }
   if (typeof value === 'string') {
-    const parsed = numericCell(value)
-    if (parsed !== null) into.add(parsed)
+    addCell(value, into)
     return
   }
   if (Array.isArray(value)) {
@@ -105,10 +105,7 @@ function collectJsonNumbers(value, into, depth) {
 function collectCsvNumbers(text, separator, into) {
   for (const line of text.split(/\r?\n/)) {
     if (into.size >= OUTPUT_NUMBER_LIMIT) return
-    for (const cell of splitDelimited(line, separator)) {
-      const parsed = numericCell(cell)
-      if (parsed !== null) into.add(parsed)
-    }
+    for (const cell of splitDelimited(line, separator)) addCell(cell, into)
   }
 }
 
@@ -139,6 +136,39 @@ function splitDelimited(line, separator) {
   return cells
 }
 
+/** One cell's numbers: its value, or the bounds of the category label it is. @param {string} cell @param {Set<number>} into */
+function addCell(cell, into) {
+  const parsed = numericCell(cell)
+  if (parsed !== null) {
+    into.add(parsed)
+    return
+  }
+  for (const bound of labelBounds(cell)) into.add(bound)
+}
+
+/** A category label that is a range of two numbers: `18-44`, `45–64`. */
+const RANGE_LABEL = /^(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)$/
+/** A category label that is an open bound: `<18`, `≥75`, `75+`. */
+const BOUND_LABEL = /^(?:[<>≤≥]=?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*\+)$/
+
+/**
+ * The bounds a category label states. The drug-safety engine writes its age
+ * bands as text (`18-44`, `75+`), a report restates them (「18–44 岁」), and
+ * read as no number at all they came back as 「44、45、64、65、74、75 只有相近而
+ * 不相同的值」 (2026-09-27 osimertinib package) — a finding the run answered
+ * with a provenance table in the report.
+ * @param {string} value @returns {number[]}
+ */
+function labelBounds(value) {
+  const trimmed = String(value).trim().replace(/^"|"$/g, '').trim()
+  if (!trimmed || trimmed.length > 24) return []
+  const range = RANGE_LABEL.exec(trimmed)
+  if (range) return [Number(range[1]), Number(range[2])]
+  const bound = BOUND_LABEL.exec(trimmed)
+  if (bound) return [Number(bound[1] ?? bound[2])]
+  return []
+}
+
 /** A cell's number, or null. Grouping commas, a trailing percent and scientific notation are read.
  * @param {string} value @returns {number | null} */
 function numericCell(value) {
@@ -166,11 +196,14 @@ function roundsTo(candidate, written, places) {
  * One stated number against the outputs: verified if some output value rounds
  * to it at the precision it is written with (a percentage is also tried as a
  * fraction, and a fraction as a percentage), mismatched if some value is
- * within 5%, else unsupported.
- * @param {string} literal @param {readonly number[]} outputs
+ * within 5%, else unsupported. `exponent` is the power of ten the number was
+ * written with (`3.54×10⁻¹¹` is the literal `3.54` at exponent −11): each
+ * output is compared at that scale, so the mantissa is held to its own
+ * precision.
+ * @param {string} literal @param {readonly number[]} outputs @param {number} [exponent]
  * @returns {'verified'|'mismatched'|'unsupported'}
  */
-export function traceNumber(literal, outputs) {
+export function traceNumber(literal, outputs, exponent = 0) {
   const written = Math.abs(Number(literal))
   if (!Number.isFinite(written)) return 'unsupported'
   const places = precisionOf(literal)
@@ -181,7 +214,8 @@ export function traceNumber(literal, outputs) {
   for (const raw of outputs) {
     // The extractor keeps magnitudes, not signs — a negative estimate is
     // stated as 「−0.12」 and read as 0.12 — so outputs are compared the same way.
-    const candidate = Math.abs(raw)
+    // Scaled by an exact power of ten either way (10 ** k is exact for k ≤ 22).
+    const candidate = exponent < 0 ? Math.abs(raw) * 10 ** -exponent : Math.abs(raw) / 10 ** exponent
     for (const [form, formPlaces] of forms) {
       if (roundsTo(candidate, form, formPlaces)) return 'verified'
       const scale = Math.max(form, candidate)
@@ -210,6 +244,44 @@ const CONVENTIONS = [
   /[pP]\s*(?:值)?\s*[<＜]\s*5\s*[x×]\s*10\s*[-−⁻]\s*[8⁸]/g,
   /\b5\s*[eE]\s*-\s*8\b/g,
 ]
+
+/**
+ * A number written in powers of ten: `3.54×10⁻¹¹`, `3.54×10^-11`, `3.54×10-11`,
+ * `3.54e-11`. The mantissa is what the extractor reads, and read alone it was
+ * traced as 3.54 against an output holding 3.54e-11: six p-values of the
+ * 2026-09-28 Mendelian randomization report, each equal to its output digit
+ * for digit, came back as 「数字溯源不到」 and cost the run a round declining
+ * them.
+ */
+const POWER_OF_TEN = /(\d+(?:\.\d+)?)\s*(?:[×xX*]\s*10\s*(?:\^\s*([-−+]?\d{1,3})|([⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]{1,3})|([-−]\d{1,3}))|[eE]([-+]?\d{1,3}))(?![\d⁰¹²³⁴⁵⁶⁷⁸⁹])/g
+const SUPERSCRIPT = /** @type {Record<string, string>} */ ({ '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '⁺': '+' })
+
+/** The spelling the extractor gives a number: no leading zeros, no trailing decimal zeros. @param {string} literal */
+function canonicalLiteral(literal) {
+  return literal.replace(/^0+(?=\d)/, '').replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+}
+
+/**
+ * A line with each power-of-ten number reduced to its mantissa, and the
+ * exponents each mantissa was written with.
+ * @param {string} line @returns {{ text: string, exponents: Map<string, number[]> }}
+ */
+function powersOfTen(line) {
+  /** @type {Map<string, number[]>} */
+  const exponents = new Map()
+  const text = line.replace(POWER_OF_TEN, (_, mantissa, caret, superscript, dashed, scientific) => {
+    const written = String(caret ?? dashed ?? scientific ?? [...String(superscript ?? '')].map((character) => SUPERSCRIPT[character] ?? character).join(''))
+    const exponent = Number(written.replace('−', '-'))
+    if (!Number.isInteger(exponent)) return mantissa
+    const key = canonicalLiteral(mantissa)
+    exponents.set(key, [...(exponents.get(key) ?? []), exponent])
+    return mantissa
+  })
+  return { text, exponents }
+}
+
+/** @type {Record<'verified'|'mismatched'|'unsupported', number>} */
+const VERDICT_RANK = { verified: 2, mismatched: 1, unsupported: 0 }
 
 /**
  * @typedef {object} NumericFinding
@@ -249,6 +321,8 @@ export function numericTraceFindings({ reportText, outputs, outputLabel = '引�
     if (HEADING.test(line) || cited.has(index)) continue
     let scannable = line
     for (const pattern of CONVENTIONS) scannable = scannable.replace(pattern, ' ')
+    const powers = powersOfTen(scannable)
+    scannable = powers.text
     /** @type {string[]} */
     const mismatched = []
     /** @type {string[]} */
@@ -256,7 +330,11 @@ export function numericTraceFindings({ reportText, outputs, outputLabel = '引�
     for (const token of conclusoryQuantities(scannable)) {
       for (const literal of token.split('-').filter(Boolean)) {
         metrics.stated += 1
-        const verdict = traceNumber(literal, outputs)
+        // As written, and at each power of ten it was written with; the best
+        // reading stands (a mantissa can also appear plain on the same line).
+        const verdict = [0, ...(powers.exponents.get(literal) ?? [])]
+          .map((exponent) => traceNumber(literal, outputs, exponent))
+          .reduce((best, next) => (VERDICT_RANK[next] > VERDICT_RANK[best] ? next : best))
         if (verdict === 'verified') metrics.verified += 1
         else if (verdict === 'mismatched') { metrics.mismatched += 1; if (!mismatched.includes(literal)) mismatched.push(literal) }
         else { metrics.unsupported += 1; if (!unsupported.includes(literal)) unsupported.push(literal) }
@@ -275,7 +353,7 @@ export function numericTraceFindings({ reportText, outputs, outputLabel = '引�
       verdict,
       numbers: named,
       message: mismatched.length
-        ? `第 ${index + 1} 行写的 ${mismatched.slice(0, NAMED_PER_FINDING).join('、')} 在${outputLabel}里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正，或在文中说明差异从哪来。`
+        ? `第 ${index + 1} 行写的 ${mismatched.slice(0, NAMED_PER_FINDING).join('、')} 在${outputLabel}里只有相近而不相同的值——多半是抄错或舍入错了。按输出改正；数字没错、差异另有来由的，回应这条发现时写明来由，不在报告里另作说明。`
         : `第 ${index + 1} 行写的 ${unsupported.slice(0, NAMED_PER_FINDING).join('、')}${unsupported.length > NAMED_PER_FINDING ? ` 等 ${unsupported.length} 个数` : ''}在${outputLabel}里找不到。结果数字应当来自这次计算；若它来自文献，给它标上引用。`,
     })
   }

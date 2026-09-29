@@ -7,7 +7,7 @@ description: Compare candidate medicines for a formulary decision using traceabl
 
 Use this workflow for formulary admission, substitution, or candidate comparison. It is an evidence and scoring assistant; external approval workflows are out of scope and it does not make a procurement, reimbursement, or patient-level treatment decision.
 
-Unless the user requests another language, interact and write deliverables in Simplified Chinese. Preserve official medicine names, identifiers, currencies, units, scoring fields, and source titles when translation would reduce traceability.
+Unless the user requests another language, interact and write deliverables in Simplified Chinese. Preserve official medicine names, identifiers, currencies, units, and source titles when translation would reduce traceability.
 
 ## 1. Bind the decision scope
 
@@ -83,3 +83,23 @@ Write what changed and why to `revision-notes.md` in this deliverable's
 directory. That file is the designated home for revision notes, replies to a
 rejection, and process description; the report itself carries none of them, and
 no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.

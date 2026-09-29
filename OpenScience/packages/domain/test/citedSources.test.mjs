@@ -117,3 +117,20 @@ test('a snapshot that records nothing and a run that retrieved nothing is empty,
   assert.equal(auditCitedSources({ reports: [], snapshotText: '{ bad' }).status, 'invalid')
   assert.equal(auditCitedSources({ reports: [], snapshotText: '42' }).status, 'not-object')
 })
+
+test('a link a reader cannot follow is worded once, by file and line, for the run-side gate and the control plane alike', async () => {
+  const { citationUrlDefectsByLine } = await import('../index.mjs')
+  const text = '# 报告\n\n见 http://ybj.qinghai.gov.cn/c.html 。\n'
+  const { advisory, blocking } = citationUrlDefectsByLine('comprehensive-evaluation-report.md', text)
+  assert.deepEqual(blocking, [])
+  assert.deepEqual(advisory.map((entry) => entry.line), [3])
+  assert.match(advisory[0].message, /^comprehensive-evaluation-report\.md line 3: The citation http:\/\/ybj\.qinghai\.gov\.cn\/c\.html is served over plain HTTP/)
+  // The gate's own finding is the same sentence, so a delivered run carries it once.
+  const verdict = runGate(/** @type {any} */ ({
+    contractKind: 'drug-evaluation-report',
+    files: new Map([['comprehensive-evaluation-report.md', text]]),
+    checks: ['citationsResolvable'],
+  }))
+  const gate = verdict.issues.filter((/** @type {any} */ issue) => issue.code === 'citation_plain_http').map((/** @type {any} */ issue) => issue.message)
+  assert.deepEqual(gate, [advisory[0].message])
+})

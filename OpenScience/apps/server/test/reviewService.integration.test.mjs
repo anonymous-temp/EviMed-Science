@@ -393,7 +393,10 @@ test("after the editor is spent, the reader still sees what its last pass left i
   await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 1 })).reviewId);
   await fs.writeFile(reportPath, `${REPORT}补充。\n`);
   const second = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 2 })).reviewId);
-  assert.deepEqual(second.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind]), [["F01", "reference_unresolvable"], ["F02", "overclaim"], ["F03", "wording"]]);
+  // Ids hold across passes, and none of these three is the first pass's: the
+  // appended sentence joined the last reference entry, so the unresolvable
+  // reference rests on new words (F03), and the editor's two are new (F04, F05).
+  assert.deepEqual(second.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind]), [["F03", "reference_unresolvable"], ["F04", "overclaim"], ["F05", "wording"]]);
   // The writer fixes the number, in the report and its matrix, and leaves the
   // overclaim; the editor is spent.
   await fs.writeFile(reportPath, `${REPORT.replace("降低 1.5% [1]", "降低 0.9 个百分点 [1]")}补充。\n`);
@@ -404,9 +407,9 @@ test("after the editor is spent, the reader still sees what its last pass left i
 
   const [view] = (await review.reviewsForRun(identity, "native_carry"));
   assert.deepEqual(view.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind, finding.response ?? null]), [
-    ["F01", "reference_unresolvable", null],
-    ["2.F02", "overclaim", null],
-    ["2.F03", "wording", "resolved"],
+    ["F03", "reference_unresolvable", null],
+    ["2.F04", "overclaim", null],
+    ["2.F05", "wording", "resolved"],
   ], "the second pass's findings, the one whose words are gone marked resolved");
   const notices = await review.reviewNoticesForRun(userId, projectId, "run_review_1");
   const summary = notices.find((notice) => notice.code === "review_summary" && notice.text.includes("「d2」"));

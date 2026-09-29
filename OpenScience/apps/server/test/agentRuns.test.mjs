@@ -4547,6 +4547,9 @@ test("a structural rejection carrying an advisory as well is charged as an ordin
     // Both facts are in front of the run, unchanged in wording.
     assert.match(repairPrompts[0], /clinical-evidence-matrix\.json must contain strict valid JSON/);
     assert.match(repairPrompts[0], /served over plain HTTP/);
+    // Where it is, in the run-side gate's wording, so the receipt's copy of the
+    // same link is the same notice (2026-09-28: one link, two notices).
+    assert.ok(repairPrompts[0].includes("clinical-evidence-report.md line 3: The citation http://example.org/a is served over plain HTTP"), repairPrompts[0]);
     assert.equal(
       store.clinicalRepairAttempts.get(run.id),
       1,

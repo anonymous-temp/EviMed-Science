@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-27-adr-001-rows-counted-by-hand",
+  "genre": "number-prose-divergence",
+  "observedIn": "evals/adr-analysis/results/2026-09-27-adr-001-osimertinib-cardiac/deliverable/deliverables/osimertinib-cardiac-adr/safety-report.md",
+  "line": 113,
+  "verbatim": "自动筛查的 13 个条目里有 9 个满足信号判定规则。",
+  "whyItIsWrong": "The table above the sentence lists 10 rows, and the run's own notes say 10 in one place and 11 in another (revision-notes.md lines 27 and 33): a count typed from memory after the items changed.",
+  "caughtBy": "nobody",
+  "note": "Counts of the package's own rows are recounted from the file that holds them, not restated."
+}
