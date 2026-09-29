@@ -419,3 +419,21 @@ def test_numeric_support_cannot_clip_a_larger_signed_or_decimal_token(tmp_path, 
     effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
     assert [effect.study_id for effect in effects] == ["S2"]
     assert audit[0]["reason"] == "numeric_support_unavailable"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_partial_report_keeps_finite_evidence_when_one_numeric_value_is_unusable(tmp_path, value):
+    from new_meta.core.partial_delivery import write_partial_report
+    from test_extraction_lifecycle import study, protocol
+    project = unattended(Project("unusable number", output_dir=tmp_path))
+    row = study()
+    row.outcomes[0].effect_size = value
+    project.save_json("all_extractions.json", [row], subdir="extraction")
+    project.save_json("protocol.json", protocol())
+    phase = PhaseResult(run_id=project.base_dir.name, phase="synthesis", status="blocked",
+                        summary="The effect estimate cannot be computed.", error_code="method_inputs_invalid",
+                        issues=[PhaseIssue(code="invalid_number", message="Nonfinite estimate", blocking=True)])
+    assert write_partial_report(project, phase)
+    draft = project.get_path("draft.md", subdir="manuscript").read_text()
+    assert "effect_size" in draft and "unusable" in draft
+    assert "0.53" in draft
