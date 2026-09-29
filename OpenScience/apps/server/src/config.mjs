@@ -298,6 +298,8 @@ function frontierSettings(overrides) {
     frontierLeaseMs: integer("frontierLeaseMs", "OPEN_SCIENCE_FRONTIER_LEASE_MS", 600_000, 60_000, 86_400_000),
     frontierModel: model,
     frontierDailyTime: dailyTime,
+    frontierNotifyBatch: integer("frontierNotifyBatch", "OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH", 50, 1, 200),
+    frontierSafetyScanBatch: integer("frontierSafetyScanBatch", "OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH", 100, 1, 500),
     frontierTimeZone: timeZone,
     // The pipeline's own model money per day (frontierPipeline.mjs gates on
     // it: past 80% only urgent items are edited, past 100% none); 0 is no

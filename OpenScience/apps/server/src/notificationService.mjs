@@ -95,9 +95,8 @@ function inboxProjectScope(value) {
 }
 
 /**
- * The notification switches a preferences row may be saved with: the three
- * the inbox began with, and those three plus `frontier` — the 「前沿动态」
- * daily (build spec D.3, on unless turned off).
+ * The original inbox switches are required; each frontier switch is optional
+ * so older clients preserve choices they do not understand.
  */
 export const NOTIFICATION_SWITCH_KEY_SETS = Object.freeze(Array.from({ length: 8 }, (_, mask) =>
   ["notify", "question", "review", ...["frontier", "frontierWeekly", "frontierSafety"].filter((_key, index) => mask & (1 << index))].sort().join(",")));

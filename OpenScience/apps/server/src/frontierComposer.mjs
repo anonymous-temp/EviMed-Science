@@ -10,6 +10,10 @@
  *   digests   every 2 min  owed event digests (at most three a round)
  *   daily     every minute today's issue once the daily time has passed
  *   push      every minute today's issue to readers whose digest time passed
+ *   weekly    every minute latest completed calendar week
+ *   weeklyPush every minute bounded recipient queue
+ *   safety    every 30 s   bounded change scan
+ *   notices   every 10 s   leased inbox deliveries
  *   profiles  every 5 min  readers' profiles (a day old) and rankings (6 h old)
  *
  * Hidden knowledge:

@@ -152,25 +152,37 @@ function clockMinutes(value) {
  */
 export function pushNotBefore(item, preferences, now) {
   if (item?.severity === "safety") return now;
-  const local = new Date(now.getTime() + SHANGHAI_OFFSET_MS);
-  const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
-  const midnight = now.getTime() - (minute * 60_000 + local.getUTCSeconds() * 1000 + local.getUTCMilliseconds());
-  /** @param {number} target minutes after local midnight @param {boolean} [tomorrow] */
-  const at = (target, tomorrow = false) => new Date(midnight + (tomorrow ? 86_400_000 : 0) + target * 60_000);
   const start = clockMinutes(preferences?.quietHours?.start);
   const end = clockMinutes(preferences?.quietHours?.end);
   const hasQuiet = start != null && end != null && start !== end;
-  const quiet = hasQuiet && (start < end ? minute >= start && minute < end : minute >= start || minute < end);
+  const minuteOf = (/** @type {Date} */ at) => {
+    const local = new Date(at.getTime() + SHANGHAI_OFFSET_MS);
+    return local.getUTCHours() * 60 + local.getUTCMinutes();
+  };
+  const wallTime = (/** @type {Date} */ day, /** @type {number} */ minute, tomorrow = false) => {
+    const local = new Date(day.getTime() + SHANGHAI_OFFSET_MS);
+    return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + Number(tomorrow), 0, minute) - SHANGHAI_OFFSET_MS);
+  };
+  const afterQuiet = (/** @type {Date} */ at) => {
+    const minute = minuteOf(at);
+    const quiet = hasQuiet && (start < end ? minute >= start && minute < end : minute >= start || minute < end);
+    return quiet ? wallTime(at, /** @type {number} */ (end), start > end && minute >= start) : at;
+  };
+  let due = now;
   if (item?.source?.type === "digest") {
-    // The morning digest: a digest the night's autopilot wrote waits for the
-    // researcher's digest time — today's if it is still ahead, tomorrow's if
-    // the night has already passed it.
+    // A retry keeps the notice's calendar anchor. Re-anchoring at every claim
+    // can move a digest inside quiet hours to tomorrow forever.
+    const stamp = Date.parse(item.updatedAt ?? item.createdAt ?? "");
+    const anchor = Number.isFinite(stamp) && stamp <= now.getTime() ? new Date(stamp) : now;
+    const minute = minuteOf(anchor);
     const digest = clockMinutes(preferences?.digestTime);
-    if (digest != null && minute < digest) return at(digest);
-    if (digest != null && quiet) return at(digest, true);
+    if (digest != null) {
+      const eveningQuiet = hasQuiet && start > end && minute >= start;
+      due = minute < digest || eveningQuiet ? wallTime(anchor, digest, Boolean(eveningQuiet && minute >= digest)) : anchor;
+    }
+    due = afterQuiet(due);
   }
-  if (!quiet) return now;
-  return at(/** @type {number} */ (end), /** @type {number} */ (start) > /** @type {number} */ (end) && minute >= /** @type {number} */ (start));
+  return afterQuiet(new Date(Math.max(now.getTime(), due.getTime())));
 }
 
 /**

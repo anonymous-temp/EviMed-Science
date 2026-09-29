@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
+import { FrontierWorker } from '../src/frontierWorker.mjs';
 import { FrontierWeekly } from '../src/frontierWeekly.mjs';
 import { FrontierNotifications } from '../src/frontierNotifications.mjs';
 import { FrontierService, frontierVocabularyView } from '../src/frontierService.mjs';
@@ -131,7 +132,9 @@ test('retained scan gap records lost range without a historical flood', options,
     await changed(alert.id);
     await changed(alert.id);
     const max = (await db.query('SELECT max(seq)::text seq FROM evimed_frontier.item_changes')).rows[0].seq;
-    await db.query('DELETE FROM evimed_frontier.item_changes WHERE seq<$1', [max]);
+    await db.query("UPDATE evimed_frontier.item_changes SET changed_at='2026-01-01' WHERE seq<$1", [max]);
+    const worker = new FrontierWorker({ database: db, ingest: { plugin: { configured: false } }, now });
+    assert.equal((await worker.cleanup()).itemChanges, 2);
     assert.equal((await delivery.scanSafety()).gap, true);
     assert.equal(delivery.status().counters.scanGaps, 1);
     assert.equal((await db.query('SELECT count(*)::int n FROM evimed_product.jobs')).rows[0].n, 0);
@@ -239,4 +242,59 @@ test('weekly generation recovers an expired lease and refreshes older job-kind c
     await db.query("UPDATE evimed_product.jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[job.id]);
     await weekly.runDue();assert.equal((await weekly.list()).length,1);
     await assert.rejects(jobs.finish('operator',job.id,expired.leaseToken,{bad:true}),{code:'product_job_lease_lost'});
+});
+
+test('old, inferred and post-publication follows do not turn newly ingested history into an alert', options, async () => {
+    await follow();
+    const old = await item({ publishedAt: '2026-06-01T00:00:00Z', visibleAt: now().toISOString() });
+    assert.equal(await delivery.eligible('alice', { kind: 'safety', key: old.publicId }), false);
+    const inferred = await item({ publishedAt: now().toISOString(), visibleAt: now().toISOString() });
+    await db.query("UPDATE evimed_frontier.items SET date_precision='inferred' WHERE id=$1", [inferred.id]);
+    assert.equal(await delivery.eligible('alice', { kind: 'safety', key: inferred.publicId }), false);
+    const after = await item({ publishedAt: '2026-09-22T01:00:00Z' });
+    await db.query("UPDATE evimed_frontier.user_follows SET created_at='2026-09-23T00:00:00Z'");
+    assert.equal(await delivery.eligible('alice', { kind: 'safety', key: after.publicId }), false);
+    await db.query("UPDATE evimed_frontier.user_follows SET created_at='2026-09-22T01:00:00Z'");
+    assert.equal(await delivery.eligible('alice', { kind: 'safety', key: after.publicId }), true);
+});
+
+test('an ordinary rolled-back sequence allocation is not a retention gap', options, async () => {
+    await follow(); await delivery.scanSafety(); const alert = await item();
+    await assert.rejects(db.transaction(async client => { await client.query("INSERT INTO evimed_frontier.item_changes(item_id,op,reason) VALUES($1,'upsert','rolled-back')", [alert.id]); throw new Error('rollback'); }));
+    await changed(alert.id); const result = await delivery.scanSafety();
+    assert.equal(result.gap, undefined); assert.equal(result.queued, 1);
+});
+
+test('a scan waits for earlier uncommitted sequence allocations before advancing', { ...options, timeout: 5000 }, async () => {
+    await follow(); await delivery.scanSafety(); const alert = await item(); const ordinary = await item({ safetyAlert: false });
+    let release, started;
+    const gate = new Promise(resolve => { release = resolve; });
+    const inserted = new Promise(resolve => { started = resolve; });
+    const writer = db.transaction(async client => {
+        await client.query("INSERT INTO evimed_frontier.item_changes(item_id,op,reason) VALUES($1,'upsert','published')", [alert.id]);
+        started(); await gate;
+    });
+    await inserted; await changed(ordinary.id);
+    let completed = false; const scanning = delivery.scanSafety().then(result => { completed = true; return result; });
+    try { await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(completed, false); }
+    finally { release(); }
+    await writer; assert.equal((await scanning).queued, 1);
+});
+
+test('scan and actual retention cleanup share a non-upgrading lock order', { ...options, timeout: 5000 }, async () => {
+    await follow(); await delivery.scanSafety(); const alert = await item(); await changed(alert.id);
+    const worker = new FrontierWorker({ database: db, ingest: { plugin: { configured: false } }, now });
+    const results = await Promise.all([delivery.scanSafety(), worker.cleanup()]);
+    assert.equal(results[0].queued, 1); assert.equal(results[1].itemChanges, 0);
+});
+
+test('known publication recency is bounded and inferred flags never establish recency', options, async () => {
+    await follow();
+    for (const [publishedAt, allowed] of [['2026-09-21T01:00:00Z', true], ['2026-09-21T00:59:59Z', false], ['2026-09-29T00:00:00Z', false], [null, false]]) {
+        const alert = await item({ publishedAt });
+        assert.equal(await delivery.eligible('alice', { kind: 'safety', key: alert.publicId }), allowed);
+    }
+    const inferred = await item({ flags: ['date-inferred'] });
+    assert.equal(await delivery.eligible('alice', { kind: 'safety', key: inferred.publicId }), false);
+    assert.equal((await service.getItem({ id: 'alice' }, inferred.publicId)).body.item.id, inferred.publicId, 'the item remains browsable');
 });

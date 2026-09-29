@@ -333,3 +333,29 @@ test("the IM module factory forwards the frontier late-delivery policy", async (
   assert.equal(module.service.frontierDeliveryPolicy, policy);
   await module.service.close();
 });
+
+test("digest scheduling reaches the end of quiet hours without rolling forward every retry", () => {
+  const notice = { severity: "info", source: { type: "digest", id: "frontier-weekly:2026-09-21" }, createdAt: cst("2026-09-28T07:00").toISOString() };
+  const quiet = { digestTime: "08:00", quietHours: { start: "22:00", end: "09:00" } };
+  assert.equal(pushNotBefore(notice, quiet, cst("2026-09-28T08:00")).toISOString(), cst("2026-09-28T09:00").toISOString());
+  assert.equal(pushNotBefore(notice, quiet, cst("2026-09-28T09:00")).toISOString(), cst("2026-09-28T09:00").toISOString());
+  const late = { ...notice, createdAt: cst("2026-09-28T21:00").toISOString() };
+  const lateQuiet = { digestTime: "23:00", quietHours: { start: "22:00", end: "08:00" } };
+  assert.equal(pushNotBefore(late, lateQuiet, cst("2026-09-28T21:00")).toISOString(), cst("2026-09-29T08:00").toISOString());
+  assert.equal(pushNotBefore({ ...late, createdAt: cst("2026-09-28T22:30").toISOString() }, lateQuiet, cst("2026-09-28T22:30")).toISOString(), cst("2026-09-29T08:00").toISOString());
+  assert.equal(pushNotBefore(late, lateQuiet, cst("2026-09-29T08:00")).toISOString(), cst("2026-09-29T08:00").toISOString());
+});
+
+test("a queued weekly is deferred once to quiet-hours end then actually sent", async () => {
+  let clock = cst("2026-09-28T08:00").getTime();
+  const settled = [], sent = [];
+  const item = { id: "weekly", userId: "alice", count: 1, source: { type: "digest", id: "frontier-weekly:2026-09-21" }, noticeType: "notify", title: "周刊", body: "Public weekly", severity: "info", createdAt: cst("2026-09-28T07:00").toISOString() };
+  const service = new ImService({ config: { imEnabled: true }, database: null, credentials: {}, users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {}, classifier: {}, write: () => {}, now: () => clock,
+    notifications: { get: async () => item, preferences: async () => ({ channels: ["in-app", "feishu"], switches: { notify: true }, digestTime: "08:00", quietHours: { start: "22:00", end: "09:00" } }), recordChannelSent: async () => {} },
+    frontierDeliveryPolicy: async () => true,
+    store: { claimDeliveries: async () => [{ id: "delivery", userId: "alice", notificationId: "weekly", channel: "feishu", bindingId: "binding", eventCount: 1, attempts: 1 }], bindingById: async () => ({ status: "active" }), settleDelivery: async (...args) => settled.push(args) },
+  });
+  service.registry = { isEnabled: () => true, get: () => ({ deliver: async (_binding, message) => { sent.push(message); return { delivered: true, messageId: "sent" }; } }) };
+  await service.processDeliveries(); assert.equal(sent.length, 0); assert.equal(settled[0][2].retryAt.toISOString(), cst("2026-09-28T09:00").toISOString());
+  clock = cst("2026-09-28T09:00").getTime(); await service.processDeliveries(); assert.equal(sent.length, 1); assert.equal(settled[1][2].status, "sent");
+});

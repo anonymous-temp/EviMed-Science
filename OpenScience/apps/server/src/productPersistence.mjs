@@ -10,9 +10,8 @@ export const PRODUCT_KINDS = Object.freeze([
   // be on trial in one project and absent from another at the same instant.
   "method-trial",
 ]);
-// `frontier-daily` and `frontier-rebuild` are the frontier feed's only kinds on
-// this shared ledger (plan §10.4.4): one daily issue per day, and the
-// operator's rebuilds. Its per-entry queue — thousands of rows a day — lives in
+// Frontier issues, reader notifications and operator rebuilds use the shared
+// durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
   "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify"]);

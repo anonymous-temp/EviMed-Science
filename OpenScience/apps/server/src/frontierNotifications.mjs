@@ -9,12 +9,20 @@ import { FRONTIER_PUSH_ACTIVE_MS, zonedClock } from './frontierDaily.mjs';
 import { latestFrontierWeek } from './frontierWeekly.mjs';
 const CURSOR = 'safety_scan_cursor';
 const KIND = 'frontier-notify';
+/** Discovery and every delivery use the same publication window. Inferred dates
+ * cannot establish recency when a newly added source exposes old announcements.
+ * @param {Date} now @param {(value:unknown)=>string} param */
+function safetyPublicationPredicate(now, param) {
+    return `i.published_at >= ${param(new Date(now.getTime() - 7 * 86400000))}::timestamptz
+      AND i.published_at <= ${param(now)}::timestamptz AND i.date_precision IN ('instant','day')
+      AND NOT ('date-inferred'=ANY(i.flags))`;
+}
 /** Public-only immutable payload: no private query, interest, project or match reason.
  * @param {any} row */
 export function frontierSafetyNotice(row) {
     const key = `frontier-safety:${row.public_id}`;
     return { noticeType: 'notify', title: String(row.title_zh || row.title_raw).slice(0, 200),
-        body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner })} · ${new Date(row.visible_at).toISOString().slice(0, 10)}`,
+        body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner })} · ${new Date(row.published_at).toISOString().slice(0, 10)}`,
         actions: [{ id: 'open', label: '查看安全公告', style: 'primary' }], source: { type: 'system', id: key }, idempotencyKey: key, groupKey: key, severity: 'safety' };
 }
 /** @param {string} week */
@@ -62,10 +70,10 @@ export class FrontierNotifications {
         const muted = subscriptions.muted.map(f => `(${frontierFollowPredicate(f, param)})`);
         let wanted;
         if (target.kind === 'safety') {
-            const matches = positive.filter(f => ['drug', 'specialty', 'event'].includes(f.kind)).map(f => `(i.visible_at >= ${param(f.createdAt)}::timestamptz AND (${frontierFollowPredicate(f, param)}))`);
+            const matches = positive.filter(f => ['drug', 'specialty', 'event'].includes(f.kind)).map(f => `(least(i.visible_at,i.published_at) >= ${param(f.createdAt)}::timestamptz AND (${frontierFollowPredicate(f, param)}))`);
             if (!matches.length)
                 return false;
-            wanted = `i.public_id=${param(target.key)} AND i.safety_alert AND (s.source_type='regulator' OR s.safety_feed) AND (${matches.join(' OR ')})`;
+            wanted = `i.public_id=${param(target.key)} AND i.safety_alert AND (s.source_type='regulator' OR s.safety_feed) AND ${safetyPublicationPredicate(this.now(), param)} AND (${matches.join(' OR ')})`;
         }
         else {
             if (!positive.length && !(account.last_seen_at && new Date(account.last_seen_at).getTime() >= this.now().getTime() - FRONTIER_PUSH_ACTIVE_MS))
@@ -122,6 +130,9 @@ export class FrontierNotifications {
             return { queued: 0, unavailable: true };
         await this.ready();
         return this.database.transaction(async (client) => {
+            // Sequence numbers are allocated before commit. Await writers before
+            // advancing beyond their lower numbers, including initial bootstrap.
+            await client.query("LOCK TABLE evimed_frontier.item_changes IN SHARE MODE");
             await client.query("SELECT pg_advisory_xact_lock(hashtext('frontier-safety-scan'))");
             const range = (await client.query('SELECT min(seq)::text AS min,max(seq)::text AS max FROM evimed_frontier.item_changes')).rows[0];
             const previous = (await client.query('SELECT value FROM evimed_frontier.meta WHERE key=$1', [CURSOR])).rows[0]?.value;
@@ -131,9 +142,10 @@ export class FrontierNotifications {
                 await save({ seq: range.max ?? sequence?.seq ?? '0', afterUserId: '' });
                 return { queued: 0, bootstrapped: true };
             }
-            if (range.min && BigInt(previous.seq) < BigInt(range.min) - 1n) {
-                await client.query(`INSERT INTO evimed_frontier.meta(key,value) VALUES('safety_scan_gap',$1::jsonb) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=clock_timestamp()`, [JSON.stringify({ from: (BigInt(previous.seq) + 1n).toString(), to: (BigInt(range.min) - 1n).toString(), at: this.now().toISOString(), outcome: 'unprocessed' })]);
-                await save({ seq: range.max, afterUserId: '' });
+            const pruned = (await client.query("SELECT value FROM evimed_frontier.meta WHERE key='safety_pruned_through'")).rows[0]?.value;
+            if (pruned && BigInt(previous.seq) < BigInt(pruned)) {
+                await client.query(`INSERT INTO evimed_frontier.meta(key,value) VALUES('safety_scan_gap',$1::jsonb) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=clock_timestamp()`, [JSON.stringify({ from: (BigInt(previous.seq) + 1n).toString(), to: String(pruned), at: this.now().toISOString(), outcome: 'unprocessed' })]);
+                await save({ seq: range.max ?? String(pruned), afterUserId: '' });
                 this.counters.scanGaps++;
                 return { queued: 0, gap: true };
             }
@@ -141,10 +153,13 @@ export class FrontierNotifications {
               WHERE seq>$1 ORDER BY seq LIMIT $2`, [previous.seq, this.scanBatch])).rows;
             let checkpoint = previous;
             for (const change of changes) {
+                const values = /** @type {any[]} */ ([change.item_id]);
+                const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
+                const publication = safetyPublicationPredicate(this.now(), param);
                 const row = (await client.query(`SELECT i.*,s.name AS source_name,s.owner_entity AS source_owner
                 FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id WHERE i.id=$1
                   AND i.state='published' AND s.enabled AND i.safety_alert AND (s.source_type='regulator' OR s.safety_feed)
-                  AND i.verification IN ('passed','repaired') AND length(trim(i.summary_zh))>0`, [change.item_id])).rows[0];
+                  AND i.verification IN ('passed','repaired') AND length(trim(i.summary_zh))>0 AND ${publication}`, values)).rows[0];
                 if (!row) {
                     checkpoint = { seq: change.seq, afterUserId: '' };
                     continue;
