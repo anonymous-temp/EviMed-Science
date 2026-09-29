@@ -123,3 +123,65 @@ def test_prediction_really_uses_hk_and_dose_primary_keeps_multivariate_identity(
     assert dose.estimator == "TWO_STAGE_MULTIVARIATE_REML_RCS"
     assert dose.linear_sensitivity["executed_method"]["tau_estimator"] == "DL"
     assert dose.linear_sensitivity["executed_method"]["fallback_reason"] == "reml_optimizer_failed"
+
+
+def test_subgroups_and_ipd_interactions_retain_their_own_executed_methods():
+    rows = complex_records()
+    for row in rows[:2]:
+        row["subgroup_values"] = {"region": "north"}
+    result = run_complex_rct(rows, subgroup_variables=[{"variable_id": "region", "values": ["north"]}])
+    subgroup = result.moderator_subgroups["variables"][0]["values"]["north"]
+    assert subgroup["executed_method"]["model"] == "fixed"
+    assert subgroup["executed_method"]["fallback_reason"] == "fewer_than_three_studies"
+    ipd = run_ipd_meta(_continuous_studies(), outcome_type="continuous", effect_measure="MD", effect_modifier="baseline")
+    assert ipd.effect_modification["executed_method"]["ci_method"] == "normal_wald"
+
+
+def envelope_for(result, family):
+    from new_meta.schemas.method_policy import MethodExecutionResult
+    from new_meta.schemas.synthesis_result import SynthesisResultEnvelope
+    execution = MethodExecutionResult(family=family, policy_version="1", plan_fingerprint="test",
+                                     estimator=result.estimator, planned_estimator="REML", payload=result.model_dump(mode="json"))
+    return SynthesisResultEnvelope.from_method_execution(execution)
+
+
+@pytest.mark.parametrize("lang", ["en", "zh"])
+def test_actual_fixed_fallback_reaches_compiled_and_native_report_consumers(lang):
+    from new_meta.agents.writing_agent import WritingAgent
+    from new_meta.core.method_manuscript import _render_nrsi_en, _render_nrsi_zh
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    complex_result = run_complex_rct(complex_records()[:2])
+    envelope = envelope_for(complex_result, "intervention_rct")
+    assert envelope.executed_method.model == "fixed"
+    assert envelope.planned_estimator == "REML"
+    facts = {"method_family": "intervention_rct", "synthesis_result": envelope.model_dump(mode="json")}
+    text = WritingAgent(lang=lang)._compiled_method_article_text(facts, zh=lang == "zh")["statistics"]
+    assert ("fewer than three" if lang == "en" else "少于3项") in text
+    assert ("normal-Wald" if lang == "en" else "正态Wald") in text
+    assert "prediction interval were reported" not in text
+    assert "报告合并效应、95% CI和预测区间" not in text
+    protocol = ResearchProtocol(research_question="Association", pico=PICO(population="Adults", intervention="X", comparator="Y", outcome_primary="Outcome"))
+    renderer = _render_nrsi_en if lang == "en" else _render_nrsi_zh
+    report = renderer(protocol=protocol, studies=[], rob_results=[], prisma={}, search_query="", certainty={},
+                      envelope=envelope_for(run_adjusted_effects(adjusted_records()[:2]), "intervention_nrsi"))
+    assert ("fewer than three" if lang == "en" else "少于3项") in report
+    assert ("no separate HKSJ interval" if lang == "en" else "未另行计算HKSJ区间") in report
+    assert "The REML estimate of tau-squared" not in report
+    assert "REML估计τ²" not in report
+
+
+def test_optimizer_fallback_reaches_pairwise_decision_and_manuscript(monkeypatch):
+    from new_meta.agents.writing_agent import WritingAgent
+    from new_meta.core.model_selection import build_model_decision_and_sensitivity
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    monkeypatch.setattr(meta_engine.optimize, "minimize_scalar", lambda *a, **k: SimpleNamespace(success=False))
+    protocol = ResearchProtocol(research_question="Mean", effect_measure="MD", model="random", tau_estimator="REML",
+                                pico=PICO(population="Adults", intervention="X", comparator="Y", outcome_primary="Outcome"))
+    primary, decision, sensitivity = build_model_decision_and_sensitivity(study_effects=effects(), protocol=protocol)
+    assert decision["requested_method"] == "REML"
+    assert decision["executed_method"]["tau_estimator"] == "DL"
+    assert sensitivity["random"]["executed_method"]["fallback_reason"] == "reml_optimizer_failed"
+    assert "DL" in decision["reason"]
+    text = WritingAgent(lang="en")._model_decision_paragraph({"model_decision": decision})
+    assert "REML optimization failed" in text
+    assert "DerSimonian-Laird" in text
