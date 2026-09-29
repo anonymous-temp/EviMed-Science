@@ -6,7 +6,7 @@ import pytest
 from test_mr_inputs import queue_job, setup_mr, write_sources
 
 
-def failed_runner(tmp_path, *, unsafe=False):
+def failed_runner(tmp_path, *, unsafe=False, complete=False):
     diagnostic = {
         "schema_version": 1, "phase": "interpretation", "omitted_results": 0,
         "failures": [{"result_index": 0, "failure": {
@@ -32,6 +32,8 @@ def failed_runner(tmp_path, *, unsafe=False):
         + "Path('result.json').write_text(" + repr(json.dumps(result)) + ")\n"
         "sys.exit(1)\n"
     )
+    if complete:
+        body = body.replace("method,b,se,pval,exposure", "method,nsnp,b,se,pval,exposure").replace("weighted,0.3", "weighted,8,0.3")
     (tmp_path / "agent/evimed_runner.py").write_text(body)
 
 
@@ -79,6 +81,27 @@ def test_unsafe_diagnostic_artifact_cannot_replace_original_failure(tmp_path, mo
     retained = state_path.parent / f"{job_id}.diagnostics"
     assert (retained / "diagnostic.json").is_file()
     assert not (retained / "pair-001/scatter_plot.pdf").exists()
+
+
+def test_failed_mr_publishes_completed_numeric_projection_through_error_contract(tmp_path, monkeypatch):
+    service, client, secret, workspace = setup_mr(tmp_path, monkeypatch)
+    write_sources(workspace, "rs101")
+    failed_runner(tmp_path, complete=True)
+    monkeypatch.setattr(service.audit_receipt, "produce", lambda *args: pytest.fail("failed result was signed"))
+    state_path, job_id = queue_job(service, client, secret, monkeypatch)
+    assert service.run_job(str(state_path)) == 1
+    state = json.loads(state_path.read_text())
+    response = service._status({"jobId": job_id}, workspace)
+    assert state["status"] == "failed"
+    assert response["status"] == "error" and response["error"]["code"] == "mr_interpretation_failed"
+    assert response["artifacts"] == state["artifacts"]
+    assert any(item["path"].endswith("partial-research.json") for item in response["artifacts"])
+    assert "data" not in response and "sources" not in response and "auditReceipt" not in state
+    for item in response["artifacts"]:
+        content = (workspace / item["path"]).read_text()
+        assert "PRIVATE_PROVIDER_SECRET" not in content and "request_max_tokens" not in content
+    summary_path = next(item["path"] for item in response["artifacts"] if item["path"].endswith("partial-research.json"))
+    assert json.loads((workspace / summary_path).read_text())["primary_estimate_available"] is True
 
 
 def test_diagnostic_directory_refuses_existing_or_symlink_destination(tmp_path, monkeypatch):
