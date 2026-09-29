@@ -164,3 +164,30 @@ test("the evimed-geo alerts read series the module exports", async () => {
     for (const name of names) assert.ok(exported.has(name), `${rule.alert} reads ${name}, which geoMetricFamilies does not export`);
   }
 });
+
+test("operators can page marketplace records and statements without invoking write hooks", async () => {
+  const calls = [];
+  const service = { allows: () => true, isOperator: () => true };
+  const market = Object.fromEntries(["orders", "topups", "settlement"].map((name) => [name, async (input) => {
+    calls.push([name, input]); return { items: [], summary: null };
+  }]));
+  const { routes } = fixture({ service, market });
+  for (const path of ["orders?view=problems&limit=2", "topups?status=requested", "settlement?month=2026-09"]) {
+    const res = response();
+    await routes(request("GET", `/api/geo/market/${path}`), res);
+    assert.equal(res.status, 200);
+  }
+  assert.deepEqual(calls, [["orders", { view: "problems", limit: "2" }], ["topups", { status: "requested" }], ["settlement", { month: "2026-09" }]]);
+  for (const name of ["orders", "topups", "settlement"]) assert.equal(geoRoutePattern(`/api/geo/market/${name}`), `/api/geo/market/${name}`);
+  await assert.rejects(fixture({ service: { ...service, isOperator: () => false }, market }).routes(
+    request("GET", "/api/geo/market/settlement?month=2026-09"), response()), { code: "geo_operator_required" });
+  assert.equal(calls.length, 3);
+});
+
+test("market overview uses the composed operations status and preserves reconciliation compatibility", async () => {
+  const { GeoService } = await import("../src/geoService.mjs");
+  const current = { configured: false, operationsAvailable: true, counts: { unknownOrders: 4 }, lastReconciliation: { day: "2026-09-29" } };
+  const result = await GeoService.prototype.market.call({ ready: async () => {}, store: { query: () => assert.fail("legacy query bypassed composed status") } }, { status: async () => current });
+  assert.equal(result.counts.unknownOrders, 4);
+  assert.deepEqual(result.reconciliation, current.lastReconciliation);
+});
