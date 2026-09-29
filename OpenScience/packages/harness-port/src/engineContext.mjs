@@ -13,6 +13,11 @@ export function decorateEngineToolContext(ctx) {
   /** @type {Map<any, {original: Function, wrapped: Function}>} */
   const decorated = new Map()
   const refresh = () => {
+    for (const [definition, entry] of decorated) {
+      if (ctx.tools?.get(definition.name) === definition) continue
+      if (definition.execute === entry.wrapped) definition.execute = entry.original
+      decorated.delete(definition)
+    }
     for (const name of ENGINE_TOOLS) {
       const definition = ctx.tools?.get(name)
       if (!definition || definition.name !== name || typeof definition.execute !== 'function' || decorated.has(definition)) continue

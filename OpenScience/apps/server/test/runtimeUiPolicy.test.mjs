@@ -1242,6 +1242,7 @@ test('native model selection permits only the certified Flash route and closed r
     cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json',
   }, body: JSON.stringify({ type: 'client-request', rpcId: 'select-effort', method: 'session/selectModel',
     payload: { args: { request: { sessionId: 's-one', provider: 'deepseek-official', model: f.config.deepseekModel, ...selected } } } }) });
+  assert.equal((await request({})).status, 200, 'native selection may omit an explicit effort');
   for (const reasoningEffort of ['off', 'low', 'high', 'max']) assert.equal((await request({ reasoningEffort })).status, 200);
   for (const invalid of [{ model: 'deepseek-v4-pro' }, { provider: 'other-provider' }, { reasoningEffort: 'unbounded' }, { apiKey: 'not-an-allowed-setting' }]) {
     assert.equal((await request(invalid)).status, 403);

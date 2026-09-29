@@ -194,7 +194,8 @@ function destroyUpgrade(socket, status, code) {
 function assertNativeModelSelection(config, payload) {
   const request = payload?.args?.request;
   if (!exactFields(payload, ["args"]) || !exactFields(payload.args, ["request"])
-    || !exactFields(request, ["sessionId", "provider", "model", "reasoningEffort"])
+    || !request || typeof request !== "object" || Array.isArray(request)
+    || Object.keys(request).some(key => !["sessionId", "provider", "model", "reasoningEffort"].includes(key))
     || typeof request.sessionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(request.sessionId)
     || request.provider !== "deepseek-official" || request.model !== config.deepseekModel
     || (request.reasoningEffort !== undefined && !MODEL_REASONING_EFFORTS.includes(request.reasoningEffort))) {
