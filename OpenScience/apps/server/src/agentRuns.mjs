@@ -789,7 +789,9 @@ function normalizeCapabilityHandbooks(value) {
     && /^sha256:[a-f0-9]{64}$/.test(item.contentDigest)
     && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
     && Number.isSafeInteger(item.version) && item.version > 0)
-    .slice(0, 6).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version }));
+    .slice(0, 24).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version, requestId }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version,
+      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && !/[\u0000-\u001f\u007f]/.test(requestId) ? { requestId } : {}),
+    }));
 }
 
 function normalizeMethodDigests(value) {
@@ -1511,7 +1513,7 @@ const TRANSIENT_REPAIR_REFUSALS = new Set(["runtime_session_error", "plugin_appl
  * the run failed with its package and nothing anywhere said why. Every attempt
  * that fails is returned, so the run can name the refusal.
  *
- * @param {(text: string) => Promise<any>} sender @param {string} text @param {number[]} delaysMs
+ * @param {(text: string, input?: {requestIds:string[]}) => Promise<any>} sender @param {string} text @param {number[]} delaysMs
  * @returns {Promise<{ accepted: boolean, failures: unknown[] }>}
  */
 async function sendRepair(sender, text, delaysMs) {
@@ -4412,7 +4414,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -4436,7 +4438,9 @@ export class AgentRunStore {
         id: runId,
         at: this.now().toISOString(),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
-        ...(patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(patch.capabilityHandbooks.filter((item) => item?.ownerId === project.userId)) }
+        ...(patch.appendCapabilityHandbooks || patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(
+          (patch.appendCapabilityHandbooks ? [...(current.capabilityHandbooks ?? []), ...patch.appendCapabilityHandbooks] : patch.capabilityHandbooks)
+            .filter((item, index, all) => item?.ownerId === project.userId && all.findIndex(other => other?.id === item.id && other?.contentDigest === item.contentDigest) === index)) }
           : current.capabilityHandbooks ? { capabilityHandbooks: current.capabilityHandbooks } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
@@ -6309,7 +6313,7 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, forkedFrom?: string | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, forkedFrom?: string | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string, input?: {requestIds:string[]}) => Promise<any> }} [routed]
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
@@ -6521,7 +6525,7 @@ export class AgentRunStore {
    * or repair, and multiple user inputs in one kernel turn are steering.
    * @param {any} project @param {string} sessionId
    * @param {import('@evimed/domain').RunTranscript} transcript
-   * @param {(text: string) => Promise<any>} [routeTurn]
+   * @param {(text: string, input?: {requestIds:string[]}) => Promise<any>} [routeTurn]
    * @param {{ forkedFrom?: string | null }} [options] the session this one was forked from
    */
   async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({}), { forkedFrom = null } = {}) {
@@ -6596,7 +6600,7 @@ export class AgentRunStore {
         const legacy = index === 0 ? knownRuns.find((item) => item.sessionId === sessionId && !item.nativeTurn
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
-        const routed = legacy ? {} : await routeTurn(question);
+        const routed = legacy ? {} : await routeTurn(question, { requestIds });
         const reservation = await this.reserveRun(project, binding ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
