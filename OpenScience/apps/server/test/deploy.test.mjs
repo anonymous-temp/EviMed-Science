@@ -1914,7 +1914,8 @@ test("a capability's two skill copies never drift apart by more than their known
     "bibliometric-analysis": 58,
     "clinical-evidence-synthesis": 267,
     "comprehensive-drug-evaluation": 45,
-    "dataset-research-scoping": 59,
+    // The optional-output scoping revision synchronized the retained body too.
+    "dataset-research-scoping": 0,
     "drug-selection": 44,
     // The hosted-input/replay changes propagated all 18 pre-delivery and
     // revision-notes lines into the retained copy; none was removed, and the
