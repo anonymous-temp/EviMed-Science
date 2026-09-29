@@ -29,3 +29,23 @@ it("keeps a failed request visible with retry rather than showing an empty subsc
   fireEvent.click(await screen.findByRole("button", { name: "重试" }));
   expect(await screen.findByRole("button", { name: "肥胖研究" })).toBeInTheDocument();
 });
+
+it("refreshes its rows after a card changes a follow outside this manager", async () => {
+  render(<FrontierFollows selected={null} onSelect={vi.fn()} onChanged={vi.fn()} />);
+  await screen.findByRole("button", { name: "肥胖研究" });
+  client.listFrontierFollows.mockResolvedValue([{ ...followed, muted: true }]);
+  window.dispatchEvent(new Event("evimed:frontier-follows-changed"));
+  expect(await screen.findByRole("button", { name: "取消屏蔽 肥胖研究" })).toBeInTheDocument();
+});
+
+it("preserves a newer selection when an earlier mute finishes late", async () => {
+  let finish!: (value: typeof followed) => void;
+  client.addFrontierFollow.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const select = vi.fn(), change = vi.fn();
+  const { rerender } = render(<FrontierFollows selected="7" onSelect={select} onChanged={change} />);
+  fireEvent.click(await screen.findByRole("button", { name: "屏蔽 肥胖研究" }));
+  rerender(<FrontierFollows selected="8" onSelect={select} onChanged={change} />);
+  finish({ ...followed, muted: true });
+  await waitFor(() => expect(change).toHaveBeenCalled());
+  expect(select).not.toHaveBeenCalledWith(null);
+});
