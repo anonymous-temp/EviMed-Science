@@ -3035,6 +3035,39 @@ test("an account changes its own password with the current one, and signs in wit
   });
 });
 
+test("six-character passwords work for registration and changes without resetting existing accounts", async () => {
+  await withAuthApp(async ({ base }) => {
+    const register = (username, password) => fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    for (const [username, password] of [["too-short", "abc12"], ["five-symbols", "😀😁😂😃😄"]]) {
+      const response = await register(username, password);
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).code, "weak_password");
+    }
+    const registered = await register("six-character", "abc123");
+    assert.equal(registered.status, 201);
+    const cookie = String(registered.headers.get("set-cookie") ?? "").split(";")[0];
+    const csrfToken = (await registered.json()).data.csrfToken;
+    const changed = await fetch(`${base}/api/auth/password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie, "X-Open-Science-CSRF": csrfToken },
+      body: JSON.stringify({ currentPassword: "abc123", newPassword: "xyz789" }),
+    });
+    assert.equal(changed.status, 200);
+    for (const [username, password] of [["six-character", "xyz789"], ["alice", "correct horse battery staple"]]) {
+      const login = await fetch(`${base}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      assert.equal(login.status, 200);
+    }
+  }, { selfRegistrationEnabled: true });
+});
+
 test("registration refuses a weak password and a name the store cannot hold", async () => {
   await withAuthApp(async ({ base }) => {
     const weak = await fetch(`${base}/api/auth/register`, {
