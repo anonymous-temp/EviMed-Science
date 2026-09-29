@@ -11,10 +11,16 @@ from new_meta.core.release_contract import (
 from new_meta.main import _finalize_cli_release
 
 
-def test_cli_release_raises_before_printing_complete_when_blocked(
+def test_cli_release_delivers_a_blocked_package_without_raising(
     tmp_path: Path,
     capsys,
 ) -> None:
+    """A written package is delivered whatever its status (2026-09-29).
+
+    This used to raise ReleaseBlockedError, so the CLI exited 2 for a finished
+    package and callers read a delivered review as a stopped one; exit 2 is now
+    left to runs that stop before a manuscript exists.
+    """
     project = Project("blocked CLI", output_dir=tmp_path / "project")
     package_path = project.get_path("metaagent_export.zip", subdir="package")
     persist_release_decision(
@@ -23,19 +29,20 @@ def test_cli_release_raises_before_printing_complete_when_blocked(
             {
                 "status": "blocked",
                 "passed": False,
-                "gates": [{"id": "rob", "status": "fail", "detail": "missing"}],
+                "gates": [{"id": "primary_result", "status": "fail", "detail": "missing"}],
             },
             package_path=package_path,
         ),
     )
 
-    with pytest.raises(ReleaseBlockedError):
-        _finalize_cli_release(project, package_path, success_label="Complete!")
+    decision = _finalize_cli_release(project, package_path, success_label="Complete!")
 
     output = capsys.readouterr().out
-    assert "BLOCKED" in output
+    assert decision["status"] == "blocked"
+    assert "Delivered as unverified" in output
     assert "Complete!" not in output
-    assert "rob" in output
+    assert "primary_result" in output
+    assert "rerun" not in output.lower()
 
 
 def test_cli_release_prints_complete_only_when_releasable(tmp_path: Path, capsys) -> None:

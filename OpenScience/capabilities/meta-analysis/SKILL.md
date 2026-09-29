@@ -40,6 +40,7 @@ full text.
    A start with exactly the same request returns the job already running or
    finished for it, and resumes a failed one from its last completed step; if
    you lose the job id, repeat the identical request rather than a reworded one.
+   A finished job, whatever its release status, is returned and never run again.
    While a job runs, a different request is refused with the running job's id.
 3. Poll with `action=status`, that job id, and `waitSeconds=45`. A queued or
    running response is not a completed review. Do not manufacture interim study counts,
@@ -49,9 +50,21 @@ full text.
    terminal failure or when `updatedAt` has not moved for 10 minutes, and record
    the state you observed either way.
 4. At the terminal response, record the exact `releaseStatus`, artifact paths,
-   warnings, blockers, and next actions in `meta-analysis-run.json`. `blocked`
-   means the package is not submission-ready. `ready_with_warnings` means the
-   warnings still require review; it is not equivalent to an unconditional pass. A failed job names
+   warnings, blockers, and next actions in `meta-analysis-run.json`. The
+   terminal response is the answer to this request. A job that wrote its
+   manuscript (`deliverable` true) is delivered whatever its `releaseStatus`:
+   `ready` passed every release check; `ready_with_warnings` carries advisory
+   findings (style, completeness, bookkeeping) a reader can see; `blocked` means
+   a check that protects the reader failed - a pooled number whose study inputs
+   were not verified, a pooled result the manuscript does not state as computed,
+   a citation number with no reference - so the manuscript is presented as
+   unverified, with those findings. Never start the job again, reworded or not,
+   to clear a finding or reach a better status: it repeats the retrieval and
+   extraction and reproduces the result. A job that stopped before writing a
+   manuscript says why; too few independent studies to pool is an evidence gap
+   to report, not a request to restate. Start once more, and only once, when the
+   stop names a part of the request the engine could not plan and a restatement
+   keeps the user's question (one primary outcome, the others secondary). A failed job names
    the steps it completed and the files it wrote; report them as partial work,
    resume once as its next action says, and never present them as a review.
    The job decides some things without asking, and its `modules` name each:
@@ -72,7 +85,9 @@ calculations, LLM interpretations, and unresolved review items distinguishable.
 Write `meta-analysis-report.md` as a concise navigation and interpretation layer:
 question, protocol scope, search and eligibility summary, synthesis method,
 primary results, certainty, limitations, and, in plain words, whether the
-engine's own manuscript is ready for release and why not. Every numerical
+engine's own manuscript is ready for release and why not - each finding of
+`package/release_decision.json` (its failed and warning gates, with their
+details and locations) said as what it means for the reader. Every numerical
 claim must match the generated artifacts and every evidence claim must remain
 traceable. Every count and total - records, exclusions, studies, participants -
 is copied from the engine's records (the project's `prisma_flow.json` and

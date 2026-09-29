@@ -29,8 +29,12 @@ def test_the_validation_gate_names_its_blocking_reasons(tmp_path):
     review = _readiness(project, {"passed": False, "issues": [
         {"kind": "citation_audit", "severity": "error", "message": "A reference number is missing."}]})
     gate = next(item for item in review["gates"] if item["id"] == "manuscript_validation")
-    assert gate["status"] == "fail"
+    # The check still fails and names its reasons; since 2026-09-29 it is an
+    # advisory tier (core.release_tiers), so its gate reads warn, not fail.
+    assert gate["check_status"] == "fail"
+    assert gate["tier"] == "advisory" and gate["status"] == "warn"
     assert "Blocking: citation_audit - A reference number is missing." in gate["detail"]
+    assert gate["locations"][0]["message"] == "A reference number is missing."
 
 
 def test_without_any_draft_text_gates_say_not_evaluated(tmp_path):
@@ -41,7 +45,11 @@ def test_without_any_draft_text_gates_say_not_evaluated(tmp_path):
     by_id = {item["id"]: item for item in review["gates"]}
     assert by_id["references"]["status"] == "not_evaluated"
     assert by_id["references"]["detail"] == "not evaluated: no manuscript draft was written."
-    assert review["status"] == "blocked"  # other gates still fail; nothing is passed on nothing
+    # Nothing is passed on nothing: a blocking check that cannot run for want
+    # of text blocks the package.
+    assert by_id["reference_resolution"]["status"] == "fail"
+    assert by_id["reference_resolution"]["check_status"] == "not_evaluated"
+    assert review["status"] == "blocked"
 
 
 def test_no_writer_path_swaps_in_the_stub():

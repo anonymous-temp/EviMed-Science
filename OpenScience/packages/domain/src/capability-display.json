@@ -26,9 +26,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-27",
-        "runs": 1,
-        "delivered": 1,
-        "typicalMinutes": 23
+        "runs": 2,
+        "delivered": 2,
+        "typicalMinutes": 25
       }
     },
     "bibliometric-analysis": {
@@ -253,7 +253,7 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-28",
-        "runs": 1,
+        "runs": 2,
         "delivered": 1,
         "typicalMinutes": 38
       }

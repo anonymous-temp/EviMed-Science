@@ -1034,9 +1034,14 @@ def _finalize_cli_release(
     *,
     success_label: str,
 ) -> dict:
-    """Print a truthful CLI terminal state and reject blocked submissions."""
+    """Print the truthful terminal state of a written package.
+
+    A written package is delivered whatever its release status (the platform's
+    rule of 2026-09-17), so this never raises and the process exits 0: exit
+    code 2 is left to runs that stop before a manuscript exists, and a caller
+    reads the release status from ``package/release_decision.json``.
+    """
     from new_meta.core.release_contract import (
-        ReleaseBlockedError,
         ReleaseStatus,
         build_release_decision,
         load_release_decision,
@@ -1051,18 +1056,20 @@ def _finalize_cli_release(
         )
     status = str(decision.get("status") or "").strip().lower()
     if status == ReleaseStatus.BLOCKED.value:
-        print_step("14", "BLOCKED — Submission Release Gate")
-        print(decision.get("summary") or "Submission release is blocked.")
+        print_step("14", "Delivered as unverified — a reader-protecting check failed")
+        print(decision.get("summary") or "A reader-protecting release check failed.")
         print(f"  Review package: {package_path}")
-        print(f"  Blocking gates: {', '.join(decision.get('blocker_codes') or []) or 'unknown'}")
+        print(f"  Blocking findings: {', '.join(decision.get('blocker_codes') or []) or 'unknown'}")
+        if decision.get("warning_codes"):
+            print(f"  Advisory findings: {', '.join(decision.get('warning_codes') or [])}")
         for action in decision.get("next_actions") or []:
             print(f"  - {action}")
-        raise ReleaseBlockedError(decision)
+        return decision
 
     print_step("14", success_label)
     if status == ReleaseStatus.READY_WITH_WARNINGS.value:
-        print("  Release status: ready with warnings; explicit reviewer acceptance is required.")
-        print(f"  Warning gates: {', '.join(decision.get('warning_codes') or []) or 'unspecified'}")
+        print("  Release status: ready with advisory findings; state them when handing the article over.")
+        print(f"  Advisory findings: {', '.join(decision.get('warning_codes') or []) or 'unspecified'}")
     return decision
 
 
@@ -1537,7 +1544,15 @@ def _run_final_manuscript_llm_readiness_review(
     model: str | None,
     lang: str,
 ) -> dict:
-    """Persist a non-blocking LLM peer-review audit of the final saved manuscript."""
+    """Persist a non-blocking LLM peer-review audit of the final saved manuscript.
+
+    The review is a notice and nothing more: it no longer drives revision
+    rounds. Until 2026-09-29 a "minor_revision" verdict (which an advisory
+    submission-gate warning could force) started up to two model rewrites of
+    the saved draft plus a citation-grounding rewrite - on ma-001's replay two
+    rounds that accepted nothing - and a model judge driving a rewrite loop is
+    what the platform's principle 13 rules out.
+    """
     draft_path = project.base_dir / "manuscript" / "draft.md"
     facts = project.load_json("manuscript_facts.json", subdir="manuscript")
     if not draft_path.exists() or not isinstance(facts, dict) or not facts:
@@ -1583,95 +1598,6 @@ def _run_final_manuscript_llm_readiness_review(
         citation_audit=citation_audit if isinstance(citation_audit, dict) else None,
     )
     project.save_json("manuscript_llm_readiness_review.json", review, subdir="manuscript")
-    revision_agent = WritingAgent(model=model, lang=lang)
-    for revision_round in range(1, 3):
-        if not WritingAgent._final_review_can_auto_revise(review):
-            break
-        revision_agent = WritingAgent(model=model, lang=lang)
-        revised, revision_audit = revision_agent._llm_apply_final_minor_revision(
-            manuscript,
-            facts,
-            review,
-        )
-        revision_audit["round"] = revision_round
-        project.save_json("manuscript_final_minor_revision_audit.json", revision_audit, subdir="manuscript")
-        if int(revision_audit.get("accepted_patches") or 0) <= 0 or revised == manuscript:
-            break
-        finalized, final_validation = _finalize_manuscript_after_postprocessing(project, revised, lang=lang)
-        project.save_text("draft.md", finalized, subdir="manuscript")
-        project.save_json("manuscript_validation.json", final_validation, subdir="manuscript")
-        manuscript = finalized
-        validation = final_validation
-        quality_gate = project.load_json("manuscript_quality_gate.json", subdir="manuscript")
-        submission_quality_gate = project.load_json("submission_quality_gate.json", subdir="manuscript")
-        try:
-            from new_meta.core.artifact_package import _build_citation_audit_review
-            citation_audit = _build_citation_audit_review(project)
-            if isinstance(citation_audit, dict):
-                project.save_json("citation_audit_review.json", citation_audit, subdir="manuscript")
-        except Exception as exc:
-            citation_audit = {
-                "schema_version": 1,
-                "status": "failed",
-                "error": str(exc)[:500],
-            }
-        review = revision_agent._llm_final_manuscript_readiness_review(
-            manuscript,
-            facts,
-            validation=validation if isinstance(validation, dict) else None,
-            quality_gate=quality_gate if isinstance(quality_gate, dict) else None,
-            submission_quality_gate=submission_quality_gate if isinstance(submission_quality_gate, dict) else None,
-            citation_audit=citation_audit if isinstance(citation_audit, dict) else None,
-        )
-        review["after_final_minor_revision"] = True
-        review["final_minor_revision_round"] = revision_round
-        project.save_json("manuscript_llm_readiness_review.json", review, subdir="manuscript")
-    if (
-        revision_agent._final_review_has_citation_grounding_issue(review)
-        and WritingAgent._auto_revisable_final_review(review).get("issues")
-    ):
-        citation_agent = WritingAgent(model=model, lang=lang)
-        working_review = WritingAgent._auto_revisable_final_review(review)
-        citation_revised, citation_revision_audit = citation_agent._llm_ground_existing_reference_citations(
-            manuscript,
-            facts,
-            working_review,
-        )
-        citation_revision_audit["mode"] = "final_tail_citation_grounding"
-        project.save_json(
-            "manuscript_final_citation_grounding_audit.json",
-            citation_revision_audit,
-            subdir="manuscript",
-        )
-        if int(citation_revision_audit.get("accepted_patches") or 0) > 0 and citation_revised != manuscript:
-            finalized, final_validation = _finalize_manuscript_after_postprocessing(project, citation_revised, lang=lang)
-            project.save_text("draft.md", finalized, subdir="manuscript")
-            project.save_json("manuscript_validation.json", final_validation, subdir="manuscript")
-            manuscript = finalized
-            validation = final_validation
-            quality_gate = project.load_json("manuscript_quality_gate.json", subdir="manuscript")
-            submission_quality_gate = project.load_json("submission_quality_gate.json", subdir="manuscript")
-            try:
-                from new_meta.core.artifact_package import _build_citation_audit_review
-                citation_audit = _build_citation_audit_review(project)
-                if isinstance(citation_audit, dict):
-                    project.save_json("citation_audit_review.json", citation_audit, subdir="manuscript")
-            except Exception as exc:
-                citation_audit = {
-                    "schema_version": 1,
-                    "status": "failed",
-                    "error": str(exc)[:500],
-                }
-            review = citation_agent._llm_final_manuscript_readiness_review(
-                manuscript,
-                facts,
-                validation=validation if isinstance(validation, dict) else None,
-                quality_gate=quality_gate if isinstance(quality_gate, dict) else None,
-                submission_quality_gate=submission_quality_gate if isinstance(submission_quality_gate, dict) else None,
-                citation_audit=citation_audit if isinstance(citation_audit, dict) else None,
-            )
-            review["after_final_tail_citation_grounding"] = True
-            project.save_json("manuscript_llm_readiness_review.json", review, subdir="manuscript")
     return review
 
 

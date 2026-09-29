@@ -8,7 +8,6 @@ import pytest
 
 import new_meta.main as main_module
 from new_meta.core.project import PIPELINE_STEPS, Project
-from new_meta.core.release_contract import ReleaseBlockedError
 from new_meta.main import (
     _can_rerun_manuscript_only,
     _can_resume_direct_to_manuscript,
@@ -408,12 +407,16 @@ def test_direct_manuscript_resume_uses_cached_analysis(monkeypatch, tmp_path) ->
     monkeypatch.setattr(main_module, "MANUSCRIPT_POLISH_USE_LLM", False)
 
     assert _can_resume_direct_to_manuscript(project) is True
-    with pytest.raises(ReleaseBlockedError):
-        _resume_direct_to_manuscript(
-            project,
-            SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
-            model=None,
-        )
+    # A written package is delivered whatever its release status (2026-09-29):
+    # the resume returns instead of raising ReleaseBlockedError. The faked
+    # writer leaves no pooled facts, so no blocking check applies to its text
+    # and only advisory findings remain.
+    _resume_direct_to_manuscript(
+        project,
+        SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
+        model=None,
+    )
+    assert project.load_json("release_decision.json", subdir="package")["status"] == "ready_with_warnings"
 
     assert captured == {
         "n_studies": 2,
@@ -517,12 +520,16 @@ def test_direct_manuscript_resume_passes_evidence_gate_state_to_writer(monkeypat
     monkeypatch.setattr(WritingAgent, "run", fake_run)
     monkeypatch.setattr(main_module, "MANUSCRIPT_POLISH_USE_LLM", False)
 
-    with pytest.raises(ReleaseBlockedError):
-        _resume_direct_to_manuscript(
-            project,
-            SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
-            model=None,
-        )
+    # A written package is delivered whatever its release status (2026-09-29):
+    # the resume returns instead of raising ReleaseBlockedError. The faked
+    # writer leaves no pooled facts, so no blocking check applies to its text
+    # and only advisory findings remain.
+    _resume_direct_to_manuscript(
+        project,
+        SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
+        model=None,
+    )
+    assert project.load_json("release_decision.json", subdir="package")["status"] == "ready_with_warnings"
 
     assert captured["gate_protocol"] == protocol
     assert captured["gate_study_ids"] == ["S1"]
@@ -839,12 +846,16 @@ def test_cached_meta_resume_skips_pooling_and_runs_missing_late_steps(monkeypatc
     monkeypatch.setattr(main_module, "MANUSCRIPT_POLISH_USE_LLM", False)
 
     assert _can_resume_from_cached_meta_analysis(project) is True
-    with pytest.raises(ReleaseBlockedError):
-        _resume_from_cached_meta_analysis(
-            project,
-            SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
-            model=None,
-        )
+    # A written package is delivered whatever its release status (2026-09-29):
+    # the resume returns instead of raising ReleaseBlockedError. The faked
+    # writer leaves no pooled facts, so no blocking check applies to its text
+    # and only advisory findings remain.
+    _resume_from_cached_meta_analysis(
+        project,
+        SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
+        model=None,
+    )
+    assert project.load_json("release_decision.json", subdir="package")["status"] == "ready_with_warnings"
 
     assert grade_calls["n"] == 1
     assert captured == {"pooled": 0.8, "grade_outcomes": 1}
@@ -939,12 +950,16 @@ def test_cached_effect_size_resume_skips_effect_recomputation(monkeypatch, tmp_p
     monkeypatch.setattr(main_module, "MANUSCRIPT_POLISH_USE_LLM", False)
 
     assert _can_resume_from_cached_effect_sizes(project) is True
-    with pytest.raises(ReleaseBlockedError):
-        _resume_from_cached_effect_sizes(
-            project,
-            SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
-            model=None,
-        )
+    # A written package is delivered whatever its release status (2026-09-29):
+    # the resume returns instead of raising ReleaseBlockedError. The faked
+    # writer leaves no pooled facts, so no blocking check applies to its text
+    # and only advisory findings remain.
+    _resume_from_cached_effect_sizes(
+        project,
+        SimpleNamespace(topic="Does treatment reduce mortality?", analysis_type=None),
+        model=None,
+    )
+    assert project.load_json("release_decision.json", subdir="package")["status"] == "ready_with_warnings"
 
     assert captured == {"n_studies": 2, "grade_outcomes": 1}
     assert project.is_step_done("meta_analysis") is True

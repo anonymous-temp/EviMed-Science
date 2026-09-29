@@ -251,7 +251,6 @@ class WritingAgent(
             manuscript,
             facts,
             project=project,
-            allow_model=project is not None,
         )
         self._quality_checked_manuscript = manuscript
         style_audit = manuscript_style_audit(manuscript)
@@ -259,6 +258,11 @@ class WritingAgent(
         citation_audit = None
         if project:
             project.save_text("draft.md", manuscript, subdir="manuscript")
+            # The citation audit is read, never answered with a model rewrite:
+            # its section-coverage, cluster and uncited-claim findings are the
+            # advisory citation_coverage check (core.release_tiers), and until
+            # 2026-09-29 each save sent them back to the model as a grounding
+            # repair - up to three saves per manuscript, so up to three passes.
             try:
                 citation_audit = build_citation_audit_review(project)
             except Exception as exc:
@@ -272,31 +276,6 @@ class WritingAgent(
                         "message": f"Citation audit failed to run: {exc}",
                     }],
                 }
-            if isinstance(citation_audit, dict) and self._citation_audit_has_repairable_grounding_issues(citation_audit):
-                repaired, grounding_audit = self._llm_ground_citation_audit_issues(
-                    manuscript,
-                    facts,
-                    citation_audit,
-                )
-                if int(grounding_audit.get("accepted_patches") or 0) > 0 and repaired != manuscript:
-                    manuscript = self._normalize_citation_marker_style(repaired, lang=self._lang)
-                    project.save_text("draft.md", manuscript, subdir="manuscript")
-                    style_audit = manuscript_style_audit(manuscript)
-                    quality_gate = manuscript_quality_gate(manuscript, facts, style_audit=style_audit)
-                    try:
-                        citation_audit = build_citation_audit_review(project)
-                    except Exception as exc:
-                        citation_audit = {
-                            "passed": False,
-                            "summary": {"error_count": 1, "warning_count": 0},
-                            "issues": [{
-                                "code": "citation_audit_failed_to_run",
-                                "kind": "citation_audit",
-                                "severity": "fail",
-                                "message": f"Citation audit failed to run after grounding repair: {exc}",
-                            }],
-                        }
-                project.save_json("citation_grounding_audit.json", grounding_audit, subdir="manuscript")
         merged = dict(base_validation)
         merged["quality_gate"] = {
             "passed": quality_gate.get("passed", False),
@@ -518,8 +497,13 @@ class WritingAgent(
         figures_b64 = figures_b64 or {}
         if project:
             self._clear_stale_manuscript_warnings(project)
-            # A new manuscript starts a new save-time conformance record.
-            (project.base_dir / "manuscript" / RELEASE_CONFORMANCE_AUDIT).unlink(missing_ok=True)
+            # A new manuscript starts a new save-time conformance record, and
+            # the audits of the model repair passes retired on 2026-09-29 must
+            # not describe it: a rewritten project would package them.
+            for name in (RELEASE_CONFORMANCE_AUDIT, "citation_grounding_audit.json",
+                         "manuscript_final_minor_revision_audit.json",
+                         "manuscript_final_citation_grounding_audit.json"):
+                (project.base_dir / "manuscript" / name).unlink(missing_ok=True)
         self._background_citation_context = self._load_background_citation_context(project, ref_manager)
         self._methodology_citation_context = self._load_methodology_citation_context(project, ref_manager)
         manuscript_facts = build_manuscript_facts(

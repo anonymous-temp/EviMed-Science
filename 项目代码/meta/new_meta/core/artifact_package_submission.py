@@ -11,6 +11,7 @@ from new_meta.core.artifact_package_language import (
     normalize_review_language as _normalize_review_language,
 )
 from new_meta.core.project import Project
+from new_meta.core.release_tiers import apply_release_tiers
 from new_meta.core.report_style import (
     data_table as _data_table,
     page_header as _page_header,
@@ -458,6 +459,10 @@ def build_submission_readiness_review(
                 f"missing_volume_or_pages={reference_summary.get('entries_missing_volume_or_pages', 0)}."
             ),
         ),
+        _reference_resolution_gate(
+            draft_text,
+            pooled_review=bool(manuscript.get("requires_publication_length_gate")),
+        ),
         _submission_gate(
             "citation_coverage",
             "Main-text citation coverage",
@@ -669,45 +674,137 @@ def build_submission_readiness_review(
         ),
     ]
 
+    _attach_gate_locations(gates, {
+        "manuscript_validation": validation.get("issues"),
+        "project_submission_quality_gate": project_submission_failed + project_submission_warned,
+        "abstract_polish": (abstract_audit or {}).get("issues"),
+        "publication_tone": (publication_tone_audit or {}).get("issues"),
+        "readability": (readability_audit or {}).get("issues"),
+        "clinical_interpretation": (clinical_interpretation_audit or {}).get("issues"),
+        "evidence_readiness": [
+            *((evidence_review or {}).get("blockers") or []),
+            *[warning for warning in evidence_warnings if _is_submission_relevant_evidence_warning(warning)],
+        ],
+        "calculation_audit": [
+            {**row, "code": "calculation_row_not_source_verified"}
+            for row in (calculation_audit or {}).get("rows") or []
+            if isinstance(row, dict)
+            and (row.get("source_row_matched") is False or row.get("source_quote_verified") is not True)
+        ],
+        "primary_source_trace": (primary_source_trace or {}).get("issues"),
+        "primary_result": (primary_result_audit or {}).get("issues"),
+        "claim_support": (claim_support_audit or {}).get("issues"),
+        "references": (reference_audit or {}).get("issues"),
+        "citation_coverage": (citation_audit or {}).get("issues"),
+        "search_strategy": (search_strategy_audit or {}).get("issues"),
+        "prisma_flow": (prisma_audit or {}).get("issues"),
+        "figures": (figure_audit or {}).get("issues"),
+        "figure_legends": (figure_legend_audit or {}).get("issues"),
+        "cross_references": (cross_reference_audit or {}).get("issues"),
+        "table_footnotes": (table_footnote_audit or {}).get("issues"),
+        "risk_of_bias_completeness": (risk_of_bias_completeness or {}).get("issues"),
+        "llm_reliability": (llm_reliability_audit or {}).get("issues"),
+    })
     if not draft_text.strip():
-        # No manuscript at all: a gate that reads the text cannot be evaluated,
-        # and says so instead of failing with counts measured on nothing. The
-        # missing draft itself still blocks (manuscript_formats).
+        # No manuscript text: a gate that reads the text cannot be evaluated,
+        # and says so instead of failing with counts measured on nothing. A
+        # blocking check that cannot run blocks - there is nothing to read.
         for gate in gates:
             if gate["id"] in _MANUSCRIPT_TEXT_GATES:
                 gate.update({"status": "not_evaluated", "passed": False,
                              "detail": "not evaluated: no manuscript draft was written."})
-    failed = sum(1 for gate in gates if gate["status"] == "fail")
-    warnings = sum(1 for gate in gates if gate["status"] == "warn")
     _localize_submission_gates(gates, readiness_language)
-    if failed:
-        status = "blocked"
-    elif warnings:
-        status = "ready_with_warnings"
-    else:
-        status = "ready"
-    return {
+    return apply_release_tiers({
         "schema_version": 1,
         "language": readiness_language,
-        "status": status,
-        "passed": failed == 0,
-        "summary": {
-            "total_gates": len(gates),
-            "passed_gates": sum(1 for gate in gates if gate["status"] == "pass"),
-            "warning_gates": warnings,
-            "failed_gates": failed,
-        },
         "manuscript": manuscript,
         "gates": gates,
-    }
+    })
 
 
 #: Gates that measure the manuscript text itself.
 _MANUSCRIPT_TEXT_GATES = frozenset({
     "manuscript_language", "manuscript_length", "abstract_polish", "clinical_interpretation",
-    "manuscript_content", "references", "citation_coverage", "claim_support", "declarations",
-    "figure_legends", "cross_references", "table_footnotes", "publication_tone", "readability",
+    "manuscript_content", "references", "reference_resolution", "citation_coverage", "claim_support",
+    "declarations", "figure_legends", "cross_references", "table_footnotes", "publication_tone",
+    "readability",
 })
+
+
+def _reference_resolution_gate(draft_text: str, *, pooled_review: bool) -> dict[str, Any]:
+    """Every in-text citation number resolves; a pooled review has a reference list.
+
+    Format parsing only (bracketed citation numbers against the numbered list),
+    the same reading the citation audit uses for its undefined numbers.
+    """
+    from new_meta.core.artifact_package_citation_audit import (
+        _citation_numbers_from_text,
+        _main_text_before_reference_section,
+        _reference_entry_count,
+        _references_section_text,
+    )
+
+    listed = _reference_entry_count(_references_section_text(draft_text))
+    cited = sorted(set(_citation_numbers_from_text(_main_text_before_reference_section(draft_text))))
+    unresolved = [number for number in cited if not 1 <= number <= listed]
+    missing_list = pooled_review and listed <= 0
+    gate = _submission_gate(
+        "reference_resolution",
+        "Citation numbers resolve",
+        not unresolved and not missing_list,
+        (
+            f"reference_list_entries={listed}; cited_numbers={len(cited)}; "
+            f"unresolved_numbers={','.join(str(number) for number in unresolved[:20]) or 'none'}; "
+            f"pooled_review={pooled_review}."
+        ),
+    )
+    locations = (
+        [{"code": "citation_number_unresolved", "citation_number": number} for number in unresolved[:_MAX_LOCATIONS]]
+        + ([{"code": "reference_list_missing", "message": "The pooled review has no numbered reference list."}]
+           if missing_list else [])
+    )
+    if locations:
+        gate["locations"] = locations
+    return gate
+
+
+_MAX_LOCATIONS = 8
+_LOCATION_KEYS = (
+    "code", "kind", "name", "section", "field", "label", "key", "study_label", "study_id", "result_id",
+    "row_id", "claim_type", "citation_number", "expected", "excerpt", "sentence", "evidence_excerpt",
+    "message",
+)
+
+
+def _attach_gate_locations(gates: list[dict[str, Any]], issues_by_gate: dict[str, Any]) -> None:
+    """Name where each non-passing check found its problem, from its own audit.
+
+    Only issues the audit itself graded fail/error/warn are carried, at most
+    eight per gate, each trimmed to the fields that locate it; the full audit
+    stays in the package's review/ directory.
+    """
+    for gate in gates:
+        if gate.get("status") == "pass" or gate.get("locations"):
+            continue
+        locations: list[dict[str, Any]] = []
+        for issue in issues_by_gate.get(str(gate.get("id") or "")) or []:
+            if not isinstance(issue, dict):
+                continue
+            grade = str(issue.get("severity") or issue.get("status") or "").strip().lower()
+            if grade and grade not in {"fail", "failed", "error", "blocker", "warn", "warning"}:
+                continue
+            row = {
+                key: (value[:240] if isinstance(value, str) else value)
+                for key in _LOCATION_KEYS
+                if (value := issue.get(key)) not in (None, "", [], {})
+                and isinstance(value, (str, int, float, bool))
+            }
+            if row:
+                locations.append(row)
+            if len(locations) >= _MAX_LOCATIONS:
+                break
+        if locations:
+            gate["locations"] = locations
 
 
 def _calculation_audit_is_complete(summary: dict[str, Any]) -> bool:
@@ -1035,6 +1132,7 @@ def _localized_submission_gate_label(gate_id: str, fallback: str, language: str)
         "primary_result": "主要结果一致性",
         "claim_support": "正文结论支持",
         "references": "参考文献",
+        "reference_resolution": "引用编号可解析",
         "citation_coverage": "正文引用覆盖",
         "search_strategy": "检索策略",
         "prisma_flow": "PRISMA流程",
@@ -1046,6 +1144,8 @@ def _localized_submission_gate_label(gate_id: str, fallback: str, language: str)
         "risk_of_bias_completeness": "主要研究偏倚风险完整性",
         "llm_reliability": "LLM输出可靠性",
         "benchmark": "已发表基准对照",
+        "publication_similarity": "与已发表稿件的相似度",
+        "compiled_method_release": "编译方法发布检查",
     }
     return labels.get(gate_id, fallback)
 
@@ -1132,6 +1232,12 @@ def _render_submission_gate_row(gate: dict, *, language: str = "en") -> str:
         or gate.get("id")
         or ""
     )
+    tier = str(gate.get("tier") or "")
+    if tier:
+        zh = _is_zh_review_language(language)
+        label = f"{label} · " + (
+            ("阻断项" if zh else "blocking") if tier == "blocking" else ("建议" if zh else "advisory")
+        )
     return (
         "<tr>"
         f"<td>{escape(label)}</td>"

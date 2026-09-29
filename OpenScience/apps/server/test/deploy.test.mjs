@@ -1905,6 +1905,10 @@ test("a capability's two skill copies never drift apart by more than their known
   // with its Steiger and MR-PRESSO paragraph); meta-analysis copies counts from
   // the engine's evidence accounting, keeps release codes and paths out of the
   // report and writes no author or COI statements (+15).
+  // Raised on 2026-09-29, later the same day: meta-analysis says which checks
+  // can block a package (three, plus no manuscript at all), that everything
+  // else is advice delivered with the package, and that a blocked job is never
+  // restarted more than once (+15).
   const knownDivergence = {
     "adr-analysis": 63,
     "bibliometric-analysis": 58,
@@ -1917,7 +1921,7 @@ test("a capability's two skill copies never drift apart by more than their known
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
     "mendelian-randomization": 81,
-    "meta-analysis": 77,
+    "meta-analysis": 92,
     "off-label-analysis": 44,
     "peer-review": 40,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are

@@ -45,6 +45,7 @@ pytest tests/test_sprint0_hygiene.py::test_secret_and_runtime_paths_are_gitignor
 - Pipeline steps are checkpointed; `--resume` resumes from the last completed step
 - Checkpoint step IDs (in order): `protocol → search_query → search → ta_screening → pdf_download → pdf_parsing → ft_screening → extraction → rob → effect_sizes → meta_analysis → grade → figures → manuscript`
 - `DOWNSTREAM_STEPS` in `core/project.py` declares what gets invalidated when a step is re-run
+- Release tiers (`core/release_tiers.py`, one table): only `calculation_audit`, `primary_result` and `reference_resolution` (plus "no manuscript at all") can make `package/release_decision.json` read `blocked`; every other gate is advisory (`warn`, its own verdict kept in `check_status`). A written package is always delivered and the CLI exits 0; exit 2 is for a run that stops before its manuscript. No finding triggers a rerun or a model rewrite of the saved draft.
 
 **EvidenceGate** (`core/evidence_gate.py`): Deterministic gate that runs **after extraction, before RoB/effect sizes**. Decides `META` / `NARRATIVE` / `EVIDENCE_GAP` based on study count, outcome extractability, and PICO matching. All checks are rule-based, no LLM.
 

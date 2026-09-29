@@ -21,7 +21,9 @@ def test_web_terminal_outcome_emits_blocked_instead_of_done(
                 {
                     "status": "blocked",
                     "passed": False,
-                    "gates": [{"id": "citation", "status": "fail", "detail": "unsupported"}],
+                    # A blocking gate (core.release_tiers); the unnamed id
+                    # "citation" is advisory since 2026-09-29.
+                    "gates": [{"id": "reference_resolution", "status": "fail", "detail": "unresolved [9]"}],
                 },
                 package_path=package_path,
             ),
@@ -40,7 +42,7 @@ def test_web_terminal_outcome_emits_blocked_instead_of_done(
 
     assert decision["status"] == "blocked"
     assert [kind for kind, _ in events] == ["blocked"]
-    assert events[0][1]["blocker_codes"] == ["citation"]
+    assert events[0][1]["blocker_codes"] == ["reference_resolution"]
     assert events[0][1]["package_path"] == str(package_path)
 
 

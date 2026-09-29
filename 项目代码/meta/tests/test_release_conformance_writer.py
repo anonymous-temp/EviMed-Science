@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 import new_meta.config as config
-from new_meta.agents.writing.contracts import SentenceSplitRevision, SentenceSplitRewrite
 from new_meta.agents.writing_agent import WritingAgent
 from new_meta.core.artifact_package import (
     _build_cross_reference_audit_review,
@@ -319,63 +318,51 @@ def _discussion_manuscript() -> str:
     ])
 
 
-class _StubSplitter(WritingAgent):
-    def __init__(self, replacement: str):
+class _RecordingAgent(WritingAgent):
+    def __init__(self):
         super().__init__(lang="zh")
-        self.replacement = replacement
         self.prompts: list[str] = []
 
     def call_llm_structured(self, prompt, schema, **kwargs):  # noqa: D401 - test double
-        assert schema is SentenceSplitRevision
         self.prompts.append(prompt)
-        return SentenceSplitRevision(rewrites=[SentenceSplitRewrite(index=0, replacement=self.replacement)])
+        raise AssertionError("an advisory readability finding must not reach the model")
 
 
-def test_residual_overlong_sentence_takes_the_models_faithful_split(tmp_path: Path, monkeypatch) -> None:
+def test_residual_overlong_sentence_stays_an_advisory_finding_without_a_model_call(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Readability is advisory (core.release_tiers, 2026-09-29).
+
+    These three tests used to cover a split-only model edit requested at every
+    save for a sentence the deterministic split could not shorten; on ma-001's
+    replay all three requests were rejected and the sentence still blocked the
+    release. An advisory finding is never sent back to the model: the sentence
+    is left in place, recorded, and the release is not blocked by it.
+    """
     monkeypatch.setattr(config, "LLM_API_KEY", "test-key")
-    faithful = MA001_COLON_LIST_SENTENCE.replace("不一致：", "不一致。").replace("［3］；", "［3］。").replace("［1］；", "［1］。")
-    agent = _StubSplitter(faithful)
+    agent = _RecordingAgent()
     project = Project("sentence split", output_dir=tmp_path)
 
     text, audit = agent._apply_release_conformance(_discussion_manuscript(), {}, project=project)
 
-    assert len(audit["deterministic_sentence_splits"]) == 1
-    assert [item["replacement"] for item in audit["model_sentence_splits"]["accepted"]] == [faithful]
-    assert audit["remaining_overlong_sentences"] == []
-    assert "100 counted units" in agent.prompts[0]
-    project.save_text("draft.md", text, subdir="manuscript")
-    assert _build_readability_audit_review(project)["passed"] is True
-    audit_path = project.base_dir / "manuscript" / "release_conformance_audit.json"
-    saved = json.loads(audit_path.read_text())
-    assert [item["model_sentence_splits"]["status"] for item in saved["passes"]] == ["ok"]
-    # A later save with nothing left to do keeps the record of the pass that did the work.
-    agent._apply_release_conformance(text, {}, project=project)
-    again = json.loads(audit_path.read_text())
-    assert len(again["passes"]) == 1 and again["remaining_overlong_sentences"] == []
-
-
-def test_an_unfaithful_split_is_rejected_and_left_as_the_gates_finding(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(config, "LLM_API_KEY", "test-key")
-    unfaithful = MA001_COLON_LIST_SENTENCE.replace("不一致：", "不一致。").replace("［3］；", "［3］。").replace(
-        "［1］；", "［1］。"
-    ).replace("不使用", "使用")
-    agent = _StubSplitter(unfaithful)
-
-    text, audit = agent._apply_release_conformance(_discussion_manuscript(), {}, project=None)
-
-    assert MA001_COLON_LIST_SENTENCE in text
-    assert audit["model_sentence_splits"]["rejected"][0]["issues"] == ["negation_or_hedge_changed"]
-    assert [item["units"] for item in audit["remaining_overlong_sentences"]] == [119]
-
-
-def test_no_model_call_without_a_configured_key(monkeypatch) -> None:
-    monkeypatch.setattr(config, "LLM_API_KEY", "")
-    agent = _StubSplitter("unused")
-
-    _text, audit = agent._apply_release_conformance(_discussion_manuscript(), {}, project=None)
-
     assert agent.prompts == []
-    assert audit["model_sentence_splits"] == {"status": "skipped", "reason": "missing_llm_api_key"}
+    assert "model_sentence_splits" not in audit
+    assert len(audit["deterministic_sentence_splits"]) == 1
+    assert MA001_COLON_LIST_SENTENCE in text
+    assert [item["units"] for item in audit["remaining_overlong_sentences"]] == [119]
+    saved = json.loads((project.base_dir / "manuscript" / "release_conformance_audit.json").read_text())
+    assert [item["units"] for item in saved["remaining_overlong_sentences"]] == [119]
+    project.save_text("draft.md", text, subdir="manuscript")
+    readability = _build_readability_audit_review(project)
+    assert readability["passed"] is False  # the finding is kept, with its location
+    from new_meta.core.release_contract import build_release_decision
+
+    decision = build_release_decision({"gates": [{
+        "id": "readability", "status": "fail",
+        "detail": "overlong_sentences=1; failed_issues=1.",
+    }]})
+    assert decision["status"] == "ready_with_warnings"
+    assert decision["warning_codes"] == ["readability"]
 
 
 # ── the save-time hook ────────────────────────────────────────────────────
