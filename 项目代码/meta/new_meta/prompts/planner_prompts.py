@@ -20,7 +20,11 @@ PICO_EXTRACTION_PROMPT = """Analyze the following research question and extract 
 Research Question: {question}
 
 Your task:
-1. Identify Population (P), Intervention (I), Comparator (C), and primary Outcome (O)
+1. Identify Population (P), Intervention (I), Comparator (C), and primary Outcome (O).
+   The protocol holds exactly one primary outcome. When the question names several outcomes
+   as primary (co-primary), or lists outcomes without naming a primary one, the first-named
+   outcome is the primary outcome and every other requested outcome goes to
+   outcomes_secondary with its own type; drop none, and do not merge them into one value.
 2. Include secondary outcomes only within the scope-design rules
 3. Determine the most suitable study design to include (RCT only, observational only, or both)
 4. Write explicit inclusion and exclusion criteria

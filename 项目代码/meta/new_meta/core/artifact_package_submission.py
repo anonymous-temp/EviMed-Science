@@ -650,12 +650,14 @@ def build_submission_readiness_review(
             "Published benchmark comparison",
             benchmark_review is None or benchmark_review.get("passed") is True,
             (
-                "No benchmark attached."
+                # A benchmark comparison is optional: its absence is a note about
+                # the run, not a defect of the package (it used to warn on every
+                # package, so none could read "ready").
+                "No benchmark attached (informational)."
                 if benchmark_review is None else
                 f"Benchmark {benchmark_review.get('benchmark_id') or ''} status={benchmark_review.get('status')}; "
                 f"failing gates={benchmark_summary.get('failing_gates', 0)}."
             ),
-            warning=benchmark_review is None,
         ),
         _submission_gate(
             "publication_similarity",
@@ -1283,6 +1285,7 @@ def _localized_submission_gate_detail(gate: dict, language: str) -> str:
     common_messages = {
         "No manuscript polish audit was available.": "未找到稿件润色审计。",
         "No external benchmark attached.": "未附加外部基准。",
+        "No benchmark attached (informational).": "未附加基准对照（仅作说明）。",
     }
     if detail.strip() in common_messages:
         return common_messages[detail.strip()]

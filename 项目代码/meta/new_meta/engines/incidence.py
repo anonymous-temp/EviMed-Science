@@ -8,6 +8,7 @@ import numpy as np
 from pydantic import BaseModel, Field, field_validator
 from scipy import optimize, stats
 from scipy.special import gammaln, logsumexp
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 class IncidenceStudy(BaseModel):
@@ -59,7 +60,7 @@ def run_incidence(
         for item in studies
     ]
     if len(studies) < 2:
-        raise ValueError("incidence synthesis requires at least two studies")
+        raise InsufficientStudiesError("incidence synthesis requires at least two studies")
     units = {item.time_unit for item in studies}
     if len(units) != 1:
         raise ValueError(

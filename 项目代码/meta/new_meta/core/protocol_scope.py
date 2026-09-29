@@ -88,14 +88,78 @@ def _validated_scope_conflicts(topic, assessment, expected_fields):
     return conflicts
 
 
-def scope_receipt(topic, protocol, assessment):
+#: The protocol holds exactly one primary outcome. A question that names several
+#: outcomes as primary, or none, can only be written as one primary outcome and
+#: the rest secondary, and the independent check flags that on these fields -
+#: on 2026-09-28 it refused three of eight production jobs, and replanning made
+#: the proposals worse. The planner gives such a non-match one feedback round
+#: (it may be an added, unrequested outcome the planner can drop), then records
+#: it as a protocol deviation and continues.
+OUTCOME_ROLE_FIELDS = frozenset({"pico.outcome_primary", "pico.outcomes_secondary", "primary_outcome_type"})
+
+
+def is_outcome_role_field(field) -> bool:
+    name = str(field or "")
+    return name in OUTCOME_ROLE_FIELDS or name.startswith("pico.outcomes_secondary[")
+
+
+def scope_refusal(protocol, conflicts):
+    """The planner's feedback for a proposal whose scope it can still repair."""
+    return ProtocolInputRequired("The proposed protocol does not demonstrably preserve the original research question.",
+        code="protocol_scope_input_required", protocol=protocol, context={"scope_findings": conflicts})
+
+
+def scope_receipt(topic, protocol, assessment, *, accept_all=False, accepted_fields=frozenset()):
+    """Receipt of the independent scope check, with every non-match recorded.
+
+    A non-match refuses unless the caller accepts it - the planner, when its
+    bounded attempts cannot repair it - or it was already recorded as a
+    deviation of this review (``accepted_fields``).
+    """
     assessment = validate_scope_assessment(topic, protocol, assessment)
     conflicts = [item.model_dump() for item in assessment.fields if item.status != "match"]
+    refused = [item for item in conflicts if not (accept_all or item["field"] in accepted_fields)]
+    if refused:
+        raise scope_refusal(protocol, conflicts)
+    receipt = {"schema_version": 1, "assessor": ASSESSOR, "topic_sha256": digest(topic),
+               "protocol_sha256": protocol_hash(protocol), "assessment": assessment.model_dump(mode="json")}
     if conflicts:
-        raise ProtocolInputRequired("The proposed protocol does not demonstrably preserve the original research question.",
-            code="protocol_scope_input_required", protocol=protocol, context={"scope_findings": conflicts})
-    return {"schema_version": 1, "assessor": ASSESSOR, "topic_sha256": digest(topic),
-            "protocol_sha256": protocol_hash(protocol), "assessment": assessment.model_dump(mode="json")}
+        receipt["deviations"] = [_scope_deviation(item) for item in conflicts]
+        if any(is_outcome_role_field(item["field"]) for item in conflicts):
+            receipt["outcome_roles"] = {"primary": protocol.pico.outcome_primary,
+                                        "secondary": list(protocol.pico.outcomes_secondary or []),
+                                        "primary_outcome_type": protocol.primary_outcome_type}
+    return receipt
+
+
+def _scope_deviation(conflict) -> dict:
+    return {"field": conflict["field"], "status": conflict["status"], "basis": conflict["basis"],
+            "kind": "outcome_role" if is_outcome_role_field(conflict["field"]) else "scope",
+            "rationale": str(conflict.get("rationale") or "")[:1000]}
+
+
+def recorded_deviation_fields(receipt) -> frozenset:
+    return frozenset(str(item.get("field") or "") for item in (receipt or {}).get("deviations") or []
+                     if isinstance(item, dict))
+
+
+def record_scope_deviations(project, receipt) -> None:
+    """Name each recorded deviation once in the run record (pipeline_warnings.json)."""
+    deviations = [item for item in (receipt or {}).get("deviations") or [] if isinstance(item, dict)]
+    if not deviations:
+        return
+    fields = sorted({item["field"] for item in deviations})
+    for warning in project.load_json("pipeline_warnings.json") or []:
+        if (isinstance(warning, dict) and warning.get("code") == "protocol_scope_deviation"
+                and sorted((warning.get("context") or {}).get("fields") or []) == fields):
+            return
+    roles = receipt.get("outcome_roles") or {}
+    message = "The protocol differs from the original question on " + ", ".join(fields) + "."
+    if roles:
+        message += (f" Primary outcome analysed: {roles.get('primary')}; secondary: "
+                    f"{'; '.join(roles.get('secondary') or []) or 'none'} - the protocol holds one primary outcome.")
+    project.add_warning("protocol", message, code="protocol_scope_deviation",
+                        context={"fields": fields, "deviations": deviations, "outcome_roles": roles})
 
 
 def original_project_topic(project):
@@ -116,6 +180,7 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
 
     topic = original_project_topic(project)
     candidates = [protocol._scope_receipt]
+    recorded = frozenset()
     disk_unverified = False
     try:
         disk = json.loads(_read_scoped(project, "analysis/protocol_scope.json", max_bytes=4 * 1024 * 1024))
@@ -126,6 +191,10 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
                        or not set(disk[key]) <= set("0123456789abcdef") for key in ("topic_sha256", "protocol_sha256"))):
             raise ValueError("The existing scope receipt is malformed")
         candidates.append(disk)
+        if disk.get("topic_sha256") == digest(topic):
+            # Deviations this review already recorded stay recorded when a later
+            # step changes another protocol field and the scope is checked again.
+            recorded = recorded_deviation_fields(disk)
     except FileNotFoundError:
         try:
             (project.base_dir / "analysis" / "protocol_scope.json").lstat()
@@ -147,7 +216,8 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
         if receipt.get("topic_sha256") != digest(topic) or receipt.get("protocol_sha256") != protocol_hash(protocol):
             continue
         try:
-            validated = scope_receipt(topic, protocol, receipt["assessment"])
+            validated = scope_receipt(topic, protocol, receipt["assessment"],
+                                      accepted_fields=recorded_deviation_fields(receipt))
             if receipt["assessor"] == SOURCE_ASSESSOR or "source_provenance" in receipt:
                 validate_scope_source_provenance(topic, protocol, receipt["assessment"], receipt["source_provenance"])
                 validated.update(assessor=receipt["assessor"], source_provenance=receipt["source_provenance"])
@@ -161,6 +231,7 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
     if selected is not None:
         _write_scoped_atomic(project, "analysis/protocol_scope.json", json.dumps(selected, ensure_ascii=False, indent=2).encode())
         protocol._scope_receipt = selected
+        record_scope_deviations(project, selected)
         return selected
     if not allow_recheck:
         raise ProtocolInputRequired("The current protocol lacks a matching independent original-question scope assessment; resume planning or restart before refreshing the report.",
@@ -169,7 +240,7 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
         from new_meta.agents.research_planner import ResearchPlanner
         planner = ResearchPlanner()
     try:
-        receipt = planner.check_scope(topic, protocol)
+        receipt = planner.check_scope(topic, protocol, **({"accepted_fields": recorded} if recorded else {}))
     except ProtocolInputRequired as exc:
         raise exc.persist(project)
     if original_project_topic(project) != topic:
@@ -177,4 +248,5 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
                                     code="protocol_scope_original_changed", protocol=protocol, project=project)
     _write_scoped_atomic(project, "analysis/protocol_scope.json", json.dumps(receipt, ensure_ascii=False, indent=2).encode())
     protocol._scope_receipt = receipt
+    record_scope_deviations(project, receipt)
     return receipt

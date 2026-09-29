@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from scipy import optimize, stats
 
 from new_meta.schemas.meta_result import StudyEffect, NMAContrast, NMAResult
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 class MultiArmCovarianceError(ValueError):
@@ -913,7 +914,7 @@ def run_network_meta(
         for item in records
     ]
     if len(rows) < 3:
-        raise ValueError("network meta-analysis requires at least three contrasts")
+        raise InsufficientStudiesError("network meta-analysis requires at least three contrasts")
     measures = {item.measure.upper() for item in rows}
     if len(measures) != 1:
         raise ValueError("all network contrasts must use one effect measure")
@@ -948,7 +949,7 @@ def run_network_meta(
         name for row in rows for name in (row.treatment, row.comparator)
     })
     if len(treatments) < 3:
-        raise ValueError("network meta-analysis requires at least three treatments")
+        raise InsufficientStudiesError("network meta-analysis requires at least three treatments")
     chosen_reference = reference or _network_reference(rows)
     if chosen_reference not in treatments:
         raise ValueError("requested NMA reference is absent from the treatment network")

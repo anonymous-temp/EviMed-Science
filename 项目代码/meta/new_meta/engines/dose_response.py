@@ -11,6 +11,7 @@ from scipy import optimize, stats
 
 from new_meta.engines.meta_engine import random_effects_reml
 from new_meta.schemas.meta_result import StudyEffect
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 _RATIO_MEASURES = {"OR", "RR", "HR"}
@@ -82,7 +83,7 @@ def run_dose_response(
         for item in records
     ]
     if len(rows) < 6:
-        raise ValueError("dose-response synthesis requires at least three studies with two contrasts each")
+        raise InsufficientStudiesError("dose-response synthesis requires at least three studies with two contrasts each")
     measures = {item.measure.upper() for item in rows}
     if len(measures) != 1:
         raise ValueError("all dose-response contrasts must use one effect measure")
@@ -107,9 +108,9 @@ def run_dose_response(
     for item in normalized:
         grouped[item["record"].study_id].append(item)
     if len(grouped) < 3:
-        raise ValueError("dose-response synthesis requires at least three independent studies")
+        raise InsufficientStudiesError("dose-response synthesis requires at least three independent studies")
     if any(len(group) < 2 for group in grouped.values()):
-        raise ValueError("each study requires at least two non-reference dose contrasts for spline rank")
+        raise InsufficientStudiesError("each study requires at least two non-reference dose contrasts for spline rank")
 
     all_doses = np.array(
         [value for item in normalized for value in (item["dose"], item["reference_dose"])],

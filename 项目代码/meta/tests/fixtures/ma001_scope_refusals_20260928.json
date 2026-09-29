@@ -1,0 +1,251 @@
+{
+ "source": "production acceptance runs 2026-09-28: the three planner scope refusals - the final proposal and the non-match fields of its resolved independent assessment (analysis/protocol_rejected_proposal.json); every other field was judged a match",
+ "cases": [
+  {
+   "job": "meta-20260928175057-d0bb560e5db9",
+   "project": "acceptance-meta-0928c",
+   "topic": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析（pairwise 配对 Meta 分析）。本方案是对上一轮因「方法输入被阻断（主分析只得到 1 项研究）」而修复后的完整请求，请在纳入与合并口径上严格按下列规定执行。\n\n【研究问题 PICO】\n- 人群（P）：接受初次单侧全膝关节置换术（total knee arthroplasty, TKA）的成年患者（年龄≥18 岁）。排除翻修术、双侧同期置换，以及 TKA 数据无法单独提取的混合手术人群。\n- 干预（I）：氨甲环酸（tranexamic acid, TXA），给药途径不限（静脉、局部/关节腔、口服、联合给药），剂量与给药次数不限。\n- 对照（C）：安慰剂（生理盐水等）或不使用氨甲环酸。\n- 研究设计（S）：随机对照试验（RCT）。\n\n【结局，逐条独立列出，彼此不得合并为一个结局】\n1. 主要结局 A（连续变量）：总失血量（total blood loss），单位 mL，效应量为均数差（MD）。\n2. 主要结局 B（二分类变量）：输血率（接受异体输血的患者数/该组人数），效应量为比值比（OR），同时给出风险比（RR）。\n3. 安全结局 C（二分类变量）：症状性静脉血栓栓塞事件（symptomatic VTE，深静脉血栓形成与肺栓塞的复合终点），效应量为 OR；零事件研究必须保留并纳入（可用 Peto OR）。\n4. 次要结局（连续变量）：术后血红蛋白下降（g/dL）、引流量（mL）、住院时间。\n\n【主分析的合并口径，必须遵守】\n- 主分析（primary analysis）把全部给药途径、全部剂量合并为一个对比（TXA 任意方案 vs 安慰剂/不用 TXA），按结局 A、B、C 分别做一次 pairwise 合并。\n- 时间点处理：主分析不对时间点分层。凡在术后住院期（约术后第 1～4 天）内报告的「计算总失血量（calculated total blood loss）」或等效的总失血量数值，均视为同一分析时间点，直接进入同一主分析；各研究报告的时间点措辞不同（如 postoperative day 4、to 4th postoperative day、postoperative calculated total blood loss、perioperative）不构成排除或另立分层的理由。同理，输血率与症状性 VTE 只要发生在术后 30 天内即纳入同一主分析。\n- 亚组处理：给药途径（静脉 vs 局部 vs 联合）与剂量水平（低剂量 vs 高剂量）只在主分析之后作为次要亚组分析，不得因亚组标签不同而把主分析拆散到每个亚组。\n- 多臂试验：同一试验的多个 TXA 剂量臂各作为一条与共享对照组的比较进入主分析时，须按引擎的多臂处理规则避免重复计入对照组。\n- 效应量与模型：连续变量 MD，二分类变量 OR（并报 RR），均给出 95% 置信区间；主分析用随机效应模型（DerSimonian-Laird 或引擎默认），报告 I²、τ² 与 Q 检验；研究数足够时报告固定效应模型的敏感性分析。\n- 偏倚与确定性：RoB 2 评估随机化过程、偏离既定干预、缺失结局数据、结局测量、结果选择性报告；用 GRADE 对结局 A、B、C 分别给出证据确定性并说明降级理由；研究数足够时做漏斗图与 Egger 检验。\n\n【输出语言与产物】简体中文。请生成完整可审计的产物：系统评价稿件、森林图与漏斗图、证据台账、偏倚风险评估、GRADE 分级与检索策略记录、PRISMA 流程图与各阶段数量。",
+   "proposal": {
+    "research_question": "In adults undergoing primary unilateral total knee arthroplasty, does perioperative tranexamic acid, compared with placebo or no tranexamic acid, reduce total blood loss and transfusion rate without increasing symptomatic venous thromboembolism? A systematic review and pairwise meta-analysis of randomized controlled trials.",
+    "pico": {
+     "population": "Adults aged 18 years or older undergoing primary unilateral total knee arthroplasty (TKA). Excluded: revision arthroplasty, simultaneous bilateral TKA, and mixed surgical populations in which TKA-specific data cannot be extracted separately.",
+     "intervention": "Tranexamic acid (TXA) given perioperatively by any route of administration (intravenous, topical/intra-articular, oral, or combined routes), at any dose and any number of doses.",
+     "comparator": "Placebo (e.g., normal saline) or no tranexamic acid.",
+     "outcome_primary": "Total blood loss (calculated total blood loss or equivalent total blood loss value, in mL), assessed within the postoperative hospital period (approximately postoperative day 1 to 4); continuous outcome expressed as mean difference (MD).",
+     "outcomes_secondary": [
+      "Transfusion rate (number of patients receiving allogeneic blood transfusion divided by the number of patients in the group); dichotomous co-primary outcome expressed as odds ratio (OR) with risk ratio (RR) also reported, within 30 days postoperatively.",
+      "Symptomatic venous thromboembolism (composite of symptomatic deep vein thrombosis and pulmonary embolism); dichotomous safety outcome expressed as OR, within 30 days postoperatively; zero-event studies are retained in the analysis (Peto OR permitted).",
+      "Postoperative hemoglobin drop (g/dL); continuous outcome expressed as mean difference (MD).",
+      "Drainage volume (mL); continuous outcome expressed as mean difference (MD).",
+      "Length of hospital stay; continuous outcome expressed as mean difference (MD)."
+     ]
+    },
+    "study_design": "parallel_rct / multi_arm_rct",
+    "study_designs": [
+     "parallel_rct",
+     "multi_arm_rct"
+    ],
+    "inclusion_criteria": [
+     "Randomized controlled trials, including parallel-group and multi-arm randomized trials with a concurrent control group.",
+     "Adults aged 18 years or older undergoing primary unilateral total knee arthroplasty (TKA).",
+     "Intervention: perioperative tranexamic acid (TXA) administered by any route (intravenous, topical/intra-articular, oral, or combined routes), at any dose and any number of doses.",
+     "Comparator: placebo (e.g., normal saline) or no tranexamic acid.",
+     "Reports at least one outcome of interest: total blood loss, transfusion rate, or symptomatic venous thromboembolism (symptomatic VTE); postoperative hemoglobin drop, drainage volume, and length of hospital stay are also extracted when reported.",
+     "Total blood loss reported as calculated total blood loss or an equivalent total blood loss value assessed within the postoperative hospital period (approximately postoperative day 1 to 4); wording variants such as postoperative day 4, to 4th postoperative day, postoperative calculated total blood loss, or perioperative are treated as the same analysis time point and are not grounds for exclusion or separate stratification. Transfusion rate and symptomatic VTE are included when they occur within 30 days postoperatively.",
+     "Multi-arm trials comparing more than one TXA regimen with a shared control group are eligible; each TXA arm enters the primary analysis as a separate comparison against the shared control, and control-group data are counted only once following the meta-analysis engine's multi-arm handling rules to avoid double-counting.",
+     "No language restriction."
+    ],
+    "exclusion_criteria": [
+     "Revision total knee arthroplasty.",
+     "Simultaneous bilateral total knee arthroplasty.",
+     "Mixed surgical populations (e.g., TKA combined with total hip arthroplasty or other procedures) in which TKA-specific data cannot be extracted separately.",
+     "Patients younger than 18 years.",
+     "Non-randomized study designs, including prospective or retrospective cohorts, case-control studies, case series, before-after studies, and registry analyses.",
+     "Trials in which the control group receives an active hemostatic or antifibrinolytic agent rather than placebo or no tranexamic acid.",
+     "Animal, cadaveric, or in vitro studies.",
+     "Conference abstracts, letters, or editorials without sufficient extractable numerical data for effect estimation.",
+     "Duplicate publications or reports with overlapping data sets (only the most complete report is retained)."
+    ],
+    "databases": [
+     "Internal literature database",
+     "PubMed"
+    ],
+    "date_range": "Database inception to the search date (no date restriction specified in the original question; assumption)",
+    "language": "No language restriction",
+    "effect_measure": "MD",
+    "model_preference": "random",
+    "tau_estimator": "DL",
+    "subgroup_variables": [
+     "Route of tranexamic acid administration (intravenous vs topical/intra-articular vs combined), evaluated only as a secondary subgroup analysis after the primary pooled analysis",
+     "Dose level of tranexamic acid (low dose vs high dose), evaluated only as a secondary subgroup analysis after the primary pooled analysis"
+    ],
+    "review_family": "intervention_rct",
+    "primary_outcome_type": "continuous",
+    "protocol_version": "1.0",
+    "interventions": [
+     "Tranexamic acid, intravenous",
+     "Tranexamic acid, topical/intra-articular",
+     "Tranexamic acid, oral",
+     "Tranexamic acid, combined routes"
+    ],
+    "analysis_type": "pairwise"
+   },
+   "conflicts": [
+    {
+     "field": "pico.outcomes_secondary",
+     "status": "mismatch",
+     "basis": "explicit",
+     "original_quote": "【结局，逐条独立列出，彼此不得合并为一个结局】\n1. 主要结局 A（连续变量）：总失血量（total blood loss），单位 mL，效应量为均数差（MD）。\n2. 主要结局 B（二分类变量）：输血率（接受异体输血的患者数/该组人数），效应量为比值比（OR），同时给出风险比（RR）。\n3. 安全结局 C（二分类变量）：症状性静脉血栓栓塞事件（symptomatic VTE，深静脉血栓形成与肺栓塞的复合终点），效应量为 OR；零事件研究必须保留并纳入（可用 Peto OR）。\n4. 次要结局（连续变量）：术后血红蛋白下降（g/dL）、引流量（mL）、住院时间。",
+     "rationale": "原文明确将输血率列为“主要结局B”、症状性VTE列为“安全结局C”，只有术后血红蛋白下降、引流量和住院时间属于“次要结局”。本字段把B和C也纳入次要结局清单，改变了结局层级/角色，与原文不符。"
+    },
+    {
+     "field": "pico.outcomes_secondary[0]",
+     "status": "mismatch",
+     "basis": "explicit",
+     "original_quote": "【结局，逐条独立列出，彼此不得合并为一个结局】\n1. 主要结局 A（连续变量）：总失血量（total blood loss），单位 mL，效应量为均数差（MD）。\n2. 主要结局 B（二分类变量）：输血率（接受异体输血的患者数/该组人数），效应量为比值比（OR），同时给出风险比（RR）。\n3. 安全结局 C（二分类变量）：症状性静脉血栓栓塞事件（symptomatic VTE，深静脉血栓形成与肺栓塞的复合终点），效应量为 OR；零事件研究必须保留并纳入（可用 Peto OR）。\n4. 次要结局（连续变量）：术后血红蛋白下降（g/dL）、引流量（mL）、住院时间。",
+     "rationale": "该条目内容（输血率、OR、RR、30天内）与原文主要结局B相符，但原文将输血率归为“主要结局B”，不是次要结局；列在 outcomes_secondary 下造成角色降级，属于角色错配。"
+    },
+    {
+     "field": "pico.outcomes_secondary[1]",
+     "status": "mismatch",
+     "basis": "explicit",
+     "original_quote": "【结局，逐条独立列出，彼此不得合并为一个结局】\n1. 主要结局 A（连续变量）：总失血量（total blood loss），单位 mL，效应量为均数差（MD）。\n2. 主要结局 B（二分类变量）：输血率（接受异体输血的患者数/该组人数），效应量为比值比（OR），同时给出风险比（RR）。\n3. 安全结局 C（二分类变量）：症状性静脉血栓栓塞事件（symptomatic VTE，深静脉血栓形成与肺栓塞的复合终点），效应量为 OR；零事件研究必须保留并纳入（可用 Peto OR）。\n4. 次要结局（连续变量）：术后血红蛋白下降（g/dL）、引流量（mL）、住院时间。",
+     "rationale": "该条目内容（症状性VTE复合终点、OR、保留零事件、可用Peto OR、30天内）与原文安全结局C相符，但原文将症状性VTE作为安全结局C进入主分析，不是次要结局；列在 outcomes_secondary 下造成角色错配。"
+    }
+   ]
+  },
+  {
+   "job": "meta-20260928180055-0acbce2472f7",
+   "project": "acceptance-meta-0928c",
+   "topic": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析（pairwise 配对 Meta 分析）。\n\n研究问题（PICO）：\n- 人群（P）：接受初次单侧全膝关节置换术（total knee arthroplasty, TKA）的成年患者（年龄≥18 岁）。排除翻修术、双侧同期置换，以及 TKA 数据无法单独提取的混合手术人群。\n- 干预（I）：氨甲环酸（tranexamic acid, TXA），给药途径不限（静脉、局部/关节腔、口服、联合给药），剂量与给药次数不限。\n- 对照（C）：安慰剂（生理盐水等）或不使用氨甲环酸。\n- 研究设计（S）：随机对照试验（RCT）。\n- 结局（O），共六项，均为需要合并分析的结局，彼此独立、不得合并为同一个结局：\n  1. 总失血量（total blood loss），连续变量，单位 mL，效应量均数差（MD）；\n  2. 输血率（接受异体输血的患者数/该组人数），二分类变量，效应量比值比（OR）并同时给出风险比（RR）；\n  3. 症状性静脉血栓栓塞事件（symptomatic venous thromboembolism，深静脉血栓形成与肺栓塞的复合终点），二分类变量，效应量 OR，零事件研究必须保留并纳入；\n  4. 术后血红蛋白下降，连续变量，单位 g/dL，效应量 MD；\n  5. 引流量，连续变量，单位 mL，效应量 MD；\n  6. 住院时间，连续变量，单位天，效应量 MD。\n\n分析方法：pairwise 配对 Meta 分析。\n- 主分析把全部给药途径与全部剂量合并为一个对比（氨甲环酸任意方案 vs 安慰剂或不用氨甲环酸），上列每一项结局各做一次合并。\n- 时间点处理：主分析不按时间点分层。凡在术后住院期内（约术后第 1 至第 4 天）报告的「计算总失血量（calculated total blood loss）」或等效的总失血量数值，均视为同一分析时间点进入同一主分析；各研究报告的时间点措辞不同（如 postoperative day 4、to 4th postoperative day、postoperative calculated total blood loss、perioperative）不构成排除或另立分层的理由。输血率与症状性静脉血栓栓塞事件凡发生在术后 30 天内即纳入同一主分析。\n- 给药途径（静脉 vs 局部 vs 联合）与剂量水平仅作为主分析之后的亚组分析，不得因亚组标签不同而拆散主分析。\n- 同一试验的多个氨甲环酸剂量臂可与共享对照组同时进入主分析，须按多臂试验处理规则避免对照组数据被重复计入。\n- 效应量与模型：连续变量用 MD，二分类变量用 OR（并报 RR），均给出 95% 置信区间；主分析用随机效应模型，报告 I²、τ² 与 Q 检验；研究数足够时补充固定效应模型敏感性分析。\n- 偏倚与确定性：用 RoB 2 评估随机化过程、偏离既定干预、缺失结局数据、结局测量与结果选择性报告；用 GRADE 对每一项合并结局给出证据确定性并说明降级理由；研究数足够时做漏斗图与 Egger 检验。\n\n输出语言：简体中文。请生成完整可审计的产物：系统评价稿件、森林图与漏斗图、证据台账、偏倚风险评估、GRADE 分级、检索策略记录，以及 PRISMA 流程图与各阶段数量。",
+   "proposal": {
+    "research_question": "In adult patients undergoing primary unilateral total knee arthroplasty, does tranexamic acid compared with placebo or no tranexamic acid reduce perioperative blood loss, transfusion rate, symptomatic venous thromboembolism, postoperative hemoglobin drop, drainage volume, and length of hospital stay? A systematic review and pairwise meta-analysis of randomized controlled trials.",
+    "pico": {
+     "population": "Adults (≥18 years) undergoing primary unilateral total knee arthroplasty (TKA).",
+     "intervention": "Tranexamic acid (TXA) administered by any route (intravenous, topical/intra-articular, oral, or combined), any dose and frequency.",
+     "comparator": "Placebo (e.g., normal saline) or no tranexamic acid.",
+     "outcome_primary": "Total blood loss (mL) measured during the postoperative hospital stay (approximately postoperative day 1 to 4) as calculated total blood loss or equivalent.",
+     "outcomes_secondary": [
+      "Transfusion rate (number of patients receiving allogeneic transfusion / total patients in group) within 30 days postoperatively.",
+      "Symptomatic venous thromboembolism (composite of deep vein thrombosis and pulmonary embolism) within 30 days postoperatively.",
+      "Postoperative hemoglobin drop (g/dL).",
+      "Drainage volume (mL).",
+      "Length of hospital stay (days)."
+     ]
+    },
+    "study_design": "cluster_rct / crossover_rct / multi_arm_rct / parallel_rct",
+    "study_designs": [
+     "cluster_rct",
+     "crossover_rct",
+     "multi_arm_rct",
+     "parallel_rct"
+    ],
+    "inclusion_criteria": [
+     "Adult patients (≥18 years) undergoing primary unilateral total knee arthroplasty (TKA).",
+     "Intervention: tranexamic acid (TXA) administered by any route (intravenous, topical/intra-articular, oral, or combined), any dose, any frequency.",
+     "Comparator: placebo (e.g., normal saline) or no tranexamic acid.",
+     "Study design: randomized controlled trials (RCTs) of any randomized design, including parallel-group, crossover, cluster, and multi-arm trials.",
+     "Reports at least one of the six outcomes: total blood loss, transfusion rate, symptomatic VTE, postoperative hemoglobin drop, drainage volume, or length of hospital stay.",
+     "Total blood loss reported within the postoperative hospital stay (approximately postoperative day 1 to 4) as calculated total blood loss or equivalent; transfusion rate and symptomatic VTE reported within 30 days postoperatively.",
+     "No language restriction.",
+     "No date restriction (inception to present)."
+    ],
+    "exclusion_criteria": [
+     "Revision total knee arthroplasty.",
+     "Bilateral simultaneous total knee arthroplasty.",
+     "Mixed surgical populations where TKA data cannot be extracted separately.",
+     "Non-randomized study designs (e.g., observational studies, quasi-experimental studies).",
+     "Studies not reporting any of the six outcomes of interest."
+    ],
+    "databases": [
+     "Internal literature database",
+     "PubMed"
+    ],
+    "date_range": "Inception to present (no date restriction applied)",
+    "language": "No language restriction",
+    "effect_measure": "MD",
+    "model_preference": "random",
+    "tau_estimator": "DL",
+    "subgroup_variables": [
+     "Route of administration (intravenous vs topical/intra-articular vs combined)",
+     "Dose level"
+    ],
+    "review_family": "intervention_rct",
+    "primary_outcome_type": "continuous",
+    "protocol_version": "1.0",
+    "interventions": [
+     "Tranexamic acid (TXA)"
+    ],
+    "analysis_type": "pairwise"
+   },
+   "conflicts": [
+    {
+     "field": "pico.outcome_primary",
+     "status": "uncertain",
+     "basis": "not_explicit",
+     "original_quote": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析（pairwise 配对 Meta 分析）。\n\n研究问题（PICO）：\n- 人群（P）：接受初次单侧全膝关节置换术（total knee arthroplasty, TKA）的成年患者（年龄≥18 岁）。排除翻修术、双侧同期置换，以及 TKA 数据无法单独提取的混合手术人群。\n- 干预（I）：氨甲环酸（tranexamic acid, TXA），给药途径不限（静脉、局部/关节腔、口服、联合给药），剂量与给药次数不限。\n- 对照（C）：安慰剂（生理盐水等）或不使用氨甲环酸。\n- 研究设计（S）：随机对照试验（RCT）。\n- 结局（O），共六项，均为需要合并分析的结局，彼此独立、不得合并为同一个结局：\n  1. 总失血量（total blood loss），连续变量，单位 mL，效应量均数差（MD）；\n  2. 输血率（接受异体输血的患者数/该组人数），二分类变量，效应量比值比（OR）并同时给出风险比（RR）；\n  3. 症状性静脉血栓栓塞事件（symptomatic venous thromboembolism，深静脉血栓形成与肺栓塞的复合终点），二分类变量，效应量 OR，零事件研究必须保留并纳入；\n  4. 术后血红蛋白下降，连续变量，单位 g/dL，效应量 MD；\n  5. 引流量，连续变量，单位 mL，效应量 MD；\n  6. 住院时间，连续变量，单位天，效应量 MD。\n\n分析方法：pairwise 配对 Meta 分析。\n- 主分析把全部给药途径与全部剂量合并为一个对比（氨甲环酸任意方案 vs 安慰剂或不用氨甲环酸），上列每一项结局各做一次合并。\n- 时间点处理：主分析不按时间点分层。凡在术后住院期内（约术后第 1 至第 4 天）报告的「计算总失血量（calculated total blood loss）」或等效的总失血量数值，均视为同一分析时间点进入同一主分析；各研究报告的时间点措辞不同（如 postoperative day 4、to 4th postoperative day、postoperative calculated total blood loss、perioperative）不构成排除或另立分层的理由。输血率与症状性静脉血栓栓塞事件凡发生在术后 30 天内即纳入同一主分析。\n- 给药途径（静脉 vs 局部 vs 联合）与剂量水平仅作为主分析之后的亚组分析，不得因亚组标签不同而拆散主分析。\n- 同一试验的多个氨甲环酸剂量臂可与共享对照组同时进入主分析，须按多臂试验处理规则避免对照组数据被重复计入。\n- 效应量与模型：连续变量用 MD，二分类变量用 OR（并报 RR），均给出 95% 置信区间；主分析用随机效应模型，报告 I²、τ² 与 Q 检验；研究数足够时补充固定效应模型敏感性分析。\n- 偏倚与确定性：用 RoB 2 评估随机化过程、偏离既定干预、缺失结局数据、结局测量与结果选择性报告；用 GRADE 对每一项合并结局给出证据确定性并说明降级理由；研究数足够时做漏斗图与 Egger 检验。\n\n输出语言：简体中文。请生成完整可审计的产物：系统评价稿件、森林图与漏斗图、证据台账、偏倚风险评估、GRADE 分级、检索策略记录，以及 PRISMA 流程图与各阶段数量。",
+     "rationale": "Total blood loss is explicitly one of the six required outcomes and its time window matches the original. However, the original does not designate any outcome as primary; it presents all six as independent outcomes requiring combined analysis. Assigning primary status to total blood loss is an unsupported role label that may alter emphasis, though it does not remove any outcome from analysis."
+    },
+    {
+     "field": "pico.outcomes_secondary",
+     "status": "uncertain",
+     "basis": "not_explicit",
+     "original_quote": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析（pairwise 配对 Meta 分析）。\n\n研究问题（PICO）：\n- 人群（P）：接受初次单侧全膝关节置换术（total knee arthroplasty, TKA）的成年患者（年龄≥18 岁）。排除翻修术、双侧同期置换，以及 TKA 数据无法单独提取的混合手术人群。\n- 干预（I）：氨甲环酸（tranexamic acid, TXA），给药途径不限（静脉、局部/关节腔、口服、联合给药），剂量与给药次数不限。\n- 对照（C）：安慰剂（生理盐水等）或不使用氨甲环酸。\n- 研究设计（S）：随机对照试验（RCT）。\n- 结局（O），共六项，均为需要合并分析的结局，彼此独立、不得合并为同一个结局：\n  1. 总失血量（total blood loss），连续变量，单位 mL，效应量均数差（MD）；\n  2. 输血率（接受异体输血的患者数/该组人数），二分类变量，效应量比值比（OR）并同时给出风险比（RR）；\n  3. 症状性静脉血栓栓塞事件（symptomatic venous thromboembolism，深静脉血栓形成与肺栓塞的复合终点），二分类变量，效应量 OR，零事件研究必须保留并纳入；\n  4. 术后血红蛋白下降，连续变量，单位 g/dL，效应量 MD；\n  5. 引流量，连续变量，单位 mL，效应量 MD；\n  6. 住院时间，连续变量，单位天，效应量 MD。\n\n分析方法：pairwise 配对 Meta 分析。\n- 主分析把全部给药途径与全部剂量合并为一个对比（氨甲环酸任意方案 vs 安慰剂或不用氨甲环酸），上列每一项结局各做一次合并。\n- 时间点处理：主分析不按时间点分层。凡在术后住院期内（约术后第 1 至第 4 天）报告的「计算总失血量（calculated total blood loss）」或等效的总失血量数值，均视为同一分析时间点进入同一主分析；各研究报告的时间点措辞不同（如 postoperative day 4、to 4th postoperative day、postoperative calculated total blood loss、perioperative）不构成排除或另立分层的理由。输血率与症状性静脉血栓栓塞事件凡发生在术后 30 天内即纳入同一主分析。\n- 给药途径（静脉 vs 局部 vs 联合）与剂量水平仅作为主分析之后的亚组分析，不得因亚组标签不同而拆散主分析。\n- 同一试验的多个氨甲环酸剂量臂可与共享对照组同时进入主分析，须按多臂试验处理规则避免对照组数据被重复计入。\n- 效应量与模型：连续变量用 MD，二分类变量用 OR（并报 RR），均给出 95% 置信区间；主分析用随机效应模型，报告 I²、τ² 与 Q 检验；研究数足够时补充固定效应模型敏感性分析。\n- 偏倚与确定性：用 RoB 2 评估随机化过程、偏离既定干预、缺失结局数据、结局测量与结果选择性报告；用 GRADE 对每一项合并结局给出证据确定性并说明降级理由；研究数足够时做漏斗图与 Egger 检验。\n\n输出语言：简体中文。请生成完整可审计的产物：系统评价稿件、森林图与漏斗图、证据台账、偏倚风险评估、GRADE 分级、检索策略记录，以及 PRISMA 流程图与各阶段数量。",
+     "rationale": "The five listed outcomes (transfusion rate, symptomatic VTE, hemoglobin drop, drainage volume, length of stay) are all explicitly required in the original. However, the original does not label any outcomes as secondary; it treats all six as co-equal outcomes for combined analysis. The secondary role is an unsupported hierarchy, even though the outcome contents themselves match."
+    }
+   ]
+  },
+  {
+   "job": "meta-20260928184219-d0a6bd5ee443",
+   "project": "acceptance-meta-0928d",
+   "topic": "Tranexamic acid for reducing perioperative blood loss in primary unilateral total knee arthroplasty: a systematic review and meta-analysis of randomized controlled trials. Population: adults undergoing primary unilateral total knee arthroplasty. Intervention: tranexamic acid administered intravenously, topically (intra-articular), or by combined routes. Comparator: placebo or no tranexamic acid. Primary outcomes: total blood loss (mL) and transfusion rate (proportion of patients receiving allogeneic blood transfusion). Safety outcome: symptomatic venous thromboembolic events (deep vein thrombosis and pulmonary embolism) within 30 days. Study design: randomized controlled trials only. Analysis: pairwise meta-analysis with random-effects models; prespecified subgroup analysis by route of administration (intravenous vs topical vs combined). No language or country restriction. Exclude studies of revision arthroplasty, bilateral or simultaneous bilateral arthroplasty, and non-randomized designs.",
+   "proposal": {
+    "research_question": "In adults undergoing primary unilateral total knee arthroplasty, does perioperative tranexamic acid (intravenous, topical/intra-articular, or combined routes) compared with placebo or no tranexamic acid reduce total perioperative blood loss and the proportion of patients receiving allogeneic blood transfusion, without increasing symptomatic venous thromboembolic events within 30 days? A systematic review and meta-analysis of randomized controlled trials with prespecified subgroup analysis by route of administration.",
+    "pico": {
+     "population": "Adults (≥18 years) undergoing primary unilateral total knee arthroplasty.",
+     "intervention": "Tranexamic acid administered perioperatively by the intravenous (systemic) route, the topical (intra-articular) route, or combined intravenous plus topical routes, at any dose, timing, or regimen.",
+     "comparator": "Placebo (saline or other inert control) or no tranexamic acid.",
+     "outcome_primary": "Co-primary outcomes: (1) total perioperative blood loss (mL), analyzed as a continuous outcome with mean difference; and (2) transfusion rate, the proportion of patients receiving allogeneic blood transfusion, analyzed as a dichotomous outcome with risk ratio.",
+     "outcomes_secondary": [
+      "Symptomatic venous thromboembolic events (deep vein thrombosis and pulmonary embolism) occurring within 30 days of surgery, as a safety outcome"
+     ]
+    },
+    "study_design": "parallel_rct / multi_arm_rct / cluster_rct",
+    "study_designs": [
+     "parallel_rct",
+     "multi_arm_rct",
+     "cluster_rct"
+    ],
+    "inclusion_criteria": [
+     "Randomized controlled trial of any randomized design (parallel-group, multi-arm, or cluster-randomized) evaluating tranexamic acid in the perioperative period.",
+     "Participants are adults (≥18 years) undergoing primary unilateral total knee arthroplasty.",
+     "The randomized intervention is tranexamic acid given intravenously, topically (intra-articular), or by combined intravenous and topical routes, at any dose, timing, or number of administrations.",
+     "The randomized comparator is placebo or no tranexamic acid.",
+     "The trial reports at least one co-primary outcome: total blood loss (mL) or transfusion rate (proportion of patients receiving allogeneic blood transfusion).",
+     "No restriction on publication language or country of conduct; non-English reports are eligible and translated for data extraction.",
+     "No restriction on publication year.",
+     "Symptomatic venous thromboembolic events within 30 days are recorded when reported, but their reporting is not a condition of eligibility."
+    ],
+    "exclusion_criteria": [
+     "Revision total knee arthroplasty.",
+     "Bilateral or simultaneous bilateral total knee arthroplasty.",
+     "Non-randomized designs, including cohort, case-control, cross-sectional, controlled before-after, interrupted time-series, registry, and database studies, as well as case reports and narrative or systematic reviews.",
+     "Trials in which tranexamic acid is used only as a non-randomized co-intervention or in which the randomized intervention differs from tranexamic acid alone or tranexamic acid plus another agent, such that the tranexamic acid effect cannot be isolated; the randomized intervention must contain tranexamic acid given intravenously and/or topically.",
+     "Mixed surgical populations in which outcomes for primary unilateral total knee arthroplasty cannot be separated from other procedures or other knee arthroplasty types.",
+     "Duplicate reports of the same trial; the most informative report is retained and companions are used for supplementary data.",
+     "Trials that do not report either co-primary outcome (total blood loss in mL or transfusion rate) and from which these data cannot be obtained from the authors."
+    ],
+    "databases": [
+     "Internal literature database",
+     "PubMed"
+    ],
+    "date_range": "Inception to present; no date restriction",
+    "language": "No language restriction",
+    "effect_measure": "MD",
+    "model_preference": "random",
+    "tau_estimator": "DL",
+    "subgroup_variables": [
+     "Route of tranexamic acid administration (intravenous vs topical/intra-articular vs combined intravenous and topical)"
+    ],
+    "review_family": "intervention_rct",
+    "primary_outcome_type": "continuous",
+    "protocol_version": "1.0",
+    "interventions": [
+     "Intravenous tranexamic acid",
+     "Topical (intra-articular) tranexamic acid",
+     "Combined intravenous and topical tranexamic acid"
+    ],
+    "analysis_type": "pairwise"
+   },
+   "conflicts": [
+    {
+     "field": "primary_outcome_type",
+     "status": "mismatch",
+     "basis": "explicit",
+     "original_quote": "Tranexamic acid for reducing perioperative blood loss in primary unilateral total knee arthroplasty: a systematic review and meta-analysis of randomized controlled trials. Population: adults undergoing primary unilateral total knee arthroplasty. Intervention: tranexamic acid administered intravenously, topically (intra-articular), or by combined routes. Comparator: placebo or no tranexamic acid. Primary outcomes: total blood loss (mL) and transfusion rate (proportion of patients receiving allogeneic blood transfusion). Safety outcome: symptomatic venous thromboembolic events (deep vein thrombosis and pulmonary embolism) within 30 days. Study design: randomized controlled trials only. Analysis: pairwise meta-analysis with random-effects models; prespecified subgroup analysis by route of administration (intravenous vs topical vs combined). No language or country restriction. Exclude studies of revision arthroplasty, bilateral or simultaneous bilateral arthroplasty, and non-randomized designs.",
+     "rationale": "The original question specifies two co-primary outcomes, total blood loss (continuous, in mL) and transfusion rate (dichotomous, proportion receiving allogeneic transfusion). The proposed single primary outcome type of continuous captures only the blood-loss outcome and omits the explicitly requested dichotomous transfusion-rate outcome, narrowing the primary outcome specification."
+    }
+   ]
+  }
+ ]
+}

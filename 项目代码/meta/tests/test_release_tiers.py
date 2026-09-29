@@ -181,12 +181,11 @@ def test_the_final_review_is_a_notice_that_drives_no_rewrite(tmp_path, monkeypat
             "action": "Consolidate the citation.", "requires_new_source": False,
         }]}
 
-    def forbidden(self, *args, **kwargs):
-        raise AssertionError("an advisory review must not rewrite the saved draft")
-
     monkeypatch.setattr(WritingAgent, "_llm_final_manuscript_readiness_review", review)
-    monkeypatch.setattr(WritingAgent, "_llm_apply_final_minor_revision", forbidden)
-    monkeypatch.setattr(WritingAgent, "_llm_ground_existing_reference_citations", forbidden)
+    # The rewrite rounds were deleted with their helpers (build to delete).
+    for retired in ("_llm_apply_final_minor_revision", "_llm_ground_existing_reference_citations",
+                    "_llm_apply_final_subsection_revision", "_final_review_can_auto_revise"):
+        assert not hasattr(WritingAgent, retired), retired
 
     saved = main_module._run_final_manuscript_llm_readiness_review(project, model=None, lang="en")
 
@@ -205,10 +204,14 @@ def test_a_citation_audit_finding_is_not_sent_back_to_the_model(tmp_path, monkey
     }]}
     monkeypatch.setattr(writing_agent_module, "build_citation_audit_review", lambda _project: audit)
 
-    def forbidden(self, *args, **kwargs):
+    for retired in ("_llm_ground_citation_audit_issues", "_citation_audit_has_repairable_grounding_issues"):
+        assert not hasattr(WritingAgent, retired), retired
+
+    def no_model(self, *args, **kwargs):
         raise AssertionError("an advisory citation finding must not reach the model")
 
-    monkeypatch.setattr(WritingAgent, "_llm_ground_citation_audit_issues", forbidden)
+    monkeypatch.setattr(WritingAgent, "call_llm_structured", no_model)
+    monkeypatch.setattr(WritingAgent, "call_llm", no_model)
     agent = WritingAgent(lang="en")
 
     validation, _, _ = agent._quality_checked_validation(_DRAFT, {}, {"passed": True, "issues": []}, project=project)

@@ -60,20 +60,23 @@ full text.
    a citation number with no reference - so the manuscript is presented as
    unverified, with those findings. Never start the job again, reworded or not,
    to clear a finding or reach a better status: it repeats the retrieval and
-   extraction and reproduces the result. A job that stopped before writing a
-   manuscript says why; too few independent studies to pool is an evidence gap
-   to report, not a request to restate. Start once more, and only once, when the
-   stop names a part of the request the engine could not plan and a restatement
-   keeps the user's question (one primary outcome, the others secondary). A failed job names
+   extraction and reproduces the result. The job no longer stops for a request
+   it can plan only approximately or for too few studies to pool: it records
+   the deviation, or writes the narrative evidence-gap report, and delivers. A
+   job that still stops before writing a manuscript says why; report that as
+   the finding and do not restate the request to get past it. A failed job names
    the steps it completed and the files it wrote; report them as partial work,
    resume once as its next action says, and never present them as a review.
    The job decides some things without asking, and its `modules` name each:
    studies excluded at full text (unusable text, unresolved design), results
    left out of pooling with the reason their verification gave (the verifier
    judged the comparison ineligible, the source contradicts itself, a number
-   was not found, the verifier gave no usable answer), and unregistered trials
-   counted by their own publication. Name each, with its reason in plain
-   words, in the limitations; a left-out result was not pooled.
+   was not found, the verifier gave no usable answer), unregistered trials
+   counted by their own publication, a protocol that differs from the question
+   (which outcome was analysed as primary, which as secondary, and why), and a
+   narrative synthesis written because too few studies could be pooled. Name
+   each, with its reason in plain words, in the limitations; a left-out result
+   was not pooled.
 
 MetaAgent may legitimately conclude that quantitative synthesis is impossible
 or that direct evidence is absent. Report that result as an evidence gap, not as

@@ -10,6 +10,24 @@ from new_meta.core.provenance import annotate_source_provenance
 from new_meta.core.run_mode import load_benchmark_reference_manifest
 
 
+
+#: A compiled synthesis with too few independent studies or contrasts to pool.
+INSUFFICIENT_STUDIES_CODE = "insufficient_studies_for_synthesis"
+
+#: Compiled-synthesis stops that are an answer about the evidence, not a
+#: question for a person: with nobody to answer (``--skip-confirm``) the run
+#: writes the narrative / evidence-gap report the pairwise route writes.
+#: ``verified_method_inputs_required`` means no result was verified (all left
+#: out and named); interactively it stays a request to adjudicate.
+NARRATIVE_FALLBACK_CODES = frozenset({INSUFFICIENT_STUDIES_CODE})
+UNATTENDED_NARRATIVE_FALLBACK_CODES = frozenset({INSUFFICIENT_STUDIES_CODE, "verified_method_inputs_required"})
+
+
+def compiled_synthesis_falls_back_to_narrative(phase, *, unattended: bool) -> bool:
+    """Whether a compiled-synthesis stop is answered with the narrative report."""
+    code = str(getattr(phase, "error_code", "") or "")
+    return code in (UNATTENDED_NARRATIVE_FALLBACK_CODES if unattended else NARRATIVE_FALLBACK_CODES)
+
 class PipelineRunner:
     """Small shared runner for deterministic downstream steps.
 
@@ -206,6 +224,7 @@ class PipelineRunner:
         """Execute the compiled non-pairwise method route from admissible ledger results."""
         from new_meta.core.analysis_set import AnalysisSetAdjudicationRequired
         from new_meta.core.method_executor import (
+            InsufficientSynthesisInputs,
             MethodExecutionBlocked,
             MethodExecutionNeedsInput,
             MethodExecutor,
@@ -400,6 +419,9 @@ class PipelineRunner:
                 error_code="transitivity_assessment_required",
                 data=exc.payload,
             )
+        except InsufficientSynthesisInputs as exc:
+            # Evidence, not a defect: the caller writes the narrative report.
+            return self._method_synthesis_blocked(str(exc), code=INSUFFICIENT_STUDIES_CODE)
         except MethodExecutionBlocked as exc:
             return self._method_synthesis_blocked(str(exc), code="method_execution_blocked")
         envelope = SynthesisResultEnvelope.from_method_execution(execution)

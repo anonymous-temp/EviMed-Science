@@ -13,6 +13,7 @@ import numpy as np
 from pydantic import BaseModel, Field, model_validator
 from scipy import optimize
 from scipy.special import expit
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 class DiagnosticStudy(BaseModel):
@@ -70,7 +71,7 @@ def run_diagnostic_accuracy(
         for item in studies
     ]
     if len(studies) < 3:
-        raise ValueError("bivariate diagnostic meta-analysis requires at least three studies")
+        raise InsufficientStudiesError("bivariate diagnostic meta-analysis requires at least three studies")
     if threshold_policy not in {"common_required", "unchecked_validation_fixture"}:
         raise ValueError(f"unknown diagnostic threshold policy: {threshold_policy}")
     if threshold_policy == "common_required":

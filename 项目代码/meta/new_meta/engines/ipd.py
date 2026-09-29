@@ -10,6 +10,7 @@ from scipy import optimize
 
 from new_meta.engines.meta_engine import random_effects_hksj, random_effects_reml
 from new_meta.schemas.meta_result import StudyEffect
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 _Z_975 = 1.959963984540054
@@ -66,7 +67,7 @@ def run_ipd_meta(
         for item in records
     ]
     if len(studies) < 3:
-        raise ValueError("IPD meta-analysis requires at least three studies")
+        raise InsufficientStudiesError("IPD meta-analysis requires at least three studies")
     if any(study.design != "parallel_rct" for study in studies):
         raise ValueError("production IPD meta-analysis currently requires parallel_rct studies")
     outcome_type = str(outcome_type).strip().lower()

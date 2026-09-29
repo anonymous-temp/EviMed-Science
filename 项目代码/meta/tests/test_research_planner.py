@@ -12,7 +12,7 @@ def independent_scope_stub(monkeypatch):
     # These tests isolate numeric/schema planning; scope semantics have their own suite.
     from new_meta.core.protocol_scope import scope_receipt
     from tests.test_protocol_scope import assessment
-    monkeypatch.setattr(ResearchPlanner, "check_scope", lambda self, topic, protocol:
+    monkeypatch.setattr(ResearchPlanner, "check_scope", lambda self, topic, protocol, **kwargs:
                         scope_receipt(topic, protocol, assessment(protocol, topic=topic)))
 
 
