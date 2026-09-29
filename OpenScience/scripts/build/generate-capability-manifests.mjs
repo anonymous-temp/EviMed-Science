@@ -226,8 +226,8 @@ function renderContractsTable(manifests) {
  * Two sources, both already maintained for their own reasons: the acceptance
  * ledger (`evals/acceptance-ledger.json`, checked on every commit) says whether
  * the latest real delivery was accepted, failed, or never happened; each
- * harness's `results/<run>/run.json` is one recorded dispatch with its outcome
- * and duration. Nothing is estimated: a capability with no recorded run gets
+ * harness's `results/<observation>/run.json` records an observation of a
+ * dispatch. Reattached observations count once per scoped execution. Nothing is estimated: a capability with no recorded run gets
  * no run counts, and one the ledger does not list gets no evaluation at all.
  * @param {string} root
  * @returns {Promise<Map<string, Record<string, any>>>}
@@ -242,7 +242,7 @@ export async function readEvaluations(root) {
     const at = typeof row.realDelivery.at === "string" ? row.realDelivery.at.slice(0, 10) : null;
     evaluations.set(row.id, { lastStatus: status, lastRunAt: status === "not-run" ? null : at });
   }
-  /** @type {Map<string, { succeeded: boolean, minutes: number | null }[]>} */
+  /** @type {Map<string, Map<string, any>>} */
   const runs = new Map();
   // A result recorded on this machine but not committed is counted here and
   // absent in CI, so the committed table fails `--check` there and passes
@@ -254,21 +254,31 @@ export async function readEvaluations(root) {
     const results = await fs.readdir(resultsDir, { withFileTypes: true }).catch(() => []);
     for (const result of results.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()) {
       const record = JSON.parse(await fs.readFile(path.join(resultsDir, result, "run.json"), "utf8").catch(() => "null"));
-      if (typeof record?.capability !== "string" || !record.outcome || typeof record.outcome.status !== "string") continue;
+      if (typeof record?.capability !== "string" || typeof record.runId !== "string" || !record.runId.trim()
+        || !record.outcome || typeof record.outcome.status !== "string") continue;
       const relative = path.posix.join("evals", harness, "results", result, "run.json");
       if (untracked.has(relative)) {
         process.stderr.write(`counted but not committed: ${relative} (commit it, or CI will read a different table)\n`);
       }
       const durationMs = Number(record.outcome.durationMs);
-      const list = runs.get(record.capability) ?? [];
-      list.push({
-        succeeded: record.outcome.status === "succeeded",
+      const executions = runs.get(record.capability) ?? new Map();
+      // One execution may have many watcher files. Case and owner-project
+      // scope stay distinct even when a fixture reuses a run id.
+      const identity = JSON.stringify([record.capability, record.brief ?? record.caseId ?? "",
+        String(record.base ?? "").replace(/\/+$/, ""), record.project ?? "", record.runId]);
+      const observed = evaluationTime(record.observedAt ?? record.dispatchedAt);
+      const completed = evaluationTime(record.outcome.finishedAt ?? record.finishedAt);
+      const observation = {
+        terminal: ["succeeded", "failed", "canceled"].includes(record.outcome.status),
+        succeeded: record.outcome.status === "succeeded", completed, observed,
         minutes: Number.isFinite(durationMs) && durationMs > 0 ? durationMs / 60_000 : null,
-      });
-      runs.set(record.capability, list);
+      };
+      executions.set(identity, preferEvaluationObservation(executions.get(identity), observation));
+      runs.set(record.capability, executions);
     }
   }
-  for (const [id, list] of runs) {
+  for (const [id, executions] of runs) {
+    const list = [...executions.values()];
     const delivered = list.filter((run) => run.succeeded);
     const minutes = delivered.map((run) => run.minutes).filter((value) => value != null).sort((a, b) => a - b);
     const middle = Math.floor(minutes.length / 2);
@@ -284,6 +294,27 @@ export async function readEvaluations(root) {
   return evaluations;
 }
 
+/** @param {unknown} value */
+function evaluationTime(value) {
+  const parsed = typeof value === "string" ? Date.parse(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Terminal evidence outranks a pending snapshot. Server completion time
+ * outranks watcher time; legacy dispatchedAt was written at observation time.
+ * A tie cannot manufacture success or pick a duration by directory name.
+ * @param {any} previous @param {any} current */
+function preferEvaluationObservation(previous, current) {
+  if (!previous) return current;
+  for (const [left, right] of [[Number(previous.terminal), Number(current.terminal)],
+    [Number(previous.completed !== null), Number(current.completed !== null)],
+    [previous.completed ?? 0, current.completed ?? 0], [previous.observed ?? 0, current.observed ?? 0]]) {
+    if (left !== right) return right > left ? current : previous;
+  }
+  return { ...previous, succeeded: previous.succeeded && current.succeeded,
+    minutes: previous.minutes === current.minutes ? previous.minutes : null };
+}
+
 /**
  * Eval files git does not track, relative to `root`; empty outside a checkout.
  * @param {string} root
@@ -291,7 +322,7 @@ export async function readEvaluations(root) {
  */
 function untrackedEvalFiles(root) {
   try {
-    return execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", "evals"], { cwd: root, encoding: "utf8" })
+    return execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", "evals"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
       .split("\n").filter(Boolean);
   } catch {
     return [];
