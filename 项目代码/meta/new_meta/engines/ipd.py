@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from scipy import optimize
 
 from new_meta.engines.meta_engine import random_effects_hksj, random_effects_reml
-from new_meta.schemas.meta_result import StudyEffect
+from new_meta.schemas.meta_result import PoolingMethod, StudyEffect
 from new_meta.engines.errors import InsufficientStudiesError
 
 
@@ -34,7 +34,8 @@ class IPDStudyRecord(BaseModel):
 
 class IPDMetaResult(BaseModel):
     schema_version: int = 1
-    estimator: str = "TWO_STAGE_IPD_REML_HKSJ"
+    estimator: str = "TWO_STAGE_IPD_REML"
+    executed_method: PoolingMethod | None = None
     outcome_type: str
     effect_measure: str
     n_studies: int
@@ -48,7 +49,7 @@ class IPDMetaResult(BaseModel):
     study_effects: list[dict[str, Any]]
     effect_modification: dict[str, Any] | None = None
     one_stage_sensitivity: dict[str, Any]
-    hksj_sensitivity: dict[str, float]
+    hksj_sensitivity: dict[str, Any]
     converged: bool = True
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
@@ -147,6 +148,7 @@ def run_ipd_meta(
     if interactions:
         interaction = random_effects_reml(interactions, "MD", "Treatment-covariate interaction")
         interaction_result = {
+            "executed_method": interaction.execution_metadata().model_dump(mode="json"),
             "modifier": modifier,
             "coefficient": interaction.pooled_effect,
             "ci_lower": interaction.ci_lower,
@@ -162,6 +164,8 @@ def run_ipd_meta(
         modifier=modifier,
     )
     return IPDMetaResult(
+        estimator=f"TWO_STAGE_IPD_{reml.tau_estimator}",
+        executed_method=reml.execution_metadata(),
         outcome_type=outcome_type,
         effect_measure=measure,
         n_studies=len(studies),
@@ -176,6 +180,7 @@ def run_ipd_meta(
         effect_modification=interaction_result,
         one_stage_sensitivity=one_stage,
         hksj_sensitivity={
+            "executed_method": hksj.execution_metadata().model_dump(mode="json"),
             "effect": hksj.pooled_effect,
             "ci_lower": hksj.ci_lower,
             "ci_upper": hksj.ci_upper,

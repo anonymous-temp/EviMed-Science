@@ -9,7 +9,7 @@ from scipy.special import expit, logit
 from scipy.stats import t
 
 from new_meta.engines.meta_engine import random_effects_reml
-from new_meta.schemas.meta_result import StudyEffect
+from new_meta.schemas.meta_result import PoolingMethod, StudyEffect
 from new_meta.engines.errors import InsufficientStudiesError
 
 
@@ -97,6 +97,7 @@ class PredictionPerformanceRecord(BaseModel):
 class PredictionPerformanceResult(BaseModel):
     schema_version: int = 1
     estimator: str = "VALMETA_CSTAT_REML_HKSJ"
+    executed_method: PoolingMethod | None = None
     metric: str
     model_id: str
     model_version: str
@@ -184,6 +185,8 @@ def run_prediction_performance(
     prediction_upper = pooled + prediction_critical * prediction_se
     model_id, model_version = next(iter(identities))
     return PredictionPerformanceResult(
+        estimator=f"VALMETA_CSTAT_{reml.tau_estimator}_HKSJ",
+        executed_method=_hk_execution(reml),
         metric="C_STATISTIC",
         model_id=model_id,
         model_version=model_version,
@@ -214,7 +217,7 @@ def run_prediction_performance(
         q=reml.q_statistic,
         diagnostics={
             "analysis_scale": "logit_c_statistic",
-            "random_effects_estimator": "REML",
+            "random_effects_estimator": reml.tau_estimator,
             "inference": "Hartung-Knapp with t(k-1)",
             "prediction_interval": "t(k-2)",
             "precision_sources": precision_sources,
@@ -314,7 +317,8 @@ def _run_oe_ratio(
     prediction_upper = pooled + prediction_critical * prediction_se
     model_id, model_version = next(iter(identities))
     return PredictionPerformanceResult(
-        estimator="VALMETA_OE_REML_HKSJ",
+        estimator=f"VALMETA_OE_{reml.tau_estimator}_HKSJ",
+        executed_method=_hk_execution(reml),
         metric="OE_RATIO",
         model_id=model_id,
         model_version=model_version,
@@ -342,7 +346,7 @@ def _run_oe_ratio(
         q=reml.q_statistic,
         diagnostics={
             "analysis_scale": "log_observed_expected_ratio",
-            "random_effects_estimator": "REML",
+            "random_effects_estimator": reml.tau_estimator,
             "inference": "Hartung-Knapp with t(k-1)",
             "prediction_interval": "t(k-2)",
             "precision_sources": precision_sources,
@@ -419,7 +423,8 @@ def _run_calibration_slope(
     )
     model_id, model_version = next(iter(identities))
     return PredictionPerformanceResult(
-        estimator="CALIBRATION_SLOPE_REML_HKSJ",
+        estimator=f"CALIBRATION_SLOPE_{reml.tau_estimator}_HKSJ",
+        executed_method=_hk_execution(reml),
         metric="CALIBRATION_SLOPE",
         model_id=model_id,
         model_version=model_version,
@@ -447,7 +452,7 @@ def _run_calibration_slope(
         q=reml.q_statistic,
         diagnostics={
             "analysis_scale": "original_calibration_slope",
-            "random_effects_estimator": "REML",
+            "random_effects_estimator": reml.tau_estimator,
             "inference": "Hartung-Knapp with t(k-1)",
             "prediction_interval": "metafor predict, t(k-1)",
             "precision_sources": precision_sources,
@@ -456,3 +461,10 @@ def _run_calibration_slope(
             "ideal_value": 1.0,
         },
     )
+
+
+def _hk_execution(pooled) -> PoolingMethod:
+    """These wrappers recompute unmodified HK t intervals using the fitted tau²."""
+    return pooled.execution_metadata().model_copy(update={
+        "ci_method": "hksj_t", "requested_method": "REML_HKSJ",
+    })

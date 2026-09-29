@@ -6,7 +6,7 @@ import math
 from pydantic import BaseModel, Field, model_validator
 
 from new_meta.engines.meta_engine import random_effects_hksj, random_effects_reml
-from new_meta.schemas.meta_result import StudyEffect
+from new_meta.schemas.meta_result import PoolingMethod, StudyEffect
 from new_meta.engines.errors import InsufficientStudiesError
 
 
@@ -38,6 +38,7 @@ class AdjustedEffectRecord(BaseModel):
 class AdjustedEffectsResult(BaseModel):
     schema_version: int = 1
     estimator: str = "REML_ADJUSTED_EFFECTS"
+    executed_method: PoolingMethod | None = None
     measure: str
     n_studies: int
     pooled_effect: float
@@ -84,6 +85,8 @@ def run_adjusted_effects(records: list[AdjustedEffectRecord]) -> AdjustedEffects
     reml = random_effects_reml(effects, measure, "Adjusted association")
     hksj = random_effects_hksj(effects, measure, "Adjusted association")
     return AdjustedEffectsResult(
+        estimator=f"{'FIXED' if reml.model == 'fixed' else reml.tau_estimator}_ADJUSTED_EFFECTS",
+        executed_method=reml.execution_metadata(),
         measure=measure,
         n_studies=len(rows),
         pooled_effect=reml.pooled_effect,
@@ -102,6 +105,7 @@ def run_adjusted_effects(records: list[AdjustedEffectRecord]) -> AdjustedEffects
         adjustment_sets=[list(item) for item in adjustment_sets],
         sensitivity={
             "HKSJ": {
+                "executed_method": hksj.execution_metadata().model_dump(mode="json"),
                 "estimate": hksj.pooled_effect,
                 "ci_lower": hksj.ci_lower,
                 "ci_upper": hksj.ci_upper,

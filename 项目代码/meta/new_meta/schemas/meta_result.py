@@ -34,7 +34,17 @@ class StudyEffect(BaseModel):
         return v
 
 
-class PooledEffect(BaseModel):
+class PoolingMethod(BaseModel):
+    """Actual calculation provenance; unknown defaults preserve legacy snapshots."""
+    model: str = "random"
+    tau_estimator: str = "unknown"  # none / DL / REML; HKSJ is an interval method.
+    ci_method: str = "unknown"
+    requested_method: str | None = None
+    fallback_reason: str | None = None
+    tau_estimation_converged: bool | None = None
+
+
+class PooledEffect(PoolingMethod):
     """Pooled effect from a meta-analysis."""
     outcome_name: str
     n_studies: int
@@ -48,9 +58,6 @@ class PooledEffect(BaseModel):
     pooled_log: float | None = None
     ci_lower_log: float | None = None
     ci_upper_log: float | None = None
-    # Model info
-    model: str = "random"  # "fixed" / "random"
-    tau_estimator: str = "DL"  # "DL" / "REML" / "HKSJ"
     # Heterogeneity
     q_statistic: float = 0.0
     q_p_value: float = 0.0
@@ -62,6 +69,10 @@ class PooledEffect(BaseModel):
     subgroup_q_between_p: float | None = None
     # Per-study data
     studies: list[StudyEffect] = []
+
+    def execution_metadata(self) -> PoolingMethod:
+        """Project the executed method without deriving it from numeric tau²."""
+        return PoolingMethod(**self.model_dump(include=set(PoolingMethod.model_fields)))
 
 
 class LeaveOneOutResult(BaseModel):

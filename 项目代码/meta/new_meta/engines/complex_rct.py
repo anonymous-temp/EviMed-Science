@@ -9,7 +9,7 @@ import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
 from new_meta.engines.meta_engine import random_effects_hksj, random_effects_reml
-from new_meta.schemas.meta_result import StudyEffect
+from new_meta.schemas.meta_result import PoolingMethod, StudyEffect
 from new_meta.engines.errors import InsufficientStudiesError
 
 
@@ -59,6 +59,7 @@ class ComplexRCTRecord(BaseModel):
 class ComplexRCTResult(BaseModel):
     schema_version: int = 1
     estimator: str = "DESIGN_AWARE_REML"
+    executed_method: PoolingMethod | None = None
     measure: str
     n_studies: int
     n_contrasts: int
@@ -185,6 +186,8 @@ def run_complex_rct(
     reml_se = _ci_se(reml, measure)
     design_counts = Counter(item["design"] for item in study_effects)
     return ComplexRCTResult(
+        estimator=f"DESIGN_AWARE_{'FIXED' if reml.model == 'fixed' else reml.tau_estimator}",
+        executed_method=reml.execution_metadata(),
         measure=measure,
         n_studies=len(effects),
         n_contrasts=len(rows),
@@ -203,6 +206,7 @@ def run_complex_rct(
         study_effects=study_effects,
         sensitivity={
             "HKSJ": {
+                "executed_method": hksj.execution_metadata().model_dump(mode="json"),
                 "estimate": hksj.pooled_effect,
                 "ci_lower": hksj.ci_lower,
                 "ci_upper": hksj.ci_upper,
@@ -210,8 +214,8 @@ def run_complex_rct(
         },
         moderator_subgroups=_moderator_subgroups(prepared, measure, variables),
         diagnostics={
-            "primary_interval": "normal_wald",
-            "sensitivity_interval": "HKSJ",
+            "primary_interval": reml.ci_method,
+            "sensitivity_interval": hksj.ci_method,
             "analysis_scale": "log" if measure in _RATIO_MEASURES else "original",
             "cluster_adjustment": "reported_or_design_effect",
             "crossover_precision": "paired_only",
@@ -349,6 +353,7 @@ def _moderator_subgroups(
             if len(effects) >= 2:
                 pooled = random_effects_reml(effects, measure, f"{spec.label or spec.variable_id}: {value}")
                 entry.update({
+                    "executed_method": pooled.execution_metadata().model_dump(mode="json"),
                     "estimate": pooled.pooled_effect, "ci_lower": pooled.ci_lower, "ci_upper": pooled.ci_upper,
                     "tau_squared": pooled.tau_squared, "i_squared": pooled.i_squared,
                 })
