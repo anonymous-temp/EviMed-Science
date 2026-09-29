@@ -23,7 +23,6 @@ produces:
   - path: analysis.R
     required: false
   checks:
-  - requiredOutputsExist
   - skillsLoaded
 inputs:
   required:

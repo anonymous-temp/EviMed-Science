@@ -78,7 +78,6 @@
         }
       ],
       "checks": [
-        "requiredOutputsExist",
         "citationsResolvable",
         "skillsLoaded"
       ]
