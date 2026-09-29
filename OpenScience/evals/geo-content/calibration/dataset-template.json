@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "geo-calibration/1",
+  "datasetId": "pending-independent-pharmacist-labels",
+  "rubric": {
+    "version": "geo-severity-initial/1",
+    "sha256": "1193dbf77d09d0a191ae677f58a03a9c354e517a840c429f917db7b5b2ba51cb",
+    "severityMeaning": "prospective information-error potential harm; local adaptation",
+    "officialNccMerpEquivalent": false,
+    "order": [
+      "S0",
+      "S1",
+      "S2",
+      "S3",
+      "S4"
+    ],
+    "codebookPath": "rubric.json"
+  },
+  "units": [],
+  "raters": [],
+  "ratings": [],
+  "references": [],
+  "analysis": {
+    "referenceRule": null
+  }
+}

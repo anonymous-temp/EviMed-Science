@@ -1,0 +1,582 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GEO independent rating dataset",
+  "description": "Offline agreement dataset; independent labels and reference derivations remain auditable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "datasetId",
+    "rubric",
+    "units",
+    "raters",
+    "ratings",
+    "references",
+    "analysis"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "geo-calibration/1"
+    },
+    "datasetId": {
+      "type": "string"
+    },
+    "rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "sha256",
+        "severityMeaning",
+        "officialNccMerpEquivalent",
+        "order"
+      ],
+      "properties": {
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severityMeaning": {
+          "const": "prospective information-error potential harm; local adaptation"
+        },
+        "officialNccMerpEquivalent": {
+          "const": false
+        },
+        "order": {
+          "const": [
+            "S0",
+            "S1",
+            "S2",
+            "S3",
+            "S4"
+          ]
+        },
+        "codebookPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unit"
+      },
+      "maxItems": 5000
+    },
+    "raters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rater"
+      },
+      "maxItems": 32
+    },
+    "ratings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rating"
+      },
+      "maxItems": 25000
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reference"
+      },
+      "maxItems": 5000
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referenceRule"
+      ],
+      "properties": {
+        "referenceRule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "url",
+        "artifactPath",
+        "sha256",
+        "capturedAt",
+        "version"
+      ],
+      "properties": {
+        "sourceId": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "artifactPath": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "capturedAt": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unitId",
+        "answerId",
+        "groupId",
+        "unitKind",
+        "question",
+        "answer",
+        "answerSha256",
+        "statement",
+        "span",
+        "context",
+        "evidence",
+        "datasetSplit"
+      ],
+      "properties": {
+        "unitId": {
+          "type": "string"
+        },
+        "answerId": {
+          "type": "string"
+        },
+        "groupId": {
+          "type": "string",
+          "description": "Shared answer/project cluster used for split and interval resampling."
+        },
+        "unitKind": {
+          "enum": [
+            "statement",
+            "omitted_safety_element"
+          ]
+        },
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "answerSha256": {
+          "type": "string"
+        },
+        "statement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "span": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "start": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "offsetUnit": {
+              "const": "unicode_codepoints"
+            }
+          },
+          "required": [
+            "start",
+            "end",
+            "offsetUnit"
+          ],
+          "additionalProperties": false
+        },
+        "context": {
+          "type": "object",
+          "required": [
+            "product",
+            "population",
+            "jurisdiction",
+            "asOf",
+            "missingContext"
+          ],
+          "properties": {
+            "product": {
+              "type": "string"
+            },
+            "population": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "jurisdiction": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "asOf": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "missingContext": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "datasetSplit": {
+          "enum": [
+            "codebook_pilot",
+            "development",
+            "held_out"
+          ]
+        }
+      }
+    },
+    "rater": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raterId",
+        "kind",
+        "qualificationBasis",
+        "modelVersion",
+        "independent"
+      ],
+      "properties": {
+        "raterId": {
+          "type": "string",
+          "description": "Pseudonymous ID; no identity documents or authentication credentials."
+        },
+        "kind": {
+          "enum": [
+            "pharmacist",
+            "other_human",
+            "model"
+          ]
+        },
+        "qualificationBasis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modelVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "independent": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rating": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ratingId",
+        "unitId",
+        "raterId",
+        "round",
+        "status",
+        "verdict",
+        "errorType",
+        "severity",
+        "severityMissingReason",
+        "rationale",
+        "evidenceSourceIds",
+        "blindedToModel",
+        "blindedToOtherRaters",
+        "createdAt",
+        "rubricVersion"
+      ],
+      "properties": {
+        "ratingId": {
+          "type": "string"
+        },
+        "unitId": {
+          "type": "string"
+        },
+        "raterId": {
+          "type": "string"
+        },
+        "round": {
+          "enum": [
+            "independent_initial",
+            "independent_repeat"
+          ]
+        },
+        "status": {
+          "enum": [
+            "rated",
+            "abstained",
+            "not_assigned",
+            "unavailable"
+          ]
+        },
+        "verdict": {
+          "enum": [
+            "correct",
+            "wrong",
+            "unverifiable",
+            null
+          ]
+        },
+        "errorType": {
+          "enum": [
+            "label_conflict",
+            "number",
+            "dropped_condition",
+            "unfounded",
+            "attribute_swap",
+            null
+          ]
+        },
+        "severity": {
+          "enum": [
+            "S0",
+            "S1",
+            "S2",
+            "S3",
+            "S4",
+            null
+          ]
+        },
+        "severityMissingReason": {
+          "enum": [
+            "not_applicable_not_wrong",
+            "insufficient_context",
+            "insufficient_source",
+            "outside_expertise",
+            "abstained",
+            "not_assigned",
+            "unavailable",
+            null
+          ]
+        },
+        "rationale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidenceSourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blindedToModel": {
+          "type": "boolean"
+        },
+        "blindedToOtherRaters": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "rubricVersion": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "severity": {
+                "type": "string"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "rated"
+              },
+              "verdict": {
+                "const": "wrong"
+              },
+              "severityMissingReason": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "abstained",
+                  "not_assigned",
+                  "unavailable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verdict": {
+                "type": "null"
+              },
+              "errorType": {
+                "type": "null"
+              },
+              "severity": {
+                "type": "null"
+              },
+              "severityMissingReason": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "correct",
+                  "unverifiable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severity": {
+                "type": "null"
+              },
+              "errorType": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "severity": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "severityMissingReason": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unitId",
+        "basis",
+        "sourceRatingIds",
+        "ruleVersion",
+        "verdict",
+        "severity",
+        "disputed",
+        "rationale",
+        "createdAt"
+      ],
+      "properties": {
+        "unitId": {
+          "type": "string"
+        },
+        "basis": {
+          "enum": [
+            "independent_pharmacist_consensus",
+            "prespecified_human_aggregation",
+            "unresolved"
+          ]
+        },
+        "sourceRatingIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "ruleVersion": {
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "correct",
+            "wrong",
+            "unverifiable",
+            null
+          ]
+        },
+        "severity": {
+          "enum": [
+            "S0",
+            "S1",
+            "S2",
+            "S3",
+            "S4",
+            null
+          ]
+        },
+        "disputed": {
+          "type": "boolean"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
