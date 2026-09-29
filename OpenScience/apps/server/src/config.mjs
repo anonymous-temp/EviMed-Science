@@ -541,6 +541,10 @@ function vcrSettings(overrides) {
     // runtime (plan §8.1). Empty = the data plane is not configured and every
     // tier above T0 answers that it is unavailable.
     vcrDataPlaneDir: String(read("vcrDataPlaneDir", "OPEN_SCIENCE_VCR_DATA_PLANE_DIR", "") ?? "").trim(),
+    // The largest data file an upload may be, in bytes: the request is streamed
+    // and cut off at it, and the whole file is read twice (validate, derive), so
+    // this bounds memory as well as disk (principle 15). 50 MB by default.
+    vcrDataMaxBytes: integer("vcrDataMaxBytes", "OPEN_SCIENCE_VCR_DATA_MAX_BYTES", 50 * 1024 * 1024, 1024 * 1024, 2 * 1024 * 1024 * 1024),
   };
 }
 

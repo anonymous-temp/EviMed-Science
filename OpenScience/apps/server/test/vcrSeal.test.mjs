@@ -7,8 +7,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  VCR_PLAN_FIELDS, VCR_SEALED_USES, VCR_SEAL_EXPLORATORY_NOTE, createVcrSeal, vcrOutcomeReadable, vcrPlanHash,
-  vcrSealRequired, vcrSealState,
+  VCR_PLAN_FIELDS, VCR_SEALED_USES, VCR_SEAL_EXPLORATORY_NOTE, createVcrSeal, vcrEffectiveSeal, vcrOutcomeColumns, vcrOutcomeReadable,
+  vcrPlanHash, vcrSealRequired, vcrSealState,
 } from "../src/vcrSeal.mjs";
 
 /** A store double: one study in memory, the same shape `vcrStore` answers with. */
@@ -103,7 +103,7 @@ test("AC-32 the first outcome read is recorded once, and the package gets both t
   clock = Date.parse("2026-09-29T09:00:00Z");
   const second = await seal.recordOutcomeAccess({ studyId: "std_1", fields: ["os_event"], actor: "u1" });
   assert.equal(second.outcomeFirstReadAt, "2026-09-28T12:00:00.000Z", "only the first read sets the timestamp");
-  assert.deepEqual(second.outcomeFieldsRead, ["pfs_event", "pfs_time", "os_event"], "the field list accumulates");
+  assert.deepEqual(second.outcomeFieldsRead, ["os_event", "pfs_event", "pfs_time"], "the field list accumulates");
   assert.match(second.note, /2026-09-28T10:00:00\.000Z 冻结/);
   assert.match(second.note, /2026-09-28T12:00:00\.000Z 首次读取/);
 });
@@ -131,18 +131,82 @@ test("outcome fields are unreadable under a confirmatory use until the plan is f
   assert.deepEqual(vcrOutcomeReadable(afterFreeze), { readable: true, reason: "plan_frozen" });
 });
 
-test("the data plane is told which fields to withhold, and a deployment without one still records the seal", async () => {
+test("the data plane is asked to lift the seal as of the freeze instant — again on a retry — and a lift that fails does not undo the freeze", async () => {
   /** @type {any[]} */
-  const sealed = [];
+  const lifts = [];
+  let fail = false;
   const store = storeDouble({ id: "std_1", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} });
-  const withPlane = createVcrSeal({ store, dataPlane: { async sealFields(input) { sealed.push(input); } } });
-  await withPlane.freezePlan({ studyId: "std_1", plan, sealedFields: ["pfs_event"], actor: "u1" });
-  assert.deepEqual(sealed, [{ studyId: "std_1", fields: ["pfs_event"], until: null }]);
+  const clock = Date.parse("2026-09-28T10:00:00Z");
+  const withPlane = createVcrSeal({ store, now: () => new Date(clock), dataPlane: {
+    async liftStudySeal(input) { if (fail) throw Object.assign(new Error("plane down"), { code: "vcr_data_plane_down" }); lifts.push(input); return [{ sealedFields: ["pfs_event"] }]; },
+  } });
+  const state = await withPlane.freezePlan({ studyId: "std_1", plan, actor: "u1" });
+  assert.deepEqual(lifts.map((lift) => [lift.studyId, lift.at]), [["std_1", "2026-09-28T10:00:00.000Z"]], "lifted as of the instant the plan froze");
+  assert.deepEqual(state.liftedFields, ["pfs_event"]);
+  // The same plan again: nothing new is recorded, and the lift is asked for again (idempotent on the plane's side).
+  const again = await withPlane.freezePlan({ studyId: "std_1", plan, actor: "u1" });
+  assert.equal(again.unchanged, true);
+  assert.equal(lifts.length, 2);
+  // A plane that is down: the freeze stands and the failure is on the ledger.
+  const other = storeDouble({ id: "std_2", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} });
+  fail = true;
+  const failing = createVcrSeal({ store: other, now: () => new Date(clock), dataPlane: { async liftStudySeal() { throw Object.assign(new Error("plane down"), { code: "vcr_data_plane_down" }); } } });
+  const stood = await failing.freezePlan({ studyId: "std_2", plan, actor: "u1" });
+  assert.equal(stood.planVersion, 1);
+  assert.ok(other.audits.some((row) => row.action === "vcr.seal.lift_failed" && row.reason === "vcr_data_plane_down"));
 
-  const bare = createVcrSeal({ store: storeDouble({ id: "std_2", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} }) });
-  const state = await bare.freezePlan({ studyId: "std_2", plan, sealedFields: ["pfs_event"], actor: "u1" });
-  assert.equal(state.planVersion, 1, "the seal is recorded even where no data plane can enforce it");
-  assert.deepEqual(await bare.readable("std_2"), { readable: true, reason: "plan_frozen" });
+  const bare = createVcrSeal({ store: storeDouble({ id: "std_3", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} }) });
+  const recorded = await bare.freezePlan({ studyId: "std_3", plan, sealedFields: ["pfs_event"], actor: "u1" });
+  assert.equal(recorded.planVersion, 1, "the seal is recorded even where no data plane can enforce it");
+  assert.deepEqual(await bare.readable("std_3"), { readable: true, reason: "plan_frozen" });
+});
+
+test("the seal is written under a row lock: one SELECT … FOR UPDATE, one UPDATE, the audit row in the same transaction", async () => {
+  /** @type {string[]} */
+  const statements = [];
+  let row = { id: "std_1", user_id: "u1", intended_use: "specified_analysis", outcome_seal: {} };
+  const client = {
+    async query(sql, values) {
+      statements.push(sql.replace(/\s+/g, " ").trim().split(" ").slice(0, 4).join(" "));
+      if (/^SELECT/.test(sql.trim())) return { rows: [row] };
+      if (/^UPDATE/.test(sql.trim())) { row = { ...row, outcome_seal: JSON.parse(values[1]) }; return { rows: [] }; }
+      throw new Error("unexpected statement");
+    },
+  };
+  /** @type {any[]} */
+  const audits = [];
+  const store = {
+    schema: "evimed_vcr",
+    async transaction(work) { statements.push("BEGIN"); const out = await work(client); statements.push("COMMIT"); return out; },
+    async audit(entry) { statements.push("AUDIT"); audits.push(entry); },
+  };
+  const seal = createVcrSeal({ store, now: () => new Date("2026-09-28T10:00:00Z") });
+  await seal.freezePlan({ studyId: "std_1", plan, actor: "u1" });
+  assert.deepEqual(statements, ["BEGIN", "SELECT id, user_id, intended_use,", "UPDATE evimed_vcr.studies SET outcome_seal", "AUDIT", "COMMIT"]);
+  assert.equal(audits[0].client, client, "the audit row is in the transaction that changed the seal");
+  statements.length = 0;
+  await seal.freezePlan({ studyId: "std_1", plan, actor: "u1" });
+  assert.deepEqual(statements, ["BEGIN", "SELECT id, user_id, intended_use,", "COMMIT"], "an unchanged plan writes nothing");
+  statements.length = 0;
+  await seal.recordOutcomeAccess({ studyId: "std_1", fields: ["os_time"], actor: "u1" });
+  await seal.recordOutcomeAccess({ studyId: "std_1", fields: ["os_time"], actor: "u1" });
+  assert.deepEqual(statements.filter((statement) => statement.startsWith("UPDATE")).length, 1, "a second read of the same field changes nothing");
+});
+
+test("the effective seal is decided from the study: confirmatory until the plan froze, then nothing; otherwise only a dated seal", () => {
+  const now = Date.parse("2026-09-28T00:00:00Z");
+  const snapshot = { sealedFields: ["os_time"], sealedUntil: null };
+  const confirmatory = { intendedUse: "specified_analysis", outcomeSeal: {} };
+  const held = vcrEffectiveSeal({ study: confirmatory, snapshot, outcomeColumns: ["os_event"], now });
+  assert.deepEqual([...held.sealed].sort(), ["os_event", "os_time"]);
+  assert.equal(held.reason, "plan_not_frozen");
+  assert.equal(vcrEffectiveSeal({ study: { ...confirmatory, outcomeSeal: { planFrozenAt: "2026-09-01T00:00:00Z" } }, snapshot, outcomeColumns: ["os_event"], now }).sealed.size, 0);
+  assert.equal(vcrEffectiveSeal({ study: { ...confirmatory, outcomeSeal: { planFrozenAt: "2026-10-01T00:00:00Z" } }, snapshot, outcomeColumns: [], now }).reason, "plan_not_frozen");
+  const exploratory = { intendedUse: "exploratory", outcomeSeal: {} };
+  assert.equal(vcrEffectiveSeal({ study: exploratory, snapshot, outcomeColumns: ["os_event"], now }).sealed.size, 0);
+  assert.deepEqual([...vcrEffectiveSeal({ study: exploratory, snapshot: { ...snapshot, sealedUntil: "2026-12-01T00:00:00Z" }, now }).sealed], ["os_time"]);
+  assert.equal(vcrEffectiveSeal({ study: null, snapshot: null, now }).reason, "not_sealed");
+  assert.deepEqual(vcrOutcomeColumns([{ columnName: "AGE" }, { columnName: "T", role: "outcome_time" }, { column: "E", role: "outcome_event" }, { columnName: "S", outcome: true }, { columnName: "T", role: "outcome_time" }]), ["E", "S", "T"]);
 });
 
 test("a study that does not exist answers rather than throwing", async () => {

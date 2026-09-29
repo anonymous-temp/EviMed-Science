@@ -506,6 +506,7 @@ services:
       # directory is bound below, so the path the config names is always a
       # directory that is there.
       OPEN_SCIENCE_VCR_DATA_PLANE_DIR: ${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:+/data-plane}
+      OPEN_SCIENCE_VCR_DATA_MAX_BYTES:
       OPEN_SCIENCE_MEDIA_MARKET_URL:
       OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: /run/secrets/media-market-api-key
       OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS:

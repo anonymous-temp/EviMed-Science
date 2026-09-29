@@ -1,8 +1,10 @@
 /**
- * 「虚拟临研」's data plane: registering a source, freezing it into a hashed
- * snapshot with a quality profile, mapping its columns, deriving the three
- * ADaM-shaped analysis tables, sealing fields, and suppressing small cells in
- * anything handed to a model (build plan 2026-09-28 §8.1, AC-03/06/22/26/32).
+ * 「虚拟临研」's data plane: registering a source, taking a file into it,
+ * confirming what its columns mean, freezing it into a hashed snapshot with a
+ * quality profile, deriving the three ADaM-shaped analysis tables in code,
+ * sealing outcome fields, and handing the engine — and only the engine — the
+ * bytes it may read (build plan 2026-09-28 §8.1, §6.5; integration contract
+ * §3.2 and §6; AC-03/06/22/26/32).
  *
  * Hidden knowledge:
  *
@@ -16,17 +18,36 @@
  *   sits under a workspace root or carries a `knowledge-base` segment. A
  *   comment saying "do not mount this" would have been the fourth such
  *   convention in the inventory's list of four, all of which were conventions.
- * - **The control plane may read the bytes; the model may not.** Hashing and
+ * - **A file is named by what it holds.** An upload lands at
+ *   `studies/<study>/sources/<source>/<sha256>.<ext>`: the name the uploader
+ *   chose is display text and never a path, the same bytes are the same file,
+ *   and a stored file cannot be swapped for another under its name — the hash
+ *   is recomputed at freeze and again by the engine. Encodings are normalised
+ *   at the door (a hospital's Excel "CSV" is GBK) so that the profiler, this
+ *   file and R all read the same characters.
+ * - **The control plane may read the bytes; the model may not.** Deriving and
  *   validating an analysis table means parsing it here, in the tenant
  *   boundary, in memory, discarded when the call returns. Nothing parsed is
  *   written into `evimed_vcr`, into a run's workspace, or into a reply.
+ * - **Only the control plane builds an engine input** (contract §3.2). A caller
+ *   names `{ kind: "snapshot", id }`; `resolveEngineInputs` checks that the
+ *   snapshot is this study's, asks the access judge for the acting principal,
+ *   withholds what is sealed, not granted or identifying, and answers the
+ *   location, hash and value source the engine will verify. A column the seal
+ *   holds is removed from the file before the engine sees it — a view written
+ *   into the plane under its own hash — never merely hidden from a listing.
+ * - **The subject key never leaves the plane as it arrived.** Analysis tables
+ *   and views carry `USUBJID = P + HMAC(study secret, source id)`; the secret
+ *   lives in the study's own directory, so deleting the study destroys the
+ *   link, and the mapping back is a file in the plane read only through an
+ *   audited call. The model never sees a source id, and two studies never see
+ *   the same person under the same key.
  * - **Small-cell suppression suppresses more than the small cell.** Hiding
  *   exactly one cell below the floor reproduces it from the total, and hiding
- *   its count while keeping its mean reproduces the people. So the walker
- *   absorbs further cells (smallest first) until the merged bucket is itself
- *   at or above the floor, and a suppressed cell keeps its key and loses every
- *   number it carried. A zero cell is suppressed too: the complement of a
- *   published zero in a published total is an exact count of somebody.
+ *   its count while keeping its mean reproduces the people. The rule lives once,
+ *   in `@evimed/domain`'s `suppressForModel`; the Python profiler applies the
+ *   same rule to a column's vocabulary when it writes it, so nothing below the
+ *   floor is ever stored.
  * - **A bad analysis table is refused, not registered with a warning.** This
  *   is not a delivery gate (principle 4's budget is untouched) — it is input
  *   validity at the operation that needs it (principle 14). A table whose CNSR
@@ -35,6 +56,12 @@
  *   names each defect and the audit row records it, so the failure is
  *   traceable rather than silent (principle 19); only that one table is
  *   refused, never the study.
+ * - **The seal is a fact recorded twice and enforced once.** Outcome columns
+ *   are sealed on every snapshot of a study whose intended use asks for it, and
+ *   lifted, as of the instant the analysis plan was frozen, by `liftStudySeal`.
+ *   `reconcileSeal` brings a snapshot in line with the study as it stands
+ *   *before* any read is judged, so a study whose use was raised after its
+ *   snapshot was frozen is sealed by the next read and never by luck.
  * - **`visible_at <= asOf`, and the three clocks are not interchangeable.** A
  *   historical replay reads what the platform could see then, not what
  *   happened then: a lab drawn on the 1st, entered on the 5th and shared with
@@ -48,7 +75,7 @@
  * @module vcrDataPlane
  */
 
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -56,10 +83,14 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
-  RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, workspaceLayout,
+  RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
+  VCR_QUALITY_CATEGORIES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson, suppressForModel, workspaceLayout,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
+import { VcrAccess } from "./vcrAccess.mjs";
+import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
+import { vcrEffectiveSeal, vcrOutcomeColumns, vcrSealRequired } from "./vcrSeal.mjs";
 
 /** Every way the data plane refuses, by name. A refusal with no name is one nobody can act on. */
 export const VCR_DATA_PLANE_CODES = Object.freeze({
@@ -69,8 +100,28 @@ export const VCR_DATA_PLANE_CODES = Object.freeze({
   locationMissing: "vcr_data_plane_location_missing",
   snapshotNotFound: "vcr_snapshot_not_found",
   sourceNotFound: "vcr_source_not_found",
+  studyNotFound: "vcr_study_not_found",
   analysisTableInvalid: "vcr_analysis_table_invalid",
   profilerFailed: "vcr_snapshot_profile_failed",
+  profilerTimeout: "vcr_snapshot_profile_timeout",
+  profilerTooLarge: "vcr_snapshot_profile_too_large",
+  payloadInvalid: "vcr_payload_invalid",
+  fileTooLarge: "vcr_data_file_too_large",
+  formatUnsupported: "vcr_data_format_unsupported",
+  fileUnreadable: "vcr_data_file_unreadable",
+  fileNameInvalid: "vcr_data_file_name_invalid",
+  fileNotFound: "vcr_source_file_not_found",
+  fileFrozen: "vcr_source_file_frozen",
+  fileChanged: "vcr_source_file_changed",
+  fieldMapInvalid: "vcr_field_map_invalid",
+  fieldMapChanged: "vcr_field_map_changed",
+  fieldMapUnconfirmed: "vcr_field_map_unconfirmed",
+  snapshotNoTables: "vcr_snapshot_no_tables",
+  snapshotWithheld: "vcr_snapshot_withheld",
+  grantInvalid: "vcr_grant_invalid",
+  grantOwnerOnly: "vcr_grant_owner_only",
+  grantNotFound: "vcr_grant_not_found",
+  documentNotFound: "vcr_document_not_found",
 });
 
 /**
@@ -159,109 +210,34 @@ export function assertDataPlaneLocation(dir, location) {
 // Small-cell suppression (AC-26)
 // ---------------------------------------------------------------------------
 
-/** The keys a cell's head count may be called. `events` is not one: an event count is not a head count. */
 /**
- * The keys a cell's headcount may be under. `events` is here on the main
- * thread's ruling (2026-09-28): one event is at least one person, so a cell of
- * three events discloses as much as a cell of three patients, and the plan's
- * 「人数少于 10 的格子」 is about disclosure rather than about the word 人数.
- * Simulation output is never walked by this function — it holds no people —
- * so the cost of the wider list falls only where it should.
- */
-export const VCR_CELL_COUNT_KEYS = Object.freeze(["n", "count", "patients", "realPatients", "subjects", "events"]);
-
-/** @param {any} cell */
-function cellCount(cell) {
-  if (!cell || typeof cell !== "object") return null;
-  for (const key of VCR_CELL_COUNT_KEYS) {
-    const value = /** @type {any} */ (cell)[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return null;
-}
-
-/** Everything a cell keeps when it is suppressed: what it is, never how many. */
-const CELL_IDENTITY_KEYS = Object.freeze(["key", "label", "name", "group", "stratum", "arm", "level", "cell"]);
-
-/** @param {any} cell */
-function suppressedCell(cell) {
-  /** @type {Record<string, any>} */
-  const kept = {};
-  for (const key of CELL_IDENTITY_KEYS) {
-    if (cell && Object.hasOwn(cell, key)) kept[key] = cell[key];
-  }
-  return { ...kept, suppressed: true, n: null };
-}
-
-/**
- * Merge or hide every cell holding fewer than `minCellSize` people, anywhere
- * in an aggregate handed to a model.
- *
- * Walks plain objects and arrays looking for a `cells` array; each such array
- * is treated as one table. Returns a new structure and never mutates the
- * caller's. Reports what it did in `suppression`, so a reader is told a cell
- * was withheld rather than shown a hole.
+ * Suppress what a model must not read from an aggregate: the domain's
+ * `suppressForModel`, answered in the `{ aggregate, suppression }` shape the
+ * first build's callers read. There is one rule and it lives in the domain
+ * (contract §4); this wrapper exists only so a caller written against the old
+ * walker still runs, and it is deleted when the last of them is. A payload that
+ * has already passed the boundary must not be passed again: a hidden cell reads
+ * as size zero, and the second pass tops the hidden set up with cells the first
+ * one showed.
  *
  * @param {any} aggregate
  * @param {{ minCellSize?: number }} [options]
- * @returns {{ aggregate: any, suppression: { tables: number, cellsSuppressed: number, cellsShown: number, minCellSize: number } }}
+ * @returns {{ aggregate: any, suppression: { cellsSuppressed: number, minCellSize: number } }}
  */
 export function suppressSmallCells(aggregate, options = {}) {
-  const floor = Number.isSafeInteger(options.minCellSize) && /** @type {number} */ (options.minCellSize) > 0
+  const floor = Number.isSafeInteger(options.minCellSize) && /** @type {number} */ (options.minCellSize) > 1
     ? Number(options.minCellSize) : VCR_MIN_CELL_SIZE;
-  const report = { tables: 0, cellsSuppressed: 0, cellsShown: 0, minCellSize: floor };
-
-  /** @param {any[]} cells */
-  const suppressTable = (cells) => {
-    report.tables += 1;
-    const counted = cells.map((cell, index) => ({ index, count: cellCount(cell) }));
-    const withCounts = counted.filter((entry) => entry.count != null);
-    // Nothing declares a head count: there is nothing to suppress, and
-    // inventing a rule over an unknown shape would suppress by superstition.
-    if (!withCounts.length) {
-      report.cellsShown += cells.length;
-      return cells.map((cell) => (cell && typeof cell === "object" ? { ...cell } : cell));
-    }
-    const hidden = new Set(withCounts.filter((entry) => /** @type {number} */ (entry.count) < floor).map((entry) => entry.index));
-    // One hidden cell is recoverable from the published total, and so is a
-    // bucket that is itself below the floor. Absorb the smallest remaining
-    // cells until the bucket carries at least `floor` people and at least two
-    // cells — or until nothing is left to absorb, in which case the whole
-    // table is withheld.
-    const bucketCount = () => withCounts.filter((entry) => hidden.has(entry.index))
-      .reduce((total, entry) => total + /** @type {number} */ (entry.count), 0);
-    if (hidden.size) {
-      const remaining = withCounts.filter((entry) => !hidden.has(entry.index))
-        .sort((a, b) => /** @type {number} */ (a.count) - /** @type {number} */ (b.count) || a.index - b.index);
-      while (remaining.length && (hidden.size < 2 || bucketCount() < floor)) {
-        hidden.add(/** @type {any} */ (remaining.shift()).index);
-      }
-    }
-    const out = cells.map((cell, index) => {
-      if (!hidden.has(index)) {
-        report.cellsShown += 1;
-        return cell && typeof cell === "object" ? { ...cell } : cell;
-      }
-      report.cellsSuppressed += 1;
-      return suppressedCell(cell);
-    });
-    return out;
+  const safe = suppressForModel(aggregate, { minCell: floor });
+  let cellsSuppressed = 0;
+  /** @param {any} node */
+  const count = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) { node.forEach(count); return; }
+    if (Array.isArray(node.suppressed) && node.suppressed.length) cellsSuppressed += 1;
+    Object.values(node).forEach(count);
   };
-
-  /** @param {any} node @param {number} depth */
-  const walk = (node, depth) => {
-    if (depth > 12 || node == null || typeof node !== "object") return node;
-    if (Array.isArray(node)) return node.map((entry) => walk(entry, depth + 1));
-    /** @type {Record<string, any>} */
-    const out = {};
-    for (const [key, value] of Object.entries(node)) {
-      if (key === "cells" && Array.isArray(value)) out[key] = suppressTable(value);
-      else out[key] = walk(value, depth + 1);
-    }
-    return out;
-  };
-
-  return { aggregate: walk(aggregate, 0), suppression: report };
+  count(safe);
+  return { aggregate: safe, suppression: { cellsSuppressed, minCellSize: floor } };
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +257,7 @@ export const VCR_ANALYSIS_TABLE_COLUMNS = Object.freeze({
 
 /** The defects that make a table not the table it says it is. */
 export const VCR_ANALYSIS_TABLE_BLOCKING_ISSUES = Object.freeze([
-  "missing-required-column", "duplicate-subject-id", "cnsr-not-binary", "aval-negative",
+  "missing-required-column", "duplicate-subject-id", "duplicate-event-row", "cnsr-not-binary", "aval-negative",
   "aval-not-numeric", "adt-before-startdt", "empty-subject-id",
 ]);
 
@@ -376,6 +352,16 @@ export function analysisTableIssues(shape, rows) {
   }
 
   if (shape === "events") {
+    // The engine reads one row per person and parameter and stops on a second.
+    /** @type {Map<string, number>} */
+    const perParameter = new Map();
+    for (const row of list) {
+      if (blank(row.USUBJID)) continue;
+      const pair = `${String(row.USUBJID).trim()}\u0000${String(row.PARAMCD ?? "").trim()}`;
+      perParameter.set(pair, (perParameter.get(pair) ?? 0) + 1);
+    }
+    const repeated = [...perParameter.entries()].filter(([, count]) => count > 1);
+    add("duplicate-event-row", "PARAMCD", repeated.length, [], "An event table is one row per subject and parameter; some subjects have several rows for one parameter.");
     let badCensor = 0;
     /** @type {(string|number)[]} */
     const badCensorExamples = [];
@@ -504,13 +490,20 @@ export async function sha256OfFile(file) {
   return digest.digest("hex");
 }
 
+/** @param {Buffer | string} bytes */
+export function sha256OfBytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 /**
- * A minimal RFC 4180 reader for the tables we ourselves derive. Deliberately
- * small: this parses artifacts the platform wrote, not arbitrary customer
- * uploads — those go to the profiler, which reads with Python's `csv`.
- * @param {string} body
+ * A minimal RFC 4180 reader, to arrays: the header row, and every non-blank row
+ * after it as a list of cells in header order. Uploads are normalised to UTF-8
+ * before they reach it, and the profiler reads the same bytes with Python's
+ * `csv`, so the two agree on what a cell is.
+ * @param {string} body @param {string} [delimiter]
+ * @returns {{ header: string[], rows: string[][] }}
  */
-export function parseDelimited(body, delimiter = ",") {
+export function parseTable(body, delimiter = ",") {
   /** @type {string[][]} */
   const rows = [];
   /** @type {string[]} */
@@ -542,8 +535,875 @@ export function parseDelimited(body, delimiter = ",") {
   const header = rows[0].map((name) => name.trim());
   const body_ = rows.slice(1)
     .filter((cells) => cells.some((cell) => cell.trim() !== ""))
-    .map((cells) => Object.fromEntries(header.map((name, index) => [name, cells[index] ?? ""])));
+    .map((cells) => header.map((_name, index) => cells[index] ?? ""));
   return { header, rows: body_ };
+}
+
+/**
+ * The same reader, to row objects — for the tables this module derives itself,
+ * whose header names are unique by construction. (A file with two columns of
+ * one name is refused at upload: an object cannot hold both.)
+ * @param {string} body @param {string} [delimiter]
+ */
+export function parseDelimited(body, delimiter = ",") {
+  const { header, rows } = parseTable(body, delimiter);
+  return {
+    header,
+    rows: rows.map((cells) => Object.fromEntries(header.map((name, index) => [name, cells[index] ?? ""]))),
+  };
+}
+
+/**
+ * A table as RFC 4180 text, `\n`-terminated, UTF-8. A cell is quoted when it
+ * has to be, so what `parseTable` reads back is what was written.
+ * @param {readonly string[]} header @param {readonly (readonly string[])[]} rows
+ */
+export function toCsv(header, rows) {
+  /** @param {unknown} value */
+  const cell = (value) => {
+    const text = value == null ? "" : String(value);
+    return /[",\n\r]/.test(text) || text !== text.trim() ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return `${[header, ...rows].map((row) => row.map(cell).join(",")).join("\n")}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// The field map: what each column of a source is for
+// ---------------------------------------------------------------------------
+
+/** What a field map may hold. */
+export const VCR_FIELD_MAP_LIMITS = Object.freeze({ entries: 500, concept: 80, unit: 32, codingSystem: 40, name: 128 });
+/** A name a column carries in the analysis tables: the row-rule grammar's `Col` (contract §2.1). */
+export const VCR_ANALYSIS_COLUMN = /^[A-Za-z_][A-Za-z0-9_.]{0,63}$/;
+/** An outcome or measurement parameter: ADaM's PARAMCD, a little wider. */
+export const VCR_PARAMETER = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+/** Column names the analysis tables use for themselves. */
+const RESERVED_ANALYSIS_NAMES = Object.freeze(["USUBJID", "PARAMCD", "AVAL", "CNSR", "STARTDT", "ADT"]);
+/** What a column may declare its values to be (the profiler's `infer_type` vocabulary). */
+export const VCR_DECLARED_TYPES = Object.freeze(["integer", "number", "date", "text"]);
+/** Roles that put a column into a derived table. */
+const DERIVING_ROLES = Object.freeze(["arm", "covariate", "outcome_time", "outcome_event", "time_zero", "measurement", "visit_date"]);
+const FIELD_ENTRY_KEYS = Object.freeze([
+  "table", "column", "role", "concept", "unit", "codingSystem", "timeKind", "missingReason", "identifier", "parameter",
+  "alias", "type", "range", "required", "outcome", "codes",
+]);
+/** What an event indicator's cell may say when the map names no codes. */
+const EVENT_YES = Object.freeze(["1", "true", "yes", "y", "是"]);
+const EVENT_NO = Object.freeze(["0", "false", "no", "n", "否"]);
+
+/** @param {unknown} value @returns {value is Record<string, any>} */
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+/** @param {unknown} value */
+const text = (value) => (typeof value === "string" ? value.trim() : "");
+/** Whether a string holds a control character — spelled without a regex, which the linter reads as a mistake. @param {string} value */
+const hasControl = (value) => [...value].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+
+/**
+ * @typedef {{ table: string, column: string, role: string, concept: string, unit: string | null,
+ *   codingSystem: string | null, timeKind: string | null, missingReason: string | null, identifier: boolean,
+ *   parameter: string | null, alias: string | null, type: string | null, range: number[] | null, required: boolean,
+ *   outcome: boolean, codes: { event?: string[], censored?: string[], treated?: string[], control?: string[] } }} VcrFieldEntry
+ * @typedef {{ index?: number, code: string, field?: string, table?: string, column?: string, message: string }} VcrFieldIssue
+ */
+
+/**
+ * The map as the routes and the run send it — a list of column entries — checked
+ * one entry at a time, closed vocabularies and all. An entry with a problem is
+ * left out and named; the rest are kept (the run's proposals are written per
+ * item, and a person told which entry was refused can mend that one).
+ *
+ * @param {unknown} input
+ * @returns {{ columns: VcrFieldEntry[], issues: VcrFieldIssue[] }}
+ */
+export function normalizeFieldMap(input) {
+  /** @type {VcrFieldIssue[]} */
+  const issues = [];
+  if (!Array.isArray(input)) {
+    return { columns: [], issues: [{ code: "field_map_not_list", message: "字段映射是一个列表，每一项对应一列。" }] };
+  }
+  if (input.length > VCR_FIELD_MAP_LIMITS.entries) {
+    issues.push({ code: "field_map_too_long", message: `字段映射最多 ${VCR_FIELD_MAP_LIMITS.entries} 项，多出的没有读取。` });
+  }
+  /** @type {VcrFieldEntry[]} */
+  const columns = [];
+  const seen = new Set();
+  input.slice(0, VCR_FIELD_MAP_LIMITS.entries).forEach((raw, index) => {
+    /** @type {(field: string, code: string, message: string) => void} */
+    const bad = (field, code, message) => { issues.push({ index, field, code, message }); };
+    if (!isObject(raw)) { bad("", "entry_not_object", "每一项是一个对象。"); return; }
+    const before = issues.length;
+    for (const key of Object.keys(raw)) {
+      if (!FIELD_ENTRY_KEYS.includes(key)) bad(key, "field_unknown", `字段映射的一项不含「${key}」。`);
+    }
+    const column = text(raw.column);
+    if (!column || column.length > VCR_FIELD_MAP_LIMITS.name || hasControl(column)) bad("column", "column_invalid", "列名是 1 到 128 个字符的一行文字。");
+    const table = raw.table == null ? "" : text(raw.table);
+    if (table.length > 120) bad("table", "table_invalid", "文件名太长。");
+    const role = raw.role == null ? "other" : text(raw.role);
+    if (!VCR_FIELD_ROLES.includes(role)) bad("role", "role_unknown", `这一列的作用必须是：${VCR_FIELD_ROLES.join("、")}。`);
+    const concept = raw.concept == null ? "" : text(raw.concept);
+    if (concept.length > VCR_FIELD_MAP_LIMITS.concept) bad("concept", "concept_invalid", "概念说明最长 80 个字符。");
+    const unit = raw.unit == null || raw.unit === "" ? null : text(raw.unit);
+    if (unit !== null && (!unit || unit.length > VCR_FIELD_MAP_LIMITS.unit)) bad("unit", "unit_invalid", "单位最长 32 个字符。");
+    const codingSystem = raw.codingSystem == null || raw.codingSystem === "" ? null : text(raw.codingSystem);
+    if (codingSystem !== null && (!codingSystem || codingSystem.length > VCR_FIELD_MAP_LIMITS.codingSystem)) bad("codingSystem", "coding_system_invalid", "编码体系最长 40 个字符。");
+    const timeKind = raw.timeKind == null || raw.timeKind === "" ? null : text(raw.timeKind);
+    if (timeKind !== null && !VCR_TIME_KINDS.includes(timeKind)) bad("timeKind", "time_kind_unknown", `时间种类必须是：${VCR_TIME_KINDS.join("、")}。`);
+    const missingReason = raw.missingReason == null || raw.missingReason === "" ? null : text(raw.missingReason);
+    if (missingReason !== null && !VCR_MISSING_REASONS.includes(missingReason)) bad("missingReason", "missing_reason_unknown", "缺失原因不在词表内。");
+    if (raw.identifier != null && typeof raw.identifier !== "boolean") bad("identifier", "identifier_invalid", "是否直接标识是 true 或 false。");
+    const parameter = raw.parameter == null || raw.parameter === "" ? null : text(raw.parameter);
+    if (parameter !== null && !VCR_PARAMETER.test(parameter)) bad("parameter", "parameter_invalid", "参数代码以字母开头，只含字母、数字和下划线，最长 32 个字符。");
+    const alias = raw.alias == null || raw.alias === "" ? null : text(raw.alias);
+    if (alias !== null && !VCR_ANALYSIS_COLUMN.test(alias)) bad("alias", "alias_invalid", "分析表里的列名以字母或下划线开头，只含字母、数字、下划线和点，最长 64 个字符。");
+    const type = raw.type == null || raw.type === "" ? null : text(raw.type);
+    if (type !== null && !VCR_DECLARED_TYPES.includes(type)) bad("type", "type_unknown", `取值类型必须是：${VCR_DECLARED_TYPES.join("、")}。`);
+    /** @type {number[] | null} */
+    let range = null;
+    if (raw.range != null) {
+      const bounds = raw.range;
+      if (Array.isArray(bounds) && bounds.length === 2 && bounds.every((bound) => typeof bound === "number" && Number.isFinite(bound)) && bounds[0] <= bounds[1]) {
+        range = [bounds[0], bounds[1]];
+      } else bad("range", "range_invalid", "取值范围是 [下限, 上限]，两个有限的数，下限不大于上限。");
+    }
+    if (raw.required != null && typeof raw.required !== "boolean") bad("required", "required_invalid", "是否必填是 true 或 false。");
+    if (raw.outcome != null && typeof raw.outcome !== "boolean") bad("outcome", "outcome_invalid", "是否结局是 true 或 false。");
+    /** @type {{ event?: string[], censored?: string[], treated?: string[], control?: string[] }} */
+    const codes = {};
+    if (raw.codes != null) {
+      const given = raw.codes;
+      const words = (/** @type {unknown} */ value) => Array.isArray(value) && value.length >= 1 && value.length <= 10
+        && value.every((word) => typeof word === "string" && word.trim() && word.length <= 40);
+      const known = ["event", "censored", "treated", "control"];
+      if (!isObject(given) || Object.keys(given).some((key) => !known.includes(key))
+        || known.some((key) => given[key] !== undefined && !words(given[key]))) {
+        bad("codes", "codes_invalid", "编码写作 { event: [...], censored: [...] }（事件列）或 { treated: [...], control: [...] }（分组列），每个最多 10 个短词。");
+      } else {
+        for (const key of known) if (given[key]) /** @type {any} */ (codes)[key] = given[key].map((/** @type {string} */ word) => word.trim());
+      }
+    }
+    if (issues.length > before) return;
+    const key = `${table}\u0000${column}`;
+    if (seen.has(key)) { bad("column", "column_duplicate", `「${column}」在映射里出现了不止一次，只保留第一项。`); return; }
+    seen.add(key);
+    columns.push({
+      table, column, role, concept, unit, codingSystem, timeKind, missingReason, identifier: raw.identifier === true,
+      parameter, alias, type, range, required: raw.required === true, outcome: raw.outcome === true, codes,
+    });
+  });
+  columns.sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
+  return { columns, issues };
+}
+
+/** The hash of a map: what a person confirms is exactly this. @param {readonly VcrFieldEntry[]} columns */
+export function fieldMapHash(columns) {
+  return sha256OfBytes(canonicalScenarioJson(columns));
+}
+
+/**
+ * Whether a mapped column is an outcome: a time-to-event pair, or a baseline or
+ * measurement column the map calls one (a binary response, a continuous change).
+ * @param {Pick<VcrFieldEntry, "role" | "outcome">} entry
+ */
+export const isOutcomeEntry = (entry) => entry.role === "outcome_time" || entry.role === "outcome_event" || entry.outcome === true;
+
+/** The name a column carries in the analysis tables. @param {Pick<VcrFieldEntry, "alias" | "column">} entry */
+export const analysisNameOf = (entry) => entry.alias ?? entry.column;
+
+/**
+ * The whole map, against the files it describes: every entry names a real
+ * column, the roles fit together (a subject key wherever there is anything to
+ * derive, both halves of an outcome, one meaning per analysis name), and nothing
+ * that identifies a person is used as data. These are the things without which
+ * the analysis tables cannot be derived, so a map that fails them is not
+ * confirmed and a snapshot is not frozen from it (CS-40).
+ *
+ * @param {readonly VcrFieldEntry[]} columns
+ * @param {readonly { name: string, header: readonly string[] }[]} tables the files' display names and headers
+ * @returns {{ columns: VcrFieldEntry[], issues: VcrFieldIssue[] }} the entries with `table` resolved, and what is wrong
+ */
+export function validateFieldMap(columns, tables) {
+  /** @type {VcrFieldIssue[]} */
+  const issues = [];
+  const add = (/** @type {string} */ code, /** @type {string} */ message, /** @type {Partial<VcrFieldEntry>} */ where = {}) => {
+    issues.push({ code, message, ...(where.table ? { table: where.table } : {}), ...(where.column ? { column: where.column } : {}) });
+  };
+  if (!tables.length && columns.length) add("no_files", "先上传数据文件，字段映射才能对上具体的列。");
+  /** @type {VcrFieldEntry[]} */
+  const resolved = [];
+  const claimed = new Set();
+  for (const entry of columns) {
+    let table = entry.table;
+    if (tables.length) {
+      if (table) {
+        const found = tables.find((candidate) => candidate.name === table);
+        if (!found) { add("table_unknown", `文件「${table}」不在这个数据源里。`, entry); continue; }
+        if (!found.header.includes(entry.column)) { add("column_unknown", `文件「${table}」里没有「${entry.column}」这一列。`, entry); continue; }
+      } else {
+        const holders = tables.filter((candidate) => candidate.header.includes(entry.column));
+        if (!holders.length) { add("column_unknown", `没有哪个文件里有「${entry.column}」这一列。`, entry); continue; }
+        if (holders.length > 1) { add("column_ambiguous", `「${entry.column}」在多个文件里都有，请写明是哪个文件的。`, entry); continue; }
+        table = holders[0].name;
+      }
+    }
+    const key = `${table}\u0000${entry.column}`;
+    if (claimed.has(key)) { add("column_duplicate", `「${entry.column}」在映射里出现了不止一次。`, { ...entry, table }); continue; }
+    claimed.add(key);
+    resolved.push({ ...entry, table });
+  }
+
+  /** @type {Map<string, VcrFieldEntry[]>} */
+  const byTable = new Map();
+  for (const entry of resolved) byTable.set(entry.table, [...(byTable.get(entry.table) ?? []), entry]);
+  /** @type {Map<string, string>} */
+  const subjectNames = new Map();
+  for (const [table, entries] of byTable) {
+    const label = table || "数据文件";
+    const keys = entries.filter((entry) => entry.role === "subject_key");
+    if (keys.length > 1) add("subject_key_multiple", `${label} 里标了 ${keys.length} 列受试者编号，只能有一列。`, { table });
+    const deriving = entries.filter((entry) => DERIVING_ROLES.includes(entry.role));
+    if (deriving.length && !keys.length) add("subject_key_missing", `${label} 要派生分析表，需要标出哪一列是受试者编号。`, { table });
+    for (const entry of entries) {
+      if (entry.identifier && DERIVING_ROLES.includes(entry.role)) {
+        add("identifier_used_as_data", `「${entry.column}」是直接标识，不能作为分析数据；请把它的作用改为「其他」。`, entry);
+      }
+      if (entry.outcome && !["measurement", "covariate"].includes(entry.role)) add("outcome_flag_invalid", `「${entry.column}」的结局标记只用于基线协变量列和纵向测量列；时间与事件列本身就是结局。`, entry);
+      if (entry.codes.event || entry.codes.censored) {
+        if (entry.role !== "outcome_event") add("codes_misplaced", `「${entry.column}」的事件编码只用于结局事件列。`, entry);
+      }
+      if (entry.codes.treated || entry.codes.control) {
+        if (entry.role !== "arm") add("codes_misplaced", `「${entry.column}」的分组编码只用于「治疗分组」列。`, entry);
+        else if ((entry.codes.treated ?? []).some((word) => (entry.codes.control ?? []).includes(word))) {
+          add("codes_overlap", `「${entry.column}」的同一个取值不能既是试验组又是对照组。`, entry);
+        }
+      }
+      if (["outcome_time", "outcome_event", "measurement"].includes(entry.role) && !entry.parameter) {
+        add("parameter_missing", `「${entry.column}」需要一个参数代码（例如 OS、SBP）。`, entry);
+      }
+    }
+    for (const role of ["time_zero", "visit_date"]) {
+      if (entries.filter((entry) => entry.role === role).length > 1) add("role_repeated", `${label} 里「${role === "time_zero" ? "时间零点" : "访视日期"}」只能标一列。`, { table });
+    }
+    /** @type {Map<string, { time: number, event: number }>} */
+    const pairs = new Map();
+    /** @type {Set<string>} */
+    const measured = new Set();
+    for (const entry of entries) {
+      if (entry.role === "outcome_time" || entry.role === "outcome_event") {
+        const at = entry.parameter ?? "";
+        const pair = pairs.get(at) ?? { time: 0, event: 0 };
+        pair[entry.role === "outcome_time" ? "time" : "event"] += 1;
+        pairs.set(at, pair);
+      }
+      if (entry.role === "measurement" && entry.parameter) {
+        if (measured.has(entry.parameter)) add("parameter_duplicate", `参数 ${entry.parameter} 在 ${label} 里被两列使用。`, entry);
+        measured.add(entry.parameter);
+      }
+    }
+    for (const [parameter, pair] of pairs) {
+      if (parameter && (pair.time !== 1 || pair.event !== 1)) {
+        add("outcome_pair_incomplete", `结局 ${parameter} 需要恰好一列时间和一列事件（现在是 ${pair.time} 列时间、${pair.event} 列事件）。`, { table });
+      }
+    }
+    for (const entry of entries) {
+      if (entry.role !== "arm" && entry.role !== "covariate") continue;
+      const name = analysisNameOf(entry);
+      if (!VCR_ANALYSIS_COLUMN.test(name)) {
+        add("alias_invalid", `「${entry.column}」在分析表里需要一个英文列名（字母、数字、下划线），请填写。`, entry);
+        continue;
+      }
+      if (RESERVED_ANALYSIS_NAMES.includes(name)) { add("alias_reserved", `「${name}」是分析表自用的列名，请换一个。`, entry); continue; }
+      const previous = subjectNames.get(name);
+      if (previous !== undefined) add("alias_duplicate", `分析表里有两列都叫「${name}」，请给其中一列另起名字。`, entry);
+      subjectNames.set(name, entry.column);
+    }
+  }
+  return { columns: resolved, issues };
+}
+
+/**
+ * The map in the shape the Python profiler reads: `table.column` keys, so two
+ * files may disagree about a column of the same name.
+ * @param {readonly VcrFieldEntry[]} columns
+ */
+export function profilerFieldMap(columns) {
+  /** @type {Record<string, Record<string, any>>} */
+  const out = {};
+  for (const entry of columns) {
+    const key = entry.table ? `${entry.table}.${entry.column}` : entry.column;
+    out[key] = {
+      concept: entry.role === "subject_key" ? "subject" : entry.concept, unit: entry.unit, codingSystem: entry.codingSystem,
+      timeKind: entry.timeKind, missingReason: entry.missingReason, identifier: entry.identifier || entry.role === "subject_key",
+      required: entry.required, range: entry.range, type: entry.type, subjectKey: entry.role === "subject_key",
+    };
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Pseudonyms: the study's own key for every person
+// ---------------------------------------------------------------------------
+
+/** A study's directory inside the plane, relative to the root. @param {string} studyId */
+export const studyRelative = (studyId) => path.posix.join("studies", studyId);
+
+/**
+ * The study's pseudonym secret: 32 random bytes in a file inside the study's own
+ * directory, made once (`wx`) and read ever after. It is deliberately not a
+ * function of a deployment key: the study's key dies with its directory, which
+ * is what turns a deletion into unlinkability, and nothing else in the platform
+ * ever holds it. The engine mounts the plane read-only as another user and the
+ * file's mode is 0600, and a location naming it is refused twice over (a hidden
+ * segment, and no job's input is ever named `.pseudonym-key`).
+ * @param {string} root @param {string} studyId
+ */
+export async function studyPseudonymKey(root, studyId) {
+  const directory = path.join(root, studyRelative(studyId));
+  const file = path.join(directory, ".pseudonym-key");
+  await fs.mkdir(directory, { recursive: true, mode: 0o755 });
+  try {
+    return Buffer.from((await fs.readFile(file, "utf8")).trim(), "hex");
+  } catch (error) {
+    if (/** @type {any} */ (error)?.code !== "ENOENT") throw error;
+  }
+  try {
+    await fs.writeFile(file, `${randomBytes(32).toString("hex")}\n`, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (/** @type {any} */ (error)?.code !== "EEXIST") throw error;
+  }
+  const key = Buffer.from((await fs.readFile(file, "utf8")).trim(), "hex");
+  if (key.length !== 32) throw refuse(500, VCR_DATA_PLANE_CODES.notConfigured, "The study's pseudonym key is unreadable.");
+  return key;
+}
+
+/**
+ * `P` and sixteen hex digits of an HMAC of the source's subject id. The same id
+ * gives the same key inside one study — that is what lets a baseline file and a
+ * visits file join — and different keys in different studies.
+ * @param {Buffer} key @param {unknown} subjectId
+ */
+export function pseudonymOf(key, subjectId) {
+  return `P${createHmac("sha256", key).update(String(subjectId ?? "").trim()).digest("hex").slice(0, 16)}`;
+}
+
+// ---------------------------------------------------------------------------
+// What may be uploaded, and how it is made readable
+// ---------------------------------------------------------------------------
+
+/** The extensions each file role accepts, and the format an extension is. */
+export const VCR_UPLOAD_FORMATS = Object.freeze({
+  data: Object.freeze({ csv: "csv", tsv: "tsv", json: "json", xlsx: "xlsx" }),
+  dictionary: Object.freeze({ csv: "csv", tsv: "tsv", json: "json", xlsx: "xlsx" }),
+  document: Object.freeze({ txt: "txt", md: "txt" }),
+});
+/** Extensions refused with a reason a person can act on. */
+const UNSUPPORTED_FORMAT_HINTS = Object.freeze({
+  parquet: "Parquet 文件目前不能直接接入：请在导出时改为 CSV，或用 Excel、Python 转成 CSV 后上传。",
+  xls: "旧版 .xls 不能接入：请另存为 .xlsx 或 CSV 后上传。",
+  zip: "请先解压，再逐个上传数据文件。",
+});
+/** A file's size ceiling by role, beyond the deployment's own. */
+export const VCR_UPLOAD_ROLE_CAPS = Object.freeze({ dictionary: 2 * 1024 * 1024, document: 1024 * 1024 });
+/** The default ceiling for a data file; a deployment lowers or raises it with `vcrDataMaxBytes`. */
+export const VCR_UPLOAD_DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
+/** Columns and rows a data file may have. */
+export const VCR_UPLOAD_LIMITS = Object.freeze({ columns: 500, rows: 2_000_000 });
+
+/**
+ * The name an uploader gave a file, as display text: no path, no control
+ * characters, no commas (a profile names its tables with it), and an extension
+ * the role accepts. It is never used as a path.
+ * @param {unknown} raw @param {string} role
+ * @returns {{ name: string, ext: string, format: string }}
+ */
+export function safeUploadName(raw, role) {
+  const original = typeof raw === "string" ? raw.normalize("NFC") : "";
+  const base = original.split(/[\\/]/).pop() ?? "";
+  const cleaned = [...base].map((character) => (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "," || character === '"' ? "_" : character)).join("").trim();
+  const dot = cleaned.lastIndexOf(".");
+  const ext = dot > 0 ? cleaned.slice(dot + 1).toLowerCase() : "";
+  if (!cleaned || cleaned.startsWith(".") || !ext) {
+    throw refuse(400, VCR_DATA_PLANE_CODES.fileNameInvalid, "A file name is a name with an extension, like cohort.csv.");
+  }
+  const formats = /** @type {Record<string, string>} */ (/** @type {any} */ (VCR_UPLOAD_FORMATS)[role] ?? {});
+  if (!Object.hasOwn(formats, ext)) {
+    const hint = /** @type {Record<string, string>} */ (UNSUPPORTED_FORMAT_HINTS)[ext];
+    throw refuse(415, VCR_DATA_PLANE_CODES.formatUnsupported,
+      hint ?? `A ${role} file is one of: ${Object.keys(formats).join(", ")}.`, { ext });
+  }
+  const shown = cleaned.length > 100 ? `${cleaned.slice(0, 100 - ext.length - 1)}.${ext}` : cleaned;
+  return { name: shown, ext, format: formats[ext] };
+}
+
+/**
+ * Bytes to text, whatever a hospital's Excel wrote: UTF-8 (with or without a
+ * byte-order mark), UTF-16 with one, or GB18030 — the "CSV" Excel saves in a
+ * Chinese locale. Anything else that is not UTF-8 is refused rather than
+ * guessed at: a wrong guess is a column of mojibake that nobody sees until a
+ * vocabulary is read.
+ * @param {Buffer} bytes
+ * @returns {{ text: string, encoding: string }}
+ */
+export function decodeUploadText(bytes) {
+  if (bytes.includes(0) && !(bytes[0] === 0xff && bytes[1] === 0xfe) && !(bytes[0] === 0xfe && bytes[1] === 0xff)) {
+    throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "The file holds binary data, not text.");
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return { text: new TextDecoder("utf-16le").decode(bytes.subarray(2)), encoding: "utf-16le" };
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return { text: new TextDecoder("utf-16be").decode(bytes.subarray(2)), encoding: "utf-16be" };
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes).replace(/^\uFEFF/, ""), encoding: "utf-8" };
+  } catch {
+    // fall through to the Chinese locale's own encoding
+  }
+  try {
+    return { text: new TextDecoder("gb18030", { fatal: true }).decode(bytes), encoding: "gb18030" };
+  } catch {
+    throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "The file is neither UTF-8 nor GB18030 text; save it as UTF-8 CSV and upload it again.");
+  }
+}
+
+/**
+ * A JSON upload is an array of flat records; it becomes the table it describes.
+ * @param {string} body
+ * @returns {{ header: string[], rows: string[][] }}
+ */
+export function jsonTable(body) {
+  /** @type {unknown} */
+  let parsed;
+  try { parsed = JSON.parse(body); } catch { throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "The file is not valid JSON."); }
+  if (!Array.isArray(parsed) || !parsed.length || !parsed.every(isObject)) {
+    throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "A JSON data file is a list of records, one object per row.");
+  }
+  /** @type {string[]} */
+  const header = [];
+  const seen = new Set();
+  for (const record of parsed) {
+    for (const key of Object.keys(record)) {
+      if (!seen.has(key)) { seen.add(key); header.push(key); }
+      if (header.length > VCR_UPLOAD_LIMITS.columns) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, `A data file has at most ${VCR_UPLOAD_LIMITS.columns} columns.`);
+    }
+  }
+  const rows = parsed.map((record) => header.map((key) => {
+    const value = record[key];
+    if (value == null) return "";
+    if (typeof value === "object") throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, `The record has a nested value in "${key}"; a table cell is one value.`);
+    return String(value);
+  }));
+  return { header, rows };
+}
+
+/**
+ * The table a delimited file holds, checked: a header, no column twice (an
+ * object row could not hold both), no more columns and rows than the plane
+ * takes. A blank header cell is named `col_<position>` — Excel writes them for
+ * an index column — and the rename is reported, not hidden.
+ * @param {string} body @param {string} delimiter
+ * @returns {{ header: string[], rows: string[][], renamed: number }}
+ */
+export function checkedTable(body, delimiter) {
+  const { header, rows } = parseTable(body, delimiter);
+  if (!header.length || header.every((name) => !name)) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "The file has no header row.");
+  if (header.length > VCR_UPLOAD_LIMITS.columns) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, `A data file has at most ${VCR_UPLOAD_LIMITS.columns} columns.`);
+  if (rows.length > VCR_UPLOAD_LIMITS.rows) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, `A data file has at most ${VCR_UPLOAD_LIMITS.rows} rows.`);
+  let renamed = 0;
+  const named = header.map((name, index) => {
+    if (name) return name;
+    renamed += 1;
+    return `col_${index + 1}`;
+  });
+  const counts = new Map();
+  for (const name of named) counts.set(name, (counts.get(name) ?? 0) + 1);
+  const repeated = [...counts.entries()].filter(([, count]) => count > 1).map(([name]) => name);
+  if (repeated.length) {
+    throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, `The file has columns of the same name: ${repeated.slice(0, 5).join(", ")}. Rename them and upload again.`, { columns: repeated.slice(0, 20) });
+  }
+  return { header: named, rows, renamed };
+}
+
+/**
+ * A data dictionary's entries — column, label, unit — from its table. Only
+ * those three are read, and each is clipped: a dictionary describes columns, it
+ * is shown to a model, and a "dictionary" that is really a patient list gets
+ * nothing out of this but its first three columns' worth of short text.
+ * @param {{ header: string[], rows: string[][] }} table
+ * @returns {{ column: string, label: string, unit: string }[]}
+ */
+export function dictionaryEntries(table) {
+  const lower = table.header.map((name) => name.trim().toLowerCase());
+  const at = (/** @type {string[]} */ names) => lower.findIndex((name) => names.includes(name));
+  const name = at(["column", "name", "variable", "field", "变量", "变量名", "字段", "字段名", "列名", "列"]);
+  if (name < 0) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "A data dictionary needs a column holding the variable names (column, name, variable or 变量名).");
+  const label = at(["label", "description", "desc", "meaning", "说明", "含义", "描述", "变量说明", "标签"]);
+  const unit = at(["unit", "units", "单位"]);
+  const clip = (/** @type {string | undefined} */ value) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  return table.rows.slice(0, 500)
+    .map((row) => ({ column: clip(row[name]), label: label >= 0 ? clip(row[label]) : "", unit: unit >= 0 ? clip(row[unit]) : "" }))
+    .filter((entry) => entry.column);
+}
+
+// ---------------------------------------------------------------------------
+// The three analysis tables, derived in code from the confirmed map
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {{ name: string, header: string[], rows: string[][] }} VcrTableData
+ * @typedef {{ header: string[], rows: string[][], columns: { source: string, name: string }[], outcomeBearing: boolean,
+ *   parameters: string[], files: string[] }} VcrDerivedShape
+ */
+
+/**
+ * A treatment-arm cell as the engine reads it: 1 for the trial arm, 0 for the
+ * control, when the map names which is which. A value the map does not name is
+ * blank — unknown is not control — and is counted. Without codes the cell
+ * passes as it is, and an engine that needs 0 and 1 says so by name.
+ * @param {string} raw @param {VcrFieldEntry} entry @param {(reason: string) => void} drop
+ */
+function armCoded(raw, entry, drop) {
+  if (entry.role !== "arm" || (!entry.codes.treated && !entry.codes.control)) return raw;
+  const word = raw.toLowerCase();
+  if ((entry.codes.treated ?? []).some((code) => code.toLowerCase() === word)) return "1";
+  if ((entry.codes.control ?? []).some((code) => code.toLowerCase() === word)) return "0";
+  if (raw) drop("arm_value_not_coded");
+  return "";
+}
+
+/** @param {string} raw @param {VcrFieldEntry} entry */
+function eventFlag(raw, entry) {
+  const word = raw.trim().toLowerCase();
+  if (!word) return null;
+  const yes = (entry.codes.event ?? EVENT_YES).map((/** @type {string} */ code) => code.toLowerCase());
+  const no = (entry.codes.censored ?? EVENT_NO).map((/** @type {string} */ code) => code.toLowerCase());
+  if (yes.includes(word)) return 1;
+  if (no.includes(word)) return 0;
+  return "invalid";
+}
+
+/**
+ * Derive the subject, longitudinal and events tables from the files and the
+ * confirmed map. The subject key becomes the study's pseudonym; a column the map
+ * (or the profiler) calls an identifier is never carried; a row with no subject
+ * key is not a person and is counted rather than kept. Deterministic: rows are
+ * sorted, so the same files and the same map give the same bytes.
+ *
+ * @param {{ tables: readonly VcrTableData[], entries: readonly VcrFieldEntry[], key: Buffer,
+ *   identifying?: ReadonlySet<string> }} input
+ * @returns {{ shapes: Partial<Record<"subject" | "longitudinal" | "events", VcrDerivedShape>>,
+ *   identity: [string, string][], dropped: Record<string, number>, excluded: { column: string, reason: string }[] }}
+ */
+export function deriveAnalysisShapes({ tables, entries, key, identifying = new Set() }) {
+  /** @type {Record<string, number>} */
+  const dropped = {};
+  const drop = (/** @type {string} */ reason, count = 1) => { dropped[reason] = (dropped[reason] ?? 0) + count; };
+  /** @type {{ column: string, reason: string }[]} */
+  const excluded = [];
+  /** @type {Map<string, string>} */
+  const identity = new Map();
+  const subjectColumns = /** @type {{ table: string, entry: VcrFieldEntry, name: string }[]} */ ([]);
+  /** @type {Map<string, Map<string, Map<string, string>[]>>} id → file → that file's rows for the person */
+  const subjectRows = new Map();
+  /** Everyone with a key, carried columns or not. @type {Set<string>} */
+  const roster = new Set();
+  /** @type {{ header: string[], rows: string[][], columns: { source: string, name: string }[], outcomeBearing: boolean, parameters: string[], files: string[] }} */
+  const events = { header: [], rows: [], columns: [], outcomeBearing: true, parameters: [], files: [] };
+  /** @type {{ header: string[], rows: string[][], columns: { source: string, name: string }[], outcomeBearing: boolean, parameters: string[], files: string[] }} */
+  const longitudinal = { header: [], rows: [], columns: [], outcomeBearing: false, parameters: [], files: [] };
+  /** @type {string[]} */
+  const subjectFiles = [];
+  let withZero = false;
+  let withVisit = false;
+  /** @type {string[][]} */
+  const eventRows = [];
+  /** @type {string[][]} */
+  const longRows = [];
+
+  const ordered = [...tables].sort((a, b) => a.name.localeCompare(b.name));
+  for (const table of ordered) {
+    const mapped = entries.filter((entry) => entry.table === table.name);
+    const keyEntry = mapped.find((entry) => entry.role === "subject_key");
+    const at = new Map(table.header.map((name, index) => [name, index]));
+    const cell = (/** @type {string[]} */ row, /** @type {VcrFieldEntry | undefined} */ entry) => (entry ? row[at.get(entry.column) ?? -1] ?? "" : "");
+    if (!keyEntry) continue;
+
+    const carried = mapped.filter((entry) => {
+      if (entry.role !== "arm" && entry.role !== "covariate") return false;
+      if (entry.identifier) { excluded.push({ column: entry.column, reason: "identifier" }); return false; }
+      if (identifying.has(entry.column)) { excluded.push({ column: entry.column, reason: "identifying" }); return false; }
+      return true;
+    });
+    for (const entry of carried) subjectColumns.push({ table: table.name, entry, name: analysisNameOf(entry) });
+    if (carried.length) subjectFiles.push(table.name);
+    const pairs = mapped.filter((entry) => entry.role === "outcome_time").map((time) => ({
+      time, event: mapped.find((entry) => entry.role === "outcome_event" && entry.parameter === time.parameter),
+    })).filter((pair) => pair.event);
+    const measures = mapped.filter((entry) => entry.role === "measurement" && !entry.identifier);
+    const zero = mapped.find((entry) => entry.role === "time_zero");
+    const visit = mapped.find((entry) => entry.role === "visit_date");
+    if (zero && pairs.length) withZero = true;
+    if (visit && measures.length) withVisit = true;
+    if (pairs.length) events.files.push(table.name);
+    if (measures.length) longitudinal.files.push(table.name);
+    for (const pair of pairs) {
+      events.parameters.push(String(pair.time.parameter));
+      events.columns.push({ source: pair.time.column, name: "AVAL" }, { source: /** @type {VcrFieldEntry} */ (pair.event).column, name: "CNSR" });
+    }
+    if (zero && pairs.length) events.columns.push({ source: zero.column, name: "STARTDT" });
+    for (const measure of measures) {
+      longitudinal.parameters.push(String(measure.parameter));
+      longitudinal.columns.push({ source: measure.column, name: "AVAL" });
+      if (measure.outcome) longitudinal.outcomeBearing = true;
+    }
+    if (visit && measures.length) longitudinal.columns.push({ source: visit.column, name: "ADT" });
+
+    for (const row of table.rows) {
+      const rawId = cell(row, keyEntry).trim();
+      if (!rawId) { drop("blank_subject_key"); continue; }
+      const id = pseudonymOf(key, rawId);
+      identity.set(id, rawId);
+      roster.add(id);
+      if (carried.length) {
+        const values = new Map(carried.map((entry) => [analysisNameOf(entry), armCoded(cell(row, entry).trim(), entry, drop)]));
+        const perFile = subjectRows.get(id) ?? new Map();
+        perFile.set(table.name, [...(perFile.get(table.name) ?? []), values]);
+        subjectRows.set(id, perFile);
+      }
+      for (const pair of pairs) {
+        const time = cell(row, pair.time).trim();
+        const flag = eventFlag(cell(row, pair.event), /** @type {VcrFieldEntry} */ (pair.event));
+        if (!time || flag === null) { drop("outcome_incomplete"); continue; }
+        const censor = flag === 1 ? "0" : flag === 0 ? "1" : cell(row, pair.event).trim();
+        eventRows.push([id, String(pair.time.parameter), time, censor, ...(zero ? [cell(row, zero).trim()] : [])]);
+      }
+      for (const measure of measures) {
+        const value = cell(row, measure).trim();
+        if (!value) continue;
+        longRows.push([id, String(measure.parameter), value, ...(visit ? [cell(row, visit).trim()] : [])]);
+      }
+    }
+  }
+
+  /** @type {Partial<Record<"subject" | "longitudinal" | "events", VcrDerivedShape>>} */
+  const shapes = {};
+  if (subjectColumns.length) {
+    const names = subjectColumns.map((entry) => entry.name);
+    /** @type {string[][]} */
+    const rows = [];
+    for (const id of [...roster].sort()) {
+      const perFile = [...(subjectRows.get(id)?.values() ?? [])];
+      // One row per person, its columns joined across files. A file that repeats
+      // a person keeps the repeats as rows of their own — the table then says
+      // `duplicate-subject-id` and is refused — and every other file's values
+      // join each of them.
+      const count = Math.max(1, ...perFile.map((versions) => versions.length));
+      for (let index = 0; index < count; index += 1) {
+        const joined = new Map();
+        for (const versions of perFile) for (const [name, value] of versions[Math.min(index, versions.length - 1)]) joined.set(name, value);
+        rows.push([id, ...names.map((name) => joined.get(name) ?? "")]);
+      }
+    }
+    shapes.subject = {
+      header: ["USUBJID", ...names], rows, outcomeBearing: subjectColumns.some((item) => item.entry.outcome === true), parameters: [], files: subjectFiles,
+      columns: subjectColumns.map((entry) => ({ source: entry.entry.column, name: entry.name })),
+    };
+  } else if (roster.size) {
+    // Subjects with a key and nothing carried: the subject table is the roster.
+    shapes.subject = {
+      header: ["USUBJID"], rows: [...roster].sort().map((id) => [id]), outcomeBearing: false, parameters: [], files: [], columns: [],
+    };
+  }
+  if (eventRows.length) {
+    events.header = ["USUBJID", "PARAMCD", "AVAL", "CNSR", ...(withZero ? ["STARTDT"] : [])];
+    events.rows = eventRows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+    shapes.events = events;
+  }
+  if (longRows.length) {
+    longitudinal.header = ["USUBJID", "PARAMCD", "AVAL", ...(withVisit ? ["ADT"] : [])];
+    longitudinal.rows = longRows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]) || (a[3] ?? "").localeCompare(b[3] ?? ""));
+    shapes.longitudinal = longitudinal;
+  }
+  return { shapes, identity: [...identity.entries()].sort((a, b) => a[0].localeCompare(b[0])), dropped, excluded };
+}
+
+// ---------------------------------------------------------------------------
+// Writing content-addressed files
+// ---------------------------------------------------------------------------
+
+/**
+ * Write bytes into the plane under their own hash, once. The same bytes are the
+ * same file, so a repeat costs nothing and an earlier job's input is never
+ * rewritten.
+ * @param {string} root @param {string} directory relative, POSIX @param {string} extension @param {Buffer | string} bytes
+ * @returns {Promise<{ location: string, sha256: string, bytes: number }>}
+ */
+export async function writeContentAddressed(root, directory, extension, bytes) {
+  const buffer = typeof bytes === "string" ? Buffer.from(bytes, "utf8") : bytes;
+  const sha256 = sha256OfBytes(buffer);
+  const location = path.posix.join(directory, `${sha256}.${extension}`);
+  const file = assertDataPlaneLocation(root, location);
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o755 });
+  const present = await fs.stat(file).then((stat) => stat.isFile() && stat.size === buffer.length, () => false);
+  if (!present) {
+    const partial = `${file}.${randomUUID()}.part`;
+    try {
+      await fs.writeFile(partial, buffer, { mode: 0o644 });
+      await fs.rename(partial, file);
+    } catch (error) {
+      await fs.rm(partial, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+  return { location, sha256, bytes: buffer.length };
+}
+
+/**
+ * A copy of a table with some columns dropped, some renamed and the subject key
+ * pseudonymised — what the engine reads when the file itself may not be read
+ * whole. The key column, when the table has one, always becomes `USUBJID`.
+ * @param {{ header: string[], rows: string[][] }} table
+ * @param {{ keep: readonly string[], rename?: Record<string, string>, keyColumn?: string | null, key?: Buffer | null }} options
+ */
+export function projectTable(table, { keep, rename = {}, keyColumn = null, key = null }) {
+  const at = new Map(table.header.map((name, index) => [name, index]));
+  const kept = table.header.filter((name) => keep.includes(name) && name !== keyColumn);
+  const header = [...(keyColumn && key ? ["USUBJID"] : []), ...kept.map((name) => rename[name] ?? name)];
+  const keyAt = keyColumn ? at.get(keyColumn) ?? -1 : -1;
+  const rows = [];
+  for (const row of table.rows) {
+    const cells = kept.map((name) => row[at.get(name) ?? -1] ?? "");
+    if (keyColumn && key) {
+      const rawId = String(row[keyAt] ?? "").trim();
+      // A row that belongs to nobody is not carried: there is no person to key it to.
+      if (!rawId) continue;
+      cells.unshift(pseudonymOf(key, rawId));
+    }
+    rows.push(cells);
+  }
+  return { header, rows };
+}
+
+// ---------------------------------------------------------------------------
+// The profiler and the workbook reader: separate processes, bounded
+// ---------------------------------------------------------------------------
+
+/** What a child process the plane starts may take. */
+export const VCR_PROFILER_LIMITS = Object.freeze({ timeoutMs: 120_000, maxOutputBytes: 16 * 1024 * 1024, maxErrorBytes: 64 * 1024 });
+
+/** The environment a helper process gets: no secret of the control plane, nothing it does not need. */
+function helperEnv() {
+  return { PATH: process.env.PATH ?? "/usr/bin:/bin", LANG: "C.UTF-8", LC_ALL: "C.UTF-8", PYTHONUTF8: "1", PYTHONDONTWRITEBYTECODE: "1" };
+}
+
+/**
+ * Run the helper script and answer its stdout — under a clock and an output
+ * ceiling, and killed when either is passed. A profile of a 50 MB file takes
+ * seconds; one that takes two minutes, or writes sixteen megabytes of JSON, is
+ * not a profile.
+ * @param {string[]} args @param {string} stdin @param {{ python?: string, timeoutMs?: number, maxOutputBytes?: number }} [options]
+ * @returns {Promise<{ code: number, out: string, err: string }>}
+ */
+function runPython(args, stdin, options = {}) {
+  const python = options.python ?? process.env.OPEN_SCIENCE_PYTHON ?? "python3";
+  const timeoutMs = options.timeoutMs ?? VCR_PROFILER_LIMITS.timeoutMs;
+  const maxOut = options.maxOutputBytes ?? VCR_PROFILER_LIMITS.maxOutputBytes;
+  return new Promise((resolve, reject) => {
+    const child = spawn(python, args, { stdio: ["pipe", "pipe", "pipe"], env: helperEnv() });
+    let out = "";
+    let outBytes = 0;
+    let err = "";
+    let settled = false;
+    /** @param {(value: any) => void} done @param {any} value */
+    const finish = (done, value) => { if (settled) return; settled = true; clearTimeout(timer); done(value); };
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(reject, refuse(504, VCR_DATA_PLANE_CODES.profilerTimeout, `The snapshot profiler ran longer than ${Math.round(timeoutMs / 1000)} seconds and was stopped.`));
+    }, timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      outBytes += Buffer.byteLength(chunk);
+      if (outBytes > maxOut) {
+        child.kill("SIGKILL");
+        finish(reject, refuse(500, VCR_DATA_PLANE_CODES.profilerTooLarge, "The snapshot profiler wrote more output than a profile can hold."));
+        return;
+      }
+      out += chunk;
+    });
+    child.stderr.on("data", (chunk) => { if (err.length < VCR_PROFILER_LIMITS.maxErrorBytes) err += chunk; });
+    child.on("error", (error) => finish(reject, refuse(500, VCR_DATA_PLANE_CODES.profilerFailed, `The snapshot profiler could not start: ${error.message}`)));
+    child.on("close", (code) => finish(resolve, { code: code ?? -1, out, err }));
+    child.stdin.on("error", () => {});
+    child.stdin.end(stdin);
+  });
+}
+
+/**
+ * Run `scripts/vcr/profile_snapshot.py` and parse its JSON. The profiler is a
+ * separate process on purpose: it is the same deterministic code the capability
+ * already uses for dataset scoping, it holds no database handle, and it is the
+ * only thing in this module that ever looks at a cell's value.
+ * @param {{ files: string[], tableNames?: string[], fieldMap: any, sealedFields: string[], asOf: string | null, script?: string,
+ *   python?: string, timeoutMs?: number, maxOutputBytes?: number }} input
+ */
+export async function runSnapshotProfiler(input) {
+  const script = input.script ?? VCR_PROFILER_SCRIPT;
+  const args = [script, ...input.files, "--json", "-", "--min-cell-size", String(VCR_MIN_CELL_SIZE)];
+  for (const name of input.tableNames ?? []) args.push(`--table-name=${name}`);
+  if (input.sealedFields?.length) args.push(`--sealed-fields=${input.sealedFields.join(",")}`);
+  if (input.asOf) args.push(`--as-of=${input.asOf}`);
+  const { code, out, err } = await runPython(args, JSON.stringify(input.fieldMap ?? {}), input);
+  if (code !== 0) {
+    throw refuse(500, VCR_DATA_PLANE_CODES.profilerFailed, `The snapshot profiler failed (exit ${code}): ${err.trim().slice(0, 400)}`);
+  }
+  try { return JSON.parse(out); } catch (error) {
+    throw refuse(500, VCR_DATA_PLANE_CODES.profilerFailed, `The snapshot profiler wrote no JSON: ${String(error)}`);
+  }
+}
+
+/**
+ * One worksheet of a workbook, as CSV text. Standard-library Python only (the
+ * web image has nothing else); see the converter's own notes for what it reads.
+ * @param {{ file: string, sheet?: string | null, python?: string, script?: string }} input
+ * @returns {Promise<{ csv: string, sheets: string[], used: string }>}
+ */
+export async function convertWorkbook(input) {
+  const target = `${input.file}.converted.csv`;
+  try {
+    const args = [input.script ?? VCR_PROFILER_SCRIPT, `--convert-xlsx=${input.file}`, `--to=${target}`, ...(input.sheet ? [`--sheet=${input.sheet}`] : [])];
+    const { code, out, err } = await runPython(args, "", input);
+    if (code !== 0) {
+      throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, err.replace(/^xlsx:\s*/, "").trim().slice(0, 300) || "The workbook could not be read.");
+    }
+    const info = JSON.parse(out || "{}");
+    return { csv: await fs.readFile(target, "utf8"), sheets: Array.isArray(info.sheets) ? info.sheets : [], used: String(info.used ?? "") };
+  } finally {
+    await fs.rm(target, { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * What the model may know of a column of the stored profile: its name, its
+ * shape, and a vocabulary as levels of at least the floor. Nothing here is a
+ * value below the floor: the profiler never stored one, and a fill count that
+ * would give a small group away is withheld with its complement.
+ * @param {string} table @param {any} column @param {number} rows @param {Set<string>} declaredIdentifiers @param {number} floor
+ */
+function columnForModel(table, column, rows, declaredIdentifiers, floor) {
+  const identifying = column.vocabulary?.identifying === true || declaredIdentifiers.has(column.name);
+  const filled = typeof column.filled === "number" ? column.filled : null;
+  const total = typeof column.rows === "number" ? column.rows : rows;
+  // A count of people in [1, floor - 1] is not shown, and neither is its
+  // complement: with the rows published, one gives the other.
+  const small = filled !== null && ((filled >= 1 && filled < floor) || (total - filled >= 1 && total - filled < floor));
+  return {
+    table, name: column.name, sealed: false,
+    inferredType: column.inferredType ?? null,
+    filled: small ? null : filled, rows: total >= floor || total === 0 ? total : null,
+    densityCompleteness: small ? null : (column.densityCompleteness ?? null),
+    distinct: column.distinct ?? null,
+    identifying,
+    levels: identifying ? [] : (column.vocabulary?.values ?? []).map((/** @type {any[]} */ pair) => ({ level: String(pair[0]), n: Number(pair[1]) })),
+    levelsHidden: identifying ? 0 : Number(column.vocabulary?.suppressedValues ?? 0),
+    levelsWithheld: column.vocabulary?.withheld === true,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -551,26 +1411,121 @@ export function parseDelimited(body, delimiter = ",") {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ vcrDataPlaneDir?: string }} VcrDataPlaneConfig
+ * @typedef {{ vcrDataPlaneDir?: string, vcrDataMaxBytes?: number, maxFileBytes?: number }} VcrDataPlaneConfig
+ * @typedef {(input: { files: string[], tableNames?: string[], fieldMap: any, sealedFields: string[], asOf: string | null }) => Promise<any>} VcrProfiler
  */
+
+/** @param {readonly VcrFieldIssue[]} issues */
+function issueSummary(issues) {
+  return issues.slice(0, 4).map((issue) => issue.message).join(" ") + (issues.length > 4 ? ` 另有 ${issues.length - 4} 处。` : "");
+}
+
+/** The field map rows of a snapshot, as the entries they were frozen from. @param {any[]} rows @returns {VcrFieldEntry[]} */
+function entriesOfRows(rows) {
+  return rows.map((row) => ({
+    table: row.tableName ?? "", column: row.columnName, role: row.role ?? "other", concept: row.concept ?? "", unit: row.unit ?? null,
+    codingSystem: row.codingSystem ?? null, timeKind: row.timeKind ?? null, missingReason: row.missingReason ?? null,
+    identifier: row.identifier === true && row.role !== "subject_key", parameter: row.parameter ?? null, alias: row.alias ?? null,
+    type: row.declaredType ?? null, range: Array.isArray(row.range) ? row.range : null, required: row.required === true,
+    outcome: row.outcome === true, codes: row.codes ?? {},
+  }));
+}
+
+/**
+ * Remove everything the plane holds for one study — uploads, views, derived
+ * tables, the identity maps and the pseudonym key (which is what makes a deletion
+ * unlinkable) — and nothing else. A study id that is not an id, a directory that
+ * is a symlink, and one that does not resolve to a direct child of `studies/` are
+ * left alone: a deletion path never follows a link out of the plane.
+ * @param {string} root the plane's root @param {string} studyId
+ * @returns {Promise<{ removed: boolean }>}
+ */
+export async function removeStudyDirectory(root, studyId) {
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(String(studyId ?? ""))) return { removed: false };
+  const directory = path.join(root, "studies", studyId);
+  const stat = await fs.lstat(directory).catch(() => null);
+  if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) return { removed: false };
+  const real = await fs.realpath(directory).catch(() => null);
+  const realRoot = await fs.realpath(path.join(root, "studies")).catch(() => null);
+  if (!real || !realRoot || path.dirname(real) !== realRoot) return { removed: false };
+  await fs.rm(directory, { recursive: true, force: true });
+  return { removed: true };
+}
+
+/**
+ * What a method reads of a snapshot, by the engine's own handlers: the raw files
+ * to profile, the subject table for a cohort, a synthesis, a MAIC or a
+ * weighting, and the events table besides for a time-to-event comparison. A
+ * snapshot with no derived table for the shape a method needs is read as its raw
+ * files — the engine takes either — and a method this file does not know reads
+ * the subject table.
+ * @param {string} method @param {string | null} endpointType @param {readonly string[]} derived the shapes the snapshot has
+ * @returns {("subject" | "longitudinal" | "events" | "files")[]}
+ */
+export function tablesNeededBy(method, endpointType, derived) {
+  if (method === "profile.snapshot") return ["files"];
+  /** @type {("subject" | "events")[]} */
+  const wanted = ["subject"];
+  const timeToEvent = method === "comparator.rmst"
+    || (["comparator.entropy_balance", "comparator.propensity_weight"].includes(method) && endpointType === "time_to_event");
+  if (timeToEvent) wanted.push("events");
+  return wanted.every((shape) => derived.includes(shape)) ? wanted : ["files"];
+}
+
+/**
+ * The data files of a source as a snapshot sees them: one per name, the latest
+ * upload of that name (files come oldest first).
+ * @param {any[]} files
+ */
+export function latestDataFiles(files) {
+  /** @type {Map<string, any>} */
+  const byName = new Map();
+  for (const file of files) if (file.role === "data") byName.set(file.name, file);
+  return [...byName.values()];
+}
+
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,80}$/;
+const USE_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
+/** What a grantee may be: an account id, `role:<role>` or `study:<id>`. */
+const ACCOUNT_PATTERN = /^[A-Za-z0-9_.@-]{1,120}$/;
 
 export class VcrDataPlane {
   /**
-   * @param {{ store: import("./vcrDataStore.mjs").VcrDataStore, config: VcrDataPlaneConfig,
-   *   profiler?: (input: { files: string[], fieldMap: any, sealedFields: string[], asOf: string | null }) => Promise<any>,
+   * @param {{ store: import("./vcrDataStore.mjs").VcrDataStore, config: VcrDataPlaneConfig, profiler?: VcrProfiler | null,
+   *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
    *   now?: () => Date }} options
+   *   `access` judges every operation (one is made from the store when none is
+   *   given); `seal` records the first outcome read — it is composed after the
+   *   plane, so `attach` also takes it.
    */
-  constructor({ store, config, profiler = null, now = () => new Date() }) {
+  constructor({ store, config, profiler = null, access = null, seal = null, now = () => new Date() }) {
     if (!store) throw new TypeError("The VCR data plane needs its store.");
     this.store = store;
     this.config = config ?? {};
     this.now = now;
     this.profiler = profiler ?? ((input) => runSnapshotProfiler(input));
+    this.access = access ?? new VcrAccess({ store, now });
+    // A page reads what a member may see without writing a ledger row per source
+    // per load; the judgments that matter (a read of rows, a write) go through `access`.
+    this.pageAccess = new VcrAccess({ store, now, audit: false });
+    this.seal = seal;
+  }
+
+  /** Attach a package composed after the plane (the seal). @param {{ seal?: any }} packages */
+  attach(packages) {
+    if (packages?.seal) this.seal = packages.seal;
+    return this;
   }
 
   /** Is the data plane composed at all? Unset means every tier above T0 says so by name. */
   get configured() {
     return Boolean(String(this.config.vcrDataPlaneDir ?? "").trim());
+  }
+
+  /** The most a data file may hold, in bytes. */
+  get maxBytes() {
+    const configured = Number(this.config.vcrDataMaxBytes ?? this.config.maxFileBytes);
+    return Number.isSafeInteger(configured) && configured > 0 ? configured : VCR_UPLOAD_DEFAULT_MAX_BYTES;
   }
 
   /** The resolved root, or a named refusal. */
@@ -583,166 +1538,845 @@ export class VcrDataPlane {
     return assertDataPlaneLocation(this.config.vcrDataPlaneDir ?? "", location);
   }
 
+  // -------------------------------------------------------------------------
+  // Who may do what, and to what
+  // -------------------------------------------------------------------------
+
+  /**
+   * The study for an operation that manages data: the caller must hold
+   * `manage_data` in it. A study that is another account's answers exactly as
+   * one that does not exist (AC-17).
+   * @param {string} studyId @param {string} actor
+   */
+  async #manager(studyId, actor) {
+    if (!ID_PATTERN.test(String(studyId ?? ""))) throw refuse(404, VCR_DATA_PLANE_CODES.studyNotFound, "Study not found.");
+    await this.access.require({ actor: String(actor ?? ""), studyId, ability: "manage_data" });
+    const study = await this.store.studyForAccess(studyId);
+    if (!study) throw refuse(404, VCR_DATA_PLANE_CODES.studyNotFound, "Study not found.");
+    return study;
+  }
+
+  /** A source of this study, or the refusal a source that does not exist gets. @param {string} studyId @param {string} sourceId */
+  async #source(studyId, sourceId) {
+    const source = ID_PATTERN.test(String(sourceId ?? "")) ? await this.store.sourceInStudy(studyId, sourceId) : null;
+    if (!source) throw refuse(404, VCR_DATA_PLANE_CODES.sourceNotFound, "Data source not found.");
+    return source;
+  }
+
+  /** A snapshot of this study, or the same refusal. @param {string} studyId @param {string} snapshotId */
+  async #snapshot(studyId, snapshotId) {
+    const snapshot = ID_PATTERN.test(String(snapshotId ?? "")) ? await this.store.getSnapshot(snapshotId) : null;
+    if (!snapshot || snapshot.studyId !== studyId) throw refuse(404, VCR_DATA_PLANE_CODES.snapshotNotFound, "Snapshot not found.");
+    return snapshot;
+  }
+
+  /** @param {any} source */
+  #assertOpen(source) {
+    if (source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The data source was withdrawn and takes no more files.");
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 1: the source
+  // -------------------------------------------------------------------------
+
   /**
    * Register a data source: whose it is, what it may be used for, what window
-   * is visible and how long it is kept (plan §8.1 step 1).
-   * @param {{ userId: string, studyId?: string | null, name: string, ownerParty?: string, allowedUses?: string[],
-   *   visibleWindow?: Record<string, unknown>, retention?: Record<string, unknown>, format?: string, actor?: string }} entry
+   * is visible and how long it is kept (plan §8.1 step 1). The account that
+   * registers it is its owner — the one who may grant others a read of its rows.
+   * @param {{ userId: string, studyId: string, name: string, ownerParty?: string, allowedUses?: string[],
+   *   visibleWindow?: Record<string, unknown>, retention?: Record<string, unknown>, format?: string,
+   *   valueSource?: string, actor?: string }} entry
    */
   async registerSource(entry) {
     this.root();
-    return this.store.createSource(entry);
+    await this.#manager(entry.studyId, entry.userId);
+    const name = text(entry.name);
+    if (!name || name.length > 80 || hasControl(name)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "A source name is one line of 1 to 80 characters.");
+    const ownerParty = entry.ownerParty == null ? "" : text(entry.ownerParty);
+    if (ownerParty.length > 80) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "ownerParty is at most 80 characters.");
+    const uses = entry.allowedUses == null ? ["vcr"] : entry.allowedUses;
+    if (!Array.isArray(uses) || uses.length > 20 || uses.some((use) => typeof use !== "string" || !USE_PATTERN.test(use))) {
+      throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "allowedUses is up to 20 lowercase words, like vcr or matching.");
+    }
+    const format = entry.format == null ? "csv" : entry.format;
+    if (!VCR_SOURCE_FORMATS.includes(format)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `format is one of: ${VCR_SOURCE_FORMATS.join(", ")}.`);
+    const valueSource = entry.valueSource == null ? "observed" : entry.valueSource;
+    if (!VCR_VALUE_SOURCES.includes(valueSource)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `valueSource is one of: ${VCR_VALUE_SOURCES.join(", ")}.`);
+    const window = isObject(entry.visibleWindow) ? entry.visibleWindow : {};
+    const retention = isObject(entry.retention) ? entry.retention : {};
+    /** @param {unknown} value @param {string} field */
+    const instant = (value, field) => {
+      if (value == null || value === "") return null;
+      const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN;
+      if (!Number.isFinite(parsed)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `${field} is a date.`);
+      return new Date(parsed).toISOString();
+    };
+    const start = instant(window.start, "visibleWindow.start");
+    const end = instant(window.end, "visibleWindow.end");
+    if (start && end && Date.parse(start) > Date.parse(end)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "The visible window ends before it starts.");
+    const until = instant(retention.until, "retention.until");
+    const note = retention.note == null ? "" : text(retention.note).slice(0, 200);
+    return this.store.createSource({
+      userId: String(entry.userId), studyId: entry.studyId, name, ownerParty, allowedUses: uses, format, valueSource,
+      visibleWindow: { ...(start ? { start } : {}), ...(end ? { end } : {}) },
+      retention: { ...(until ? { until } : {}), ...(note ? { note } : {}) },
+      actor: entry.actor ?? String(entry.userId),
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 2: a file
+  // -------------------------------------------------------------------------
+
+  /**
+   * Take one file into a source. The bytes are streamed to the plane under a cap
+   * (never buffered whole on the way in), made readable (encoding, JSON, a
+   * workbook's first sheet), checked to be a table with a header and no column
+   * twice, profiled once so the run has the shape to propose a field map from,
+   * and stored under their own hash. The same bytes twice are the same file.
+   *
+   * @param {{ actor: string, studyId: string, sourceId: string, name: string, role?: string,
+   *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null,
+   *   visibleAt?: string | null, sheet?: string | null }} entry
+   */
+  async storeUpload(entry) {
+    const root = this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    const source = await this.#source(entry.studyId, entry.sourceId);
+    this.#assertOpen(source);
+    const role = entry.role == null ? "data" : entry.role;
+    if (!VCR_SOURCE_FILE_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `role is one of: ${VCR_SOURCE_FILE_ROLES.join(", ")}.`);
+    const named = safeUploadName(entry.name, role);
+    const cap = Math.min(this.maxBytes, /** @type {Record<string, number>} */ (VCR_UPLOAD_ROLE_CAPS)[role] ?? this.maxBytes);
+    if (entry.declaredLength != null && entry.declaredLength > cap) {
+      throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap });
+    }
+
+    const incoming = path.join(root, studyRelative(entry.studyId), "incoming");
+    await fs.mkdir(incoming, { recursive: true, mode: 0o755 });
+    const stem = randomUUID();
+    const raw = path.join(incoming, `${stem}.upload`);
+    /** @type {string[]} */
+    const scratch = [raw];
+    try {
+      const handle = await fs.open(raw, "wx", 0o600);
+      const digest = createHash("sha256");
+      let total = 0;
+      try {
+        for await (const chunk of entry.stream) {
+          total += chunk.length;
+          if (total > cap) throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap });
+          digest.update(chunk);
+          await handle.write(chunk);
+        }
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        throw refuse(400, VCR_DATA_PLANE_CODES.fileUnreadable, "The upload was interrupted before it finished.");
+      } finally {
+        await handle.close();
+      }
+      if (!total) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "The file is empty.");
+      const originalSha256 = digest.digest("hex");
+
+      /** @type {Record<string, any>} */
+      const detail = { originalName: named.name, originalSha256, originalBytes: total };
+      /** @type {Buffer} */
+      let bytes;
+      let extension = "csv";
+      /** @type {{ header: string[], rows: string[][], renamed?: number } | null} */
+      let table = null;
+      if (role === "document") {
+        const decoded = decodeUploadText(await fs.readFile(raw));
+        bytes = Buffer.from(decoded.text, "utf8");
+        extension = "txt";
+        Object.assign(detail, { encoding: decoded.encoding, chars: decoded.text.length });
+        if (entry.subject != null && entry.subject !== "") {
+          detail.subjectKey = pseudonymOf(await studyPseudonymKey(root, entry.studyId), entry.subject);
+        }
+        if (entry.visibleAt != null && entry.visibleAt !== "") {
+          const stamp = Date.parse(String(entry.visibleAt));
+          if (!Number.isFinite(stamp)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "visibleAt is a date.");
+          detail.visibleAt = new Date(stamp).toISOString();
+        }
+      } else {
+        /** @type {string} */
+        let body;
+        if (named.format === "xlsx") {
+          const workbook = `${raw}.xlsx`;
+          scratch.push(workbook);
+          await fs.rename(raw, workbook);
+          const converted = await convertWorkbook({ file: workbook, sheet: entry.sheet ?? null });
+          body = converted.csv;
+          Object.assign(detail, { sheets: converted.sheets, sheetUsed: converted.used });
+          scratch.push(`${workbook}.converted.csv`);
+        } else {
+          const decoded = decodeUploadText(await fs.readFile(raw));
+          detail.encoding = decoded.encoding;
+          body = named.format === "json" ? toCsv(...(() => { const parsed = jsonTable(decoded.text); return /** @type {[string[], string[][]]} */ ([parsed.header, parsed.rows]); })()) : decoded.text;
+          if (named.format === "tsv") detail.delimiter = "tab";
+        }
+        table = checkedTable(body, named.format === "tsv" ? "\t" : ",");
+        if (table.renamed) detail.renamedBlankHeaders = table.renamed;
+        bytes = Buffer.from(toCsv(table.header, table.rows), "utf8");
+      }
+
+      const directory = role === "document"
+        ? path.posix.join(studyRelative(entry.studyId), "documents")
+        : path.posix.join(studyRelative(entry.studyId), "sources", entry.sourceId);
+      const written = await writeContentAddressed(root, directory, extension, bytes);
+      // A corrected re-upload under the same name is a new version of that file
+      // (its own bytes, its own row); a snapshot takes the latest of each name
+      // unless it is told which files, so the field map — which names files by
+      // display name — keeps meaning the same table.
+      // A patient document is the one file whose name is not kept: a chart's file
+      // name is the patient's name or number more often than not, and the name is
+      // shown on the page, kept in the ledger and read by every member.
+      const displayName = role === "document" ? `document-${written.sha256.slice(0, 8)}.txt` : named.name;
+      if (role === "document") delete detail.originalName;
+
+      let rowCount = null;
+      let columnCount = null;
+      /** @type {Record<string, any>} */
+      let profile = {};
+      if (role === "data") {
+        const profiled = path.join(incoming, `${stem}.csv`);
+        scratch.push(profiled);
+        await fs.writeFile(profiled, bytes, { mode: 0o600 });
+        const result = await this.profiler({ files: [profiled], tableNames: [displayName], fieldMap: {}, sealedFields: [], asOf: null });
+        rowCount = result?.snapshot?.rowCount ?? table?.rows.length ?? null;
+        columnCount = result?.snapshot?.columnCount ?? table?.header.length ?? null;
+        profile = slimProfile(result);
+      } else if (role === "dictionary" && table) {
+        detail.dictionary = dictionaryEntries(table);
+        rowCount = table.rows.length;
+        columnCount = table.header.length;
+      }
+      const stored = await this.store.addSourceFile({
+        sourceId: entry.sourceId, studyId: entry.studyId, userId: String(entry.actor), role, name: displayName,
+        format: named.format, location: written.location, sha256: written.sha256, bytes: written.bytes, rowCount, columnCount,
+        profile, detail, actor: String(entry.actor),
+      });
+      if (source.status === "registered" && role === "data") {
+        await this.store.setSourceStatus({ sourceId: entry.sourceId, status: "profiled", actor: String(entry.actor), userId: source.userId });
+      }
+      return stored;
+    } finally {
+      for (const file of scratch) await fs.rm(file, { force: true }).catch(() => {});
+    }
   }
 
   /**
-   * Freeze a registered source into an immutable snapshot: hash the bytes,
-   * count the rows and columns, profile the quality, and write **only** that
-   * metadata into `evimed_vcr` (plan §8.1 step 6).
-   * @param {{ userId: string, sourceId: string, studyId?: string | null, files: string[],
-   *   sealedFields?: string[], sealedUntil?: string | Date | null, fieldMap?: Record<string, any>,
-   *   asOf?: string | null, actor?: string }} entry
+   * Forget a file no snapshot names. Its bytes go with the row: an upload that
+   * was a mistake should not outlive the correction.
+   * @param {{ actor: string, studyId: string, fileId: string }} entry
+   */
+  async removeUpload(entry) {
+    const root = this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    if (!ID_PATTERN.test(String(entry.fileId ?? ""))) throw refuse(404, VCR_DATA_PLANE_CODES.fileNotFound, "File not found.");
+    const { removed, frozen } = await this.store.deleteSourceFile({ studyId: entry.studyId, fileId: entry.fileId, actor: String(entry.actor) });
+    if (frozen) throw refuse(409, VCR_DATA_PLANE_CODES.fileFrozen, "A snapshot holds this file; a frozen snapshot's files are its own record.");
+    if (!removed) throw refuse(404, VCR_DATA_PLANE_CODES.fileNotFound, "File not found.");
+    // The same bytes may be another source's file (a re-upload elsewhere): only
+    // this row's path is removed, and it is this source's own.
+    const stillNamed = (await this.store.listSourceFilesForStudy(entry.studyId)).some((file) => file.location === removed.location);
+    if (!stillNamed) await fs.rm(path.join(root, removed.location), { force: true }).catch(() => {});
+    return { removed: true, fileId: removed.id };
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 3: what the columns mean
+  // -------------------------------------------------------------------------
+
+  /**
+   * The headers of a source's data files, from what was profiled at upload.
+   * @param {any[]} files
+   * @returns {{ name: string, header: string[] }[]}
+   */
+  #tablesOf(files) {
+    return latestDataFiles(files).map((file) => ({
+      name: file.name,
+      header: (file.profile?.tables?.[0]?.columns ?? []).map((/** @type {any} */ column) => String(column.name)),
+    }));
+  }
+
+  /**
+   * Store a proposed field map — by the run or by a person — for a source. Every
+   * entry is checked on its own (closed vocabularies, names, ranges) and the
+   * whole is checked against the files; a proposal with problems is still
+   * stored, with the problems named, because the person confirming it is who
+   * fixes them. Nothing is confirmed by being proposed, and an edit withdraws an
+   * earlier confirmation.
+   * @param {{ actor: string, studyId: string, sourceId: string, columns: unknown, by?: string, reason?: string }} entry
+   */
+  async proposeFieldMap(entry) {
+    this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    const source = await this.#source(entry.studyId, entry.sourceId);
+    this.#assertOpen(source);
+    const { columns, issues } = normalizeFieldMap(entry.columns);
+    const tables = this.#tablesOf(await this.store.listSourceFiles(source.id));
+    const whole = validateFieldMap(columns, tables);
+    const hash = fieldMapHash(whole.columns.length ? whole.columns : columns);
+    const saved = await this.store.saveFieldMapDraft({
+      sourceId: source.id, columns: whole.columns.length ? whole.columns : columns, hash,
+      by: entry.by === "run" ? "run" : String(entry.actor), actor: String(entry.actor), reason: entry.reason ?? "",
+    });
+    return { source: saved, hash, entryIssues: issues, mapIssues: whole.issues };
+  }
+
+  /**
+   * A person confirms the map they read: the hash they were shown must still be
+   * the map's, and the whole map must hold together against the files. The
+   * profiler is run once with the map, so the conformance findings — a declared
+   * type the values do not have, a value outside a declared range, a code that is
+   * not the coding system's shape — come back with the confirmation. They are
+   * advice: the map is confirmed, and each finding is a thing to look at.
+   * @param {{ actor: string, studyId: string, sourceId: string, hash: string }} entry
+   */
+  async confirmFieldMap(entry) {
+    const root = this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    const source = await this.#source(entry.studyId, entry.sourceId);
+    this.#assertOpen(source);
+    if (source.fieldMapState === "none" || !source.fieldMapHash) {
+      throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapUnconfirmed, "There is no field map to confirm yet.");
+    }
+    if (source.fieldMapHash !== entry.hash) {
+      throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapChanged, "The field map changed since it was shown; read it again before confirming.");
+    }
+    const files = await this.store.listSourceFiles(source.id);
+    const data = latestDataFiles(files);
+    const whole = validateFieldMap(source.fieldMap.columns, this.#tablesOf(files));
+    if (whole.issues.length) {
+      throw refuse(422, VCR_DATA_PLANE_CODES.fieldMapInvalid, issueSummary(whole.issues), { issues: whole.issues });
+    }
+    /** @type {Record<string, number>} */
+    let checks = {};
+    if (data.length) {
+      const result = await this.profiler({
+        files: data.map((file) => path.join(root, file.location)), tableNames: data.map((file) => file.name),
+        fieldMap: profilerFieldMap(whole.columns), sealedFields: [], asOf: null,
+      });
+      checks = Object.fromEntries(VCR_QUALITY_CATEGORIES.map((category) => [category, Array.isArray(result?.quality?.[category]) ? result.quality[category].length : 0]));
+    }
+    const confirmed = await this.store.confirmFieldMapDraft({ sourceId: source.id, hash: entry.hash, by: String(entry.actor), actor: String(entry.actor) });
+    if (!confirmed) throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapChanged, "The field map changed since it was shown; read it again before confirming.");
+    return { source: confirmed, checks };
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 4: freeze
+  // -------------------------------------------------------------------------
+
+  /**
+   * Freeze a source into an immutable snapshot: verify every file's bytes,
+   * validate the whole confirmed map, profile once, hash, and write the snapshot,
+   * its field map, its seal and its audit rows in one transaction — then derive
+   * the three analysis tables (plan §8.1 step 6). The tables are derived after
+   * the snapshot and never roll it back: a snapshot with a table refused by name
+   * is a snapshot, and the refusal is what a person acts on.
+   *
+   * @param {{ userId: string, studyId: string, sourceId: string, fileIds?: string[] | null, asOf?: string | null,
+   *   derive?: boolean, actor?: string }} entry
    */
   async freezeSnapshot(entry) {
-    const root = this.root();
-    const source = await this.store.sourceFor(entry.sourceId);
-    if (!source || source.userId !== entry.userId) {
-      throw refuse(404, VCR_DATA_PLANE_CODES.sourceNotFound, "Data source not found.");
+    this.root();
+    const study = await this.#manager(entry.studyId, entry.userId);
+    const source = await this.#source(entry.studyId, entry.sourceId);
+    this.#assertOpen(source);
+    if (source.fieldMapState !== "confirmed") {
+      throw refuse(409, VCR_DATA_PLANE_CODES.fieldMapUnconfirmed, "Confirm the field map before freezing a snapshot: a snapshot is read through what its columns mean.");
     }
-    const files = (entry.files ?? []).map((file) => this.resolve(file));
-    if (!files.length) throw refuse(400, VCR_DATA_PLANE_CODES.locationMissing, "A snapshot needs at least one file.");
-    for (const file of files) {
-      const stat = await fs.stat(file).catch(() => null);
-      if (!stat?.isFile()) {
-        throw refuse(400, VCR_DATA_PLANE_CODES.locationMissing,
-          `The snapshot file does not exist inside the data plane: ${path.relative(root, file)}`);
+    const all = await this.store.listSourceFiles(source.id);
+    const data = all.filter((file) => file.role === "data");
+    /** @type {any[]} */
+    let chosen = latestDataFiles(all);
+    if (entry.fileIds?.length) {
+      chosen = entry.fileIds.map((id) => {
+        const found = data.find((file) => file.id === id);
+        if (!found) throw refuse(404, VCR_DATA_PLANE_CODES.fileNotFound, "File not found.");
+        return found;
+      });
+      if (new Set(chosen.map((file) => file.name)).size !== chosen.length) {
+        throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "A snapshot takes one version of each file: two of the chosen files have the same name.");
       }
     }
-    const sealedFields = (entry.sealedFields ?? []).map((field) => String(field));
+    if (!chosen.length) throw refuse(400, VCR_DATA_PLANE_CODES.locationMissing, "A snapshot needs at least one file.");
+    // The whole map first, before anything is profiled or written (CS-40).
+    const whole = validateFieldMap(source.fieldMap.columns, this.#tablesOf(chosen));
+    if (whole.issues.length) throw refuse(422, VCR_DATA_PLANE_CODES.fieldMapInvalid, issueSummary(whole.issues), { issues: whole.issues });
+    const files = [];
+    for (const file of chosen) {
+      const absolute = this.resolve(file.location);
+      const sha256 = await sha256OfFile(absolute).catch(() => null);
+      if (sha256 === null) throw refuse(400, VCR_DATA_PLANE_CODES.locationMissing, `The file ${file.name} is not in the data plane.`);
+      if (sha256 !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, `The bytes of ${file.name} are not the ones that were uploaded.`);
+      files.push({ file, absolute });
+    }
+    const entries = whole.columns;
+    const outcomeColumns = [...new Set(entries.filter(isOutcomeEntry).map((entryOf) => entryOf.column))].sort();
+    const planFrozenAt = typeof study.outcomeSeal?.planFrozenAt === "string" ? study.outcomeSeal.planFrozenAt : null;
+    const sealedFields = vcrSealRequired(study.intendedUse) ? outcomeColumns : [];
+    // A snapshot frozen after the plan was frozen is sealed on the record and
+    // already lifted: what was sealed is a fact, and so is when it stopped.
+    const sealedUntil = sealedFields.length && planFrozenAt ? planFrozenAt : null;
+    const asOf = entry.asOf ? new Date(Date.parse(entry.asOf)).toISOString() : null;
+    if (entry.asOf && !asOf) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "asOf is a date.");
+
     const profile = await this.profiler({
-      files, fieldMap: entry.fieldMap ?? {}, sealedFields, asOf: entry.asOf ?? null,
+      files: files.map((item) => item.absolute), tableNames: files.map((item) => item.file.name),
+      fieldMap: profilerFieldMap(entries), sealedFields, asOf,
     });
     // One hash over every file of the snapshot, in the order the profiler saw
     // them: two files whose contents swap places are a different snapshot.
     const digest = createHash("sha256");
-    for (const file of files) digest.update(`${path.relative(root, file)}\u0000${await sha256OfFile(file)}\u0000`);
-    const sha256 = digest.digest("hex");
+    for (const { file } of files) digest.update(`${file.location}\u0000${file.sha256}\u0000`);
     const snapshot = await this.store.freezeSnapshot({
-      sourceId: entry.sourceId, studyId: entry.studyId ?? source.studyId ?? null, userId: entry.userId,
-      location: files.map((file) => path.relative(root, file)).join("\n"),
-      sha256,
-      rowCount: profile?.snapshot?.rowCount ?? null,
-      columnCount: profile?.snapshot?.columnCount ?? null,
-      profile: profile?.profile ?? profile?.base ?? {},
-      quality: profile?.quality ?? {},
-      sealedFields, sealedUntil: entry.sealedUntil ?? null,
-      actor: entry.actor ?? entry.userId,
+      sourceId: source.id, studyId: entry.studyId, userId: source.userId, actor: String(entry.userId),
+      location: files.map((item) => item.file.location).join("\n"), sha256: digest.digest("hex"),
+      rowCount: profile?.snapshot?.rowCount ?? null, columnCount: profile?.snapshot?.columnCount ?? null,
+      profile: profile?.profile ?? {}, quality: profile?.quality ?? {},
+      sealedFields, sealedUntil, valueSource: source.valueSource, fieldMapHash: source.fieldMapHash,
+      fileHashes: files.map(({ file }) => ({ id: file.id, name: file.name, location: file.location, sha256: file.sha256, bytes: file.bytes, role: file.role })),
+      fieldMaps: entries.map((mapped) => ({
+        tableName: mapped.table, columnName: mapped.column, concept: mapped.concept, unit: mapped.unit, codingSystem: mapped.codingSystem,
+        timeKind: mapped.timeKind, missingReason: mapped.missingReason, identifier: mapped.identifier || mapped.role === "subject_key",
+        reviewState: "reviewed", role: mapped.role, parameter: mapped.parameter, alias: mapped.alias, declaredType: mapped.type,
+        range: mapped.range, required: mapped.required, outcome: isOutcomeEntry(mapped), codes: mapped.codes,
+      })),
     });
-    // The field map the profiler was handed is the study's own answer to 「这
-    // 一列是什么」; storing it beside the snapshot is what lets a later replay
-    // and a later engine job read the same columns the profile describes.
-    for (const [column, map] of Object.entries(entry.fieldMap ?? {})) {
-      await this.store.putFieldMap({
-        snapshotId: snapshot.id, userId: entry.userId, columnName: column,
-        concept: map?.concept ?? "", unit: map?.unit ?? null, codingSystem: map?.codingSystem ?? null,
-        timeKind: map?.timeKind ?? null, missingReason: map?.missingReason ?? null,
-        identifier: map?.identifier === true, reviewState: map?.reviewState ?? "ai_set", actor: entry.actor ?? entry.userId,
-      });
+    /** @type {any} */
+    let tables = null;
+    if (entry.derive !== false) {
+      tables = await this.deriveAnalysisTables({ userId: entry.userId, studyId: entry.studyId, snapshotId: snapshot.id })
+        .catch((/** @type {any} */ error) => {
+          if (error instanceof HttpError && error.code === VCR_DATA_PLANE_CODES.analysisTableInvalid) {
+            return { registered: [], refused: /** @type {any} */ (error).vcrDetail?.refused ?? [], skipped: [], failed: error.code };
+          }
+          throw error;
+        });
     }
-    return { snapshot, profile };
+    return { snapshot, profile, tables };
   }
 
+  // -------------------------------------------------------------------------
+  // Step 5: the three analysis tables
+  // -------------------------------------------------------------------------
+
   /**
-   * Derive and register the three analysis tables. A table whose shape is not
-   * what it says it is is refused by name and not registered; the others are.
-   * @param {{ userId: string, studyId: string, snapshotId: string,
-   *   tables: { shape: string, file: string }[], actor?: string }} entry
+   * Derive and register the subject, longitudinal and events tables of a frozen
+   * snapshot from its confirmed field map (plan §8.1). A table whose shape is not
+   * what it says it is is refused by name and not registered; the others are. A
+   * shape the map has nothing for is skipped, not an error.
+   * @param {{ userId: string, studyId: string, snapshotId: string, actor?: string }} entry
    */
   async deriveAnalysisTables(entry) {
-    const snapshot = await this.store.getSnapshot(entry.snapshotId);
-    if (!snapshot) throw refuse(404, VCR_DATA_PLANE_CODES.snapshotNotFound, "Snapshot not found.");
+    const root = this.root();
+    await this.#manager(entry.studyId, entry.userId);
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const entries = entriesOfRows(await this.store.listFieldMaps(snapshot.id));
+    const data = snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data");
+    /** @type {VcrTableData[]} */
+    const tables = [];
+    for (const file of data) {
+      const absolute = this.resolve(file.location);
+      const body = await fs.readFile(absolute, "utf8").catch(() => null);
+      if (body === null) throw refuse(400, VCR_DATA_PLANE_CODES.locationMissing, `The file ${file.name} is not in the data plane.`);
+      if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, `The bytes of ${file.name} are not the ones the snapshot froze.`);
+      const parsed = parseTable(body);
+      tables.push({ name: file.name, header: parsed.header, rows: parsed.rows });
+    }
+    const identifying = new Set(
+      (snapshot.profile?.tables ?? []).flatMap((/** @type {any} */ table) => (table.columns ?? [])
+        .filter((/** @type {any} */ column) => column?.vocabulary?.identifying === true).map((/** @type {any} */ column) => String(column.name))));
+    const key = await studyPseudonymKey(root, entry.studyId);
+    const derived = deriveAnalysisShapes({ tables, entries, key, identifying });
+    // The way back from a pseudonym to a source id is a file in the plane, mode
+    // 0600 (the engine runs as another user), read only through `identityOf`.
+    const identityFile = path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`);
+    await fs.mkdir(path.dirname(identityFile), { recursive: true, mode: 0o700 });
+    await fs.writeFile(identityFile, toCsv(["pseudonym", "source_id"], derived.identity), { mode: 0o600 });
+
     /** @type {any[]} */
     const registered = [];
     /** @type {any[]} */
     const refused = [];
-    for (const table of entry.tables ?? []) {
-      const file = this.resolve(table.file);
-      const body = await fs.readFile(file, "utf8").catch(() => null);
-      if (body == null) {
-        refused.push({ shape: table.shape, issues: [{ issue: "missing-file", blocking: true, column: null, rows: 1, examples: [], message: "The derived table is not in the data plane." }] });
-        continue;
-      }
-      const parsed = parseDelimited(body);
-      const issues = analysisTableIssues(table.shape, parsed.rows);
+    /** @type {string[]} */
+    const skipped = [];
+    for (const shape of VCR_ANALYSIS_TABLES) {
+      const built = derived.shapes[/** @type {"subject" | "longitudinal" | "events"} */ (shape)];
+      if (!built) { skipped.push(shape); continue; }
+      const objects = built.rows.map((cells) => Object.fromEntries(built.header.map((name, index) => [name, cells[index] ?? ""])));
+      const issues = analysisTableIssues(shape, objects);
       const blocking = issues.filter((issue) => issue.blocking);
       if (blocking.length) {
         await this.store.audit({
-          studyId: entry.studyId, userId: entry.userId, actor: entry.actor ?? entry.userId,
-          action: "analysis_table.refused", object: `${entry.snapshotId}:${table.shape}`, outcome: "denied",
-          reason: blocking.map((issue) => issue.issue).join(","),
-          detail: { shape: table.shape, issues: blocking },
+          studyId: entry.studyId, userId: snapshot.userId, actor: String(entry.userId),
+          action: "analysis_table.refused", object: `${snapshot.id}:${shape}`, outcome: "denied",
+          reason: blocking.map((issue) => issue.issue).join(","), detail: { shape, issues: blocking },
         });
-        refused.push({ shape: table.shape, issues });
+        refused.push({ shape, issues });
         continue;
       }
+      const written = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "tables", snapshot.id, shape), "csv", toCsv(built.header, built.rows));
       registered.push(await this.store.putAnalysisTable({
-        snapshotId: entry.snapshotId, studyId: entry.studyId, userId: entry.userId, shape: table.shape,
-        location: path.relative(this.root(), file), sha256: await sha256OfFile(file),
-        rowCount: parsed.rows.length, columns: parsed.header, issues, actor: entry.actor ?? entry.userId,
+        snapshotId: snapshot.id, studyId: entry.studyId, userId: snapshot.userId, shape, location: written.location, sha256: written.sha256,
+        rowCount: built.rows.length, columns: built.header, issues, outcomeBearing: built.outcomeBearing, valueSource: snapshot.valueSource,
+        derivedFrom: { files: built.files, columns: built.columns, parameters: [...new Set(built.parameters)].sort() },
+        actor: String(entry.userId),
       }));
     }
     if (refused.length && !registered.length) {
-      throw refuse(422, VCR_DATA_PLANE_CODES.analysisTableInvalid,
-        "The analysis tables do not hold the shape they declare.", { refused });
+      throw refuse(422, VCR_DATA_PLANE_CODES.analysisTableInvalid, "The analysis tables do not hold the shape they declare.", { refused });
     }
-    return { registered, refused };
+    return {
+      registered, refused, skipped, subjects: derived.identity.length,
+      excluded: derived.excluded, dropped: derived.dropped,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // The seal
+  // -------------------------------------------------------------------------
+
+  /**
+   * Bring a snapshot's seal in line with the study as it stands: sealed while a
+   * confirmatory study's plan is not frozen, lifted as of the freeze once it is,
+   * and lifted for a study that is no longer confirmatory. Idempotent, and
+   * read before every judged read so that a study whose use changed after its
+   * snapshot was frozen is sealed by the next read rather than by luck.
+   * @param {{ study: any, snapshot: any, entries: VcrFieldEntry[] }} input
+   * @returns {Promise<any>} the snapshot as it stands now
+   */
+  async #reconcile({ study, snapshot, entries }) {
+    const outcomeColumns = [...new Set(entries.filter(isOutcomeEntry).map((entry) => entry.column))].sort();
+    if (!outcomeColumns.length) return snapshot;
+    const required = vcrSealRequired(study.intendedUse);
+    const planFrozenAt = typeof study.outcomeSeal?.planFrozenAt === "string" ? study.outcomeSeal.planFrozenAt : null;
+    const nowMs = this.now().getTime();
+    const holds = snapshot.sealedFields.length > 0 && (!snapshot.sealedUntil || Date.parse(snapshot.sealedUntil) > nowMs);
+    if (required && !planFrozenAt) {
+      const complete = outcomeColumns.every((column) => snapshot.sealedFields.includes(column)) && snapshot.sealedUntil === null;
+      if (!complete) {
+        await this.store.sealStudySnapshots({ studyId: study.id, fields: outcomeColumns, snapshotIds: [snapshot.id], actor: "platform", reason: "分析计划冻结前，结局字段封存" });
+        return (await this.store.getSnapshot(snapshot.id)) ?? snapshot;
+      }
+    } else if (holds) {
+      await this.store.liftStudySeal({
+        studyId: study.id, at: planFrozenAt ?? this.now().toISOString(), actor: "platform",
+        reason: required ? "分析计划已冻结，封存解除" : "本研究的预期用途不要求封存",
+      });
+      return (await this.store.getSnapshot(snapshot.id)) ?? snapshot;
+    }
+    return snapshot;
   }
 
   /**
-   * Seal outcome fields (AC-32) or lift the seal. Both write an audit row
-   * carrying the wall clock: the study package's proof that the plan was
-   * frozen before the outcome could be read is those two timestamps, and a
-   * boolean cannot carry it.
-   * @param {{ snapshotId: string, fields: string[], until?: string | Date | null, actor: string, reason?: string }} entry
+   * Lift the seal on every snapshot of a study as of `at` — the instant the
+   * analysis plan was frozen. The seal module's port.
+   * @param {{ studyId: string, at: string | Date, actor?: string, reason?: string }} entry
    */
-  async sealFields(entry) {
-    const snapshot = await this.store.getSnapshot(entry.snapshotId);
-    if (!snapshot) throw refuse(404, VCR_DATA_PLANE_CODES.snapshotNotFound, "Snapshot not found.");
-    const fields = [...new Set([...(snapshot.sealedFields ?? []), ...(entry.fields ?? []).map(String)])].sort();
-    const sealed = await this.store.setSeal({
-      snapshotId: entry.snapshotId, sealedFields: fields, sealedUntil: entry.until ?? null,
-      actor: entry.actor, reason: entry.reason ?? "", action: "snapshot.seal",
+  async liftStudySeal(entry) {
+    return this.store.liftStudySeal({
+      studyId: entry.studyId, at: entry.at, actor: entry.actor ?? "platform", reason: entry.reason ?? "分析计划冻结，封存解除",
     });
-    return { snapshot: sealed, sealedAt: this.now().toISOString() };
   }
 
-  /** @param {{ snapshotId: string, fields?: string[] | null, actor: string, reason?: string }} entry */
-  async unsealFields(entry) {
-    const snapshot = await this.store.getSnapshot(entry.snapshotId);
-    if (!snapshot) throw refuse(404, VCR_DATA_PLANE_CODES.snapshotNotFound, "Snapshot not found.");
-    const dropping = new Set((entry.fields ?? snapshot.sealedFields ?? []).map(String));
-    const fields = (snapshot.sealedFields ?? []).filter((field) => !dropping.has(field)).sort();
-    const sealed = await this.store.setSeal({
-      snapshotId: entry.snapshotId, sealedFields: fields, sealedUntil: fields.length ? snapshot.sealedUntil : null,
-      actor: entry.actor, reason: entry.reason ?? "", action: "snapshot.unseal",
-    });
-    return { snapshot: sealed, unsealedAt: this.now().toISOString() };
+  /**
+   * Seal the outcome columns of every snapshot of a study now — for a study
+   * whose intended use has just become confirmatory before its plan was frozen.
+   * @param {{ studyId: string, actor?: string, reason?: string }} entry
+   */
+  async sealStudy(entry) {
+    const study = await this.store.studyForAccess(entry.studyId);
+    if (!study) throw refuse(404, VCR_DATA_PLANE_CODES.studyNotFound, "Study not found.");
+    if (!vcrSealRequired(study.intendedUse) || study.outcomeSeal?.planFrozenAt) return [];
+    const changed = [];
+    for (const snapshot of await this.store.listSnapshots({ studyId: entry.studyId })) {
+      if (!snapshot) continue;
+      const entries = entriesOfRows(await this.store.listFieldMaps(snapshot.id));
+      const outcomeColumns = [...new Set(entries.filter(isOutcomeEntry).map((mapped) => mapped.column))].sort();
+      if (!outcomeColumns.length) continue;
+      changed.push(...await this.store.sealStudySnapshots({
+        studyId: entry.studyId, fields: outcomeColumns, snapshotIds: [snapshot.id], actor: entry.actor ?? "platform",
+        reason: entry.reason ?? "分析计划冻结前，结局字段封存",
+      }));
+    }
+    return changed;
   }
+
+  // -------------------------------------------------------------------------
+  // The engine's inputs (contract §3.2)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Turn `{ kind: "snapshot", id }` into the inputs an engine may read.
+   *
+   * The snapshot must be this study's (404 otherwise, for every reason alike);
+   * the access judge decides, for the acting principal, whether the columns may
+   * be read at all (`read_patient_level`, the grant, the purpose, the window, the
+   * seal); a table is handed over only if every column it is derived from is
+   * allowed, except the subject table, which is projected to the columns that
+   * are. A raw file is handed over as a view without its sealed, denied and
+   * identifying columns and with its subject key pseudonymised. Each input
+   * carries its location relative to the plane, the sha256 of exactly those
+   * bytes and the value source the snapshot's source declared. The first read of
+   * an outcome column is recorded before anything is returned.
+   *
+   * Which tables a job is given follows from its method, not from what exists:
+   * a cohort or a weighting reads the subject table, a time-to-event comparison
+   * adds the events table, a profile reads the raw files. A job that is not
+   * handed the events table has not read the outcome, and the seal's second
+   * timestamp says so.
+   *
+   * @param {{ studyId: string, snapshotId: string, principal: string, purpose?: string | null, fields?: string[] | null,
+   *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
+   *   include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
+   * @returns {Promise<{ snapshotId: string,
+   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string }[],
+   *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],
+   *   outcomeFieldsRead: string[], grantId: string | null }>}
+   */
+  async resolveSnapshotInputs(input) {
+    const root = this.root();
+    const studyId = String(input.studyId ?? "");
+    const principal = String(input.principal ?? "");
+    const study = ID_PATTERN.test(studyId) ? await this.store.studyForAccess(studyId) : null;
+    if (!study) throw refuse(404, VCR_DATA_PLANE_CODES.studyNotFound, "Study not found.");
+    let snapshot = await this.#snapshot(studyId, String(input.snapshotId ?? ""));
+    const fieldMaps = await this.store.listFieldMaps(snapshot.id);
+    const entries = entriesOfRows(fieldMaps);
+    snapshot = await this.#reconcile({ study, snapshot, entries });
+
+    const tables = await this.store.listAnalysisTables({ snapshotId: snapshot.id, studyId });
+    const kind = String(input.kind ?? input.jobKind ?? "");
+    const method = String(input.method ?? (/** @type {Record<string, string>} */ (VCR_JOB_METHODS))[kind] ?? "");
+    const wants = input.include ?? tablesNeededBy(method, input.endpointType ?? null, tables.map((table) => table.shape));
+    const dataFiles = snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data");
+    const identifyingNames = new Set(
+      (snapshot.profile?.tables ?? []).flatMap((/** @type {any} */ table) => (table.columns ?? [])
+        .filter((/** @type {any} */ column) => column?.vocabulary?.identifying === true).map((/** @type {any} */ column) => String(column.name))));
+    const identifierNames = new Set(entries.filter((entry) => entry.identifier || entry.role === "subject_key").map((entry) => entry.column));
+    /** @param {string} name */
+    const judgeable = (name) => !identifierNames.has(name) && !identifyingNames.has(name);
+
+    /** @type {{ table: any }[]} */
+    const wantedTables = tables.filter((table) => wants.includes(/** @type {any} */ (table.shape))).map((table) => ({ table }));
+    /** @type {Map<string, string[]>} raw file name → its judged columns */
+    const fileColumns = new Map();
+    if (wants.includes("files")) {
+      for (const file of dataFiles) {
+        const profiled = (snapshot.profile?.tables ?? []).find((/** @type {any} */ table) => table.name === file.name);
+        fileColumns.set(file.name, (profiled?.columns ?? []).map((/** @type {any} */ column) => String(column.name)).filter(judgeable));
+      }
+    }
+    // A scenario names columns of the analysis tables (`age`); the seal and the
+    // grants are about the source's columns (`AGE`), so an alias is translated to
+    // the column it was derived from before anything is judged.
+    const sourceOfAlias = new Map(wantedTables.flatMap(({ table }) => (table.derivedFrom?.columns ?? []).map((/** @type {any} */ mapped) => [String(mapped.name), String(mapped.source)])));
+    const requestedFields = [...new Set((Array.isArray(input.fields) ? input.fields.map(String) : []).map((name) => sourceOfAlias.get(name) ?? name))];
+    const judged = [...new Set([
+      ...wantedTables.flatMap(({ table }) => (table.derivedFrom?.columns ?? []).map((/** @type {any} */ mapped) => String(mapped.source))),
+      ...[...fileColumns.values()].flat(),
+      ...requestedFields,
+    ])].filter(judgeable).sort();
+
+    const decision = await this.access.require({
+      actor: principal, studyId, ability: "read_patient_level", snapshotId: snapshot.id,
+      ...(judged.length ? { fields: judged } : {}), purpose: input.purpose ?? null, note: kind || "engine input",
+    });
+    const allowed = new Set(judged.length ? decision.fields.allowed : judged);
+    /** @type {Map<string, string>} */
+    const why = new Map(decision.fields.denied.map((denial) => [denial.field, denial.code === "vcr_field_sealed" ? "sealed" : denial.code === "vcr_field_identifying" ? "identifying" : "not_granted"]));
+
+    /** @type {{ kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string }[]} */
+    const inputs = [];
+    /** @type {{ id: string, kind: string, shape?: string, reason: string, fields: string[] }[]} */
+    const withheld = [];
+    /** @type {Set<string>} */
+    const outcomeRead = new Set(requestedFields.filter((name) => allowed.has(name) && entries.some((entry) => entry.column === name && isOutcomeEntry(entry))));
+    const outcomeColumns = new Set(entries.filter(isOutcomeEntry).map((entry) => entry.column));
+
+    for (const { table } of wantedTables) {
+      const id = `${snapshot.id}:${table.shape}`;
+      /** @type {{ source: string, name: string }[]} */
+      const mapped = table.derivedFrom?.columns ?? [];
+      const missing = [...new Set(mapped.map((column) => column.source).filter((name) => judgeable(name) && !allowed.has(name)))];
+      if (!missing.length) {
+        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: table.location, hash: table.sha256, valueSource: table.valueSource });
+        if (table.outcomeBearing) for (const column of mapped.map((item) => item.source)) if (outcomeColumns.has(column)) outcomeRead.add(column);
+        continue;
+      }
+      const carried = mapped.filter((column) => !missing.includes(column.source));
+      if (table.shape === "subject" && carried.length) {
+        const parsed = parseTable(await fs.readFile(this.resolve(table.location), "utf8"));
+        const projection = projectTable(parsed, { keep: ["USUBJID", ...carried.map((column) => column.name)] });
+        const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
+        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: written.location, hash: written.sha256, valueSource: table.valueSource });
+        continue;
+      }
+      withheld.push({ id, kind: "analysis_table", shape: table.shape, reason: why.get(missing[0]) ?? "not_granted", fields: missing });
+    }
+
+    if (wants.includes("files")) {
+      const key = await studyPseudonymKey(root, studyId);
+      let position = 0;
+      for (const file of dataFiles) {
+        position += 1;
+        const id = `${snapshot.id}:${position}`;
+        const columns = fileColumns.get(file.name) ?? [];
+        const missing = columns.filter((name) => !allowed.has(name));
+        const keep = columns.filter((name) => allowed.has(name));
+        if (!keep.length && columns.length) {
+          withheld.push({ id, kind: "snapshot_file", reason: why.get(missing[0]) ?? "not_granted", fields: missing });
+          continue;
+        }
+        const own = entries.filter((entry) => entry.table === file.name);
+        const keyEntry = own.find((entry) => entry.role === "subject_key");
+        const parsed = parseTable(await fs.readFile(this.resolve(file.location), "utf8"));
+        /** @type {Record<string, string>} */
+        const rename = {};
+        const used = new Set(["USUBJID"]);
+        parsed.header.forEach((name, index) => {
+          if (!keep.includes(name)) return;
+          const mapped = own.find((entry) => entry.column === name);
+          let wanted = mapped?.alias ?? (VCR_ANALYSIS_COLUMN.test(name) ? name : `col_${index + 1}`);
+          for (let attempt = 2; used.has(wanted); attempt += 1) wanted = `${mapped?.alias ?? name}_${attempt}`;
+          used.add(wanted);
+          if (wanted !== name) rename[name] = wanted;
+        });
+        const projection = projectTable(parsed, { keep, rename, keyColumn: keyEntry?.column ?? null, key });
+        const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
+        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: snapshot.valueSource });
+        for (const name of keep) if (outcomeColumns.has(name)) outcomeRead.add(name);
+      }
+    }
+
+    if (!inputs.length) {
+      if (withheld.length) {
+        throw refuse(403, VCR_DATA_PLANE_CODES.snapshotWithheld,
+          `Every table of this snapshot is withheld (${[...new Set(withheld.map((item) => item.reason))].join(", ")}).`, { withheld });
+      }
+      throw refuse(409, VCR_DATA_PLANE_CODES.snapshotNoTables, "This snapshot has no analysis tables yet; derive them from its field map first.");
+    }
+    if (outcomeRead.size && this.seal?.recordOutcomeAccess) {
+      await this.seal.recordOutcomeAccess({ studyId, fields: [...outcomeRead].sort(), actor: principal, reason: kind || String(input.purpose ?? "engine input") });
+    }
+    return { snapshotId: snapshot.id, inputs, withheld, outcomeFieldsRead: [...outcomeRead].sort(), grantId: decision.grantId };
+  }
+
+  /**
+   * The inputs the engine may read for one snapshot, as the job queue attaches
+   * them: `[{ kind: "analysis_table" | "snapshot_file", id, shape?, location,
+   * hash, valueSource }]` (contract §3.2). A refusal is thrown — 404 for a
+   * snapshot that is not the study's, 403 for a principal who may not read it or
+   * a snapshot every table of which is withheld — never an empty answer a caller
+   * could read as 「没有数据」. {@link resolveSnapshotInputs} has the same call
+   * with what was withheld and which outcome columns were read.
+   * @param {Parameters<VcrDataPlane["resolveSnapshotInputs"]>[0]} input
+   */
+  async resolveEngineInputs(input) {
+    return (await this.resolveSnapshotInputs(input)).inputs;
+  }
+
+  // -------------------------------------------------------------------------
+  // Grants
+  // -------------------------------------------------------------------------
+
+  /**
+   * Let somebody read a source's rows. Only the source's own account may: the
+   * partner who registered the data decides who else sees it, and a study lead
+   * who could grant themselves a partner's rows would make the partner's
+   * registration a note rather than a control.
+   * @param {{ actor: string, studyId: string, sourceId: string, grantee: string, role?: string | null, fields?: string[],
+   *   fieldMode?: string, windowStart?: string | null, windowEnd?: string | null, purposes?: string[] }} entry
+   */
+  async createGrant(entry) {
+    await this.#manager(entry.studyId, entry.actor);
+    const source = await this.#source(entry.studyId, entry.sourceId);
+    this.#assertOpen(source);
+    if (source.userId !== String(entry.actor)) throw refuse(403, VCR_DATA_PLANE_CODES.grantOwnerOnly, "Only the account that registered a source may grant a read of it.");
+    const grantee = text(entry.grantee);
+    if (grantee.startsWith("role:")) {
+      if (!VCR_MEMBER_ROLES.includes(grantee.slice(5))) throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "A role grantee is role:<a member role>.");
+    } else if (grantee.startsWith("study:")) {
+      if (grantee.slice(6) !== entry.studyId) throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "A study grantee is this study.");
+    } else {
+      const owner = (await this.store.studyForAccess(entry.studyId))?.userId;
+      const held = ACCOUNT_PATTERN.test(grantee) ? await this.store.rolesOf(entry.studyId, grantee) : [];
+      if (!ACCOUNT_PATTERN.test(grantee) || (grantee !== owner && !held.length)) {
+        throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "A grantee is an account that is a member of this study, role:<role> or study:<id>.");
+      }
+    }
+    const role = entry.role == null || entry.role === "" ? null : entry.role;
+    if (role !== null && !VCR_MEMBER_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "role is a member role.");
+    const fields = entry.fields ?? [];
+    if (!Array.isArray(fields) || fields.length > 300 || fields.some((field) => typeof field !== "string" || !field.trim() || field.length > VCR_FIELD_MAP_LIMITS.name)) {
+      throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "fields is up to 300 column names.");
+    }
+    const purposes = entry.purposes ?? [];
+    if (!Array.isArray(purposes) || purposes.length > 20 || purposes.some((use) => typeof use !== "string" || !USE_PATTERN.test(use))) {
+      throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "purposes is up to 20 lowercase words.");
+    }
+    /** @param {unknown} value */
+    const at = (value) => {
+      if (value == null || value === "") return null;
+      const stamp = typeof value === "string" ? Date.parse(value) : Number.NaN;
+      if (!Number.isFinite(stamp)) throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "A grant window is dates.");
+      return new Date(stamp).toISOString();
+    };
+    const windowStart = at(entry.windowStart);
+    const windowEnd = at(entry.windowEnd);
+    if (windowStart && windowEnd && Date.parse(windowStart) > Date.parse(windowEnd)) throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "The grant window ends before it starts.");
+    if (entry.fieldMode != null && !["allow", "deny"].includes(entry.fieldMode)) throw refuse(400, VCR_DATA_PLANE_CODES.grantInvalid, "fieldMode is allow or deny.");
+    return this.store.createGrant({
+      sourceId: source.id, studyId: entry.studyId, userId: source.userId, grantee, role,
+      fields: fields.map((field) => field.trim()), fieldMode: entry.fieldMode ?? "allow", windowStart, windowEnd, purposes,
+      actor: String(entry.actor),
+    });
+  }
+
+  /** @param {{ actor: string, studyId: string, grantId: string }} entry */
+  async revokeGrant(entry) {
+    await this.#manager(entry.studyId, entry.actor);
+    const grant = ID_PATTERN.test(String(entry.grantId ?? "")) ? await this.store.getGrant(entry.grantId) : null;
+    if (!grant || grant.studyId !== entry.studyId) throw refuse(404, VCR_DATA_PLANE_CODES.grantNotFound, "Grant not found.");
+    const source = await this.store.sourceFor(grant.sourceId);
+    if (!source || source.userId !== String(entry.actor)) throw refuse(403, VCR_DATA_PLANE_CODES.grantOwnerOnly, "Only the account that registered a source may revoke a grant on it.");
+    const revoked = await this.store.revokeGrant({ grantId: grant.id, studyId: entry.studyId, actor: String(entry.actor) });
+    return revoked ?? grant;
+  }
+
+  // -------------------------------------------------------------------------
+  // What a model may be told
+  // -------------------------------------------------------------------------
 
   /**
    * What a model may be told about a snapshot: the structure, the data
    * dictionary, the quality profile and nothing that is a row. Sealed columns
-   * appear by name with no statistics — a sealed outcome's fill rate is an
-   * event rate — and identifying columns carry no vocabulary.
-   * @param {{ snapshotId: string }} entry
+   * appear by name with no statistics — a sealed outcome's fill rate is an event
+   * rate — identifying columns carry no vocabulary, a vocabulary is levels of at
+   * least the floor, and a count that would give a small group away is withheld.
+   * With `principal`, the read is judged and audited first; the snapshot must be
+   * the study's either way.
+   * @param {{ studyId: string, snapshotId: string, principal?: string | null }} entry
    */
   async snapshotProfileForModel(entry) {
-    const snapshot = await this.store.getSnapshot(entry.snapshotId);
-    if (!snapshot) throw refuse(404, VCR_DATA_PLANE_CODES.snapshotNotFound, "Snapshot not found.");
-    const fieldMaps = await this.store.listFieldMaps(entry.snapshotId);
-    const sealed = new Set(snapshot.sealedFields ?? []);
+    const studyId = String(entry.studyId ?? "");
+    if (entry.principal != null) {
+      await this.access.require({ actor: String(entry.principal), studyId, ability: "read", snapshotId: String(entry.snapshotId ?? ""), note: "snapshot profile" });
+    }
+    const study = ID_PATTERN.test(studyId) ? await this.store.studyForAccess(studyId) : null;
+    if (!study) throw refuse(404, VCR_DATA_PLANE_CODES.studyNotFound, "Study not found.");
+    let snapshot = await this.#snapshot(studyId, String(entry.snapshotId ?? ""));
+    const fieldMaps = await this.store.listFieldMaps(snapshot.id);
+    snapshot = await this.#reconcile({ study, snapshot, entries: entriesOfRows(fieldMaps) });
+    const sealed = new Set(snapshot.sealedFields);
     const now = this.now().getTime();
     const sealActive = sealed.size > 0 && (!snapshot.sealedUntil || Date.parse(snapshot.sealedUntil) > now);
-    const tables = Array.isArray(/** @type {any} */ (snapshot.profile)?.tables) ? /** @type {any} */ (snapshot.profile).tables : [];
+    const floor = VCR_MIN_CELL_SIZE;
+    const tables = Array.isArray(snapshot.profile?.tables) ? snapshot.profile.tables : [];
     // The field map is the study's own declaration of which columns identify a
     // person, and it wins over the profiler's name and value heuristics: a
     // column called `USUBJID` is one token with no id-shaped suffix, so the
@@ -751,35 +2385,203 @@ export class VcrDataPlane {
     const columns = [];
     for (const table of tables) {
       for (const column of table.columns ?? []) {
-        if (sealActive && sealed.has(column.name)) {
+        if ((sealActive && sealed.has(column.name)) || (column.sealed === true && sealActive)) {
           columns.push({ table: table.name, name: column.name, sealed: true });
-          continue;
-        }
-        const identifying = column.vocabulary?.identifying === true || declaredIdentifiers.has(column.name);
-        columns.push({
-          table: table.name, name: column.name, sealed: false,
-          inferredType: column.inferredType ?? null,
-          filled: column.filled ?? null, rows: column.rows ?? null,
-          densityCompleteness: column.densityCompleteness ?? null,
-          distinct: column.distinct ?? null,
-          identifying,
-          vocabulary: identifying ? [] : (column.vocabulary?.values ?? []),
-        });
+        } else if (column.sealed === true) {
+          columns.push({ table: table.name, name: column.name, sealed: false, unprofiled: true });
+        } else columns.push(columnForModel(table.name, column, Number(table.rows ?? 0), declaredIdentifiers, floor));
       }
     }
+    const files = (await this.store.listSourceFiles(snapshot.sourceId)).filter((file) => snapshot.fileHashes.some((/** @type {any} */ frozen) => frozen.id === file.id));
+    const dictionary = (await this.store.listSourceFiles(snapshot.sourceId)).filter((file) => file.role === "dictionary").flatMap((file) => file.detail?.dictionary ?? []);
     return {
       snapshotId: snapshot.id, sourceId: snapshot.sourceId, version: snapshot.version,
-      sha256: snapshot.sha256, rowCount: snapshot.rowCount, columnCount: snapshot.columnCount,
-      frozenAt: snapshot.frozenAt,
+      sha256: snapshot.sha256, rowCount: snapshot.rowCount != null && snapshot.rowCount < floor ? null : snapshot.rowCount,
+      columnCount: snapshot.columnCount, frozenAt: snapshot.frozenAt, valueSource: snapshot.valueSource,
+      files: files.map((file) => ({ name: file.name, format: file.format })),
       sealedFields: sealActive ? [...sealed].sort() : [],
       sealedUntil: snapshot.sealedUntil,
       clocks: snapshotClocks(fieldMaps),
       fieldMap: fieldMaps.map((map) => ({
-        column: map.columnName, concept: map.concept, unit: map.unit, codingSystem: map.codingSystem,
-        timeKind: map.timeKind, missingReason: map.missingReason, identifier: map.identifier, reviewState: map.reviewState,
+        table: map.tableName, column: map.columnName, role: map.role, parameter: map.parameter, alias: map.alias, concept: map.concept,
+        unit: map.unit, codingSystem: map.codingSystem, timeKind: map.timeKind, missingReason: map.missingReason,
+        identifier: map.identifier, outcome: map.outcome, reviewState: map.reviewState,
       })),
+      dictionary,
       columns,
       quality: qualitySummary(snapshot.quality),
+    };
+  }
+
+  /**
+   * What a model may be told about a source that has no snapshot yet: its files'
+   * columns as profiled at upload, the data dictionary, and where the field map
+   * stands — enough to propose the map from. The same rules as a snapshot's.
+   * @param {{ studyId: string, sourceId: string, principal?: string | null }} entry
+   */
+  async sourceProfileForModel(entry) {
+    const studyId = String(entry.studyId ?? "");
+    const source = await this.#source(studyId, String(entry.sourceId ?? ""));
+    if (entry.principal != null) {
+      await this.access.require({ actor: String(entry.principal), studyId, ability: "read", sourceId: source.id, note: "source profile" });
+    }
+    const floor = VCR_MIN_CELL_SIZE;
+    const files = await this.store.listSourceFiles(source.id);
+    const declared = new Set(source.fieldMap.columns.filter((column) => column.identifier || column.role === "subject_key").map((column) => column.column));
+    return {
+      sourceId: source.id, name: source.name, valueSource: source.valueSource, status: source.status,
+      files: files.filter((file) => file.role === "data").map((file) => {
+        const table = file.profile?.tables?.[0];
+        return {
+          name: file.name, format: file.format, rowCount: file.rowCount != null && file.rowCount < floor ? null : file.rowCount,
+          columnCount: file.columnCount,
+          columns: (table?.columns ?? []).map((/** @type {any} */ column) => columnForModel(file.name, column, Number(table?.rows ?? 0), declared, floor)),
+        };
+      }),
+      dictionary: files.filter((file) => file.role === "dictionary").flatMap((file) => file.detail?.dictionary ?? []),
+      fieldMap: { state: source.fieldMapState, hash: source.fieldMapHash, columns: source.fieldMap.columns },
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Documents and identities: the two reads behind an audited judgment
+  // -------------------------------------------------------------------------
+
+  /**
+   * The text of a patient document, for the matching side. Judged as a
+   * patient-level read of the source that holds it, and audited.
+   * @param {{ studyId: string, documentId: string, principal: string, purpose?: string | null }} entry
+   */
+  async documentText(entry) {
+    const root = this.root();
+    const studyId = String(entry.studyId ?? "");
+    const file = ID_PATTERN.test(String(entry.documentId ?? "")) ? await this.store.getSourceFile(studyId, entry.documentId) : null;
+    if (!file || file.role !== "document") throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, "Document not found.");
+    await this.access.require({ actor: String(entry.principal), studyId, ability: "read_patient_level", sourceId: file.sourceId, purpose: entry.purpose ?? null, note: "document" });
+    const body = await fs.readFile(assertDataPlaneLocation(root, file.location), "utf8").catch(() => null);
+    if (body === null) throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, "Document not found.");
+    if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The document's bytes are not the ones that were uploaded.");
+    return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null };
+  }
+
+  /**
+   * The documents a study holds, by subject key: metadata only, no text.
+   * @param {{ studyId: string, principal: string, subjectKey?: string | null }} entry
+   */
+  async listDocuments(entry) {
+    await this.access.require({ actor: String(entry.principal), studyId: String(entry.studyId), ability: "read_patient_level", note: "document list" });
+    return (await this.store.listSourceFilesForStudy(entry.studyId))
+      .filter((file) => file.role === "document" && (!entry.subjectKey || file.detail?.subjectKey === entry.subjectKey))
+      .map((file) => ({ id: file.id, sourceId: file.sourceId, name: file.name, chars: file.detail?.chars ?? null,
+        subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null }));
+  }
+
+  /**
+   * The source id behind a pseudonym — for the partner's own coordinator who has
+   * to find the person a referral is about. Needs `manage_data`, and is audited.
+   * @param {{ studyId: string, snapshotId: string, pseudonym: string, actor: string }} entry
+   */
+  async identityOf(entry) {
+    const root = this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const body = await fs.readFile(path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`), "utf8").catch(() => null);
+    const found = body === null ? null : parseTable(body).rows.find((row) => row[0] === entry.pseudonym)?.[1] ?? null;
+    await this.store.audit({
+      studyId: entry.studyId, userId: snapshot.userId, actor: String(entry.actor), action: "identity.lookup",
+      object: `${snapshot.id}:${entry.pseudonym}`, outcome: found === null ? "denied" : "ok", reason: found === null ? "not_found" : "",
+    });
+    return found === null ? null : { pseudonym: entry.pseudonym, sourceSubjectId: found };
+  }
+
+  // -------------------------------------------------------------------------
+  // Deletion
+  // -------------------------------------------------------------------------
+
+  /**
+   * Remove everything the plane holds for a study: uploads, views, derived
+   * tables, the identity maps and the pseudonym key (which is what makes a
+   * deletion unlinkable). Never follows a symlink and never leaves the
+   * plane's `studies/` directory.
+   * @param {string} studyId
+   */
+  async deleteStudyFiles(studyId) {
+    if (!this.configured) return { removed: false };
+    return removeStudyDirectory(this.root(), studyId);
+  }
+
+  /** @param {{ studyIds: readonly string[] }} entry */
+  async deleteUserFiles(entry) {
+    let removed = 0;
+    for (const studyId of entry.studyIds ?? []) if ((await this.deleteStudyFiles(studyId)).removed) removed += 1;
+    return { removed };
+  }
+
+  // -------------------------------------------------------------------------
+  // What the page shows
+  // -------------------------------------------------------------------------
+
+  /**
+   * The intake half of the data tab for one viewer: every source of the study
+   * with its files, its field map (and what is wrong with it), its grants and
+   * its snapshots with their tables. A source the viewer may not read shows its
+   * name, owner and state and nothing of its columns.
+   * @param {{ id: string, dataTier?: string }} study @param {{ id: string }} viewer
+   */
+  async tabFor(study, viewer) {
+    const [sources, files, snapshots, tables] = await Promise.all([
+      this.store.listSourcesForStudy(study.id), this.store.listSourceFilesForStudy(study.id),
+      this.store.listSnapshots({ studyId: study.id }), this.store.listAnalysisTables({ studyId: study.id }),
+    ]);
+    const grants = await this.store.grantsForSources(sources.map((source) => source.id));
+    const openings = new Map();
+    for (const source of sources) {
+      const mine = source.userId === String(viewer.id);
+      const decision = mine ? null : await this.pageAccess.judge({ actor: String(viewer.id), studyId: study.id, ability: "read", sourceId: source.id }).catch(() => null);
+      openings.set(source.id, mine || Boolean(decision?.allowed));
+    }
+    return {
+      available: true,
+      formats: Object.keys(VCR_UPLOAD_FORMATS.data),
+      maxBytes: this.maxBytes,
+      sources: sources.map((source) => {
+        const readable = openings.get(source.id) === true;
+        const own = files.filter((file) => file.sourceId === source.id);
+        const tablesOf = this.#tablesOf(own);
+        const whole = validateFieldMap(source.fieldMap.columns, tablesOf);
+        return {
+          id: source.id, name: source.name, ownerParty: source.ownerParty, registeredBy: source.userId, mine: source.userId === String(viewer.id),
+          readable, allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
+          valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
+          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes },
+          // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
+          files: readable ? own.map((file) => fileView(file)) : [],
+          fieldMap: {
+            state: source.fieldMapState, hash: source.fieldMapHash, by: source.fieldMapBy || null,
+            confirmedBy: source.fieldMapConfirmedBy, confirmedAt: source.fieldMapConfirmedAt,
+            columns: readable ? source.fieldMap.columns : [], issues: readable ? whole.issues : [],
+          },
+          grants: !readable ? [] : grants.filter((grant) => grant.sourceId === source.id).map((grant) => ({
+            id: grant.id, grantee: grant.grantee, role: grant.role, fields: grant.fields, fieldMode: grant.fieldMode,
+            windowStart: grant.windowStart, windowEnd: grant.windowEnd, purposes: grant.purposes, revokedAt: grant.revokedAt,
+            createdAt: grant.createdAt,
+          })),
+        };
+      }),
+      // The seal as the judge would find it now, not as the snapshot row last said
+      // it: a study raised to a confirmatory use after its snapshot was frozen shows
+      // its outcome columns sealed before anyone has read them.
+      snapshots: await Promise.all(snapshots.map(async (snapshot) => {
+        const outcomeColumns = vcrOutcomeColumns(await this.store.listFieldMaps(snapshot.id));
+        const { sealed } = vcrEffectiveSeal({ study: /** @type {any} */ (study), snapshot, outcomeColumns, now: this.now().getTime() });
+        return {
+          ...snapshotView(snapshot, this.now().getTime(), {
+            sealed: sealed.size > 0,
+            fields: [...new Set([...snapshot.sealedFields, ...outcomeColumns.filter((column) => sealed.has(column))])].sort(),
+          }),
+          tables: tables.filter((table) => table.snapshotId === snapshot.id).map(tableView),
+        };
+      })),
     };
   }
 }
@@ -798,36 +2600,80 @@ export function qualitySummary(quality) {
 }
 
 /**
- * Run `scripts/vcr/profile_snapshot.py` and parse its JSON. The profiler is a
- * separate process on purpose: it is the same deterministic code the capability
- * already uses for dataset scoping, it holds no database handle, and it is the
- * only thing in this module that ever looks at a cell's value.
- * @param {{ files: string[], fieldMap: any, sealedFields: string[], asOf: string | null, script?: string, python?: string }} input
+ * The part of a profiler run worth keeping beside an uploaded file: each column's
+ * name, shape and (already suppressed) vocabulary, not the joins and type
+ * conflicts that only make sense across a snapshot.
+ * @param {any} result
  */
-export async function runSnapshotProfiler(input) {
-  const script = input.script ?? VCR_PROFILER_SCRIPT;
-  const python = input.python ?? process.env.OPEN_SCIENCE_PYTHON ?? "python3";
-  const args = [script, ...input.files, "--json", "-", "--min-cell-size", String(VCR_MIN_CELL_SIZE)];
-  if (input.sealedFields?.length) args.push("--sealed-fields", input.sealedFields.join(","));
-  if (input.asOf) args.push("--as-of", input.asOf);
-  const payload = JSON.stringify(input.fieldMap ?? {});
-  return new Promise((resolve, reject) => {
-    const child = spawn(python, args, { stdio: ["pipe", "pipe", "pipe"] });
-    let out = "";
-    let err = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { out += chunk; });
-    child.stderr.on("data", (chunk) => { err += chunk; });
-    child.on("error", (error) => reject(refuse(500, VCR_DATA_PLANE_CODES.profilerFailed, `The snapshot profiler could not start: ${error.message}`)));
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(refuse(500, VCR_DATA_PLANE_CODES.profilerFailed, `The snapshot profiler failed (exit ${code}): ${err.trim().slice(0, 400)}`));
-        return;
-      }
-      try { resolve(JSON.parse(out)); }
-      catch (error) { reject(refuse(500, VCR_DATA_PLANE_CODES.profilerFailed, `The snapshot profiler wrote no JSON: ${String(error)}`)); }
-    });
-    child.stdin.end(payload);
-  });
+function slimProfile(result) {
+  const tables = Array.isArray(result?.profile?.tables) ? result.profile.tables : [];
+  return {
+    tables: tables.map((/** @type {any} */ table) => ({
+      name: table.name, rows: table.rows,
+      columns: (table.columns ?? []).map((/** @type {any} */ column) => ({
+        name: column.name, rows: column.rows, filled: column.filled, densityCompleteness: column.densityCompleteness,
+        distinct: column.distinct, inferredType: column.inferredType, vocabulary: column.vocabulary,
+      })),
+    })),
+    counts: result?.counts ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// What leaves through a route or the page: views without a path of the server
+// ---------------------------------------------------------------------------
+
+/**
+ * A source as a route answers it. No location, no other account's field map: the
+ * map's columns are the study's own and travel in the page's tab.
+ * @param {any} source
+ */
+export function sourceView(source) {
+  return {
+    id: source.id, name: source.name, ownerParty: source.ownerParty, allowedUses: source.allowedUses,
+    visibleWindow: source.visibleWindow, retention: source.retention, valueSource: source.valueSource, status: source.status,
+    fieldMapState: source.fieldMapState, fieldMapHash: source.fieldMapHash, createdAt: source.createdAt,
+  };
+}
+
+/** A stored file as a route answers it. @param {any} file @param {boolean} [withColumns] */
+export function fileView(file, withColumns = true) {
+  return {
+    id: file.id, sourceId: file.sourceId, name: file.name, role: file.role, format: file.format, bytes: file.bytes,
+    sha256: file.sha256, rowCount: file.rowCount, columnCount: file.columnCount, createdAt: file.createdAt,
+    ...(withColumns && file.role === "data" ? {
+      columns: (file.profile?.tables?.[0]?.columns ?? []).slice(0, VCR_UPLOAD_LIMITS.columns).map((/** @type {any} */ column) => ({
+        name: column.name, type: column.inferredType ?? null, filled: column.densityCompleteness ?? null, distinct: column.distinct ?? null,
+        identifying: column.vocabulary?.identifying === true,
+      })),
+    } : {}),
+    ...(file.role === "dictionary" ? { entries: (file.detail?.dictionary ?? []).length } : {}),
+    ...(file.role === "document" ? { subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null, chars: file.detail?.chars ?? null } : {}),
+    ...(file.detail?.sheets ? { sheets: file.detail.sheets, sheetUsed: file.detail.sheetUsed ?? null } : {}),
+  };
+}
+
+/**
+ * A snapshot as a route answers it. `effective` is the seal as the judge finds it
+ * now (the study's use and plan decide it, not only the row); without it the
+ * row's own seal is read.
+ * @param {any} snapshot @param {number} [now] @param {{ sealed: boolean, fields: string[] }} [effective]
+ */
+export function snapshotView(snapshot, now = Date.now(), effective = undefined) {
+  const sealed = effective ? effective.sealed : snapshot.sealedFields.length > 0 && (!snapshot.sealedUntil || Date.parse(snapshot.sealedUntil) > now);
+  return {
+    id: snapshot.id, sourceId: snapshot.sourceId, version: snapshot.version, sha256: snapshot.sha256, rowCount: snapshot.rowCount,
+    columnCount: snapshot.columnCount, frozenAt: snapshot.frozenAt, valueSource: snapshot.valueSource,
+    files: snapshot.fileHashes.map((/** @type {any} */ file) => ({ name: file.name, sha256: file.sha256, bytes: file.bytes })),
+    sealedFields: effective ? effective.fields : snapshot.sealedFields, sealedUntil: snapshot.sealedUntil, sealed,
+    quality: qualitySummary(snapshot.quality),
+  };
+}
+
+/** An analysis table as a route answers it. @param {any} table */
+export function tableView(table) {
+  return {
+    shape: table.shape, rowCount: table.rowCount, sha256: table.sha256, columns: table.columns, issues: table.issues.length,
+    outcomeBearing: table.outcomeBearing, valueSource: table.valueSource,
+  };
 }

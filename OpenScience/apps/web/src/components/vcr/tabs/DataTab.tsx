@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { ExternalLink } from "lucide-react";
 import {
   getVcrData,
+  readVcrIntake,
   saveVcrAssumption,
   signVcrReview,
   type VcrAssumption,
@@ -19,13 +20,14 @@ import { FilterChips } from "@/components/ui/FilterChips";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
+import { IntakePanel } from "../data/IntakePanel";
 import { VcrForestPlot } from "../VcrDiagrams";
 import { ReviewChip, SourceTag } from "../VcrMarks";
 import { VcrValueText } from "../VcrNumber";
 import { VcrPrecedentTable } from "../VcrPrecedentsPanel";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
-import { intervalText, numberText, reviewKindLabel, valueText } from "../vcrText";
+import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
 
 type Filter = "all" | "key" | "ai_set" | "reviewed" | "changed";
@@ -88,11 +90,18 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const note = data.evidenceNote ? <p data-vcr-evidence-note="" className="text-caption text-text-3">{data.evidenceNote}</p> : null;
+  // 数据接入 is the tab's own work, not an evidence card: it is there whenever the
+  // plane is (or, above T0, whenever it should be), whatever the evidence side holds.
+  const intake = readVcrIntake(data.intake);
+  const intakePanel = intake.available || (data.intake != null && study.tier !== "T0")
+    ? <IntakePanel studyId={studyId} intake={intake} onChanged={reload} />
+    : null;
   if (data.assumptions.length === 0 && data.precedents.length === 0) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
         {note}
         <VcrStepPending studyId={studyId} study={study} step="evidence" />
+        {intakePanel}
       </div>
     );
   }
@@ -181,31 +190,7 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
         </VcrSection>
       )}
 
-      {data.snapshots && data.snapshots.length > 0 && (
-        <VcrSection title="数据快照与质量">
-          <ul className="grid gap-4 lg:grid-cols-2">
-            {data.snapshots.map((snapshot) => (
-              <li key={snapshot.id}>
-                <Card title={snapshot.label}>
-                  <p className="text-caption tabular-nums text-text-3">
-                    {[snapshot.at, snapshot.rows != null ? `${numberText(snapshot.rows, 0)} 行` : null].filter(Boolean).join(" · ")}
-                  </p>
-                  {snapshot.quality && (
-                    <ul className="mt-3 flex flex-col gap-1.5">
-                      {snapshot.quality.map((check) => (
-                        <li key={check.label} className="flex items-baseline justify-between gap-3 text-caption">
-                          <span className="min-w-0 truncate text-text-2">{check.label}</span>
-                          <span className={cn("shrink-0 tabular-nums", check.passed === false ? "text-warn-strong" : "text-text")}>{check.value}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </VcrSection>
-      )}
+      {intakePanel}
 
       {data.decisions && data.decisions.length > 0 && (
         <VcrSection title="决策记录" meta={`${data.decisions.length}`}>

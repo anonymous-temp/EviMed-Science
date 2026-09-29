@@ -31,12 +31,23 @@
  *   snapshot's field map marks `identifier` is refused even under a grant that
  *   names it — the grant is about which clinical columns may be read, not
  *   about who the people are.
- * - **The window is judged on `asOf`, and `asOf` defaults to now.** A replay
- *   dated in the past is judged against the grant as it is today, deliberately
- *   — a revoked grant does not become live again by asking about last month.
- *   What the past date does change is which rows are visible
- *   (`rowsVisibleAsOf` in `vcrDataPlane.mjs`), which is the other half of
- *   AC-15.
+ * - **Access is judged at `now`. `asOf` only selects rows.** A replay dated in
+ *   the past is judged against the grant, the window and the seal as they are
+ *   today: a revoked grant does not become live again by asking about last
+ *   month, and a seal that stood then is not a seal that stands now. Judging on
+ *   the caller's date was the hole (review CS-39) — an `asOf` before a grant's
+ *   window closed opened a read the window forbids, and an `asOf` before the plan
+ *   froze read sealed outcomes. What a past date does change is which rows are
+ *   visible (`rowsVisibleAsOf` in `vcrDataPlane.mjs`), the other half of AC-15;
+ *   the decision echoes it as `asOf` so the ledger says what was asked about.
+ * - **A source is the study's or it does not exist.** A source of another
+ *   account, of another study, or attached to no study answers 404 whatever the
+ *   caller holds in this study (CS-49): telling a member "you have no grant" on
+ *   somebody else's source tells them the source exists.
+ * - **The seal is judged from the study, not only from the snapshot.** A snapshot
+ *   frozen while the study was exploratory carries no seal; when the study's use
+ *   is raised to a confirmatory one its outcome columns are sealed at once, by
+ *   `vcrEffectiveSeal`, with no one having to remember to seal them.
  * - **One audit row per judgment, allowed or refused.** The question a
  *   sponsor's computerized-system validation asks is 「当时谁读了什么」, and a
  *   ledger that records only the refusals answers a different question.
@@ -47,6 +58,7 @@
 import { VCR_MEMBER_ROLES, VCR_ROLE_ABILITIES, roleAllows } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
+import { vcrEffectiveSeal, vcrOutcomeColumns } from "./vcrSeal.mjs";
 
 /** Every refusal this judge can return, by name. */
 export const VCR_ACCESS_CODES = Object.freeze({
@@ -139,8 +151,10 @@ export class VcrAccess {
     if (!VCR_ABILITIES.includes(ability)) {
       throw new TypeError(`A VCR ability is one of ${VCR_ABILITIES.join(", ")}, got ${JSON.stringify(request?.ability)}`);
     }
-    const asOfDate = request?.asOf ? stamp(request.asOf) : this.now().getTime();
-    const asOf = new Date(asOfDate ?? this.now().getTime()).toISOString();
+    // Judged at `now`; the caller's `asOf` is echoed and selects rows elsewhere.
+    const judgedAt = this.now().getTime();
+    const asked = request?.asOf ? stamp(request.asOf) : null;
+    const asOf = new Date(asked ?? judgedAt).toISOString();
     const fields = [...new Set((request?.fields ?? []).map((field) => String(field)))].sort();
     /** @type {VcrAccessDecision} */
     const base = {
@@ -185,8 +199,9 @@ export class VcrAccess {
       }
       sourceId = snapshot.sourceId;
       // A snapshot attached to another study is that study's; from here it
-      // does not exist, the same way the study itself would not.
-      if (snapshot.studyId && snapshot.studyId !== study.id) {
+      // does not exist, the same way the study itself would not. So is one
+      // attached to none: every snapshot the routes make belongs to a study.
+      if (snapshot.studyId !== study.id) {
         return this.#record(decide({ code: VCR_ACCESS_CODES.snapshotNotFound, roles }), request);
       }
     }
@@ -195,8 +210,11 @@ export class VcrAccess {
     const source = sourceId ? await this.store.sourceFor(sourceId) : null;
     if (!source) return this.#record(decide({ code: VCR_ACCESS_CODES.sourceNotFound, roles, sourceId }), request);
     const ownsSource = source.userId === actor;
-    const sourceInStudy = !source.studyId || source.studyId === study.id;
-    if (!ownsSource && !sourceInStudy) {
+    // The study's own source, or a source of the caller's own that is attached
+    // to no study. Anything else — another account's, or another study's — does
+    // not exist from here, whatever role the caller holds (CS-49).
+    const inThisStudy = source.studyId === study.id || (!source.studyId && ownsSource);
+    if (!inThisStudy) {
       return this.#record(decide({ code: VCR_ACCESS_CODES.sourceNotFound, roles, sourceId }), request);
     }
     if (source.status === "withdrawn") {
@@ -241,10 +259,10 @@ export class VcrAccess {
       { start: stamp(source.visibleWindow?.start), end: stamp(source.visibleWindow?.end) },
     ];
     for (const window of windows) {
-      if (window.start != null && asOfDate != null && asOfDate < window.start) {
+      if (window.start != null && judgedAt < window.start) {
         return this.#record(decide({ code: VCR_ACCESS_CODES.outsideWindow, roles, sourceId, grantId: grant?.id ?? null }), request);
       }
-      if (window.end != null && asOfDate != null && asOfDate > window.end) {
+      if (window.end != null && judgedAt > window.end) {
         return this.#record(decide({ code: VCR_ACCESS_CODES.outsideWindow, roles, sourceId, grantId: grant?.id ?? null }), request);
       }
     }
@@ -255,13 +273,12 @@ export class VcrAccess {
     const denied = [];
     const allowedFields = [];
     if (fields.length) {
-      const sealed = new Set(snapshot?.sealedFields ?? []);
-      const sealActive = sealed.size > 0
-        && (!snapshot?.sealedUntil || (stamp(snapshot.sealedUntil) ?? Infinity) > (asOfDate ?? 0));
+      // The seal, from the study as it stands and the snapshot's outcome columns.
+      const fieldMaps = snapshot ? await this.store.listFieldMaps(snapshot.id) : [];
+      const { sealed } = vcrEffectiveSeal({ study, snapshot, outcomeColumns: vcrOutcomeColumns(fieldMaps), now: judgedAt });
+      const sealActive = sealed.size > 0;
       const identifiers = new Set(
-        snapshot ? (await this.store.listFieldMaps(snapshot.id))
-          .filter((/** @type {any} */ map) => map.identifier === true)
-          .map((/** @type {any} */ map) => map.columnName) : []);
+        fieldMaps.filter((/** @type {any} */ map) => map.identifier === true).map((/** @type {any} */ map) => map.columnName));
       for (const field of fields) {
         if (sealActive && sealed.has(field)) {
           denied.push({ field, code: VCR_ACCESS_CODES.fieldSealed, reason: VCR_ACCESS_REASONS_ZH[VCR_ACCESS_CODES.fieldSealed] });

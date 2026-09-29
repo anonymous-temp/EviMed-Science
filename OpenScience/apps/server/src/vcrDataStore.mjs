@@ -37,9 +37,19 @@
  * @module vcrDataStore
  */
 
-import { VCR_ANALYSIS_TABLES, VCR_MEMBER_ROLES, VCR_MISSING_REASONS, VCR_SOURCE_FORMATS, VCR_TIME_KINDS } from "@evimed/domain";
+import { randomUUID } from "node:crypto";
 
+import {
+  VCR_ANALYSIS_TABLES, VCR_MEMBER_ROLES, VCR_MISSING_REASONS, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES,
+} from "@evimed/domain";
+
+import { VCR_FIELD_MAP_STATES, VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+
+export { VCR_FIELD_MAP_STATES, VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES };
+
+/** A file's id: `sfl_` and 22 characters of a uuid, the same shape `vcrId` gives every other object. */
+const sourceFileId = () => `sfl_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
 
 /** A source's lifecycle, as the DDL's CHECK spells it. */
 export const VCR_SOURCE_STATUSES = Object.freeze(["registered", "profiled", "frozen", "withdrawn"]);
@@ -87,8 +97,38 @@ export function vcrSourceFromRow(row) {
     retention: object(row.retention),
     format: row.format,
     status: row.status,
+    valueSource: row.value_source ?? "observed",
+    fieldMap: { columns: Array.isArray(object(row.field_map).columns) ? object(row.field_map).columns : [] },
+    fieldMapState: row.field_map_state ?? "none",
+    fieldMapHash: text(row.field_map_hash),
+    fieldMapBy: row.field_map_by ?? "",
+    fieldMapAt: iso(row.field_map_at),
+    fieldMapConfirmedBy: text(row.field_map_confirmed_by),
+    fieldMapConfirmedAt: iso(row.field_map_confirmed_at),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+  };
+}
+
+/** @param {any} row */
+export function vcrSourceFileFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    sourceId: row.source_id,
+    studyId: text(row.study_id),
+    userId: row.user_id,
+    role: row.role,
+    name: row.name,
+    format: row.format,
+    location: row.location,
+    sha256: row.sha256,
+    bytes: Number(row.bytes),
+    rowCount: num(row.row_count),
+    columnCount: num(row.column_count),
+    profile: object(row.profile),
+    detail: object(row.detail),
+    createdAt: iso(row.created_at),
   };
 }
 
@@ -129,6 +169,10 @@ export function vcrSnapshotFromRow(row) {
     quality: object(row.quality),
     sealedFields: words(row.sealed_fields),
     sealedUntil: iso(row.sealed_until),
+    fileHashes: Array.isArray(row.file_hashes) ? row.file_hashes : [],
+    fieldMapHash: text(row.field_map_hash),
+    valueSource: row.value_source ?? "observed",
+    createdBy: row.created_by ?? "",
     frozenAt: iso(row.frozen_at),
   };
 }
@@ -148,6 +192,15 @@ export function vcrFieldMapFromRow(row) {
     missingReason: text(row.missing_reason),
     identifier: row.identifier === true,
     reviewState: row.review_state,
+    tableName: row.table_name ?? "",
+    role: row.role ?? "other",
+    parameter: text(row.parameter),
+    alias: text(row.alias),
+    declaredType: text(row.declared_type),
+    range: Array.isArray(row.value_range) ? row.value_range : null,
+    required: row.required === true,
+    outcome: row.outcome === true,
+    codes: object(row.codes),
     createdAt: iso(row.created_at),
   };
 }
@@ -166,6 +219,9 @@ export function vcrAnalysisTableFromRow(row) {
     rowCount: num(row.row_count),
     columns: Array.isArray(row.columns) ? row.columns : [],
     issues: Array.isArray(row.issues) ? row.issues : [],
+    outcomeBearing: row.outcome_bearing === true,
+    derivedFrom: object(row.derived_from),
+    valueSource: row.value_source ?? "observed",
     createdAt: iso(row.created_at),
   };
 }
@@ -194,13 +250,22 @@ export class VcrDataStore extends VcrStoreBase {
   // this file needs the owner and the tombstone to judge who may read a source.
   // -------------------------------------------------------------------------
 
-  /** @param {string} studyId @param {any} [client] */
+  /**
+   * The study as the judge needs it: who owns it, what it is used for, and where
+   * its seal stands. Never a study that is deleted.
+   * @param {string} studyId @param {any} [client]
+   */
   async studyForAccess(studyId, client = null) {
-    const sql = `SELECT id, user_id, project_id, deleted_at FROM ${this.schema}.studies WHERE id = $1`;
+    const sql = `SELECT id, user_id, project_id, deleted_at, intended_use, data_tier, outcome_seal
+      FROM ${this.schema}.studies WHERE id = $1`;
     const rows = client ? (await client.query(sql, [studyId])).rows : await this.rows(sql, [studyId]);
     const row = rows[0];
     if (!row || row.deleted_at) return null;
-    return { id: row.id, userId: row.user_id, projectId: row.project_id };
+    return {
+      id: row.id, userId: row.user_id, projectId: row.project_id,
+      intendedUse: String(row.intended_use ?? "exploratory"), dataTier: String(row.data_tier ?? "T0"),
+      outcomeSeal: object(row.outcome_seal),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -270,23 +335,26 @@ export class VcrDataStore extends VcrStoreBase {
   /**
    * @param {{ userId: string, studyId?: string | null, name: string, ownerParty?: string,
    *   allowedUses?: string[], visibleWindow?: Record<string, unknown>, retention?: Record<string, unknown>,
-   *   format?: string, actor?: string }} entry
+   *   format?: string, valueSource?: string, actor?: string }} entry
    */
   async createSource(entry) {
     const userId = required(entry.userId, "userId");
     const name = required(entry.name, "A data source needs a name");
     const format = oneOf(VCR_SOURCE_FORMATS, entry.format ?? "csv", "A source format");
+    const valueSource = oneOf(VCR_VALUE_SOURCES, entry.valueSource ?? "observed", "A value source");
     const id = vcrId("source");
     return this.transaction(async (client) => {
       const result = await client.query(
-        `INSERT INTO ${this.schema}.sources (id, user_id, study_id, name, owner_party, allowed_uses, visible_window, retention, format)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9) RETURNING *`,
+        `INSERT INTO ${this.schema}.sources
+           (id, user_id, study_id, name, owner_party, allowed_uses, visible_window, retention, format, value_source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10) RETURNING *`,
         [id, userId, entry.studyId ?? null, name, entry.ownerParty ?? "", words(entry.allowedUses),
-          JSON.stringify(entry.visibleWindow ?? {}), JSON.stringify(entry.retention ?? {}), format]);
+          JSON.stringify(entry.visibleWindow ?? {}), JSON.stringify(entry.retention ?? {}), format, valueSource]);
       await this.audit({
         client, studyId: entry.studyId ?? null, userId, actor: entry.actor ?? userId,
         action: "source.register", object: id,
-        detail: { name, format, ownerParty: entry.ownerParty ?? "", allowedUses: words(entry.allowedUses) },
+        detail: { name, format, valueSource, ownerParty: entry.ownerParty ?? "", allowedUses: words(entry.allowedUses),
+          visibleWindow: entry.visibleWindow ?? {}, retention: entry.retention ?? {} },
       });
       return vcrSourceFromRow(result.rows[0]);
     });
@@ -305,12 +373,30 @@ export class VcrDataStore extends VcrStoreBase {
     return vcrSourceFromRow(rows[0]);
   }
 
+  /**
+   * A source of *this* study, or nothing: a source of another study, another
+   * account or no study at all answers exactly as one that does not exist.
+   * @param {string} studyId @param {string} sourceId @param {any} [client]
+   */
+  async sourceInStudy(studyId, sourceId, client = null) {
+    const sql = `SELECT * FROM ${this.schema}.sources WHERE id = $1 AND study_id = $2`;
+    const rows = client ? (await client.query(sql, [sourceId, studyId])).rows : await this.rows(sql, [sourceId, studyId]);
+    return vcrSourceFromRow(rows[0]);
+  }
+
   /** @param {{ userId: string, studyId?: string | null }} query */
   async listSources(query) {
     const values = [required(query.userId, "userId")];
     let where = "user_id = $1";
     if (query.studyId) { values.push(query.studyId); where += ` AND study_id = $${values.length}`; }
     const rows = await this.rows(`SELECT * FROM ${this.schema}.sources WHERE ${where} ORDER BY updated_at DESC, id`, values);
+    return rows.map(vcrSourceFromRow);
+  }
+
+  /** Every source of a study, whoever registered it. @param {string} studyId */
+  async listSourcesForStudy(studyId) {
+    const rows = await this.rows(
+      `SELECT * FROM ${this.schema}.sources WHERE study_id = $1 ORDER BY created_at, id`, [studyId]);
     return rows.map(vcrSourceFromRow);
   }
 
@@ -329,6 +415,144 @@ export class VcrDataStore extends VcrStoreBase {
         });
       }
       return source;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // The field map before a snapshot: one document per source
+  // -------------------------------------------------------------------------
+
+  /**
+   * Store the source's field-map draft (the whole document, replaced), proposed
+   * by the run or a person. A confirmation never survives an edit: the state
+   * goes back to `proposed` and the hash moves, so a person confirms exactly the
+   * map they read.
+   * @param {{ sourceId: string, columns: unknown[], hash: string, by: string, actor?: string, reason?: string }} entry
+   */
+  async saveFieldMapDraft(entry) {
+    return this.transaction(async (client) => {
+      const result = await client.query(
+        `UPDATE ${this.schema}.sources SET field_map = $2::jsonb, field_map_state = 'proposed', field_map_hash = $3,
+           field_map_by = $4, field_map_at = now(), field_map_confirmed_by = NULL, field_map_confirmed_at = NULL,
+           updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [entry.sourceId, JSON.stringify({ columns: entry.columns }), entry.hash, entry.by]);
+      const source = vcrSourceFromRow(result.rows[0]);
+      if (source) {
+        await this.audit({
+          client, studyId: source.studyId, userId: source.userId, actor: entry.actor ?? entry.by,
+          action: "fieldmap.propose", object: source.id, reason: entry.reason ?? "",
+          detail: { hash: entry.hash, columns: entry.columns.length, by: entry.by },
+        });
+      }
+      return source;
+    });
+  }
+
+  /**
+   * Confirm the draft — only the version the person read (`hash`), only if it
+   * is still the current one.
+   * @param {{ sourceId: string, hash: string, by: string, actor?: string }} entry
+   */
+  async confirmFieldMapDraft(entry) {
+    return this.transaction(async (client) => {
+      const result = await client.query(
+        `UPDATE ${this.schema}.sources SET field_map_state = 'confirmed', field_map_confirmed_by = $3,
+           field_map_confirmed_at = now(), updated_at = now()
+         WHERE id = $1 AND field_map_hash = $2 AND field_map_state IN ('proposed', 'confirmed') RETURNING *`,
+        [entry.sourceId, entry.hash, entry.by]);
+      const source = vcrSourceFromRow(result.rows[0]);
+      if (source) {
+        await this.audit({
+          client, studyId: source.studyId, userId: source.userId, actor: entry.actor ?? entry.by,
+          action: "fieldmap.confirm", object: source.id, detail: { hash: entry.hash, by: entry.by },
+        });
+      }
+      return source;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Uploaded files (before any snapshot)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Record a stored file. The same bytes uploaded again to the same source in
+   * the same role are the same file: the existing row answers, nothing new is
+   * written (`created: false`).
+   * @param {{ sourceId: string, studyId: string, userId: string, role: string, name: string, format: string,
+   *   location: string, sha256: string, bytes: number, rowCount?: number | null, columnCount?: number | null,
+   *   profile?: Record<string, unknown>, detail?: Record<string, unknown>, actor?: string }} entry
+   */
+  async addSourceFile(entry) {
+    const role = oneOf(VCR_SOURCE_FILE_ROLES, entry.role, "A file role");
+    const id = sourceFileId();
+    return this.transaction(async (client) => {
+      const inserted = await client.query(
+        `INSERT INTO ${this.schema}.source_files
+           (id, source_id, study_id, user_id, role, name, format, location, sha256, bytes, row_count, column_count, profile, detail)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb)
+         ON CONFLICT (source_id, sha256, role) DO NOTHING RETURNING *`,
+        [id, required(entry.sourceId, "sourceId"), entry.studyId, required(entry.userId, "userId"), role,
+          required(entry.name, "A file name"), required(entry.format, "A file format"), required(entry.location, "A file location"),
+          required(entry.sha256, "A file sha256"), Math.max(0, Math.trunc(Number(entry.bytes) || 0)),
+          entry.rowCount ?? null, entry.columnCount ?? null, JSON.stringify(entry.profile ?? {}), JSON.stringify(entry.detail ?? {})]);
+      if (inserted.rows[0]) {
+        await this.audit({
+          client, studyId: entry.studyId, userId: entry.userId, actor: entry.actor ?? entry.userId,
+          action: "source.file", object: id,
+          detail: { sourceId: entry.sourceId, role, name: entry.name, format: entry.format, bytes: entry.bytes, sha256: entry.sha256,
+            rowCount: entry.rowCount ?? null, columnCount: entry.columnCount ?? null },
+        });
+        return { file: vcrSourceFileFromRow(inserted.rows[0]), created: true };
+      }
+      const existing = await client.query(
+        `SELECT * FROM ${this.schema}.source_files WHERE source_id = $1 AND sha256 = $2 AND role = $3`,
+        [entry.sourceId, entry.sha256, role]);
+      return { file: vcrSourceFileFromRow(existing.rows[0]), created: false };
+    });
+  }
+
+  /** @param {string} sourceId */
+  async listSourceFiles(sourceId) {
+    const rows = await this.rows(
+      `SELECT * FROM ${this.schema}.source_files WHERE source_id = $1 ORDER BY created_at, id`, [sourceId]);
+    return rows.map(vcrSourceFileFromRow);
+  }
+
+  /** Every file of a study's sources. @param {string} studyId */
+  async listSourceFilesForStudy(studyId) {
+    const rows = await this.rows(
+      `SELECT * FROM ${this.schema}.source_files WHERE study_id = $1 ORDER BY created_at, id`, [studyId]);
+    return rows.map(vcrSourceFileFromRow);
+  }
+
+  /** @param {string} studyId @param {string} fileId */
+  async getSourceFile(studyId, fileId) {
+    return vcrSourceFileFromRow(await this.one(
+      `SELECT * FROM ${this.schema}.source_files WHERE id = $1 AND study_id = $2`, [fileId, studyId]));
+  }
+
+  /**
+   * Forget a file — only one no snapshot names: a frozen snapshot's bytes are
+   * its own record. Answers the row it removed, or `null`.
+   * @param {{ studyId: string, fileId: string, actor?: string }} entry
+   */
+  async deleteSourceFile(entry) {
+    return this.transaction(async (client) => {
+      const row = (await client.query(
+        `SELECT * FROM ${this.schema}.source_files WHERE id = $1 AND study_id = $2 FOR UPDATE`, [entry.fileId, entry.studyId])).rows[0];
+      if (!row) return { removed: null, frozen: false };
+      const used = await client.query(
+        `SELECT 1 FROM ${this.schema}.snapshots WHERE source_id = $1 AND file_hashes @> $2::jsonb LIMIT 1`,
+        [row.source_id, JSON.stringify([{ id: entry.fileId }])]);
+      if (used.rowCount) return { removed: null, frozen: true };
+      await client.query(`DELETE FROM ${this.schema}.source_files WHERE id = $1`, [entry.fileId]);
+      await this.audit({
+        client, studyId: entry.studyId, userId: row.user_id, actor: entry.actor ?? "",
+        action: "source.file.remove", object: entry.fileId, detail: { sourceId: row.source_id, name: row.name, sha256: row.sha256 },
+      });
+      return { removed: vcrSourceFileFromRow(row), frozen: false };
     });
   }
 
@@ -363,12 +587,17 @@ export class VcrDataStore extends VcrStoreBase {
     });
   }
 
-  /** @param {{ grantId: string, actor?: string }} entry */
+  /**
+   * Revoke, keeping the row. With `studyId` the grant must be that study's: an
+   * id from another study revokes nothing.
+   * @param {{ grantId: string, studyId?: string | null, actor?: string }} entry
+   */
   async revokeGrant(entry) {
     return this.transaction(async (client) => {
       const result = await client.query(
-        `UPDATE ${this.schema}.grants SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL RETURNING *`,
-        [entry.grantId]);
+        `UPDATE ${this.schema}.grants SET revoked_at = now()
+         WHERE id = $1 AND revoked_at IS NULL AND ($2::text IS NULL OR study_id = $2) RETURNING *`,
+        [entry.grantId, entry.studyId ?? null]);
       const grant = vcrGrantFromRow(result.rows[0]);
       if (grant) {
         await this.audit({
@@ -394,6 +623,19 @@ export class VcrDataStore extends VcrStoreBase {
     return rows.map(vcrGrantFromRow);
   }
 
+  /** The live and the revoked grants of several sources, in one read. @param {string[]} sourceIds */
+  async grantsForSources(sourceIds) {
+    if (!sourceIds.length) return [];
+    const rows = await this.rows(
+      `SELECT * FROM ${this.schema}.grants WHERE source_id = ANY($1::text[]) ORDER BY created_at, id`, [sourceIds]);
+    return rows.map(vcrGrantFromRow);
+  }
+
+  /** @param {string} grantId */
+  async getGrant(grantId) {
+    return vcrGrantFromRow(await this.one(`SELECT * FROM ${this.schema}.grants WHERE id = $1`, [grantId]));
+  }
+
   /** Every grant ever written for a source, revoked ones included. @param {string} sourceId */
   async listGrants(sourceId) {
     const rows = await this.rows(
@@ -406,35 +648,57 @@ export class VcrDataStore extends VcrStoreBase {
   // -------------------------------------------------------------------------
 
   /**
-   * Freeze a source into an immutable, hashed version. The version is
-   * allocated under the row lock inside this transaction.
+   * Freeze a source into an immutable, hashed version, and everything that
+   * belongs to that moment with it — the snapshot row, its field map, the
+   * source's status and the audit rows — in one transaction, under one advisory
+   * lock per source. Before the lock two freezes of one source both read
+   * `MAX(version)` and the slower one failed on the unique index after its
+   * profile had already been computed (review CS-40); after it, the second waits
+   * and takes the next version. A map that does not write leaves no snapshot
+   * without a map behind.
    * @param {{ sourceId: string, studyId?: string | null, userId: string, location: string, sha256: string,
    *   rowCount?: number | null, columnCount?: number | null, profile?: Record<string, unknown>,
    *   quality?: Record<string, unknown>, sealedFields?: string[], sealedUntil?: string | Date | null,
-   *   actor?: string }} entry
+   *   fileHashes?: unknown[], fieldMapHash?: string | null, valueSource?: string,
+   *   fieldMaps?: Array<Record<string, any>>, actor?: string }} entry
    */
   async freezeSnapshot(entry) {
     const sourceId = required(entry.sourceId, "sourceId");
     const location = required(entry.location, "A snapshot needs a location");
     const sha256 = required(entry.sha256, "A snapshot needs its sha256");
     const id = vcrId("snapshot");
+    const userId = required(entry.userId, "userId");
     return this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`vcr-snapshot:${sourceId}`]);
       const version = await this.nextVersion(client, "snapshots", "source_id = $1", [sourceId]);
       const result = await client.query(
         `INSERT INTO ${this.schema}.snapshots
-           (id, source_id, study_id, user_id, version, location, sha256, row_count, column_count, profile, quality, sealed_fields, sealed_until)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13) RETURNING *`,
-        [id, sourceId, entry.studyId ?? null, required(entry.userId, "userId"), version, location, sha256,
+           (id, source_id, study_id, user_id, version, location, sha256, row_count, column_count, profile, quality,
+            sealed_fields, sealed_until, file_hashes, field_map_hash, value_source, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14::jsonb, $15, $16, $17) RETURNING *`,
+        [id, sourceId, entry.studyId ?? null, userId, version, location, sha256,
           entry.rowCount ?? null, entry.columnCount ?? null,
           JSON.stringify(entry.profile ?? {}), JSON.stringify(entry.quality ?? {}),
-          words(entry.sealedFields), entry.sealedUntil ?? null]);
+          words(entry.sealedFields), entry.sealedUntil ?? null, JSON.stringify(entry.fileHashes ?? []),
+          entry.fieldMapHash ?? null, oneOf(VCR_VALUE_SOURCES, entry.valueSource ?? "observed", "A value source"),
+          entry.actor ?? userId]);
+      for (const map of entry.fieldMaps ?? []) await this.putFieldMap(/** @type {any} */ ({ ...map, snapshotId: id, userId }), client);
       await client.query(`UPDATE ${this.schema}.sources SET status = 'frozen', updated_at = now() WHERE id = $1`, [sourceId]);
       await this.audit({
-        client, studyId: entry.studyId ?? null, userId: entry.userId, actor: entry.actor ?? entry.userId,
+        client, studyId: entry.studyId ?? null, userId, actor: entry.actor ?? userId,
         action: "snapshot.freeze", object: id,
         detail: { sourceId, version, sha256, rowCount: entry.rowCount ?? null, columnCount: entry.columnCount ?? null,
-          sealedFields: words(entry.sealedFields) },
+          files: (entry.fileHashes ?? []).length, fieldMapHash: entry.fieldMapHash ?? null, sealedFields: words(entry.sealedFields) },
       });
+      // The seal is its own row in the ledger, stamped when it was set: AC-32
+      // compares this instant with the analysis plan's.
+      if (words(entry.sealedFields).length) {
+        await this.audit({
+          client, studyId: entry.studyId ?? null, userId, actor: entry.actor ?? userId,
+          action: "snapshot.seal", object: id, reason: "结局字段在分析计划冻结前封存",
+          detail: { sealedFields: words(entry.sealedFields), sealedUntil: entry.sealedUntil ?? null },
+        });
+      }
       return vcrSnapshotFromRow(result.rows[0]);
     });
   }
@@ -484,16 +748,77 @@ export class VcrDataStore extends VcrStoreBase {
     });
   }
 
+  /**
+   * Seal columns on every snapshot of a study (or the named ones), in one
+   * statement: the union with what is already sealed is taken inside the
+   * `UPDATE`, so two sealers cannot lose each other's columns. Sealing again
+   * clears a lift — this is for a study whose plan has not been frozen.
+   * @param {{ studyId: string, fields: string[], snapshotIds?: string[] | null, actor: string, reason?: string }} entry
+   */
+  async sealStudySnapshots(entry) {
+    const fields = words(entry.fields);
+    if (!fields.length) return [];
+    return this.transaction(async (client) => {
+      const values = [required(entry.studyId, "studyId"), fields];
+      let scope = "";
+      if (entry.snapshotIds?.length) { values.push(entry.snapshotIds); scope = ` AND id = ANY($${values.length}::text[])`; }
+      const result = await client.query(
+        `UPDATE ${this.schema}.snapshots
+           SET sealed_fields = ARRAY(SELECT DISTINCT f FROM unnest(sealed_fields || $2::text[]) AS f ORDER BY f),
+               sealed_until = NULL
+         WHERE study_id = $1 AND NOT (sealed_fields @> $2::text[] AND sealed_until IS NULL)${scope}
+         RETURNING *`, values);
+      const changed = result.rows.map(vcrSnapshotFromRow);
+      for (const snapshot of changed) {
+        await this.audit({
+          client, studyId: entry.studyId, userId: snapshot?.userId ?? null, actor: entry.actor, action: "snapshot.seal",
+          object: snapshot?.id ?? "", reason: entry.reason ?? "",
+          detail: { sealedFields: snapshot?.sealedFields ?? [], sealedUntil: null },
+        });
+      }
+      return changed;
+    });
+  }
+
+  /**
+   * Lift the seal on every snapshot of a study as of `at` — the instant the
+   * analysis plan was frozen. The sealed columns stay listed (what was sealed is
+   * a fact); `sealed_until` is what ends the seal, so a judgment at any time
+   * after `at` finds it lifted and one before it finds it standing.
+   * @param {{ studyId: string, at: string | Date, actor: string, reason?: string }} entry
+   */
+  async liftStudySeal(entry) {
+    return this.transaction(async (client) => {
+      const result = await client.query(
+        `UPDATE ${this.schema}.snapshots SET sealed_until = $2
+         WHERE study_id = $1 AND cardinality(sealed_fields) > 0 AND (sealed_until IS NULL OR sealed_until > $2)
+         RETURNING *`, [required(entry.studyId, "studyId"), entry.at]);
+      const lifted = result.rows.map(vcrSnapshotFromRow);
+      for (const snapshot of lifted) {
+        await this.audit({
+          client, studyId: entry.studyId, userId: snapshot?.userId ?? null, actor: entry.actor, action: "snapshot.unseal",
+          object: snapshot?.id ?? "", reason: entry.reason ?? "",
+          detail: { sealedFields: snapshot?.sealedFields ?? [], sealedUntil: snapshot?.sealedUntil ?? null },
+        });
+      }
+      return lifted;
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Field maps
   // -------------------------------------------------------------------------
 
   /**
    * One column's meaning. Re-mapping a column replaces its row, so a study
-   * never holds two answers to 「这一列是什么」.
-   * @param {{ snapshotId: string, userId: string, columnName: string, concept?: string, unit?: string | null,
-   *   codingSystem?: string | null, timeKind?: string | null, missingReason?: string | null,
-   *   identifier?: boolean, reviewState?: string, actor?: string }} entry @param {any} [client]
+   * never holds two answers to 「这一列是什么」. A column is addressed by its
+   * table (the file's name) and its name: two files of one snapshot may each
+   * have an `ID`.
+   * @param {{ snapshotId: string, userId: string, columnName: string, tableName?: string, concept?: string,
+   *   unit?: string | null, codingSystem?: string | null, timeKind?: string | null, missingReason?: string | null,
+   *   identifier?: boolean, reviewState?: string, role?: string, parameter?: string | null, alias?: string | null,
+   *   declaredType?: string | null, range?: number[] | null, required?: boolean, outcome?: boolean,
+   *   codes?: Record<string, unknown>, actor?: string }} entry @param {any} [client]
    */
   async putFieldMap(entry, client = null) {
     const snapshotId = required(entry.snapshotId, "snapshotId");
@@ -501,24 +826,31 @@ export class VcrDataStore extends VcrStoreBase {
     const timeKind = entry.timeKind == null || entry.timeKind === "" ? null : oneOf(VCR_TIME_KINDS, entry.timeKind, "A time kind");
     const missingReason = entry.missingReason == null || entry.missingReason === ""
       ? null : oneOf(VCR_MISSING_REASONS, entry.missingReason, "A missing reason");
+    const role = oneOf(VCR_FIELD_ROLES, entry.role ?? "other", "A field role");
     const values = [vcrId("fieldMap"), snapshotId, required(entry.userId, "userId"), columnName,
       entry.concept ?? "", entry.unit ?? null, entry.codingSystem ?? null, timeKind, missingReason,
-      entry.identifier === true, entry.reviewState ?? "ai_set"];
+      entry.identifier === true, entry.reviewState ?? "ai_set", entry.tableName ?? "", role,
+      entry.parameter ?? null, entry.alias ?? null, entry.declaredType ?? null,
+      Array.isArray(entry.range) ? JSON.stringify(entry.range) : null, entry.required === true, entry.outcome === true,
+      JSON.stringify(entry.codes ?? {})];
     const sql = `INSERT INTO ${this.schema}.field_maps
-        (id, snapshot_id, user_id, column_name, concept, unit, coding_system, time_kind, missing_reason, identifier, review_state)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      ON CONFLICT (snapshot_id, column_name) DO UPDATE SET
+        (id, snapshot_id, user_id, column_name, concept, unit, coding_system, time_kind, missing_reason, identifier, review_state,
+         table_name, role, parameter, alias, declared_type, value_range, required, outcome, codes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20::jsonb)
+      ON CONFLICT (snapshot_id, table_name, column_name) DO UPDATE SET
         concept = EXCLUDED.concept, unit = EXCLUDED.unit, coding_system = EXCLUDED.coding_system,
         time_kind = EXCLUDED.time_kind, missing_reason = EXCLUDED.missing_reason,
-        identifier = EXCLUDED.identifier, review_state = EXCLUDED.review_state
+        identifier = EXCLUDED.identifier, review_state = EXCLUDED.review_state, role = EXCLUDED.role,
+        parameter = EXCLUDED.parameter, alias = EXCLUDED.alias, declared_type = EXCLUDED.declared_type,
+        value_range = EXCLUDED.value_range, required = EXCLUDED.required, outcome = EXCLUDED.outcome, codes = EXCLUDED.codes
       RETURNING *`;
     if (client) return vcrFieldMapFromRow((await client.query(sql, values)).rows[0]);
     return this.transaction(async (own) => {
       const row = vcrFieldMapFromRow((await own.query(sql, values)).rows[0]);
       await this.audit({
         client: own, userId: entry.userId, actor: entry.actor ?? entry.userId,
-        action: "fieldmap.put", object: `${snapshotId}:${columnName}`,
-        detail: { concept: entry.concept ?? "", unit: entry.unit ?? null, timeKind, missingReason, identifier: entry.identifier === true },
+        action: "fieldmap.put", object: `${snapshotId}:${entry.tableName ? `${entry.tableName}.` : ""}${columnName}`,
+        detail: { concept: entry.concept ?? "", unit: entry.unit ?? null, timeKind, missingReason, role, identifier: entry.identifier === true },
       });
       return row;
     });
@@ -526,7 +858,7 @@ export class VcrDataStore extends VcrStoreBase {
 
   /** @param {string} snapshotId @param {any} [client] */
   async listFieldMaps(snapshotId, client = null) {
-    const sql = `SELECT * FROM ${this.schema}.field_maps WHERE snapshot_id = $1 ORDER BY column_name`;
+    const sql = `SELECT * FROM ${this.schema}.field_maps WHERE snapshot_id = $1 ORDER BY table_name, column_name`;
     const rows = client ? (await client.query(sql, [snapshotId])).rows : await this.rows(sql, [snapshotId]);
     return rows.map(vcrFieldMapFromRow);
   }
@@ -537,20 +869,23 @@ export class VcrDataStore extends VcrStoreBase {
 
   /**
    * @param {{ snapshotId: string, studyId: string, userId: string, shape: string, location: string, sha256: string,
-   *   rowCount?: number | null, columns?: unknown[], issues?: unknown[], actor?: string }} entry @param {any} [client]
+   *   rowCount?: number | null, columns?: unknown[], issues?: unknown[], outcomeBearing?: boolean,
+   *   derivedFrom?: Record<string, unknown>, valueSource?: string, actor?: string }} entry @param {any} [client]
    */
   async putAnalysisTable(entry, client = null) {
     const shape = oneOf(VCR_ANALYSIS_TABLES, entry.shape, "An analysis table shape");
     const values = [vcrId("analysisTable"), required(entry.snapshotId, "snapshotId"), required(entry.studyId, "studyId"),
       required(entry.userId, "userId"), shape, required(entry.location, "An analysis table needs a location"),
       required(entry.sha256, "An analysis table needs its sha256"), entry.rowCount ?? null,
-      JSON.stringify(entry.columns ?? []), JSON.stringify(entry.issues ?? [])];
+      JSON.stringify(entry.columns ?? []), JSON.stringify(entry.issues ?? []), entry.outcomeBearing === true,
+      JSON.stringify(entry.derivedFrom ?? {}), oneOf(VCR_VALUE_SOURCES, entry.valueSource ?? "observed", "A value source")];
     const sql = `INSERT INTO ${this.schema}.analysis_tables
-        (id, snapshot_id, study_id, user_id, shape, location, sha256, row_count, columns, issues)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
+        (id, snapshot_id, study_id, user_id, shape, location, sha256, row_count, columns, issues, outcome_bearing, derived_from, value_source)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13)
       ON CONFLICT (snapshot_id, study_id, shape) DO UPDATE SET
         location = EXCLUDED.location, sha256 = EXCLUDED.sha256, row_count = EXCLUDED.row_count,
-        columns = EXCLUDED.columns, issues = EXCLUDED.issues, created_at = now()
+        columns = EXCLUDED.columns, issues = EXCLUDED.issues, outcome_bearing = EXCLUDED.outcome_bearing,
+        derived_from = EXCLUDED.derived_from, value_source = EXCLUDED.value_source, created_at = now()
       RETURNING *`;
     if (client) return vcrAnalysisTableFromRow((await client.query(sql, values)).rows[0]);
     return this.transaction(async (own) => {
@@ -558,7 +893,8 @@ export class VcrDataStore extends VcrStoreBase {
       await this.audit({
         client: own, studyId: entry.studyId, userId: entry.userId, actor: entry.actor ?? entry.userId,
         action: "analysis_table.put", object: `${entry.snapshotId}:${shape}`,
-        detail: { shape, sha256: entry.sha256, rowCount: entry.rowCount ?? null, issues: (entry.issues ?? []).length },
+        detail: { shape, sha256: entry.sha256, rowCount: entry.rowCount ?? null, issues: (entry.issues ?? []).length,
+          outcomeBearing: entry.outcomeBearing === true, valueSource: entry.valueSource ?? "observed" },
       });
       return row;
     });

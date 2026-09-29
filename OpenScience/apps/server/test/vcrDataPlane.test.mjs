@@ -13,11 +13,13 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES } from "@evimed/domain";
+import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, suppressForModel } from "@evimed/domain";
 import {
   VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT,
-  analysisTableIssues, assertDataPlaneLocation, assertDataPlaneRoot, parseDelimited,
-  qualitySummary, rowsVisibleAsOf, sha256OfFile, snapshotClocks, suppressSmallCells, treatmentEvidence,
+  analysisTableIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, decodeUploadText, deriveAnalysisShapes,
+  dictionaryEntries, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
+  qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, toCsv, treatmentEvidence, validateFieldMap,
+  writeContentAddressed,
 } from "../src/vcrDataPlane.mjs";
 
 /** @type {string} */
@@ -96,70 +98,35 @@ test("AC-03 a snapshot location must be inside the data plane", () => {
 // AC-26: what an aggregate handed to a model may say
 // ---------------------------------------------------------------------------
 
-test("AC-26 an aggregate handed to the model has no cell under ten people", () => {
-  const { aggregate, suppression } = suppressSmallCells({
-    name: "baseline by arm",
-    cells: [{ key: "A", n: 41, mean: 62.1 }, { key: "B", n: 3, mean: 58.4 }, { key: "C", n: 37, mean: 60.0 }],
-  });
-  assert.equal(suppression.minCellSize, VCR_MIN_CELL_SIZE);
-  for (const cell of aggregate.cells) {
-    assert.ok(cell.n == null || cell.n >= VCR_MIN_CELL_SIZE, `cell ${cell.key} kept n=${cell.n}`);
-  }
-  const suppressed = aggregate.cells.filter((/** @type {any} */ cell) => cell.suppressed);
-  // One hidden cell is recoverable from the published total, so a second is
-  // absorbed: the merged bucket must itself be at or above the floor.
-  assert.ok(suppressed.length >= 2, "a single hidden cell is recoverable from the total");
-  assert.equal(suppression.cellsSuppressed, suppressed.length);
-  // A suppressed cell keeps what it is and loses every number it carried: a
-  // mean over four people is four people.
-  for (const cell of suppressed) {
-    assert.equal(cell.mean, undefined);
-    assert.equal(cell.n, null);
-    assert.ok(cell.key);
-  }
-});
-
-test("AC-26 a zero cell is suppressed too, and the whole table goes when it cannot reach the floor", () => {
-  const { aggregate } = suppressSmallCells({ cells: [{ key: "A", n: 0 }, { key: "B", n: 55 }] });
-  assert.equal(aggregate.cells[0].suppressed, true, "a published zero plus a published total is an exact count");
-  assert.equal(aggregate.cells[1].suppressed, true);
-  const tiny = suppressSmallCells({ cells: [{ key: "A", n: 2 }, { key: "B", n: 3 }] });
-  assert.ok(tiny.aggregate.cells.every((/** @type {any} */ cell) => cell.suppressed), "5 people cannot be published as two cells");
-});
-
-test("AC-26 suppression reaches nested tables and leaves the caller's object alone", () => {
+test("AC-26 the plane's suppression is the domain's: one rule, the shapes the stores produce, the caller's object untouched", () => {
   const source = {
-    population: { cells: [{ key: "x", n: 100 }, { key: "y", n: 90 }] },
-    strata: [{ name: "site", cells: [{ key: "s1", n: 4 }, { key: "s2", n: 60 }, { key: "s3", n: 80 }] }],
+    counts: { realPatients: 3, events: 40 },
+    waterfall: [{ rule: "年龄", kept: 41, excluded: 3 }, { rule: "ECOG", kept: 37, excluded: 4 }],
+    diagnostics: { arms: [{ arm: "A", n: 41, mean: 62.1 }, { arm: "B", n: 3, mean: 58.4 }, { arm: "C", n: 37, mean: 60.0 }] },
     note: "四个数分开显示",
   };
   const { aggregate, suppression } = suppressSmallCells(source);
-  assert.equal(suppression.tables, 2);
+  assert.equal(suppression.minCellSize, VCR_MIN_CELL_SIZE);
+  assert.deepEqual(aggregate, suppressForModel(source, { minCell: VCR_MIN_CELL_SIZE }), "no second copy of the rule");
+  assert.equal(aggregate.counts.realPatients, null, "a standalone small count is hidden");
+  assert.deepEqual(aggregate.counts.suppressed, ["realPatients"]);
+  assert.equal(aggregate.counts.events, 40);
+  const arms = aggregate.diagnostics.arms;
+  assert.ok(arms.filter((/** @type {any} */ arm) => arm.n === null).length >= 2, "a single hidden cell is recoverable from the total, so a second goes with it");
+  assert.ok(arms.every((/** @type {any} */ arm) => arm.n === null ? arm.mean === undefined : true), "a hidden cell loses every number it carried");
   assert.equal(aggregate.note, "四个数分开显示");
-  assert.equal(aggregate.population.cells.length, 2);
-  assert.ok(aggregate.population.cells.every((/** @type {any} */ cell) => !cell.suppressed), "big cells stay");
-  assert.equal(aggregate.strata[0].cells[0].suppressed, true);
-  assert.equal(source.strata[0].cells[0].n, 4, "the caller's object is untouched");
+  assert.ok(suppression.cellsSuppressed >= 3);
+  assert.equal(source.counts.realPatients, 3, "the caller's object is untouched");
+  assert.equal(source.diagnostics.arms[1].n, 3);
 });
 
-test("AC-26 a table that declares no head count is passed through rather than guessed at", () => {
-  const { aggregate, suppression } = suppressSmallCells({ cells: [{ key: "hr", value: 0.72 }, { key: "ci", value: 0.51 }] });
+test("AC-26 a payload with no head count passes unchanged, and the floor is the caller's to raise", () => {
+  const plain = { cells: [{ key: "hr", value: 0.72 }, { key: "ci", value: 0.51 }] };
+  const { aggregate, suppression } = suppressSmallCells(plain);
+  assert.deepEqual(aggregate, plain);
   assert.equal(suppression.cellsSuppressed, 0);
-  assert.equal(suppression.cellsShown, 2);
-  assert.equal(aggregate.cells[0].value, 0.72);
-});
-
-test("AC-26 the floor is configurable, and an event count discloses like a head count", () => {
-  const { aggregate } = suppressSmallCells({ cells: [{ key: "a", n: 12 }, { key: "b", n: 40 }] }, { minCellSize: 20 });
-  assert.equal(aggregate.cells[0].suppressed, true);
-  // Main thread's ruling of 2026-09-28, over this package's first reading:
-  // three events are at least three people, so a cell counted in events is
-  // suppressed on the same floor. The plan says 人数; disclosure is the reason
-  // it says it. Simulation output never reaches this walker — it holds no
-  // people — so the wider key list costs nothing where it would be wrong.
-  const events = suppressSmallCells({ cells: [{ key: "a", events: 3 }, { key: "b", events: 40 }] });
-  assert.equal(events.aggregate.cells[0].suppressed, true, "a cell of three events is a cell of at least three people");
-  assert.equal(events.suppression.cellsSuppressed >= 1, true);
+  const { aggregate: raised } = suppressSmallCells({ cells: [{ key: "a", n: 12 }, { key: "b", n: 40 }] }, { minCellSize: 50 });
+  assert.ok(raised.cells.every((/** @type {any} */ cell) => cell.n === null));
 });
 
 // ---------------------------------------------------------------------------
@@ -427,7 +394,7 @@ test("the snapshot profile is byte-identical for the same input", async () => {
   assert.equal(first.json.snapshot.files[0].sha256, `sha256:${await sha256OfFile(file)}`);
 });
 
-test("AC-26 a profile's vocabulary drops every entry standing for fewer than ten rows", async () => {
+test("AC-26 PA-36 a profile's vocabulary hides small entries together with the next-smallest, so no single hidden entry can be recovered", async () => {
   // Twelve people on arm A, three on arm B, and everybody's own survival time.
   const rows = ["USUBJID,ARM,OS_TIME"];
   for (let index = 1; index <= 12; index += 1) rows.push(`S${String(index).padStart(3, "0")},A,${300 + index}`);
@@ -436,16 +403,46 @@ test("AC-26 a profile's vocabulary drops every entry standing for fewer than ten
   const { json, text } = await profile([file], {});
   const columns = Object.fromEntries(json.profile.tables[0].columns.map((/** @type {any} */ column) => [column.name, column]));
   assert.equal(json.minCellSize, VCR_MIN_CELL_SIZE);
-  // The arm that 12 people share is a category and stays; the one 3 share is
-  // three people and goes, and so does every distinct survival time.
-  assert.deepEqual(columns.ARM.vocabulary.values, [["A", 12]]);
-  assert.equal(columns.ARM.vocabulary.suppressedValues, 1);
+  // B (3 people) is hidden; hidden alone it would be 15 - 12 from the row count
+  // and the distinct count, so A goes with it: two entries, 15 people, above the floor.
+  assert.deepEqual(columns.ARM.vocabulary.values, []);
+  assert.equal(columns.ARM.vocabulary.suppressedValues, 2, "the count of hidden entries stays; which they are does not");
   assert.equal(columns.ARM.vocabulary.complete, false, "a partial vocabulary says it is partial");
   assert.deepEqual(columns.OS_TIME.vocabulary.values, []);
   assert.equal(columns.OS_TIME.vocabulary.suppressedValues, 15);
+  assert.equal(columns.OS_TIME.vocabulary.withheld, undefined, "fifteen people in fifteen entries are enough to hide them together");
   assert.ok(!text.includes("312") && !text.includes("315"), "no individual's survival time reaches the profile");
   assert.equal(columns.OS_TIME.distinct, 15, "the shape of the column is still reported");
   assert.equal(columns.OS_TIME.filled, 15);
+});
+
+test("PA-36 340 on one arm and 5 on the other: the small arm's label and count are not in the profile, the large arm's are only if they are not its complement", async () => {
+  const rows = ["PATIENT_NO,ARM,GRADE"];
+  for (let n = 1; n <= 345; n += 1) rows.push(`P${n},${n <= 340 ? "A" : "B"},${["low", "mid", "high"][n % 3]}`);
+  const file = await write("arms.csv", `${rows.join("\n")}\n`);
+  const { json, text } = await profile([file], {});
+  const columns = Object.fromEntries(json.profile.tables[0].columns.map((/** @type {any} */ column) => [column.name, column]));
+  assert.ok(columns.ARM.vocabulary.suppressedValues >= 2);
+  assert.ok(!text.includes('"B"'), "the small arm's label is not written");
+  assert.deepEqual(columns.GRADE.vocabulary.values.map((/** @type {any[]} */ pair) => pair[0]).sort(), ["high", "low", "mid"], "categories that many people share stay");
+  // Every entry that is written stands for at least the floor.
+  for (const column of Object.values(columns)) for (const pair of /** @type {any} */ (column).vocabulary.values) assert.ok(pair[1] >= VCR_MIN_CELL_SIZE);
+});
+
+test("PA-36 when even every entry together is under the floor the vocabulary is withheld whole", async () => {
+  const file = await write("tiny.csv", "ID,ARM\n1,A\n2,A\n3,B\n4,C\n");
+  const { json } = await profile([file], {});
+  const arm = json.profile.tables[0].columns.find((/** @type {any} */ column) => column.name === "ARM");
+  assert.deepEqual(arm.vocabulary.values, []);
+  assert.equal(arm.vocabulary.withheld, true);
+});
+
+test("a file is profiled under the name it was uploaded as, and a table name is given once per file", async () => {
+  const file = await write("3f9c0a.csv", "A,B\n1,2\n");
+  const named = await profile([file], {}, ["--table-name=cohort.csv"]);
+  assert.equal(named.json.profile.tables[0].name, "cohort.csv");
+  assert.equal(named.json.snapshot.files[0].name, "cohort.csv");
+  await assert.rejects(() => profile([file], {}, ["--table-name=a.csv", "--table-name=b.csv"]), /once per input file/);
 });
 
 test("AC-03 a column the field map calls an identifier is masked whatever its name looks like", async () => {
@@ -473,4 +470,251 @@ test("AC-03 the profiler masks identifying columns rather than printing their va
   assert.ok(!text.includes("张三"), "a personal name never reaches the profile");
   const age = json.profile.tables[0].columns.find((/** @type {any} */ column) => column.name === "AGE");
   assert.equal(age.vocabulary.identifying, false, "the clinical column keeps its vocabulary");
+});
+
+// ---------------------------------------------------------------------------
+// The field map, in pure functions
+// ---------------------------------------------------------------------------
+
+const TABLES = [{ name: "cohort.csv", header: ["PATIENT_NO", "ARM", "AGE", "OS_MONTHS", "OS_DEAD"] }, { name: "visits.csv", header: ["PATIENT_NO", "SBP"] }];
+const GOOD_MAP = [
+  { table: "cohort.csv", column: "PATIENT_NO", role: "subject_key", identifier: true },
+  { table: "cohort.csv", column: "ARM", role: "arm", alias: "arm", codes: { treated: ["TRT"], control: ["CTL"] } },
+  { table: "cohort.csv", column: "AGE", role: "covariate", alias: "age", unit: "year", range: [18, 100], type: "integer" },
+  { table: "cohort.csv", column: "OS_MONTHS", role: "outcome_time", parameter: "OS" },
+  { table: "cohort.csv", column: "OS_DEAD", role: "outcome_event", parameter: "OS" },
+  { table: "visits.csv", column: "PATIENT_NO", role: "subject_key" },
+  { table: "visits.csv", column: "SBP", role: "measurement", parameter: "SBP" },
+];
+/** @param {(entries: any[]) => any[]} change */
+const issuesOf = (change) => {
+  const { columns, issues } = normalizeFieldMap(change(structuredClone(GOOD_MAP)));
+  return [...issues.map((issue) => issue.code), ...validateFieldMap(columns, TABLES).issues.map((issue) => issue.code)].sort();
+};
+
+test("PA-10 a field map is checked one entry at a time: closed vocabularies, names, ranges, codes — and nothing that is code", () => {
+  assert.deepEqual(issuesOf((entries) => entries), []);
+  const { columns, issues } = normalizeFieldMap([
+    ...GOOD_MAP.slice(0, 2),
+    { table: "cohort.csv", column: "AGE", role: "wizard" },
+    { table: "cohort.csv", column: "SEX", role: "covariate", alias: "9lives" },
+    { table: "cohort.csv", column: "ECOG", role: "covariate", alias: "ecog", timeKind: "whenever" },
+    { table: "cohort.csv", column: "X", role: "covariate", alias: "x", missingReason: "because" },
+    { table: "cohort.csv", column: "Y", role: "covariate", alias: "y", range: [5, 1] },
+    { table: "cohort.csv", column: "Z", role: "covariate", alias: "z", expression: "system('id')" },
+    { table: "cohort.csv", column: "W", role: "outcome_event", parameter: "OS", codes: { event: ["1"], invent: ["2"] } },
+    "not an object",
+  ]);
+  assert.equal(columns.length, 2, "the good entries are kept");
+  assert.deepEqual(issues.map((issue) => `${issue.index}:${issue.field || issue.code}`),
+    ["2:role", "3:alias", "4:timeKind", "5:missingReason", "6:range", "7:expression", "8:codes", "9:entry_not_object"]);
+  assert.equal(normalizeFieldMap({}).issues[0].code, "field_map_not_list");
+  assert.equal(normalizeFieldMap(Array.from({ length: 501 }, (_, index) => ({ column: `C${index}` }))).issues[0].code, "field_map_too_long");
+  // A column twice is one column.
+  assert.equal(normalizeFieldMap([GOOD_MAP[0], GOOD_MAP[0]]).issues[0].code, "column_duplicate");
+  // The hash is of the map, not of its spelling.
+  assert.equal(fieldMapHash(normalizeFieldMap(GOOD_MAP).columns), fieldMapHash(normalizeFieldMap([...GOOD_MAP].reverse()).columns));
+  assert.notEqual(fieldMapHash(normalizeFieldMap(GOOD_MAP).columns), fieldMapHash(normalizeFieldMap(GOOD_MAP.map((entry) => (entry.column === "AGE" ? { ...entry, unit: "y" } : entry))).columns));
+});
+
+test("CS-40 the whole map is validated against the files: unknown columns, keys, outcome pairs, names used twice, identifiers used as data", () => {
+  assert.deepEqual(issuesOf((entries) => entries.filter((entry) => entry.column !== "OS_DEAD")), ["outcome_pair_incomplete"]);
+  assert.deepEqual(issuesOf((entries) => entries.filter((entry) => !(entry.column === "PATIENT_NO" && entry.table === "visits.csv"))), ["subject_key_missing"]);
+  assert.deepEqual(issuesOf((entries) => [...entries, { table: "cohort.csv", column: "GHOST", role: "covariate", alias: "ghost" }]), ["column_unknown"]);
+  assert.deepEqual(issuesOf((entries) => [...entries, { table: "nofile.csv", column: "A", role: "other" }]), ["table_unknown"]);
+  assert.deepEqual(issuesOf((entries) => [...entries, { column: "PATIENT_NO", role: "other" }]), ["column_ambiguous"]);
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "AGE" ? { ...entry, alias: "arm" } : entry))), ["alias_duplicate"]);
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "AGE" ? { ...entry, alias: "USUBJID" } : entry))), ["alias_reserved"]);
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "AGE" ? { ...entry, alias: undefined } : entry))), [], "a column named like an analysis column needs no alias");
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "AGE" ? { ...entry, identifier: true } : entry))), ["identifier_used_as_data"]);
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "SBP" ? { ...entry, parameter: undefined } : entry))), ["parameter_missing"]);
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "ARM" ? { ...entry, codes: { treated: ["A"], control: ["A"] } } : entry))), ["codes_overlap"]);
+  assert.deepEqual(issuesOf((entries) => entries.map((entry) => (entry.column === "AGE" ? { ...entry, codes: { treated: ["A"] } } : entry))), ["codes_misplaced"]);
+  assert.deepEqual(issuesOf((entries) => [...entries, { table: "visits.csv", column: "PATIENT_NO", role: "subject_key" }]), ["column_duplicate"]);
+  assert.ok(validateFieldMap([], []).issues.length === 0, "an empty map over no files is empty, not wrong");
+  assert.equal(validateFieldMap(normalizeFieldMap(GOOD_MAP).columns, []).issues[0].code, "no_files");
+  const resolved = validateFieldMap(normalizeFieldMap([{ column: "SBP", role: "measurement", parameter: "SBP" }]).columns, TABLES).columns[0];
+  assert.equal(resolved.table, "visits.csv", "a column in one file needs no table named");
+});
+
+test("the profiler is handed the map the way it reads it: table.column keys, the subject key as an identifier", () => {
+  const map = profilerFieldMap(normalizeFieldMap(GOOD_MAP).columns);
+  assert.equal(map["cohort.csv.PATIENT_NO"].subjectKey, true);
+  assert.equal(map["cohort.csv.PATIENT_NO"].identifier, true);
+  assert.equal(map["visits.csv.PATIENT_NO"].identifier, true, "even where the entry did not say so");
+  assert.deepEqual(map["cohort.csv.AGE"].range, [18, 100]);
+  assert.equal(map["cohort.csv.AGE"].type, "integer");
+});
+
+// ---------------------------------------------------------------------------
+// Deriving the three tables (C2-23) and the pseudonym (PA-35)
+// ---------------------------------------------------------------------------
+
+test("PA-35 the pseudonym is the study's own: stable inside it, different in another, and never the source id", () => {
+  const one = Buffer.alloc(32, 1);
+  const two = Buffer.alloc(32, 2);
+  assert.equal(pseudonymOf(one, "HZ-30001"), pseudonymOf(one, " HZ-30001 "));
+  assert.match(pseudonymOf(one, "HZ-30001"), /^P[a-f0-9]{16}$/);
+  assert.notEqual(pseudonymOf(one, "HZ-30001"), pseudonymOf(two, "HZ-30001"));
+  assert.notEqual(pseudonymOf(one, "HZ-30001"), pseudonymOf(one, "HZ-30002"));
+});
+
+test("C2-23 the tables are derived in code from the map: pseudonymous keys, CNSR polarity, arm codes, joined baselines, nothing identifying", () => {
+  const cohort = { name: "cohort.csv", header: TABLES[0].header, rows: [
+    ["A1", "TRT", "50", "12.5", "1"], ["A2", "CTL", "61", "8", "0"], ["", "TRT", "40", "3", "1"], ["A3", "??", "70", "5", "1"]] };
+  const visits = { name: "visits.csv", header: ["PATIENT_NO", "SBP"], rows: [["A1", "120"], ["A1", "130"], ["A2", ""], ["A2", "111"]] };
+  const key = Buffer.alloc(32, 7);
+  const { shapes, identity, dropped } = deriveAnalysisShapes({ tables: [cohort, visits], entries: validateFieldMap(normalizeFieldMap(GOOD_MAP).columns, TABLES).columns, key });
+  assert.deepEqual(shapes.subject?.header, ["USUBJID", "age", "arm"]);
+  assert.equal(shapes.subject?.rows.length, 3, "a row with no subject key is not a person");
+  const a1 = pseudonymOf(key, "A1");
+  assert.deepEqual(shapes.subject?.rows.find((row) => row[0] === a1), [a1, "50", "1"], "TRT is 1");
+  assert.deepEqual(shapes.subject?.rows.find((row) => row[0] === pseudonymOf(key, "A2")), [pseudonymOf(key, "A2"), "61", "0"], "CTL is 0");
+  assert.deepEqual(shapes.subject?.rows.find((row) => row[0] === pseudonymOf(key, "A3")), [pseudonymOf(key, "A3"), "70", ""], "an arm the map does not name is unknown, not control");
+  assert.equal(dropped.blank_subject_key, 1);
+  assert.equal(dropped.arm_value_not_coded, 1);
+  assert.deepEqual(shapes.events?.header, ["USUBJID", "PARAMCD", "AVAL", "CNSR"]);
+  assert.deepEqual(shapes.events?.rows.find((row) => row[0] === a1), [a1, "OS", "12.5", "0"], "OS_DEAD 1 is an event: CNSR 0");
+  assert.deepEqual(shapes.events?.rows.find((row) => row[0] === pseudonymOf(key, "A2")), [pseudonymOf(key, "A2"), "OS", "8", "1"], "OS_DEAD 0 is censored: CNSR 1");
+  assert.equal(shapes.events?.outcomeBearing, true);
+  assert.deepEqual(shapes.longitudinal?.rows.filter((row) => row[0] === a1).map((row) => row[2]), ["120", "130"]);
+  assert.equal(shapes.longitudinal?.rows.length, 3, "a blank measurement is not a row");
+  assert.equal(shapes.longitudinal?.outcomeBearing, false);
+  assert.equal(identity.length, 3);
+  assert.ok(!JSON.stringify(shapes).includes("A1"), "no source subject id in any derived table");
+  // Deterministic: the same files and map give the same bytes.
+  const again = deriveAnalysisShapes({ tables: [visits, cohort], entries: validateFieldMap(normalizeFieldMap([...GOOD_MAP].reverse()).columns, TABLES).columns, key });
+  assert.equal(toCsv(again.shapes.subject?.header ?? [], again.shapes.subject?.rows ?? []), toCsv(shapes.subject?.header ?? [], shapes.subject?.rows ?? []));
+});
+
+test("C2-23 a column the profiler calls identifying is never carried into a table, and a repeated baseline stays repeated so the table is refused", () => {
+  const cohort = { name: "cohort.csv", header: ["ID", "PHONE", "AGE"], rows: [["A1", "13800138000", "50"], ["A1", "13800138000", "51"]] };
+  const entries = validateFieldMap(normalizeFieldMap([
+    { table: "cohort.csv", column: "ID", role: "subject_key" }, { table: "cohort.csv", column: "PHONE", role: "covariate", alias: "phone" },
+    { table: "cohort.csv", column: "AGE", role: "covariate", alias: "age" }]).columns, [{ name: "cohort.csv", header: cohort.header }]).columns;
+  const { shapes, excluded } = deriveAnalysisShapes({ tables: [cohort], entries, key: Buffer.alloc(32, 3), identifying: new Set(["PHONE"]) });
+  assert.deepEqual(excluded, [{ column: "PHONE", reason: "identifying" }]);
+  assert.deepEqual(shapes.subject?.header, ["USUBJID", "age"]);
+  const objects = (shapes.subject?.rows ?? []).map((cells) => Object.fromEntries((shapes.subject?.header ?? []).map((name, index) => [name, cells[index]])));
+  assert.ok(analysisTableIssues("subject", objects).some((issue) => issue.issue === "duplicate-subject-id" && issue.blocking));
+});
+
+test("C2-23 an events table with two rows for one subject and parameter is refused by name", () => {
+  const rows = [{ USUBJID: "P1", PARAMCD: "OS", AVAL: "5", CNSR: "0" }, { USUBJID: "P1", PARAMCD: "OS", AVAL: "6", CNSR: "1" }, { USUBJID: "P1", PARAMCD: "PFS", AVAL: "2", CNSR: "0" }];
+  const issues = analysisTableIssues("events", rows);
+  assert.ok(issues.some((issue) => issue.issue === "duplicate-event-row" && issue.blocking));
+  assert.ok(VCR_ANALYSIS_TABLE_BLOCKING_ISSUES.includes("duplicate-event-row"));
+  assert.ok(!analysisTableIssues("events", rows.slice(1)).some((issue) => issue.issue === "duplicate-event-row"));
+});
+
+// ---------------------------------------------------------------------------
+// The door: names, encodings, tables
+// ---------------------------------------------------------------------------
+
+test("PA-10 an upload's name is display text: no path, no comma, an extension the role accepts", () => {
+  assert.deepEqual(safeUploadName("C:\\data\\队列,v2.CSV", "data"), { name: "队列_v2.CSV", ext: "csv", format: "csv" });
+  assert.deepEqual(safeUploadName("../../etc/x.tsv", "data"), { name: "x.tsv", ext: "tsv", format: "tsv" });
+  assert.equal(safeUploadName("note.md", "document").format, "txt");
+  for (const [name, role, code] of [["a.parquet", "data", "vcr_data_format_unsupported"], ["a.xls", "data", "vcr_data_format_unsupported"], ["a.txt", "data", "vcr_data_format_unsupported"],
+    ["a.csv", "document", "vcr_data_format_unsupported"], [".hidden.csv", "data", "vcr_data_file_name_invalid"], ["noext", "data", "vcr_data_file_name_invalid"], [42, "data", "vcr_data_file_name_invalid"]]) {
+    assert.throws(() => safeUploadName(name, role), (error) => /** @type {any} */ (error).code === code, `${name} as ${role}`);
+  }
+  assert.ok(safeUploadName(`${"长".repeat(300)}.csv`, "data").name.length <= 100);
+});
+
+test("PA-10 bytes become text whatever a hospital's Excel wrote, or are refused", () => {
+  assert.deepEqual(decodeUploadText(Buffer.from("a,b\n1,2\n")), { text: "a,b\n1,2\n", encoding: "utf-8" });
+  assert.equal(decodeUploadText(Buffer.from("\uFEFFa,b\n", "utf8")).text, "a,b\n", "a UTF-8 byte-order mark is not a column name");
+  const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("a,姓名\n", "utf16le")]);
+  assert.deepEqual(decodeUploadText(utf16), { text: "a,姓名\n", encoding: "utf-16le" });
+  const gbk = Buffer.from([0xd0, 0xd5, 0xc3, 0xfb, 0x2c, 0x61]); // 姓名,a
+  assert.deepEqual(decodeUploadText(gbk), { text: "姓名,a", encoding: "gb18030" });
+  assert.throws(() => decodeUploadText(Buffer.from([0x61, 0x00, 0x62, 0x00, 0x63])), (error) => /** @type {any} */ (error).code === "vcr_data_file_unreadable");
+  assert.throws(() => decodeUploadText(Buffer.from([0x81, 0x30, 0x81, 0x20])), (error) => /** @type {any} */ (error).code === "vcr_data_file_unreadable", "neither UTF-8 nor GB18030 is refused, not guessed");
+});
+
+test("PA-10 a table is a header and rows: blank header cells are named, repeats refused, JSON records become a table, and CSV round-trips through the writer", () => {
+  assert.deepEqual(checkedTable(",b\n1,2\n", ","), { header: ["col_1", "b"], rows: [["1", "2"]], renamed: 1 });
+  assert.throws(() => checkedTable("a,a\n1,2\n", ","), (error) => /** @type {any} */ (error).code === "vcr_data_file_unreadable" && /same name/.test(/** @type {any} */ (error).message));
+  assert.throws(() => checkedTable("", ","), (error) => /** @type {any} */ (error).code === "vcr_data_file_unreadable");
+  assert.throws(() => checkedTable(`${Array.from({ length: 501 }, (_, index) => `c${index}`).join(",")}\n`, ","), /at most 500 columns/);
+  assert.deepEqual(jsonTable('[{"a":1,"b":"x"},{"a":2,"c":true}]'), { header: ["a", "b", "c"], rows: [["1", "x", ""], ["2", "", "true"]] });
+  assert.throws(() => jsonTable('[{"a":{"nested":1}}]'), /nested value/);
+  assert.throws(() => jsonTable("not json"), (error) => /** @type {any} */ (error).code === "vcr_data_file_unreadable");
+  const header = ["名字", "note"];
+  const rows = [["张,三", 'he said "hi"'], [" padded ", "line\nbreak"], ["", ""]];
+  const written = toCsv(header, rows);
+  const read = parseTable(written);
+  assert.deepEqual(read.header, header);
+  assert.deepEqual(read.rows.slice(0, 2), rows.slice(0, 2), "commas, quotes, padding and newlines survive");
+  assert.deepEqual(parseDelimited("a\tb\n1\t2\n", "\t").rows, [{ a: "1", b: "2" }]);
+});
+
+test("PA-10 a data dictionary is three short columns per variable, in either language, and nothing else", () => {
+  const entries = dictionaryEntries({ header: ["变量名", "说明", "单位", "患者姓名"], rows: [["AGE", "年龄", "岁", "张三"], ["", "空", "", ""], ["OS", "总生存期".repeat(100), "月", "李四"]] });
+  assert.deepEqual(entries.map((entry) => entry.column), ["AGE", "OS"]);
+  assert.equal(entries[0].unit, "岁");
+  assert.ok(entries[1].label.length <= 120);
+  assert.ok(!JSON.stringify(entries).includes("张三"), "a fourth column is not read");
+  assert.throws(() => dictionaryEntries({ header: ["x", "y"], rows: [] }), (error) => /** @type {any} */ (error).code === "vcr_data_file_unreadable");
+});
+
+test("PA-10 projecting a table drops columns, renames them and pseudonymises the key; a row with no key belongs to nobody", () => {
+  const table = { header: ["ID", "AGE", "PHONE"], rows: [["A1", "50", "138"], ["", "60", "139"], ["A2", "70", "140"]] };
+  const key = Buffer.alloc(32, 5);
+  const view = projectTable(table, { keep: ["AGE"], rename: { AGE: "age" }, keyColumn: "ID", key });
+  assert.deepEqual(view.header, ["USUBJID", "age"]);
+  assert.deepEqual(view.rows, [[pseudonymOf(key, "A1"), "50"], [pseudonymOf(key, "A2"), "70"]]);
+  assert.deepEqual(projectTable(table, { keep: ["AGE", "PHONE"] }).header, ["AGE", "PHONE"], "without a key column nothing is added");
+});
+
+test("PA-10 a stored file is named by its bytes and written once", async () => {
+  const root = await fs.mkdtemp(path.join(scratch, "plane-"));
+  const first = await writeContentAddressed(root, "studies/std_1/tables", "csv", "a,b\n1,2\n");
+  assert.match(first.location, /^studies\/std_1\/tables\/[a-f0-9]{64}\.csv$/);
+  assert.equal(first.sha256, await sha256OfFile(path.join(root, first.location)));
+  const before = (await fs.stat(path.join(root, first.location))).mtimeMs;
+  const second = await writeContentAddressed(root, "studies/std_1/tables", "csv", "a,b\n1,2\n");
+  assert.deepEqual(second, first);
+  assert.equal((await fs.stat(path.join(root, first.location))).mtimeMs, before, "the same bytes are not written again");
+  await assert.rejects(() => writeContentAddressed(root, "../out", "csv", "x"), (error) => /** @type {any} */ (error).code === VCR_DATA_PLANE_CODES.locationOutside);
+  await assert.rejects(() => writeContentAddressed(root, "knowledge-base", "csv", "x"), (error) => /** @type {any} */ (error).code === VCR_DATA_PLANE_CODES.locationRuntimeReadable);
+  assert.deepEqual((await fs.readdir(path.join(root, "studies/std_1/tables"))).filter((name) => name.endsWith(".part")), []);
+});
+
+test("PB-10 a baseline column can itself be the outcome: it is sealed like the pair, and its table says it holds one", () => {
+  const tables = [{ name: "cohort.csv", header: ["ID", "ARM", "RESPONSE", "AGE"] }];
+  const map = [
+    { table: "cohort.csv", column: "ID", role: "subject_key" }, { table: "cohort.csv", column: "ARM", role: "arm", alias: "arm" },
+    { table: "cohort.csv", column: "RESPONSE", role: "covariate", alias: "y", outcome: true }, { table: "cohort.csv", column: "AGE", role: "covariate", alias: "age" }];
+  const { columns, issues } = normalizeFieldMap(map);
+  assert.deepEqual(issues, []);
+  assert.deepEqual(validateFieldMap(columns, tables).issues, []);
+  assert.deepEqual(columns.filter(isOutcomeEntry).map((entry) => entry.column), ["RESPONSE"]);
+  const cohort = { name: "cohort.csv", header: tables[0].header, rows: [["A", "TRT", "1", "50"], ["B", "CTL", "0", "60"]] };
+  const derived = deriveAnalysisShapes({ tables: [cohort], entries: validateFieldMap(columns, tables).columns, key: Buffer.alloc(32, 9) });
+  assert.equal(derived.shapes.subject?.outcomeBearing, true);
+  assert.deepEqual(derived.shapes.subject?.header, ["USUBJID", "age", "arm", "y"], "in the order of the source columns' names");
+  // The flag belongs on a baseline or measurement column only.
+  const bad = normalizeFieldMap([...map.slice(0, 1), { table: "cohort.csv", column: "ARM", role: "arm", alias: "arm", outcome: true }]);
+  assert.deepEqual(validateFieldMap(bad.columns, tables).issues.map((issue) => issue.code), ["outcome_flag_invalid"]);
+});
+
+test("a method is given the tables it reads and no more: files to profile, the subject table, the events table for a time-to-event comparison", () => {
+  const all = ["events", "longitudinal", "subject"];
+  assert.deepEqual(tablesNeededBy("profile.snapshot", null, all), ["files"]);
+  assert.deepEqual(tablesNeededBy("cohort.build", null, all), ["subject"]);
+  assert.deepEqual(tablesNeededBy("comparator.rmst", "time_to_event", all), ["subject", "events"]);
+  assert.deepEqual(tablesNeededBy("comparator.entropy_balance", "time_to_event", all), ["subject", "events"]);
+  assert.deepEqual(tablesNeededBy("comparator.entropy_balance", "binary", all), ["subject"], "a binary outcome is a column of the subject table");
+  assert.deepEqual(tablesNeededBy("comparator.propensity_weight", null, all), ["subject"]);
+  assert.deepEqual(tablesNeededBy("population.synthpop", null, all), ["subject"]);
+  assert.deepEqual(tablesNeededBy("something.new", null, all), ["subject"]);
+  assert.deepEqual(tablesNeededBy("comparator.rmst", "time_to_event", ["subject"]), ["files"], "no events table derived: the raw files, which the engine also takes");
+  assert.deepEqual(tablesNeededBy("cohort.build", null, []), ["files"]);
+});
+
+test("a corrected upload is a newer version of the same file: a snapshot takes the latest of each name", () => {
+  const files = [{ id: "a", name: "cohort.csv", role: "data" }, { id: "b", name: "visits.csv", role: "data" }, { id: "c", name: "cohort.csv", role: "data" }, { id: "d", name: "dict.csv", role: "dictionary" }];
+  assert.deepEqual(latestDataFiles(files).map((file) => file.id).sort(), ["b", "c"]);
 });

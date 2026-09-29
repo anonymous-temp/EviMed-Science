@@ -50,18 +50,39 @@ import {
 export const VCR_SCHEMA = "evimed_vcr";
 
 /**
+ * What a column of a source is *for* in the study — the one thing the analysis
+ * tables are derived from (plan §8.1 step 2). `subject_key` is the person's key
+ * in the source (it becomes a per-study pseudonym and never leaves the data
+ * plane); `arm` and `covariate` are baseline attributes (the subject table);
+ * `outcome_time` / `outcome_event` are one time-to-event outcome, paired by
+ * their `parameter` (the events table); `measurement` is one longitudinal
+ * parameter (the longitudinal table); `time_zero` is the index date; `visit_date`
+ * dates a measurement row; `other` is kept in the snapshot and never derived.
+ * A vocabulary of this file's own, spliced into a CHECK like the domain's: it
+ * belongs in `@evimed/domain` the next time that package is open.
+ */
+export const VCR_FIELD_ROLES = Object.freeze([
+  "subject_key", "arm", "covariate", "outcome_time", "outcome_event", "time_zero", "measurement", "visit_date", "other",
+]);
+/** What an uploaded file is: the rows, the dictionary that explains them, or a patient document. */
+export const VCR_SOURCE_FILE_ROLES = Object.freeze(["data", "dictionary", "document"]);
+/** Where a source's field map stands: nothing yet, proposed (by the run or a person), or confirmed by a person. */
+export const VCR_FIELD_MAP_STATES = Object.freeze(["none", "proposed", "confirmed"]);
+
+/**
  * Every table the migration creates, in creation order. The deletion paths and
  * the integration test read this list; a table added below and not here is a
  * table nobody cleans up.
  */
 export const VCR_TABLES = Object.freeze([
   "studies", "members", "study_definitions", "protocol_versions", "criteria", "soa_items",
-  "precedents", "evidence_items", "assumptions",
-  "sources", "grants", "snapshots", "field_maps", "analysis_tables",
+  "precedents", "study_precedents", "evidence_items", "assumptions",
+  "sources", "source_files", "grants", "snapshots", "field_maps", "analysis_tables",
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
   "models", "methods",
   "jobs", "executions", "results", "forecasts",
-  "matching_assessments", "criterion_judgments", "referrals", "referral_events", "sites", "followup_episodes",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments",
+  "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
 ]);
 
@@ -170,6 +191,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.criteria (
   created_at          timestamptz NOT NULL DEFAULT now(),
   UNIQUE (protocol_version_id, ordinal)
 );
+-- When a criterion applies at all (「仅女性」), beside the requirement, never inside it:
+-- the evaluator reads it from here and the domain's requirement grammar refuses
+-- an extra key, so the two must not share a document.
+ALTER TABLE evimed_vcr.criteria ADD COLUMN IF NOT EXISTS applicability jsonb;
 
 -- The schedule of activities, when a protocol carries one: visits, procedures
 -- and the burden a design costs a patient and a site (plan §2.2).
@@ -192,10 +217,14 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.soa_items (
 -- A trial precedent: the registry record and what was published about it.
 -- Planned and actual enrollment are kept apart on purpose — the gap between
 -- them is the most useful accrual prior there is (plan §6.4).
+-- The library is the account's: a precedent is one registry record however many
+-- studies pull it in, so \`study_id\` is only the study that first did (SET NULL
+-- when that study goes, never CASCADE — deleting a study must not take a record
+-- another study is pooling from) and the studies that use it are \`study_precedents\`.
 CREATE TABLE IF NOT EXISTS evimed_vcr.precedents (
   id               text PRIMARY KEY,
   user_id          text NOT NULL,
-  study_id         text REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  study_id         text REFERENCES evimed_vcr.studies(id) ON DELETE SET NULL,
   registry         text NOT NULL DEFAULT '',
   registry_id      text NOT NULL DEFAULT '',
   title            text NOT NULL DEFAULT '',
@@ -214,13 +243,42 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.precedents (
 );
 CREATE INDEX IF NOT EXISTS vcr_precedents_study_idx ON evimed_vcr.precedents (study_id);
 
+-- What a quotation is checked against later: the preserved text of the record
+-- (reproducible from the registry id and the reduction, and kept because a
+-- registry changes under a stored value) and its hash.
+ALTER TABLE evimed_vcr.precedents ADD COLUMN IF NOT EXISTS record_text text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.precedents ADD COLUMN IF NOT EXISTS record_hash text;
+
+-- Which studies use which precedent. The library is the account's, the use is the study's.
+CREATE TABLE IF NOT EXISTS evimed_vcr.study_precedents (
+  study_id     text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  precedent_id text NOT NULL REFERENCES evimed_vcr.precedents(id) ON DELETE CASCADE,
+  user_id      text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (study_id, precedent_id)
+);
+
+-- A database that predates this: the first study no longer owns the record.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conname = 'precedents_study_id_fkey' AND conrelid = 'evimed_vcr.precedents'::regclass AND confdeltype <> 'n') THEN
+    ALTER TABLE evimed_vcr.precedents DROP CONSTRAINT IF EXISTS precedents_study_id_fkey;
+    ALTER TABLE evimed_vcr.precedents ADD CONSTRAINT precedents_study_id_fkey
+      FOREIGN KEY (study_id) REFERENCES evimed_vcr.studies(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+INSERT INTO evimed_vcr.study_precedents (study_id, precedent_id, user_id)
+  SELECT study_id, id, user_id FROM evimed_vcr.precedents WHERE study_id IS NOT NULL
+  ON CONFLICT DO NOTHING;
+
 -- One extracted number, with the place in the source it can be checked
 -- against. A value with no locator never becomes an assumption (AC-25).
 CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_items (
   id             text PRIMARY KEY,
   user_id        text NOT NULL,
   study_id       text REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  precedent_id   text REFERENCES evimed_vcr.precedents(id) ON DELETE CASCADE,
+  precedent_id   text REFERENCES evimed_vcr.precedents(id) ON DELETE SET NULL,
   parameter      text NOT NULL,
   arm            text,
   value          numeric,
@@ -238,6 +296,28 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_items (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS vcr_evidence_items_study_idx ON evimed_vcr.evidence_items (study_id, parameter);
+
+-- What pooling needs to know about a value and the extraction used to leave out:
+-- which arm it describes, which endpoint definition it measures, whether the
+-- registry stated it as having happened, and the rest of the record's own
+-- words. A missing \`historical_baseline\` is not a baseline (a value of unknown
+-- standing never enters a pool by omission).
+ALTER TABLE evimed_vcr.evidence_items ADD COLUMN IF NOT EXISTS endpoint_key text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.evidence_items ADD COLUMN IF NOT EXISTS arm_role text NOT NULL DEFAULT 'unknown';
+ALTER TABLE evimed_vcr.evidence_items ADD COLUMN IF NOT EXISTS enrollment_kind text;
+ALTER TABLE evimed_vcr.evidence_items ADD COLUMN IF NOT EXISTS historical_baseline boolean;
+ALTER TABLE evimed_vcr.evidence_items ADD COLUMN IF NOT EXISTS detail jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE INDEX IF NOT EXISTS vcr_evidence_items_key_idx
+  ON evimed_vcr.evidence_items (study_id, precedent_id, parameter, arm, endpoint_key, created_at DESC);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conname = 'evidence_items_precedent_id_fkey' AND conrelid = 'evimed_vcr.evidence_items'::regclass AND confdeltype <> 'n') THEN
+    ALTER TABLE evimed_vcr.evidence_items DROP CONSTRAINT IF EXISTS evidence_items_precedent_id_fkey;
+    ALTER TABLE evimed_vcr.evidence_items ADD CONSTRAINT evidence_items_precedent_id_fkey
+      FOREIGN KEY (precedent_id) REFERENCES evimed_vcr.precedents(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- An assumption card: one parameter, one version. The distribution is what a
 -- simulation draws from; the prediction interval is what a pooled literature
@@ -282,10 +362,57 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.sources (
   retention      jsonb NOT NULL DEFAULT '{}'::jsonb,
   format         text NOT NULL DEFAULT 'csv',
   status         text NOT NULL DEFAULT 'registered' CHECK (status IN ('registered', 'profiled', 'frozen', 'withdrawn')),
+  -- What the rows of this source are (the nine value sources). Every table
+  -- derived from it carries this label; a caller never supplies it.
+  value_source   text NOT NULL DEFAULT 'observed' CHECK (value_source IN ${inList(VCR_VALUE_SOURCES)}),
+  -- The field map before any snapshot: one document, validated as a whole,
+  -- proposed by the run or a person and confirmed by a person (plan §8.1 step 2).
+  field_map      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  field_map_state text NOT NULL DEFAULT 'none' CHECK (field_map_state IN ${inList(VCR_FIELD_MAP_STATES)}),
+  field_map_hash text,
+  field_map_by   text NOT NULL DEFAULT '',
+  field_map_at   timestamptz,
+  field_map_confirmed_by text,
+  field_map_confirmed_at timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS value_source text NOT NULL DEFAULT 'observed' CHECK (value_source IN ${inList(VCR_VALUE_SOURCES)});
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map_state text NOT NULL DEFAULT 'none' CHECK (field_map_state IN ${inList(VCR_FIELD_MAP_STATES)});
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map_hash text;
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map_by text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map_at timestamptz;
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map_confirmed_by text;
+ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS field_map_confirmed_at timestamptz;
 CREATE INDEX IF NOT EXISTS vcr_sources_user_idx ON evimed_vcr.sources (user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS vcr_sources_study_idx ON evimed_vcr.sources (study_id, updated_at DESC);
+
+-- A file uploaded into a source, before any snapshot: named by what it holds
+-- (the bytes' sha256), never by what the uploader called it. The bytes live in
+-- the data plane; this row is the reference, the hash and the draft profile the
+-- run reads to propose a field map. \`detail\` carries a dictionary's entries or
+-- a document's subject key and visible time.
+CREATE TABLE IF NOT EXISTS evimed_vcr.source_files (
+  id           text PRIMARY KEY,
+  source_id    text NOT NULL REFERENCES evimed_vcr.sources(id) ON DELETE CASCADE,
+  study_id     text REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id      text NOT NULL,
+  role         text NOT NULL DEFAULT 'data' CHECK (role IN ${inList(VCR_SOURCE_FILE_ROLES)}),
+  name         text NOT NULL,
+  format       text NOT NULL,
+  location     text NOT NULL,
+  sha256       text NOT NULL,
+  bytes        bigint NOT NULL,
+  row_count    integer,
+  column_count integer,
+  profile      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  detail       jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source_id, sha256, role)
+);
+CREATE INDEX IF NOT EXISTS vcr_source_files_source_idx ON evimed_vcr.source_files (source_id, created_at);
+CREATE INDEX IF NOT EXISTS vcr_source_files_study_idx ON evimed_vcr.source_files (study_id);
 
 -- Who may read which fields of which source, in which window. Judged per
 -- operation in \`vcrAccess.mjs\`; this table is what it judges against.
@@ -321,9 +448,19 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.snapshots (
   quality       jsonb NOT NULL DEFAULT '{}'::jsonb,
   sealed_fields text[] NOT NULL DEFAULT '{}',
   sealed_until  timestamptz,
+  -- Every file of the snapshot with its own sha256, in the order they were
+  -- profiled, and the hash of the confirmed field map they were frozen with.
+  file_hashes   jsonb NOT NULL DEFAULT '[]'::jsonb,
+  field_map_hash text,
+  value_source  text NOT NULL DEFAULT 'observed',
+  created_by    text NOT NULL DEFAULT '',
   frozen_at     timestamptz NOT NULL DEFAULT now(),
   UNIQUE (source_id, version)
 );
+ALTER TABLE evimed_vcr.snapshots ADD COLUMN IF NOT EXISTS file_hashes jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_vcr.snapshots ADD COLUMN IF NOT EXISTS field_map_hash text;
+ALTER TABLE evimed_vcr.snapshots ADD COLUMN IF NOT EXISTS value_source text NOT NULL DEFAULT 'observed';
+ALTER TABLE evimed_vcr.snapshots ADD COLUMN IF NOT EXISTS created_by text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS vcr_snapshots_study_idx ON evimed_vcr.snapshots (study_id, frozen_at DESC);
 
 -- What a column means: the unit, the coding system, which clock it is on and
@@ -332,6 +469,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.field_maps (
   id             text PRIMARY KEY,
   snapshot_id    text NOT NULL REFERENCES evimed_vcr.snapshots(id) ON DELETE CASCADE,
   user_id        text NOT NULL,
+  table_name     text NOT NULL DEFAULT '',
   column_name    text NOT NULL,
   concept        text NOT NULL DEFAULT '',
   unit           text,
@@ -340,9 +478,30 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.field_maps (
   missing_reason text CHECK (missing_reason IS NULL OR missing_reason IN ${inList(VCR_MISSING_REASONS)}),
   identifier     boolean NOT NULL DEFAULT false,
   review_state   text NOT NULL DEFAULT 'ai_set' CHECK (review_state IN ${inList(VCR_REVIEW_STATES)}),
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (snapshot_id, column_name)
+  -- What the column is for (the derivation reads these), the name it carries in
+  -- the analysis tables, and what the map declares about its values.
+  role           text NOT NULL DEFAULT 'other' CHECK (role IN ${inList(VCR_FIELD_ROLES)}),
+  parameter      text,
+  alias          text,
+  declared_type  text,
+  value_range    jsonb,
+  required       boolean NOT NULL DEFAULT false,
+  outcome        boolean NOT NULL DEFAULT false,
+  codes          jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at     timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS table_name text NOT NULL DEFAULT '';
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'other' CHECK (role IN ${inList(VCR_FIELD_ROLES)});
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS parameter text;
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS alias text;
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS declared_type text;
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS value_range jsonb;
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS required boolean NOT NULL DEFAULT false;
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS outcome boolean NOT NULL DEFAULT false;
+ALTER TABLE evimed_vcr.field_maps ADD COLUMN IF NOT EXISTS codes jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- Two files of one snapshot may each have a column of the same name.
+ALTER TABLE evimed_vcr.field_maps DROP CONSTRAINT IF EXISTS field_maps_snapshot_id_column_name_key;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_field_maps_snapshot_table_column ON evimed_vcr.field_maps (snapshot_id, table_name, column_name);
 
 -- The three ADaM-shaped tables a snapshot derives inside a study. The engine
 -- only ever reads these three shapes, which is why a new disease does not
@@ -358,9 +517,18 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.analysis_tables (
   row_count   integer,
   columns     jsonb NOT NULL DEFAULT '[]'::jsonb,
   issues      jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Which source columns feed the table, whether any of them is an outcome
+  -- (a table carrying one is withheld while the seal holds), and the value
+  -- source its rows carry — set from the source, never by a caller.
+  outcome_bearing boolean NOT NULL DEFAULT false,
+  derived_from    jsonb NOT NULL DEFAULT '{}'::jsonb,
+  value_source    text NOT NULL DEFAULT 'observed',
   created_at  timestamptz NOT NULL DEFAULT now(),
   UNIQUE (snapshot_id, study_id, shape)
 );
+ALTER TABLE evimed_vcr.analysis_tables ADD COLUMN IF NOT EXISTS outcome_bearing boolean NOT NULL DEFAULT false;
+ALTER TABLE evimed_vcr.analysis_tables ADD COLUMN IF NOT EXISTS derived_from jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE evimed_vcr.analysis_tables ADD COLUMN IF NOT EXISTS value_source text NOT NULL DEFAULT 'observed';
 
 -- ---------------------------------------------------------------------------
 -- Research objects (plan §5)
@@ -637,6 +805,47 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.criterion_judgments (
   created_at     timestamptz NOT NULL DEFAULT now(),
   UNIQUE (assessment_id, criterion_id)
 );
+
+-- A fact about one patient, with where it was read (plan §7.1). The subject is
+-- the study's pseudonym, never a source id. A model-read fact keeps the
+-- document, the span and the quotation so the evaluator can re-read the bytes;
+-- \`fact_key\` makes writing the same located fact twice one row.
+CREATE TABLE IF NOT EXISTS evimed_vcr.matching_facts (
+  id           text PRIMARY KEY,
+  study_id     text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id      text NOT NULL,
+  subject_key  text NOT NULL,
+  fact_key     text NOT NULL,
+  variable     text NOT NULL,
+  value        jsonb,
+  unit         text,
+  polarity     text NOT NULL DEFAULT 'affirmed' CHECK (polarity IN ('affirmed', 'negated', 'hypothetical', 'family')),
+  occurred_at  timestamptz,
+  recorded_at  timestamptz,
+  visible_at   timestamptz NOT NULL,
+  surface      text NOT NULL DEFAULT '',
+  date_surface text,
+  source       jsonb,
+  extracted_by text NOT NULL DEFAULT 'model' CHECK (extracted_by IN ('model', 'code')),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, fact_key)
+);
+CREATE INDEX IF NOT EXISTS vcr_matching_facts_subject_idx ON evimed_vcr.matching_facts (study_id, subject_key);
+
+-- The answer to a criterion only language can decide, with the sentences it
+-- rests on. The newest per (study, subject, key) is the one evaluated.
+CREATE TABLE IF NOT EXISTS evimed_vcr.language_judgments (
+  id           text PRIMARY KEY,
+  study_id     text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id      text NOT NULL,
+  subject_key  text NOT NULL,
+  criterion_key text NOT NULL,
+  state        text NOT NULL CHECK (state IN ('satisfied', 'not_satisfied', 'unknown')),
+  evidence     jsonb NOT NULL DEFAULT '[]'::jsonb,
+  visible_at   timestamptz NOT NULL DEFAULT now(),
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_language_judgments_idx ON evimed_vcr.language_judgments (study_id, subject_key, criterion_key, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.sites (
   id             text PRIMARY KEY,

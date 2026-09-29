@@ -29,11 +29,19 @@ Hidden knowledge
   model, so ``OS_TIME: {410: 1, 377: 1, 289: 1}`` is three patients' survival
   times written into ``evimed_vcr.snapshots.profile``. Found by the
   integration test that scans every text and jsonb column of the schema for a
-  value that exists only in the file. So every vocabulary entry below
-  ``--min-cell-size`` (the domain's ``VCR_MIN_CELL_SIZE``) is dropped and
-  counted, exactly as an aggregate handed to a model is (AC-26), and the raw
-  example values the base profiler keeps for composite cells are dropped
-  outright.
+  value that exists only in the file. So a vocabulary entry standing for fewer
+  than ``--min-cell-size`` (the domain's ``VCR_MIN_CELL_SIZE``) people is not
+  printed, and the raw example values the base profiler keeps for composite
+  cells are dropped outright.
+* **Hiding one small entry is not hiding it.** A column of 340 people on arm A
+  and 5 on arm B, with the 5 dropped, still says ``filled: 345`` and
+  ``distinct: 2``: the 5 is the difference. So the hidden set is grown, smallest
+  entries first, until it holds at least ``--min-cell-size`` people in at least
+  two entries — the same rule the runtime's small-cell suppression applies to
+  any table it hands a model — and if all the entries together are still too few
+  the whole vocabulary is withheld. A hidden entry loses its label as well as its
+  count: in a numeric column the label *is* somebody's value. What is left says
+  how many entries were hidden (``suppressedValues``) and never which.
 * **A column the field map calls an identifier is masked whatever its name
   looks like.** ``USUBJID`` is one token with no id-shaped suffix, so the
   base profiler's name rule does not catch it and it printed its subject ids.
@@ -69,6 +77,7 @@ plane's ``runSnapshotProfiler`` calls it.
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import math
@@ -688,23 +697,50 @@ def linkage_findings(joins: list) -> list:
 # ---------------------------------------------------------------------------
 
 
-def suppress_small_vocabularies(profile: dict, minimum: int) -> None:
-    """Drop every vocabulary entry standing for fewer than `minimum` rows.
+def absorb_small_entries(values: list, minimum: int):
+    """Split a vocabulary into the entries that may be shown and how many were hidden.
 
-    In place. A category that 340 people share is a category; a value three
-    people share is those three people. The count of what was dropped stays,
-    so a reader is told the vocabulary is partial rather than shown a hole.
+    ``values`` is ``[[label, count], ...]``. Every entry under ``minimum`` is
+    hidden, then the smallest of the rest are added until the hidden set holds at
+    least ``minimum`` people in at least two entries. Ties are broken by position,
+    so the same input hides the same entries. Returns ``(shown, hidden_count,
+    withheld)``; ``withheld`` is true when even every entry together is too few,
+    in which case nothing is shown.
+    """
+    counts = [int(pair[1]) for pair in values]
+    hidden = {index for index, count in enumerate(counts) if count < minimum}
+    if not hidden:
+        return list(values), 0, False
+    rest = sorted((count, index) for index, count in enumerate(counts) if index not in hidden)
+    held = sum(counts[index] for index in hidden)
+    while (len(hidden) < 2 or held < minimum) and rest:
+        count, index = rest.pop(0)
+        hidden.add(index)
+        held += count
+    if len(hidden) < 2 or held < minimum:
+        return [], len(values), True
+    return [pair for index, pair in enumerate(values) if index not in hidden], len(hidden), False
+
+
+def suppress_small_vocabularies(profile: dict, minimum: int) -> None:
+    """Apply :func:`absorb_small_entries` to every column's vocabulary. In place.
+
+    A category that 340 people share is a category; a value three people share
+    is those three people. The number of hidden entries stays, so a reader is
+    told the vocabulary is partial rather than shown a hole.
     """
     for table in profile.get("tables", []):
         for column in table.get("columns", []):
             vocabulary = column.get("vocabulary") or {}
             values = vocabulary.get("values") or []
-            kept = [pair for pair in values if int(pair[1]) >= minimum]
-            vocabulary["suppressedValues"] = len(values) - len(kept)
+            shown, hidden, withheld = absorb_small_entries(values, minimum)
+            vocabulary["suppressedValues"] = hidden
             vocabulary["minCellSize"] = minimum
-            if len(kept) != len(values):
+            if hidden:
                 vocabulary["complete"] = False
-            vocabulary["values"] = kept
+            if withheld:
+                vocabulary["withheld"] = True
+            vocabulary["values"] = shown
             column["vocabulary"] = vocabulary
             # The base profiler keeps up to three example composite cells.
             # They are raw values of real rows.
@@ -750,13 +786,326 @@ def seal_profile(profile: dict, sealed: set) -> None:
 
 
 # ---------------------------------------------------------------------------
+# XLSX -> CSV (standard library only)
+# ---------------------------------------------------------------------------
+#
+# The web image has Python and nothing else: no openpyxl, and no way to install
+# it at run time. A hospital's own export is an .xlsx more often than a .csv, and
+# refusing it would send the data manager back to Excel for a step the platform
+# can do. So a workbook is read here with `zipfile` and `xml.etree` and turned
+# into the CSV the rest of the pipeline reads. Only the *cached values* are read
+# (a formula's last result), a merged cell is its top-left value, and dates are
+# written as dates — an Excel date is a number plus a number format, and a
+# converter that ignores the format writes 45658 where the study needs
+# 2025-01-01.
+#
+# A workbook is untrusted input, so the reader is bounded on every side: the
+# archive's member count and uncompressed size, each XML part's size, and the
+# rows and columns written. An XML part that declares a DOCTYPE or an entity is
+# refused outright — nothing in a worksheet needs one, and an entity is how a
+# small part becomes a large one.
+
+XLSX_MAX_MEMBERS = 2000
+XLSX_MAX_TOTAL_BYTES = 400 * 1024 * 1024
+XLSX_MAX_PART_BYTES = 200 * 1024 * 1024
+XLSX_MAX_ROWS = 1_048_576
+XLSX_MAX_COLUMNS = 2000
+_NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_NS_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+_NS_PKG_REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+# Built-in number formats that are dates and/or times (ECMA-376 18.8.30).
+_BUILTIN_DATE_FORMATS = frozenset(list(range(14, 23)) + list(range(27, 37)) + list(range(45, 48)) + list(range(50, 59)))
+_BUILTIN_TIME_ONLY = frozenset({18, 19, 20, 21, 45, 46, 47})
+
+
+class XlsxError(Exception):
+    """A workbook this reader will not or cannot read; the message is safe to show."""
+
+
+def _xlsx_part(archive, name: str) -> bytes:
+    try:
+        info = archive.getinfo(name)
+    except KeyError as error:
+        raise XlsxError(f"the workbook has no part {name}") from error
+    if info.file_size > XLSX_MAX_PART_BYTES:
+        raise XlsxError(f"the workbook part {name} is larger than this reader accepts")
+    data = archive.read(name)
+    head = data[:4096].lower()
+    if b"<!doctype" in head or b"<!entity" in head:
+        raise XlsxError(f"the workbook part {name} declares a DOCTYPE, which a worksheet never needs")
+    return data
+
+
+def _column_index(reference: str) -> int:
+    letters = ""
+    for character in reference:
+        if character.isalpha():
+            letters += character
+        else:
+            break
+    index = 0
+    for character in letters.upper():
+        index = index * 26 + (ord(character) - 64)
+    return index - 1
+
+
+def _date_format_kind(code: str) -> str:
+    """'date', 'time', 'datetime' or '' for a custom number-format code."""
+    stripped = []
+    quoted = False
+    bracket = False
+    escape = False
+    for character in code:
+        if escape:
+            escape = False
+            continue
+        if character == "\\":
+            escape = True
+            continue
+        if character == '"':
+            quoted = not quoted
+            continue
+        if quoted:
+            continue
+        if character == "[":
+            bracket = True
+            continue
+        if character == "]":
+            bracket = False
+            continue
+        if bracket:
+            # [h] and [mm] and [ss] are elapsed-time markers; the rest are colours and locales.
+            if character.lower() in "hms":
+                stripped.append(character.lower())
+            continue
+        stripped.append(character.lower())
+    text = "".join(stripped)
+    has_time = any(token in text for token in ("h", "s")) or "am/pm" in text or "a/p" in text
+    has_date = any(token in text for token in ("y", "d")) or (("m" in text) and not has_time)
+    if has_date and has_time:
+        return "datetime"
+    if has_time:
+        return "time"
+    if has_date:
+        return "date"
+    return ""
+
+
+def _excel_serial(value: float, date1904: bool, kind: str) -> str:
+    from datetime import timedelta
+
+    epoch = datetime(1904, 1, 1) if date1904 else datetime(1899, 12, 30)
+    if kind == "time":
+        seconds = round((value % 1) * 86400)
+        return f"{seconds // 3600 % 24:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+    moment = epoch + timedelta(seconds=round(value * 86400))
+    if kind == "date" or (moment.hour == 0 and moment.minute == 0 and moment.second == 0 and kind != "datetime"):
+        return moment.strftime("%Y-%m-%d")
+    return moment.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _number_text(raw: str) -> str:
+    try:
+        number = float(raw)
+    except ValueError:
+        return raw
+    if not math.isfinite(number):
+        return ""
+    if number == int(number) and abs(number) < 1e15:
+        return str(int(number))
+    return repr(number)
+
+
+def _shared_string_text(item) -> str:
+    """A shared string's text: its `<t>` and its runs, never the phonetic hints (furigana)."""
+    parts = []
+    for child in item:
+        if child.tag == f"{_NS_MAIN}t":
+            parts.append(child.text or "")
+        elif child.tag == f"{_NS_MAIN}r":
+            for node in child.findall(f"{_NS_MAIN}t"):
+                parts.append(node.text or "")
+    return "".join(parts)
+
+
+def convert_xlsx(path: Path, sheet=None):
+    """Read one worksheet of a workbook. Returns ``(rows, sheets, used)``.
+
+    ``rows`` is a list of lists of strings with every fully empty row removed;
+    ``sheets`` is the workbook's visible sheet names; ``used`` is the one read.
+    """
+    import xml.etree.ElementTree as ET
+    import zipfile
+
+    try:
+        archive = zipfile.ZipFile(path)
+    except (zipfile.BadZipFile, OSError) as error:
+        raise XlsxError("the file is not an .xlsx workbook") from error
+    with archive:
+        members = archive.infolist()
+        if len(members) > XLSX_MAX_MEMBERS or sum(item.file_size for item in members) > XLSX_MAX_TOTAL_BYTES:
+            raise XlsxError("the workbook is larger than this reader accepts")
+        if any(item.flag_bits & 0x1 for item in members):
+            raise XlsxError("the workbook is password protected")
+        names = set(archive.namelist())
+        if "xl/workbook.xml" not in names:
+            raise XlsxError("the file is not an .xlsx workbook")
+        workbook = ET.fromstring(_xlsx_part(archive, "xl/workbook.xml"))
+        properties = workbook.find(f"{_NS_MAIN}workbookPr")
+        date1904 = properties is not None and properties.get("date1904") in ("1", "true")
+        rels = {}
+        if "xl/_rels/workbook.xml.rels" in names:
+            for rel in ET.fromstring(_xlsx_part(archive, "xl/_rels/workbook.xml.rels")).findall(f"{_NS_PKG_REL}Relationship"):
+                rels[rel.get("Id")] = rel.get("Target") or ""
+        sheets = []
+        for node in workbook.findall(f"{_NS_MAIN}sheets/{_NS_MAIN}sheet"):
+            if node.get("state") in ("hidden", "veryHidden"):
+                continue
+            target = rels.get(node.get(f"{_NS_REL}id"), "").lstrip("/")
+            if target and not target.startswith("xl/"):
+                target = "xl/" + target
+            sheets.append((node.get("name") or "", target))
+        if not sheets:
+            raise XlsxError("the workbook has no visible worksheet")
+
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            for item in ET.fromstring(_xlsx_part(archive, "xl/sharedStrings.xml")).findall(f"{_NS_MAIN}si"):
+                shared.append(_shared_string_text(item))
+
+        date_styles = {}
+        if "xl/styles.xml" in names:
+            styles = ET.fromstring(_xlsx_part(archive, "xl/styles.xml"))
+            custom = {}
+            for fmt in styles.findall(f"{_NS_MAIN}numFmts/{_NS_MAIN}numFmt"):
+                custom[int(fmt.get("numFmtId"))] = fmt.get("formatCode") or ""
+            for position, xf in enumerate(styles.findall(f"{_NS_MAIN}cellXfs/{_NS_MAIN}xf")):
+                fmt_id = int(xf.get("numFmtId") or 0)
+                if fmt_id in custom:
+                    kind = _date_format_kind(custom[fmt_id])
+                elif fmt_id in _BUILTIN_DATE_FORMATS:
+                    kind = "time" if fmt_id in _BUILTIN_TIME_ONLY else ("datetime" if fmt_id == 22 else "date")
+                else:
+                    kind = ""
+                if kind:
+                    date_styles[position] = kind
+
+        order = list(range(len(sheets)))
+        if sheet not in (None, ""):
+            chosen = None
+            for position, (name, _target) in enumerate(sheets):
+                if name == str(sheet):
+                    chosen = position
+            if chosen is None and str(sheet).isdigit() and 1 <= int(str(sheet)) <= len(sheets):
+                chosen = int(str(sheet)) - 1
+            if chosen is None:
+                raise XlsxError(f"the workbook has no worksheet {sheet}")
+            order = [chosen]
+        for position in order:
+            name, target = sheets[position]
+            if not target:
+                continue
+            rows = _read_sheet(archive, target, shared, date_styles, date1904)
+            if rows:
+                return rows, [entry[0] for entry in sheets], name
+        raise XlsxError("no worksheet of the workbook holds any data")
+
+
+def _read_sheet(archive, target: str, shared: list, date_styles: dict, date1904: bool) -> list:
+    import xml.etree.ElementTree as ET
+
+    if target not in archive.namelist():
+        raise XlsxError("a worksheet named by the workbook is missing")
+    if archive.getinfo(target).file_size > XLSX_MAX_PART_BYTES:
+        raise XlsxError("a worksheet is larger than this reader accepts")
+    rows = []
+    with archive.open(target) as handle:
+        head = handle.read(4096).lower()
+    if b"<!doctype" in head or b"<!entity" in head:
+        raise XlsxError("a worksheet declares a DOCTYPE, which a worksheet never needs")
+    with archive.open(target) as handle:
+        for _event, element in ET.iterparse(handle, events=("end",)):
+            if element.tag != f"{_NS_MAIN}row":
+                continue
+            cells = {}
+            width = 0
+            for cell in element.findall(f"{_NS_MAIN}c"):
+                reference = cell.get("r") or ""
+                column = _column_index(reference) if reference else width
+                if column < 0 or column >= XLSX_MAX_COLUMNS:
+                    continue
+                kind = cell.get("t") or "n"
+                value_node = cell.find(f"{_NS_MAIN}v")
+                text = value_node.text if value_node is not None and value_node.text is not None else ""
+                if kind == "s":
+                    try:
+                        text = shared[int(text)]
+                    except (ValueError, IndexError):
+                        text = ""
+                elif kind == "inlineStr":
+                    text = "".join(node.text or "" for node in cell.iter(f"{_NS_MAIN}t"))
+                elif kind == "b":
+                    text = "1" if text.strip() == "1" else "0"
+                elif kind == "e":
+                    text = ""
+                elif kind in ("str", "d"):
+                    pass
+                elif text != "":
+                    style = int(cell.get("s") or 0)
+                    if style in date_styles:
+                        try:
+                            text = _excel_serial(float(text), date1904, date_styles[style])
+                        except (ValueError, OverflowError):
+                            pass
+                    else:
+                        text = _number_text(text)
+                if text != "":
+                    cells[column] = text
+                    width = max(width, column + 1)
+            element.clear()
+            if not cells:
+                continue
+            if len(rows) >= XLSX_MAX_ROWS:
+                raise XlsxError("the worksheet has more rows than a worksheet can")
+            rows.append([cells.get(index, "") for index in range(width)])
+    return rows
+
+
+def convert_xlsx_main(args) -> int:
+    if not args.convert_to:
+        raise SystemExit("--convert-xlsx needs --to")
+    try:
+        rows, sheets, used = convert_xlsx(Path(args.convert_xlsx), args.convert_sheet)
+    except XlsxError as error:
+        sys.stderr.write(f"xlsx: {error}\n")
+        return 3
+    width = max((len(row) for row in rows), default=0)
+    with open(args.convert_to, "w", encoding="utf-8", newline="") as out:
+        writer = csv.writer(out, lineterminator="\n")
+        for row in rows:
+            writer.writerow(row + [""] * (width - len(row)))
+    sys.stdout.write(json.dumps({"sheets": sheets, "used": used, "rows": len(rows), "columns": width}, ensure_ascii=False))
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
 def build(args) -> dict:
     profiler = load_profiler(Path(args.profiler) if args.profiler else DEFAULT_PROFILER)
-    paths = sorted((Path(p) for p in args.inputs), key=lambda p: p.name)
+    names = list(args.table_name or [])
+    if names and len(names) != len(args.inputs):
+        raise SystemExit("--table-name is given once per input file, in the same order")
+    # A file is known by the name it was uploaded under, not by the content hash
+    # it is stored as: the profile is read by people and by a model, and
+    # ``3f9c…e1.csv`` tells neither of them what the table is.
+    entries = sorted(
+        ((Path(path), names[index] if names else Path(path).name) for index, path in enumerate(args.inputs)),
+        key=lambda entry: entry[1],
+    )
+    paths = [path for path, _display in entries]
     missing = [str(p) for p in paths if not p.is_file()]
     if missing:
         raise SystemExit("input file(s) not found: " + ", ".join(missing))
@@ -771,34 +1120,35 @@ def build(args) -> dict:
         raise SystemExit(f"--as-of is not a date: {args.as_of}")
 
     tables = []
-    for path in paths:
+    origin = {}
+    for path, display in entries:
         for name, header, rows in profiler.read_table(path):
-            tables.append((name, [str(column) for column in header], [[str(cell) for cell in row] for row in rows]))
+            shown = display + name[len(path.name):]
+            origin[shown] = (path, display)
+            tables.append((shown, [str(column) for column in header], [[str(cell) for cell in row] for row in rows]))
     tables, as_of_report = restrict_to_as_of(tables, field_map, as_of)
 
     # The base profile, computed on exactly the rows above.
     base = {"schemaVersion": getattr(profiler, "SCHEMA_VERSION", 1), "tables": []}
     values = {}
-    for path in paths:
-        digest = profiler.fingerprint(path)
-        for name, header, rows in tables:
-            if not name.startswith(path.name):
-                continue
-            columns = []
-            for index, column in enumerate(header):
-                cells = [row[index] if index < len(row) else "" for row in rows]
-                column_profile, distinct = profiler.profile_column(str(column), cells)
-                columns.append(column_profile)
-                values[(name, str(column))] = distinct
-            base["tables"].append(
-                {
-                    "name": name,
-                    "sourceFile": path.name,
-                    "sourceFingerprint": digest,
-                    "rows": len(rows),
-                    "columns": columns,
-                }
-            )
+    fingerprints = {path: profiler.fingerprint(path) for path in paths}
+    for name, header, rows in tables:
+        path, display = origin[name]
+        columns = []
+        for index, column in enumerate(header):
+            cells = [row[index] if index < len(row) else "" for row in rows]
+            column_profile, distinct = profiler.profile_column(str(column), cells)
+            columns.append(column_profile)
+            values[(name, str(column))] = distinct
+        base["tables"].append(
+            {
+                "name": name,
+                "sourceFile": display,
+                "sourceFingerprint": fingerprints[path],
+                "rows": len(rows),
+                "columns": columns,
+            }
+        )
     profiler.mask_by_value_overlap(base, values)
     mask_declared_identifiers(base, field_map)
     suppress_small_vocabularies(base, minimum)
@@ -835,8 +1185,8 @@ def build(args) -> dict:
         "asOfFilter": as_of_report,
         "snapshot": {
             "files": [
-                {"name": path.name, "sha256": profiler.fingerprint(path), "bytes": path.stat().st_size}
-                for path in paths
+                {"name": display, "sha256": fingerprints[path], "bytes": path.stat().st_size}
+                for path, display in entries
             ],
             "tables": len(base["tables"]),
             "rowCount": sum(table["rows"] for table in base["tables"]),
@@ -857,7 +1207,7 @@ def build(args) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Profile a 虚拟临研 data snapshot.")
-    parser.add_argument("inputs", nargs="+", help="CSV, TSV or XLSX files of the snapshot")
+    parser.add_argument("inputs", nargs="*", help="CSV, TSV or XLSX files of the snapshot")
     parser.add_argument("--json", dest="json_out", default="snapshot-profile.json", help="output file, or - for stdout")
     parser.add_argument("--field-map", dest="field_map", default=None, help="field-map JSON; stdin is read when absent")
     parser.add_argument("--sealed-fields", dest="sealed_fields", default="", help="comma-separated sealed column names")
@@ -865,7 +1215,18 @@ def main() -> int:
     parser.add_argument("--min-cell-size", dest="min_cell_size", type=int, default=DEFAULT_MIN_CELL_SIZE,
                         help="vocabulary entries standing for fewer rows than this are dropped")
     parser.add_argument("--profiler", dest="profiler", default=None, help="path to profile_dataset.py")
+    parser.add_argument("--table-name", dest="table_name", action="append", default=None,
+                        help="the name to profile a file under; once per input, in input order")
+    parser.add_argument("--convert-xlsx", dest="convert_xlsx", default=None, metavar="XLSX",
+                        help="convert one worksheet of this workbook to UTF-8 CSV and exit; --to names the output")
+    parser.add_argument("--to", dest="convert_to", default=None, help="output path of --convert-xlsx")
+    parser.add_argument("--sheet", dest="convert_sheet", default=None,
+                        help="worksheet to convert: a name or a 1-based position (default: the first with data)")
     args = parser.parse_args()
+    if args.convert_xlsx:
+        return convert_xlsx_main(args)
+    if not args.inputs:
+        parser.error("at least one input file is required")
 
     profile = build(args)
     body = json.dumps(profile, ensure_ascii=False, indent=2, sort_keys=True)

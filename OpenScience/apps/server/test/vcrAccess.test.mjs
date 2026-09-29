@@ -70,7 +70,10 @@ class StoreDouble {
   async studyForAccess(studyId) {
     const study = this.studies.get(String(studyId));
     if (!study || study.deletedAt) return null;
-    return { id: study.id, userId: study.userId, projectId: study.projectId };
+    return {
+      id: study.id, userId: study.userId, projectId: study.projectId,
+      intendedUse: study.intendedUse ?? "exploratory", dataTier: study.dataTier ?? "T0", outcomeSeal: study.outcomeSeal ?? {},
+    };
   }
 
   async rolesOf(studyId, userId) {
@@ -266,25 +269,41 @@ test("AC-17 a read outside the authorised window is refused by name", async () =
   store.addMember("std_1", "dm", "data_manager");
   store.addGrant({
     id: "grt_1", sourceId: "src_1", userId: "partner", grantee: "dm",
-    windowStart: "2026-01-01T00:00:00Z", windowEnd: "2026-06-30T00:00:00Z",
+    windowStart: "2026-01-01T00:00:00Z", windowEnd: "2026-12-31T00:00:00Z",
   });
-  const inside = await access.judge({
-    actor: "dm", studyId: "std_1", sourceId: "src_1", ability: "read_patient_level", asOf: "2026-03-01T00:00:00Z",
-  });
-  assert.equal(inside.allowed, true);
-  assert.equal(inside.asOf, "2026-03-01T00:00:00.000Z");
-  for (const asOf of ["2025-12-31T00:00:00Z", "2026-07-01T00:00:00Z"]) {
-    const outside = await access.judge({
-      actor: "dm", studyId: "std_1", sourceId: "src_1", ability: "read_patient_level", asOf,
-    });
-    assert.equal(outside.code, VCR_ACCESS_CODES.outsideWindow, `${asOf} was admitted`);
-  }
-  // The source's own registered visible window binds as well as the grant's.
+  const read = (/** @type {Record<string, any>} */ extra = {}) => access.judge({
+    actor: "dm", studyId: "std_1", sourceId: "src_1", ability: "read_patient_level", ...extra });
+  assert.equal((await read()).allowed, true, "the judge runs at 2026-09-28, inside the window");
+  // The window closes: judged now, it is closed.
+  store.grants[0].windowEnd = "2026-06-30T00:00:00Z";
+  assert.equal((await read()).code, VCR_ACCESS_CODES.outsideWindow);
+  // And one that has not opened yet.
+  store.grants[0].windowStart = "2027-01-01T00:00:00Z";
   store.grants[0].windowEnd = null;
+  assert.equal((await read()).code, VCR_ACCESS_CODES.outsideWindow);
+  // The source's own registered visible window binds as well as the grant's.
+  store.grants[0].windowStart = null;
   store.sources.get("src_1").visibleWindow = { end: "2026-02-01T00:00:00Z" };
-  assert.equal((await access.judge({
+  assert.equal((await read()).code, VCR_ACCESS_CODES.outsideWindow);
+});
+
+test("CS-39 access is judged at now: a caller's asOf selects rows and opens nothing", async () => {
+  const { store, access } = scene();
+  store.addMember("std_1", "dm", "data_manager");
+  store.addGrant({ id: "grt_1", sourceId: "src_1", userId: "partner", grantee: "dm", windowStart: "2026-01-01T00:00:00Z", windowEnd: "2026-06-30T00:00:00Z" });
+  const asked = await access.judge({
     actor: "dm", studyId: "std_1", sourceId: "src_1", ability: "read_patient_level", asOf: "2026-03-01T00:00:00Z",
-  })).code, VCR_ACCESS_CODES.outsideWindow);
+  });
+  assert.equal(asked.allowed, false, "a date inside a window that has closed does not reopen it");
+  assert.equal(asked.code, VCR_ACCESS_CODES.outsideWindow);
+  assert.equal(asked.asOf, "2026-03-01T00:00:00.000Z", "the ledger still says what the read was about");
+  store.grants[0].windowEnd = "2026-12-31T00:00:00Z";
+  for (const asOf of ["2025-01-01T00:00:00Z", "2030-01-01T00:00:00Z"]) {
+    assert.equal((await access.judge({ actor: "dm", studyId: "std_1", sourceId: "src_1", ability: "read_patient_level", asOf })).allowed, true,
+      `${asOf}: a date outside the window does not close a window that is open now`);
+  }
+  const rows = store.auditRows.filter((row) => row.action === "access.read_patient_level");
+  assert.equal(rows[0].detail.asOf, "2026-03-01T00:00:00.000Z");
 });
 
 // ---------------------------------------------------------------------------
@@ -310,6 +329,7 @@ test("AC-22 a sealed field is refused to everyone, the study lead included", asy
 
 test("AC-22 asking only for sealed fields is a refusal, not an empty success", async () => {
   const { store, access } = scene();
+  store.studies.get("std_1").intendedUse = "specified_analysis";
   store.addGrant({ id: "grt_all", sourceId: "src_1", userId: "partner", grantee: "study:std_1" });
   store.snapshots.get("snp_1").sealedFields = ["OS_TIME", "OS_EVENT"];
   const decision = await access.judge({
@@ -321,26 +341,78 @@ test("AC-22 asking only for sealed fields is a refusal, not an empty success", a
   assert.deepEqual(decision.fields.allowed, []);
 });
 
-test("AC-32 a seal that has lapsed stops refusing, and the judgment is on the record", async () => {
+test("AC-32 the plan's freeze lifts the seal, judged at now, and the judgment is on the record", async () => {
   const { store, access } = scene();
+  const study = store.studies.get("std_1");
+  study.intendedUse = "specified_analysis";
   store.addGrant({ id: "grt_all", sourceId: "src_1", userId: "partner", grantee: "study:std_1" });
   store.snapshots.get("snp_1").sealedFields = ["OS_TIME"];
-  store.snapshots.get("snp_1").sealedUntil = "2026-09-01T00:00:00Z";
-  const decision = await access.judge({
-    actor: "owner", studyId: "std_1", snapshotId: "snp_1", ability: "read_patient_level", fields: ["OS_TIME"],
-  });
-  assert.equal(decision.allowed, true, "the seal lifted on 2026-09-01 and the judge runs at 2026-09-28");
-  const still = await access.judge({
-    actor: "owner", studyId: "std_1", snapshotId: "snp_1", ability: "read_patient_level",
-    fields: ["OS_TIME"], asOf: "2026-08-01T00:00:00Z",
-  });
-  assert.equal(still.code, VCR_ACCESS_CODES.fieldSealed, "a read dated inside the seal is still sealed");
+  const ask = (/** @type {Record<string, any>} */ extra = {}) => access.judge({
+    actor: "owner", studyId: "std_1", snapshotId: "snp_1", ability: "read_patient_level", fields: ["OS_TIME"], ...extra });
+  assert.equal((await ask()).code, VCR_ACCESS_CODES.fieldSealed, "the plan is not frozen: sealed");
+  // Frozen before now: lifted, even though the snapshot row itself still says sealed with no end.
+  study.outcomeSeal = { planFrozenAt: "2026-09-01T00:00:00.000Z" };
+  const decision = await ask();
+  assert.equal(decision.allowed, true, "the freeze is the lift, whether or not the lift was written to the snapshot");
+  // A replay dated before the freeze reads no sealed outcome either: the judgment is at now.
+  const replay = await ask({ asOf: "2026-08-01T00:00:00Z" });
+  assert.equal(replay.allowed, true);
+  // Frozen in the future (a clock that ran ahead): still sealed.
+  study.outcomeSeal = { planFrozenAt: "2026-10-01T00:00:00.000Z" };
+  assert.equal((await ask()).code, VCR_ACCESS_CODES.fieldSealed);
   const rows = store.auditRows.filter((row) => row.action === "access.read_patient_level");
-  assert.equal(rows.length, 2, "allowed reads are recorded too, not only refusals");
-  assert.equal(rows[0].outcome, "ok");
-  assert.equal(rows[1].outcome, "denied");
-  assert.equal(rows[1].reason, VCR_ACCESS_CODES.fieldSealed);
-  assert.deepEqual(rows[0].detail.fields, ["OS_TIME"]);
+  assert.equal(rows.length, 4, "allowed reads are recorded too, not only refusals");
+  assert.deepEqual(rows.map((row) => row.outcome), ["denied", "ok", "ok", "denied"]);
+  assert.equal(rows[3].reason, VCR_ACCESS_CODES.fieldSealed);
+  assert.deepEqual(rows[1].detail.fields, ["OS_TIME"]);
+});
+
+test("AC-32 the outcome columns of the field map are sealed for a confirmatory study whether or not the snapshot says so; an exploratory one is never sealed", async () => {
+  const { store, access } = scene();
+  store.addGrant({ id: "grt_all", sourceId: "src_1", userId: "partner", grantee: "study:std_1" });
+  store.setFieldMaps("snp_1", [
+    { columnName: "USUBJID", identifier: true }, { columnName: "AGE" },
+    { columnName: "OS_TIME", role: "outcome_time" }, { columnName: "OS_EVENT", role: "outcome_event" }, { columnName: "SBP", role: "measurement", outcome: true },
+  ]);
+  const ask = () => access.judge({ actor: "owner", studyId: "std_1", snapshotId: "snp_1", ability: "read_patient_level", fields: ["AGE", "OS_TIME", "OS_EVENT", "SBP"] });
+  assert.deepEqual((await ask()).fields.allowed.sort(), ["AGE", "OS_EVENT", "OS_TIME", "SBP"], "exploratory: nothing is sealed");
+  store.studies.get("std_1").intendedUse = "submission_preparation";
+  const sealed = await ask();
+  assert.deepEqual(sealed.fields.allowed, ["AGE"], "raised to a confirmatory use: the outcomes are sealed at once, with no snapshot row changed");
+  assert.deepEqual(sealed.fields.denied.map((entry) => entry.field).sort(), ["OS_EVENT", "OS_TIME", "SBP"]);
+});
+
+test("a dated seal on a study that does not ask for one still holds until its date; an open-ended one left by an earlier use does not outlive that use", async () => {
+  const { store, access } = scene();
+  store.addGrant({ id: "grt_all", sourceId: "src_1", userId: "partner", grantee: "study:std_1" });
+  const snapshot = store.snapshots.get("snp_1");
+  snapshot.sealedFields = ["OS_TIME"];
+  const ask = () => access.judge({ actor: "owner", studyId: "std_1", snapshotId: "snp_1", ability: "read_patient_level", fields: ["OS_TIME", "AGE"] });
+  assert.equal((await ask()).fields.allowed.includes("OS_TIME"), true, "open-ended, exploratory: not held");
+  snapshot.sealedUntil = "2026-12-01T00:00:00Z";
+  assert.equal((await ask()).fields.denied[0]?.code, VCR_ACCESS_CODES.fieldSealed, "a seal with a date still ahead of it holds");
+  snapshot.sealedUntil = "2026-09-01T00:00:00Z";
+  assert.equal((await ask()).fields.allowed.includes("OS_TIME"), true, "and stops on its date");
+});
+
+test("CS-49 a source of no study, or of another account, is 404 whatever the caller holds; a snapshot of no study is 404 too", async () => {
+  const { store, access } = scene();
+  store.addMember("std_1", "dm", "data_manager");
+  store.addSource({ id: "src_stray", userId: "somebody-else", studyId: null });
+  const stray = await access.judge({ actor: "dm", studyId: "std_1", sourceId: "src_stray", ability: "read_patient_level" });
+  assert.equal(stray.code, VCR_ACCESS_CODES.sourceNotFound, "not `vcr_no_grant`: that would say the source exists");
+  assert.equal(vcrAccessError(stray).status, 404);
+  // A caller's own study-less source is still theirs.
+  store.addMember("std_1", "partner", "data_manager");
+  store.addSource({ id: "src_mine", userId: "partner", studyId: null });
+  assert.equal((await access.judge({ actor: "partner", studyId: "std_1", sourceId: "src_mine", ability: "read_patient_level" })).allowed, true);
+  // The caller's own source attached to another study is that study's.
+  store.addSource({ id: "src_other_mine", userId: "partner", studyId: "std_other" });
+  assert.equal((await access.judge({ actor: "partner", studyId: "std_1", sourceId: "src_other_mine", ability: "read_patient_level" })).code,
+    VCR_ACCESS_CODES.sourceNotFound);
+  store.addSnapshot({ id: "snp_loose", sourceId: "src_1", studyId: null, userId: "partner" });
+  assert.equal((await access.judge({ actor: "dm", studyId: "std_1", snapshotId: "snp_loose", ability: "read_patient_level" })).code,
+    VCR_ACCESS_CODES.snapshotNotFound);
 });
 
 test("AC-03 a direct identifier is refused even under a grant that names it", async () => {

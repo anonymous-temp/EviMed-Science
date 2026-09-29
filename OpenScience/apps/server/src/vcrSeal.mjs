@@ -26,9 +26,26 @@
  *   is idempotent on the first timestamp: a second read does not move it, and
  *   the fields are accumulated so the package can name what was opened.
  * - **The seal decides readability, the data plane enforces it.** This module
- *   answers `readable(...)`; the data plane (package A) is what actually
- *   refuses the columns, because that is where the rows are. A seal that only
- *   lived here would be a note, not a control.
+ *   answers `readable(...)` and `vcrEffectiveSeal(...)`; the data plane and the
+ *   access judge are what actually refuse the columns, because that is where the
+ *   rows are — and both ask the same function, so a seal that lifted for one
+ *   lifted for the other. A seal that only lived here would be a note, not a
+ *   control.
+ * - **The two timestamps are written under a row lock.** `outcome_seal` is one
+ *   JSON value on the study row, and two runs finishing together used to read it,
+ *   each add their half and write it back: the later write won and the earlier
+ *   one's timestamp — the one the package cover prints — was gone. Every change
+ *   is now one transaction that locks the study row, reads the seal it will
+ *   change, and writes it (`mutateSeal`); the first outcome read is therefore
+ *   the first one whatever the interleaving, and a retried freeze cannot move
+ *   the plan's time. A store without a transaction (a unit-test double) gets the
+ *   read-then-write form and says nothing more than the double can.
+ * - **The seal lifts as of the instant the plan froze, not as of the instant the
+ *   lift ran.** `sealed_until` is set to `planFrozenAt`, so a judgment at any
+ *   later moment finds it lifted and one before it finds it standing — and a lift
+ *   that failed (the plane down, the process killed) is finished by the next read,
+ *   which reconciles the snapshot with the study rather than trusting the last
+ *   thing that ran.
  * - A study whose plan is frozen and whose outcomes were never read is the
  *   normal, good case: `ordered: true`, `outcomeFirstReadAt: null`.
  *
@@ -38,6 +55,8 @@
 import { createHash } from "node:crypto";
 
 import { VCR_INTENDED_USES, canonicalScenarioJson } from "@evimed/domain";
+
+import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 
 /** Intended uses under which outcome fields are sealed until the plan is frozen (§6.5). */
 export const VCR_SEALED_USES = Object.freeze(["specified_analysis", "submission_preparation"]);
@@ -119,73 +138,179 @@ export function vcrOutcomeReadable(study) {
 }
 
 /**
- * @param {{ store: { studyById: (id: string) => Promise<any>, updateStudy: (id: string, patch: any, actor?: string) => Promise<any>,
- *   audit?: (entry: Record<string, any>) => Promise<unknown> },
- *   dataPlane?: { sealFields?: (input: { studyId: string, fields: readonly string[], until?: string | null }) => Promise<unknown> } | null,
+ * The columns of a snapshot's field map that are outcomes: a time-to-event pair,
+ * or a measurement the map calls an outcome.
+ * @param {readonly { columnName?: string, column?: string, role?: string, outcome?: boolean }[]} fieldMaps
+ * @returns {string[]}
+ */
+export function vcrOutcomeColumns(fieldMaps) {
+  return [...new Set((fieldMaps ?? [])
+    .filter((map) => map.role === "outcome_time" || map.role === "outcome_event" || map.outcome === true)
+    .map((map) => String(map.columnName ?? map.column ?? ""))
+    .filter(Boolean))].sort();
+}
+
+/**
+ * Which columns of a snapshot are sealed at `now`, decided from the study as it
+ * stands — the one function the access judge and the data plane both ask.
+ *
+ * - A confirmatory use whose plan is not frozen (or is frozen in the future,
+ *   which a clock never says but a corrupted row might): the outcome columns and
+ *   whatever the snapshot already holds sealed.
+ * - A confirmatory use whose plan is frozen at or before `now`: nothing. The
+ *   freeze is the lift, whether or not the lift has been written to the snapshot.
+ * - Any other use: only a seal with a date still ahead of it. An open-ended seal
+ *   left by an earlier confirmatory use does not outlive the use that asked for it.
+ *
+ * @param {{ study?: { intendedUse?: string, outcomeSeal?: Record<string, any> } | null,
+ *   snapshot?: { sealedFields?: readonly string[], sealedUntil?: string | null } | null,
+ *   outcomeColumns?: readonly string[], now?: number }} input
+ * @returns {{ sealed: Set<string>, reason: "plan_not_frozen" | "plan_frozen" | "held_until" | "not_sealed" }}
+ */
+export function vcrEffectiveSeal({ study, snapshot, outcomeColumns = [], now = Date.now() }) {
+  const stored = new Set(snapshot?.sealedFields ?? []);
+  const until = snapshot?.sealedUntil ? Date.parse(snapshot.sealedUntil) : Number.NaN;
+  const required = vcrSealRequired(String(study?.intendedUse ?? "exploratory"));
+  const frozenText = study?.outcomeSeal?.planFrozenAt;
+  const frozen = typeof frozenText === "string" ? Date.parse(frozenText) : Number.NaN;
+  if (required) {
+    if (!Number.isFinite(frozen) || frozen > now) return { sealed: new Set([...stored, ...outcomeColumns]), reason: "plan_not_frozen" };
+    return { sealed: new Set(), reason: "plan_frozen" };
+  }
+  if (stored.size && Number.isFinite(until) && until > now) return { sealed: stored, reason: "held_until" };
+  return { sealed: new Set(), reason: "not_sealed" };
+}
+
+/**
+ * Change a study's seal under a lock. `compute` gets the study as it stands and
+ * answers the seal to write (or `null` to write nothing) and what to hand back.
+ *
+ * @template T
+ * @param {any} store the VCR store: with a transaction the change is atomic, without one (a test double) it is read-then-write
+ * @param {string} studyId
+ * @param {string} actor
+ * @param {(study: any) => { seal: Record<string, any> | null, result: T, audit?: Record<string, any> | null }} compute
+ * @returns {Promise<T | null>} `null` when there is no such study
+ */
+async function mutateSeal(store, studyId, actor, compute) {
+  if (typeof store.transaction === "function") {
+    return store.transaction(async (/** @type {any} */ client) => {
+      const found = (await client.query(
+        `SELECT id, user_id, intended_use, outcome_seal FROM ${store.schema ?? VCR_SCHEMA}.studies WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        [studyId])).rows[0];
+      if (!found) return null;
+      const study = { id: String(found.id), userId: String(found.user_id), intendedUse: String(found.intended_use), outcomeSeal: object(found.outcome_seal) };
+      const { seal, result, audit } = compute(study);
+      if (seal) {
+        await client.query(`UPDATE ${store.schema ?? VCR_SCHEMA}.studies SET outcome_seal = $2::jsonb, updated_at = now() WHERE id = $1`,
+          [studyId, JSON.stringify(seal)]);
+      }
+      if (audit && typeof store.audit === "function") {
+        await store.audit({ client, studyId, userId: study.userId, actor, object: studyId, ...audit });
+      }
+      return result;
+    });
+  }
+  const study = await store.studyById(studyId);
+  if (!study) return null;
+  const { seal, result, audit } = compute(study);
+  if (seal) await store.updateStudy(studyId, { outcomeSeal: seal }, actor);
+  if (audit) await store.audit?.({ studyId, userId: study.userId, actor, object: studyId, ...audit });
+  return result;
+}
+
+/**
+ * @param {{ store: any,
+ *   dataPlane?: { liftStudySeal?: (input: { studyId: string, at: string, actor?: string, reason?: string }) => Promise<any[]> } | null,
  *   audit?: (event: string, status: string, details: Record<string, any>) => unknown,
  *   now?: () => Date }} dependencies
- *   `dataPlane` is package A's: it is what actually withholds the columns, and
- *   without it the seal is recorded and reported as a note, never as a claim
- *   that the rows were withheld.
+ *   `store` is the VCR store (`studyById`, `updateStudy`, `audit`, and a
+ *   `transaction` when it is the real one). `dataPlane` is what actually
+ *   withholds the columns; it is asked to lift, per study, as of the freeze
+ *   instant. Without it the seal is recorded and reported as a note, never as a
+ *   claim that rows were withheld.
  */
 export function createVcrSeal({ store, dataPlane = null, audit = () => {}, now = () => new Date() }) {
   if (!store) throw new TypeError("The VCR seal needs the VCR store.");
 
   return {
     /**
-     * Freeze an analysis plan: the time, the hash, and the outcome fields the
-     * data plane should withhold until it is frozen. Idempotent on an
-     * unchanged plan — freezing the same bytes again keeps the first time, so
-     * a retried run cannot move the timestamp forward.
+     * Freeze an analysis plan: the time, the hash, and the lift of the seal on
+     * every snapshot of the study as of that time. Idempotent on an unchanged
+     * plan — freezing the same bytes again keeps the first time, so a retried run
+     * cannot move the timestamp forward — but the lift is asked for again, so a
+     * lift that failed the first time is finished by the retry.
      * @param {{ studyId: string, plan: Record<string, any>, sealedFields?: readonly string[], actor?: string }} input
      */
     async freezePlan(input) {
-      const study = await store.studyById(String(input.studyId));
-      if (!study) return null;
-      const state = vcrSealState(study);
+      const studyId = String(input.studyId);
+      const actor = String(input.actor ?? "");
       const planHash = vcrPlanHash(input.plan ?? {});
       const at = now().toISOString();
-      const sealedFields = [...new Set(list(input.sealedFields).map(String))];
-      if (state.planHash === planHash && state.planFrozenAt) {
-        return { ...state, unchanged: true };
+      const named = [...new Set(list(input.sealedFields).map(String))];
+      const outcome = await mutateSeal(store, studyId, actor, (study) => {
+        const state = vcrSealState(study);
+        if (state.planHash === planHash && state.planFrozenAt) {
+          return { seal: null, result: { study, unchanged: true, planFrozenAt: state.planFrozenAt, planHash, planVersion: state.planVersion }, audit: null };
+        }
+        const seal = {
+          ...object(study.outcomeSeal),
+          planFrozenAt: at,
+          planHash,
+          planVersion: state.planVersion + 1,
+          sealedFields: named.length ? named : state.sealedFields,
+          history: [...list(object(study.outcomeSeal).history), ...(state.planFrozenAt
+            ? [{ planFrozenAt: state.planFrozenAt, planHash: state.planHash, planVersion: state.planVersion }] : [])].slice(-20),
+        };
+        return {
+          seal,
+          result: { study: { ...study, outcomeSeal: seal }, unchanged: false, planFrozenAt: at, planHash, planVersion: seal.planVersion },
+          audit: { action: "vcr.seal.freeze_plan", detail: { planHash, planVersion: seal.planVersion, sealedFields: seal.sealedFields } },
+        };
+      });
+      if (!outcome) return null;
+      /** @type {any[]} */
+      let lifted = [];
+      if (dataPlane?.liftStudySeal) {
+        try {
+          lifted = await dataPlane.liftStudySeal({ studyId, at: outcome.planFrozenAt, actor: actor || "platform", reason: "分析计划冻结，结局字段封存解除" });
+        } catch (error) {
+          // The freeze stands. The next read reconciles the snapshot with the
+          // study (`vcrEffectiveSeal`), so the seal is not left holding — but
+          // a failed lift is a fact somebody may need, and it is recorded.
+          await store.audit?.({ studyId, userId: outcome.study.userId, actor, action: "vcr.seal.lift_failed", object: studyId,
+            outcome: "failed", reason: String(/** @type {any} */ (error)?.code ?? "lift_failed") }).catch(() => null);
+        }
       }
-      const seal = {
-        ...object(study.outcomeSeal),
-        planFrozenAt: at,
-        planHash,
-        planVersion: state.planVersion + 1,
-        sealedFields: sealedFields.length ? sealedFields : state.sealedFields,
-        history: [...list(object(study.outcomeSeal).history), ...(state.planFrozenAt
-          ? [{ planFrozenAt: state.planFrozenAt, planHash: state.planHash, planVersion: state.planVersion }] : [])].slice(-20),
-      };
-      const updated = await store.updateStudy(String(input.studyId), { outcomeSeal: seal }, String(input.actor ?? ""));
-      if (sealedFields.length && dataPlane?.sealFields) {
-        await dataPlane.sealFields({ studyId: String(input.studyId), fields: sealedFields, until: null }).catch(() => null);
-      }
-      await store.audit?.({ studyId: String(input.studyId), userId: study.userId, actor: String(input.actor ?? ""),
-        action: "vcr.seal.freeze_plan", object: String(input.studyId), detail: { planHash, planVersion: seal.planVersion, sealedFields } });
-      audit("vcr.seal.freeze_plan", "completed", { userId: study.userId, code: String(input.studyId), detail: planHash });
-      return { ...vcrSealState(updated ?? { ...study, outcomeSeal: seal }), unchanged: false };
+      if (!outcome.unchanged) audit("vcr.seal.freeze_plan", "completed", { userId: outcome.study.userId, code: studyId, detail: planHash });
+      const sealedNow = [...new Set(lifted.flatMap((snapshot) => list(snapshot?.sealedFields).map(String)))].sort();
+      return { ...vcrSealState(outcome.study), unchanged: outcome.unchanged, lifted: lifted.length, liftedFields: sealedNow };
     },
 
     /**
      * An outcome field was read. Only the first read sets the timestamp; the
-     * field list grows so the package can name what was opened.
+     * field list grows so the package can name what was opened. Atomic: two reads
+     * at once leave the earlier of the two as the first.
      * @param {{ studyId: string, fields?: readonly string[], actor?: string, reason?: string }} input
      */
     async recordOutcomeAccess(input) {
-      const study = await store.studyById(String(input.studyId));
-      if (!study) return null;
-      const seal = object(study.outcomeSeal);
-      const fields = [...new Set([...list(seal.outcomeFieldsRead).map(String), ...list(input.fields).map(String)])].slice(0, 200);
-      const first = typeof seal.outcomeFirstReadAt === "string" ? seal.outcomeFirstReadAt : now().toISOString();
-      const updated = await store.updateStudy(String(input.studyId), {
-        outcomeSeal: { ...seal, outcomeFirstReadAt: first, outcomeFieldsRead: fields },
-      }, String(input.actor ?? ""));
-      await store.audit?.({ studyId: String(input.studyId), userId: study.userId, actor: String(input.actor ?? ""),
-        action: "vcr.seal.outcome_read", object: String(input.studyId),
-        reason: String(input.reason ?? ""), detail: { fields: list(input.fields).map(String), first } });
-      return vcrSealState(updated ?? { ...study, outcomeSeal: { ...seal, outcomeFirstReadAt: first, outcomeFieldsRead: fields } });
+      const studyId = String(input.studyId);
+      const actor = String(input.actor ?? "");
+      const moment = now().toISOString();
+      const named = list(input.fields).map(String);
+      const result = await mutateSeal(store, studyId, actor, (study) => {
+        const seal = object(study.outcomeSeal);
+        const fields = [...new Set([...list(seal.outcomeFieldsRead).map(String), ...named])].sort().slice(0, 200);
+        const first = typeof seal.outcomeFirstReadAt === "string" ? seal.outcomeFirstReadAt : moment;
+        const next = { ...seal, outcomeFirstReadAt: first, outcomeFieldsRead: fields };
+        const unchanged = seal.outcomeFirstReadAt === first && list(seal.outcomeFieldsRead).length === fields.length;
+        return {
+          seal: unchanged ? null : next,
+          result: { ...study, outcomeSeal: next },
+          audit: { action: "vcr.seal.outcome_read", reason: String(input.reason ?? ""), detail: { fields: named, first } },
+        };
+      });
+      return result ? vcrSealState(result) : null;
     },
 
     /**
@@ -199,8 +324,8 @@ export function createVcrSeal({ store, dataPlane = null, audit = () => {}, now =
     },
 
     /**
-     * Whether an outcome field may be read at all, for the data plane to ask
-     * before it opens a column.
+     * Whether an outcome field may be read at all, for a caller to ask before it
+     * opens a column.
      * @param {string} studyId
      */
     async readable(studyId) {
