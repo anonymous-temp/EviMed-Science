@@ -481,6 +481,8 @@ def _publish_partial_failure(inputs, stage, output, prefix, error_code, environm
     if not artifacts_safe:
         return [], []
     secrets = sensitive_values(environment)
+    if isinstance(error_code, str) and any(secret in error_code.encode() for secret in secrets):
+        error_code = None
     summary = {"schema_version": 1, "status": "partial", "primary_estimate_available": False,
                "original_error_code": error_code if isinstance(error_code, str) and _RUNNER_CODE.fullmatch(error_code) else "mr_analysis_failed",
                "available": [], "unavailable": []}
@@ -611,7 +613,7 @@ def _analysis_helper(credentials, operation, arguments, *, descriptors=()):
         [sys.executable, "-I", str(Path(__file__).resolve()), operation, *map(str, arguments)],
         env={"PATH": os.defpath}, pass_fds=descriptors,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        check=False, **credentials,
+        check=False, **(credentials or {}),
     ).returncode == 0
 
 
@@ -635,10 +637,10 @@ def _wait_without_reaping(process, timeout):
 
 
 def _run_analysis(command, credentials, timeout, **kwargs):
-    if credentials is None:
-        return subprocess.run(command, timeout=timeout, check=False, **kwargs), None
+    if sys.platform != "linux" or not hasattr(os, "waitid"):
+        raise OSError("Confirmed analysis process-group supervision requires Linux.")
     with _worker_signals() as signal_state:
-        process = subprocess.Popen(command, start_new_session=True, **kwargs, **credentials)
+        process = subprocess.Popen(command, start_new_session=True, **kwargs, **(credentials or {}))
         identity = _process_identity(process.pid)
         if identity["pgid"] != process.pid or identity["session"] != process.pid:
             raise ValueError("The analysis process group is not isolated.")
@@ -680,11 +682,6 @@ def _run_analysis(command, credentials, timeout, **kwargs):
 
 @contextmanager
 def _private_directories(inputs, credentials, cleanup_errors):
-    if credentials is None:
-        with (tempfile.TemporaryDirectory(prefix="evimed-mr-job-", dir="/tmp") as stage,
-              tempfile.TemporaryDirectory(prefix="evimed-mr-scratch-", dir="/tmp") as scratch):
-            yield stage, scratch
-        return
     owned = []
     try:
         for prefix in ("evimed-mr-job-", "evimed-mr-scratch-"):

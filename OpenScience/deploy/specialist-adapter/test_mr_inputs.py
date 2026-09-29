@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -58,6 +60,19 @@ def setup_mr(tmp_path, monkeypatch):
         "(out/'received.json').write_text(json.dumps(request))\n"
         "(out/'result.json').write_text(json.dumps({'status':'succeeded'}))\n"
     )
+    if sys.platform != "linux":
+        # These fixtures are fixed, single-process fake runners. Real descendant
+        # quiescence is covered by test_mr_cleanup's offline Linux containers.
+        # Production refuses a platform without its verified group supervisor.
+        load_job = service._mr_job
+
+        def fixture_job(root):
+            jobs = load_job(root)
+            monkeypatch.setattr(jobs, "_run_analysis", lambda command, credentials, timeout, **kwargs: (
+                subprocess.run(command, timeout=timeout, check=False, **kwargs), None))
+            return jobs
+
+        monkeypatch.setattr(service, "_mr_job", fixture_job)
     return service, client, secret, workspace
 
 
