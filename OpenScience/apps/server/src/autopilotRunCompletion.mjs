@@ -20,6 +20,14 @@ export async function completeOwnedAutopilotRun({ service, runtimeManager, usage
     || (episode.payload?.runId && episode.payload.runId !== run.id)
     || (episode.payload?.sessionId && episode.payload.sessionId !== run.sessionId)) return false;
 
+  if (run.dispatchStatus === "rejected" && ["autopilot_paused", "autopilot_stopped"].includes(run.errorCode)) {
+    await service.markEpisodeCanceled(project.userId, episode.id);
+    if (runtimeManager.boundedRuntimeScope(project)?.runId === episode.id) {
+      await runtimeManager.endBoundedRuntime(project, episode.id).catch(error => audit("autopilot.runtime.release", error));
+    }
+    return true;
+  }
+
   const delta = await readDelta(project, run);
   const usage = usageLedger ? await usageLedger.summaryRun(project.userId, episode.id).catch(() => null) : null;
   await service.completeRun(project.userId, {
