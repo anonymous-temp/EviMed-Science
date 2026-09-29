@@ -15,8 +15,6 @@ uvicorn[standard]>=0.27.0
 websockets>=12.0
 aiohttp>=3.9.0
 oss2>=2.18.0
-# GWAS Catalog summary-statistics metadata (GWAS-SSF -meta.yaml)
-pyyaml>=6.0
 
 # Testing
 # Kept here, not only in the pyproject dev extra, because the virtualenv is
