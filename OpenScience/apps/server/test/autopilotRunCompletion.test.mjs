@@ -102,8 +102,11 @@ test("completion preserves safe stored-run artifacts and never accepts an artifa
   const f = fixture();
   f.run.artifacts = ["reports/result.md", "scripts/reproduce.py", "../secret", "https://invented.test/output"];
   f.run.unverifiedArtifacts = ["data/partial.csv"];
-  f.dependencies.readDelta = async () => ({ deltaSchemaVersion: 1, claims: [], artifactRefs: [{ projectId: "other", runId: "fake", sessionId: "fake", path: "fake.md" }] });
+  f.run.status = "failed";
+  f.dependencies.readDelta = async () => ({ projectId: "other", runId: "fake", sessionId: "fake", status: "succeeded", deltaSchemaVersion: 1, claims: [], artifactRefs: [{ projectId: "other", runId: "fake", sessionId: "fake", path: "fake.md" }] });
   await completeOwnedAutopilotRun(f.dependencies, f.project, f.run);
   const completed = f.calls.find(call => call[0] === "complete")[1];
+  assert.equal(completed.runId, f.run.id);
+  assert.equal(completed.status, "failed");
   assert.deepEqual(completed.artifactRefs, ["reports/result.md", "scripts/reproduce.py", "data/partial.csv"].map(path => ({ projectId: f.project.id, runId: f.run.id, sessionId: f.run.sessionId, path })));
 });
