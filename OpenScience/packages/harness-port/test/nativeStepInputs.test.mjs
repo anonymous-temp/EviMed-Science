@@ -30,3 +30,18 @@ test('a context acknowledgement happens only for an entering decision and reject
   assert.equal(entered.messages[0], payload.messages[0], 'the native input identity is untouched')
   assert.equal(acknowledged, 1)
 })
+
+test('a step canceled while the downstream decision settles never acknowledges attachment', async () => {
+  /** @type {any} */ let handler
+  let acknowledged = 0
+  const controller = new AbortController()
+  const agent = { id: 'agent', session: { id: 'session' }, inject: () => {} }
+  onPreStep({ on: (/** @type {string} */ _event, /** @type {any} */ fn) => { handler = fn; return () => {} } }, async () => {
+    injectContext(agent, 'Optional supplement', 'evimed-capsule')
+    return { allow: true, discardOnReject: true, onEntered: async () => { acknowledged += 1 } }
+  }, () => ({ first: false, root: true }))
+  await handler({ agent, turn: 1, step: 1, signal: controller.signal, messages: [message('A','Question')] }, async () => {
+    controller.abort(); return { kind: 'enter', messages: [] }
+  })
+  assert.equal(acknowledged, 0)
+})

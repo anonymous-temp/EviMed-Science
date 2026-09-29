@@ -89,3 +89,15 @@ test("opaque request IDs cannot escape metadata storage and metadata symlinks ar
   await assert.rejects(context.prepare(project,request("B")));
   assert.deepEqual(await fs.readdir(project.workspaceDir),[]);
 }));
+
+test("an unbound turn keeps its initial capability snapshot when a steer looks like another capability", async () => fixture(async ({ context, project, calls }) => {
+  context.route = async (_project, _session, text) => { calls.push(text); return { effectiveAgentId: text.startsWith("Initial") ? "geo-content" : "open-domain-answer", effectiveRouteReason: "llm:0.9", question: text }; };
+  await context.prepare(project, request("A", "Initial capability A"));
+  const steer = { ...request("B", "An unrelated capability B question"), mode: "steer" };
+  assert.equal(await context.prepare(project, steer), null);
+  assert.deepEqual(calls, ["Initial capability A"], "a steer does not classify or prepare a replacement capability");
+  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "B", textDigest: hash("An unrelated capability B question") }] }), { contexts: [] });
+  assert.equal((await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("Initial capability A") }] })).contexts.length, 1);
+  await context.prepare(project, request("C", "An unrelated capability B question"));
+  assert.deepEqual(calls, ["Initial capability A", "An unrelated capability B question"], "the next queued turn still resolves its own capability");
+}));
