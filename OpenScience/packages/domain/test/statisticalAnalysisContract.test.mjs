@@ -63,6 +63,7 @@ test('native receipts require no fabricated specialist job id', () => {
 
 test('malformed primitive fields are advisory instead of invoking object coercion', () => {
   const malformed = { toString: null }
+  /** @type {Record<string, string>[]} */
   const inputs = [
     { 'analysis-results.json': results([{ id: malformed, status: 'complete', estimate: 2 }]) },
     { 'analysis-run.json': JSON.stringify({ executions: [{ script: { path: 'analysis.py', sha256: malformed }, inputs: [] }] }) },

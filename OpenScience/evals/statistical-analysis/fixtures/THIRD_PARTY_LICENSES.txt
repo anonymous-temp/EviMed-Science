@@ -1,4 +1,15 @@
-TableMage-Analysis dataset and adapted sequential reference
+Original WDBC dataset: CC BY 4.0
+
+Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993).
+Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository.
+DOI: https://doi.org/10.24432/C5DW2B
+Source: https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic
+License: https://creativecommons.org/licenses/by/4.0/
+The frozen CSV is redistributed through TableMage-Analysis with sklearn feature
+names and target coding, plus a serialized row index. Data values are unchanged
+from the sklearn representation; no endorsement by the dataset authors is implied.
+
+TableMage-Analysis adapted sequential reference code: BSD-3-Clause
 
 BSD 3-Clause License
 

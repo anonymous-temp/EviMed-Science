@@ -20,8 +20,16 @@ import sys
 import uuid
 
 
+def resolved(path: Path, *, strict=False) -> Path:
+    try:
+        return path.resolve(strict=strict)
+    except RuntimeError as error:
+        # Python 3.12 reports symlink loops as RuntimeError, unlike other I/O.
+        raise ValueError('Path resolution failed.') from error
+
+
 def confined(root: Path, value: str) -> Path:
-    path = (root / value).resolve()
+    path = resolved(root / value)
     if not path.is_relative_to(root) or path == root:
         raise ValueError('Path must be a file inside the workspace.')
     return path
@@ -51,7 +59,7 @@ def distinct_outputs(root: Path, outputs: tuple, sources: list):
         raise ValueError('Results and receipt must be distinct files.')
 
 
-def write_bytes(root: Path, path: Path, data: bytes, protected: list):
+def write_bytes(root: Path, path: Path, data: bytes, protected: list, *, create_only=False):
     """One writer for every artifact: protect inputs and anchor atomic replacement.
 
     Resolving a target authorizes it but does not authorize following a new link
@@ -59,15 +67,27 @@ def write_bytes(root: Path, path: Path, data: bytes, protected: list):
     O_NOFOLLOW refuses parents replaced by a script or concurrent process.
     """
     def check_target():
+        if create_only and os.path.lexists(path):
+            raise ValueError('Provenance artifacts are immutable; destination already exists.')
         target = confined(root, str(path))
         for source in protected:
-            if target == source.resolve() or (target.exists() and source.exists() and target.samefile(source)):
+            if path == source:
+                raise ValueError('Artifact write would replace a protected analysis file.')
+            try:
+                source_target = resolved(source)
+                aliases = target == source_target or (target.exists() and source.exists() and target.samefile(source))
+            except (OSError, ValueError):
+                # A broken source path has already been recorded as unreadable.
+                # It cannot authorize a write, or prevent a separate safe receipt.
+                continue
+            if aliases:
                 raise ValueError('Artifact write would replace a protected analysis file.')
 
     check_target()
     parts = path.relative_to(root).parts
     directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
     temporary = f'.analysis-{uuid.uuid4().hex}.tmp'
+    temporary_created = False
     try:
         for part in parts[:-1]:
             try:
@@ -78,15 +98,21 @@ def write_bytes(root: Path, path: Path, data: bytes, protected: list):
             os.close(directory)
             directory = child
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
+        temporary_created = True
         with os.fdopen(descriptor, 'wb') as stream:
             stream.write(data)
         check_target()
-        os.replace(temporary, parts[-1], src_dir_fd=directory, dst_dir_fd=directory)
+        if create_only:
+            # Publish without replacement even if a path appeared after checking.
+            os.link(temporary, parts[-1], src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
+        else:
+            os.replace(temporary, parts[-1], src_dir_fd=directory, dst_dir_fd=directory)
     finally:
-        try:
-            os.unlink(temporary, dir_fd=directory)
-        except FileNotFoundError:
-            pass
+        if temporary_created:
+            try:
+                os.unlink(temporary, dir_fd=directory)
+            except FileNotFoundError:
+                pass
         os.close(directory)
 
 
@@ -118,7 +144,7 @@ def versions(interpreter: str, executable: str):
 
 
 def execute(args) -> int:
-    root = Path(args.workspace).resolve(strict=True)
+    root = resolved(Path(args.workspace), strict=True)
     script = confined(root, args.script)
     inputs = [confined(root, value) for value in args.input]
     transforms = [confined(root, value) for value in args.transform]
@@ -127,7 +153,9 @@ def execute(args) -> int:
     for path in sources:
         if not path.is_file():
             raise ValueError('Script, input and transformation files must exist.')
-    distinct_outputs(root, (results, receipt), sources)
+    history_root = confined(root, '.analysis-provenance')
+    history = [path for pattern in ('*-previous-results.json', '*-results.raw.json') for path in history_root.glob(pattern)]
+    distinct_outputs(root, (results, receipt), sources + history)
     ledger = json.loads(receipt.read_text()) if receipt.exists() else {'schemaVersion': 1, 'executions': []}
     if not isinstance(ledger, dict) or ledger.get('schemaVersion') != 1 or not isinstance(ledger.get('executions'), list):
         raise ValueError('Existing receipt is not an execution ledger; retain it and use a different receipt path.')
@@ -142,8 +170,9 @@ def execute(args) -> int:
     before = snapshot(root, results)
     before_artifact = None
     if before is not None:
-        backup = confined(root, f'.analysis-provenance/{attempt["id"]}-previous-results.json')
-        write_bytes(root, backup, results.read_bytes(), sources + [results, receipt])
+        backup = root / f'.analysis-provenance/{attempt["id"]}-previous-results.json'
+        write_bytes(root, backup, results.read_bytes(), sources + history + [results, receipt], create_only=True)
+        history.append(backup)
         before_artifact = snapshot(root, backup)
     try:
         if executable is None:
@@ -159,7 +188,7 @@ def execute(args) -> int:
     try:
         # A native script may replace an authorized path with a symlink/hardlink.
         # Recheck aliases before reading or normalizing through that path.
-        distinct_outputs(root, (results, receipt), sources)
+        distinct_outputs(root, (results, receipt), sources + history)
         after = snapshot(root, results)
     except (OSError, ValueError) as error:
         after = None
@@ -177,10 +206,11 @@ def execute(args) -> int:
             value = json.loads(raw)
             clean = finite(value, attempt['warnings'])
             if any(item.get('code') == 'nonfinite' for item in attempt['warnings']):
-                raw_path = confined(root, f'.analysis-provenance/{attempt["id"]}-results.raw.json')
-                write_bytes(root, raw_path, raw, sources + [results, receipt])
+                raw_path = root / f'.analysis-provenance/{attempt["id"]}-results.raw.json'
+                write_bytes(root, raw_path, raw, sources + history + [results, receipt], create_only=True)
+                history.append(raw_path)
                 attempt['output']['raw'] = snapshot(root, raw_path)
-                write_bytes(root, results, encoded(clean), sources + [receipt])
+                write_bytes(root, results, encoded(clean), sources + history + [receipt])
                 attempt['output']['normalized'] = snapshot(root, results)
         except (OSError, UnicodeError, ValueError, RecursionError) as error:
             attempt['warnings'].append({'code': 'results_unreadable', 'message': type(error).__name__})
@@ -197,14 +227,14 @@ def execute(args) -> int:
         attempt['warnings'].append({'code': 'source_changed', 'message': 'A script, input or transformation changed during execution; inspect provenance before reusing state.'})
     ledger['executions'].append(attempt)
     try:
-        write_bytes(root, receipt, encoded(ledger), sources + [results])
+        write_bytes(root, receipt, encoded(ledger), sources + history + [results])
     except (OSError, ValueError):
         # Never retry an unsafe destination. A root-level artifact also avoids
         # any provenance directory the child replaced with a symlink.
         receipt = root / f'analysis-receipt-{uuid.uuid4().hex}.json'
         output_error = True
         attempt['warnings'].append({'code': 'receipt_path_unsafe', 'message': 'The requested receipt path became unsafe; this attempt and prior records are retained in the returned receipt path.'})
-        write_bytes(root, receipt, encoded(ledger), sources + [results])
+        write_bytes(root, receipt, encoded(ledger), sources + history + [results], create_only=True)
     print(json.dumps({'execution': attempt['id'], 'exitCode': attempt['exitCode'], 'outputObservation': observation, 'receipt': receipt.relative_to(root).as_posix()}))
     if output_error and attempt['exitCode'] == 0:
         return 2

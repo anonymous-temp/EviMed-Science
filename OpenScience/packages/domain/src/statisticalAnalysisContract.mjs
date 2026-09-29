@@ -5,7 +5,9 @@ const record = (value) => value != null && typeof value === 'object' && !Array.i
 /** @param {unknown} value */
 const finite = (value) => typeof value === 'number' && Number.isFinite(value)
 /** @param {unknown} value */
-const fingerprint = (value) => record(value) && typeof value.path === 'string' && value.path.length > 0 && /^[a-f0-9]{64}$/.test(value.sha256)
+const timestamp = (value) => typeof value === 'string' && Number.isFinite(Date.parse(value))
+/** @param {unknown} value */
+const fingerprint = (value) => record(value) && typeof value.path === 'string' && value.path.length > 0 && typeof value.sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.sha256)
 
 /**
  * Absent outputs and failed calculations cannot invalidate completed work.
@@ -35,12 +37,16 @@ export function statisticalAnalysisFindings(input) {
   } else if (results) {
     for (const analysis of results.analyses) {
       if (!record(analysis)) { notice(issues, 'statistical-results-shape', resultPath, 'An analysis entry is not an object.'); continue }
-      const id = String(analysis.id ?? 'unnamed')
+      const id = typeof analysis.id === 'string' ? analysis.id : 'unnamed'
+      if (analysis.id != null && typeof analysis.id !== 'string') notice(issues, 'statistical-results-shape', resultPath, 'An analysis id must be a string when provided.')
       if (analysis.status === 'complete') metrics.statisticalComplete += 1
       else if (analysis.status === 'unsupported') metrics.statisticalUnsupported += 1
       else metrics.statisticalPartial += 1
       if (analysis.status === 'complete' && Object.hasOwn(analysis, 'estimate') && !finite(analysis.estimate)) {
         notice(issues, 'statistical-finite-results', resultPath, `${id}: the complete estimate is not finite; describe the affected calculation as unavailable.`)
+      }
+      if (record(analysis.interval) && ['lower', 'upper'].some((bound) => Object.hasOwn(analysis.interval, bound) && !finite(analysis.interval[bound]))) {
+        notice(issues, 'statistical-finite-results', resultPath, `${id}: a provided interval bound is not a finite number; retain the valid estimate and explain the unavailable bound.`)
       }
       if (record(analysis.interval) && finite(analysis.interval.lower) && finite(analysis.interval.upper) && analysis.interval.lower > analysis.interval.upper) {
         notice(issues, 'statistical-results-shape', resultPath, `${id}: interval lower bound exceeds its upper bound.`)
@@ -53,7 +59,7 @@ export function statisticalAnalysisFindings(input) {
     }
   }
   const receipt = read(receiptPath, provenance)
-  if (receipt != null) {
+  if (input.files.has(receiptPath) && receipt !== undefined) {
     if (!record(receipt) || !Array.isArray(receipt.executions) || !receipt.executions.length) {
       notice(issues, 'statistical-execution-provenance', receiptPath, 'The receipt has no execution records.')
     } else {
@@ -66,7 +72,7 @@ export function statisticalAnalysisFindings(input) {
         if (record(execution.script) && typeof execution.script.path === 'string' && !input.files.has(execution.script.path)) {
           notice(issues, 'statistical-execution-provenance', receiptPath, `The linked script ${execution.script.path} is not included in the package.`)
         }
-        if (!Array.isArray(execution.argv) || !execution.argv.length || execution.argv.some((value) => typeof value !== 'string') || !record(execution.versions) || !execution.versions.interpreter || !record(execution.versions.libraries) || !Number.isInteger(execution.exitCode) || !Number.isFinite(Date.parse(execution.startedAt)) || !Number.isFinite(Date.parse(execution.endedAt))) {
+        if (!Array.isArray(execution.argv) || !execution.argv.length || execution.argv.some((value) => typeof value !== 'string') || !record(execution.versions) || typeof execution.versions.interpreter !== 'string' || !execution.versions.interpreter || !record(execution.versions.libraries) || !Number.isInteger(execution.exitCode) || !timestamp(execution.startedAt) || !timestamp(execution.endedAt)) {
           notice(issues, 'statistical-execution-provenance', receiptPath, 'An execution lacks command, observed versions, timestamps or exit status.')
         }
         if (execution.sourcesUnchanged === false || execution.exitCode !== 0 || !record(execution.output) || execution.output.observedWrite !== true) {

@@ -8,7 +8,7 @@
       "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
       "source": "https://github.com/YMa-lab/TableMage-Analysis",
       "upstreamPath": "benchmarking/dataanalysisqa/datasets/breast_cancer.csv",
-      "license": "BSD-3-Clause",
+      "license": "CC-BY-4.0",
       "coding": {
         "0": "malignant",
         "1": "benign"
@@ -16,7 +16,12 @@
       "note": "Downloaded source bytes match sklearn 1.6.1 load_breast_cancer features and targets exactly. Unnamed: 0 is a serialized row index. Upstream label prose incorrectly calls target 1 with cancer; corrected here.",
       "upstreamCommit": "2fd5220e184bf85fb517bd7cc43a9c245b25bf49",
       "pinnedContentVerified": true,
-      "pinnedUrl": "https://raw.githubusercontent.com/YMa-lab/TableMage-Analysis/2fd5220e184bf85fb517bd7cc43a9c245b25bf49/benchmarking/dataanalysisqa/datasets/breast_cancer.csv"
+      "pinnedUrl": "https://raw.githubusercontent.com/YMa-lab/TableMage-Analysis/2fd5220e184bf85fb517bd7cc43a9c245b25bf49/benchmarking/dataanalysisqa/datasets/breast_cancer.csv",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "originalSource": "https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic",
+      "attribution": "Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5DW2B.",
+      "adaptedReferenceLicense": "BSD-3-Clause",
+      "adaptedReferenceSource": "TableMage-Analysis sequential label code, copyright 2025 Ying Ma; its license applies to the adapted reference code separately from the original dataset."
     },
     {
       "path": "lung.csv",
