@@ -1200,3 +1200,14 @@ test("a proven unsent lease loss is neutral, retryable and cannot rewind a newer
   assert.equal((await service.getEpisode("user-one",episode.id)).payload.runId,"new-run");
   await assert.rejects(service.recordUnsentAttempt("user-one",episode.id,{projectId:agenda.projectId,run:{...run,dispatchStatus:"unknown"}}), {code:"autopilot_episode_state_conflict"});
 });
+
+test("an unsent verifier retry keeps its logical claim and existing scientific evidence unchanged", async () => {
+  const f = fixture(); const {episode} = await completedEpisode(f);
+  const before = await f.service.getEpisode("user-one",episode.id);
+  const verificationId = before.payload.claims[0].verification.id;
+  const saved = await f.service.recordUnsentAttempt("user-one",episode.id,{projectId:"project-one",verificationId,
+    run:{id:"unsent-verifier",sessionId:"verify-session",dispatchId:`${verificationId}-a2`,status:"failed",dispatchStatus:"rejected",errorCode:"product_job_lease_lost"}});
+  assert.equal(saved.payload.status,before.payload.status);
+  assert.deepEqual(saved.payload.claims,before.payload.claims);
+  assert.equal(saved.payload.unsentAttempts[0].checkId,verificationId);
+});
