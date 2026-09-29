@@ -29,6 +29,7 @@ function listOfText(value, field, allowed = null) {
 
 function isConflict(error) { return error?.code === "product_revision_conflict"; }
 function hash(value) { return createHash("sha256").update(value).digest("hex"); }
+const followUpKey = item => hash(JSON.stringify([item.digestId, item.claimId, item.note, item.at]));
 
 function daysWithoutActivity(agenda, now) {
   const createdAt = Number.isFinite(Date.parse(agenda.payload.createdAt)) ? agenda.payload.createdAt : agenda.createdAt;
@@ -1044,14 +1045,12 @@ export class AutopilotService {
       "Use the ordinary capability contract and delivery gate. Do not send anything externally. Stop when the budget or two-hour wall clock limit is reached.",
     ].join("\n");
     let episode;
-    let createdEpisode = false;
     try {
       episode = await this.documents.put(userId, "episode", episodeId, {
         schemaVersion: 1, agendaId: agenda.id, taskType, date, budgetCny, verificationBudgetCny: verificationCny,
-        prompt, progress, status: "queued",
+        prompt, progress, followUpKeys: followUps.map(followUpKey), status: "queued",
         runId: null, claims: [], createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
       }, { expectedRevision: 0, projectId: agenda.projectId });
-      createdEpisode = true;
     } catch (error) {
       if (!isConflict(error)) throw error;
       episode = await this.documents.get(userId, "episode", episodeId);
@@ -1061,16 +1060,24 @@ export class AutopilotService {
       taskType: episode.payload.taskType, budgetCny: episode.payload.budgetCny, prompt: episode.payload.prompt }, {
       idempotencyKey: `episode:${agenda.id}:${date}`, projectId: agenda.projectId, maxAttempts: 10,
     });
-    const consumeFollowUps = createdEpisode && followUps.length > 0;
-    if (agenda.payload.lastScheduledDate !== date || consumeFollowUps) {
-      await this.documents.put(userId, "agenda", agenda.id, {
-        ...agenda.payload, lastScheduledDate: date,
-        followUps: consumeFollowUps
-          ? (agenda.payload.followUps ?? []).map((item) => item.consumedBy || !followUps.includes(item) ? item : { ...item, consumedBy: episodeId })
-          : agenda.payload.followUps ?? [],
-        updatedAt: this.now().toISOString(),
-      }, { expectedRevision: agenda.revision, projectId: agenda.projectId }).catch((error) => { if (!isConflict(error)) throw error; });
+    // Settle the questions frozen with this episode, including a retry after
+    // its first agenda update lost a CAS race. New questions are not consumed.
+    const consumed = new Set(episode.payload.followUpKeys ?? []);
+    let settled = false;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await this.get(userId, agenda.id);
+      const pending = (current.payload.followUps ?? []).some(item => !item.consumedBy && consumed.has(followUpKey(item)));
+      const scheduledDate = current.payload.lastScheduledDate > date ? current.payload.lastScheduledDate : date;
+      if (current.payload.lastScheduledDate === scheduledDate && !pending) { settled = true; break; }
+      try {
+        await this.documents.put(userId, "agenda", agenda.id, { ...current.payload, lastScheduledDate: scheduledDate,
+          followUps: (current.payload.followUps ?? []).map(item => item.consumedBy || !consumed.has(followUpKey(item)) ? item : { ...item, consumedBy: episodeId }),
+          updatedAt: this.now().toISOString(),
+        }, { expectedRevision: current.revision, projectId: current.projectId });
+        settled = true; break;
+      } catch (error) { if (!isConflict(error)) throw error; }
     }
+    if (!settled) throw new HttpError(409, "autopilot_activity_conflict", "Follow-up questions changed repeatedly; retry this same episode.");
     return { episode, job };
   }
 
