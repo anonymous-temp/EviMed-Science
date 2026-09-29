@@ -106,6 +106,21 @@ def test_repository_metadata_binds_source_scale_without_changing_effects():
     assert result.mr_results == []
 
 
+def test_binding_catalogue_metadata_keeps_source_n_and_harmonised_n_separate():
+    import evimed_local_inputs as inputs
+    from mr_agent.source_context import variant_sample_summary, scientific_context
+    result = MRAnalysisResult(exposure_id="GCST900001", outcome_id="GCST900002", exposure_source_type="gwas_catalog", outcome_source_type="gwas_catalog")
+    harmonised = variant_sample_summary([238944, 218359], scope="harmonised_rows")
+    source = variant_sample_summary([None, 218359, 339205], scope="selected_source_rows_before_catalogue_fill")
+    result.variant_sample_sizes["exposure"] = harmonised
+    record = {role: {"accession": accession, "sampleMetadata": {"sampleSize": 238944}, "sampleSize": {"originalVariantSampleSizes": source}}
+              for role, accession in (("exposure", "GCST900001"), ("outcome", "GCST900002"))}
+    inputs.bind_open_metadata([result], record, {"exposure": "BMI", "outcome": "CHD"})
+    context = scientific_context(result)["sample_sizes"]["exposure"]
+    assert context["variants"] == harmonised
+    assert context["source_variants"] == source
+
+
 def test_mixed_source_repository_read_retains_a_conflicting_declaration(monkeypatch):
     import evimed_local_inputs as inputs
     from mr_agent.source_context import declared_scale
