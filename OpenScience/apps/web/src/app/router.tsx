@@ -30,6 +30,8 @@ const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ def
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
+const VcrHomePage = lazy(() => import("./virtual-research/VcrHomePage").then((m) => ({ default: m.VcrHomePage })));
+const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((m) => ({ default: m.VcrStudyPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
@@ -74,6 +76,13 @@ export const routes: RouteObject[] = [
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
+        // 「虚拟临研」: the module's home, and one study's seven tabs (总览
+        // when none is named). A study package is read at `?package=<id>` on
+        // the study's own address rather than at a route of its own — it is a
+        // view of the study, and a third route would make it a place people
+        // can arrive at without the study around it.
+        { path: "virtual-research", element: <VcrHomePage /> },
+        { path: "virtual-research/:studyId/:tab?", element: <VcrStudyPage /> },
         // 「循证 GEO」: the projects, one project's tabs (概览 when none is
         // named), and one AI answer. Like the frontier feed, each answers for
         // itself when the module is off here.

@@ -97,6 +97,9 @@ export const ROUTES = [
   // module; one project's seven tabs are added when the account has one
   // (`geoProjectRoutes`).
   ["geo", "/app/geo"],
+  // 虚拟临研's home — its one sentence where the account is not offered
+  // the module; one study's seven tabs are added when the account has one.
+  ["virtual-research", "/app/virtual-research"],
   ["files", "/app/files"],
   ["memory", "/app/memory"],
   ["autopilot", "/app/autopilot"],
@@ -163,10 +166,22 @@ export const GEO_TABS = [
   ["geo-overview", ""], ["geo-visibility", "/visibility"], ["geo-accuracy", "/accuracy"],
   ["geo-questions", "/questions"], ["geo-sources", "/sources"], ["geo-actions", "/actions"], ["geo-plan", "/plan"],
 ];
+/**
+ * The seven tabs of one 虚拟临研 study, by the report's name and path segment
+ * (build plan 2026-09-28 §9.4). Walked like GEO's: the module's home page is
+ * one sentence for an account it is not open to, and a study's own pages only
+ * exist where that account has a study.
+ */
+export const VCR_TABS_WALK = [
+  ["vcr-overview", ""], ["vcr-population", "/population"], ["vcr-patients", "/patients"],
+  ["vcr-comparator", "/comparator"], ["vcr-trial", "/trial"], ["vcr-matching", "/matching"], ["vcr-data", "/data"],
+];
 export const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
   geo: DATA_BUDGET,
   ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
+  "virtual-research": DATA_BUDGET,
+  ...Object.fromEntries(VCR_TABS_WALK.map(([name]) => [name, GEO_BUDGET])),
   // The knowledge base became a data page when it grew its project-and-type
   // rail. Its route is `files`: the key used to read `knowledge`, a page name
   // no route has, so the page kept the reading budget and failed on its ninth
@@ -179,6 +194,20 @@ export const BUDGET_BY_PAGE = {
  * the first the list names. None when the module is off here or the account
  * has none: the home is walked either way. It walked three of the seven until
  * 2026-09-27, so four tabs had never been through the walk.
+ * @param {any} context a logged-in browser context @param {string} base
+ * @returns {Promise<Array<[string, string]>>}
+ */
+async function vcrStudyRoutes(context, base) {
+  const answer = await context.request.get(`${base}/api/vcr/studies`).catch(() => null);
+  if (!answer || !answer.ok()) return [];
+  const studies = (await answer.json().catch(() => null))?.data?.studies;
+  const id = Array.isArray(studies) && typeof studies[0]?.id === "string" ? studies[0].id : null;
+  if (!id) return [];
+  const at = `/app/virtual-research/${encodeURIComponent(id)}`;
+  return VCR_TABS_WALK.map(([name, segment]) => [name, `${at}${segment}`]);
+}
+
+/**
  * @param {any} context a logged-in browser context @param {string} base
  * @returns {Promise<Array<[string, string]>>}
  */
@@ -442,7 +471,7 @@ async function main() {
       return 2;
     }
     const leaks = [...LEAKS, ...shoutedCapabilityKeys([...ids, "open-domain-answer"])];
-    const routes = [...ROUTES, ...await geoProjectRoutes(context, base)];
+    const routes = [...ROUTES, ...await geoProjectRoutes(context, base), ...await vcrStudyRoutes(context, base)];
     const page = await context.newPage();
     const consoleErrors = {};
     const httpErrors = {};
