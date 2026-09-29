@@ -22,3 +22,20 @@ test("the real run ledger preserves only bounded owner/capability/digest handboo
     assert.ok(!(await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8")).includes("PRIVATE BODY"));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("native request receipts append without erasing earlier attachments or duplicating replays", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-native-receipt-ledger-"));
+  try {
+    const project = { id: "p", userId: "alice", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(project.workspaceDir); await mkdir(project.metaDir);
+    const store = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [] });
+    store.scheduleMonitor = () => {};
+    const { run } = await store.reserveRun(project, { sessionId: "session", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }, { baselineCursor: null, kernelRequestIds: ["A", "B"] });
+    const receipt = { id: "method:capability-handbook:geo-content:denominator-check", ownerId: "alice", capabilityId: "geo-content", contentDigest: `sha256:${"a".repeat(64)}`, version: 1, path: `.evimed-handbooks/${"b".repeat(64)}/SKILL.md`, requestId: "A" };
+    await store.recordLearning(project, run.id, { appendCapabilityHandbooks: [receipt] });
+    await store.recordLearning(project, run.id, { appendCapabilityHandbooks: [receipt, { ...receipt, id: "method:capability-handbook:geo-content:second", requestId: "B" }] });
+    const [saved] = await store.list(project);
+    assert.equal(saved.capabilityHandbooks.length, 2);
+    assert.deepEqual(saved.capabilityHandbooks.map(item => item.requestId), ["A", "B"]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
