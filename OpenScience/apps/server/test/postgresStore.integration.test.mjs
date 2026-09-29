@@ -134,8 +134,8 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     assert.equal(competingSessions.filter((result) => result.status === "rejected").length, 1);
     assert.equal(competingSessions.find((result) => result.status === "rejected").reason.code, "research_session_limit_reached");
 
-    await first.app.store.createUser("bob", "another correct battery staple", "Bob");
-    const bob = await login(second.base, "bob", "another correct battery staple");
+    await first.app.store.createUser("bob", "abc123", "Bob");
+    const bob = await login(second.base, "bob", "abc123");
     assert.equal(bob.response.status, 200);
     const bobProjects = await fetch(`${second.base}/api/projects`, { headers: { Cookie: bob.cookie } });
     assert.deepEqual((await bobProjects.json()).data, [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
@@ -266,6 +266,34 @@ test("expired sign-ins are purged oldest first in bounded batches, and a live on
     assert.equal(left.rows[0].count, 1);
   } finally {
     await app?.app.close();
+    await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+    await admin.end();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("PostgreSQL bootstrap applies the character floor only when creating a new account", {
+  skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  assertTestDatabase(databaseUrl);
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-bootstrap-floor-"));
+  const app = createWebApiApp({ dataDir, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "bootstrap-floor", bootstrapPassword: "short", stateStore: "postgres", databaseUrl });
+  try {
+    await assert.rejects(app.store.loadUsers(), { code: "weak_password" });
+    assert.equal((await admin.query("SELECT count(*)::integer AS count FROM evimed_control.users")).rows[0].count, 0);
+    app.store.config.bootstrapPassword = "abc123";
+    await app.store.loadUsers();
+    const before = await admin.query("SELECT password_hash FROM evimed_control.users WHERE id = 'bootstrap-floor'");
+    assert.equal(before.rowCount, 1);
+    app.store.config.bootstrapPassword = "old";
+    await app.store.loadUsers();
+    const after = await admin.query("SELECT password_hash FROM evimed_control.users WHERE id = 'bootstrap-floor'");
+    assert.equal(after.rows[0].password_hash, before.rows[0].password_hash, "existing passwords are not reset");
+  } finally {
+    await app.close().catch(error => { if (error.code !== "ERR_SERVER_NOT_RUNNING") throw error; });
     await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
     await admin.end();
     await rm(dataDir, { recursive: true, force: true });

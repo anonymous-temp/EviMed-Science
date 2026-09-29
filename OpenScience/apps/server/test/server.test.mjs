@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 import { createWebApiApp } from "../src/server.mjs";
+import { hashPassword } from "../src/security.mjs";
 import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
 const productionReadinessReady = {
@@ -1096,6 +1097,27 @@ test("the configured bootstrap account is created when it is absent, not only wh
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("existing bootstrap passwords remain usable after the character policy changes", async () => {
+  await withAuthApp(async ({ app, base }) => {
+    const legacyPassword = "😀😁😂😃";
+    await app.store.loadUsers();
+    const user = app.store.users.get("alice");
+    assert.ok(user);
+    user.passwordHash = hashPassword(legacyPassword);
+    await app.store.saveUsers();
+    app.store.config.production = true;
+    app.store.config.bootstrapPasswordSource = "file";
+    app.store.config.bootstrapPassword = legacyPassword;
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "alice", password: legacyPassword }),
+    });
+    assert.equal(login.status, 200);
+    const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
+    assert.equal(ready.checks.auth.ok, true, "a password policy change must not require a reset");
+  });
 });
 
 test("local authentication bootstraps from a no-follow password file", async () => {
