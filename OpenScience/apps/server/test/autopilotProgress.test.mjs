@@ -63,3 +63,17 @@ test("a shortened claim is explicitly marked as truncated even when its episode 
   assert.equal(snapshot.episodes.length,1);
   assert.equal(snapshot.truncated,true);
 });
+
+test("every bounded collection reports omitted valid observations", () => {
+  const refs = Array.from({length:7},(_,i)=>({projectId:"p",runId:"run",sessionId:"session",path:`out-${i}.csv`}));
+  const claim = {id:"c",statement:"Finding",tier:"gated"};
+  const digest = id => ({id,ownerId:"alice",projectId:"p",createdAt:"2026-09-29T00:00:00Z",payload:{agendaId:"agenda",date:"2026-09-29",decisions:[]}});
+  const cases = [
+    {episodes:[episode("refs","2026-09-29","merged",{runId:"run",sessionId:"session",artifactRefs:refs})]},
+    {episodes:[episode("sources","2026-09-29","merged",{claims:[{...claim,sources:["a","b","c","d","e"]}]})]},
+    {episodes:[episode("fold","2026-09-29","verifying",{claims:undefined,completion:{claims:Array.from({length:4},(_,i)=>({...claim,id:`c${i}`}))}})]},
+    {digests:Array.from({length:9},(_,i)=>digest(`d${i}`))},
+    {digests:[{...digest("decisions"),payload:{...digest("decisions").payload,decisions:Array.from({length:6},(_,i)=>({action:"reject",claimId:`c${i}`,note:"Rejected",at:"2026-09-29T01:00:00Z"}))}}]},
+  ];
+  for (const patch of cases) assert.equal(buildAutopilotProgress({...input,...patch}).truncated,true,JSON.stringify(patch));
+});
