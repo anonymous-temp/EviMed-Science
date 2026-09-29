@@ -258,3 +258,15 @@ async def test_a_stream_is_counted_from_its_final_usage_chunk():
         "requests": 1, "cacheHitTokens": 16, "cacheMissTokens": 4, "outputTokens": 5, "model": "deepseek-flash",
     }
     provider_usage.reset()
+
+
+@pytest.mark.parametrize("effort", ["off", "low", "high", "max"])
+@pytest.mark.parametrize("tier", ["flash", "pro"])
+def test_managed_choice_reaches_request_payload(monkeypatch, effort, tier):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "managed-thinking")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
+    client, api = _sync_client([_response()])
+    client.complete([{"role": "user", "content": "test"}], tier=tier)
+    request = api.calls[0]
+    assert request["extra_body"]["thinking"]["type"] == ("disabled" if effort == "off" else "enabled")
+    assert request.get("reasoning_effort") == (None if effort == "off" else effort)

@@ -387,3 +387,20 @@ async def test_every_billed_response_is_counted_for_the_evimed_usage_ledger(monk
         "requests": 3, "cacheHitTokens": 40, "cacheMissTokens": 12, "outputTokens": 5, "model": "deepseek-flash",
     }
     provider_usage.reset()
+
+
+@pytest.mark.parametrize("effort", ["off", "low", "high", "max"])
+@pytest.mark.parametrize("tier", ["flash", "pro"])
+@pytest.mark.asyncio
+async def test_managed_choice_reaches_request_payload(monkeypatch, effort, tier):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "managed-thinking")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
+    requests = []
+    monkeypatch.setattr(gateway_module, "_make_session", lambda timeout: _FakeSession(requests))
+    gateway = _gateway(monkeypatch)
+    selected = ModelTier.FAST if tier == "flash" else ModelTier.ADVANCED
+    await gateway._call_llm(messages=[{"role": "user", "content": "test"}],
+        model=gateway.model_mapping[selected], model_tier=selected, temperature=0.2, max_tokens=10)
+    request = requests[0]["json"]
+    assert request["thinking"]["type"] == ("disabled" if effort == "off" else "enabled")
+    assert request.get("reasoning_effort") == (None if effort == "off" else effort)
