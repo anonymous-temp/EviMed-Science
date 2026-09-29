@@ -564,10 +564,9 @@ function mediaMarketSettings(overrides) {
  *   write. A second copy of one secret is a second thing to rotate.
  * - Both addresses are full endpoint URLs, and both must be https unless they
  *   are loopback: the key travels in an `Authorization` header on every call.
- * - **The rate is a deployment fact and has no default.** 0 — the default —
- *   means 「not configured」 and the module settles nothing while saying so. A
- *   guessed 灵豆-per-CNY rate would charge every user wrongly and look exactly
- *   like a working deployment, which is the one failure mode money cannot have.
+ * - The owner approved one credit per CNY on 2026-09-29. An explicit 0 still
+ *   means not configured. Settlement also requires the separate enabled
+ *   switch and actual billing endpoints; the conversion alone spends nothing.
  *
  * @param {Record<string, any>} overrides
  */
@@ -1181,9 +1180,8 @@ export function loadConfig(overrides = {}) {
     restoreDrillAck: overrides.restoreDrillAck ?? boolEnv("OPEN_SCIENCE_RESTORE_DRILL_ACK", false),
     authMode,
     devAuth,
-    // Whether anyone may create an account here. Off by default: a deployment
-    // that turns it on is choosing to be open, and that choice belongs to the
-    // operator rather than to whichever build happens to be running.
+    // The owner opened self-registration on 2026-09-29. A deployment can
+    // still explicitly disable it; existing account passwords stay unchanged.
     selfRegistrationEnabled:
       overrides.selfRegistrationEnabled ?? boolEnv("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED", true),
     oidcIssuer: overrides.oidcIssuer ?? process.env.OPEN_SCIENCE_OIDC_ISSUER ?? "",
