@@ -137,7 +137,6 @@ test("only the researcher's own work in their own live projects is family", () =
   assert.ok(withPeers({ project: projectOf("other-paper"), runs: [run()] }), "the control completes the group of three");
   const excluded = [
     ["an automated run (evaluation cell, probe, harness)", { project: projectOf("other-paper"), runs: [run({ automated: true })] }],
-    ["an autopilot episode", { project: projectOf("other-paper"), runs: [run({ effectiveRouteReason: "autopilot:literature-sentinel" })] }],
     ["a run that failed", { project: projectOf("other-paper"), runs: [run({ status: "failed" })] }],
     ["a run still going", { project: projectOf("other-paper"), runs: [run({ status: "running", finishedAt: null })] }],
     ["a run in an internal project", { project: projectOf(LEARNING_PROJECT_ID), runs: [run()] }],

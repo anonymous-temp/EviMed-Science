@@ -112,6 +112,21 @@ export function usagePurposeOfRun(run) {
   return 'kernel'
 }
 
+/**
+ * Work performed for a researcher includes their managed GEO and proactive
+ * workflows. Platform evaluations and the learning loop's own jobs do not.
+ * Callers still enforce project ownership and exclude internal projects.
+ * @param {{ automated?: boolean, effectiveRouteReason?: string | null,
+ * effectiveAgentId?: string | null, dispatchId?: string | null } | null | undefined} run
+ * @returns {boolean}
+ */
+export function isResearcherOwnedWork(run) {
+  if (!run || usagePurposeOfRun(run) !== 'kernel') return false
+  const route = String(run.effectiveRouteReason ?? '')
+  const managedResearch = route.startsWith('geo:') || route.startsWith('autopilot:')
+  return run.automated !== true || managedResearch
+}
+
 /** The learning loop's two internal capabilities. */
 export const LEARNING_AGENT_IDS = Object.freeze(['method-distillation', 'method-relations'])
 

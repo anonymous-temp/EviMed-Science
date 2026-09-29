@@ -15,7 +15,7 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, isResearcherRun, readRunStateProjection, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -31,7 +31,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -1451,7 +1451,7 @@ export function createWebApiApp(overrides = {}) {
         for (const listed of await store.listProjects(user)) {
           if (isInternalProject(listed.id)) continue;
           const project = await store.requireProject(user, listed.id);
-          for (const run of await agentRuns.researcherRuns(project)) runs.push({ projectId: project.id, run });
+          for (const run of await agentRuns.researcherRuns(project, { includeManaged: true })) runs.push({ projectId: project.id, run });
         }
         return runs;
       } });
@@ -2090,7 +2090,7 @@ export function createWebApiApp(overrides = {}) {
       runAttribution.delete(`${project.userId}\0${project.id}`);
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
-      if (frontier && !isInternalProject(project.id) && isResearcherRun(run)) frontier.profiles.noteConversation(project.userId, run);
+      if (frontier && !isInternalProject(project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
       if (geo && !isInternalProject(project.id)) {

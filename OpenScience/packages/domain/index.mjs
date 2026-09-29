@@ -714,13 +714,14 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 7 exports: what a metered model request was for (X1)
+// usagePurpose — 8 exports: what a metered model request was for (X1)
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
   isUsagePurpose,
   usagePurpose,
   usagePurposeOfRun,
+  isResearcherOwnedWork,
   LEARNING_AGENT_IDS,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
 } from './src/usagePurpose.mjs'

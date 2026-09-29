@@ -73,7 +73,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits, usagePurposeOfRun } from "@evimed/domain";
+import { clinicalSafetyCautionHits, isResearcherOwnedWork, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -3869,10 +3869,13 @@ export class AgentRunStore {
    * ones included and marked, folded without the phase walk `list` adds —
    * what 与我相关 reads a researcher's recent questions from, in the
    * background, for every project of an account at once.
-   * @param {any} project @returns {Promise<Record<string, any>[]>}
+   * @param {any} project
+   * @param {{ includeManaged?: boolean }} [options]
+   * @returns {Promise<Record<string, any>[]>}
    */
-  async researcherRuns(project) {
-    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()].filter(isResearcherRun);
+  async researcherRuns(project, { includeManaged = false } = {}) {
+    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
+      .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun);
   }
 
   /**
