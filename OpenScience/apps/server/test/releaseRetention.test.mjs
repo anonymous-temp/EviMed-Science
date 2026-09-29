@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, symlink, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, symlink, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { plan, releaseImageTags, releasesHeldThroughCurrent, releasesNamedBy } from "../../../scripts/ops/release-retention.mjs";
 
 /**
@@ -244,4 +247,14 @@ test("a release's images are found under the names this deployment actually tags
     "open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26-526261d6a154",
     "open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26-526261d6a154-flat",
   ]);
+});
+
+
+test("retention invoked through the deployment current symlink executes its CLI", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "retention-current-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const script = fileURLToPath(new URL("../../../scripts/ops/release-retention.mjs", import.meta.url));
+  await symlink(path.dirname(script), path.join(root, "current"));
+  await assert.rejects(promisify(execFile)(process.execPath, [path.join(root, "current/release-retention.mjs"), "invalid-command"]),
+    error => error.code === 2 && /Usage: release-retention/.test(error.stderr));
 });
