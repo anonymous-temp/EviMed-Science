@@ -57,6 +57,21 @@ function parseReasoningEffort(value) {
 }
 
 /**
+ * How long one engine job's model credential lives, in seconds
+ * (modelGatewayEngineTokens.mjs). It has to outlast the job: a credential that
+ * expires first fails the job's remaining model calls. Five minutes to a day;
+ * anything else is refused at startup rather than at the first long job.
+ * @param {unknown} value
+ */
+function parseEngineModelTokenTtl(value) {
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds < 300 || seconds > 86_400) {
+    throw new Error(`OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS must be a whole number from 300 to 86400, got ${JSON.stringify(value)}.`);
+  }
+  return seconds;
+}
+
+/**
  * The socket plugins every runtime of this deployment runs without, by preset
  * row id. A name that matches no switch is refused here: it would leave that
  * plugin on while the operator believes it is off.
@@ -1572,6 +1587,24 @@ export function loadConfig(overrides = {}) {
       overrides.evimedWorkloadTokenTtlSeconds ??
       process.env.OPEN_SCIENCE_EVIMED_WORKLOAD_TOKEN_TTL_SECONDS ??
       300,
+    ),
+    // The specialist engines' model calls (gap E4). Off, each engine calls
+    // DeepSeek from its own container with the key mounted there, and its
+    // spend reaches the ledger once per job, after the fact. On, an adapter
+    // admitting a job asks `/internal/engines/v1/model-token` for a credential
+    // for that job alone, and the engine's calls go through the model gateway:
+    // reserved and settled per call, on the certified model, under the
+    // account's caps and the starting run's budget. Switched off again, the
+    // gateway refuses every engine credential at the next call. The adapters
+    // read the same variable (deploy/web/docker-compose.yml), so one lever
+    // moves both sides.
+    engineModelGatewayEnabled:
+      overrides.engineModelGatewayEnabled ?? boolEnv("OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED", false),
+    // Six hours: twice what the release audit allows one engine job
+    // (`run_specialist_jobs.py --job-timeout-seconds`, 10800), and short enough
+    // that a credential copied out of a job stops working the same day.
+    engineModelTokenTtlSeconds: parseEngineModelTokenTtl(
+      overrides.engineModelTokenTtlSeconds ?? ((process.env.OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS ?? "").trim() || 21_600),
     ),
     deepseekProviderEnabled:
       overrides.deepseekProviderEnabled ?? boolEnv("OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED", Boolean(deepseekSecret.value)),

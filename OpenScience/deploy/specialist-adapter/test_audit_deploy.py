@@ -1,26 +1,38 @@
-"""The optional audit signing secret is confined to the MR adapter service."""
+"""The optional audit signing secret is confined to the adapter services that sign."""
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+#: Every service built from this adapter; each signs the same way (gap E9).
+ADAPTER_SERVICES = {
+    "evimed-mr-agent",
+    "evimed-bibliometric-agent",
+    "evimed-research-topic-agent",
+    "evimed-peer-review-agent",
+    "evimed-drug-safety-agent",
+}
 
 
-def test_optional_mr_audit_overlay_mounts_only_a_readonly_operator_file():
+def test_optional_audit_overlay_mounts_only_a_readonly_operator_file_into_every_adapter():
     overlay = yaml.safe_load((ROOT / "deploy/web/docker-compose.specialist-audit.yml").read_text())
-    assert set(overlay["services"]) == {"evimed-mr-agent"}
-    service = overlay["services"]["evimed-mr-agent"]
-    assert service["user"] == "0:0"
-    assert set(service["cap_add"]) == {"SETUID", "SETGID"}
-    assert service["environment"] == {
-        "EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE": "/run/secrets/specialist-audit-signing-key"}
-    assert service["volumes"] == [{"type": "bind",
-        "source": "${OPEN_SCIENCE_SPECIALIST_AUDIT_SIGNING_KEY_HOST_FILE:?set a protected audit signing key file}",
-        "target": "/run/secrets/specialist-audit-signing-key", "read_only": True,
-        "bind": {"create_host_path": False}}]
+    assert set(overlay["services"]) == ADAPTER_SERVICES
     base = yaml.safe_load((ROOT / "deploy/web/docker-compose.yml").read_text())
-    assert base["services"]["evimed-mr-agent"]["cap_drop"] == ["ALL"]
-    assert base["services"]["evimed-mr-agent"]["security_opt"] == ["no-new-privileges:true"]
+    built_here = {name for name, service in base["services"].items()
+                  if (service.get("build") or {}).get("dockerfile") == "OpenScience/deploy/specialist-adapter/Dockerfile"}
+    assert built_here == ADAPTER_SERVICES, "a new adapter service must sign like the others"
+    for name in ADAPTER_SERVICES:
+        service = overlay["services"][name]
+        assert service["user"] == "0:0"
+        assert set(service["cap_add"]) == {"SETUID", "SETGID"}
+        assert service["environment"] == {
+            "EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE": "/run/secrets/specialist-audit-signing-key"}
+        assert service["volumes"] == [{"type": "bind",
+            "source": "${OPEN_SCIENCE_SPECIALIST_AUDIT_SIGNING_KEY_HOST_FILE:?set a protected audit signing key file}",
+            "target": "/run/secrets/specialist-audit-signing-key", "read_only": True,
+            "bind": {"create_host_path": False}}]
+        assert base["services"][name]["cap_drop"] == ["ALL"]
+        assert base["services"][name]["security_opt"] == ["no-new-privileges:true"]
     for service in base["services"].values():
         assert "EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE" not in service.get("environment", {})
     example = (ROOT / "deploy/web/.env.example").read_text()

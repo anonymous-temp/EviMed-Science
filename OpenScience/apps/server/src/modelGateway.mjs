@@ -6,6 +6,7 @@
 // cannot drive the chain fails the release rather than reaching a reader.
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
+import { verifyEngineModelToken } from "./modelGatewayEngineTokens.mjs";
 import { recordProviderRefusal } from "./providerRefusals.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
@@ -168,6 +169,27 @@ function consumeBudgetScope(request, caller, config) {
     }
   }
   return { request: { ...request, messages }, scope: scopes[0] ?? null };
+}
+
+/**
+ * The caller an engine job's credential stands for (modelGatewayEngineTokens.mjs).
+ *
+ * Asked only after the token is not a live runtime's. Accepted only while the
+ * lever is on — switched off, every engine credential already handed out stops
+ * at its next call — and only on the chat route, the one protocol the engines
+ * speak. Its scope is the token's own: a budget marker in an engine's prompt is
+ * text, never authority, so the marker rules below do not apply to it.
+ * @param {string} token @param {{ protocol: string }} route @param {Record<string, any>} config
+ */
+function engineCaller(token, route, config) {
+  if (config.engineModelGatewayEnabled !== true || route.protocol !== "chat") {
+    throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
+  }
+  try {
+    return verifyEngineModelToken(token, { secret: config.modelGatewaySigningSecret });
+  } catch {
+    throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
+  }
 }
 
 function minimumPositive(...values) {
@@ -940,15 +962,16 @@ export function createModelGatewayHandler(config, runtimeManager, {
         throw gatewayError(503, "model_gateway_unavailable", "The model gateway is not configured.");
       }
       const token = route.token(req);
+      /** @type {any} */
       let caller;
       try {
         caller = runtimeManager.assertActiveModelGatewayToken(token);
       } catch {
-        throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
+        caller = engineCaller(token, route, config);
       }
       const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
       let normalized = route.normalize(body, config);
-      const scoped = consumeBudgetScope(normalized, caller, config);
+      const scoped = caller.engine ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
       modelName = normalized.model;
       streamRequested = normalized.stream === true;
@@ -977,14 +1000,18 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // unattributed rather than guessed (they still count toward the
         // account's caps). Measured on 2026-09-20: two conversations in the
         // default project overlapped, and both read 「约 ¥0.00」.
-        const attributed = caller.runId == null && attributeRun
+        //
+        // An engine job's run was decided when the job was admitted and rides
+        // in its credential; asking again now could name a run that started
+        // after the job did.
+        const attributed = caller.runId == null && attributeRun && !caller.engine
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
         const runId = caller.runId ?? attributed ?? null;
         // A runtime's request is the kernel's unless its run says otherwise.
         // Asking can fail (the run ledger is a file); the answer is a report
         // column, so a failure records `kernel` rather than costing the call.
-        const purpose = runPurpose
+        const purpose = caller.engine ? "engine" : runPurpose
           ? await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel")
           : "kernel";
         reservation = await usageLedger.reserveModel({

@@ -7,7 +7,6 @@ environment variable, absolute output path, or caller-supplied tenant scope.
 """
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 import os
@@ -29,7 +28,7 @@ from fastapi import Body, FastAPI, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .mr_job_store import MRJobStore
-from . import audit_receipt, usage_report
+from . import audit_receipt, engine_model, isolated_job, usage_report
 from .security import _authorized_claims, _read_secret, _signing_secret
 
 
@@ -473,16 +472,14 @@ def _mr_job(root: Path) -> Any:
 
 
 def _source_evidence(root: Path) -> dict[str, Any]:
-    if _kind() == "mendelian-randomization":
-        return audit_receipt.current_evidence(root)
-    digest = hashlib.sha256()
-    for target in (
-        root / "evimed_runner.py",
-        root / _spec()["marker"],
-        Path(__file__).resolve(),
-    ):
-        digest.update(target.read_bytes())
-    return {"algorithm": "sha256", "digest": digest.hexdigest()}
+    """The whole auditable engine tree and this adapter, hashed one way for every engine.
+
+    The same evidence a signed receipt carries and a clean checkout recomputes
+    (audit_receipt.current_evidence). It used to be three files for every
+    engine but MR, which no verifier could reproduce, so only MR could ever be
+    certified.
+    """
+    return audit_receipt.current_evidence(root)
 
 
 def _job_paths(workspace: Path, job_id: str) -> tuple[Path, Path]:
@@ -582,7 +579,12 @@ def _validated_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _model_ready() -> bool:
     try:
-        _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
+        # Through the gateway a job's credential is issued per job, so this
+        # container needs no provider key; directly, it needs the mounted one.
+        if engine_model.enabled():
+            engine_model.token_url()
+        else:
+            _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
         root = _agent_root()
         if _kind() == "mendelian-randomization" and not all(
             (root / name).is_file()
@@ -673,6 +675,7 @@ def _start(
     workspace: Path,
     job_credentials: dict[str, str] | None = None,
     owner: dict[str, str] | None = None,
+    workload_token: str | None = None,
 ) -> dict[str, Any]:
     if not _model_ready():
         return _error(
@@ -682,6 +685,23 @@ def _start(
         )
     spec = _spec()
     request = {key: arguments[key] for key in spec["inputs"] if key in arguments}
+    # What a signed receipt binds the job to: the request exactly as the caller
+    # sent it, before a manuscript path is resolved inside the workspace.
+    try:
+        request_sha256 = audit_receipt.digest(audit_receipt.canonical(request))
+    except ValueError:
+        request_sha256 = None  # not canonical JSON (a NaN): the job runs, nothing can sign it
+    if _kind() != "mendelian-randomization":
+        try:
+            audit_receipt.analysis_credentials()
+        except audit_receipt.AuditReceiptUnavailable:
+            # A signing key is mounted but the engine could not be kept from
+            # it: refused before anything is queued, never run beside the key.
+            return _error(
+                "specialist_audit_isolation_unavailable",
+                "Signed audit receipts need the engine to run as its own user, which this adapter cannot arrange.",
+                True,
+            )
     if _kind() == "mendelian-randomization":
         # A job that can only fail for want of OpenGWAS is refused here, by
         # name, instead of being queued to fail inside the engine.
@@ -715,6 +735,25 @@ def _start(
         except helper.MRInputError as error:
             return _error(error.code, str(error))
     job_id = _job_id(arguments, spec)
+    # With the lever on, the job's model calls go through the gateway under a
+    # credential issued for this job alone. Asked for before anything is
+    # reserved on disk, so a refusal leaves nothing behind.
+    model_credentials: dict[str, str] = {}
+    if engine_model.enabled():
+        try:
+            model_credentials = engine_model.request_credential(
+                url=engine_model.token_url(),
+                secret=_signing_secret(),
+                workload_token=workload_token,
+                kind=_kind(),
+                job_id=job_id,
+            )
+        except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError) as error:
+            return _error(
+                "specialist_model_gateway_unavailable",
+                f"The model gateway did not admit this job: {error}.",
+                True,
+            )
     run_root = workspace / spec["directory"]
     queue_record = None
     if _kind() == "mendelian-randomization":
@@ -776,6 +815,9 @@ def _start(
         # report at the end names the account and project, and by then the
         # token is long expired. MR carries the same in its queue context.
         **({"owner": owner} if owner and queue_record is None else {}),
+        **({"requestSha256": request_sha256} if queue_record is None and request_sha256 else {}),
+        # How the engine reaches the model; never the credential itself.
+        **({"modelRoute": "gateway"} if model_credentials else {}),
         "createdAt": _now(),
         "updatedAt": _now(),
         "artifacts": [],
@@ -800,7 +842,7 @@ def _start(
                 str(state_path),
             ],
             cwd=str(Path(__file__).resolve().parents[1]),
-            env={**os.environ, **(job_credentials or {})},
+            env={**os.environ, **(job_credentials or {}), **model_credentials},
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -969,6 +1011,7 @@ def call(
     workspace: Path,
     job_credentials: dict[str, str] | None = None,
     owner: dict[str, str] | None = None,
+    workload_token: str | None = None,
 ) -> dict[str, Any]:
     action = arguments["action"]
     if action == "capabilities":
@@ -1023,7 +1066,7 @@ def call(
             )
         return result
     if action == "start":
-        return _start(arguments, workspace, job_credentials, owner)
+        return _start(arguments, workspace, job_credentials, owner, workload_token)
     deadline = time.monotonic() + int(arguments.get("waitSeconds", 0))
     while True:
         result = _status(arguments, workspace)
@@ -1036,21 +1079,31 @@ def call(
 
 
 def _child_environment() -> dict[str, str]:
-    api_key = _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
     environment = dict(os.environ)
     environment.pop("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", None)
+    gateway_token = environment.pop(engine_model.TOKEN_ENV, "")
+    gateway_base = environment.pop(engine_model.BASE_URL_ENV, "")
     # A credential resolved for this job at submission arrives prefixed in the
     # worker's own environment; the engine sees it under the name it expects,
     # in place of whatever this container was started with.
     for name in list(environment):
         if name.startswith(_JOB_ENV_PREFIX):
             environment[name[len(_JOB_ENV_PREFIX):]] = environment.pop(name)
+    if gateway_token and gateway_base:
+        # The job was admitted through the gateway: its own credential, and
+        # not so much as the path of a provider key.
+        environment.pop("LLM_API_KEY_FILE", None)
+        environment.update(engine_model.child_environment(gateway_token, gateway_base))
+    else:
+        api_key = _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
+        environment.update({
+            "DEEPSEEK_API_KEY": api_key,
+            "DEEPSEEK_BASE_URL": os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/"),
+            "LLM_API_KEY": api_key,
+        })
     environment.update({
-        "DEEPSEEK_API_KEY": api_key,
-        "DEEPSEEK_BASE_URL": os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/"),
         "DEEPSEEK_PRO_MODEL": "deepseek-flash",
         "DEEPSEEK_FLASH_MODEL": "deepseek-flash",
-        "LLM_API_KEY": api_key,
         "LLM_MODEL": "deepseek-flash",
         "LLM_ENABLE_THINKING": "true",
         "LLM_REASONING_EFFORT": "high",
@@ -1083,6 +1136,11 @@ def _report_usage(state: dict[str, Any], log_path: Path | None) -> None:
     usage = state.get("usage")
     context = state.get("queueContext") if _kind() == "mendelian-randomization" else state.get("owner")
     if not isinstance(usage, dict) or not isinstance(context, dict):
+        return
+    if state.get("modelRoute") == "gateway":
+        # Every call was reserved and settled by the gateway as it happened;
+        # reporting the totals again would book the job twice.
+        _log_line(log_path, "usage report: not sent (metered per call by the model gateway)")
         return
     try:
         secret = _signing_secret()
@@ -1281,6 +1339,15 @@ def run_job(state_file: str) -> int:
     expected_state, log_path = _job_paths(workspace, state["jobId"])
     if expected_state.resolve() != state_path or workspace not in output_root.parents:
         raise RuntimeError("specialist state no longer matches its managed source")
+    # A mounted audit key means the engine runs as the analysis UID and the
+    # job is signed; a key the engine could not be kept from means no run.
+    try:
+        isolation = audit_receipt.analysis_credentials()
+    except audit_receipt.AuditReceiptUnavailable:
+        state.update(status="failed", updatedAt=_now(), finishedAt=_now(), retryable=False, artifacts=[],
+                     error="Signed audit receipts need the engine to run as its own user, which this adapter cannot arrange.")
+        _write_state(state_path, state)
+        return 1
     state.update(
         {
             "status": "running",
@@ -1309,18 +1376,28 @@ def run_job(state_file: str) -> int:
     # Beside the state, not in the output: it is the engine's word on where it
     # is, not a deliverable, and it is gone once the job has ended.
     progress_path = state_path.with_name(f"{state['jobId']}.progress.json")
+    receipt_rows: dict[str, list[dict[str, Any]]] | None = None
     try:
         with os.fdopen(log_descriptor, "ab", buffering=0) as log:
-            with _heartbeat(state_path, state, read=_read_json, write=_atomic_json, progress_path=progress_path):
-                completed = subprocess.run(
-                    command,
-                    cwd=str(root),
-                    env={**_child_environment(), _PROGRESS_ENV: str(progress_path)},
-                    stdin=subprocess.DEVNULL,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    check=False,
-                )
+            if isolation is None:
+                with _heartbeat(state_path, state, read=_read_json, write=_atomic_json, progress_path=progress_path):
+                    return_code = subprocess.run(
+                        command,
+                        cwd=str(root),
+                        env={**_child_environment(), _PROGRESS_ENV: str(progress_path)},
+                        stdin=subprocess.DEVNULL,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        check=False,
+                    ).returncode
+            else:
+                try:
+                    return_code, receipt_rows = _run_isolated(
+                        state, state_path, root, workspace, output_root, request_path, log, isolation
+                    )
+                except (OSError, ValueError, isolated_job.IsolatedJobError) as error:
+                    _log_line(log_path, f"isolated run failed: {type(error).__name__}: {error}")
+                    return_code, receipt_rows = 1, None
     finally:
         try:
             progress_path.unlink()
@@ -1331,24 +1408,24 @@ def run_job(state_file: str) -> int:
     # What the engine spent at the provider, success or not: a failed job's
     # tokens were paid for as well.
     usage = usage_report.normalize(result.get("usage"))
-    if completed.returncode != 0 or result.get("status") != "succeeded":
+    if return_code != 0 or result.get("status") != "succeeded" or (isolation is not None and receipt_rows is None):
         state.update(
             {
                 "status": "failed",
                 "updatedAt": _now(),
                 "finishedAt": _now(),
-                "returnCode": completed.returncode,
-                "retryable": completed.returncode in {75, 137, 143},
+                "returnCode": return_code,
+                "retryable": return_code in {75, 137, 143},
                 "error": str(
                     result.get("error")
-                    or f"{_spec()['label']} exited with code {completed.returncode}."
+                    or f"{_spec()['label']} exited with code {return_code}."
                 ),
                 **({"usage": usage} if usage else {}),
             }
         )
         _write_state(state_path, state)
         _report_usage(state, log_path)
-        return completed.returncode or 1
+        return return_code or 1
     if state.get("sourceEvidence") != _source_evidence(root):
         raise RuntimeError("specialist source changed while the job was running")
     # Which of the engine's own steps did not do what they were meant to.
@@ -1384,11 +1461,98 @@ def run_job(state_file: str) -> int:
             "artifacts": _collect_artifacts(workspace, output_root),
             **degradation,
             **({"usage": usage} if usage else {}),
+            **({"analysisIsolated": True} if receipt_rows is not None else {}),
         }
     )
+    if receipt_rows is not None:
+        receipt = audit_receipt.produce_job_receipt(
+            state,
+            tool=_kind().replace("-", "_"),
+            output_prefix=f"{_spec()['directory']}/{state['jobId']}/output/",
+            inputs=receipt_rows["inputs"],
+            artifacts=receipt_rows["artifacts"],
+            data_root=data_root,
+        )
+        if receipt is None:
+            _log_line(log_path, "audit receipt: not signed (the job or its files are not what a receipt may attest)")
+        elif len(json.dumps({**state, "auditReceipt": receipt}, ensure_ascii=False, indent=2).encode("utf-8")) <= _STATE_LIMIT:
+            state["auditReceipt"] = receipt
+        # Full source evidence includes the signing implementation itself.
+        if state.get("sourceEvidence") != _source_evidence(root):
+            state.pop("auditReceipt", None)
+            raise RuntimeError("specialist source changed while the job was running")
     _write_state(state_path, state)
     _report_usage(state, log_path)
     return 0
+
+
+#: Credentials an engine reads from a mounted file, which the analysis UID
+#: cannot open; under isolation the owner reads them and hands over the value
+#: under the name the engine also accepts.
+_ISOLATED_FILE_CREDENTIALS = {
+    "drug-safety-analysis": {"EVIMED_EVIDENCE_SEARCH_KEY_FILE": "EVIMED_EVIDENCE_SEARCH_KEY"},
+}
+
+
+def _run_isolated(
+    state: dict[str, Any],
+    state_path: Path,
+    root: Path,
+    workspace: Path,
+    output_root: Path,
+    request_path: Path,
+    log: Any,
+    credentials: dict[str, Any],
+) -> tuple[int, dict[str, list[dict[str, Any]]]]:
+    """Run the engine as the analysis UID in a private stage (isolated_job).
+
+    Returns its exit code and the owner's receipt rows: the inputs it was
+    handed and every file published into the job's output, the request the
+    owner wrote there included.
+    """
+    request = dict(state["request"])
+    inputs, handed = [], {}
+    if _kind() == "peer-review":
+        manuscript = Path(request["manuscript"]).relative_to(workspace).as_posix()
+        blob, row = isolated_job.read_input(workspace, manuscript)
+        handed["manuscript"] = (blob, manuscript)
+        inputs.append(row)
+    with isolated_job.stage(credentials) as stage:
+        for field, (blob, name) in handed.items():
+            request[field] = str(isolated_job.hand_over(blob, name, stage / "input"))
+        staged_request = stage / "request.json"
+        descriptor = os.open(staged_request, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o640)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(json.dumps(request, ensure_ascii=False).encode("utf-8"))
+        os.chmod(staged_request, 0o640)
+        progress = stage / "progress.json"
+        environment = {
+            **_child_environment(),
+            _PROGRESS_ENV: str(progress),
+            "HOME": str(stage / "home"),
+            "TMPDIR": str(stage / "tmp"),
+            "MPLCONFIGDIR": str(stage / "home" / "matplotlib"),
+        }
+        for file_name, value_name in _ISOLATED_FILE_CREDENTIALS.get(_kind(), {}).items():
+            location = environment.pop(file_name, "")
+            if location:
+                try:
+                    environment[value_name] = _read_secret(location)
+                except (OSError, RuntimeError, UnicodeDecodeError):
+                    pass
+        command = [
+            sys.executable,
+            str(root / "evimed_runner.py"),
+            "--request",
+            str(staged_request),
+            "--output-dir",
+            str(stage / "output"),
+        ]
+        with _heartbeat(state_path, state, read=_read_json, write=_atomic_json, progress_path=progress):
+            return_code = isolated_job.run(command, credentials=credentials, cwd=str(root), env=environment, log=log)
+        artifacts = isolated_job.publish(stage / "output", output_root, workspace)
+    artifacts.append(isolated_job.file_row(workspace, request_path))
+    return return_code, {"inputs": inputs, "artifacts": sorted(artifacts, key=lambda row: row["path"])}
 
 
 def _create_app() -> FastAPI:
@@ -1431,9 +1595,10 @@ def _create_app() -> FastAPI:
             "ready": ready,
             "serving": serving,
             "specialist": _kind(),
+            "modelRoute": "gateway" if engine_model.enabled() else "direct",
             **({"opengwas": opengwas} if opengwas is not None else {}),
             **({"openDataSources": open_sources} if _kind() == "mendelian-randomization" else {}),
-            **({"auditReceiptsReady": audit_receipt.ready()} if _kind() == "mendelian-randomization" else {}),
+            "auditReceiptsReady": audit_receipt.ready(fixture=_kind() == "mendelian-randomization"),
             **(
                 {"acceptedStartInputs": _accepted_start_inputs()}
                 if _kind() in {"research-topic-selection", "mendelian-randomization"}
@@ -1468,6 +1633,7 @@ def _create_app() -> FastAPI:
             workspace_for_claims(claims),
             job_credentials,
             {"userId": claims["userId"], "projectId": claims["projectId"]},
+            bearer.credentials if bearer is not None and validated.get("action") == "start" else None,
         )
 
     instance.add_api_route(spec["endpoint"], specialist_call, methods=["POST"])

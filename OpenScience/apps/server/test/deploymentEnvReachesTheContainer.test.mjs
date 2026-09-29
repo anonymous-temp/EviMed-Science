@@ -237,6 +237,12 @@ const operatorLevers = {
   // passed by no compose file until 2026-09-28, so the handoff answered
   // "off" in every deployment however .env was set.
   OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED: ["open-science-web"],
+  // The specialist engines' model calls through the gateway (gap E4,
+  // 2026-09-29). The adapters receive it as EVIMED_ENGINE_MODEL_GATEWAY; the
+  // web API must receive it too, or it refuses every credential the adapters
+  // ask for and every job is turned away.
+  OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS: ["open-science-web"],
 };
 
 async function composeFiles() {

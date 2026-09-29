@@ -159,7 +159,11 @@ def write_new(root, relative, blob):
 
 
 def current_evidence(tool, repo=REPO):
-    if tool != "mendelian_randomization":
+    # Every engine the shared adapter runs signs its receipts over the same
+    # evidence formula since 2026-09-29 (the whole engine tree plus the
+    # adapter); MR was the only one before. Meta runs outside the adapter and
+    # keeps the legacy rule until it signs receipts of its own.
+    if tool == "meta_analysis":
         location = repo / "runtime/mcp/evimed-research/execution_evidence.py"
         spec = importlib.util.spec_from_file_location("hosted_legacy_execution_evidence", location)
         legacy = importlib.util.module_from_spec(spec)

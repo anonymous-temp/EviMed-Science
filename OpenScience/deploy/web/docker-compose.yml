@@ -601,6 +601,11 @@ services:
       OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
       OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-flash}
+      # The specialist engines' model calls through the gateway (gap E4): the
+      # five adapters below read the same variable, so one line in .env moves
+      # both sides. Value-less, so config.mjs's defaults (off, six hours) hold.
+      OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:
+      OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS:
       # The thinking budget of every managed call (low / high / max). Absent
       # here it would be a knob that changes nothing, which is the shape the
       # deploymentEnvReachesTheContainer test exists to refuse.
@@ -1060,6 +1065,12 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
+      # With the lever on (OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED, gap E4)
+      # each job asks the control plane for a model credential of its own and
+      # the engine calls the model gateway with it; the key above is then not
+      # read (docker-compose.engine-keyless.yml removes it from the container).
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
       # One credential, one host variable. This read `${OPENGWAS_JWT}` while
       # the control plane read `${OPEN_SCIENCE_OPENGWAS_JWT}`, so setting the
       # documented one left this container's JWT empty -- which is exactly
@@ -1241,6 +1252,8 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
     volumes:
       - open-science-data:/data
       - type: bind
@@ -1293,6 +1306,8 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
     volumes:
       - open-science-data:/data
       - type: bind
@@ -1340,6 +1355,8 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
     volumes:
       - open-science-data:/data
       - type: bind

@@ -1,19 +1,29 @@
-# Optional overlay; ordinary MR jobs and the base stack need no audit key.
-# Apply after docker-compose.yml when the dedicated operator key is installed.
+# Optional overlay: every adapter-run specialist signs its completed jobs.
+# Ordinary jobs and the base stack need no audit key. Apply after
+# docker-compose.yml once the dedicated operator key is installed.
+#
+# The trusted worker keeps key ownership; only the analysis drops to uid 65532
+# (the MR engine in its own evimed_mr_job.py, every other engine through the
+# shared adapter's isolated_job.py). Base cap_drop: ALL and no-new-privileges
+# remain in force. The MetaAgent service is its own image and is not listed.
+x-specialist-audit: &specialist-audit
+  user: "0:0"
+  cap_add:
+    - SETUID
+    - SETGID
+  environment:
+    EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE: /run/secrets/specialist-audit-signing-key
+  volumes:
+    - type: bind
+      source: ${OPEN_SCIENCE_SPECIALIST_AUDIT_SIGNING_KEY_HOST_FILE:?set a protected audit signing key file}
+      target: /run/secrets/specialist-audit-signing-key
+      read_only: true
+      bind:
+        create_host_path: false
+
 services:
-  evimed-mr-agent:
-    user: "0:0"
-    # The trusted worker keeps key ownership; only analysis drops to 65532.
-    # Base cap_drop: ALL and no-new-privileges remain in force.
-    cap_add:
-      - SETUID
-      - SETGID
-    environment:
-      EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE: /run/secrets/specialist-audit-signing-key
-    volumes:
-      - type: bind
-        source: ${OPEN_SCIENCE_SPECIALIST_AUDIT_SIGNING_KEY_HOST_FILE:?set a protected audit signing key file}
-        target: /run/secrets/specialist-audit-signing-key
-        read_only: true
-        bind:
-          create_host_path: false
+  evimed-mr-agent: *specialist-audit
+  evimed-bibliometric-agent: *specialist-audit
+  evimed-research-topic-agent: *specialist-audit
+  evimed-peer-review-agent: *specialist-audit
+  evimed-drug-safety-agent: *specialist-audit
