@@ -1,0 +1,37 @@
+# 虚拟临研 · EviMed（Vue）外壳补丁 1/4：侧栏入口
+#
+# The sidebar entry, directly before 循证 GEO and behind the same open switch
+# Science itself reads (`features.vcr` from Science's /api/me). This shell has
+# no 「科研工具」 row, so the two boards are the last two entries of the group.
+#
+# Apply from the Vue repository root:  git apply 01-research-nav.patch
+--- a/src/utils/researchNav.js
++++ b/src/utils/researchNav.js
+@@ -7,19 +7,24 @@
+  * for this reader: a build pointed at no Science deployment, a control plane
+  * that is down, or a reader Science does not know shows the sidebar it showed
+  * before, rather than five entries that each open an error. An optional module
+- * (`frontier`, `geo`) appears only when Science's `/api/me` says this account
+- * sees it — the same `features` its own sidebar reads; its routes answer 404 to
++ * (`frontier`, `vcr`, `geo`) appears only when Science's `/api/me` says this
++ * account sees it — the same `features` its own sidebar reads; its routes answer 404 to
+  * anyone else, so the entry is presentation, never access.
+  *
+  * Kept free of Vue so the rule can be tested as a function.
+  */
+ 
+-/** In the plan's order: 前沿动态, 知识库, 记忆胶囊, 主动科研; then 工作台 · 循证 GEO. */
++/** In the plan's order: 前沿动态, 知识库, 记忆胶囊, 主动科研; then 虚拟临研 · 循证 GEO. */
+ export const RESEARCH_NAV = Object.freeze([
+   Object.freeze({ key: 'frontier', label: '前沿动态', path: '/research/frontier', icon: 'newspaper', feature: 'frontier' }),
+   Object.freeze({ key: 'knowledge', label: '知识库', path: '/research/knowledge', icon: 'folder-tree' }),
+   Object.freeze({ key: 'memory', label: '记忆胶囊', path: '/research/memory', icon: 'brain' }),
+   Object.freeze({ key: 'autopilot', label: '主动科研', path: '/research/autopilot', icon: 'orbit' }),
++  // 「虚拟临研」 sits directly before 循证 GEO here as it does in Science's
++  // own sidebar, and reads the same open switch (`features.vcr`): this
++  // shell has no 「科研工具」 row to hang it under, so the two boards are
++  // simply the last two entries of the group.
++  Object.freeze({ key: 'vcr', label: '虚拟临研', path: '/research/vcr', icon: 'users-round', feature: 'vcr' }),
+   Object.freeze({ key: 'geo', label: '循证 GEO', path: '/research/geo', icon: 'radar', feature: 'geo' }),
+ ])
+ 

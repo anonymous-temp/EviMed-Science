@@ -1,0 +1,17 @@
+# 虚拟临研 · EviMed（Vue）外壳补丁 2/4：嵌入页地址
+#
+# Where the `vcr` entry lands inside the Science shell. `scienceSubAppUrl`
+# appends `embed=1`, so the embedded page draws its content without Science's
+# own sidebar.
+#
+# Apply from the Vue repository root:  git apply 02-science-sub-app-pages.patch
+--- a/src/api/science.js
++++ b/src/api/science.js
+@@ -474,6 +474,7 @@
+   memory: '/app/memory',
+   autopilot: '/app/autopilot',
+   frontier: '/app/frontier',
++  vcr: '/app/virtual-research',
+   geo: '/app/geo',
+   capabilities: '/app/capabilities',
+   inbox: '/app/inbox',
