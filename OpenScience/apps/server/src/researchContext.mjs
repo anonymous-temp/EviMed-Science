@@ -11,6 +11,7 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
+import { handbookContextFor } from "./capabilityHandbooks.mjs";
 import { userLibraryDir } from "./libraryService.mjs";
 
 export const KNOWLEDGE_BASE_DIR = "knowledge-base";
@@ -164,7 +165,7 @@ export async function prepareResearchContext(
   config,
   // `query` still arrives from every caller and chooses nothing any more: the
   // knowledge base is named here, and searched only when the model asks.
-  { query: _query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [] } = {},
+  { query: _query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [], handbooks = null } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   // A pointer, not a retrieval. Until 2026-09-20 every dispatch indexed the
@@ -255,7 +256,9 @@ export async function prepareResearchContext(
         ].join("\n")
       : "本轮未命中确定性专项路由；若后续发现任务与已注册专项实质匹配，仍应加载对应 Skill。";
 
+  const attachedHandbooks = handbookContextFor(handbooks, project, routedSpecialist?.agentId ?? session.agentId ?? "");
   return {
+    handbooks: attachedHandbooks.items,
     // What this prompt actually carries, for the caller to record. A run record
     // saying a skill was mounted must come from the code that mounted it, not
     // from the code that intended to.
@@ -280,6 +283,7 @@ export async function prepareResearchContext(
       "开放域问题保持自主科研能力。",
       specialistInstruction,
       routingInstruction,
+      attachedHandbooks.context,
       // Platform text, not retrieved material: the registry read this body from
       // the image and checked its frontmatter name against the manifest, so it
       // carries the same authority as the sentences around it and is not

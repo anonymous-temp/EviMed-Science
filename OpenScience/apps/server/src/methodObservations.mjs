@@ -380,3 +380,34 @@ export function runMethodObservations(input) {
     invokedWithoutMount,
   };
 }
+
+/** Record attached context, explicit reads and associated delivery outcomes separately. None establishes causal improvement.
+ * @param {{learning:any,userId:string,run:any,projection:any,sessions?:readonly any[]}} input */
+export async function recordHandbookRunObservations({ learning, userId, run, projection, sessions = [] }) {
+  for (const mounted of run.capabilityHandbooks ?? []) {
+    if (mounted.ownerId !== userId || mounted.capabilityId !== run.effectiveAgentId) continue;
+    const row = await learning.documents.get(userId, "method", mounted.id);
+    if (row?.payload?.recordType !== "capability-handbook" || row.payload.capabilityId !== mounted.capabilityId
+      || row.payload.contentDigest !== mounted.contentDigest) continue;
+    if (row.payload.observations?.some((entry) => entry.runId === run.id)) continue;
+    const used = sessions.some((session) => (session.transcript?.messages ?? []).some((message) => (message.parts ?? []).some((part) => {
+      if (part?.type !== "tool" || part?.status !== "completed") return false;
+      if (["read", "grep"].includes(part.tool)) {
+        const target = String(part.input?.path ?? part.input?.file_path ?? part.input?.filePath ?? "");
+        return target === mounted.path || target.endsWith(`/${mounted.path}`);
+      }
+      if (part.tool !== "bash") return false;
+      return String(part.input?.command ?? part.input?.cmd ?? "").split(/&&|\|\||[;|\n]/).some((segment) => {
+        const words = segment.trim().split(/\s+/);
+        return READING_PROGRAMS.has(words[0]?.split("/").pop() ?? "") && words.some((word) => word.replaceAll(/["']/g, "") === mounted.path);
+      });
+    })));
+    const outcomes = (projection?.plan?.items ?? []).filter((item) => item.capability === mounted.capabilityId && deliverableOutcome(item))
+      .map((item) => ({ deliverableId: item.id, outcome: deliverableOutcome(item) }));
+    const observation = { runId: run.id, projectId: run.projectId ?? null, at: new Date().toISOString(),
+      contentDigest: mounted.contentDigest, attached: true, used, outcomes };
+    await learning.documents.put(userId, "method", row.id, { ...row.payload,
+      observations: [...(row.payload.observations ?? []), observation].slice(-100),
+    }, { expectedRevision: row.revision, telemetry: true });
+  }
+}
