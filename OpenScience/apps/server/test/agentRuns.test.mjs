@@ -7520,6 +7520,64 @@ test("with nothing fresh anywhere, a stale package is still reported stale", asy
   }
 });
 
+test("a package with one previous-run file among fresh ones is delivered marked, not failed", async () => {
+  // 2026-09-29, geo-insight into a project that held the last run's
+  // question-map.json: four fresh files and one stale one read `failed`, the
+  // ruling of 2026-09-17 says the package that exists is delivered.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stale-among-fresh-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace"),
+    };
+    await mkdir(path.join(project.workspaceDir, "deliverables", "d"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const july = Date.parse("2026-07-23T16:02:37.000Z") / 1000;
+    const previous = path.join(project.workspaceDir, "deliverables", "d", "second.md");
+    await writeFile(previous, "# last run's\n", "utf8");
+    await utimes(previous, july, july);
+
+    const binding = { sessionId: "ses_stale_among_fresh", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis", version: "2.11.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          skill: "clinical-evidence-synthesis", companionSkills: [],
+          outputs: [{ path: "first.md", required: true }, { path: "second.md", required: true }, { path: "third.md", required: true }],
+          completionChecks: ["requiredOutputsExist"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000, monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    await store.dispatch(project, {
+      sessionId: binding.sessionId, dispatchId: "turn_stale_among_fresh",
+      effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "2.11.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+    await writeFile(path.join(project.workspaceDir, "deliverables", "d", "first.md"), "# first\n", "utf8");
+    await writeFile(path.join(project.workspaceDir, "deliverables", "d", "third.md"), "# third\n", "utf8");
+    history = [{
+      info: { id: "msg_done", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [{ type: "text", text: "done" }],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.notEqual(finished.status, "failed", "the package this run wrote is delivered");
+    assert.deepEqual([...finished.artifacts].sort(), ["deliverables/d/first.md", "deliverables/d/third.md"]);
+    assert.equal(finished.verification, "unverified");
+    assert.ok((finished.qualityNotices ?? []).some((notice) => /predates this run/.test(String(notice.text ?? notice.detail ?? ""))),
+      "the reader is told which file is the previous run's");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a dispatch's recalled memories are on the run, as ids and kinds and never as values", async () => {
   // The recall existed only as `memory.md` inside the run's container: a
   // researcher reading an answer could not see what the platform had used about
