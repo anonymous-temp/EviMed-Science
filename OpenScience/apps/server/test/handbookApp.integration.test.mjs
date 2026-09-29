@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import test from "node:test";
+import { issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { frontmatter, BODY } from "./helpers/handbookFixture.mjs";
@@ -111,9 +112,13 @@ test("native HTTP inputs consume their frozen handbook revision through the sock
     } } } });
     const send = async id => { const body = JSON.stringify(prompt(id)); assert.equal((await fetch(`${nativeBase}/api/session/prompt`, { method: "POST", headers: browserHeaders, body })).status, 200); assert.equal(forwarded.at(-1), body); };
     await send("A"); const digestB = await applyLesson(`${BODY}\nRevision B only.`); await send("B");
-    const hooks = new Map();
+    // The mock runtime omits credential files; issue the same scoped short-lived
+    // workload credential as the real launcher, never a provider credential.
+    runtime.workloadTokenFile = path.join(project.metaDir, "native-workload.token");
+    await writeFile(runtime.workloadTokenFile, issueEviMedWorkloadToken({ secret: app.config.evimedWorkloadSigningSecret, userId: user.id, projectId: project.id }), { mode: 0o600 });
+    const hooks = new Map(); const degraded = [];
     const ctx = { effect: fn => fn(), on: (event,handler) => { const previous = hooks.get(event); hooks.set(event, previous ? (payload,next) => handler(payload,()=>previous(payload,next)) : handler); return ()=>{}; },
-      provide: ()=>{}, get: key => key === "fs" ? { resolve: async (relative,{cwd}) => path.resolve(cwd,relative), readText: file => readFile(file,"utf8") } : undefined,
+      provide: ()=>{}, get: key => key === "evimedDiagnostics" ? { degrade: text => degraded.push(text) } : key === "fs" ? { resolve: async (relative,{cwd}) => path.resolve(cwd,relative), readText: file => readFile(file,"utf8") } : undefined,
       tools: { register: ()=>()=>{} }, systemPrompt: { section: ()=>()=>{} } };
     await applyCapsule(ctx, { methodsDir: "", recallUrl: `${base}/internal/capsules/v1`, tokenFile: runtime.workloadTokenFile, recallTimeoutMs: 1000 });
     const input = id => ({ role: "user", source: { kind: "user", rpcId: id }, content: prompt(id).payload.args.request.content });
@@ -121,7 +126,7 @@ test("native HTTP inputs consume their frozen handbook revision through the sock
       return hooks.get("agent/pre-step")(payload,async()=>({kind:"enter",messages:payload.messages})); };
     const decisionA = await enter("A",1);
     const textA = decisionA.messages.map(message=>message.content?.map(part=>part.text??"").join(" ")).join("\n");
-    assert.match(textA,/Keep denominators tied/); assert.doesNotMatch(textA,/Revision B only/);
+    assert.match(textA,/Keep denominators tied/, JSON.stringify({ degraded, mounted: runtime.mountedMethodPromptBytes, tokenFilePresent: Boolean(runtime.workloadTokenFile) })); assert.doesNotMatch(textA,/Revision B only/);
     const now = Date.now(); let events = [{ type:"turn/start",seq:1,time:now,data:{turn:1} },{type:"user/message",seq:2,time:now+1,data:input("A")}];
     app.runtimeManager.sessionTranscript = async()=>normalizeTranscript("native-session",events);
     app.agentRuns.readSessionHistory = async()=>transcriptToLedgerMessages(normalizeTranscript("native-session",events));

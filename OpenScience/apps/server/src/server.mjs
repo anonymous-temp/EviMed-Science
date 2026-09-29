@@ -26,7 +26,8 @@ import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
-import { createOwnedResearchContext } from "./ownedResearchContext.mjs";
+import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
+import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
@@ -1786,6 +1787,8 @@ export function createWebApiApp(overrides = {}) {
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
   // what the pump was given when a second kernel without a downlink could be
   // selected; there is one kernel now and it always publishes one.
+  /** @type {NativeHandbookContext | null} */
+  let nativeHandbookContext = null;
   const runtimeEventPump = new RuntimeEventPump({
     runEvents,
     isDshKernel: true,
@@ -1813,11 +1816,15 @@ export function createWebApiApp(overrides = {}) {
       // kernel's own parentage, which is what makes this a branch (decision 6).
       const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
       const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
-      return agentRuns.adoptRuntimeSession(full, sessionId, {
+      const run = await agentRuns.adoptRuntimeSession(full, sessionId, {
         transcript,
-        routeTurn: (text) => routeAdoptedInput(full, sessionId, text),
+        routeTurn: async (text, input) => (await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text))
+          ?? routeAdoptedInput(full, sessionId, text),
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
+      await recordNativeSessionHandbooks(full, sessionId);
+      return run;
+
     },
     // The pump has already authenticated the runtime and attributed root and
     // child sessions to one project-scoped run. Feed that kernel-owned
@@ -2354,7 +2361,7 @@ export function createWebApiApp(overrides = {}) {
             const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
             if (!state.learning && !state.trial) {
               await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
-                run, projection: await agentRuns.runWorkflowProjection(project, run), sessions,
+                run: await recordNativeHandbookAttachments(project, run), projection: await agentRuns.runWorkflowProjection(project, run), sessions,
               }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
                 userId: project.userId, projectId: project.id, runId: run.id,
                 code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
@@ -2543,10 +2550,18 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
-  const prepareOwnedResearchContext = createOwnedResearchContext({
+  const ownedContextDependencies = {
     learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns,
     paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
     audit: (event, status, detail) => securityAudit(config, event, status, detail),
+  };
+  const prepareOwnedResearchContext = createOwnedResearchContext(ownedContextDependencies);
+  const selectOwnedHandbooks = createOwnedHandbookSelector(ownedContextDependencies);
+  if (learningService && config.learningEnabled) nativeHandbookContext = new NativeHandbookContext({
+    route: routeAdoptedInput,
+    select: (project, session, route) => selectOwnedHandbooks(project, session, {}, route),
+    budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
+    attached: recordNativeSessionHandbooks,
   });
   if (sourceService) sourceUnderstandingRuntime = createSourceUnderstandingRuntime({
     config, store, sources: sourceService, agentRuns, runtimeManager, researchSessions,
@@ -3008,7 +3023,7 @@ export function createWebApiApp(overrides = {}) {
     steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate,
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -3374,6 +3389,27 @@ export function createWebApiApp(overrides = {}) {
    * the question out of the session's own transcript instead of a request body.
    * @param {Record<string, any>} project @param {string} sessionId @param {string} text
    */
+  /** Join only confirmed, current-input attachments to a kernel-owned run. */
+  async function recordNativeHandbookAttachments(project, run) {
+    if (!nativeHandbookContext || !run?.kernelRequestIds?.length) return run;
+    try {
+      const receipts = await nativeHandbookContext.receipts(project, run);
+      const fresh = receipts.filter(item => !(run.capabilityHandbooks ?? []).some(previous => previous.id === item.id && previous.contentDigest === item.contentDigest));
+      return fresh.length ? await agentRuns.recordLearning(project, run.id, { appendCapabilityHandbooks: fresh }) ?? run : run;
+    } catch (error) {
+      await securityAudit(config, "handbook.native.attach", "failed", { userId: project.userId, projectId: project.id, runId: run.id,
+        code: typeof error?.code === "string" ? error.code : "handbook_attachment_unavailable" });
+      return run;
+    }
+  }
+
+  async function recordNativeSessionHandbooks(project, sessionId, requestIds = null) {
+    for (const run of (await agentRuns.list(project)).filter(item => item.sessionId === sessionId
+      && (!requestIds || requestIds.some(id => item.kernelRequestIds?.includes(id))))) {
+      await recordNativeHandbookAttachments(project, run);
+    }
+  }
+
   async function routeAdoptedInput(project, sessionId, text) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
@@ -5247,6 +5283,7 @@ export function createWebApiApp(overrides = {}) {
     agentRegistry,
     usageLedger,
     authorizePrompt: assertPublicSessionPrompt,
+    preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
     // on that run — the learning loop's in-run correction signal.
@@ -5599,6 +5636,7 @@ export function createWebApiApp(overrides = {}) {
     agentRuns,
     server,
     runtimeUi,
+    runtimeEventPump,
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
