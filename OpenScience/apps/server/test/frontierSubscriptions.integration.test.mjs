@@ -46,7 +46,7 @@ test("drug follows share bilingual canonical identity, and every mute outranks a
   const first = await service.createFollow(alice, { kind: "drug", key: "司美格鲁肽" });
   const second = await service.createFollow(alice, { kind: "drug", key: "semaglutide" });
   assert.equal(first.follow.id, second.follow.id);
-  assert.equal(second.follow.key, "drug:semaglutide");
+  assert.equal(second.follow.key, "semaglutide");
   assert.deepEqual((await list(alice, { follow: first.follow.id })).body.items.map((item) => item.id), [wanted.publicId]);
   await service.createFollow(alice, { kind: "specialty", key: "cardiology", muted: true });
   assert.deepEqual((await list(alice, { follow: first.follow.id })).body.items, []);
@@ -64,4 +64,17 @@ test("muted topics filter lists and follow changes invalidate only that reader's
   await assert.rejects(list(alice, { follow: follow.id, limit: "1", cursor: first.body.nextCursor }), { code: "invalid_cursor" });
   assert.deepEqual((await list(alice, {})).body.items, []);
   assert.equal((await list(bob, {})).body.items.length, 3);
+});
+
+test("event follows resolve old aliases and legacy drug names are updated without duplicates", options, async () => {
+  const item = await insertItem(db, { title: "A trial milestone" });
+  const result = await db.query("INSERT INTO evimed_frontier.events(public_id,title_zh,lane,first_at,last_at) VALUES('eventnew12345','Trial','evidence',now(),now()) RETURNING id");
+  await db.query("INSERT INTO evimed_frontier.event_aliases(public_id,event_id) VALUES('eventold12345',$1)", [result.rows[0].id]);
+  await db.query("UPDATE evimed_frontier.items SET event_id=$1 WHERE id=$2", [result.rows[0].id, item.id]);
+  const follow = (await service.createFollow(alice, { kind: "event", key: "eventold12345" })).follow;
+  assert.deepEqual((await list(alice, { follow: follow.id })).body.items.map((row) => row.id), [item.publicId]);
+  await db.query("INSERT INTO evimed_frontier.user_follows(user_id,kind,key,label) VALUES('alice','drug','司美格鲁肽','Legacy Chinese')");
+  const drug = await service.createFollow(alice, { kind: "drug", key: "semaglutide" });
+  assert.equal(drug.follow.key, "semaglutide");
+  assert.equal((await service.listFollows(alice)).follows.filter((row) => row.kind === "drug").length, 1);
 });

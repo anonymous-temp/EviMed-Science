@@ -501,7 +501,7 @@ export class FrontierDaily {
       WHERE (up.last_push_day IS NULL OR up.last_push_day <> $1::date)
         AND coalesce((p.switches->>'frontier')::boolean, true)
         AND coalesce(p.digest_time, '08:00') <= $2
-        AND (up.last_seen_at >= $3::timestamptz OR EXISTS (SELECT 1 FROM evimed_frontier.user_follows f WHERE f.user_id = up.user_id))
+        AND (up.last_seen_at >= $3::timestamptz OR EXISTS (SELECT 1 FROM evimed_frontier.user_follows f WHERE f.user_id = up.user_id AND NOT f.muted))
         AND ($4::text[] IS NULL OR up.user_id = ANY($4::text[]))
       ORDER BY up.user_id LIMIT $5`, [day, clock, new Date(now.getTime() - FRONTIER_PUSH_ACTIVE_MS), audience, FRONTIER_PUSH_BATCH])).rows ?? [];
     if (!readers.length) return { pushed: 0 };

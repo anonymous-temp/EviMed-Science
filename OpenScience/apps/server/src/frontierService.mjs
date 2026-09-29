@@ -13,6 +13,7 @@ import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
 import { trigramTerms, tsqueryLiteral } from "./kbChunker.mjs";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
+import { FrontierSubscriptions, frontierFollowPredicate } from "./frontierSubscriptions.mjs";
 
 /**
  * What a reader of 「前沿动态」 is served (plan §7.3, §10.5).
@@ -277,14 +278,17 @@ export function normalizeItemsQuery(params, vocabulary) {
   // A list is newest first whatever it is asked; `sort` orders a search.
   const sort = params.get("sort") || "relevance";
   if (!SORTS.includes(sort)) throw invalid("sort");
-  return { view, by, lane, specialty, window, q: rawQuery || null, starred: starredValue === "1", safety: safetyValue === "1", cursor, limit, sort };
+  const follow = params.get("follow") || null;
+  if (follow && !/^\d{1,18}$/.test(follow)) throw invalid("follow");
+  return { view, by, lane, specialty, window, follow, q: rawQuery || null, starred: starredValue === "1", safety: safetyValue === "1", cursor, limit, sort };
 }
 
-/** @typedef {ReturnType<typeof normalizeItemsQuery>} ItemsQuery */
+/** @typedef {ReturnType<typeof normalizeItemsQuery> & { readerKey?: string,
+ * subscriptions?: Awaited<ReturnType<FrontierSubscriptions["read"]>> }} ItemsQuery */
 
 /** The filters a cursor was minted under, as a short fingerprint. @param {ItemsQuery} query */
 const filterPrint = (query) => shortHash(JSON.stringify([query.lane, query.specialty, query.window, query.starred, query.q, query.safety,
-  query.q ? query.sort : "relevance"]));
+  query.q ? query.sort : "relevance", query.follow, query.readerKey ?? null]));
 
 /** @param {Record<string, unknown>} value */
 const encodeCursor = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -418,6 +422,7 @@ export class FrontierService {
     this.events = events;
     this.daily = daily;
     this.profiles = profiles;
+    this.subscriptions = new FrontierSubscriptions({ database });
     this.actions = actions;
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
@@ -554,6 +559,11 @@ export class FrontierService {
     const axis = query.by === "published" ? "i.published_at" : "i.timeline_at";
     const where = ["i.state = 'published'", "s.enabled"];
     if (query.by === "published") where.push("i.published_at IS NOT NULL");
+    const subscribed = query.subscriptions;
+    if (subscribed?.selected && !(subscribed.selected.kind === "topic" && search)) {
+      where.push(`(${frontierFollowPredicate(subscribed.selected, param)})`);
+    }
+    for (const muted of subscribed?.muted ?? []) where.push(`NOT (${frontierFollowPredicate(muted, param)})`);
     // Searching the selected view searches everything and marks the selected.
     if (query.view === "selected" && !search) where.push("i.selected");
     if (query.lane) where.push(`i.lane = ${param(query.lane)}`);
@@ -676,7 +686,7 @@ export class FrontierService {
    * @returns {Promise<{ ids: string[], mode: "keyword" | "hybrid" }>}
    */
   async #byTime(ranking, query, version, clock) {
-    const key = query.starred ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock]);
+    const key = query.starred || query.readerKey ? null : JSON.stringify(["time", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null]);
     const cached = key ? this.#cached(key, version) : null;
     if (cached) return cached;
     const candidates = ranking.lexical.length ? ranking.lexical : ranking.ids;
@@ -717,9 +727,14 @@ export class FrontierService {
    * @returns {Promise<{ status: 200 | 304, etag: string, body?: any }>}
    */
   async listItems(user, params, ifNoneMatch = null) {
-    const query = normalizeItemsQuery(params, this.vocabulary);
+    const query = /** @type {ItemsQuery} */ (normalizeItemsQuery(params, this.vocabulary));
     this.counters.lists += 1;
     const versions = await this.#transaction((client) => this.#versions(client, user.id));
+    query.subscriptions = await this.subscriptions.read(user.id, query.follow);
+    if (query.follow || query.subscriptions.muted.length) query.readerKey = `${user.id}:${versions.state}`;
+    if (query.subscriptions.selected?.kind === "topic") {
+      query.q = [query.subscriptions.selected.key, query.q].filter(Boolean).join(" ");
+    }
     // A window cuts by the clock as well as by content: the tag moves with the
     // minute the page was cut in, which is also the public cache's lifetime.
     const clock = query.window ? Math.floor(this.now().getTime() / 60_000) : 0;
@@ -744,14 +759,14 @@ export class FrontierService {
       }
     }
     // Public content is shared by every reader; "only my stars" is not.
-    const cacheKey = query.starred ? null : JSON.stringify([search ? "search" : "list", query.view, query.by, query.lane, query.specialty,
-      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null]);
+    const cacheKey = query.starred || query.readerKey ? null : JSON.stringify([search ? "search" : "list", query.view, query.by, query.lane, query.specialty,
+      query.window, query.q, query.safety, query.cursor, query.limit, clock, search ? query.sort : null, query.readerKey ?? null]);
     let page = cacheKey ? this.#cached(cacheKey, versions.content) : null;
     if (!page) {
       if (search) {
         // The fused ranking is kept for the next pages of the same search: a
         // second page must not embed the question and run three legs again.
-        const rankingKey = query.starred ? null : JSON.stringify(["ranking", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock]);
+        const rankingKey = query.starred || query.readerKey ? null : JSON.stringify(["ranking", query.by, query.lane, query.specialty, query.window, query.q, query.safety, clock, query.readerKey ?? null]);
         let ranking = rankingKey ? this.#cached(rankingKey, versions.content) : null;
         if (!ranking) {
           this.counters.searches += 1;
@@ -1079,6 +1094,7 @@ export class FrontierService {
       key = followText(body.key, 120)?.toLowerCase() ?? null;
     }
     if (!key) throw failure(400, "frontier_follow_invalid", "The follow key is invalid.");
+    if (kind === "drug") { await this.ready(); key = await this.subscriptions.drugKey(key); }
     const label = body.label == null ? (kind === "specialty" ? this.vocabulary.specialties[key] : key) : followText(body.label, 120);
     if (!label) throw failure(400, "frontier_follow_invalid", "The follow label is invalid.");
     const row = await this.#transaction(async (client) => {
@@ -1086,6 +1102,16 @@ export class FrontierService {
         throw failure(400, "frontier_follow_invalid", "No such source.");
       }
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`frontier-follows:${user.id}`]);
+      if (kind === "drug") {
+        const legacy = (await client.query("SELECT id,key FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind='drug' ORDER BY id", [user.id])).rows;
+        const equivalent = [];
+        for (const old of legacy) if (await this.subscriptions.drugKey(old.key) === key) equivalent.push(old);
+        if (equivalent.length) {
+          const keep = equivalent.find((old) => old.key === key) ?? equivalent[0];
+          await client.query("DELETE FROM evimed_frontier.user_follows WHERE user_id=$1 AND id=ANY($2::bigint[])", [user.id, equivalent.filter((old) => old.id !== keep.id).map((old) => old.id)]);
+          await client.query("UPDATE evimed_frontier.user_follows SET key=$3 WHERE user_id=$1 AND id=$2", [user.id, keep.id, key]);
+        }
+      }
       const existing = await client.query(`SELECT 1 FROM evimed_frontier.user_follows WHERE user_id=$1 AND kind=$2 AND key=$3`, [user.id, kind, key]);
       if (!existing.rowCount) {
         const count = Number((await client.query("SELECT count(*)::integer AS n FROM evimed_frontier.user_follows WHERE user_id=$1", [user.id])).rows[0].n);
@@ -1095,6 +1121,7 @@ export class FrontierService {
         ON CONFLICT (user_id, kind, key) DO UPDATE SET label = EXCLUDED.label, muted = EXCLUDED.muted
         RETURNING id, kind, key, label, muted, created_at`, [user.id, kind, key, label, body.muted === true])).rows[0];
       await this.#bumpState(client, user.id);
+      await client.query("UPDATE evimed_frontier.user_profiles SET for_you_at=NULL WHERE user_id=$1", [user.id]);
       return saved;
     });
     this.counters.writes += 1;
@@ -1108,6 +1135,7 @@ export class FrontierService {
       const removed = await client.query("DELETE FROM evimed_frontier.user_follows WHERE user_id=$1 AND id=$2", [user.id, followId]);
       if (!removed.rowCount) throw failure(404, "frontier_follow_not_found", "No such follow.");
       await this.#bumpState(client, user.id);
+      await client.query("UPDATE evimed_frontier.user_profiles SET for_you_at=NULL WHERE user_id=$1", [user.id]);
     });
     this.counters.writes += 1;
     return { deleted: true };
