@@ -4197,7 +4197,9 @@ export class AgentRunStore {
           effectiveAgentId: session.agentId,
           effectiveAgentVersion: session.agentVersion,
           effectiveRuntimeAgent: session.runtimeAgent,
-          effectiveRouteReason: "session-binding",
+          // Binding owns the capability identity; the dispatcher still knows
+          // whether this is researcher-owned managed work or a platform probe.
+          effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
     const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected });
