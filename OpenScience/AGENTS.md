@@ -195,3 +195,5 @@ per-project workspace + JSONL provenance.
 - Avoid adding new Markdown docs unless requested — too many docs become debt.
 - Prefer minimal, verifiable changes; every step should produce a checkable result.
 - Do not write inferences as verified facts; tie conclusions to code or data.
+
+- The root `AGENTS.md` owner decisions dated 2026-09-29 govern this subtree: preserve usable partial research, avoid whole-package methodological vetoes or human adjudication requirements, apply autonomous learning across capabilities, and honor the settled product/operations choices.
