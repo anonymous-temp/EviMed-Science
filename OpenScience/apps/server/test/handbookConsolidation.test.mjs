@@ -12,3 +12,85 @@ test("optimize consumes the owner-scoped handbook instead of successfully leavin
   assert.deepEqual(consumed, { job });
   assert.equal(result.verification, "unmeasured");
 });
+
+import { HandbookConsolidation } from "../src/handbookConsolidation.mjs";
+import { fixture, registry } from "./helpers/handbookFixture.mjs";
+
+test("reviewed candidates enqueue idempotently, apply unmeasured, and never enter personal methods", async () => {
+  const f = fixture();
+  const candidate = await f.learning.recordHandbookCandidate("alice", f.input());
+  assert.equal(f.queued.length, 1);
+  assert.equal(f.queued[0].payload.candidateDigest, candidate.payload.contentDigest);
+  const loop = new HandbookConsolidation({ ...f, registry });
+  const result = await loop.run({ job: f.queued[0] });
+  assert.equal(result.disposition, "applied");
+  assert.equal(result.verification, "unmeasured");
+  const applied = await f.documents.get("alice", "method", result.handbookId);
+  assert.equal(applied.payload.body, candidate.payload.body);
+  assert.equal(applied.payload.capabilityId, "geo-content");
+  assert.equal(applied.payload.source.candidateDigest, candidate.payload.contentDigest);
+  assert.deepEqual(await f.learning.approvedMethods("alice"), []);
+  assert.deepEqual((await f.learning.listMethods("alice")).items, []);
+  const replay = await loop.run({ job: f.queued[0] });
+  assert.equal(replay.handbookId, applied.id);
+  assert.equal((await f.documents.get("alice", "method", applied.id)).revision, applied.revision);
+  await f.learning.recordHandbookCandidate("alice", f.input());
+  assert.equal(f.queued.length, 1);
+});
+
+test("a rejected or malformed evaluated revision preserves the previously applied bytes", async () => {
+  const f = fixture();
+  await f.learning.recordHandbookCandidate("alice", f.input());
+  const loop = new HandbookConsolidation({ ...f, registry });
+  const first = await loop.run({ job: f.queued[0] });
+  const previous = await f.documents.get("alice", "method", first.handbookId);
+  await f.learning.recordHandbookCandidate("alice", f.input({ body: `${previous.payload.body}\nChanged.` }));
+  loop.evaluate = async (request) => ({ ...request.binding, verdict: "worse", report: "reports/paired.json" });
+  const rejected = await loop.run({ job: f.queued[1] });
+  assert.equal(rejected.disposition, "rejected");
+  assert.equal((await f.documents.get("alice", "method", first.handbookId)).revision, previous.revision);
+  await f.learning.recordHandbookCandidate("alice", f.input({ body: `${previous.payload.body}\nChanged again.` }));
+  loop.evaluate = async () => ({ verdict: "better", report: "reports/forged.json" });
+  const malformed = await loop.run({ job: f.queued[2] });
+  assert.equal(malformed.disposition, "failed");
+  assert.equal(malformed.reason, "handbook_evaluation_binding_invalid");
+  assert.equal((await f.documents.get("alice", "method", first.handbookId)).payload.body, previous.payload.body);
+});
+
+test("changed candidates, foreign owners and model-invented capabilities cannot apply", async () => {
+  const f = fixture();
+  const first = await f.learning.recordHandbookCandidate("alice", f.input());
+  await f.learning.recordHandbookCandidate("alice", f.input({ body: `${first.payload.body}\nNew version.` }));
+  const loop = new HandbookConsolidation({ ...f, registry });
+  assert.equal((await loop.run({ job: f.queued[0] })).disposition, "stale");
+  await assert.rejects(loop.run({ job: { ...f.queued[1], userId: "bob" } }), { code: "handbook_candidate_unavailable" });
+  const wrong = await f.learning.recordHandbookCandidate("alice", f.input({ capabilityId: "meta-analysis" }));
+  assert.notEqual(wrong.id, first.id, "same method name in two capabilities has separate history");
+  const result = await loop.run({ job: f.queued[2] });
+  assert.equal(result.reason, "handbook_source_capability_mismatch");
+  assert.equal(result.disposition, "failed");
+});
+
+test("pause, missing source and lost lease leave no effective supplement", async () => {
+  const f = fixture();
+  await f.learning.recordHandbookCandidate("alice", f.input());
+  const loop = new HandbookConsolidation({ ...f, registry, enabled: () => false });
+  await assert.rejects(loop.run({ job: f.queued[0] }), { code: "learning_paused" });
+  loop.enabled = () => true;
+  await assert.rejects(loop.run({ job: { ...f.queued[0], leaseToken: "lost" } }), { code: "product_job_lease_lost" });
+  loop.resolveSourceRun = async () => null;
+  assert.equal((await loop.run({ job: f.queued[0] })).reason, "handbook_source_unavailable");
+  assert.equal((await f.documents.list("alice", "method", { filter: { recordType: "capability-handbook" } })).items.length, 0);
+});
+
+test("a bounded backlog scan queues old candidates once and records exhausted jobs", async () => {
+  const f = fixture();
+  f.learning.jobs = null;
+  const old = await f.learning.recordHandbookCandidate("alice", f.input());
+  f.learning.jobs = f.jobs;
+  const loop = new HandbookConsolidation({ ...f, registry });
+  await loop.reconcile("alice", { limit: 1 });
+  await loop.reconcile("alice", { limit: 1 });
+  assert.equal(f.queued.length, 1);
+  assert.equal(f.queued[0].payload.candidateId, old.id);
+});
