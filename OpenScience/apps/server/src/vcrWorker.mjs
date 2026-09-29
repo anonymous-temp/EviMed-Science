@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's background work: one timer, three loops (build plan
+ * 「虚拟临研」's background work: one timer, four loops (build plan
  * 2026-09-28 §11.2 layer 2).
  *
  *   `jobs`          — claim queued compute, push each running job one step,
@@ -8,6 +8,9 @@
  *                     notify
  *   `recompute`     — pick up the stale marks a change left and queue what has
  *                     to be computed again
+ *   `recheck`       — queue the matching job of every study with a deferral
+ *                     date that has passed (a washout that ended), so a due
+ *                     date is re-evaluated without anyone remembering it
  *
  * Hidden knowledge:
  *
@@ -24,7 +27,7 @@
  *   and a lease around the whole loop would serialise two control planes that
  *   can safely both be pulling work. The `orchestrator` and `recompute` loops
  *   *are* leased, because dispatching a run and marking a study's results
- *   stale must happen once.
+ *   stale must happen once; so is `recheck`, because one due date is one job.
  * - **A loop without its function is skipped and reported**, not an error: a
  *   deployment with no engine composed still runs the orchestrator, and
  *   readiness warns rather than going red (plan §10.5).
@@ -44,6 +47,7 @@ export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "jobs", package: "jobs", every: 0 }),
   Object.freeze({ name: "orchestrator", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recompute", package: "orchestrator", every: MINUTE, leased: true }),
+  Object.freeze({ name: "recheck", package: "matching", every: 15 * MINUTE, leased: true }),
 ]);
 
 /** @param {unknown} error */
@@ -233,45 +237,55 @@ export class VcrWorker {
 }
 
 /**
- * The three loop functions, built from the composed module. Kept here so
+ * The loop functions, built from the composed module. Kept here so
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null }) {
   return {
-    /** Claim what is queued, then push everything this process holds one step. */
+    /**
+     * Claim what is queued, then push everything this process holds one step.
+     * Jobs that ended without this loop's help are folded in too: one that ran
+     * out of attempts while nobody held it (the claim fails it by name), and one
+     * cancelled after the engine had already computed part of it (its partial
+     * result is fetched and kept).
+     */
     jobs: jobs
       ? async () => {
         const claimed = await jobs.claim({ limit: Math.max(1, Number(jobs.maxConcurrent ?? 1)) });
         let advanced = 0;
         let finished = 0;
+        /** @param {any} outcome */
+        const told = async (outcome) => {
+          if (outcome?.action !== "finished") return;
+          finished += 1;
+          if (orchestrator?.onJobFinished) await orchestrator.onJobFinished(outcome).catch(() => null);
+        };
         for (const job of claimed) {
-          const outcome = await jobs.advance(job);
           advanced += 1;
-          if (outcome?.action === "finished") {
-            finished += 1;
-            if (orchestrator?.onJobFinished) {
-              await orchestrator.onJobFinished({ job: outcome.job, result: outcome.result }).catch(() => null);
-            }
-          }
+          await told(await jobs.advance(job));
         }
         // Jobs already out with this process's lease: read where they got to.
         const running = await store.rows(
           "SELECT id, study_id FROM evimed_vcr.jobs WHERE state = 'running' AND lease_owner = $1 LIMIT 20", [jobs.owner]);
         for (const row of running) {
           if (claimed.some((job) => job.id === String(row.id))) continue;
-          const outcome = await jobs.advance({ id: String(row.id) });
           advanced += 1;
-          if (outcome?.action === "finished") {
-            finished += 1;
-            if (orchestrator?.onJobFinished) {
-              await orchestrator.onJobFinished({ job: outcome.job, result: outcome.result }).catch(() => null);
-            }
-          }
+          await told(await jobs.advance({ id: String(row.id) }));
         }
-        return { claimed: claimed.length, advanced, finished };
+        let failedForAttempts = 0;
+        for (const job of jobs.takeReaped?.() ?? []) {
+          failedForAttempts += 1;
+          if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({ job, result: null }).catch(() => null);
+        }
+        let recovered = 0;
+        for (const kept of (await jobs.recoverCanceled?.().catch(() => [])) ?? []) {
+          recovered += 1;
+          if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({ job: kept.job, result: kept.result, partial: true }).catch(() => null);
+        }
+        return { claimed: claimed.length, advanced, finished, failedForAttempts, recovered };
       }
       : null,
 
@@ -296,5 +310,12 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store }) {
         return { studies: rows.length, advanced };
       }
       : null,
+
+    /**
+     * The subjects whose deferral date has passed: the matching package queues
+     * one frozen job per study with something due. A deployment with no
+     * matching package composed has no such loop, and readiness says so.
+     */
+    recheck: matching?.recheckDue ? () => matching.recheckDue() : null,
   };
 }

@@ -40,7 +40,8 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STALE_REASONS, VCR_STEPS,
-  VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, lineageNode, missingModelEvidence, roleAllows, useWithin,
+  VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, intendedUseCeilingDetail, lineageNode, missingModelEvidence, roleAllows,
+  useWithin,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -699,6 +700,16 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /**
+   * The computed cells of a design grid, filled from the engine's own result:
+   * a run may write a grid's dimensions and truth scenarios, never the numbers
+   * in its cells.
+   * @param {string} id @param {readonly unknown[]} cells
+   */
+  async attachGridCells(id, cells) {
+    return this.one(`UPDATE ${VCR_SCHEMA}.design_grids SET cells = $2::jsonb WHERE id = $1 RETURNING id`, [id, JSON.stringify(list(cells))]);
+  }
+
+  /**
    * Point a research object at the result it produced. The only in-place
    * update on these rows, and the one the orchestrator reads a step's
    * completion from.
@@ -727,18 +738,20 @@ export class VcrStore extends VcrStoreBase {
   /**
    * What a finished job actually ran. Immutable: this is what AC-04
    * reproduces from, so its inputs and environment are copied, never
-   * referenced.
-   * @param {Record<string, any>} input
+   * referenced. `client` is the caller's transaction when the execution has to
+   * commit or roll back together with the result and the job row.
+   * @param {Record<string, any>} input @param {{ client?: any }} [options]
    */
-  async recordExecution(input) {
-    const row = await this.one(`INSERT INTO ${VCR_SCHEMA}.executions
+  async recordExecution(input, { client = null } = {}) {
+    const sql = `INSERT INTO ${VCR_SCHEMA}.executions
       (id, job_id, study_id, user_id, method, method_version, scenario_hash, inputs, environment, seed, replicates, output_hash, receipt,
        cpu_seconds, started_at, finished_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13::jsonb, $14, $15, $16) RETURNING *`,
-    [vcrId("execution"), String(input.jobId), String(input.studyId), String(input.userId), String(input.method),
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13::jsonb, $14, $15, $16) RETURNING *`;
+    const values = [vcrId("execution"), String(input.jobId), String(input.studyId), String(input.userId), String(input.method),
       String(input.methodVersion ?? ""), String(input.scenarioHash ?? ""), JSON.stringify(input.inputs ?? []),
       JSON.stringify(input.environment ?? {}), Number(input.seed ?? 0), input.replicates ?? null, input.outputHash ?? null,
-      JSON.stringify(input.receipt ?? {}), input.cpuSeconds ?? null, input.startedAt ?? null, input.finishedAt ?? null]);
+      JSON.stringify(input.receipt ?? {}), input.cpuSeconds ?? null, input.startedAt ?? null, input.finishedAt ?? null];
+    const row = client ? (await client.query(sql, values)).rows[0] : await this.one(sql, values);
     return row ? { id: String(row.id), jobId: String(row.job_id), studyId: String(row.study_id), method: String(row.method),
       methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""), inputs: list(row.inputs),
       environment: object(row.environment), seed: Number(row.seed ?? 0), replicates: num(row.replicates),
@@ -749,35 +762,50 @@ export class VcrStore extends VcrStoreBase {
   /**
    * Register a result. Supersedes the previous result of the same kind and
    * subject rather than replacing it, and derives the intended use the result
-   * may claim from the model tiers it used (plan §8.2, AC-34) — never
-   * withholding it, only labelling it down with the reason.
+   * may claim from the models it used (plan §8.2, AC-34) — never withholding
+   * it, only labelling it down with the reason.
+   *
+   * What a result used is the caller's to say and never the engine's: `tiers`
+   * are the credibility tiers the method itself carries (the domain's table)
+   * and `models` are the model rows the job named (a patient set's model, read
+   * from the library). An engine that described its own model could lift its own
+   * result's ceiling, which is why `recordResult` reads neither from a result.
    *
    * @param {{ studyId: string, userId: string, kind: string, subjectId?: string | null, executionId?: string | null,
    *   conclusion?: string | null, notEstimableRule?: string | null, counts?: Record<string, any>, measures?: unknown[],
-   *   diagnostics?: Record<string, any>, tables?: unknown[], models?: Array<{ tier?: string, risk?: string, evidence?: string[], name?: string }>,
-   *   requestedUse?: string }} input
+   *   diagnostics?: Record<string, any>, tables?: unknown[], tiers?: string[],
+   *   models?: Array<{ tier?: string, risk?: string, evidence?: string[], name?: string }>,
+   *   supersedesSubjects?: string[], requestedUse?: string }} input
+   *   `supersedesSubjects` are earlier versions of the same object — a new version of a labelled trial
+   *   scenario is a new row with its own id, and the result of the version it replaces is no longer current.
+   * @param {{ client?: any }} [options] the caller's transaction, when the result has to land with other rows
    */
-  async recordResult(input) {
+  async recordResult(input, { client: outer = null } = {}) {
     const models = list(input.models);
-    const ceiling = intendedUseCeiling(models.map((model) => String(model?.tier ?? "scenario")));
+    const tiers = [...list(input.tiers).map(String), ...models.map((model) => String(model?.tier ?? "scenario"))];
     const requested = VCR_INTENDED_USES.includes(String(input.requestedUse)) ? String(input.requestedUse) : "exploratory";
+    const detail = intendedUseCeilingDetail({ tiers: list(input.tiers).map(String), models });
     /** @type {Array<{ model: string, risk: string, missing: readonly string[] }>} */
     const shortfalls = [];
     for (const model of models) {
       const missing = missingModelEvidence(String(model?.risk ?? "none"), list(model?.evidence).map(String));
       if (missing.length) shortfalls.push({ model: String(model?.name ?? "model"), risk: String(model?.risk ?? "none"), missing });
     }
-    // A model whose own evidence is short of its risk cannot carry more than
-    // the tier ceiling either: the two rules of §8.2 meet here, and the lower
-    // of them decides.
-    const evidenceCeiling = shortfalls.length ? VCR_INTENDED_USES[Math.max(0, VCR_INTENDED_USES.indexOf(ceiling) - 1)] : ceiling;
-    const intendedUse = useWithin(requested, evidenceCeiling) ? requested : evidenceCeiling;
+    // The ceiling is the domain's: each model's own is the lowest of its tier's,
+    // its declared risk's and what its held evidence supports, and the weakest
+    // decides (`intendedUseCeilingFor`). A model short of its evidence is
+    // reported by name, whichever of the three set the limit.
+    const ceiling = detail.ceiling;
+    const intendedUse = useWithin(requested, ceiling) ? requested : ceiling;
+    const evidenceLimited = detail.limitedBy.some((entry) => entry.cause === "evidence");
     const downgrade = intendedUse === requested ? null : {
-      requested, ceiling: evidenceCeiling, reason: shortfalls.length ? "model_evidence_missing" : "model_tier_ceiling",
-      models: models.map((model) => ({ name: String(model?.name ?? "model"), tier: String(model?.tier ?? "scenario"), risk: String(model?.risk ?? "none") })),
+      requested, ceiling, reason: evidenceLimited || shortfalls.length ? "model_evidence_missing" : "model_tier_ceiling",
+      models: [...list(input.tiers).map((tier) => ({ name: "method", tier: String(tier), risk: "none" })),
+        ...models.map((model) => ({ name: String(model?.name ?? "model"), tier: String(model?.tier ?? "scenario"), risk: String(model?.risk ?? "none") }))],
       missingEvidence: shortfalls,
     };
-    return this.transaction(async (client) => {
+    /** @param {any} client */
+    const write = async (client) => {
       const version = await this.nextVersion(client, "results", "study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3",
         [input.studyId, input.kind, input.subjectId ?? null]);
       const id = vcrId("result");
@@ -791,16 +819,43 @@ export class VcrStore extends VcrStoreBase {
         // The models a result used travel with it whether or not they lowered
         // its use: a page that read the tiers only off a downgrade would read
         // a result that needed no downgrade as having used no model at all.
-        JSON.stringify({ ...object(input.diagnostics), ...(models.length ? { modelsUsed: models } : {}) }),
+        JSON.stringify({ ...object(input.diagnostics), ...(tiers.length ? { modelsUsed: [
+          ...list(input.tiers).map((tier) => ({ name: "method", tier: String(tier), risk: "none" })), ...models] } : {}) }),
         JSON.stringify(input.tables ?? []),
         intendedUse, downgrade == null ? null : JSON.stringify(downgrade)])).rows[0];
       await client.query(`UPDATE ${VCR_SCHEMA}.results SET superseded_by = $1
-        WHERE study_id = $2 AND kind = $3 AND subject_id IS NOT DISTINCT FROM $4 AND id <> $1 AND superseded_by IS NULL`,
-      [id, input.studyId, String(input.kind), input.subjectId ?? null]);
+        WHERE study_id = $2 AND kind = $3 AND id <> $1 AND superseded_by IS NULL
+          AND (subject_id IS NOT DISTINCT FROM $4 OR subject_id = ANY($5::text[]))`,
+      [id, input.studyId, String(input.kind), input.subjectId ?? null, list(input.supersedesSubjects).map(String)]);
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.result.record", object: id,
         detail: { kind: String(input.kind), version, conclusion: input.conclusion ?? null, intendedUse, downgraded: Boolean(downgrade) } });
       return resultFromRow(row);
-    });
+    };
+    return outer ? write(outer) : this.transaction(write);
+  }
+
+  /**
+   * The current (not superseded) result of one kind and subject, or null: what
+   * a later stage of the same object folds its own measures into.
+   * @param {string} studyId @param {string} kind @param {string | null} subjectId
+   */
+  async currentResultOf(studyId, kind, subjectId) {
+    return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results
+      WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3 AND superseded_by IS NULL
+      ORDER BY version DESC LIMIT 1`, [studyId, kind, subjectId ?? null]));
+  }
+
+  /**
+   * The lineage nodes of every result of one kind and subject — the current one
+   * and every one it superseded — so a recomputation can clear the stale marks
+   * of the results its successor replaced (plan §6.3).
+   * @param {string} studyId @param {string} kind @param {string | null} subjectId
+   * @returns {Promise<string[]>}
+   */
+  async resultNodesOf(studyId, kind, subjectId) {
+    const rows = await this.rows(`SELECT id, version FROM ${VCR_SCHEMA}.results
+      WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3`, [studyId, kind, subjectId ?? null]);
+    return rows.map((row) => lineageNode("result", String(row.id), Number(row.version)));
   }
 
   /** @param {string} studyId @param {string} id */
@@ -826,20 +881,22 @@ export class VcrStore extends VcrStoreBase {
 
   /**
    * A prediction registered before the outcome it predicts. The hash is over
-   * the prediction as it was at registration, and a change is a new version —
-   * never an edit, or the timestamp would prove nothing.
-   * @param {{ studyId: string, userId: string, kind: string, prediction: Record<string, any>, public?: boolean }} input
+   * the prediction **and the instant it was registered**, and a change is a new
+   * version — never an edit, or the timestamp would prove nothing: the same
+   * numbers registered a month later are a different claim and hash differently.
+   * @param {{ studyId: string, userId: string, kind: string, prediction: Record<string, any>, public?: boolean, at?: Date }} input
    */
   async registerForecast(input) {
     return this.transaction(async (client) => {
       const version = await this.nextVersion(client, "forecasts", "study_id = $1 AND kind = $2", [input.studyId, String(input.kind)]);
-      const payloadHash = vcrHash({ studyId: input.studyId, kind: String(input.kind), version, prediction: input.prediction ?? {} });
-      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.forecasts (id, study_id, user_id, kind, version, prediction, payload_hash, public)
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8) RETURNING *`,
+      const createdAt = (input.at ?? new Date()).toISOString();
+      const payloadHash = vcrHash({ studyId: input.studyId, kind: String(input.kind), version, prediction: input.prediction ?? {}, createdAt });
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.forecasts (id, study_id, user_id, kind, version, prediction, payload_hash, public, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::timestamptz) RETURNING *`,
       [vcrId("forecast"), input.studyId, String(input.userId), String(input.kind), version, JSON.stringify(input.prediction ?? {}),
-        payloadHash, input.public === true])).rows[0];
+        payloadHash, input.public === true, createdAt])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.forecast.register",
-        object: String(row.id), detail: { kind: String(input.kind), version, payloadHash } });
+        object: String(row.id), detail: { kind: String(input.kind), version, payloadHash, createdAt } });
       return this.#forecastFromRow(row);
     });
   }

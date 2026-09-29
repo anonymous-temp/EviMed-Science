@@ -46,7 +46,7 @@
 VCR_ENGINE_SOURCE_FILES <- c(
   "protocol", "rules", "inputs", "rng", "simulators", "population", "quality", "weighting", "rmst",
   "reconstruct", "maic", "evidence_pool", "map_prior", "design_analytic",
-  "design_simulate", "assurance", "procova", "accrual"
+  "design_simulate", "assurance", "procova", "accrual", "summaries"
 )
 
 #' Source every module in dependency order. Idempotent.
@@ -209,8 +209,13 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
     method_ok <- is.character(job$method) && length(job$method) == 1L && !is.na(job$method)
     default_src <- vcr_default_measure_source(if (method_ok) job$method else "")
     measures <- lapply(measures, function(m) { if (is.null(m$source)) m$source <- default_src; m })
+    # A run that stopped before it finished (a spent CPU budget, a cancel) and
+    # still holds measures from the batches that did finish says `limited`: it is
+    # the one word that lets the control plane keep those measures as a partial
+    # result and refuse the measures of any other failure (contract 3.4).
     con <- if (identical(status, "succeeded")) (conclusion %||% "estimable")
-           else if (identical(status, "not_estimable")) "not_estimable" else NULL
+           else if (identical(status, "not_estimable")) "not_estimable"
+           else if (status %in% c("failed", "canceled") && length(measures)) "limited" else NULL
     result <- list(
       jobId = job$jobId, protocolVersion = 1L, status = status,
       method = job$method,
@@ -742,9 +747,13 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
        measures = list(vcr_measure("generated_records", nrow(d), source = "synthetic")),
        counts = vcr_counts(realPatients = 0, generatedRecords = nrow(d),
                            events = if ("status" %in% names(d)) sum(d$status) else NULL),
-       diagnostics = list(endpoint = endpoint, valueSource = "synthetic", modelTier = "scenario",
+       diagnostics = c(list(endpoint = endpoint, valueSource = "synthetic", modelTier = "scenario",
                           mode = if (is.null(pop)) "scenario" else "population",
                           note = "Scenario simulation from stated parameters; no baseline-conditioned or digital-twin claim is made."),
+                       # what the patients page draws: the arms' survival curves and their summary numbers,
+                       # and how the headline moves if each stated parameter is off by a fifth
+                       vcr_patient_summary(d, endpoint),
+                       list(sensitivity = tryCatch(vcr_patient_sensitivity(endpoint, tr), error = function(e) NULL))),
        tables = .vcr_tables_of(list(vcr_write_table(out, "virtual-patients", output_dir))))
 }
 
@@ -883,9 +892,20 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
   }
   if (is.finite(log_hr)) measures <- c(measures, list(vcr_measure("log_hazard_ratio", log_hr, source = "reconstructed")))
   not_reached <- vapply(rec, function(r) !is.finite(vcr_km_median(vcr_km(r$recon$ipd$time, r$recon$ipd$status))), logical(1))
+  curves <- list()
+  for (i in seq_along(rec)) {
+    r <- rec[[i]]
+    nm <- if (length(rec) > 1L) c("对照组", "试验组")[i] else "对照组"
+    original <- vcr_rows_df(arms[[i]]$curve)
+    ot <- as.numeric(original$time); os <- as.numeric(original$surv)
+    curves[[length(curves) + 1L]] <- vcr_series(paste0("published_", i), paste0(nm, "（原文曲线，数字化）"), ot, os, "extracted", dashed = TRUE,
+                                                 at_risk = list(x = r$riskTime, n = r$atRisk))
+    curves[[length(curves) + 1L]] <- vcr_km_series(r$recon$ipd$time, r$recon$ipd$status, NULL, paste0("reconstructed_", i),
+                                                    paste0(nm, "（重建的伪个体）"), "reconstructed", ours = i == 2L)
+  }
   list(status = "succeeded", measures = measures,
        counts = vcr_counts(realPatients = 0, events = events_total, reconstructedPseudoPatients = n_pseudo),
-       diagnostics = list(qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, valueSource = "reconstructed",
+       diagnostics = list(curves = curves, qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, valueSource = "reconstructed",
                           provenance = sc$provenance,
                           medianNotReached = as.list(not_reached),
                           logHazardRatioReconstructed = if (is.finite(log_hr)) log_hr else NULL,
@@ -902,6 +922,17 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
 vcr_outcome_frame <- function(sc, tabs, subj, endpoint) {
   if (identical(endpoint, "time_to_event")) {
     if (is.null(tabs$event)) {
+      # The engine's own long form: a table another job wrote (a reconstruction's
+      # pseudo-patients, a virtual-patient set) carries `time` and `status`
+      # (1 = event) beside the arm, and is read as it is. Any other table has to
+      # bring the event table.
+      if (all(c("time", "status") %in% names(subj))) {
+        tm <- suppressWarnings(as.numeric(subj$time)); st <- suppressWarnings(as.integer(subj$status))
+        if (anyNA(tm) || anyNA(st) || !all(st %in% c(0L, 1L))) {
+          vcr_abort("input_shape_invalid", "inputs", "`time` is a number and `status` is 1 for an event and 0 for a censored person, complete.")
+        }
+        return(list(time = tm, status = st))
+      }
       vcr_abort("input_shape_invalid", "inputs", "A time-to-event analysis reads the event table (AVAL, CNSR); the job names none.")
     }
     ev <- vcr_event_frame(tabs$event, if (is.null(sc$parameterCode)) NULL else as.character(sc$parameterCode))
@@ -1078,6 +1109,10 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                            events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
        diagnostics = list(method = method, estimand = estimand, endpoint = endpoint,
+                          tau = if (identical(endpoint, "time_to_event")) tau else NULL,
+                          curves = if (identical(endpoint, "time_to_event"))
+                            vcr_arm_curves(outcome$time, outcome$status, treat, weights = w, source = .vcr_source_label(subj, "observed"), tau = tau)
+                          else NULL,
                           estimandChanged = changed,
                           balance = balance, support = support, weights = wdiag,
                           thresholds = limits_used,
@@ -1113,10 +1148,15 @@ vcr_job_rmst <- function(job, output_dir = NULL, ...) {
   arm <- as.integer(arm)
   o <- vcr_outcome_frame(sc, tabs, subj, "time_to_event")
   if (anyNA(o$time) || anyNA(o$status)) vcr_abort("input_shape_invalid", "inputs", "Time and status are complete.")
+  # The counts follow the input's value source: a real person's row is a real
+  # patient, a reconstructed pseudo-patient is counted apart and never as one
+  # (contract 3.2, AC-27).
+  counts <- vcr_table_counts(subj, events = sum(o$status))
+  counts$events <- sum(o$status)
   rule <- vcr_tau_rule(o$time, o$status, arm, tau)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
-                counts = vcr_counts(realPatients = nrow(subj), events = sum(o$status)),
+                counts = counts,
                 diagnostics = rule))
   }
   r <- vcr_rmst_difference(o$time, o$status, arm, tau)
@@ -1127,8 +1167,9 @@ vcr_job_rmst <- function(job, output_dir = NULL, ...) {
                      interval = vcr_interval("confidence", r$interval[1], r$interval[2])),
          vcr_measure("rmst_treatment", r$arm1, source = "calculated"), vcr_measure("rmst_control", r$arm0, source = "calculated"),
          vcr_measure("survival_difference_at_tau", as.numeric(r$survivalAtTau[1] - r$survivalAtTau[2]), source = "calculated")),
-       counts = vcr_counts(realPatients = nrow(subj), events = sum(o$status)),
+       counts = counts,
        diagnostics = list(tau = tau, survivalAtTau = r$survivalAtTau, weighted = FALSE, cohort = cohort$info,
+                          curves = vcr_arm_curves(o$time, o$status, arm, weights = NULL, source = .vcr_source_label(subj, "observed"), tau = tau),
                           intervalBasis = "Greenwood-type variance of the unweighted Kaplan-Meier areas"))
 }
 
@@ -1394,7 +1435,54 @@ vcr_job_design_analytic <- function(job, ...) {
       add("simon_minimax_r1", s$minimax$r1); add("simon_minimax_r", s$minimax$r)
     }
   }
+  # what the trial page draws: the power of this design over the true effect, and how
+  # the required size moves if the stated effect is off by a fifth
+  if (identical(kind, "two_arm_fixed")) {
+    n_total <- if (identical(e, "time_to_event")) NULL else if (identical(e, "continuous")) ceiling(vcr_n_means(
+      vcr_scalar(tr$effect, NA_real_), vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)$total) else {
+      p0 <- vcr_scalar(tr$controlRate, NULL)
+      p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr$treatmentRate, NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
+      ceiling(vcr_n_proportions(p0, p1, alpha, power, alloc, sided)$total)
+    }
+    diag$powerCurve <- tryCatch({
+      sc2 <- sc
+      if (!is.null(n_total)) sc2$design <- list(kind = kind, nTreat = ceiling(n_total * alloc), nControl = ceiling(n_total * (1 - alloc)))
+      else if (!is.null(sc$accrual)) {
+        m_req <- Filter(function(m) identical(m$name, "required_patients"), measures)
+        if (length(m_req)) sc2$design <- list(kind = kind, nTreat = ceiling(m_req[[1]]$value * alloc), nControl = ceiling(m_req[[1]]$value * (1 - alloc)))
+      }
+      if (is.null(sc2$design$nTreat)) NULL else vcr_power_curve_summary(sc2, alpha, sided)
+    }, error = function(err) NULL)
+    diag$sensitivity <- tryCatch(vcr_analytic_sensitivity(e, tr, alpha, power, alloc, sided, measures), error = function(err) NULL)
+  }
   list(status = "succeeded", measures = measures, counts = vcr_counts(), diagnostics = diag)
+}
+
+#' Required size at the stated effect and at 80% and 120% of it, one parameter at a time.
+vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures) {
+  wiggle <- c(0.8, 1.2)
+  base_of <- function(name) { m <- Filter(function(x) identical(x$name, name), measures); if (length(m)) m[[1]]$value else NA_real_ }
+  if (identical(e, "time_to_event")) {
+    hr <- vcr_scalar(tr$hazardRatio, NULL); if (is.null(hr)) return(NULL)
+    ev <- vapply(wiggle, function(k) vcr_events_schoenfeld(exp(k * log(hr)), alpha, power, alloc, sided), numeric(1))
+    return(list(measure = "所需事件数", base = list(value = base_of("required_events")),
+                rows = list(list(label = "效应（log 风险比）", range = sprintf("HR %.3g–%.3g", exp(0.8 * log(hr)), exp(1.2 * log(hr))),
+                                 low = ceiling(min(ev)), high = ceiling(max(ev))))))
+  }
+  if (identical(e, "continuous")) {
+    eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff)) return(NULL)
+    n <- vapply(wiggle, function(k) vcr_n_means(eff * k, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)$total, numeric(1))
+    sdv <- vapply(wiggle, function(k) vcr_n_means(eff, vcr_scalar(tr$sd, 1) * k, alpha, power, alloc, sided)$total, numeric(1))
+    return(list(measure = "所需总样本量", base = list(value = base_of("required_total")),
+                rows = list(list(label = "效应", range = sprintf("%.3g–%.3g", eff * 0.8, eff * 1.2), low = ceiling(min(n)), high = ceiling(max(n))),
+                            list(label = "标准差", range = sprintf("%.3g–%.3g", vcr_scalar(tr$sd, 1) * 0.8, vcr_scalar(tr$sd, 1) * 1.2), low = ceiling(min(sdv)), high = ceiling(max(sdv))))))
+  }
+  p0 <- vcr_scalar(tr$controlRate, NULL)
+  p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr$treatmentRate, NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
+  clip <- function(p) pmin(pmax(p, 0.001), 0.999)
+  n <- vapply(wiggle, function(k) vcr_n_proportions(p0, clip(p0 + k * (p1 - p0)), alpha, power, alloc, sided)$total, numeric(1))
+  list(measure = "所需总样本量", base = list(value = base_of("required_total")),
+       rows = list(list(label = "两组事件率之差", range = sprintf("%.3g–%.3g", 0.8 * (p1 - p0), 1.2 * (p1 - p0)), low = ceiling(min(n)), high = ceiling(max(n)))))
 }
 
 vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, progress = NULL) {
@@ -1413,10 +1501,15 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   # replicate and the directory is what gets shipped.
   if (!is.null(cp) && file.exists(cp) && identical(res$status, "succeeded")) unlink(cp)
   n_per <- vcr_scalar(sc$design$nTreat, 0) + vcr_scalar(sc$design$nControl, vcr_scalar(sc$design$nTreat, 0))
+  # the analytic power curve at this size with the simulated point on it: analytic first, the simulation as the check
+  simulated <- Filter(function(m) identical(m$name, "power"), res$measures)
+  curve <- tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
+                                            if (length(simulated)) list(value = simulated[[1]]$value, mcse = simulated[[1]]$mcse %||% NA_real_) else NULL),
+                    error = function(e) NULL)
   list(status = res$status, measures = res$measures, issues = res$issues,
        conclusion = res$diagnostics$conclusion,
        counts = vcr_counts(realPatients = 0, generatedRecords = res$diagnostics$replicatesCompleted * n_per),
-       diagnostics = c(res$diagnostics, list(analyticCheck = check)),
+       diagnostics = c(res$diagnostics, list(analyticCheck = check, powerCurve = curve)),
        tables = tables)
 }
 
@@ -1459,9 +1552,11 @@ vcr_job_design_grid <- function(job, output_dir = NULL, cancel_file = NULL, prog
        counts = vcr_counts(),
        issues = issues,
        diagnostics = list(replicatesCompleted = done,
+                          # the cells with their numbers: the page draws the heat grid from these (the full table stays a CSV)
                           cells = lapply(cells, function(c_) list(designIndex = c_$designIndex, truthIndex = c_$truthIndex, seed = c_$seed,
                                                                   scenarioHash = c_$scenarioHash, status = c_$status,
-                                                                  refusal = if (!is.null(c_$refusal)) c_$refusal$code else NULL))),
+                                                                  refusal = if (!is.null(c_$refusal)) c_$refusal$code else NULL,
+                                                                  measures = lapply(c_$measures, function(m) list(name = m$name, value = m$value, mcse = m$mcse))))),
        tables = .vcr_tables_of(list(vcr_write_table(long, "operating-characteristics", output_dir))))
 }
 

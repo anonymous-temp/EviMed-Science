@@ -9,12 +9,13 @@ The control plane's `vcrEngineClient.mjs` speaks exactly these routes
     GET    /jobs/{id}           -> {jobId, state, progress:{done,total}, cpuSeconds, cpuSecondsLimit, error}
     POST   /jobs/{id}/cancel    -> {canceled}
     GET    /jobs/{id}/result    -> the full engine result, receipt signed
+    GET    /jobs/{id}/tables/{name} -> one table the finished result lists, as the bytes the job wrote
     DELETE /jobs/{id}           -> {discarded: true}
 
 Every refusal is `{"detail": "<fixed code>"}` (plus `field` for
 `job_field_invalid`): 401 unauthorized, 404 job_not_found, 409
 job_already_submitted / job_still_running / result_not_ready /
-job_directory_conflict, 413 job_body_too_large, 422 job_body_invalid /
+job_directory_conflict, 413 job_body_too_large / table_too_large, 404 table_not_found, 422 job_body_invalid /
 job_id_invalid / job_field_invalid / job_replicates_too_large, 503
 job_directory_unavailable / engine_self_check_failed. A job's `error` is
 one of engine_crashed, cpu_limit_exceeded, memory_limit_exceeded, canceled,
@@ -31,6 +32,7 @@ Configuration (environment; secrets only ever as files):
     VCR_ENGINE_CORES=1              the ceiling a job's `cores` can only lower
     VCR_ENGINE_MAX_REPLICATES=200000, VCR_ENGINE_MEMORY_BYTES=0 (RLIMIT_AS when > 0)
     VCR_ENGINE_MAX_INPUT_BYTES (unset: R's own cap on one input file)
+    VCR_ENGINE_MAX_TABLE_BYTES=536870912 (the largest output table this service will hand out)
     VCR_ENGINE_MAX_BODY_BYTES=8 MiB, VCR_ENGINE_KEEP_JOBS=500 (finished jobs held in memory)
     VCR_ENGINE_CANCEL_GRACE_SECONDS=15, VCR_ENGINE_KILL_GRACE_SECONDS=5 (CANCEL -> SIGTERM -> SIGKILL)
 
@@ -59,6 +61,15 @@ Hidden knowledge:
   everything in it except the checkpoints, which R re-validates by scenario
   hash and seed. A finished job no longer held in memory (after a restart, or
   pruned past `VCR_ENGINE_KEEP_JOBS`) is answered from its `result.json`.
+- **A table leaves only by the name its result gave it.** A step's output (a
+  generated population, a reconstructed curve's pseudo-patients) is the next
+  step's input, and the engine's work volume is not the control plane's: the
+  control plane asks for a table by the name the finished result lists, checks
+  the sha256 the result carries, and files it in the data plane itself. The
+  route opens `<job dir>/<location>` only when that exact pair is in the
+  result, refuses a symlink or anything not a regular file, and stops at
+  `VCR_ENGINE_MAX_TABLE_BYTES` -- so it cannot be made to read another job's
+  directory or a file the result never wrote.
 - **Secrets live in files and stay in this process.** The token and the
   receipt key are read once, without following symlinks, and the R child gets
   an allowlisted environment -- never a copy of this one.
@@ -98,7 +109,7 @@ from typing import Any, Callable, Mapping
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 LOG = logging.getLogger("vcr_engine")
@@ -160,6 +171,7 @@ class Settings:
     cores: int
     max_replicates: int
     max_input_bytes: int
+    max_table_bytes: int
     memory_bytes: int
     max_body_bytes: int
     keep_jobs: int
@@ -273,6 +285,7 @@ def load_settings(environ: Mapping[str, str]) -> Settings:
         max_replicates=_number(environ, "VCR_ENGINE_MAX_REPLICATES", 200000, integer=True, minimum=1),
         # 0 = unset: R applies its own default cap on one input file.
         max_input_bytes=_number(environ, "VCR_ENGINE_MAX_INPUT_BYTES", 0, integer=True),
+        max_table_bytes=_number(environ, "VCR_ENGINE_MAX_TABLE_BYTES", 512 * 1024 * 1024, integer=True, minimum=1),
         memory_bytes=_number(environ, "VCR_ENGINE_MEMORY_BYTES", 0, integer=True),
         max_body_bytes=_number(environ, "VCR_ENGINE_MAX_BODY_BYTES", 8 * 1024 * 1024, integer=True, minimum=1),
         keep_jobs=_number(environ, "VCR_ENGINE_KEEP_JOBS", 500, integer=True),
@@ -364,6 +377,27 @@ def read_regular_file(path: Path, limit: int) -> bytes | None:
         return None
     finally:
         os.close(fd)
+
+
+TABLE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,80}")
+TABLE_CHUNK_BYTES = 1 << 20
+
+
+def open_regular_file(path: Path) -> tuple[int, int] | None:
+    """An open descriptor and the size of a regular file (never through a symlink), or None."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        return None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            os.close(fd)
+            return None
+        return fd, info.st_size
+    except OSError:
+        os.close(fd)
+        return None
 
 
 def write_atomically(path: Path, data: bytes) -> None:
@@ -715,6 +749,46 @@ class Engine:
         if loaded is None:
             raise Refusal(409, "result_not_ready")
         return loaded[0]
+
+    def table(self, job_id: str, name: str) -> tuple[int, int]:
+        """An open descriptor and the size of one table the job's result lists.
+
+        The result is read from disk (the bytes that were signed), the table is
+        looked up in it by name, and the file is `<job dir>/<location>` with the
+        location a bare file name: a table nobody listed, a location that is a
+        path, and a file that is not a regular file are all `table_not_found`.
+        """
+        if not valid_job_id(job_id):
+            raise Refusal(404, "job_not_found")
+        job = self._known(job_id)
+        if job is None:
+            disk = self._on_disk(job_id)
+            if disk is None:
+                raise Refusal(404, "job_not_found")
+            directory, result = disk[0], disk[2]
+        else:
+            if job.state not in TERMINAL or job.error == "result_unreadable":
+                raise Refusal(409, "result_not_ready")
+            loaded = self._answer(job.directory, job_id)
+            if loaded is None:
+                raise Refusal(409, "result_not_ready")
+            directory, result = job.directory, loaded[1]
+        if TABLE_NAME_PATTERN.fullmatch(name) is None or ".." in name:
+            raise Refusal(404, "table_not_found")
+        tables = result.get("tables")
+        listed = [entry for entry in (tables if isinstance(tables, list) else [])
+                  if isinstance(entry, dict) and entry.get("name") == name]
+        location = listed[0].get("location") if listed else None
+        if (not isinstance(location, str) or TABLE_NAME_PATTERN.fullmatch(location) is None or ".." in location
+                or location in ("result.json", "job.json", "progress.json")):
+            raise Refusal(404, "table_not_found")
+        opened = open_regular_file(directory / location)
+        if opened is None:
+            raise Refusal(404, "table_not_found")
+        if opened[1] > self.settings.max_table_bytes:
+            os.close(opened[0])
+            raise Refusal(413, "table_too_large")
+        return opened
 
     def cancel(self, job_id: str) -> bool:
         job = self._known(job_id)
@@ -1095,6 +1169,23 @@ def create_app(environ: Mapping[str, str] | None = None) -> FastAPI:
     def result(job_id: str) -> Response:
         # The bytes on disk, not a re-serialization: what was signed is what is served.
         return Response(service.engine().result(job_id), media_type="application/json")
+
+    @app.get("/jobs/{job_id}/tables/{name}", dependencies=authorized)
+    def table(job_id: str, name: str) -> StreamingResponse:
+        fd, size = service.engine().table(job_id, name)
+
+        def chunks():  # type: ignore[no-untyped-def]
+            # The descriptor is closed when the body is done or the client goes.
+            try:
+                while True:
+                    block = os.read(fd, TABLE_CHUNK_BYTES)
+                    if not block:
+                        return
+                    yield block
+            finally:
+                os.close(fd)
+
+        return StreamingResponse(chunks(), media_type="text/csv", headers={"content-length": str(size)})
 
     @app.delete("/jobs/{job_id}", dependencies=authorized)
     def discard(job_id: str) -> JSONResponse:

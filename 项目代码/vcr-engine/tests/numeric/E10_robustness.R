@@ -159,7 +159,8 @@ vcr_case("E10b", c("AC-28", "AC-04"), function() {
   t_job <- proc.time()[["elapsed"]] - t0
   done_job <- b_job$diagnostics$replicatesCompleted
   ok_budget <- identical(b_job$status, "failed") && "cpu_budget_exhausted" %in% vcr_test_issue_codes(b_job) && length(vcr_validate_result(b_job)) == 0L &&
-    !is.null(vcr_get_measure(b_job, "power")) && done_job >= 500L && done_job < 150000L && t_job < 3 * 0.9 + 3 && b_job$manifest$cpuSeconds > 1.5
+    !is.null(vcr_get_measure(b_job, "power")) && done_job >= 500L && done_job < 150000L && t_job < 3 * 0.9 + 3 && b_job$manifest$cpuSeconds > 1.5 &&
+    identical(b_job$conclusion, "limited")
   # The environment's ceiling counts the process's whole CPU life (it mirrors the
   # kernel limit the service sets on the child), the job's own limit counts from
   # the job's start, and the budget is 0.9 of the smaller.
@@ -182,10 +183,12 @@ vcr_case("E10b", c("AC-28", "AC-04"), function() {
   staggered[[2]]$sites <- lapply(seq_along(staggered[[2]]$sites), function(i) { x <- staggered[[2]]$sites[[i]]; x$startTime <- 2 * (i - 1); x })
   canceled <- lapply(c("design.simulate", "comparator.entropy_balance", "accrual.poisson_gamma", "population.synthpop"), function(m) {
     cs <- if (m == "accrual.poisson_gamma") staggered else pick(m); r <- run_c(cs[[1]], cs[[2]], cs[[3]], if (length(cs) >= 4L) cs[[4]] else NULL)
-    list(method = m, status = r$status, measures = length(r$measures), valid = length(vcr_validate_result(r)) == 0L, codes = vcr_test_issue_codes(r))
+    list(method = m, status = r$status, conclusion = r$conclusion, measures = length(r$measures), valid = length(vcr_validate_result(r)) == 0L, codes = vcr_test_issue_codes(r))
   })
   ok_cancel <- all(vapply(canceled, function(x) identical(x$status, "canceled") && x$valid && !length(x$codes), logical(1))) &&
-    all(vapply(canceled[-1], function(x) x$measures == 0L, logical(1)))
+    all(vapply(canceled[-1], function(x) x$measures == 0L, logical(1))) &&
+    # a cancel that kept measures says `limited`; one that kept none says nothing
+    all(vapply(canceled, function(x) identical(x$conclusion, if (x$measures > 0L) "limited" else NULL), logical(1)))
   # ... and without the request the same accrual job runs to a forecast
   free_run <- vcr_run_job(vcr_test_json(vcr_test_job("accrual.poisson_gamma", staggered[[2]], staggered[[3]], seed = 3L, replicates = staggered[[4]])))
   ok_cancel <- ok_cancel && identical(free_run$status, "succeeded") && length(free_run$measures) > 0L

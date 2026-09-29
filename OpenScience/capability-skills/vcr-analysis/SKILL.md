@@ -1,83 +1,228 @@
 ---
 name: vcr-analysis
-description: 「虚拟临研」的人群、虚拟患者、对照与试验四步：按数据档位选路、配置、交引擎算、读回来讲清楚。
+description: 「虚拟临研」的人群、虚拟患者、对照与试验四步：按数据档位选路，把每个对象按引擎认识的字段写下来，平台交引擎算，读回来讲清楚。
 ---
 
 # 人群、虚拟患者、对照与试验
 
 ## 模型不产生数字
 
-**这一条排在最前面，因为它是整个板块成立的前提。** 你不做统计：样本量、功效、I 类错误、偏倚、覆盖率、有效样本量、标准化差异、RMST、入组时间分布、蒙特卡洛标准误——每一个都来自 `mcp__evimed__vcr_read` 读到的已保存结果，或 `mcp__evimed__vcr_simulate` 排出去的引擎作业。你负责的是：说清楚要算什么、把场景配对、读回结果、判断它可信到什么程度、讲清楚它意味着什么。
+**这一条排在最前面，因为它是整个板块成立的前提。** 你不做统计：样本量、功效、I 类错误、偏倚、覆盖率、有效样本量、标准化差异、RMST、入组时间分布、蒙特卡洛标准误——每一个都来自 `mcp__evimed__vcr_read` 读到的已保存结果，或引擎的作业。你负责的是：说清楚要算什么、把对象写对、读回结果、判断它可信到什么程度、讲清楚它意味着什么。
 
 心算出来的、"按经验大约"的、从记忆里搬来的数，一律不得写进交付物。需要而没有的数，写清楚缺它、缺的原因、由哪一步能补上。
 
 ## 先读
 
-- `mcp__evimed__vcr_read` `what: "study"` — 数据档位（T0/T1/T2/T3）、预期用途、七步进度、结局封存状态。
-- `mcp__evimed__vcr_read` `what: "definition"` — 估计目标与终点类型。**终点类型决定所有方法分支。**
-- `mcp__evimed__vcr_read` `what: "assumptions"` — 已有的假设卡及其版本。
-- `mcp__evimed__vcr_read` `what: "results"` — 已经算过什么。**算过的不重算**；过期的（带 `stale`）要重算。
-- `mcp__evimed__vcr_read` `what: "models"` — 模型与方法库：能用哪些模型、每个模型的层级与缺什么证据。
+写任何对象之前，先读两样，因为下面的写法取决于它们：
 
-## 步骤 3：人群
+- `mcp__evimed__vcr_read` `what: "definition"`——**终点类型（连续、二分类、事件时间）决定所有方法分支**，也决定场景里 `endpoint.type` 写什么。
+- `mcp__evimed__vcr_read` `what: "assumptions"`——已有的假设卡。卡里有的参数，平台会直接放进场景（见「假设卡里的数」），你不要在对象里再写一遍。
+
+要引用一个数时才读 `what: "results"`；带 `stale` 的结果过期了，平台会按新版本自动重算，你只需要读回来。
+
+## 你写对象，平台交给引擎算
+
+用 `mcp__evimed__vcr_write` 写人群、虚拟患者集、对照和试验方案。**写下去，平台就把这个对象冻结成一个引擎作业，算完把结果存回来**，不需要你自己排作业。只有回答一个不属于任何对象的问题（比如一句话问"要多少例"）才用 `mcp__evimed__vcr_simulate`：`action: "start"` 拿到 `jobId`，`action: "status"` 轮询。作业超出研究的计算预算会停在确认处，照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
+
+**对象里只能写引擎认识的字段。** 多写一个字段、拼错一个字段（比如脱落率没有写成 `accrual.dropoutAnnual`），这个对象不会被算，而是被拒绝并说出字段的路径——引擎从不悄悄忽略一个参数。零效应情景写 `truth.null: true`（布尔值），脱落只有 `accrual.dropoutAnnual` 一种写法（每 12 个时间单位的比例）；`alpha` 是总 α，`sided` 写 1 或 2。
+
+### 步骤 3：人群
 
 数据档位决定从哪里开始：
 
-| 档位 | 人群 `kind` | 作业 |
+| 档位 | 人群 `kind` | 引擎做什么 |
 |---|---|---|
-| T1–T3 有患者级数据 | `real` | `build_cohort` |
-| 有本地数据但要外发 | `empirical_synthetic` | `synthesize_population` |
-| 只有文献基线表 | `literature` | `generate_population` |
-| 什么都没有 | `scenario` | `generate_population` |
+| T1–T3 有患者级数据 | `real` | 按入选规则筛出真实队列 |
+| 有本地数据但要外发 | `empirical_synthetic` | 经验合成人群，附保真度、可用性和泄露风险 |
+| 只有文献基线表 | `literature` | 按已发表的基线表生成 |
+| 什么都没有 | `scenario` | 按设定的分布生成 |
 
-`mcp__evimed__vcr_write` `what: "population"`，写 `kind`、`definition`（筛选条件或分布设定）、`allowedUses`。合成人群的 `allowedUses` 只能是 `design` / `feasibility` / `testing` / `training` / `shared_preview`——**合成人群永远不进真实外部对照**（§5.1）。
+`mcp__evimed__vcr_write` `what: "population"`，`definition` 直接写引擎的字段（没有多一层）。情景人群：
+
+```json vcr:object:population
+{
+  "kind": "scenario",
+  "name": "情景人群",
+  "definition": {
+    "n": 2000,
+    "population": {
+      "variables": [
+        { "name": "age", "family": "normal", "mean": 63, "sd": 9 },
+        { "name": "ldh", "family": "lognormal", "meanlog": 5.4, "sdlog": 0.35 }
+      ],
+      "constraints": [
+        { "name": "成年", "rule": { "op": "compare", "column": "age", "comparator": "gte", "value": 18 } }
+      ]
+    }
+  },
+  "allowedUses": ["design", "feasibility"]
+}
+```
+
+文献人群写 `baselineTable`（每行一个变量，连续变量给 `mean` 和 `sd`，二分类给 `proportion`）；真实队列写 `rules`（每条 `{ name, rule }`）加 `timeZero` 和 `exit` 两个列名，并带 `snapshotId`。**规则是数据，不是代码**：`compare`、`between`、`in`、`missing`、`present`，用 `all`、`any`、`not` 组合，列名必须是这张表里真有的列；写成表达式字符串会被拒绝。
+
+合成人群的 `allowedUses` 只能是 `design` / `feasibility` / `testing` / `training` / `shared_preview`——**合成人群永远不进真实外部对照**。
 
 筛选流程每一步都要单列三个数：保留、排除、**无法判断**。把「无法判断」并进「排除」，是这一步最常见也最贵的错误。
 
-## 步骤 4：虚拟患者
+### 步骤 4：虚拟患者
 
 在库里选能覆盖这个人群和这个终点的**最高一级**模型（`validated` > `data` > `literature` > `scenario`）。选不到就用文献模型或情景模型，并在报告里写明是哪一级、为什么。
 
-`mcp__evimed__vcr_write` `what: "patient_set"`：`modelId`、`modelVersion`、`scenario`。
+`mcp__evimed__vcr_write` `what: "patient_set"`：`modelId`、`modelVersion`、`scenario`，有已生成的人群就写 `populationId`（两组人数之和要等于人群的人数）。
+
+```json vcr:object:patient_set
+{
+  "name": "240 名虚拟患者",
+  "populationId": "pop_example",
+  "modelId": "reference-time-to-event",
+  "modelVersion": "1.0.0",
+  "scenario": {
+    "design": { "nTreat": 160, "nControl": 80 },
+    "endpoint": { "type": "time_to_event" },
+    "truth": { "covariateEffects": { "ldh": 0.001 } },
+    "accrual": { "kind": "uniform", "duration": 12, "followup": 12 }
+  }
+}
+```
+
+风险比、对照组中位、脱落率这些参数由假设卡填进 `truth` 和 `accrual`，你只写卡里没有的部分（这里是协变量效应）。
 
 **「数字孪生」这四个字有门槛**：个体条件化、随新数据更新、校准过的不确定性、验证记录，四项齐全才是 `digital_twin`，否则是 `baseline_conditioned_prediction`（基线条件化预测）。平台自己按证据推导这个标签，你不要替它下结论。
 
-模型不适用时（人群、终点或输入超出范围），给出「适用性问题」：哪一项超出范围，然后在「换一个合适的模型」「用文献模型或情景模型并标明」「提一个数据需求」三条里选一条，照实标注。**不要编一条轨迹顶替**（AC-13）。
+模型不适用时（人群、终点或输入超出范围），给出「适用性问题」：哪一项超出范围，然后在「换一个合适的模型」「用文献模型或情景模型并标明」「提一个数据需求」三条里选一条，照实标注。**不要编一条轨迹顶替。**
 
-## 步骤 5：对照
+### 步骤 5：对照
 
-`mcp__evimed__vcr_read` `what: "comparator"` 会回来 `routes`——这个数据档位能走哪几条路线，是确定性的：
+`mcp__evimed__vcr_read` `what: "comparator"` 会回来 `routes`——这个数据档位能走哪几条路线，是确定性的。路线、最低档位和引擎做的事：
 
-| 路线 | 最低档位 | 作业 |
+| 路线 | 最低档位 | 引擎做什么 |
 |---|---|---|
-| `prognostic_adjustment` 预后校正 | T3 | `weight_comparator` |
-| `external_control` 真实外部对照 | T2 | `weight_comparator` |
-| `literature_control` 文献对照 | T0 | `rmst` |
-| `model_comparator` 模型预测比较器 | T0 | `rmst` |
-| `hybrid_control` 混合对照 | T0 | `map_prior` |
+| `prognostic_adjustment` 预后校正 | T3 | 预后校正的样本量计算（`procova`），连续终点 |
+| `external_control` 真实外部对照 | T2 | 熵平衡加权，估计目标是 ATT；换成 ATE 或 ATO 时用倾向得分加权 |
+| `literature_control` 文献对照 | T0 | 先重建 KM 曲线的伪个体数据；两组曲线都给了，再对伪个体算 RMST；说明按 MAIC 做就用 MAIC（要自己的个体数据） |
+| `model_comparator` 模型预测比较器 | T0 | 当前版本没有实现：引擎里只有按情景参数生成的参考仿真器，给不出"对该人群的预测"。平台如实记为不可估计并写明原因 |
+| `hybrid_control` 混合对照 | T0 | 设计期的 MAP 先验：先验有效样本量与冲突情景下的运行特征 |
 
-先按 ICH E10 的四个条件判断外部对照是否适宜（效应远大于自然变异、终点客观、病程可预测、预后因素已知可得），再逐项过 FDA 外部对照草案的十个可比性维度。
+`mcp__evimed__vcr_write` `what: "comparator"`。文献对照的曲线坐标必须来自数字化程序或人工点选（`provenance` 写明是哪个工具），**你不能看图报数**；缺风险人数表就不重建，因为没有它删失无从辨认。下面的曲线只列了四个点作示意，数字化出来的曲线有几十到上百个点：
 
-估计目标默认 `ATT`（对试验人群）。换成 `ATE` 或 `ATO` 必须写明理由——加权改变的是"这个效应是对谁说的"。
+```json vcr:object:comparator
+{
+  "route": "literature_control",
+  "estimand": "ATT",
+  "targetTrial": { "population": "二线 NSCLC", "treatment": "EV 单药" },
+  "configuration": {
+    "curve": [ { "time": 0, "surv": 1 }, { "time": 6, "surv": 0.7 }, { "time": 12, "surv": 0.5 }, { "time": 24, "surv": 0.25 } ],
+    "riskTable": [ { "time": 0, "atRisk": 200 }, { "time": 12, "atRisk": 100 }, { "time": 24, "atRisk": 50 } ],
+    "totalEvents": 120,
+    "reportedMedian": 12,
+    "provenance": { "kind": "digitizer", "tool": "WebPlotDigitizer", "toolVersion": "4.6" }
+  }
+}
+```
 
-**「不可估计」是一份完成的结果。** 熵平衡无解、共同支持域外比例越界、加权后有效样本量低于下限、关键协变量标准化差异 ≥ 0.1、τ 超过随访、重建未过质控、MAP 先验冲突——这七条是确定性规则，由引擎判定。触发了就 `mcp__evimed__vcr_write` `what: "comparator"` 带 `conclusion: "not_estimable"` 和 `gapList`（缺什么、缺到什么程度、补上之后能做什么），照常交付。
+只有一条曲线的重建是一个基准，不是比较。要做 RMST 对比，把另一组的曲线写进 `treatmentArm`（同样的 `curve`、`riskTable`、`totalEvents`），再加 `tau`（RMST 的时点，不能超过任一组的最长随访）和 `timeUnit`；平台先重建，再对伪个体算 RMST。
 
-## 步骤 6：试验
+真实外部对照读的是患者级数据，`configuration` 写用哪些协变量、分析时点和哪个参数，并带数据快照：
 
-按 ADEMP 五段组织场景，`mcp__evimed__vcr_write` `what: "trial_scenario"`，通常写三个方案并排比。每个方案：
+```json vcr:object:comparator
+{
+  "route": "external_control",
+  "estimand": "ATT",
+  "configuration": {
+    "covariates": ["age", "ecog", "ldh"],
+    "tau": 12,
+    "timeUnit": "months",
+    "parameterCode": "OS",
+    "targetTrial": [
+      { "item": "入选标准", "emulation": "approximate" },
+      { "item": "处理策略", "emulation": "exact" },
+      { "item": "同期治疗", "emulation": "cannot" }
+    ],
+    "snapshotId": "snp_example"
+  }
+}
+```
 
-- `design`：`single_arm` / `single_arm_external` / `two_arm_fixed` / `group_sequential` / `simon_two_stage`。
-- `endpointType`：与研究定义一致。
-- `configuration.truth`：真值情景。**必须有一个零效应情景**（`{"isNull": true}`），否则 I 类错误无从谈起。
-- `configuration.accrual`：入组节奏。
-- `configuration.performance`：默认全开（功效、I 类错误、偏倚、覆盖率、期望样本量、周期、成本）。
-- `assumptionIds`：这个方案用到的假设卡。
+先按 ICH E10 的四个条件判断外部对照是否适宜（效应远大于自然变异、终点客观、病程可预测、预后因素已知可得），再逐项过 FDA 外部对照草案的十个可比性维度。估计目标默认 `ATT`；换成 `ATE` 或 `ATO` 必须写明理由——加权改变的是"这个效应是对谁说的"。
 
-**解析优先、仿真复核**：固定设计和成组序贯的边界、样本量、事件数先用 `design_analytic` 算，再用 `design_simulation` 核对；两者差异超出蒙特卡洛误差就在报告里说出来（AC-29）。
+**「不可估计」是一份完成的结果，而且不由你宣布。** 一条路线数据档位够不着，或引擎判定熵平衡无解、共同支持域外比例越界、加权后有效样本量低于下限、关键协变量标准化差异 ≥ 0.1、τ 超过随访、重建未过质控、MAP 先验冲突，平台都会把它存成「不可估计」，带触发的规则和缺口清单，照常交付。你不要在对象里自己写结论。你要做的是读回来，把缺什么、缺到什么程度、补上之后能回答什么讲清楚。
 
-重复次数不用你定：零假设情景默认不少于 2 万次，备择不少于 5,000 次，`configuration.targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
+### 步骤 6：试验
 
-排作业：`mcp__evimed__vcr_simulate` `action: "start"`，拿到 `jobId`，`action: "status"` 轮询。**作业超出研究计算预算会停在确认处**——这是平台三个人工停点之一。停了就照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
+按 ADEMP 五段组织场景，`mcp__evimed__vcr_write` `what: "trial_scenario"`，通常写三个方案并排比。`design` 和 `endpointType` 是对象自己的字段，其余都在 `configuration` 里，字段名就是引擎的字段名：
+
+```json vcr:object:trial_scenario
+{
+  "label": "A 2:1 随机",
+  "design": "two_arm_fixed",
+  "endpointType": "time_to_event",
+  "assumptionIds": ["hazard_ratio", "control_median_pfs", "dropout_rate"],
+  "configuration": {
+    "design": { "nTreat": 120, "nControl": 60, "allocation": 0.6667 },
+    "analysis": { "method": "logrank", "alpha": 0.025, "sided": 1, "power": 0.9 },
+    "accrual": { "kind": "uniform", "duration": 12, "followup": 12 },
+    "performance": ["power"]
+  }
+}
+```
+
+```json vcr:object:trial_scenario
+{
+  "label": "B 1:1 加一次期中分析",
+  "design": "group_sequential",
+  "endpointType": "time_to_event",
+  "configuration": {
+    "design": { "nTreat": 90, "nControl": 90, "allocation": 0.5, "informationRates": [0.5, 1], "spending": "obrien_fleming" },
+    "analysis": { "method": "logrank", "alpha": 0.025, "sided": 1, "power": 0.9 },
+    "accrual": { "kind": "uniform", "duration": 12, "followup": 12 },
+    "truth": { "hazardRatio": 0.7, "controlMedian": 6 }
+  }
+}
+```
+
+引擎实现的设计：固定样本两组比较（连续、二分类、事件时间）、成组序贯（事件时间）、Simon 两阶段（二分类，只有解析计算）。**单臂和单臂加外部对照当前不做仿真**，平台会说这个设计没有实现，而不会把它当成别的设计去算；要比就并排写引擎支持的方案。
+
+**解析优先、仿真复核**：平台对每个方案先算解析结果再仿真，两者差异超出蒙特卡洛误差时结果里带着差值，你在报告里说出来。固定设计的效应有假设卡给出预测分布时，平台还会算成功把握（按证据的不确定性平均后的功效）。重复次数不用你定：零假设情景默认不少于 2 万次，备择不少于 5,000 次，`targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
+
+**必须有一个零效应情景**（`truth.null: true`，或在设计网格的真值列表里放一列），否则 I 类错误无从谈起。比较设计和真值的组合用设计网格，`dimensions.designs` 列出设计，`truthScenarios` 列出真值情景，每一格的数字是引擎填的：
+
+```json vcr:object:design_grid
+{
+  "dimensions": {
+    "designs": [
+      { "label": "每组 100", "kind": "two_arm_fixed", "nTreat": 100, "nControl": 100 },
+      { "label": "每组 200", "kind": "two_arm_fixed", "nTreat": 200, "nControl": 200 }
+    ],
+    "base": {
+      "endpoint": { "type": "binary" },
+      "analysis": { "method": "risk_difference", "alpha": 0.025, "sided": 1 },
+      "performance": ["power"]
+    }
+  },
+  "truthScenarios": [
+    { "label": "零效应", "controlRate": 0.3, "treatmentRate": 0.3 },
+    { "label": "有效应", "controlRate": 0.3, "treatmentRate": 0.45 }
+  ],
+  "comparisonGoal": { "text": "在零效应下 I 类错误不超过 2.5%，有效应下功效尽量高", "measures": [{ "name": "power", "direction": "higher" }] }
+}
+```
+
+一句话问样本量这类不属于任何对象的问题，直接排一个解析作业：
+
+```json vcr:design_analytic
+{
+  "design": { "kind": "two_arm_fixed" },
+  "endpoint": { "type": "time_to_event" },
+  "truth": { "hazardRatio": 0.7, "controlMedian": 6 },
+  "analysis": { "alpha": 0.025, "power": 0.9, "sided": 1 },
+  "accrual": { "duration": 24, "followup": 12 }
+}
+```
+
+### 假设卡里的数
+
+平台把假设卡的设定值放进场景，靠的是卡的 `key`：`hazard_ratio`→`truth.hazardRatio`，`control_median…`→`truth.controlMedian`，`dropout_rate`→`accrual.dropoutAnnual`，`control_event_rate`→`truth.controlRate`，`treatment_event_rate`→`truth.treatmentRate`，`risk_difference`、`odds_ratio`，`mean_difference`→`truth.effect`，`outcome_sd`→`truth.sd`。方案里同一参数写了数，也以卡为准。**改卡就是改场景**：新版本的卡进入新的作业，旧的结果标为已过期、由新结果取代，旧结果保留可查。方案 `assumptionIds` 指名了哪几张卡，就只用那几张。
 
 ## 四个数永远分开
 
@@ -96,13 +241,13 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 | `analysis-report.md` | 每次 | 这一步做了什么、结果是什么、可信到什么程度、有什么局限 |
 | `results.json` | 每次 | 机器可读的结果：结论、四个数、指标、诊断 |
 | `comparability.md` | 做对照时 | 十个可比性维度逐项、ICH E10 四条件、重叠与平衡 |
-| `simulation.json` | 做试验时 | FDA 复杂创新设计清单的结构化版本 |
+| `simulation.json` | 做试验时 | 模拟报告的结构化版本 |
 
 `results.json` 至少要有 `conclusion`、`counts`（四个数，没有的写 `null` 不写 `0`）、`measures`（每个仿真指标带 `mcse`）、`diagnostics`；人群还要 `waterfall`（每步带 `unknown`）与 `populationKind`，经验合成人群另加 `qualityReport`（保真度、可用性、泄露风险）；对照还要 `estimand` 与 `diagnostics`。
 
-`simulation.json` 按 FDA 复杂创新设计指导原则的清单：`designSummary`、`exampleTrial`、`scenarios`（含 `isNull: true` 的零效应情景）、`replicates`、`operatingCharacteristics`（每行带 `mcse`）、`sensitivity`、`code`（种子与软件版本）、`summary`。
+`simulation.json` 按 FDA 复杂创新设计指导原则的清单：`designSummary`、`exampleTrial`、`scenarios`（含 `null: true` 的零效应情景）、`replicates`、`operatingCharacteristics`（每行带 `mcse`）、`sensitivity`、`code`（种子与软件版本）、`summary`。
 
-**报告里的每个数写成 `{{n:…}}` 引用**，例如 `{{n:measure(power).value|pct1}}`、`{{n:counts.realPatients|thousands}}`、`{{n:measure(power)|pm}}`、`{{n:measure(hazard_ratio)|ci}}`。平台按 `results.json` 渲染（§8.3、AC-20）。手打的数字会被标出来。
+**报告里的每个数写成 `{{n:…}}` 引用**，用 `mcp__evimed__vcr_read` `what: "report_model"` 看能引用哪些路径。例如 `{{n:measure(power).value|pct1}}`、`{{n:counts.realPatients|thousands}}`、`{{n:measure(power)|pm}}`、`{{n:measure(hazard_ratio)|ci}}`；同一份报告里比较几个方案时按方案的 id 指名：`{{n:measure(power, scenario=<方案 id>).value|pct1}}`。平台在交付时按研究已保存的结果渲染这些引用，渲染不出来的写成「未计算」，不会写成 0；手打的数字会被标出来。
 
 ## 运行完成前
 

@@ -24,10 +24,12 @@ Five tools a 虚拟临研 capability's run uses; none is ever forced into a turn
 - ``trial_registry_record`` fetches one registry record as structured fields --
   eligibility text, arms, endpoints, planned and actual enrolment. The run
   never reaches a registry itself; the control plane does.
-- ``evidence_pool`` hands several extracted estimates to the engine to be
-  pooled into one assumption distribution, and returns the job to poll. The
-  pooling is the engine's (DL / REML / HKSJ with a prediction interval), not
-  the model's.
+- ``evidence_pool`` asks the platform to pool this study's *verified*
+  extractions of one parameter into an assumption distribution, and returns
+  the job to poll. What is pooled is what the study already holds, checked
+  against its source (quote and locator) -- a run names the parameter, never
+  the numbers; the pooling is the engine's (DL / REML / HKSJ with a
+  prediction interval), not the model's.
 
 The runtime does not know where the study's data lives. It posts to the
 server's own route with the same runtime token as the public-source gateway;
@@ -52,28 +54,42 @@ import public_sources
 # `apps/server/test/vcrGateway.test.mjs` reads this file and holds these copies
 # equal to the server's.
 READ_WHATS = (
-    "study", "definition", "criteria", "assumptions", "population", "patients", "comparator", "trial",
-    "precedents", "matching", "results", "snapshot_profile", "models", "jobs", "trial_registry_record",
+    "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
+    "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
+    "trial_registry_record",
 )
 WRITE_WHATS = (
-    "definition", "protocol", "criteria", "assumption", "population", "patient_set", "comparator",
-    "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step",
+    "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
+    "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
+    "fact", "language_judgment", "site", "followup", "field_map",
 )
+# The engine's 24 job kinds, in the domain's order (`VCR_JOB_KINDS` in
+# `packages/domain/src/vcrVocabulary.mjs`); `test/test_vcr_platform.py` reads the
+# domain and holds this list equal to it.
 JOB_KINDS = (
-    "profile_snapshot", "build_cohort", "generate_population", "synthesize_population", "generate_patients",
-    "reconstruct_km", "pool_evidence", "weight_comparator", "rmst", "design_analytic", "design_simulation",
-    "design_grid", "assurance", "accrual_forecast", "map_prior", "match_criteria",
+    "profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
+    "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary",
+    "reconstruct_km", "pool_evidence", "weight_comparator", "propensity_weight_comparator", "maic_comparator",
+    "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
+    "accrual_forecast", "map_prior", "match_criteria",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
+POOLING_CALIBRES = ("closest", "overall", "next_closest")
 SIMULATE_ACTIONS = ("start", "status", "cancel")
 READ_MAX_LIMIT = 50
 WRITE_MAX_ITEMS = 200
-MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Reads, writes and job submissions answer within ten seconds server-side; the
 # client's ceiling leaves room for one retry under the kernel's 180 s limit.
 TIMEOUT_SECONDS = 30
 GATEWAY_CODE = re.compile(r"^(?:vcr|registry|engine)_[a-z0-9_]{1,60}$")
 ID = {"type": "string", "minLength": 1, "maxLength": 160, "pattern": r"^[A-Za-z0-9_.:@-]+$"}
+
+
+# The gateway's own refusals of the conversation's credential. They end in
+# `_invalid` like a malformed field does, and are not one: the run cannot fix
+# them by changing what it sent.
+AUTH_CODES = ("vcr_gateway_token_invalid", "vcr_gateway_token_missing", "vcr_unconfigured")
 
 
 class VcrPlatformError(Exception):
@@ -82,6 +98,18 @@ class VcrPlatformError(Exception):
         self.code = code
         self.retryable = retryable
 
+    def stop_reason(self) -> str:
+        """What the run should do next: fix the call, retry, or go on without.
+
+        A code ending ``_invalid`` names a field the run got wrong -- except the
+        credential's, which is the deployment's to fix (``unsupported``).
+        """
+        if self.code in AUTH_CODES:
+            return "unsupported"
+        if self.code.endswith("_invalid"):
+            return "invalid_input"
+        return "retry" if self.retryable else "unsupported"
+
 
 def tool_definitions():
     return [
@@ -89,9 +117,13 @@ def tool_definitions():
             "name": "vcr_read",
             "description": (
                 "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption "
-                "cards with their sources, population and patient sets, comparator designs, trial scenarios, saved "
-                "results, the model and method library, and queued jobs. Aggregates and structure only -- never a "
-                "patient-level row, and never a cell speaking for fewer than ten people."
+                "cards with their sources, verified evidence, population and patient sets, comparator designs, trial "
+                "scenarios, saved results, the report model, the model and method library, and queued jobs. "
+                "Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than "
+                "ten people. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
+                "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
+                "judgments with their evidence quotes and the facts written for them, and the language criteria still "
+                "waiting for the run's answer."
             ),
             "inputSchema": {
                 "type": "object",
@@ -104,7 +136,9 @@ def tool_definitions():
                             "registryId": ID,
                             "registry": ID,
                             "snapshotId": ID,
+                            "sourceId": ID,
                             "subjectKey": ID,
+                            "documentId": ID,
                             "query": {"type": "string", "minLength": 1, "maxLength": 200},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 10000},
@@ -120,10 +154,12 @@ def tool_definitions():
             "name": "vcr_write",
             "description": (
                 "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and "
-                "its structured eligibility criteria, assumption cards, population, patient-set, comparator and trial "
-                "designs, a design grid, a decision record, a registered forecast, a fitted literature model, or the "
-                "report text. Numbers are not writable: results, counts, measures and execution records come from the "
-                "engine. Items are checked one by one; refused items come back in issues and the rest are written."
+                "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
+                "patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, "
+                "patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, "
+                "measures and execution records come from the engine, and an object's configuration carries only the "
+                "keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in "
+                "issues and the rest are written."
             ),
             "inputSchema": {
                 "type": "object",
@@ -139,11 +175,27 @@ def tool_definitions():
         {
             "name": "vcr_simulate",
             "description": (
-                "Queue a deterministic computation on the 虚拟临研 engine and read where it got to: cohort building, "
-                "population or patient generation, comparator weighting, RMST, analytic or simulated trial design, "
-                "assurance, accrual forecasting or criterion evaluation. start returns a jobId; status reports state "
-                "and progress; cancel stops it and keeps the completed batches. Every number in the answer is the "
-                "engine's -- never compute one yourself."
+                "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a "
+                "jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed "
+                "batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the "
+                "frozen setting of one method and is refused by name (the field's path) when it carries a key the "
+                "engine does not read, lacks a required one, or asks for a design or endpoint the method does not "
+                "implement. Shapes: design_analytic {design{kind,informationRates?,spending?,allocation?}, "
+                "endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?}; design_simulation "
+                "{design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, "
+                "analysis{method,alpha,sided,tau?}, accrual?, performance?, targetMcse?}; design_grid the same plus "
+                "designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, truth?, "
+                "analysis}; generate_population {n, population{variables[{name,family,...}],correlation?,constraints?,"
+                "missing?}}; literature_population {n, baselineTable[{variable,mean,sd|proportion|proportions}]}; "
+                "generate_patients{,_binary,_continuous} {design{nTreat,nControl?}, endpoint, truth, accrual?}; "
+                "reconstruct_km {curve[{time,surv}], riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, "
+                "treatmentArm?}; rmst {tau, ...}; weight_comparator {covariates[], estimand, endpoint, tau?, ...}; "
+                "map_prior {historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. "
+                "Truth spells the null case truth.null (boolean); dropout is accrual.dropoutAnnual; alpha is the total, "
+                "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, synthesize_population, "
+                "weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. "
+                "pool_evidence and match_criteria are built by the platform (evidence_pool; the protocol's criteria). "
+                "The vcr-analysis skill has the full shapes with examples."
             ),
             "inputSchema": {
                 "type": "object",
@@ -183,34 +235,21 @@ def tool_definitions():
         {
             "name": "evidence_pool",
             "description": (
-                "Pool several extracted estimates into one assumption distribution on the 虚拟临研 engine "
-                "(DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). start returns a "
-                "jobId; status reports the pooled estimate, heterogeneity and the prediction interval. The pooling is "
-                "the engine's: state the inputs, read the result, and never average the numbers yourself."
+                "Pool this study's verified extractions of one parameter into an assumption distribution on the "
+                "虚拟临研 engine (DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). Name "
+                "the parameter and the endpoint definition it is measured under -- the values pooled are the ones the "
+                "study already holds, checked against their source, never numbers you bring. start returns a jobId "
+                "(or says why nothing was started: no verified evidence, no such parameter); status reports the pooled "
+                "estimate, heterogeneity and the prediction interval. Never average the numbers yourself."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": ["start", "status"], "default": "start"},
                     "parameter": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "endpointKey": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$"},
+                    "calibres": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "enum": list(POOLING_CALIBRES)}},
                     "method": {"type": "string", "enum": list(POOLING_METHODS), "default": "random_effects_reml"},
-                    "studies": {
-                        "type": "array", "minItems": 1, "maxItems": 200,
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "sourceRef": {"type": "string", "minLength": 1, "maxLength": 300},
-                                "estimate": {"type": "number"},
-                                "standardError": {"type": "number"},
-                                "ciLow": {"type": "number"},
-                                "ciHigh": {"type": "number"},
-                                "sampleSize": {"type": "integer", "minimum": 1},
-                                "events": {"type": "integer", "minimum": 0},
-                            },
-                            "required": ["sourceRef", "estimate"],
-                            "additionalProperties": False,
-                        },
-                    },
                     "jobId": ID,
                 },
                 "required": ["action"],
@@ -411,6 +450,17 @@ def simulate(arguments: dict) -> dict:
 def _job_answer(data: dict, action: str) -> dict:
     state = str(data.get("state") or "queued")
     job_id = str(data.get("jobId") or "")
+    if state == "not_started":
+        reason = str(data.get("reason") or "")
+        return {
+            "status": "warning",
+            "summary": "Nothing was started%s." % (": %s" % reason if reason else ""),
+            "data": data,
+            "warnings": [str(data.get("message") or "The platform did not queue this computation.")],
+            "next_actions": [
+                "Read what the study holds (vcr_read), supply what is missing, and start again; say in the report what could not be pooled.",
+            ],
+        }
     if state == "awaiting_budget":
         return {
             "status": "warning",
@@ -476,15 +526,33 @@ def registry_record(arguments: dict) -> dict:
         if error.code in _absent_codes():
             return _module_absent(error, "trial registry", "read")
         raise
-    if data.get("available") is False:
+    # Every way a registry answer can be "not a record": the channel is not
+    # composed (`available: false`), or it answered with one of its own statuses
+    # (`registry_not_found`, `registry_unavailable`, ...). None of them is a
+    # success, and none of them is evidence that the trial does not exist.
+    status = str(data.get("status") or data.get("code") or "")
+    if data.get("available") is False or status.startswith("registry_"):
+        not_found = status == "registry_not_found"
         return {
             "status": "warning",
-            "summary": "The trial registry is not available on this deployment.",
+            "summary": ("The registry has no record %s." % registry_id) if not_found else "The trial registry could not be read.",
             "data": data,
-            "warnings": [str(data.get("message") or "The registry channel is not composed here.")],
-            "next_actions": ["Use the literature and clinical-trial search tools instead, and say where each field came from."],
+            "warnings": [str(data.get("message") or ("No registry record was found under this id." if not_found
+                                                     else "The registry channel is not available here (%s)." % (status or "unavailable")))],
+            "next_actions": (
+                ["Check the registration number; do not treat a missing record as a trial that did not happen."] if not_found
+                else ["Use the literature and clinical-trial search tools instead, and say where each field came from."]
+            ),
         }
-    record = data.get("record") if isinstance(data.get("record"), dict) else data
+    record = data.get("record") if isinstance(data.get("record"), dict) else None
+    if record is None:
+        return {
+            "status": "warning",
+            "summary": "The registry answer for %s carried no record." % registry_id,
+            "data": data,
+            "warnings": ["The gateway answered without a record; nothing was read."],
+            "next_actions": ["Try again once, then use the literature and clinical-trial search tools."],
+        }
     return {
         "status": "success",
         "summary": "Read registry record %s." % registry_id,
@@ -500,18 +568,29 @@ def evidence_pool(arguments: dict) -> dict:
         raise VcrPlatformError("vcr_simulate_action_invalid", "action must be start or status.")
     if action == "status":
         return simulate({"action": "status", "jobId": arguments.get("jobId")})
-    studies = arguments.get("studies")
-    if not isinstance(studies, list) or not studies:
-        raise VcrPlatformError("vcr_simulate_payload_invalid", "studies is a non-empty list of extracted estimates.")
     parameter = arguments.get("parameter")
     if not isinstance(parameter, str) or not parameter.strip():
         raise VcrPlatformError("vcr_simulate_payload_invalid", "parameter names what is being pooled.")
-    method = arguments.get("method") or "random_effects_reml"
-    if method not in POOLING_METHODS:
-        raise VcrPlatformError("vcr_simulate_payload_invalid", "method must be one of: %s." % ", ".join(POOLING_METHODS))
+    endpoint_key = arguments.get("endpointKey")
+    if not isinstance(endpoint_key, str) or not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$", endpoint_key):
+        raise VcrPlatformError(
+            "vcr_simulate_payload_invalid",
+            "endpointKey is the short id of the endpoint definition the parameter is measured under (it cannot be empty).",
+        )
+    scenario = {"parameter": parameter.strip(), "endpointKey": endpoint_key}
+    calibres = arguments.get("calibres")
+    if calibres is not None:
+        if not isinstance(calibres, list) or not calibres or any(item not in POOLING_CALIBRES for item in calibres):
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "calibres is a list drawn from: %s." % ", ".join(POOLING_CALIBRES))
+        scenario["calibres"] = calibres
+    method = arguments.get("method")
+    if method is not None:
+        if method not in POOLING_METHODS:
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "method must be one of: %s." % ", ".join(POOLING_METHODS))
+        scenario["method"] = method
     return simulate({
         "action": "start",
         "kind": "pool_evidence",
         "subjectId": parameter.strip()[:120],
-        "scenario": {"parameter": parameter.strip(), "method": method, "studies": studies},
+        "scenario": scenario,
     })

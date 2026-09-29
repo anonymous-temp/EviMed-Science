@@ -73,7 +73,7 @@ env > "$here/env-$id.txt"
 echo $$ > "$here/pid-$id.txt"
 mode=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["scenario"]["stub"])' "$job")
 case "$mode" in
-  ok|no_hash|forged|wrong_job)
+  ok|no_hash|forged|wrong_job|tables|tables_evil)
     echo '{"done": 5, "total": 5, "cpuSeconds": 0.01}' > "$dir/progress.json"
     python3 "$here/stub_result.py" "$job" "$dir" "$mode"
     echo "ordinary R chatter on stdout"
@@ -116,6 +116,20 @@ if kind == "forged":
     result["manifest"]["signature"] = "f" * 64
 if kind == "wrong_job":
     result["jobId"] = "someone_else"
+if kind in ("tables", "tables_evil"):
+    with open(os.path.join(directory, "population.csv"), "w") as handle:
+        handle.write("age,male\n61,1\n55,0\n")
+    with open(os.path.join(directory, "secret-note.txt"), "w") as handle:
+        handle.write("not listed anywhere")
+    os.symlink("/etc/hostname", os.path.join(directory, "linked.csv"))
+    result["tables"] = [{"name": "population", "location": "population.csv", "sha256": "e" * 64, "rows": 2}]
+    if kind == "tables_evil":
+        result["tables"] += [
+            {"name": "escape", "location": "../population.csv", "sha256": "e" * 64},
+            {"name": "linked", "location": "linked.csv", "sha256": "e" * 64},
+            {"name": "resultfile", "location": "result.json", "sha256": "e" * 64},
+            {"name": "missing", "location": "missing.csv", "sha256": "e" * 64},
+        ]
 tmp = os.path.join(directory, "result.json.tmp")
 with open(tmp, "w") as handle:
     json.dump(result, handle)
@@ -268,7 +282,7 @@ class EngineCase(unittest.TestCase):
 
 class AuthenticationTest(EngineCase):
     ROUTES = [("GET", "/health"), ("POST", "/jobs"), ("GET", "/jobs/j1"), ("POST", "/jobs/j1/cancel"),
-              ("GET", "/jobs/j1/result"), ("DELETE", "/jobs/j1")]
+              ("GET", "/jobs/j1/result"), ("GET", "/jobs/j1/tables/population"), ("DELETE", "/jobs/j1")]
 
     def test_livez_is_open_and_says_nothing_else(self) -> None:
         client = self.client(authorized=False)
@@ -628,6 +642,55 @@ class LifecycleTest(EngineCase):
         self.assertTrue(self.work.is_dir())
         self.assertEqual(client.get("/jobs/sleeper").status_code, 404)
         self.assertEqual(client.delete("/jobs/sleeper").status_code, 404)
+
+
+class TableRouteTest(EngineCase):
+    """A step's output table leaves the engine only by the name its finished result lists."""
+
+    def finished(self, client: TestClient, job_id: str, mode: str = "tables") -> None:
+        self.assertEqual(client.post("/jobs", json=self.job(job_id, mode)).status_code, 202)
+        self.assertEqual(self.wait_for(client, job_id)["state"], "succeeded")
+
+    def test_a_listed_table_is_served_as_the_bytes_the_job_wrote(self) -> None:
+        client = self.client()
+        self.finished(client, "tbl1")
+        response = client.get("/jobs/tbl1/tables/population")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"age,male\n61,1\n55,0\n")
+        self.assertEqual(response.headers["content-length"], str(len(response.content)))
+
+    def test_only_listed_regular_files_inside_the_job_directory(self) -> None:
+        client = self.client()
+        self.finished(client, "tbl2", "tables_evil")
+        for name in ("secret-note", "escape", "linked", "resultfile", "missing", "population.csv", "a..b"):
+            response = client.get(f"/jobs/tbl2/tables/{name}")
+            self.assertEqual((response.status_code, response.json()), (404, {"detail": "table_not_found"}), name)
+        # a slash in the name never reaches the handler: no route, still a 404
+        self.assertEqual(client.get("/jobs/tbl2/tables/..%2Fpopulation").status_code, 404)
+        self.assertEqual(client.get("/jobs/tbl2/tables/population").status_code, 200)
+
+    def test_not_before_the_job_is_terminal_and_not_for_an_unknown_job(self) -> None:
+        client = self.client()
+        client.post("/jobs", json=self.job("tbl3", "early_result"))
+        self.wait_for_file(self.work / "tbl3" / "result.json")
+        self.assertEqual(self.wait_for(client, "tbl3", {"running"})["state"], "running")
+        self.assertEqual(client.get("/jobs/tbl3/tables/population").json(), {"detail": "result_not_ready"})
+        client.post("/jobs/tbl3/cancel")
+        self.wait_for(client, "tbl3")
+        self.assertEqual(client.get("/jobs/nope/tables/population").json(), {"detail": "job_not_found"})
+
+    def test_a_table_over_the_cap_is_refused_and_the_route_needs_the_token(self) -> None:
+        client = self.client(VCR_ENGINE_MAX_TABLE_BYTES="8")
+        self.finished(client, "tbl4")
+        self.assertEqual(client.get("/jobs/tbl4/tables/population").json(), {"detail": "table_too_large"})
+        anonymous = self.client(authorized=False)
+        self.assertEqual(anonymous.get("/jobs/tbl4/tables/population").status_code, 401)
+
+    def test_a_finished_job_the_process_no_longer_holds_is_read_from_its_directory(self) -> None:
+        client = self.client()
+        self.finished(client, "tbl5")
+        again = self.client()  # a restarted service: nothing in memory, the directory still there
+        self.assertEqual(again.get("/jobs/tbl5/tables/population").content, b"age,male\n61,1\n55,0\n")
 
 
 class CancelAndLimitsTest(EngineCase):

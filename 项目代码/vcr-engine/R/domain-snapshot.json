@@ -4946,7 +4946,9 @@
     "standardized_difference_above_floor",
     "tau_beyond_followup",
     "reconstruction_failed_qc",
-    "map_prior_conflict"
+    "map_prior_conflict",
+    "data_tier_insufficient",
+    "route_unavailable_in_version"
   ],
   "countKeys": [
     "realPatients",

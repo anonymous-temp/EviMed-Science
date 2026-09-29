@@ -2,13 +2,20 @@
 // job a research object needs, the dispatch tag a run carries, and the five
 // notices — their kinds, their titles and who hears them.
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
-  VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_RUN_CAPABILITIES, vcrDispatchId, vcrJobKindFor, vcrProgramSteps,
-  vcrRunId, vcrRunPrompt, wantedVcrSteps,
+  VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_RUN_CAPABILITIES, vcrAssumptionConflicts, vcrBindAssumptions,
+  vcrBuildStages, vcrDesignPriorFrom, vcrDispatchId, vcrGapsForRule, vcrJobKindFor, vcrProgramSteps, vcrProjectScenario, vcrRunId,
+  vcrRunPrompt, vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
-import { VCR_NOTIFICATION_KINDS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS } from "@evimed/domain";
+import {
+  VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES,
+  VCR_STEP_NEEDS, validateEngineJob, validateScenario,
+} from "@evimed/domain";
 
 /** @param {string[]} requested */
 const steps = (requested) => Object.fromEntries(VCR_STEPS.map((step) => [step, { status: "none", requested: requested.includes(step) }]));
@@ -48,22 +55,34 @@ test("a study whose definition exists and which nobody asked anything of runs th
   assert.equal(queued.trial.requested, true);
 });
 
-test("which engine job a research object needs is deterministic", () => {
+test("which engine job a research object needs is deterministic, and is the one the engine runs for that method", () => {
   assert.equal(vcrJobKindFor("population", { kind: "real" }), "build_cohort");
   assert.equal(vcrJobKindFor("population", { kind: "empirical_synthetic" }), "synthesize_population");
-  assert.equal(vcrJobKindFor("population", { kind: "literature" }), "generate_population");
+  assert.equal(vcrJobKindFor("population", { kind: "literature" }), "literature_population");
+  assert.equal(vcrJobKindFor("population", { kind: "scenario" }), "generate_population");
+  // The patient generator follows the endpoint the scenario (or, failing that, the study definition) states.
+  assert.equal(vcrJobKindFor("patient_set", { scenario: { endpoint: { type: "binary" } } }), "generate_patients_binary");
+  assert.equal(vcrJobKindFor("patient_set", { scenario: { endpoint: { type: "continuous" } } }), "generate_patients_continuous");
+  assert.equal(vcrJobKindFor("patient_set", { scenario: {} }, { definition: { endpointType: "time_to_event" } }), "generate_patients");
   assert.equal(vcrJobKindFor("patient_set", {}), "generate_patients");
+  // The comparator routes, each to its own method — no route is wired to a method that only resembles it.
   assert.equal(vcrJobKindFor("comparator", { route: "external_control" }), "weight_comparator");
-  assert.equal(vcrJobKindFor("comparator", { route: "prognostic_adjustment" }), "weight_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", estimand: "ATE" }), "propensity_weight_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "propensity" } }), "propensity_weight_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "prognostic_adjustment" }), "procova");
   assert.equal(vcrJobKindFor("comparator", { route: "literature_control" }), "reconstruct_km",
-    "a literature control has no rows to read; it rebuilds the published curve");
-  assert.equal(vcrJobKindFor("comparator", { route: "model_comparator" }), "rmst");
+    "a literature control has no rows to read; it rebuilds the published curve, and RMST follows on the pseudo-patients");
+  assert.equal(vcrJobKindFor("comparator", { route: "literature_control", configuration: { method: "maic" } }), "maic_comparator");
   assert.equal(vcrJobKindFor("comparator", { route: "hybrid_control" }), "map_prior");
+  assert.equal(vcrJobKindFor("comparator", { route: "model_comparator" }), null, "the route the engine cannot honestly compute is not wired to another method");
   assert.equal(vcrJobKindFor("trial_scenario", {}), "design_simulation");
   assert.equal(vcrJobKindFor("trial_scenario", { configuration: { analytic: true } }), "design_analytic");
-  // A configuration may name a method, but only one the engine publishes.
+  assert.equal(vcrJobKindFor("design_grid", {}), "design_grid");
+  // A configuration may name a method, but only one of the trial methods.
   assert.equal(vcrJobKindFor("trial_scenario", { configuration: { jobKind: "assurance" } }), "assurance");
   assert.equal(vcrJobKindFor("trial_scenario", { configuration: { jobKind: "make_it_up" } }), "design_simulation");
+  assert.equal(vcrJobKindFor("trial_scenario", { configuration: { jobKind: "rmst" } }), "design_simulation");
+  for (const kind of VCR_JOB_KINDS) assert.ok(VCR_JOB_METHODS[kind], `${kind} has a method`);
 });
 
 test("each step's capability is the domain's map, and the four analysis steps share one run", () => {
@@ -92,7 +111,8 @@ test("there are exactly five notices, and they are the domain's five", () => {
 
 test("a notice opens the page it is about", () => {
   assert.equal(vcrNoticeHref("std_1/overview"), "/app/virtual-research/std_1/overview");
-  assert.equal(vcrNoticeHref("std_1/matching/ref_1"), "/app/virtual-research/std_1/matching/ref_1");
+  // The page route is `/app/virtual-research/:studyId/:tab?`: one segment after the study, and nothing deeper is a page.
+  assert.equal(vcrNoticeHref("std_1/matching/ref_1"), null);
   assert.equal(vcrNoticeHref("../etc/passwd"), null);
   assert.equal(vcrNoticeHref(""), null);
 });
@@ -194,4 +214,251 @@ test("a study with no name is still named in a notice", () => {
 
 test("the accrual tolerance is a number with a reason, and a study may set its own", () => {
   assert.equal(VCR_ACCRUAL_TOLERANCE, 0.2);
+});
+
+
+// --- scenarios: what the engine is told, built from the objects -----------------------------------
+
+const cards = [
+  { key: "hazard_ratio", version: 2, pointValue: 0.7,
+    distribution: { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 }, range: { kind: "prediction", low: 0.52, high: 0.94 } } },
+  { key: "control_median_pfs", version: 1, pointValue: 6 },
+  { key: "dropout_rate", version: 3, pointValue: 0.1 },
+];
+const seedStudy = { id: "std_1", userId: "u1", dataTier: "T0", intendedUse: "design_support" };
+const definition = { id: "def_1", version: 1, endpointType: "time_to_event" };
+const context = { study: seedStudy, definition, assumptions: cards, populations: [], scenarios: [], grid: null, analytic: null };
+
+/** @param {Record<string, any>} configuration @param {Record<string, any>} [row] */
+const trialRow = (configuration, row = {}) => ({ id: "scn_1", version: 1, label: "A", design: "two_arm_fixed", endpointType: "time_to_event",
+  assumptionIds: [], configuration, ...row });
+
+test("a scenario is the object projected onto the schema of the method that runs it — and what the schema does not read is named, not ignored", () => {
+  const candidate = {
+    design: { kind: "two_arm_fixed", nTreat: 120, nControl: 60, allocation: 0.6667 }, endpoint: { type: "time_to_event" },
+    truth: { hazardRatio: 0.7, controlMedian: 6 }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 },
+    accrual: { kind: "uniform", duration: 12, followup: 12, dropoutRate: 0.1 }, performance: ["power"], nonsense: 1,
+  };
+  const simulate = vcrProjectScenario("design.simulate", candidate);
+  assert.deepEqual(simulate.dropped.sort(), ["accrual.dropoutRate", "analysis.power", "design.allocation", "nonsense"],
+    "the analytic keys are not the simulation's, and a misspelt dropout is named");
+  assert.equal(simulate.scenario.design.nTreat, 120);
+  assert.equal(simulate.scenario.accrual.dropoutRate, undefined);
+  const analytic = vcrProjectScenario("design.analytic", candidate);
+  assert.ok(analytic.dropped.includes("design.nTreat") && analytic.dropped.includes("analysis.method"));
+  assert.equal(analytic.scenario.analysis.power, 0.9);
+  assert.equal(analytic.scenario.design.allocation, 0.6667);
+  // A null is not a value in the protocol: the key is left out.
+  assert.deepEqual(vcrProjectScenario("design.simulate", { ...candidate, truth: { ...candidate.truth, null: null } }).scenario.truth, candidate.truth);
+});
+
+test("an assumption card's point value is the number the scenario uses, and a new version of the card is a different scenario", () => {
+  const candidate = { design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.9 }, accrual: { duration: 12 } };
+  const bound = vcrBindAssumptions(candidate, cards, "time_to_event");
+  assert.deepEqual(bound.map((entry) => `${entry.key}@${entry.version}:${entry.path}`),
+    ["hazard_ratio@2:truth.hazardRatio", "control_median_pfs@1:truth.controlMedian", "dropout_rate@3:accrual.dropoutAnnual"]);
+  assert.equal(candidate.truth.hazardRatio, 0.7, "the card wins over what the object typed for the same parameter");
+  assert.equal(candidate.accrual.dropoutAnnual, 0.1);
+  // A card for another endpoint's parameter binds nothing; a binary card replaces the whole exclusive group.
+  assert.deepEqual(vcrBindAssumptions({ truth: {} }, [{ key: "hazard_ratio", version: 1, pointValue: 0.7 }], "binary"), []);
+  const binary = { truth: { controlRate: 0.3, oddsRatio: 2 } };
+  vcrBindAssumptions(binary, [{ key: "risk_difference", version: 1, pointValue: 0.1 }], "binary");
+  assert.deepEqual(binary.truth, { controlRate: 0.3, riskDifference: 0.1 });
+  assert.ok(VCR_ASSUMPTION_BINDINGS.every((binding) => Object.isFrozen(binding) || Object.isFrozen(VCR_ASSUMPTION_BINDINGS)));
+  // The card's number reaches the stage's scenario, and a different version of the card is a different scenario.
+  const row = trialRow({ design: { nTreat: 120, nControl: 60 }, analysis: { method: "logrank", alpha: 0.025 }, accrual: { kind: "uniform", duration: 12, followup: 12 } });
+  const first = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, context));
+  assert.equal(first.ok, true);
+  const simulation = first.stages.find((entry) => entry.stage === "simulation");
+  assert.equal(simulation.scenario.truth.hazardRatio, 0.7);
+  assert.equal(simulation.scenario.accrual.dropoutAnnual, 0.1);
+  const later = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, { ...context,
+    assumptions: cards.map((card) => (card.key === "dropout_rate" ? { ...card, version: 4, pointValue: 0.15 } : card)) }));
+  assert.equal(later.stages.find((entry) => entry.stage === "simulation").scenario.accrual.dropoutAnnual, 0.15);
+  assert.equal(row.configuration.accrual.dropoutAnnual, undefined, "the object itself is never edited");
+});
+
+test("a trial scenario is an analytic stage, a simulation stage and — when the effect card states a prediction distribution — assurance", () => {
+  const row = trialRow({ design: { nTreat: 120, nControl: 60 }, analysis: { method: "logrank", alpha: 0.025 }, accrual: { kind: "uniform", duration: 12, followup: 12 } });
+  const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, context));
+  // The assurance stage needs the events the analytic calculation says the design needs: it is planned once that result exists.
+  assert.deepEqual(plan.stages.map((entry) => entry.jobKind), ["design_analytic", "design_simulation"]);
+  const withEvents = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, { ...context, analytic: { measures: [{ name: "required_events", value: 246.2 }] } }));
+  assert.deepEqual(withEvents.stages.map((entry) => `${entry.stage}:${entry.jobKind}`), ["analytic:design_analytic", "simulation:design_simulation", "assurance:assurance"]);
+  const assurance = withEvents.stages[2];
+  assert.equal(assurance.after, "analytic");
+  assert.deepEqual(assurance.scenario.designPrior, { mean: Math.log(0.7), sd: 0.15, kind: "lognormal", basis: "prediction" });
+  assert.equal(assurance.scenario.design.events, 247);
+  for (const entry of withEvents.stages) {
+    assert.deepEqual(validateScenario(VCR_JOB_METHODS[entry.jobKind], entry.scenario), [], `${entry.jobKind}: ${JSON.stringify(validateScenario(VCR_JOB_METHODS[entry.jobKind], entry.scenario))}`);
+  }
+  // A prior built from a confidence interval understates the spread of a new trial, and a point value has none: no assurance.
+  assert.equal(vcrDesignPriorFrom([{ ...cards[0], pooling: { basis: "confidence" } }], "time_to_event"), null);
+  assert.equal(vcrDesignPriorFrom([{ key: "hazard_ratio", version: 1, pointValue: 0.7, distribution: { family: "point", params: { point: 0.7 } } }], "time_to_event"), null);
+  assert.deepEqual(vcrDesignPriorFrom([{ key: "mean_difference", version: 1, pointValue: 2, distribution: { kind: "normal", mean: 2, sd: 0.5 } }], "continuous")?.prior,
+    { mean: 2, sd: 0.5, kind: "normal", basis: "prediction" }, "the flat shape an earlier run wrote is read too");
+});
+
+test("a design the engine does not implement is said in a sentence and never run as something else; a key it does not read is refused by its path", () => {
+  const single = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 80 } }, { design: "single_arm_external" }) }, context));
+  assert.equal(single.ok, false);
+  assert.equal(single.unavailable.reason, "design_not_supported");
+  assert.match(single.unavailable.gaps[0].title, /single_arm_external/);
+  // Simon's design is the one that is analytic only.
+  const simon = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ truth: { nullRate: 0.1, alternativeRate: 0.3 }, analysis: { alpha: 0.05, power: 0.8 } },
+    { design: "simon_two_stage", endpointType: "binary" }) }, context));
+  assert.equal(simon.ok, true);
+  assert.deepEqual(simon.stages.map((entry) => entry.jobKind), ["design_analytic"]);
+  const typo = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ accrual: { kind: "uniform", duration: 12, followup: 12, dropoutRate: 0.1 } }) }, context));
+  assert.equal(typo.ok, false);
+  assert.deepEqual(typo.refused.paths, ["accrual.dropoutRate"]);
+  assert.match(typo.refused.message, /accrual\.dropoutRate/);
+  // The old spelling of the null case is refused the same way, not translated.
+  const legacy = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ truth: { isNull: true } }) }, context));
+  assert.deepEqual(legacy.refused.paths, ["truth.isNull"]);
+  // The words a page shows an object by are the only keys allowed to go without a word.
+  const shown = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ cost: 180, notes: "x", design: { nTreat: 10, nControl: 10 } }) }, context));
+  assert.equal(shown.ok, true);
+});
+
+test("each comparator route becomes the jobs the engine runs for it; a route the tier cannot reach is a derived verdict, not a job", () => {
+  const literature = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_1", version: 1, route: "literature_control", estimand: "ATT", configuration: {
+    curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.5 }, { time: 24, surv: 0.25 }], riskTable: [{ time: 0, atRisk: 200 }, { time: 12, atRisk: 100 }],
+    provenance: { kind: "digitizer", tool: "WebPlotDigitizer" }, treatmentArm: { curve: [{ time: 0, surv: 1 }, { time: 24, surv: 0.5 }], riskTable: [{ time: 0, atRisk: 200 }, { time: 24, atRisk: 100 }] },
+    tau: 18, timeUnit: "months", comparability: [] } } }, context));
+  assert.equal(literature.ok, true, JSON.stringify(literature));
+  assert.deepEqual(literature.stages.map((entry) => `${entry.stage}:${entry.jobKind}`), ["reconstruct:reconstruct_km", "rmst:rmst"]);
+  assert.deepEqual(literature.stages[1].derived, [{ from: "stage", stage: "reconstruct", table: "reconstructed-ipd" }]);
+  assert.equal(literature.stages[1].after, "reconstruct");
+  assert.equal(literature.stages[1].snapshot, false, "the pseudo-patients are the control plane's own file, not a granted snapshot");
+  assert.equal(literature.stages[1].scenario.tau, 18);
+  assert.equal(literature.stages[0].scenario.tau, undefined);
+  // One arm is a benchmark, not a comparison: no RMST stage.
+  const oneArm = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_1", version: 1, route: "literature_control", configuration: {
+    curve: [{ time: 0, surv: 1 }, { time: 24, surv: 0.5 }], riskTable: [{ time: 0, atRisk: 200 }, { time: 24, atRisk: 100 }], provenance: { kind: "human_click", tool: "manual" } } } }, context));
+  assert.deepEqual(oneArm.stages.map((entry) => entry.jobKind), ["reconstruct_km"]);
+
+  const t0External = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_2", version: 1, route: "external_control", configuration: {} } }, context));
+  assert.equal(t0External.ok, false);
+  assert.equal(t0External.unavailable.rule, "data_tier_insufficient");
+  assert.match(t0External.unavailable.gaps[0].detail, /T0/);
+  assert.match(t0External.unavailable.gaps[0].detail, /T2/);
+  const model = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_3", version: 1, route: "model_comparator", configuration: {} } }, context));
+  assert.equal(model.unavailable.reason, "model_comparator_unavailable");
+  assert.ok(model.unavailable.gaps[0].detail.length > 30, "and it says why");
+
+  const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" } };
+  const external = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_2", version: 1, route: "external_control", estimand: "ATT",
+    configuration: { covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1", comparability: [], e10: [] } } }, t2));
+  assert.equal(external.ok, true, JSON.stringify(external));
+  assert.equal(external.stages[0].jobKind, "weight_comparator");
+  assert.equal(external.stages[0].snapshot, true);
+  assert.equal(external.stages[0].scenario.estimand, "ATT");
+  assert.deepEqual(external.stages[0].scenario.endpoint, { type: "time_to_event" });
+  assert.equal(external.stages[0].scenario.snapshotId, undefined, "the snapshot is named as an input, never as a scenario key");
+  const t3 = { ...context, study: { ...seedStudy, dataTier: "T3" } };
+  const prognostic = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_4", version: 1, route: "prognostic_adjustment", configuration: {
+    endpoint: { type: "continuous" }, truth: { effect: 3, sd: 8 }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, prognostic: { rho: 0.5 } } } }, t3));
+  assert.equal(prognostic.stages[0].jobKind, "procova");
+  assert.equal(prognostic.stages[0].snapshot, false, "a sample-size calculator reads no rows");
+  const hybrid = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row: { id: "cmp_5", version: 1, route: "hybrid_control", configuration: {
+    historical: { events: [12, 15], n: [40, 50] }, tauPrior: { kind: "half_normal", scale: 0.5 } } } }, context));
+  assert.equal(hybrid.stages[0].jobKind, "map_prior");
+});
+
+test("populations, patient sets and grids are built as their own schemas, and a patient set waits for the population it stands on", () => {
+  const population = /** @type {any} */ (vcrBuildStages({ kind: "population", row: { id: "pop_1", version: 1, kind: "scenario", definition: { n: 100, population: {
+    variables: [{ name: "age", family: "normal", mean: 63, sd: 9 }] } } } }, context));
+  assert.equal(population.stages[0].jobKind, "generate_population");
+  assert.deepEqual(population.stages[0].keepTables, ["population"], "its table is what the patients read");
+  const real = /** @type {any} */ (vcrBuildStages({ kind: "population", row: { id: "pop_2", version: 1, kind: "real", snapshotId: "snp_1", definition: {
+    rules: [{ name: "成年", rule: { op: "compare", column: "age", comparator: "gte", value: 18 } }], timeZero: { column: "index_date" }, exit: { column: "last_seen" } } } }, context));
+  assert.equal(real.stages[0].jobKind, "build_cohort");
+  assert.equal(real.stages[0].snapshot, true);
+  const patientRow = { id: "pts_1", version: 1, populationId: "pop_1", modelId: "reference-time-to-event", modelVersion: "1.0.0",
+    scenario: { design: { nTreat: 60, nControl: 40 }, endpoint: { type: "time_to_event" }, truth: { covariateEffects: { age: 0.01 } } } };
+  const waiting = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [{ id: "pop_1", resultId: null }] }));
+  assert.deepEqual(waiting, { ok: false, waiting: "population_pending" });
+  const ready = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [{ id: "pop_1", resultId: "res_1" }] }));
+  assert.equal(ready.stages[0].jobKind, "generate_patients");
+  assert.deepEqual(ready.stages[0].derived, [{ from: "object", table: "population" }]);
+  assert.equal(ready.stages[0].scenario.truth.hazardRatio, 0.7, "the cards' truth is laid over the patients too");
+  assert.deepEqual(ready.stages[0].detail, { modelId: "reference-time-to-event", modelVersion: "1.0.0" });
+  const noEndpoint = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, scenario: { design: { nTreat: 6 } } } }, { ...context, definition: null, populations: [{ id: "pop_1", resultId: "r" }] }));
+  assert.equal(noEndpoint.refused.code, "vcr_scenario_endpoint_missing");
+
+  const grid = /** @type {any} */ (vcrBuildStages({ kind: "design_grid", row: { id: "grd_1", version: 1,
+    dimensions: { designs: [{ label: "每组 100", kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, { label: "每组 200", kind: "two_arm_fixed", nTreat: 200, nControl: 200 }],
+      base: { endpoint: { type: "binary" }, analysis: { method: "risk_difference", alpha: 0.025, sided: 1 }, performance: ["power"] } },
+    truthScenarios: [{ label: "零效应", controlRate: 0.3, treatmentRate: 0.3 }, { label: "有效应", controlRate: 0.3, treatmentRate: 0.45 }] } }, context));
+  assert.equal(grid.ok, true, JSON.stringify(grid));
+  assert.equal(grid.stages[0].scenario.designs.length, 2);
+  assert.equal(grid.stages[0].scenario.designs[0].label, undefined, "the words a page shows a design by never reach the engine");
+  assert.deepEqual(validateScenario("design.grid", grid.stages[0].scenario), []);
+});
+
+test("every example in the skill is a shape the platform accepts: the objects build, and the direct scenarios validate", () => {
+  const skill = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capabilities/vcr-analysis/SKILL.md"), "utf8");
+  const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
+  assert.ok(blocks.length >= 8, `the skill teaches by example (${blocks.length} blocks)`);
+  const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" },
+    populations: [{ id: "pop_example", resultId: "res_example" }] };
+  const kinds = new Set();
+  for (const { kind, body } of blocks) {
+    kinds.add(kind);
+    if (kind.startsWith("object:")) {
+      const objectKind = kind.slice("object:".length);
+      const row = { id: `${objectKind}_example`, version: 1, ...body, ...(objectKind === "design_grid" ? { truthScenarios: body.truthScenarios } : {}) };
+      const plan = /** @type {any} */ (vcrBuildStages({ kind: objectKind, row }, t2));
+      assert.equal(plan.ok, true, `${kind}: ${JSON.stringify(plan)}`);
+      for (const stage of plan.stages) {
+        const method = VCR_JOB_METHODS[stage.jobKind];
+        assert.deepEqual(validateScenario(method, stage.scenario), [], `${kind} → ${stage.jobKind}`);
+      }
+    } else {
+      const method = VCR_JOB_METHODS[/** @type {keyof typeof VCR_JOB_METHODS} */ (kind)];
+      assert.ok(method, `${kind} is a job kind`);
+      assert.deepEqual(validateEngineJob({ jobId: "job_x", studyId: "std_x", kind, method, methodVersion: "1.0.0", protocolVersion: 1, seed: 1,
+        cpuSecondsLimit: 60, inputs: [], scenario: body }), [], kind);
+    }
+  }
+  for (const wanted of ["object:population", "object:patient_set", "object:comparator", "object:trial_scenario", "object:design_grid", "design_analytic"]) {
+    assert.ok(kinds.has(wanted), `the skill has an example of ${wanted}`);
+  }
+  // The skill speaks to the model in its own words: no plan section numbers, no acceptance-case ids, no retired spellings.
+  assert.doesNotMatch(skill, /§\s?\d|\bAC-\d|\bEB-\d|\bPA-\d/);
+  assert.doesNotMatch(skill, /isNull|dropoutRate/);
+  assert.match(skill, /mcp__evimed__vcr_write/);
+  assert.equal(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capability-skills/vcr-analysis/SKILL.md"), "utf8"), skill,
+    "the capability's skill and the shared copy are one file");
+});
+
+test("two assumptions that cannot both hold are found by closed-form identities and named with their versions", () => {
+  assert.deepEqual(vcrAssumptionConflicts(cards), []);
+  const conflicts = vcrAssumptionConflicts([
+    { key: "hazard_ratio", version: 2, pointValue: 0.5, name: "风险比" }, { key: "control_median_pfs", version: 1, pointValue: 6 },
+    { key: "treatment_median_pfs", version: 1, pointValue: 7 },
+    { key: "dropout_rate", version: 1, pointValue: 0.3, name: "脱落率", distribution: { range: { low: 0.05, high: 0.15 } } },
+  ]);
+  assert.deepEqual(conflicts.map((entry) => entry.code).sort(), ["hazard_ratio_vs_medians", "point_outside_range"]);
+  const medians = conflicts.find((entry) => entry.code === "hazard_ratio_vs_medians");
+  assert.deepEqual(medians.versions, ["hazard_ratio@2", "control_median_pfs@1", "treatment_median_pfs@1"]);
+  assert.match(medians.detail, /0\.857/);
+  const rates = vcrAssumptionConflicts([{ key: "control_event_rate", version: 1, pointValue: 0.3 }, { key: "treatment_event_rate", version: 1, pointValue: 0.45 },
+    { key: "risk_difference", version: 1, pointValue: 0.05 }]);
+  assert.equal(rates[0].code, "risk_difference_vs_rates");
+});
+
+test("a not-estimable result names what is missing and what would answer it, for every rule the engine can fire", () => {
+  for (const rule of VCR_NOT_ESTIMABLE_RULES) {
+    const [gap] = vcrGapsForRule(rule);
+    assert.ok(gap?.title && gap.detail && gap.answers, `${rule} has its gap sentence`);
+  }
+  assert.deepEqual(vcrGapsForRule("something_else"), []);
+});
+
+test("a superseded version is found where the graph knows it: an earlier version of the same object is what a change replaces", () => {
+  const edges = [{ from: "assumption:dropout_rate@1", to: "trial_scenario:scn_1@1" }];
+  assert.deepEqual([...vcrSupersededNodes(edges, ["assumption:dropout_rate@2"])].sort(), ["assumption:dropout_rate@1", "assumption:dropout_rate@2"]);
+  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length === 24);
 });

@@ -169,6 +169,17 @@ case N00 keeps the snapshot byte-identical to the live exports.
 - The result echoes `method`, `methodVersion`, `scenarioHash`, `seed`, `replicates`; the control
   plane refuses a result whose echo differs from the frozen job (`vcr_engine_result_mismatch`) and
   stores the engine's own values in the execution row.
+- A `failed` or `canceled` result may carry measures only when it says `conclusion: "limited"` — the
+  engine's word for a run cut short by its CPU budget (`cpu_budget_exhausted`) or by a cancel after at
+  least one batch. The control plane records exactly that, and nothing else, as a result marked
+  `partial` (`diagnostics.partial`, conclusion `limited`); a `failed` result with measures and no
+  `limited` is recorded as a failure and its measures are dropped, never believed. A run whose
+  replicate count was held below the precision floor by `VCR_ENGINE_MAX_REPLICATES` is `succeeded`
+  with `conclusion: "limited"`. A job cancelled while the engine is running it is cancelled at once;
+  the engine's partial result is fetched afterwards and recorded under the cancelled job.
+- An engine refusal it cannot tie to a job (a malformed identity field) has no echo, no output hash
+  and no signature; the client returns it as a refusal carrying the engine's own issue, and the job
+  fails with that reason instead of being rejected as a mismatch.
 - `manifest.outputHash` = sha256 of the canonical JSON (domain canonicalization) of
   `{ measures, counts, conclusion, notEstimableRule, tables: [{ name, sha256 }] }`; the control
   plane recomputes it. `manifest.signature` = hex HMAC-SHA256(receiptKey,

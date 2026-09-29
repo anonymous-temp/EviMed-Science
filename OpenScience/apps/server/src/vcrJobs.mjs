@@ -1,6 +1,6 @@
 /**
  * 「虚拟临研」's deterministic work: the job queue in front of `vcr-engine`
- * (build plan 2026-09-28 §11.4, build contract §3.3).
+ * (build plan 2026-09-28 §11.4, integration contract 2026-09-29 §3).
  *
  * A job is not a run. It does not take the study's one run slot, it is not
  * dispatched to a kernel, and a two-hour simulation never blocks the
@@ -15,22 +15,64 @@
  *   copied into the row at enqueue. Re-reading an assumption at run time would
  *   make a result unreproducible the moment anyone edits one, which is exactly
  *   the moment reproducibility matters (AC-04).
+ * - **The engine is given a job only after three checks, in this order.** What a
+ *   caller sent is checked as a caller's (`validateCallerInputs`: patient-level
+ *   data is named `{ kind: "snapshot", id }` and nothing more); every such name
+ *   is resolved by the data plane for the acting principal into the engine's
+ *   own inputs, with a location and a sha256 only the control plane writes; and
+ *   the job that results is checked as the engine will check it
+ *   (`validateEngineJob`, which reads the per-method scenario schemas). A
+ *   scenario the engine cannot read is refused here with the field named, not
+ *   queued to fail three minutes later.
  * - **The seed is derived from the scenario, not drawn.** Two enqueues of the
  *   same frozen scenario ask for the same numbers, and a rerun after a restart
  *   is the same run rather than a second sample. A caller that wants a second
  *   independent sample says so with its own seed.
+ * - **The idempotency key names what was computed, not only who asked.** It
+ *   carries the scenario's hash and the inputs' hash, so the same question
+ *   asked twice is one job and a changed assumption or a corrected snapshot is
+ *   a new one — under the old key the second enqueue would have returned the
+ *   first job's stale result.
  * - **Over budget stops, everything else does not** (plan §10.1: 人只在三处停).
  *   A job whose CPU-second ceiling would take the study past its budget is
  *   written `awaiting_budget` and waits for one confirmation; it is not
  *   refused, not silently shrunk, and nothing else in the study waits for it.
- * - **Cancel is immediate** (AC-38): the row moves to `canceled` in the same
- *   statement that records the request, and the engine is told afterwards on a
- *   best-effort basis. A cancel that waited for the engine to answer would be
- *   a cancel the user watched spin.
- * - **Failure keeps what was computed** (principle 19, AC-19): the checkpoint
- *   stays on the row, and measures the engine managed to return before it
- *   failed are recorded as a result marked `partial` with the conclusion
- *   `limited`. A failed job never writes a zero.
+ * - **Cancel is final** (AC-38): the row moves to `canceled` in the same
+ *   statement that records the request, the engine is told afterwards on a
+ *   best-effort basis, and nothing a still-running worker does afterwards can
+ *   move the row again — every write of a running job is conditioned on the
+ *   row still being `running` and still leased to that worker, and the
+ *   execution, the result and the row's own move commit together or not at all.
+ *   What the engine had computed when the cancel reached it is fetched later and
+ *   kept as a `limited` partial result (`recoverCanceled`).
+ * - **Failure keeps what was computed** (principle 19, AC-19): a `failed` or
+ *   `canceled` result that carries measures is recorded only when it says
+ *   `conclusion: "limited"` — the engine's rule for a run cut short by its CPU
+ *   budget or a cancel — and is then a result marked `partial`. A failed job
+ *   never writes a zero, and a failed result that claims to be complete is not
+ *   believed.
+ * - **What a result was filed under is the object it was queued for.** A trial
+ *   scenario's result and another scenario's result of the same kind are two
+ *   current results, not one superseding the other; the enqueuer names the
+ *   subject, and stages of one object (`analytic`, `simulation`, `assurance`)
+ *   fold into that subject's current result rather than replace it.
+ * - **A result is held against the job it answers.** The engine echoes what it
+ *   ran; the echo must equal what was frozen, and the output hash is recomputed
+ *   from the numbers here. A result nobody can tie to this job is refused
+ *   (`vcr_engine_result_mismatch`), and the engine's own values go into the
+ *   execution row.
+ * - **What a result may be used for comes from what it used, never from what the
+ *   engine says about itself.** The method's own credibility tier (the domain's
+ *   table) and the library row of the model a patient set named decide the
+ *   ceiling of the result's intended use (`intendedUseCeilingFor`).
+ * - **A step's output can be the next step's input, through the data plane.**
+ *   The engine's work volume is not the control plane's, so a table the next
+ *   job needs (a generated population, a reconstruction's pseudo-patients) is
+ *   fetched by name, checked against the sha256 the result lists and filed
+ *   under `derived/<study>/<job>/`; the next job names it as `derived` and this
+ *   file turns that into a location and a hash the engine will open. Only the
+ *   orchestrator may name a derived table, and only synthetic and reconstructed
+ *   ones: a patient-level table reaches the engine by grant and snapshot alone.
  * - **`matching.evaluate` does not go to the engine.** Criterion evaluation is
  *   Kleene three-valued logic over structured facts — code, not statistics —
  *   and it runs in the control plane through an injected local executor (the
@@ -40,16 +82,20 @@
  */
 
 import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import {
   VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES,
-  canonicalScenarioJson, replicateFloor, validateEngineJob,
+  canonicalScenarioJson, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrId } from "./vcrStoreBase.mjs";
-import { jobSummaryFromRow } from "./vcrStore.mjs";
+import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
+import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues } from "./vcrEngineClient.mjs";
+import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
 export const VCR_JOB_OPEN_STATES = Object.freeze(["queued", "running", "awaiting_budget"]);
@@ -59,6 +105,19 @@ export const VCR_JOB_TERMINAL_STATES = Object.freeze(["succeeded", "failed", "ca
 export const VCR_JOB_DEFAULT_LEASE_MS = 900_000;
 /** Attempts before a job stops retrying on a failure that waiting could clear. */
 export const VCR_JOB_MAX_ATTEMPTS = 3;
+/** How many times a job is submitted again because the engine lost it (a restart). */
+export const VCR_JOB_MAX_RESUBMITS = 2;
+/** What the access judgment is told a job reads the data for. */
+export const VCR_JOB_PURPOSE = "vcr";
+/** How long after a cancel the engine's partial result is still looked for. */
+export const VCR_CANCEL_RECOVERY_MINUTES = 15;
+
+/** The value source of each table a job may hand on, by the method that wrote it. */
+export const VCR_DERIVED_SOURCES = Object.freeze({
+  "population.scenario": "synthetic", "population.literature": "synthetic", "population.synthpop": "synthetic",
+  "patients.continuous": "synthetic", "patients.binary": "synthetic", "patients.time_to_event": "synthetic",
+  "evidence.reconstruct_km": "reconstructed",
+});
 
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -66,6 +125,8 @@ const object = (value) => (value && typeof value === "object" && !Array.isArray(
 const list = (value) => (Array.isArray(value) ? value : []);
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "vcr_job_failed");
+/** @param {unknown} value */
+const sha256 = (value) => createHash("sha256").update(String(value)).digest("hex");
 
 /** The sha256 of a scenario's canonical bytes — the same bytes the engine hashes. @param {unknown} scenario */
 export function vcrScenarioHash(scenario) {
@@ -82,45 +143,153 @@ export function vcrSeedFor(scenarioHash) {
   return Number.parseInt(String(scenarioHash).slice(0, 8), 16) % 2_147_483_647;
 }
 
-/** How many replicates a simulation scenario needs, when the caller named none. @param {Record<string, any>} scenario */
-export function vcrReplicatesFor(scenario) {
-  const truth = object(scenario?.truth);
-  const isNull = truth.isNull === true || truth.effect === 0;
-  const target = Number(scenario?.targetMcse);
-  return replicateFloor({ isNull, targetMcse: Number.isFinite(target) && target > 0 ? target : null });
+/**
+ * What the idempotency key of a job is made of: the caller's own key (or the
+ * kind, when it named none), the scenario's hash and the inputs' hash. Anything
+ * that changes what is computed changes the key.
+ * @param {{ key?: string | null, kind: string, scenarioHash: string, inputs: readonly unknown[], seed: number }} parts
+ */
+export function vcrIdempotencyKey({ key, kind, scenarioHash, inputs, seed }) {
+  const inputsHash = sha256(canonicalScenarioJson(inputs));
+  const head = (key == null || key === "" ? `vcr-job:${kind}` : String(key)).slice(0, 110);
+  return `${head}:s${scenarioHash.slice(0, 16)}:i${inputsHash.slice(0, 16)}:r${seed}`;
+}
+
+/**
+ * How many replicates a job needs: the domain's floor for the scenario (20,000
+ * under the null, 5,000 under an alternative, raised to the precision asked for,
+ * on the worst truth of a grid), raised again to what the caller asked for.
+ * @param {string} kind @param {Record<string, any>} scenario @param {number | null} asked
+ * @returns {number | null} null for a method that has no replicates
+ */
+export function vcrReplicatesForJob(kind, scenario, asked) {
+  if (kind === "design_simulation") return Math.max(vcrReplicateFloorFor(scenario), Number.isInteger(asked) ? Number(asked) : 0);
+  if (kind === "design_grid") {
+    const truths = list(scenario?.truths).filter((truth) => truth && typeof truth === "object");
+    const worst = Math.max(...(truths.length ? truths : [{}]).map((cell) => vcrReplicateFloorFor({
+      ...scenario, truth: { ...object(scenario?.truth), ...cell } })));
+    return Math.max(worst, Number.isInteger(asked) ? Number(asked) : 0);
+  }
+  return Number.isInteger(asked) && Number(asked) > 0 ? Number(asked) : null;
+}
+
+/**
+ * The columns of a table a scenario reads, for the access judgment and the
+ * seal: every column a scenario names by key or by a row rule. Empty when the
+ * scenario names none (a profile reads the whole table).
+ * @param {unknown} scenario
+ * @returns {string[]}
+ */
+export function vcrScenarioColumns(scenario) {
+  const out = new Set();
+  const COLUMN_KEYS = new Set(["treatmentColumn", "outcomeColumn", "weightColumn", "idColumn", "tstrOutcome", "column", "outcome", "target"]);
+  const LIST_KEYS = new Set(["covariates", "predictors", "on"]);
+  /** @param {unknown} node @param {number} depth */
+  const walk = (node, depth) => {
+    if (depth > 12 || node === null || typeof node !== "object") return;
+    if (Array.isArray(node)) { for (const item of node) walk(item, depth + 1); return; }
+    for (const [key, value] of Object.entries(node)) {
+      if (COLUMN_KEYS.has(key) && typeof value === "string") out.add(value);
+      else if (LIST_KEYS.has(key) && Array.isArray(value)) for (const item of value) if (typeof item === "string") out.add(item);
+      else if (key === "targets" && value && typeof value === "object") for (const name of Object.keys(value)) out.add(name);
+      else walk(value, depth + 1);
+    }
+  };
+  walk(scenario, 0);
+  return [...out].filter((name) => /^[A-Za-z_][A-Za-z0-9_.]{0,63}$/.test(name));
 }
 
 /** Job kinds whose work is heavy enough to be the study's budget question. */
-const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "assurance", "synthesize_population", "generate_patients"]);
+const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "synthesize_population", "generate_patients",
+  "generate_patients_continuous", "generate_patients_binary"]);
+
+/** Weakest first: the worst of two conclusions is the later one. */
+const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
+
+/**
+ * A later stage of one object folded into the object's current result: the
+ * measures of both (the later stage wins a name they share), the worst of the
+ * two conclusions, and a record of which job made which part. The result stays
+ * one row per version — a new version each time a stage lands — so a page that
+ * reads an object's result reads all its stages at once.
+ *
+ * @param {ReturnType<typeof resultFromRow> | null} prior
+ * @param {{ conclusion: string | null, notEstimableRule: string | null, counts: Record<string, any>, measures: any[],
+ *   diagnostics: Record<string, any>, tables: any[] }} incoming
+ * @param {{ stage: string, jobId: string, method: string, methodVersion: string }} stage
+ */
+export function vcrMergeStageResult(prior, incoming, stage) {
+  const stages = [...list(object(prior?.diagnostics).stages).filter((entry) => object(entry).stage !== stage.stage), {
+    ...stage, conclusion: incoming.conclusion, measures: incoming.measures.map((measure) => String(object(measure).name)),
+  }];
+  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages } };
+  const byName = new Map(list(prior.measures).map((measure) => [String(object(measure).name), measure]));
+  for (const measure of incoming.measures) byName.set(String(object(measure).name), measure);
+  const counts = { ...object(prior.counts) };
+  for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
+  const worst = [prior.conclusion, incoming.conclusion].filter(Boolean)
+    .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
+  const tables = new Map(list(prior.tables).map((table) => [String(object(table).name), table]));
+  for (const table of incoming.tables) tables.set(String(object(table).name), table);
+  return {
+    conclusion: worst ?? null,
+    notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null,
+    counts,
+    measures: [...byName.values()],
+    diagnostics: { ...prior.diagnostics, ...incoming.diagnostics, stages },
+    tables: [...tables.values()],
+  };
+}
 
 export class VcrJobs {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config?: Record<string, any>, engine?: any,
    *   localExecutors?: Record<string, (input: { job: Record<string, any>, onProgress: (progress: { done: number, total: number }) => Promise<unknown> }) => Promise<any>>,
    *   notifier?: { budgetConfirm?: (study: any, job: any) => Promise<unknown> } | null,
+   *   dataPlane?: { resolveEngineInputs: (input: Record<string, any>) => Promise<Array<Record<string, any>>> } | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    *   `localExecutors` is keyed by method id (`matching.evaluate` is the
    *   matching package's); anything not named there goes to the engine.
+   *   `dataPlane` is the piece that turns a snapshot a caller named into the
+   *   files an engine may open (`resolveEngineInputs`).
    */
-  constructor({ store, config = {}, engine = null, localExecutors = {}, notifier = null, now = () => new Date(), report = () => {} }) {
+  constructor({ store, config = {}, engine = null, localExecutors = {}, notifier = null, dataPlane = null,
+    now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR job queue needs the VCR store.");
     this.store = store;
     this.config = config;
     this.engine = engine;
     this.localExecutors = localExecutors ?? {};
     this.notifier = notifier;
+    this.dataPlane = dataPlane;
     this.now = now;
     this.report = report;
     this.owner = `vcr-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
     this.counters = { enqueued: 0, deduplicated: 0, claimed: 0, dispatched: 0, succeeded: 0, failed: 0, canceled: 0,
-      awaitingBudget: 0, partial: 0 };
+      awaitingBudget: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0 };
     /** @type {string | null} */
     this.lastError = null;
+    /** @type {Array<(outcome: Record<string, any>) => Promise<unknown> | unknown>} */
+    this.finishHooks = [];
+    /** @type {any[]} rows failed by the claim for having no attempts left, until the worker has told the orchestrator */
+    this.reaped = [];
   }
 
   get maxConcurrent() { return Math.max(1, Number(this.config.vcrMaxConcurrentJobs ?? 1)); }
   get jobCpuSeconds() { return Math.max(10, Number(this.config.vcrJobCpuSeconds ?? 600)); }
   get leaseMs() { return Math.max(60_000, Number(this.config.vcrLeaseMs ?? VCR_JOB_DEFAULT_LEASE_MS)); }
+
+  /**
+   * Register something to run once a job has finished (or been cancelled) and
+   * its rows have committed (the matching package persists a `match_criteria`
+   * job's assessments here; the orchestrator hears of cancels). A hook that
+   * throws is reported and never undoes the job.
+   * @param {(outcome: Record<string, any>) => Promise<unknown> | unknown} hook
+   */
+  addFinishHook(hook) {
+    this.finishHooks.push(hook);
+    return this;
+  }
 
   // --- budget -----------------------------------------------------------------------
 
@@ -153,9 +322,17 @@ export class VcrJobs {
   /**
    * Freeze a scenario into a job row.
    *
-   * @param {{ studyId: string, userId: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
-   *   seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
-   *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any> }} input
+   * `inputs` are what a caller names: lineage references (`{ kind:
+   * "assumption", id: "asm@3" }`) and patient-level data as `{ kind:
+   * "snapshot", id }`. `derived` (`[{ resultId, table }]`) and `internal` are the
+   * orchestrator's alone: a table an earlier job of this study wrote and the
+   * control plane filed in the data plane, handed to the next job — so no route
+   * and no gateway can hand an engine a file it chose. The acting principal is
+   * `principal`, else `userId`.
+   *
+   * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
+   *   derived?: Array<{ resultId: string, table: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
+   *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
    * @returns {Promise<{ job: any, created: boolean }>}
    */
   async enqueue(input) {
@@ -163,57 +340,144 @@ export class VcrJobs {
     if (!VCR_JOB_KINDS.includes(kind)) {
       throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     }
+    const studyId = String(input.studyId);
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     const methodVersion = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "";
     const scenario = object(input.scenario);
+    const principal = String(input.principal ?? input.userId);
+
+    // 1. what a caller may send
+    const asked = list(input.inputs);
+    // A patient-level kind must name the snapshot it is granted — unless the orchestrator
+    // hands it a table an earlier job of this study wrote (pseudo-patients, a generated
+    // population), which is the control plane's own file and needs no grant.
+    // A method the control plane computes itself (criterion evaluation) reads the study's own
+    // fact ledger server-side and takes no snapshot, though the domain files its kind under the
+    // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
+    const runsLocally = typeof this.localExecutors[method] === "function";
+    const callerIssues = [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || runsLocally ? undefined : kind })];
+    if (list(input.derived).length && input.internal !== true) {
+      callerIssues.push({ code: "input_location_forbidden", field: "derived", detail: "Only the orchestrator hands one job's table to the next." });
+    }
+    if (callerIssues.length) throw this.#invalid("vcr_job_scenario_invalid", callerIssues);
+
+    // 2. what the control plane makes of it
+    const inputs = [
+      ...await this.#resolveInputs({ studyId, principal, kind, method, scenario, asked }),
+      ...await Promise.all(list(input.derived).map((entry) => this.#resolveDerived(studyId, object(entry)))),
+    ];
+
     const scenarioHash = vcrScenarioHash(scenario);
     const seed = Number.isInteger(input.seed) ? Number(input.seed) : vcrSeedFor(scenarioHash);
-    const replicates = Number.isInteger(input.replicates) && Number(input.replicates) > 0
-      ? Number(input.replicates)
-      : (kind === "design_simulation" || kind === "assurance" ? vcrReplicatesFor(scenario) : null);
+    const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
     const id = vcrId("job");
     const job = {
-      jobId: id, studyId: String(input.studyId), kind, method, methodVersion,
-      protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, seed, replicates, cpuSecondsLimit,
-      inputs: list(input.inputs), scenario,
+      jobId: id, studyId, kind, method, methodVersion,
+      protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, seed, replicates, cpuSecondsLimit, inputs, scenario,
     };
-    const issues = validateEngineJob(job);
-    if (issues.length) {
-      throw new HttpError(400, "vcr_job_scenario_invalid",
-        `作业不符合引擎协议：${issues.slice(0, 6).map((issue) => issue.field || issue.code).join("、")}。`);
-    }
 
-    const budget = await this.budgetOf(String(input.studyId));
+    // 3. what the engine will check (a locally computed method has no engine to read a table)
+    const issues = validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
+    if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
+
+    const budget = await this.budgetOf(studyId);
     const overBudget = cpuSecondsLimit > budget.remainingSeconds;
     const state = overBudget ? "awaiting_budget" : "queued";
 
-    const key = input.idempotencyKey == null ? null : String(input.idempotencyKey).slice(0, 200);
+    const key = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, scenarioHash, inputs, seed });
     const row = await this.store.one(`INSERT INTO ${VCR_SCHEMA}.jobs
       (id, study_id, user_id, kind, method, method_version, state, scenario, scenario_hash, inputs, seed, replicates,
        cpu_seconds_limit, max_attempts, run_id, idempotency_key, checkpoint)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17::jsonb)
       ON CONFLICT (user_id, idempotency_key) DO UPDATE SET updated_at = now()
       RETURNING *, (xmax = 0) AS inserted`,
-    [id, String(input.studyId), String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
-      JSON.stringify(list(input.inputs)), seed, replicates, cpuSecondsLimit,
+    [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
+      JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
       JSON.stringify({ ...object(input.detail), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })]);
     const created = row?.inserted === true;
     if (created) {
       this.counters.enqueued += 1;
       if (overBudget) this.counters.awaitingBudget += 1;
-      await this.store.audit({ studyId: String(input.studyId), userId: String(input.userId), action: "vcr.job.enqueue",
+      await this.store.audit({ studyId, userId: String(input.userId), action: "vcr.job.enqueue",
         object: String(row.id), detail: { kind, method, state, cpuSecondsLimit, scenarioHash } });
       if (overBudget && this.notifier?.budgetConfirm) {
-        const study = await this.store.studyById(String(input.studyId));
+        const study = await this.store.studyById(studyId);
         if (study) await this.notifier.budgetConfirm(study, jobSummaryFromRow(row)).catch(() => null);
       }
     } else {
       this.counters.deduplicated += 1;
     }
     return { job: jobSummaryFromRow(row), created };
+  }
+
+  /** @param {string} code @param {readonly { code: string, field: string, detail?: string }[]} issues */
+  #invalid(code, issues) {
+    const error = new HttpError(400, code,
+      `作业不符合引擎协议：${issues.slice(0, 6).map((issue) => `${issue.field || issue.code}（${issue.code}）`).join("、")}。`);
+    /** @type {any} */ (error).issues = issues.slice(0, 20);
+    return error;
+  }
+
+  /**
+   * Every input the engine will receive: lineage references as they are, a
+   * snapshot resolved by the data plane into the tables the engine may open, a
+   * derived table resolved from the result that wrote it.
+   * @param {{ studyId: string, principal: string, kind: string, method: string, scenario: Record<string, any>, asked: unknown[] }} input
+   */
+  async #resolveInputs({ studyId, principal, kind, method, scenario, asked }) {
+    /** @type {Array<Record<string, any>>} */
+    const out = [];
+    for (const raw of asked) {
+      const entry = object(raw);
+      if (entry.kind === "snapshot") {
+        if (typeof this.dataPlane?.resolveEngineInputs !== "function") {
+          throw new HttpError(503, "vcr_data_plane_not_configured", "本部署没有接入数据平面，患者级数据的计算暂不可用；T0 档的步骤不受影响。");
+        }
+        const fields = vcrScenarioColumns(scenario);
+        const resolved = await this.dataPlane.resolveEngineInputs({
+          studyId, snapshotId: String(entry.id), principal, purpose: VCR_JOB_PURPOSE, kind, method,
+          endpointType: object(scenario.endpoint).type ?? null, ...(fields.length ? { fields } : {}),
+        });
+        out.push(...list(resolved).map((item) => ({ ...object(item) })));
+      } else {
+        out.push({ ...entry });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * A table one job wrote, as the next job's input: found through the result
+   * that lists it, checked against the sha256 the result carries, and given the
+   * value source the method that wrote it earns.
+   * @param {string} studyId @param {Record<string, any>} entry
+   */
+  async #resolveDerived(studyId, entry) {
+    const { resultId, table } = entry;
+    const result = typeof resultId === "string" ? await this.store.result(studyId, resultId) : null;
+    const listed = list(result?.tables).map(object).find((candidate) => candidate.name === table);
+    const location = String(listed?.location ?? "");
+    const hash = String(listed?.sha256 ?? "");
+    if (!result || !listed || !location.startsWith("derived/") || !vcrLocationIsValid(location) || !/^[a-f0-9]{64}$/.test(hash)) {
+      throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表没有存入数据平面：这一步需要它，暂时算不了。");
+    }
+    const execution = result.executionId
+      ? await this.store.one(`SELECT method FROM ${VCR_SCHEMA}.executions WHERE id = $1`, [result.executionId]) : null;
+    const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
+    if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
+    const root = assertDataPlaneRoot(String(this.config.vcrDataPlaneDir ?? ""));
+    const file = path.resolve(root, location);
+    if (!file.startsWith(`${root}${path.sep}`)) throw new HttpError(409, "vcr_derived_table_missing", "输出表的位置不在数据平面里。");
+    const bytes = await fs.readFile(file).catch(() => null);
+    if (!bytes || sha256Bytes(bytes) !== hash) {
+      throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表丢失或已被改动：这一步暂时算不了。");
+    }
+    // The engine reads it as a raw table of the value source the method that
+    // wrote it earns; it is not an analysis table of a snapshot.
+    return { kind: "snapshot_file", id: `${resultId}:${table}`, location, hash, valueSource: source };
   }
 
   /** @param {string} studyId @param {number} [limit] */
@@ -235,21 +499,32 @@ export class VcrJobs {
 
   /**
    * Take up to `limit` queued jobs, honouring the deployment's global
-   * concurrency. `FOR UPDATE SKIP LOCKED`, so two control planes never take
-   * the same row.
+   * concurrency. `FOR UPDATE SKIP LOCKED`, so two control planes never take the
+   * same row, and an advisory lock around the count-and-claim so two of them
+   * never *count* the same free slot either. A job of a paused study waits; a
+   * job another worker held that has run out of attempts is failed by name
+   * rather than run again.
    * @param {{ workerId?: string, leaseMs?: number, limit?: number }} [options]
    */
   async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1 } = {}) {
     const rows = await this.store.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-job-claim'))");
+      const exhausted = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
+        SET state = 'failed', lease_owner = NULL, lease_until = NULL, finished_at = now(), updated_at = now(),
+            error = jsonb_build_object('code', 'vcr_job_attempts_exhausted', 'attempts', attempts,
+              'message', '这项计算已经试了最大次数，没有做成。')
+        WHERE state = 'running' AND lease_until IS NOT NULL AND lease_until < now() AND attempts >= max_attempts RETURNING *`);
+      for (const row of exhausted.rows) this.reaped.push(row);
       const running = Number((await client.query(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
         WHERE state = 'running' AND (lease_until IS NULL OR lease_until > now())`)).rows[0]?.n ?? 0);
       const free = Math.max(0, this.maxConcurrent - running);
       if (!free) return [];
       const take = Math.min(free, Math.max(1, limit));
-      const picked = await client.query(`SELECT id FROM ${VCR_SCHEMA}.jobs
-        WHERE (state = 'queued' AND run_after <= now())
-           OR (state = 'running' AND lease_until IS NOT NULL AND lease_until < now())
-        ORDER BY run_after, created_at LIMIT $1 FOR UPDATE SKIP LOCKED`, [take]);
+      const picked = await client.query(`SELECT j.id FROM ${VCR_SCHEMA}.jobs j
+        JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status = 'active'
+        WHERE (j.state = 'queued' AND j.run_after <= now())
+           OR (j.state = 'running' AND j.lease_until IS NOT NULL AND j.lease_until < now() AND j.attempts < j.max_attempts)
+        ORDER BY j.run_after, j.created_at LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take]);
       if (!picked.rows.length) return [];
       const ids = picked.rows.map((/** @type {any} */ row) => String(row.id));
       const claimed = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
@@ -259,6 +534,13 @@ export class VcrJobs {
       return claimed.rows;
     });
     this.counters.claimed += rows.length;
+    this.counters.exhausted += this.reaped.length;
+    return rows.map(jobSummaryFromRow);
+  }
+
+  /** The jobs the last claims failed for want of attempts, once each. */
+  takeReaped() {
+    const rows = this.reaped.splice(0);
     return rows.map(jobSummaryFromRow);
   }
 
@@ -287,15 +569,16 @@ export class VcrJobs {
   }
 
   /**
-   * A restart point. The engine writes one per batch of replicates; a job that
-   * fails resumes here instead of starting over, and a job that is cancelled
-   * keeps whatever this holds (plan §10.5).
+   * What the queue keeps about a running job beside the engine's own restart
+   * point: the engine's job id and when it was submitted. (The engine resumes a
+   * simulation from its own checkpoint file when the same job id is submitted
+   * again; nothing here is sent to it.) Only a job still running is touched.
    * @param {string} jobId @param {Record<string, any>} checkpoint
    */
   async checkpoint(jobId, checkpoint) {
     const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
       SET checkpoint = checkpoint || $2::jsonb, lease_until = now() + make_interval(secs => $3), updated_at = now()
-      WHERE id = $1 RETURNING *`, [jobId, JSON.stringify(object(checkpoint)), Math.round(this.leaseMs / 1000)]);
+      WHERE id = $1 AND state = 'running' RETURNING *`, [jobId, JSON.stringify(object(checkpoint)), Math.round(this.leaseMs / 1000)]);
     return jobSummaryFromRow(row);
   }
 
@@ -304,12 +587,14 @@ export class VcrJobs {
   /**
    * Cancel now. The row moves in the same statement that records the request;
    * the engine is told afterwards and a failure to reach it does not un-cancel
-   * anything (AC-38).
+   * anything (AC-38). What the engine had computed is fetched later
+   * (`recoverCanceled`).
    * @param {string} studyId @param {string} jobId @param {{ actor?: string }} [options]
    */
   async cancel(studyId, jobId, { actor = "" } = {}) {
     const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
       SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(),
+          lease_owner = NULL, lease_until = NULL,
           error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text)
       WHERE study_id = $1 AND id = $2 AND state = ANY($4::text[]) RETURNING *`,
     [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES]]);
@@ -323,7 +608,13 @@ export class VcrJobs {
       detail: { keptCheckpoint: Object.keys(object(row.checkpoint)).length > 0 } });
     const engineJobId = object(row.checkpoint).engineJobId;
     if (engineJobId && this.engine?.cancel) await this.engine.cancel(String(engineJobId)).catch(() => null);
-    return { job: jobSummaryFromRow(row), canceled: true };
+    const job = jobSummaryFromRow(row);
+    // Whoever cancelled, the module that owns the object hears of it: a cancelled
+    // job must not leave its step reading 「进行中」 for ever.
+    for (const hook of this.finishHooks) {
+      try { await hook({ action: "finished", state: "canceled", job, result: null, canceled: true }); } catch (error) { this.report(codeOf(error)); }
+    }
+    return { job, canceled: true };
   }
 
   /**
@@ -365,35 +656,129 @@ export class VcrJobs {
   async advance(job) {
     const row = await this.#row(job.id);
     if (!row || row.state !== "running") return { action: "skipped", state: row?.state ?? "gone" };
-    if (row.cancel_requested === true) return { action: "canceled", state: "canceled" };
+    const owner = String(row.lease_owner ?? "");
     const frozen = this.#engineJob(row);
     const local = this.localExecutors[String(row.method)];
-    if (local) return this.#runLocal(row, frozen, local);
+    if (local) return this.#runLocal(row, frozen, local, owner);
     if (!this.engine?.configured?.()) {
-      return this.finish(String(row.id), { status: "failed", error: { code: "engine_unavailable",
+      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, error: { code: "engine_unavailable",
         message: "计算引擎未接入本部署，这一步暂不可用。" } });
     }
     const engineJobId = object(row.checkpoint).engineJobId;
-    if (!engineJobId) {
-      try {
-        const accepted = await this.engine.submit(frozen);
-        await this.checkpoint(String(row.id), { engineJobId: accepted.jobId, submittedAt: this.now().toISOString() });
-        this.counters.dispatched += 1;
-        return { action: "submitted", engineJobId: accepted.jobId };
-      } catch (error) {
-        return this.#fail(row, error);
-      }
-    }
+    if (!engineJobId) return this.#submit(row, frozen, owner);
     try {
       const status = await this.engine.status(String(engineJobId));
       if (status.progress) await this.progress(String(row.id), status.progress);
-      if (["queued", "running"].includes(status.state)) return { action: "waiting", state: status.state, progress: status.progress };
-      const { result, signed } = await this.engine.result(String(engineJobId));
-      return this.finish(String(row.id), {
-        status: String(result.status), result, signed, cpuSeconds: Number(result?.manifest?.cpuSeconds ?? status.cpuSeconds ?? 0),
-      });
+      if (["queued", "running", "canceling"].includes(status.state)) return { action: "waiting", state: status.state, progress: status.progress };
+      let answer;
+      try {
+        answer = await this.engine.result(String(engineJobId));
+      } catch (error) {
+        // The engine ended the job without a result of its own to give: a crash,
+        // a CPU limit, a memory limit. Its fixed code says which; nothing retries
+        // a job that killed its own process.
+        if (status.error && ["vcr_engine_rejected", "vcr_engine_not_found"].includes(codeOf(error))) {
+          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, cpuSeconds: Number(status.cpuSeconds ?? 0), error: {
+            code: "vcr_job_failed", engineError: String(status.error), message: ENGINE_ERROR_MESSAGES[String(status.error)] ?? "引擎没有做成这项计算。" } });
+        }
+        throw error;
+      }
+      return await this.#settle(row, answer, status, owner);
     } catch (error) {
-      return this.#fail(row, error);
+      if (codeOf(error) === "vcr_engine_not_found") return this.#resubmit(row, frozen, owner);
+      return this.#fail(row, error, owner);
+    }
+  }
+
+  /**
+   * Hand a result over for recording: the engine's refusal as a failure with its
+   * own reason, anything else after it has been held against the frozen job.
+   * @param {any} row @param {{ result: Record<string, any>, signed?: boolean, refused?: boolean }} answer
+   * @param {Record<string, any>} status @param {string} owner
+   */
+  async #settle(row, answer, status, owner) {
+    const result = object(answer.result);
+    const cpuSeconds = Number(result?.manifest?.cpuSeconds ?? status?.cpuSeconds ?? 0);
+    if (answer.refused === true) {
+      const issue = object(list(object(result.diagnostics).issues)[0]);
+      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, cpuSeconds,
+        error: { code: String(issue.code ?? "vcr_job_failed"), message: String(issue.detail ?? issue.message ?? "引擎拒绝了这项作业。").slice(0, 400) } });
+    }
+    this.#verify(row, result);
+    const tables = await this.#storeTables(row, result);
+    return this.finish(String(row.id), {
+      status: String(result.status), result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner,
+      outputHash: vcrComputedOutputHash(result),
+    });
+  }
+
+  /**
+   * The result held against the job it answers: the echoed identity must be the
+   * frozen one, and the hash the engine wrote must be the hash of what it said.
+   * (The engine client checks the signature; this check does not depend on it,
+   * so a transport that skips it is still held to the frozen job.)
+   * @param {any} row @param {Record<string, any>} result
+   */
+  #verify(row, result) {
+    const differ = vcrResultEchoIssues({
+      method: String(row.method), methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""),
+      seed: Number(row.seed ?? 0), replicates: row.replicates == null ? null : Number(row.replicates),
+    }, result);
+    if (differ.length) {
+      this.counters.mismatched += 1;
+      throw new VcrEngineError("vcr_engine_result_mismatch", `引擎返回的结果和提交的作业对不上：${differ.join("、")}。`, { detail: { fields: differ } });
+    }
+    const written = result?.manifest?.outputHash;
+    if (written != null && String(written) !== vcrComputedOutputHash(result)) {
+      throw new VcrEngineError("vcr_engine_result_invalid", "引擎结果里的输出哈希和结果本身对不上：这份结果不予采信。", { detail: { reason: "output_hash_mismatch" } });
+    }
+  }
+
+  /**
+   * Submit a job. The engine's answer that it already has this job (a submit
+   * whose reply was lost) is the job being there.
+   * @param {any} row @param {Record<string, any>} frozen @param {string} owner
+   */
+  async #submit(row, frozen, owner) {
+    try {
+      let accepted;
+      try {
+        accepted = await this.engine.submit(frozen);
+      } catch (error) {
+        if (String(/** @type {any} */ (error)?.detail) === "job_already_submitted") {
+          accepted = { jobId: String(row.id), accepted: true };
+        } else throw error;
+      }
+      const stored = await this.checkpoint(String(row.id), { engineJobId: accepted.jobId, submittedAt: this.now().toISOString() });
+      if (!stored) return { action: "skipped", state: "changed" };
+      this.counters.dispatched += 1;
+      return { action: "submitted", engineJobId: accepted.jobId };
+    } catch (error) {
+      return this.#fail(row, error, owner);
+    }
+  }
+
+  /**
+   * The engine no longer knows this job: it restarted, and its queue was in
+   * memory. The job is submitted again under the same id — the engine keeps a
+   * simulation's checkpoint in the job's own directory and resumes from it — a
+   * bounded number of times.
+   * @param {any} row @param {Record<string, any>} frozen @param {string} owner
+   */
+  async #resubmit(row, frozen, owner) {
+    const tries = Number(object(row.checkpoint).resubmits ?? 0);
+    if (tries >= VCR_JOB_MAX_RESUBMITS) {
+      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, error: { code: "vcr_engine_not_found",
+        message: "引擎反复找不到这项作业，没有做成；可以重新计算。" } });
+    }
+    try {
+      const accepted = await this.engine.submit(frozen);
+      const stored = await this.checkpoint(String(row.id), { engineJobId: accepted.jobId, resubmits: tries + 1, submittedAt: this.now().toISOString() });
+      if (!stored) return { action: "skipped", state: "changed" };
+      this.counters.resubmitted += 1;
+      return { action: "resubmitted", engineJobId: accepted.jobId };
+    } catch (error) {
+      return this.#fail(row, error, owner);
     }
   }
 
@@ -401,13 +786,13 @@ export class VcrJobs {
    * A method the control plane computes itself (`matching.evaluate`). The
    * executor gets the same frozen job the engine would, so the two paths
    * cannot drift in what a result was computed from.
-   * @param {any} row @param {Record<string, any>} frozen @param {Function} executor
+   * @param {any} row @param {Record<string, any>} frozen @param {Function} executor @param {string} owner
    */
-  async #runLocal(row, frozen, executor) {
+  async #runLocal(row, frozen, executor, owner) {
     const startedAt = this.now().toISOString();
     try {
       const result = await executor({
-        job: frozen,
+        job: { ...frozen, scenarioHash: String(row.scenario_hash ?? "") },
         onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}),
       });
       return this.finish(String(row.id), {
@@ -416,10 +801,11 @@ export class VcrJobs {
         signed: false,
         local: true,
         startedAt,
+        leaseOwner: owner,
         cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0),
       });
     } catch (error) {
-      return this.#fail(row, error);
+      return this.#fail(row, error, owner);
     }
   }
 
@@ -431,17 +817,17 @@ export class VcrJobs {
       seed: Number(row.seed ?? 0), replicates: row.replicates == null ? null : Number(row.replicates),
       cpuSecondsLimit: Number(row.cpu_seconds_limit ?? this.jobCpuSeconds),
       inputs: list(row.inputs), scenario: object(row.scenario),
-      ...(Object.keys(object(row.checkpoint)).length ? { resumeFrom: object(row.checkpoint) } : {}),
     };
   }
 
   /**
    * A failure. Retryable and with tries left goes back to the queue with a
-   * back-off; anything else is final — and either way the checkpoint stays,
-   * because what was computed was computed (principle 19).
-   * @param {any} row @param {unknown} error
+   * back-off; anything else is final — and either way what was computed stays,
+   * because what was computed was computed (principle 19). A job that was
+   * cancelled, or that another worker now holds, is not touched.
+   * @param {any} row @param {unknown} error @param {string} owner
    */
-  async #fail(row, error) {
+  async #fail(row, error, owner) {
     const code = codeOf(error);
     const retryable = /** @type {any} */ (error)?.retryable === true;
     const attempts = Number(row.attempts ?? 0);
@@ -452,25 +838,87 @@ export class VcrJobs {
       const requeued = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
         SET state = 'queued', lease_owner = NULL, lease_until = NULL, run_after = now() + make_interval(secs => $2),
             error = jsonb_build_object('code', $3::text, 'message', $4::text, 'attempt', $5::integer), updated_at = now()
-        WHERE id = $1 RETURNING *`,
-      [String(row.id), backoffSeconds, code, String(/** @type {any} */ (error)?.message ?? "").slice(0, 400), attempts]);
-      return { action: "requeued", code, job: jobSummaryFromRow(requeued) };
+        WHERE id = $1 AND state = 'running' AND lease_owner = $6 RETURNING *`,
+      [String(row.id), backoffSeconds, code, String(/** @type {any} */ (error)?.message ?? "").slice(0, 400), attempts, owner]);
+      return requeued ? { action: "requeued", code, job: jobSummaryFromRow(requeued) } : { action: "skipped", state: "changed" };
     }
     return this.finish(String(row.id), {
-      status: "failed",
-      error: { code, message: String(/** @type {any} */ (error)?.message ?? "").slice(0, 400) },
+      status: "failed", leaseOwner: owner,
+      error: { code, message: String(/** @type {any} */ (error)?.message ?? "").slice(0, 400),
+        ...(Array.isArray(/** @type {any} */ (error)?.detail) ? { issues: /** @type {any} */ (error).detail.slice(0, 10) } : {}) },
     });
   }
 
   /**
+   * File the tables the next step needs (the enqueuer named them in
+   * `checkpoint.keepTables`) in the data plane, under `derived/<study>/<job>/`,
+   * and return the result's table list with each stored one's location. A
+   * table that cannot be stored is left out of the list, never half-listed: the
+   * step that needs it says so.
+   * @param {any} row @param {Record<string, any>} result
+   */
+  async #storeTables(row, result) {
+    const tables = list(result.tables).map((table) => ({ ...object(table) }));
+    const keep = new Set(list(object(row.checkpoint).keepTables).map(String));
+    const engineJobId = object(row.checkpoint).engineJobId;
+    if (!keep.size || !engineJobId || typeof this.engine?.downloadTable !== "function"
+      || !String(this.config.vcrDataPlaneDir ?? "").trim()) return tables;
+    const root = assertDataPlaneRoot(String(this.config.vcrDataPlaneDir));
+    for (const table of tables) {
+      if (!keep.has(String(table.name)) || !/^[a-f0-9]{64}$/.test(String(table.sha256))) continue;
+      const relative = `derived/${row.study_id}/${row.id}/${table.name}.csv`;
+      if (!vcrLocationIsValid(relative)) continue;
+      const destination = path.join(root, relative);
+      await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+      const present = await fs.readFile(destination).then((bytes) => sha256Bytes(bytes) === table.sha256).catch(() => false);
+      if (!present) {
+        await this.engine.downloadTable(String(engineJobId), String(table.name), { destination, sha256: String(table.sha256),
+          maxBytes: Number(this.config.vcrDerivedTableMaxBytes ?? 256 * 1024 * 1024) });
+        this.counters.tablesStored += 1;
+      }
+      table.location = relative;
+    }
+    return tables;
+  }
+
+  /**
+   * Which models a result used, for its intended use: the credibility tier the
+   * method carries on its own, and the library row of the model a patient set
+   * named. Never read from the engine's own account of itself.
+   * @param {any} row
+   */
+  async #usedModels(row) {
+    const tier = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[String(row.method)]?.modelTier ?? null;
+    const detail = object(row.checkpoint);
+    /** @type {any[]} */
+    const models = [];
+    if (detail.modelId) {
+      const library = await this.store.models(String(row.user_id));
+      const found = library.find((model) => (model.id === detail.modelId || model.name === detail.modelId)
+        && (!detail.modelVersion || model.version === detail.modelVersion));
+      models.push(found
+        ? { name: found.name, tier: found.tier, risk: found.risk, evidence: found.evidence }
+        // A model the library does not hold has earned nothing: the weakest tier, an unknown (so highest) risk, no evidence.
+        : { name: String(detail.modelId), tier: "scenario", risk: "unknown", evidence: [] });
+    }
+    return { tiers: tier ? [tier] : [], models };
+  }
+
+  /**
    * Record what a job produced and close it. A `succeeded` or `not_estimable`
-   * result becomes an execution row and a result row; a `failed` one with
-   * partial measures becomes a result marked partial with the conclusion
-   * `limited`, so the study keeps what was computed and says what it is.
+   * result becomes an execution row and a result row; a `failed` or `canceled`
+   * one that carries measures **and says `limited`** becomes a result marked
+   * partial, so the study keeps what was computed and says what it is. Anything
+   * else records the failure and nothing more.
+   *
+   * The execution, the result and the job row commit together, and the job row
+   * is only moved if it is still `running` and still this worker's: a job that
+   * was cancelled meanwhile stays cancelled and nothing of the late result is
+   * kept (AC-38).
    *
    * @param {string} jobId
    * @param {{ status: string, result?: Record<string, any> | null, error?: Record<string, any> | null, signed?: boolean,
-   *   local?: boolean, cpuSeconds?: number, startedAt?: string | null }} outcome
+   *   local?: boolean, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, outputHash?: string | null }} outcome
    */
   async finish(jobId, outcome) {
     const row = await this.#row(jobId);
@@ -479,62 +927,186 @@ export class VcrJobs {
       ? String(outcome.status) : "failed";
     const result = object(outcome.result);
     const measures = list(result.measures);
-    const partial = status === "failed" && measures.length > 0;
-    const state = status === "not_estimable" ? "succeeded" : (VCR_JOB_TERMINAL_STATES.includes(status) ? status : "failed");
+    const complete = status === "succeeded" || status === "not_estimable";
+    const partial = !complete && measures.length > 0 && result.conclusion === "limited";
+    const state = complete ? "succeeded" : (status === "canceled" ? "canceled" : "failed");
+    const record = complete || partial;
+    const { tiers, models } = record ? await this.#usedModels(row) : { tiers: [], models: [] };
+    const study = record ? await this.store.studyById(String(row.study_id)) : null;
+    const detail = object(row.checkpoint);
+    const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
+    const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
+    const leaseOwner = outcome.leaseOwner ?? null;
 
-    /** @type {any} */
-    let execution = null;
-    /** @type {any} */
-    let recorded = null;
-    if (measures.length || status === "succeeded" || status === "not_estimable") {
-      execution = await this.store.recordExecution({
-        jobId, studyId: String(row.study_id), userId: String(row.user_id), method: String(row.method),
-        methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""),
-        inputs: list(row.inputs), environment: object(result.manifest), seed: Number(row.seed ?? 0),
-        replicates: row.replicates == null ? null : Number(row.replicates), outputHash: result?.manifest?.outputHash ?? null,
-        receipt: { signed: outcome.signed === true, local: outcome.local === true, status },
-        cpuSeconds: Number(outcome.cpuSeconds ?? result?.manifest?.cpuSeconds ?? 0),
-        startedAt: outcome.startedAt ?? result?.manifest?.startedAt ?? null,
-        finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
-      });
-      const study = await this.store.studyById(String(row.study_id));
-      recorded = await this.store.recordResult({
-        studyId: String(row.study_id), userId: String(row.user_id), executionId: execution?.id ?? null,
-        // The enqueuer names the object this result belongs to when it knows
-        // one; the method's own default answers for everything else.
-        kind: String(object(row.checkpoint).resultKind || this.#resultKind(String(row.kind))),
-        subjectId: object(row.checkpoint).subjectId ?? object(row.scenario).subjectId ?? null,
-        conclusion: status === "not_estimable" ? "not_estimable" : (partial ? "limited" : (result.conclusion ?? "estimable")),
-        notEstimableRule: result.notEstimableRule ?? null,
-        counts: object(result.counts), measures, diagnostics: { ...object(result.diagnostics), ...(partial ? { partial: true } : {}) },
-        tables: list(result.tables), models: list(result.models),
-        requestedUse: study?.intendedUse ?? "exploratory",
-      });
-      if (partial) this.counters.partial += 1;
-    }
+    const outcomeOf = await this.store.transaction(async (client) => {
+      const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [jobId])).rows[0];
+      if (!locked || locked.state !== "running" || (leaseOwner && String(locked.lease_owner ?? "") !== leaseOwner)) {
+        return { skipped: true, state: String(locked?.state ?? "gone") };
+      }
+      /** @type {any} */
+      let execution = null;
+      /** @type {any} */
+      let recorded = null;
+      if (record) {
+        execution = await this.store.recordExecution({
+          jobId, studyId: String(row.study_id), userId: String(row.user_id), method: String(row.method),
+          methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""),
+          inputs: list(row.inputs), environment: object(result.manifest),
+          // The engine's own account of what it ran, held equal to the frozen job
+          // above; on a run that stopped early these are what actually ran.
+          seed: Number(result.seed ?? row.seed ?? 0),
+          replicates: result.replicates === undefined ? (row.replicates == null ? null : Number(row.replicates)) : result.replicates,
+          outputHash: outcome.outputHash ?? result?.manifest?.outputHash ?? null,
+          receipt: { signed: outcome.signed === true, local: outcome.local === true, status,
+            ...(detail.engineJobId ? { engineJobId: String(detail.engineJobId) } : {}), ...(partial ? { partial: true } : {}) },
+          cpuSeconds: Number(outcome.cpuSeconds ?? result?.manifest?.cpuSeconds ?? 0),
+          startedAt: outcome.startedAt ?? result?.manifest?.startedAt ?? null,
+          finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
+        }, { client });
+        /** @type {any} */
+        const incoming = {
+          conclusion: complete ? (status === "not_estimable" ? "not_estimable" : (result.conclusion ?? "estimable")) : "limited",
+          notEstimableRule: result.notEstimableRule ?? null,
+          counts: object(result.counts), measures,
+          diagnostics: { ...object(result.diagnostics), ...(partial ? { partial: true, ...(status === "canceled" ? { canceled: true } : {}) } : {}) },
+          tables: list(result.tables),
+        };
+        let filed = incoming;
+        if (detail.stage) {
+          // One subject, one current result: a later stage folds into it, serialised
+          // so two stages finishing together cannot each miss the other's measures.
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-vcr-result:${row.study_id}:${kind}:${subjectId ?? ""}`]);
+          const prior = resultFromRow((await client.query(`SELECT * FROM ${VCR_SCHEMA}.results
+            WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3 AND superseded_by IS NULL
+            ORDER BY version DESC LIMIT 1`, [String(row.study_id), kind, subjectId])).rows[0]);
+          filed = vcrMergeStageResult(prior, incoming, {
+            stage: String(detail.stage), jobId, method: String(row.method), methodVersion: String(row.method_version ?? "") });
+        }
+        // A result made of several stages is only as credible as the weakest of them:
+        // the tiers and models the earlier stages used are carried into this one.
+        const carried = list(object(filed.diagnostics).modelsUsed).map(object);
+        recorded = await this.store.recordResult({
+          studyId: String(row.study_id), userId: String(row.user_id), executionId: execution?.id ?? null, kind, subjectId,
+          conclusion: filed.conclusion, notEstimableRule: filed.notEstimableRule, counts: filed.counts, measures: filed.measures,
+          diagnostics: filed.diagnostics, tables: filed.tables,
+          tiers: [...new Set([...tiers, ...carried.filter((entry) => entry.name === "method").map((entry) => String(entry.tier))])],
+          models: [...models, ...carried.filter((entry) => entry.name !== "method")],
+          supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory",
+        }, { client });
+      }
+      const finished = (await client.query(`UPDATE ${VCR_SCHEMA}.jobs
+        SET state = $2, finished_at = now(), lease_owner = NULL, lease_until = NULL, updated_at = now(),
+            cpu_seconds_used = GREATEST(cpu_seconds_used, $3::numeric),
+            error = $4::jsonb
+        WHERE id = $1 AND state = 'running' RETURNING *`,
+      [jobId, state, Number(outcome.cpuSeconds ?? 0),
+        outcome.error == null && !partial ? null : JSON.stringify({ ...object(outcome.error), ...(partial ? { partial: true } : {}) })])).rows[0];
+      await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.finish", object: jobId,
+        outcome: state === "succeeded" ? "ok" : state,
+        reason: outcome.error ? String(object(outcome.error).code ?? "") : "",
+        detail: { kind: String(row.kind), resultId: recorded?.id ?? null, partial, signed: outcome.signed === true } });
+      return { finished, execution, recorded };
+    });
+    if (/** @type {any} */ (outcomeOf).skipped) return { action: "skipped", state: /** @type {any} */ (outcomeOf).state };
 
-    const finished = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
-      SET state = $2, finished_at = now(), lease_owner = NULL, lease_until = NULL, updated_at = now(),
-          cpu_seconds_used = GREATEST(cpu_seconds_used, $3::numeric),
-          error = $4::jsonb
-      WHERE id = $1 RETURNING *`,
-    [jobId, state, Number(outcome.cpuSeconds ?? 0),
-      outcome.error == null && !partial ? null : JSON.stringify({ ...object(outcome.error), ...(partial ? { partial: true } : {}) })]);
-
+    const { finished, execution, recorded } = /** @type {any} */ (outcomeOf);
     if (state === "succeeded") this.counters.succeeded += 1;
     else if (state === "failed") this.counters.failed += 1;
-    await this.store.audit({ studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.finish", object: jobId,
-      outcome: state === "succeeded" ? "ok" : state,
-      reason: outcome.error ? String(object(outcome.error).code ?? "") : "",
-      detail: { kind: String(row.kind), resultId: recorded?.id ?? null, partial, signed: outcome.signed === true } });
-    return { action: "finished", state, job: jobSummaryFromRow(finished), result: recorded, execution, partial };
+    if (partial) this.counters.partial += 1;
+    const done = { action: "finished", state, job: jobSummaryFromRow(finished), result: recorded, execution, partial,
+      engineResult: result, error: outcome.error ?? null };
+    for (const hook of this.finishHooks) {
+      try { await hook(done); } catch (error) { this.report(codeOf(error)); }
+    }
+    return done;
+  }
+
+  /**
+   * Keep what the engine had computed when a job was cancelled. The cancel is
+   * final at once; the engine finishes the batch it is in and writes a result
+   * that says `canceled` and — if any batch completed — carries those batches'
+   * measures as `limited`. This looks for that result after the fact, records it
+   * as a partial result under the cancelled job and leaves the job's state alone.
+   * Called by the worker; bounded to the minutes after the cancel.
+   * @param {{ limit?: number }} [options]
+   */
+  async recoverCanceled({ limit = 5 } = {}) {
+    if (!this.engine?.configured?.()) return [];
+    const rows = await this.store.rows(`SELECT * FROM ${VCR_SCHEMA}.jobs
+      WHERE state = 'canceled' AND checkpoint ? 'engineJobId' AND NOT (checkpoint ? 'partialChecked')
+        AND finished_at IS NOT NULL ORDER BY finished_at LIMIT $1`, [limit]);
+    /** @type {any[]} */
+    const recovered = [];
+    for (const row of rows) {
+      const expired = Date.parse(String(row.finished_at)) < this.now().getTime() - VCR_CANCEL_RECOVERY_MINUTES * 60_000;
+      const mark = async (/** @type {string} */ how) => this.store.query(`UPDATE ${VCR_SCHEMA}.jobs
+        SET checkpoint = checkpoint || jsonb_build_object('partialChecked', $2::text) WHERE id = $1`, [String(row.id), how]);
+      try {
+        const status = await this.engine.status(String(object(row.checkpoint).engineJobId));
+        if (["queued", "running", "canceling"].includes(status.state)) {
+          if (expired) await mark("expired");
+          continue;
+        }
+        const answer = await this.engine.result(String(object(row.checkpoint).engineJobId));
+        const result = object(answer.result);
+        if (answer.refused !== true) {
+          this.#verify(row, result);
+          const measures = list(result.measures);
+          if (measures.length && result.conclusion === "limited" && String(result.status) !== "succeeded") {
+            const kept = await this.#recordAfterCancel(row, result, answer.signed === true);
+            if (kept) recovered.push(kept);
+          }
+        }
+        await mark("done");
+      } catch (error) {
+        // A restarted engine has forgotten the job and a hostile one signs
+        // nothing: neither is worth asking again. A busy one might be.
+        if (!/** @type {any} */ (error)?.retryable || expired) await mark(codeOf(error));
+      }
+    }
+    return recovered;
+  }
+
+  /**
+   * The partial result of a job that was cancelled, recorded under it.
+   * @param {any} row @param {Record<string, any>} result @param {boolean} signed
+   */
+  async #recordAfterCancel(row, result, signed) {
+    const { tiers, models } = await this.#usedModels(row);
+    const study = await this.store.studyById(String(row.study_id));
+    const detail = object(row.checkpoint);
+    const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
+    const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
+    return this.store.transaction(async (client) => {
+      const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [String(row.id)])).rows[0];
+      const has = await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.executions WHERE job_id = $1`, [String(row.id)]);
+      if (!locked || locked.state !== "canceled" || has.rowCount) return null;
+      const execution = await this.store.recordExecution({
+        jobId: String(row.id), studyId: String(row.study_id), userId: String(row.user_id), method: String(row.method),
+        methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""), inputs: list(row.inputs),
+        environment: object(result.manifest), seed: Number(result.seed ?? row.seed ?? 0), replicates: result.replicates ?? null,
+        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, canceled: true, partial: true, status: "canceled" },
+        cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0), startedAt: result?.manifest?.startedAt ?? null,
+        finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
+      }, { client });
+      const recorded = await this.store.recordResult({
+        studyId: String(row.study_id), userId: String(row.user_id), executionId: execution?.id ?? null, kind, subjectId,
+        conclusion: "limited", counts: object(result.counts), measures: list(result.measures),
+        diagnostics: { ...object(result.diagnostics), partial: true, canceled: true }, tables: list(result.tables),
+        tiers, models, supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory",
+      }, { client });
+      await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('partial', true),
+        cpu_seconds_used = GREATEST(cpu_seconds_used, $2::numeric) WHERE id = $1`, [String(row.id), Number(result?.manifest?.cpuSeconds ?? 0)]);
+      this.counters.partial += 1;
+      return { job: jobSummaryFromRow(locked), result: recorded, execution };
+    });
   }
 
   /** Which `results.kind` a job kind files under. @param {string} kind */
   #resultKind(kind) {
-    if (["build_cohort", "generate_population", "synthesize_population"].includes(kind)) return "population";
-    if (kind === "generate_patients") return "patient_set";
-    if (["weight_comparator", "rmst", "map_prior"].includes(kind)) return "comparator";
+    if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
+    if (["generate_patients", "generate_patients_continuous", "generate_patients_binary"].includes(kind)) return "patient_set";
+    if (["weight_comparator", "propensity_weight_comparator", "maic_comparator", "rmst", "map_prior", "evalue", "procova"].includes(kind)) return "comparator";
     if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
     if (kind === "design_grid") return "design_grid";
     if (kind === "match_criteria") return "matching";
@@ -553,4 +1125,19 @@ export class VcrJobs {
       counters: { ...this.counters },
     };
   }
+}
+
+/** What the engine's own fixed job errors mean, for a reader. */
+const ENGINE_ERROR_MESSAGES = Object.freeze(/** @type {Record<string, string>} */ ({
+  engine_crashed: "计算进程异常退出，没有做成。",
+  cpu_limit_exceeded: "计算用尽了这项作业的 CPU 上限，被引擎终止；提高上限后可以重新计算。",
+  memory_limit_exceeded: "计算用尽了内存，被引擎终止；缩小规模后可以重新计算。",
+  spawn_failed: "计算进程没能启动。",
+  result_unreadable: "引擎没能写出可读的结果。",
+  canceled: "计算已被取消。",
+}));
+
+/** @param {Buffer} bytes */
+function sha256Bytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
