@@ -232,7 +232,7 @@ function renderContractsTable(manifests) {
  * @param {string} root
  * @returns {Promise<Map<string, Record<string, any>>>}
  */
-async function readEvaluations(root) {
+export async function readEvaluations(root) {
   /** @type {Map<string, Record<string, any>>} */
   const evaluations = new Map();
   const ledger = JSON.parse(await fs.readFile(path.join(root, "evals/acceptance-ledger.json"), "utf8").catch(() => "null"));
@@ -320,4 +320,4 @@ function renderDisplayTable(generated, evaluations) {
   }, null, 2)}\n`;
 }
 
-await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
