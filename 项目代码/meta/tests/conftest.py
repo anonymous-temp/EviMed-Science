@@ -103,3 +103,22 @@ def forbid_external_http_transports(monkeypatch):
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", handle_async_request)
     yield
     assert not attempts, f"Unexpected external HTTP attempts occurred even if caught by production code: {attempts}"
+
+
+@pytest.fixture(autouse=True)
+def forbid_unmocked_analysis_judgment_calls(monkeypatch):
+    """Autonomous evidence choices must use explicit model oracles in offline tests."""
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.llm import LLMClient
+    original_agent_call = BaseAgent.call_llm_structured
+    original_structured = LLMClient.structured_output
+    original_call = LLMClient._call
+
+    def guarded(self, *args, **kwargs):
+        if (self.name == "analysis_judgment"
+                and getattr(self.llm.structured_output, "__func__", None) is original_structured
+                and getattr(self.llm._call, "__func__", None) is original_call):
+            raise AssertionError("Provide a mocked analysis judgment; live calls are forbidden in unit tests")
+        return original_agent_call(self, *args, **kwargs)
+
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", guarded)

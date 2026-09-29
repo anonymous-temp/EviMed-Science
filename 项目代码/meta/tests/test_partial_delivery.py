@@ -224,3 +224,103 @@ def test_compiled_review_preserves_uncertain_trial_and_renders_limitations(tmp_p
     assert project.get_path("draft.md", subdir="manuscript").exists()
     assert studies[0].outcomes[0].primary_analysis_alignment is None
     require_current_compiled_alignment(project)
+
+
+def test_compiled_estimator_label_describes_the_interval_actually_returned():
+    """Live ma-001 labelled a normal REML CI as HKSJ; the primary math stays unchanged."""
+    from new_meta.engines.complex_rct import run_complex_rct
+    from test_method_executor import _complex_rct_records
+    result = run_complex_rct(_complex_rct_records())
+    assert result.estimator == "DESIGN_AWARE_REML"
+    assert result.diagnostics["primary_interval"] == "normal_wald"
+    assert result.diagnostics["sensitivity_interval"] == "HKSJ"
+    assert result.sensitivity["HKSJ"]["ci_lower"] != result.ci_lower
+
+
+def test_unattended_cli_preserves_data_and_writes_partial_manuscript_on_unresolved_method(tmp_path, monkeypatch):
+    from new_meta.main import _require_cli_method_delivery
+    from new_meta.schemas.protocol import ResearchProtocol
+    from test_extraction_lifecycle import protocol, study
+    project = unattended(Project("partial report", output_dir=tmp_path))
+    project.save_json("protocol.json", protocol())
+    project.save_json("all_extractions.json", [study()], subdir="extraction")
+    phase = PhaseResult(run_id=project.base_dir.name, phase="synthesis", status="blocked",
+        summary="Network comparability remains uncertain.", error_code="transitivity_assessment_required",
+        issues=[PhaseIssue(code="transitivity_assessment_required", message="No adequate comparison.", blocking=True)])
+    # Packaging is separately covered; this oracle checks the pre-package report contract.
+    monkeypatch.setattr("new_meta.main.create_artifact_package", lambda project: project.base_dir / "package")
+    with pytest.raises(SystemExit) as done:
+        _require_cli_method_delivery(project, phase)
+    assert done.value.code == 0
+    draft = project.get_path("draft.md", subdir="manuscript").read_text()
+    assert "Network comparability remains uncertain" in draft
+    assert "S1" in draft and "0.66" in draft
+    assert project.load_json("all_extractions.json", subdir="extraction")[0]["outcomes"][0]["effect_size"] == 0.66
+    assert project.load_json("release_decision.json", subdir="package")["deliverable"] is True
+
+
+def test_missing_result_rob_does_not_stop_the_unattended_pairwise_writer(tmp_path, monkeypatch):
+    import new_meta.main as cli
+    from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, needs_input_phase
+    project = unattended(Project("missing result rob", output_dir=tmp_path))
+    monkeypatch.setattr(cli, "validated_pairwise_result_rob", Mock(side_effect=PrimaryAlignmentRequired(
+        needs_input_phase(project, [], reason="pairwise_result_rob_incomplete"))))
+    writer = Mock()
+    writer.run.return_value = "Readable manuscript"
+    assert cli._run_verified_pairwise_writer(writer, project=project, protocol=object(), meta_results=object(),
+        extracted_studies=[], rob_results=[]) == "Readable manuscript"
+    assert writer.run.call_args.kwargs["rob_results"] == []
+    assert any(item["code"] == "risk_of_bias_unavailable" for item in project.load_json("pipeline_warnings.json"))
+
+
+def test_model_identity_cannot_double_count_an_already_verified_trial(tmp_path, monkeypatch):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.primary_analysis_alignment import record_checked_alignments
+    from test_primary_analysis_alignment import SOURCE, assessment_payload
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    record_checked_alignments(project, protocol, studies[0], [assessment_payload()], source_text=SOURCE,
+                              issue_histories={0: ([], True)})
+    from new_meta.core.primary_analysis_alignment import alignment_status
+    assert alignment_status(project, protocol, studies[0], 0)["status"] == "match"
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies, same_trial=True))
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert [effect.study_id for effect in effects] == ["S1"]
+    assert next(row for row in audit if row["study_id"] == "S2")["reason"] == "overlapping_trial_publication"
+
+
+def test_new_publication_context_invalidates_previous_identity_judgment(tmp_path, monkeypatch):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.autonomous_analysis import resolve_analysis_judgments, judgment_for_row
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    resolve_analysis_judgments(project, protocol, studies)
+    assert judgment_for_row(project, protocol, studies[0], 0)["include"]
+    studies[1].characteristics.title = "Secondary publication of S1"
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    assert judgment_for_row(project, protocol, studies[0], 0) is None
+
+
+def test_model_source_resolution_replays_an_existing_negative_verification(tmp_path, monkeypatch):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.primary_analysis_alignment import record_checked_alignments, cached_alignment_is_current
+    from test_primary_analysis_alignment import SOURCE, assessment_payload
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    record_checked_alignments(project, protocol, studies[0], [assessment_payload(contrast="mismatch")], source_text=SOURCE)
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert len(effects) == 2
+    assert audit[0]["alignment"]["status"] == "mismatch"
+    assert cached_alignment_is_current(project)
+
+
+def test_pairwise_manuscript_keeps_analysis_assumptions_in_readable_prose():
+    from new_meta.core.manuscript_facts import _ensure_pipeline_warning_note
+    draft = "# Review\n\n## Results\n\nTwo estimates were pooled.\n\n## References\n"
+    rendered, _ = _ensure_pipeline_warning_note(draft, {"report_type": "meta", "pipeline_warnings": [
+        {"code": "analysis_assumptions", "stage": "synthesis", "message": "Trial identity remains uncertain for S1."},
+        {"code": "risk_of_bias_unavailable", "stage": "synthesis", "message": "Risk of bias is unknown for S1."}]})
+    assert "Trial identity remains uncertain for S1" in rendered
+    assert "Risk of bias is unknown for S1" in rendered
+    assert "analysis_assumptions" not in rendered
