@@ -573,3 +573,16 @@ test("the MR engine reads EBI through the web API's node, with its credentials, 
   ]);
 });
 
+
+test("all six engines use the gateway by default and have a keyless overlay", async () => {
+  const base = YAML.parse(await readFile(path.join(deployDir, "docker-compose.yml"), "utf8"));
+  const overlay = YAML.parse(await readFile(path.join(deployDir, "docker-compose.engine-keyless.yml"), "utf8"));
+  assert.equal(loadConfig({ rootDir: repoRoot }).engineModelGatewayEnabled, true);
+  for (const name of ["meta", "mr", "bibliometric", "research-topic", "peer-review", "drug-safety"]) {
+    const id = `evimed-${name}-agent`;
+    assert.equal(base.services[id].environment.EVIMED_ENGINE_MODEL_GATEWAY, "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}");
+    assert.match(base.services[id].environment.EVIMED_ENGINE_MODEL_TOKEN_URL, /internal\/engines\/v1\/model-token/);
+    assert.equal(overlay.services[id].volumes[0].source, "/dev/null");
+    assert.equal(overlay.services[id].volumes[0].target, "/run/secrets/deepseek-api-key");
+  }
+});

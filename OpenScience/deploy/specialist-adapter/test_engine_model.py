@@ -270,3 +270,16 @@ def test_off_is_a_valid_job_policy_without_forcing_thinking():
     env = engine_model.child_environment(JOB_TOKEN, GATEWAY, {"reasoningEffort": "off", "source": "session"})
     assert env["LLM_REASONING_EFFORT"] == "off"
     assert env["LLM_ENABLE_THINKING"] == "false"
+
+
+def test_context_and_policy_reject_non_scalar_protocol_values():
+    import pytest
+    context = {"v": 1, "sessionId": "s-one", "callId": "call-1", "rootCallId": "call-1",
+               "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "low"}
+    for key, values in {"v": [True, "1"], "model": [[], {}], "reasoningEffort": [[], {}, True, "medium"]}.items():
+        for value in values:
+            with pytest.raises(engine_model.EngineModelUnavailable):
+                engine_model.validate_context({**context, key: value})
+    for value in ([], {}, True, "medium", None):
+        with pytest.raises(engine_model.EngineModelUnavailable):
+            engine_model.model_policy({"reasoningEffort": value})
