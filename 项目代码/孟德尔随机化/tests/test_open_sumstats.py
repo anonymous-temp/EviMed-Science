@@ -375,7 +375,7 @@ def test_ld_reference_selection_uses_exposure_metadata_before_clumping(catalogue
     metadata = {"ancestrySamples": [["European"]], "source": "https://example.org/exposure.yaml"}
     monkeypatch.setattr(osm, "read_sample_metadata", lambda study, http: metadata if study.accession == "GCST000001" else
                         {"ancestrySamples": [["European"], ["South Asian"]], "source": "https://example.org/outcome.yaml"})
-    reference = SimpleNamespace(plink="/test/plink", bfile="/test/EUR", population="EUR", record=lambda: {"population": "EUR", "manifestSha256": "a" * 64})
+    reference = SimpleNamespace(plink="/test/plink", bfile="/test/EUR", population="EUR", assert_current=lambda: None, record=lambda: {"population": "EUR", "manifestSha256": "a" * 64})
     monkeypatch.setattr(osm, "ld_reference", lambda choice: (seen.append(choice) or reference, None))
     monkeypatch.setattr(osm, "plink_clump", lambda variants, *_: (osm.distance_clump(variants), 0))
     pair = osm.build_pair({"type": "gwas_catalog", "accession": "GCST000001"},
@@ -391,7 +391,7 @@ def test_ld_reference_selection_uses_exposure_metadata_before_clumping(catalogue
 def test_plink_failure_preserves_distance_approximation_and_explicit_reason(catalogue, monkeypatch):
     from types import SimpleNamespace
 
-    reference = SimpleNamespace(plink="/test/plink", bfile="/test/EUR", population="EUR", record=lambda: {"population": "EUR"})
+    reference = SimpleNamespace(plink="/test/plink", bfile="/test/EUR", population="EUR", assert_current=lambda: None, record=lambda: {"population": "EUR"})
     monkeypatch.setattr(osm, "ld_reference", lambda choice: (reference, None))
 
     def failed(*args):

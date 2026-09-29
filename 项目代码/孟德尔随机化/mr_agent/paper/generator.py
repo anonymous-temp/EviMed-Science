@@ -476,11 +476,10 @@ class PaperGenerator:
         if zh:
             return (f"工具变量由本次运行从GWAS Catalog汇总统计中选取：p<{threshold}的变异{total}个，"
                     f"按距离修剪（每{window} kb窗口保留最显著的一个变异，未使用LD参考面板）保留{kept}个；"
-                    "该做法比窗口内r²<0.001的clumping更严格，但并未实测LD。")
+                    "该近似方法并未实测LD，不能据此认定工具变量相互独立。")
         return (f"Instruments were selected by this run from GWAS Catalog summary statistics: {total} variants at "
                 f"p<{threshold}, distance pruning (the most significant variant per {window} kb window, no LD "
-                f"reference panel) kept {kept}; this is stricter than r²<0.001 clumping within the window but "
-                "does not measure LD. ")
+                f"reference panel) kept {kept}; this approximation does not measure LD or establish instrument independence. ")
 
     @staticmethod
     def _fmt_p(value: float) -> str:

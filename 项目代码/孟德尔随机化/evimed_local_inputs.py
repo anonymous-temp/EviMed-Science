@@ -748,7 +748,7 @@ def open_catalog_sources(
             file_path=str(private_root / OPEN_INPUT_NAMES[role]),
             column_mapping=mapping,
             trait_name=request[role],
-            population="; ".join(study.get("discoveryAncestry") or [])[:1000] or None,
+            population=open_sumstats.population_label(study),
             instruments_preclumped=role == "exposure",
             clumping_provenance=open_sumstats.provenance_sentence(pair.record)[:4000] if role == "exposure" else None,
             selection=open_sumstats.selection_record(pair.record) if role == "exposure" else None,
