@@ -59,7 +59,9 @@ def build_model_decision_and_sensitivity(
     else:
         primary = random
         primary_kind = primary.model
-        reason = "random-effects REML selected for the primary generic synthesis"
+        reason = f"random-effects {protocol_tau} requested for the primary generic synthesis; {primary.tau_estimator} tau estimation executed"
+        if primary.fallback_reason == "reml_optimizer_failed":
+            reason += " after REML optimization failed"
         if random.model == "fixed" and len(study_effects) < 3:
             reason = (
                 "generic random-effects synthesis was requested, but fewer than three studies contributed; "
@@ -72,6 +74,8 @@ def build_model_decision_and_sensitivity(
         "primary_engine_model": primary.model,
         "requested_model": requested_model,
         "tau_estimator": primary.tau_estimator,
+        "requested_method": primary.requested_method,
+        "executed_method": primary.execution_metadata().model_dump(mode="json"),
         "reason": reason,
         "k": len(study_effects),
         "benchmark_mode": bool(benchmark_reason),
@@ -107,6 +111,7 @@ def _pooled_summary(result: PooledEffect) -> dict[str, Any]:
     return {
         "model": result.model,
         "tau_estimator": result.tau_estimator,
+        "executed_method": result.execution_metadata().model_dump(mode="json"),
         "n_studies": result.n_studies,
         "effect_measure": result.effect_measure,
         "pooled_effect": result.pooled_effect,

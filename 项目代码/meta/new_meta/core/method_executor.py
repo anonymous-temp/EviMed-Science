@@ -184,6 +184,7 @@ class MethodExecutor:
             policy_version=plan.policy_version,
             plan_fingerprint=plan.plan_fingerprint,
             estimator=str(payload.get("estimator") or plan.primary_estimator),
+            planned_estimator=plan.primary_estimator,
             payload=payload,
             diagnostics=payload.get("diagnostics") or {},
         )

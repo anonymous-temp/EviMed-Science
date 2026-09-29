@@ -1,6 +1,8 @@
 """The per-section manuscript writers and the figure assembly."""
 from __future__ import annotations
 
+from new_meta.core.pooling_method_text import describe_pooling_method
+
 import json
 import re
 
@@ -962,6 +964,10 @@ class SectionWritersMixin:
             if po.prediction_interval:
                 lines.append(f"| Prediction interval | {po.prediction_interval[0]:.4f} to {po.prediction_interval[1]:.4f} |")
             lines.append(f"| Number of studies | {po.n_studies} |")
+
+        if po.ci_method != "unknown":
+            label = "实际计算方法" if zh else "Executed method"
+            lines.append(f"| {label} | {describe_pooling_method(po.execution_metadata(), zh=zh)} |")
 
         if results.meta_regression:
             if zh:

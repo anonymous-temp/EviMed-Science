@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from new_meta.schemas.method_policy import MethodExecutionResult, MethodPlan, ReviewFamily
+from new_meta.schemas.meta_result import PoolingMethod
 
 
 class SynthesisEstimate(BaseModel):
@@ -27,6 +28,8 @@ class SynthesisResultEnvelope(BaseModel):
     method_plan_fingerprint: str = Field(min_length=1)
     route: str
     estimator: str
+    planned_estimator: str | None = None
+    executed_method: PoolingMethod | None = None
     n_studies: int = Field(ge=0)
     input_result_ids: list[str] = Field(default_factory=list)
     primary_estimates: list[SynthesisEstimate] = Field(min_length=1)
@@ -59,6 +62,8 @@ class SynthesisResultEnvelope(BaseModel):
             method_plan_fingerprint=plan.plan_fingerprint,
             route="pairwise_aggregate",
             estimator=(primary.tau_estimator if primary.model == "random" else "INVERSE_VARIANCE_FIXED"),
+            planned_estimator=plan.primary_estimator,
+            executed_method=primary.execution_metadata(),
             n_studies=primary.n_studies,
             input_result_ids=input_result_ids,
             primary_estimates=[
@@ -339,6 +344,8 @@ class SynthesisResultEnvelope(BaseModel):
             method_plan_fingerprint=result.plan_fingerprint,
             route="method_plugin",
             estimator=result.estimator,
+            planned_estimator=result.planned_estimator,
+            executed_method=payload.get("executed_method"),
             n_studies=int(payload.get("n_studies") or len(result.input_result_ids)),
             input_result_ids=result.input_result_ids,
             primary_estimates=estimates,

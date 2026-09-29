@@ -1,6 +1,8 @@
 """Labels, titles, generic tables and references used by fallback reports."""
 from __future__ import annotations
 
+from new_meta.core.pooling_method_text import describe_pooling_method, primary_method_text, sensitivity_method_text
+
 from datetime import date
 import os
 import re
@@ -1382,7 +1384,7 @@ class FallbackContentMixin:
             for design, count in design_counts.items()
             if self._int(count)
         )
-        paragraphs: list[str] = []
+        paragraphs: list[str] = [primary_method_text(payload, zh=zh)]
         if zh:
             paragraphs.append(
                 f"主要合并使用{estimator}，基于{n_studies}个独立研究单位"
@@ -1453,6 +1455,10 @@ class FallbackContentMixin:
         for name, result in sensitivity.items():
             if not isinstance(result, dict) or result.get("estimate") is None:
                 continue
+            actual = result.get("executed_method") or {}
+            if actual.get("fallback_reason") == "fewer_than_three_studies":
+                paragraphs.append(sensitivity_method_text({"sensitivity": {name: result}}, zh=zh))
+                continue
             paragraphs.append(
                 f"{name}敏感性分析得到{measure} {self._fmt(result.get('estimate'), 2)}（95% CI "
                 f"{self._fmt(result.get('ci_lower'), 2)}至{self._fmt(result.get('ci_upper'), 2)}）。"
@@ -1484,6 +1490,8 @@ class FallbackContentMixin:
                 estimate_text += f"; 95% prediction interval {prediction_lower} to {prediction_upper}"
             estimate_texts.append(estimate_text)
         result_summary = "; ".join(estimate_texts) + ("." if estimate_texts else "")
+        method_text = primary_method_text(payload, zh=zh)
+        linear_method_text = describe_pooling_method((payload.get("linear_sensitivity") or {}).get("executed_method"), zh=zh)
         common = {
             "active": "true" if family else "",
             "family": family,
@@ -1499,7 +1507,7 @@ class FallbackContentMixin:
                     "study_selection": "纳入直接回答预设PICO的随机试验；整群、交叉和多臂设计仅在其相关性结构能够由报告数据重建时进入定量合成。",
                     "abstract_synthesis": f"研究效应先按随机化设计还原为独立研究单位，再采用{estimator}合并。整群试验使用报告的校正估计或可验证设计效应；交叉试验仅接受配对精度；多臂试验通过显式共享对照协方差和广义最小二乘整合。",
                     "unit": "分析单位为独立随机化研究，而非单条对比。平行设计直接贡献研究层效应；整群设计必须校正聚类；交叉设计必须保留配对方差；多臂试验的共享对照相关性通过协方差矩阵建模，避免把同一对照组重复当作独立信息。",
-                    "statistics": f"主要模型为{estimator}。比值类效应在对数尺度分析，研究内相关对比先用广义最小二乘合并为独立研究效应，再估计研究间方差；报告合并效应、95% CI和预测区间。HKSJ结果作为小样本推断敏感性分析，而不是替代主要模型。",
+                    "statistics": f"主要模型为{estimator}。比值类效应在对数尺度分析，研究内相关对比先用广义最小二乘合并为独立研究效应，进行研究间合并。{method_text}",
                     "limitations": "该设计感知合成纠正了可识别的聚类、配对和共享对照依赖，但无法弥补原报告未给出的组内相关系数、配对方差或协方差；缺少这些精度信息的复杂设计严格不进入合并。",
                     "calculation": f"主要计算以{n_studies}个独立研究单位为基础；复杂设计依赖在研究内处理后才进行研究间{estimator}合并。",
                     "table2_title": "设计校正后的研究层效应",
@@ -1509,7 +1517,7 @@ class FallbackContentMixin:
                 "study_selection": "Randomized trials directly matching the prespecified PICO were eligible; cluster, crossover, and multi-arm designs entered quantitative synthesis only when their dependence structure could be reconstructed from reported data.",
                 "abstract_synthesis": f"Effects were reduced to independent randomized-study units and synthesized with {estimator}. Cluster trials required a reported adjusted estimate or verifiable design effect, crossover trials required paired precision, and multi-arm trials were consolidated using explicit shared-control covariance and generalized least squares.",
                 "unit": "The unit of analysis was the independent randomized study, not an individual contrast. Parallel trials contributed a study effect directly; cluster trials required clustering adjustment; crossover trials retained paired variance; and correlations induced by shared controls in multi-arm trials were represented in a covariance matrix so the same control group was not counted as independent information more than once.",
-                "statistics": f"The primary estimator was {estimator}. Ratio measures were analyzed on the log scale. Correlated within-study contrasts were first consolidated by generalized least squares, after which between-study heterogeneity was estimated across independent study units. The pooled effect, 95% confidence interval, and prediction interval were reported. HKSJ inference was retained as a small-sample sensitivity analysis rather than substituted for the primary model.",
+                "statistics": f"The primary estimator was {estimator}. Ratio measures were analyzed on the log scale. Correlated within-study contrasts were first consolidated by generalized least squares, before pooling independent study units. {method_text}",
                 "limitations": "The design-aware synthesis corrects identifiable clustering, pairing, and shared-control dependence, but it cannot recreate an unreported intracluster correlation, paired variance, or covariance. Complex-design results lacking the required precision information were therefore excluded from pooling rather than treated as ordinary independent comparisons.",
                 "calculation": f"The primary calculation used {n_studies} independent study units; complex-design dependence was resolved within study before the {estimator} between-study synthesis.",
                 "table2_title": "Design-adjusted study-level effects",
@@ -1546,7 +1554,7 @@ class FallbackContentMixin:
                     "study_selection": "纳入报告至少两个可比较暴露剂量、共同参考剂量和可恢复剂量特异效应精度的研究。",
                     "abstract_synthesis": f"相关剂量对比在研究内以广义最小二乘处理，并用{estimator}限制性立方样条估计{unit}尺度上的非线性剂量-反应曲线。",
                     "unit": "分析单位为研究内相对于共同参考剂量的相关剂量对比；同一研究的多个剂量点共享参考组，因此以协方差矩阵联合处理，不能当作独立研究。",
-                    "statistics": f"采用{estimator}多变量随机效应剂量-反应模型。剂量统一到{unit}，限制性立方样条表达潜在非线性，并报告曲线点估计、95% CI及非线性检验；不把最高剂量点当作普通两组Meta分析。",
+                    "statistics": f"采用{estimator}多变量随机效应剂量-反应模型。剂量统一到{unit}，限制性立方样条表达潜在非线性，并报告曲线点估计、95% CI及非线性检验；不把最高剂量点当作普通两组Meta分析。线性敏感性分析：{linear_method_text}",
                     "limitations": "剂量-反应曲线受剂量换算、参考剂量、剂量范围覆盖和研究内协方差可得性限制；观察性研究还可能残留剂量选择相关混杂。",
                     "calculation": f"主要计算使用{n_studies}项研究的相关剂量对比，并在{unit}统一尺度上拟合多变量样条曲线。",
                     "table2_title": "预设剂量点的剂量-反应估计",
@@ -1556,7 +1564,7 @@ class FallbackContentMixin:
                 "study_selection": "Studies were eligible when they reported at least two comparable exposure doses, a common reference dose, and recoverable precision for dose-specific effects.",
                 "abstract_synthesis": f"Correlated dose contrasts were handled within study by generalized least squares and a {estimator} restricted-cubic-spline model estimated the potentially nonlinear dose-response curve on the {unit} scale.",
                 "unit": "The unit of analysis was a dose contrast relative to a common within-study reference. Multiple dose levels from one study share that reference and were therefore analyzed jointly through a covariance matrix rather than counted as independent studies.",
-                "statistics": f"A {estimator} multivariate random-effects dose-response model was fitted after harmonizing dose to {unit}. Restricted cubic splines represented possible nonlinearity; curve estimates, 95% confidence intervals, and the nonlinearity test were reported. The maximum observed dose was not analyzed as an ordinary two-group meta-analysis.",
+                "statistics": f"A {estimator} multivariate random-effects dose-response model was fitted after harmonizing dose to {unit}. Restricted cubic splines represented possible nonlinearity; curve estimates, 95% confidence intervals, and the nonlinearity test were reported. The maximum observed dose was not analyzed as an ordinary two-group meta-analysis. Linear sensitivity: {linear_method_text}",
                 "limitations": "The dose-response curve remains sensitive to dose conversion, the reference dose, coverage of the dose range, and availability of within-study covariance. Observational dose data may also retain confounding related to dose selection.",
                 "calculation": f"The primary calculation used correlated dose contrasts from {n_studies} studies and fitted a multivariate spline curve on the harmonized {unit} scale.",
                 "table2_title": "Dose-response estimates at prespecified doses",
@@ -1568,7 +1576,7 @@ class FallbackContentMixin:
                     "study_selection": "仅纳入可获得、可校验并可映射到共同变量字典的个体参与者数据集；只有汇总结果而无IPD的数据不冒充IPD分析。",
                     "abstract_synthesis": f"各研究IPD按共同结局、治疗和协变量定义协调，先估计研究特异效应，再以{estimator}进行两阶段合并；一阶段分层模型作为敏感性分析。",
                     "unit": "参与者嵌套于原随机研究内；治疗效应先在研究内估计，随后跨研究合并。效应修饰协变量在研究内中心化，以区分个体内关联与研究间生态差异。",
-                    "statistics": f"主要分析为{estimator}两阶段IPD Meta分析，并报告研究特异效应、合并效应、异质性和预测区间。一阶段分层模型检验模型形式敏感性；治疗-协变量交互在研究内中心化后单独估计。",
+                    "statistics": f"主要分析为{estimator}两阶段IPD Meta分析，并报告研究特异效应、合并效应和异质性。{method_text}一阶段分层模型检验模型形式敏感性；治疗-协变量交互在研究内中心化后单独估计。",
                     "limitations": "IPD结果受数据集可得性、变量协调、缺失数据和未提供IPD研究的选择性影响；汇总数据不能填补缺失参与者记录，也不会被当作IPD。",
                     "calculation": f"主要计算包含{n_studies}个协调后的IPD数据集；先在研究内估计治疗效应，再进行两阶段{estimator}合并，并以一阶段模型验证。",
                     "table2_title": "IPD研究特异效应",
@@ -1578,7 +1586,7 @@ class FallbackContentMixin:
                 "study_selection": "Only participant-level datasets that were available, validated, and mappable to a common data dictionary were eligible; studies with aggregate results alone were not represented as IPD analyses.",
                 "abstract_synthesis": f"IPD were harmonized to common outcome, treatment, and covariate definitions. Study-specific effects were estimated first and pooled with {estimator} in a two-stage analysis; a stratified one-stage model was used as sensitivity analysis.",
                 "unit": "Participants remained nested within their randomized studies. Treatment effects were estimated within study before cross-study pooling. Candidate effect modifiers were centered within study to distinguish participant-level interaction from between-study ecological differences.",
-                "statistics": f"The primary analysis was a two-stage {estimator} IPD meta-analysis reporting study-specific effects, the pooled effect, heterogeneity, and a prediction interval. A stratified one-stage model assessed model-form sensitivity. Treatment-covariate interactions were estimated separately after within-study centering.",
+                "statistics": f"The primary analysis was a two-stage {estimator} IPD meta-analysis reporting study-specific effects, the pooled effect, and heterogeneity. {method_text} A stratified one-stage model assessed model-form sensitivity. Treatment-covariate interactions were estimated separately after within-study centering.",
                 "limitations": "IPD findings remain vulnerable to dataset availability, variable harmonization, missing participant data, and selective nonavailability of IPD. Aggregate results cannot fill missing participant records and were not treated as IPD.",
                 "calculation": f"The primary calculation included {n_studies} harmonized IPD datasets; treatment effects were estimated within study, pooled with the two-stage {estimator}, and checked against a one-stage model.",
                 "table2_title": "IPD study-specific effects",

@@ -14,6 +14,7 @@ from new_meta.core.claim_alignment import (
     source_backed_claims_for_alignment,
 )
 from new_meta.core.llm import parse_source_json
+from new_meta.core.pooling_method_text import describe_pooling_method
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.schemas.meta_result import MetaAnalysisResults
@@ -1649,6 +1650,8 @@ class ClaimMapMixin:
         decision = facts.get("model_decision") if isinstance(facts.get("model_decision"), dict) else {}
         if not decision:
             return ""
+        if decision.get("executed_method") and not decision.get("low_k_random_fallback"):
+            return describe_pooling_method(decision["executed_method"], zh=self._zh)
         reason = str(decision.get("reason") or "").strip()
         primary = str(decision.get("primary_engine_model") or decision.get("primary_model") or "").strip()
         tau = str(decision.get("tau_estimator") or "").strip()

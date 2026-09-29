@@ -331,11 +331,15 @@ def build_manuscript_facts(
     grade_inputs_snapshot = _load_project_json(project, "grade_inputs_snapshot.json", subdir="analysis") or {}
     if compiled_method_active and not meta_results:
         estimator = str(synthesis_result.get("estimator") or "")
+        executed = synthesis_result.get("executed_method") or (synthesis_result.get("engine_payload") or {}).get("executed_method") or {}
         model_decision = {
             "schema_version": 1,
-            "primary_model": estimator,
-            "primary_engine_model": estimator,
-            "tau_estimator": estimator,
+            "executed_method": executed,
+            "requested_method": executed.get("requested_method"),
+            "planned_estimator": synthesis_result.get("planned_estimator"),
+            "primary_model": executed.get("model") or estimator,
+            "primary_engine_model": executed.get("model") or estimator,
+            "tau_estimator": executed.get("tau_estimator", "unknown"),
             "reason": "The prespecified compiled method for this review family determined the estimator.",
             "compiled_method": True,
         }
@@ -385,6 +389,7 @@ def build_manuscript_facts(
             "model": actual_model or po.model,
             "engine_model": actual_model or po.model,
             "tau_estimator": po.tau_estimator,
+            "executed_method": po.execution_metadata().model_dump(mode="json"),
             "studies": [
                 {
                     "study_id": s.study_id,
@@ -466,7 +471,8 @@ def build_manuscript_facts(
                 "tau_squared": heterogeneity.get("tau_squared"),
                 "model": actual_model,
                 "engine_model": actual_model,
-                "tau_estimator": actual_model,
+                "tau_estimator": (model_decision.get("executed_method") or {}).get("tau_estimator", "unknown"),
+                "executed_method": model_decision.get("executed_method") or {},
                 "studies": method_study_rows,
             }
 

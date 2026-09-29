@@ -237,7 +237,7 @@ def test_compiled_estimator_label_describes_the_interval_actually_returned():
     result = run_complex_rct(records)
     assert result.estimator == "DESIGN_AWARE_REML"
     assert result.diagnostics["primary_interval"] == "normal_wald"
-    assert result.diagnostics["sensitivity_interval"] == "HKSJ"
+    assert result.diagnostics["sensitivity_interval"] == "modified_hksj_t"
     assert result.sensitivity["HKSJ"]["ci_lower"] != result.ci_lower
 
 
