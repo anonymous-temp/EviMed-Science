@@ -27,7 +27,13 @@ export async function prepareCapabilityHandbooks({ learning, registry, project, 
   const selected = [];
   for (const document of page.items) {
     const payload = document.payload;
-    if (await learning.validateHandbook(project.userId, payload) !== payload.contentDigest) { result.omitted += 1; continue; }
+    try {
+      if (await learning.validateHandbook(project.userId, payload) !== payload.contentDigest) { result.omitted += 1; continue; }
+    } catch (error) {
+      if (error?.code !== "method_invalid") throw error;
+      result.omitted += 1;
+      continue;
+    }
     const key = createHash("sha256").update(JSON.stringify([document.id, payload.contentDigest])).digest("hex");
     const directory = `.evimed-handbooks/${key}`;
     const files = Object.entries(payload.files ?? {}).map(([name, content]) => ({ path: `${directory}/${name}`, content: String(content) }));
