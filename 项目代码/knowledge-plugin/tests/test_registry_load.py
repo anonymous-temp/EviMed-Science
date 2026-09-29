@@ -53,6 +53,7 @@ def test_the_plan_decisions_hold(document):
     verified_on_production |= {json.loads(line)["id"] for line in (ROOT / "registry/research/probe-2026-09-28.jsonl")
                                .read_text(encoding="utf-8").splitlines()
                                if line.strip() and json.loads(line)["verdict"] == "feed-ok"}
+    verified_on_production |= {row["id"] for row in json.loads((ROOT / "registry/research/source-expansion-2026-09-29.json").read_text())["rows"] if row.get("enabledAfterProbe") or (row["group"] == "p1" and row["outcome"] == "ok")}
     assert "google-health-blog" in verified_on_production
     for s in sources:
         if s["enabled"]:
@@ -87,9 +88,9 @@ def test_the_plan_decisions_hold(document):
                 .read_text(encoding="utf-8").splitlines() if line.strip()}
     for sid, reason in (("fierce-biotech", "challenge_cloudflare"), ("fierce-pharma", "challenge_cloudflare"),
                         ("cde-breakthrough-therapy", "waf_refuses_crawler_identity")):
-        assert by_id[sid]["enabled"] is False and by_id[sid]["disabled_reason"] == reason, sid
+        assert by_id[sid]["enabled"] is False and by_id[sid]["disabled_reason"] == "owner_excluded", sid
         assert research[sid]["verdict"] == "blocked", sid
-    assert by_id["fierce-healthcare"]["enabled"] and by_id["fierce-healthcare"]["egress"] == "relay"
+    assert not by_id["fierce-healthcare"]["enabled"] and by_id["fierce-healthcare"]["disabled_reason"] == "owner_excluded"
     star = by_id["star-guideline-rating-cn"]
     assert star["poll_floor_s"] == 86400 and star["config"]["max_pages"] == 3           # a daily poll reads 3 pages
     assert star["config"]["full_walk_every_s"] == 604800 and star["config"]["full_walk_max_pages"] == 160
@@ -97,7 +98,7 @@ def test_the_plan_decisions_hold(document):
     assert len(by_id["evimed-chictr"]["config"]["terms"]) == 20 and len(by_id["evimed-guides"]["config"]["publisher_groups"]) == 30
     assert by_id["nmpa-label-revision-announcements"]["poll_floor_s"] == 1800 and by_id["cde-guidance-principles"]["poll_floor_s"] == 7200
     # 30 on 2026-09-22; 2026-09-28: the two Fierce feeds off behind Cloudflare, google-health-blog on
-    assert sum(1 for s in sources if s["enabled"] and s["egress"] == "relay") >= 29
+    assert sum(1 for s in sources if s["enabled"] and s["egress"] == "relay") >= 28
     # round 3: the general NMPA 药品公告通告 column is mixed, so it is not a safety feed (the edit's
     # safety-notice type makes an item an alert); label revisions stay one; 21 pure safety feeds
     other = by_id["nmpa-other-drug-announcements"]
@@ -208,3 +209,16 @@ def test_the_schema_starts_with_the_normative_draft():
         pytest.skip("outside the monorepo")
     from knowledge_plugin.db import schema_sql
     assert schema_sql().startswith(draft.read_text(encoding="utf-8"))
+
+
+@pytest.mark.db
+async def test_owner_exclusion_overrides_an_older_operator_enable(pool):
+    rows = [row for row in load_registry(REGISTRY) if row.source.id == 'fierce-healthcare']
+    from datetime import datetime, timezone
+    now = datetime(2026, 9, 29, tzinfo=timezone.utc)
+    async with pool.connection() as conn:
+        await sync_registry(conn, rows, now)
+        await conn.execute("UPDATE evimed_knowledge.sources SET operator_enabled = true, enabled = true WHERE id = 'fierce-healthcare'")
+        await sync_registry(conn, rows, now)
+        record = await (await conn.execute("SELECT enabled, disabled_reason, health, operator_enabled FROM evimed_knowledge.sources WHERE id = 'fierce-healthcare'")).fetchone()
+        assert record == {'enabled': False, 'disabled_reason': 'owner_excluded', 'health': 'disabled', 'operator_enabled': True}
