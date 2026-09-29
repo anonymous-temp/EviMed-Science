@@ -68,8 +68,8 @@ function runtimeManager({ bounded = null, live = true } = {}) {
 }
 
 async function requestToken(t, { cfg = config(), manager = runtimeManager(), attributeRun = async () => "run_going",
-  body = { v: 1, kind: "bibliometric-analysis", jobId }, signature, bearer = "live-workload-token" } = {}) {
-  const base = await listen(t, createEngineModelTokenHandler({ config: cfg, runtimeManager: manager, attributeRun }));
+  body = { v: 1, kind: "bibliometric-analysis", jobId }, signature, bearer = "live-workload-token", resolveExecutionContext = null } = {}) {
+  const base = await listen(t, createEngineModelTokenHandler({ config: cfg, runtimeManager: manager, attributeRun, resolveExecutionContext }));
   const raw = JSON.stringify(body);
   return fetch(`${base}${ENGINE_MODEL_TOKEN_PATH}`, {
     method: "POST",
@@ -262,4 +262,28 @@ test("different engine jobs retain their signed reasoning choice despite interle
   assert.deepEqual(seen.map(body => body.thinking.type), ["enabled", "enabled", "disabled"]);
   assert.ok(seen.every(body => body.model === "deepseek-v4-flash"));
   assert.equal(verifyEngineModelToken(tokens[0], { secret: gatewaySecret }).sessionId, "session-low");
+});
+
+
+test("admission freezes the validated session policy in each job and rejects unresolvable metadata", async t => {
+  for (const effort of ["low", "max", "off"]) {
+    const executionContext = { v: 1, sessionId: `session-${effort}`, callId: `call-${effort}`, rootCallId: `call-${effort}`,
+      provider: "deepseek-official", model: "deepseek-v4-flash", reasoningEffort: effort };
+    const response = await requestToken(t, { body: { v: 1, kind: "peer-review", jobId, executionContext },
+      attributeRun: async () => { throw new Error("must not guess from active project"); },
+      resolveExecutionContext: async (owner, context) => {
+        assert.deepEqual(owner, { userId: "user-1", projectId: "project-1" });
+        assert.deepEqual(context, executionContext);
+        return { runId: `run-${effort}`, sessionId: context.sessionId, reasoningEffort: effort };
+      } });
+    assert.equal(response.status, 200);
+    const { data } = await response.json();
+    const caller = verifyEngineModelToken(data.token, { secret: gatewaySecret });
+    assert.equal(caller.reasoningEffort, effort);
+    assert.equal(caller.runId, `run-${effort}`);
+    assert.equal(data.modelPolicy.reasoningEffort, effort);
+  }
+  const response = await requestToken(t, { body: { v: 1, kind: "peer-review", jobId,
+    executionContext: { sessionId: "other-project", reasoningEffort: "max" } } });
+  assert.equal(response.status, 400);
 });
