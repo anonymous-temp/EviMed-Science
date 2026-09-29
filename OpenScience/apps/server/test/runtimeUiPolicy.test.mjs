@@ -1250,3 +1250,29 @@ test('native model selection permits only the certified Flash route and closed r
   assert.equal(isDeniedRuntimeUiMethod('session/initializeDefaultModel'), true);
   assert.equal(isDeniedRuntimeUiMethod('credentials/set'), true);
 });
+
+test('native mux selection preserves the effort and rejects provider or metadata changes before forwarding', async t => {
+  const checked = [];
+  const f = await fixture(t, {}, {}, { authorizePrompt: async (_project, sessionId) => {
+    checked.push(sessionId);
+    if (sessionId === 'private-source') throw new HttpError(403, 'agent_background_only', 'Private source session.');
+  } });
+  const connection = f.connect();
+  assert.equal(await connection.opened, 101);
+  const selected = { sessionId: 's-one', provider: 'deepseek-official', model: f.config.deepseekModel };
+  for (const reasoningEffort of ['off', 'low', 'high', 'max']) {
+    connection.send(open(`effort-${reasoningEffort}`, 'session/selectModel', { request: { ...selected, reasoningEffort } }));
+    assert.equal((await connection.next()).type, 'item');
+    assert.equal(f.received.at(-1).payload.args.request.reasoningEffort, reasoningEffort);
+  }
+  const before = f.received.length;
+  for (const [index, invalid] of [{ provider: 'other' }, { model: 'deepseek-v4-pro' }, { reasoningEffort: 'medium' },
+    { providerSettings: {} }, { sessionId: 'private-source' }].entries()) {
+    const streamId = `invalid-${index}`;
+    connection.send(open(streamId, 'session/selectModel', { request: { ...selected, ...invalid } }));
+    assertNativeError(await connection.next(), streamId, index === 4 ? 'agent_background_only' : 'runtime_ui_model_selection_forbidden');
+    assert.equal((await connection.next()).type, 'end');
+  }
+  assert.equal(f.received.length, before);
+  assert.deepEqual(checked, ['s-one', 's-one', 's-one', 's-one', 'private-source']);
+});
