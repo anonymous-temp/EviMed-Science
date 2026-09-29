@@ -64,3 +64,34 @@ def test_limitations_prompt_does_not_require_unobserved_findings():
     assert "ideally separate" not in PAPER_LIMITATIONS
     assert "extent and direction" in PAPER_LIMITATIONS
     assert "skipped" in PAPER_LIMITATIONS
+
+
+def test_bound_local_declaration_reaches_result_and_native_report(tmp_path):
+    import evimed_local_inputs as inputs
+    from test_hosted_inputs import source
+    from mr_agent.source_context import declared_scale
+    from mr_agent.paper.generator import PaperGenerator
+    from mr_agent.models import SessionState
+    request = {"exposure": "BMI", "outcome": "CHD", "exposureSource": source(), "outcomeSource": source("data/outcome.csv")}
+    request["exposureSource"]["effectScale"] = {"unit": "kg/m2", "evidence": "Data dictionary"}
+    assert inputs.validate_request(request)
+    result = MRAnalysisResult(exposure_id="exposure.csv", outcome_id="outcome.csv", exposure_source_type="local_file", outcome_source_type="local_file")
+    inputs.bind_result_provenance([result], {"exposure": request["exposureSource"], "outcome": request["outcomeSource"]}, request)
+    assert result.exposure_scale == declared_scale(request["exposureSource"]["effectScale"])
+    state = SessionState(); state.analysis_results = [result]
+    generator = PaperGenerator.__new__(PaperGenerator); generator.state = state; generator.language = "en"
+    report = generator._grounded_limitations([result])
+    assert "kg/m2" in report
+    assert "not independently verified" in report
+    assert "extent and direction" in report
+    assert "Significant heterogeneity was not detected" not in report  # No test was observed.
+
+
+def test_repository_metadata_binds_source_scale_without_changing_effects():
+    import evimed_local_inputs as inputs
+    result = MRAnalysisResult(exposure_id="GCST900001", outcome_id="GCST900002", exposure_source_type="gwas_catalog", outcome_source_type="gwas_catalog")
+    record = {role: {"accession": accession, "sampleMetadata": {"sampleSize": 238944, "effectScale": {"status": "repository_reported", "unit": "SD", "transformation": "inverse_normal", "source": "GWAS-SSF", "evidence": None, "raw_fields": {"unit": "SD", "transformation": "inverse_normal"}}}} for role, accession in (("exposure", "GCST900001"), ("outcome", "GCST900002"))}
+    inputs.bind_open_metadata([result], record, {"exposure": "BMI", "outcome": "CHD"})
+    assert result.exposure_scale["transformation"] == "inverse_normal"
+    assert result.exposure_scale["status"] == "repository_reported"
+    assert result.mr_results == []
