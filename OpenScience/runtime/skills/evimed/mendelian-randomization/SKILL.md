@@ -20,8 +20,8 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
    heterogeneity, pleiotropy, Steiger direction, or sensitivity results. Those
    values must come from the deterministic MR engines and their files.
 4. Treat zero instruments, weak instruments, unresolved sample overlap,
-   harmonization failure, and missing sensitivity checks as analysis limits or
-   blockers. Statistical significance does not by itself establish a valid
+   harmonization failure, and missing sensitivity checks as limits on the
+   affected calculations; preserve available source rows and completed results. Statistical significance does not by itself establish a valid
    causal interpretation.
 
 ## Uploaded local GWAS inputs
@@ -39,7 +39,8 @@ count, a filename, or statistical significance.
 For a local source, pass `type: "local_file"`, `path`, `columnMapping`, and a
 JSON boolean `instrumentsPreclumped`. The mapping must explicitly name all seven
 keys: `snp`, `beta`, `se`, `effect_allele`, `other_allele`, `eaf`, and `pval`, each
-pointing to a distinct original header. Optional `sampleSize` and `population`
+pointing to a distinct original header. Optional `samplesize` maps a per-variant
+sample-size column without replacing those values by catalogue totals. Optional `sampleSize` and `population`
 are provider declarations, not independently verified repository metadata.
 `instrumentsPreclumped: true` requires `clumpingProvenance` identifying the source
 and instrument-selection method. Do not invent this statement or change a false
@@ -81,6 +82,35 @@ limitations, and STROBE-MR-aligned discussion. Write
 `mendelian-randomization-run.json` with the terminal job state and exact returned
 artifacts. Every number must match the managed analysis output. For local inputs, also preserve `mendelian-randomization-inputs.json` and the returned standard input CSV artifacts. The manifest binds original relative paths, byte counts, SHA-256 digests, actual mappings and supplied clumping provenance; retain it without adding repository IDs, years, or absolute host paths.
 
+Scientific scale and denominators. Each source can carry optional `effectScale`
+with `unit`, `transformation` and source-linked `evidence`; these are declarations,
+not proof of repository confirmation. Results preserve `exposure_scale` and
+`outcome_scale` with unknown, declared, repository-reported or conflicting status.
+Use only the documented unit and transformation. Unknown units mean per source
+exposure unit, never automatically per SD from the phenotype name, F statistic or
+coefficient. A documented SD applies to that exact transformed or original trait;
+retain beta, OR and CI unchanged. Preserve a declaration/repository conflict as a
+limitation rather than choosing a convenient unit.
+
+Keep catalogue sample totals distinct from `variant_sample_sizes` and the
+`originalVariantSampleSizes` recorded before any existing catalogue-N fill.
+Neither denominator establishes exact ancestry shares in the analyzed variants.
+`sample_overlap` records unknown or possible overlap from the prefix heuristic;
+this does not measure overlapping participants, independence, or the direction
+or magnitude of bias. Discuss directional mechanisms only conditionally with
+explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
+not proof of instrument validity; skipped Egger/PRESSO remains skipped.
+
+A failed managed job may return top-level `artifacts` with `partial-research.json`,
+`partial-research.md` and bounded scientific CSV projections. Keep the original
+failed state and error code. Inspect only the returned public artifact paths;
+private diagnostics, runner logs and model responses are not deliverables. Use
+available primary numbers when explicitly marked available. With 0–2 candidate
+or retained variants, preserve observed source/selection/harmonized rows and
+state that unsupported downstream estimates were not computed. Candidate rows
+before clumping are not independently verified instruments. Missing modules are
+not negative findings, and an incomplete job is not a successful full analysis.
+
 For paired local inputs with a declared-preclumped exposure, preserve the
 returned `analysis-data/<pair>/replay/` package in full: its complete manifest,
 exact input CSVs, options and seed, observed R/package versions, `run.R` and
@@ -113,32 +143,3 @@ Write what changed and why to `revision-notes.md` in this deliverable's
 directory. That file is the designated home for revision notes, replies to a
 rejection, and process description; the report itself carries none of them, and
 no check reads the notes as report prose.
-
-Scientific scale and denominators. Each source can carry optional `effectScale`
-with `unit`, `transformation` and source-linked `evidence`; these are declarations,
-not proof of repository confirmation. Results preserve `exposure_scale` and
-`outcome_scale` with unknown, declared, repository-reported or conflicting status.
-Use only the documented unit and transformation. Unknown units mean per source
-exposure unit, never automatically per SD from the phenotype name, F statistic or
-coefficient. A documented SD applies to that exact transformed or original trait;
-retain beta, OR and CI unchanged. Preserve a declaration/repository conflict as a
-limitation rather than choosing a convenient unit.
-
-Keep catalogue sample totals distinct from `variant_sample_sizes` and the
-`originalVariantSampleSizes` recorded before any existing catalogue-N fill.
-Neither denominator establishes exact ancestry shares in the analyzed variants.
-`sample_overlap` records unknown or possible overlap from the prefix heuristic;
-this does not measure overlapping participants, independence, or the direction
-or magnitude of bias. Discuss directional mechanisms only conditionally with
-explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
-not proof of instrument validity; skipped Egger/PRESSO remains skipped.
-
-A failed managed job may return top-level `artifacts` with `partial-research.json`,
-`partial-research.md` and bounded scientific CSV projections. Keep the original
-failed state and error code. Inspect only the returned public artifact paths;
-private diagnostics, runner logs and model responses are not deliverables. Use
-available primary numbers when explicitly marked available. With 0–2 candidate
-or retained variants, preserve observed source/selection/harmonized rows and
-state that unsupported downstream estimates were not computed. Candidate rows
-before clumping are not independently verified instruments. Missing modules are
-not negative findings, and an incomplete job is not a successful full analysis.
