@@ -96,6 +96,28 @@ def test_bound_local_declaration_reaches_result_and_native_report(tmp_path):
     assert "Significant heterogeneity was not detected" not in report  # No test was observed.
 
 
+@pytest.mark.parametrize("language", ["en", "zh"])
+@pytest.mark.parametrize("section", ["_grounded_abstract", "_grounded_discussion", "_grounded_limitations"])
+@pytest.mark.parametrize("q_pval", [None, 0.2, 0.001])
+def test_report_distinguishes_unobserved_and_measured_heterogeneity(language, section, q_pval):
+    from mr_agent.models import HeterogeneityResult, MRResult, SessionState
+    from mr_agent.paper.generator import PaperGenerator
+
+    result = MRAnalysisResult(exposure_id="x", outcome_id="y", mr_results=[
+        MRResult(method="Inverse variance weighted", nsnp=8, beta=0.3, se=0.04, pval=0.001)],
+        heterogeneity=[] if q_pval is None else [HeterogeneityResult(method="IVW", q=5, q_df=7, q_pval=q_pval)])
+    generator = PaperGenerator.__new__(PaperGenerator)
+    generator.state = SessionState(analysis_results=[result]); generator.language = language
+    report = getattr(generator, section)([result])
+    if q_pval is None:
+        assert ("Heterogeneity was not assessed" if language == "en" else "未完成异质性检验") in report
+        assert ("not statistically significant" if language == "en" else "未达统计学显著") not in report
+    elif q_pval < 0.05:
+        assert ("Heterogeneity was statistically significant" if language == "en" else "异质性检验显著") in report
+    else:
+        assert ("not statistically significant" in report or "Significant heterogeneity was not detected" in report) if language == "en" else ("未达统计学显著" in report or "未检出显著异质性" in report)
+
+
 def test_repository_metadata_binds_source_scale_without_changing_effects():
     import evimed_local_inputs as inputs
     result = MRAnalysisResult(exposure_id="GCST900001", outcome_id="GCST900002", exposure_source_type="gwas_catalog", outcome_source_type="gwas_catalog")

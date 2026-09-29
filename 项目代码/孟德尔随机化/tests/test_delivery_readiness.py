@@ -131,6 +131,26 @@ def test_current_summary_and_nested_selection_records_are_independently_fresh(tm
         assert any(path.endswith(name) for path in copied) == fresh_records
 
 
+@pytest.mark.parametrize("primary", [False, True])
+@pytest.mark.parametrize("fresh_error", [False, True])
+def test_previous_error_does_not_label_or_raise_from_this_attempt(tmp_path, monkeypatch, primary, fresh_error):
+    from mr_agent.tools import mr_executor
+
+    (tmp_path / "mr_error.json").write_text('{"code":"opengwas_auth_failed","error":"Old attempt"}')
+
+    def failed(script, output):
+        if primary:
+            (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n")
+        if fresh_error:
+            (output / "mr_error.json").write_text('{"code":"no_instruments","error":"Current observation"}')
+        return False
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", failed)
+    result = mr_executor.run_mr_analysis("x", "y", tmp_path)
+    assert result.analysis_error_code == ("no_instruments" if fresh_error else "analysis_failed")
+    assert bool(result.mr_results) == primary
+
+
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])
 def test_interpretation_failure_is_typed_and_retains_numerical_results(response):
     from mr_agent.analysis.delivery import MRDeliveryError
