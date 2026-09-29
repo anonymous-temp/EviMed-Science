@@ -6638,6 +6638,20 @@ export class AgentRunStore {
             { detail: "这次提问没有匹配到交付契约，所以没有做交付核验。" })], { unchecked: true });
         }
       }
+      // A steer may be committed after the turn was first adopted. Only the
+      // kernel's actual user inputs extend ownership; queue admission alone
+      // never binds a future message to this run.
+      if (requestIds.some(requestId => !run.kernelRequestIds?.includes(requestId))) {
+        run = await withProjectStorageMutation(project, async () => {
+          const events = parseEvents(await readLedgerText(project, this.maxBytes));
+          const current = foldEvents(events).get(run.id);
+          const missing = requestIds.filter(requestId => !current?.kernelRequestIds?.includes(requestId));
+          if (!current || !missing.length) return current ?? run;
+          const event = { event: "kernel-request", id: current.id, requestIds: missing };
+          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          return foldEvents([...events, event]).get(current.id);
+        });
+      }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
         const runProject = await this.resolveRunProject(project, run);
         if (!runProject) continue;
