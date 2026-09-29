@@ -246,3 +246,50 @@ def test_existing_method_language_check_accepts_dl_only_when_execution_records_i
     legacy.engine_payload["sensitivity"]["HKSJ"].pop("executed_method")
     unknown = _validate_method_manuscript(manuscript, envelope=legacy, method_input_audit={}, method_certainty={}, lang="en")
     assert any("DerSimonian-Laird" in issue.get("items", []) for issue in unknown["issues"])
+
+
+@pytest.mark.parametrize("mode", ["sparse", "reml", "optimizer_failure", "legacy_unknown"])
+def test_partial_delivery_section_prompt_uses_execution_not_protocol(monkeypatch, mode):
+    import json
+    from new_meta.agents.writing_agent import WritingAgent
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    if mode == "optimizer_failure":
+        monkeypatch.setattr(meta_engine.optimize, "minimize_scalar", lambda *a, **k: SimpleNamespace(success=False))
+    result = meta_engine.random_effects_reml(effects(2 if mode == "sparse" else 3), "MD", "Outcome")
+    primary = {"n_studies": result.n_studies, "effect_measure": "MD", "model": result.model,
+               "executed_method": result.execution_metadata().model_dump(mode="json"),
+               "prediction_lower": result.prediction_interval[0] if result.prediction_interval else None,
+               "prediction_upper": result.prediction_interval[1] if result.prediction_interval else None}
+    if mode == "legacy_unknown":
+        primary = {"n_studies": 3, "effect_measure": "MD", "model": "random"}
+    writer = WritingAgent(lang="en")
+    writer._manuscript_facts = {"primary_effect": primary, "evidence_readiness": {"blockers": [{"code": "source_uncertain"}]}}
+    captured = []
+    monkeypatch.setattr(writer, "call_llm", lambda prompt, **kwargs: captured.append(prompt) or "Usable partial methods")
+    protocol = ResearchProtocol(research_question="Outcome", model_preference="random", tau_estimator="REML", effect_measure="MD",
+                                pico=PICO(population="Adults", intervention="X", comparator="Y", outcome_primary="Outcome"))
+    writer._write_methods(protocol, {"included": {"studies_included": 8}}, "query", [])
+    prompt = captured[0]
+    assert "DerSimonian-Laird for random effects" not in prompt
+    assert "Protocol choices describe planned methods, not proof of execution" in prompt
+    contract = writer._section_fact_contract_block("methods")
+    facts = json.loads(contract.split("```json\n")[1].split("\n```")[0])
+    actual = facts["primary_effect"]["executed_method"]
+    if mode == "legacy_unknown":
+        assert actual is None
+        assert "executed pooling and interval methods were not recorded" in prompt
+        assert "Prediction interval: not recorded" in prompt
+    else:
+        assert actual == primary["executed_method"]
+        assert "normal-Wald" in prompt
+        assert facts["primary_effect"]["prediction_lower"] == primary["prediction_lower"]
+        if mode == "sparse":
+            assert "fixed-effect inverse-variance" in prompt
+            assert "fewer than three" in prompt
+            assert "Prediction interval: not computed" in prompt
+        elif mode == "optimizer_failure":
+            assert "REML optimization failed" in prompt
+            assert "Tau-squared was estimated by DerSimonian-Laird" in prompt
+        else:
+            assert "Tau-squared was estimated by restricted maximum likelihood" in prompt
+            assert "Prediction interval: recorded" in prompt
