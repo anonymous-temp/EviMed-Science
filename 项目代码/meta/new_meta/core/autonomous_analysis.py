@@ -64,6 +64,43 @@ def _catalogue(studies):
             for study in studies]
 
 
+
+def _trial_aliases(project, studies, decisions=()):
+    """Source-named trial identities take precedence over publication identifiers."""
+    parents = {_study_id(study): _study_id(study) for study in studies}
+    def root(key):
+        while parents[key] != key:
+            key = parents[key]
+        return key
+    owners = {}
+    for study in studies:
+        study_id = _study_id(study)
+        for index, outcome in enumerate(study.outcomes):
+            proof = outcome.primary_analysis_alignment
+            verification = proof.assessment.verification if proof else None
+            if verification is None:
+                continue
+            source = " ".join(_source(project, study, index).casefold().split())
+            for unit in verification.trial_units:
+                if unit.role == "mentioned_only":
+                    continue
+                for field in ("registry_id", "trial_name"):
+                    identity = " ".join(getattr(unit, field).casefold().split())
+                    if not identity or identity not in source:
+                        continue
+                    key = (field, identity)
+                    previous = owners.setdefault(key, study_id)
+                    left, right = root(study_id), root(previous)
+                    parents[max(left, right)] = min(left, right)
+    for decision in decisions:
+        if not decision.get("include"):
+            continue
+        publication, trial = decision["study_id"], decision["trial_id"]
+        if publication in parents and trial in parents:
+            left, right = root(publication), root(trial)
+            parents[max(left, right)] = min(left, right)
+    return {key: root(key) for key in parents}
+
 def _catalogue_hash(project):
     from new_meta.schemas.study import ExtractedStudy
     return digest(_catalogue([ExtractedStudy.model_validate(row) for row in
@@ -108,6 +145,11 @@ def resolve_analysis_judgments(project, protocol, studies):
     catalogue = _catalogue(studies)
     ids = {item["study_id"] for item in catalogue}
     saved = project.load_json(FILE, subdir="analysis") or {"schema_version": 1, "rows": {}}
+    current_rows = {f"{_study_id(study)}:{index}": (study, index)
+                    for study in studies for index in range(len(study.outcomes))}
+    saved["rows"] = {key: value for key, value in saved["rows"].items() if key in current_rows
+                     and all(value.get(field) == expected for field, expected in
+                             _signature(project, protocol, *current_rows[key]).items())}
     agent = None
     for study in studies:
         pending = []
@@ -191,16 +233,18 @@ def resolve_analysis_judgments(project, protocol, studies):
     # the first selected publication deterministically; its own multi-arm rows
     # still pass the existing covariance/dependency checks.
     selected_publications = {}
+    aliases = _trial_aliases(project, studies, saved["rows"].values())
     for study in studies:
         for index, outcome in enumerate(study.outcomes):
             if (alignment_status(project, protocol, study, index)["status"] == "match"
                     and f"{_study_id(study)}:{index}" not in saved["rows"]):
-                selected_publications[_study_id(study)] = _study_id(study)
+                selected_publications[aliases[_study_id(study)]] = _study_id(study)
     for row_id, decision in sorted(saved["rows"].items()):
         if not decision.get("include"):
             continue
-        trial = decision["trial_id"]
         publication = decision["study_id"]
+        trial = aliases.get(publication, decision["trial_id"])
+        decision["trial_id"] = trial
         prior = selected_publications.setdefault(trial, publication)
         if prior != publication:
             decision.update(include=False, reason="overlapping_trial_publication",
