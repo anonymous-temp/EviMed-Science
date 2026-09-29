@@ -111,6 +111,15 @@ export const FRAME_VOCABULARY = Object.freeze({
     title: '循证 GEO',
     capabilities: Object.freeze(['geo-insight', 'geo-strategy', 'geo-content', 'geo-proposal']),
   }),
+  // 虚拟临研's capabilities, read the same way: a conversation bound to any of
+  // the five carries 「虚拟临研」 on its chip, and none of them is offered by
+  // `/工具` — the module is entered from its own sidebar row (build plan
+  // 2026-09-28 §9.3). Unlike GEO's, this entry carries no frame controls:
+  // a study's settings are cards on its own page, not chips on the composer.
+  vcr: Object.freeze({
+    title: '虚拟临研',
+    capabilities: Object.freeze(['vcr-protocol', 'vcr-evidence', 'vcr-analysis', 'vcr-matching', 'vcr-package']),
+  }),
   // What a tool call says in the conversation, by the name its row is keyed
   // on: 「检索说明书 · 玛仕度肽」 rather than `mcp__evimed__drug_label_search`
   // (融合方案 §8.2). Derived from the domain's own tool list, so a tool added

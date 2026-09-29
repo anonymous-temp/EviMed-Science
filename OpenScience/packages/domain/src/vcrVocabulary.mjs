@@ -1,0 +1,501 @@
+/**
+ * 「虚拟临研」's closed vocabularies (build plan 2026-09-28 §3.5, §3.6, §4, §8.2, §11.3).
+ *
+ * Hidden knowledge:
+ *
+ * - **One list per word, read by everyone.** The control plane's schema CHECKs,
+ *   the routes' validation, the runtime gateway's per-item checks, the MCP
+ *   tools' schemas, the engine's scenario validator and the page's labels all
+ *   derive from these arrays. 「循证 GEO」 learned this the expensive way: a
+ *   second copy is the one that drifts, and the drift shows up as a row the
+ *   ledger refuses.
+ * - **Nine value sources, not seven.** The owner's v1.0 had seven; literature
+ *   parameterization adds `aggregate` (a published summary statistic) and
+ *   `reconstructed` (pseudo-individual rows digitized from a published curve).
+ *   They exist so the two rules that protect every number downstream can be
+ *   stated in code: an aggregate never joins a weighting as if it were an
+ *   individual, and a reconstructed row is never counted as an observed
+ *   patient, nor drawn as a measured curve (plan §3.5, §5.3).
+ * - **Three states that never substitute for each other** (§3.6): the run
+ *   state is the platform's (it reuses `states.mjs`), the scientific
+ *   conclusion is the method's own diagnosis, and the review state is a
+ *   countersignature on one version. "Finished" is not "sound", and "sound" is
+ *   not "reviewed".
+ * - **`not_applicable` is not a criterion state.** A criterion that cannot
+ *   apply to this patient (pregnancy for a man) is an applicability flag
+ *   beside the three-valued judgment, because folding it into `unknown` is one
+ *   of the two errors TrialGPT's own error analysis names (plan §7.1).
+ * - **Intended use is a ceiling, not a badge.** `intendedUseCeiling` takes the
+ *   model risks actually used and answers the highest use the evidence carries
+ *   (§8.2). Nothing is blocked; the result is labelled down and told why.
+ * - Labels are UI text (Simplified Chinese); ids never reach a reader.
+ *
+ * @module @evimed/domain/vcrVocabulary
+ */
+
+/** @param {readonly string[]} list */
+const frozen = (list) => Object.freeze([...list])
+
+// ---------------------------------------------------------------------------
+// Provenance: where a number came from (§3.5)
+// ---------------------------------------------------------------------------
+
+/** The nine value-level source labels. Every displayed number carries one. */
+export const VCR_VALUE_SOURCES = frozen([
+  'observed', 'extracted', 'calculated', 'imputed', 'aggregate', 'reconstructed', 'predicted', 'assumed', 'synthetic',
+])
+export const VCR_VALUE_SOURCE_LABELS_ZH = Object.freeze({
+  observed: '观察', extracted: '抽取', calculated: '计算', imputed: '插补', aggregate: '汇总',
+  reconstructed: '重建', predicted: '预测', assumed: '假设', synthetic: '合成',
+})
+/** Sources that are a record of a real person: they may enter `realPatients`. */
+export const VCR_REAL_PATIENT_SOURCES = frozen(['observed', 'extracted', 'calculated', 'imputed'])
+/** Sources a real external-control route refuses outright (plan §5.1, §5.3). */
+export const VCR_NON_INDIVIDUAL_SOURCES = frozen(['aggregate', 'synthetic', 'predicted'])
+
+/**
+ * The four counts that must be shown apart wherever a sample size appears
+ * (§3.5), plus the two that appear only when their route is used.
+ */
+export const VCR_COUNT_KEYS = frozen(['realPatients', 'events', 'effectiveSampleSize', 'generatedRecords'])
+export const VCR_OPTIONAL_COUNT_KEYS = frozen(['priorEffectiveSampleSize', 'reconstructedPseudoPatients'])
+export const VCR_COUNT_LABELS_ZH = Object.freeze({
+  realPatients: '真实患者数', events: '事件数', effectiveSampleSize: '有效样本量', generatedRecords: '生成记录数',
+  priorEffectiveSampleSize: '先验有效样本量', reconstructedPseudoPatients: '重建伪个体数',
+})
+
+/** Why a value is missing (§8.1). "Unknown treatment" is never "no treatment". */
+export const VCR_MISSING_REASONS = frozen([
+  'not_measured', 'not_recorded', 'not_shared', 'restricted_in_trial', 'out_of_window', 'pending_result', 'not_applicable',
+])
+export const VCR_MISSING_REASON_LABELS_ZH = Object.freeze({
+  not_measured: '未测量', not_recorded: '未记录', not_shared: '未共享', restricted_in_trial: '试验期间受限',
+  out_of_window: '在观察窗外', pending_result: '待出结果', not_applicable: '不适用',
+})
+
+/** The three clocks every fact carries (§8.1). */
+export const VCR_TIME_KINDS = frozen(['occurred_at', 'recorded_at', 'visible_at'])
+export const VCR_TIME_KIND_LABELS_ZH = Object.freeze({ occurred_at: '发生时间', recorded_at: '记录时间', visible_at: '平台可见时间' })
+
+// ---------------------------------------------------------------------------
+// The three states (§3.6)
+// ---------------------------------------------------------------------------
+
+/** What the method itself says about the estimate. "Not estimable" is a finished result. */
+export const VCR_CONCLUSIONS = frozen(['estimable', 'limited', 'not_estimable'])
+export const VCR_CONCLUSION_LABELS_ZH = Object.freeze({ estimable: '可估计', limited: '有限制地估计', not_estimable: '不可估计' })
+
+/** A countersignature on one version, never a gate (§10.2). */
+export const VCR_REVIEW_STATES = frozen(['ai_set', 'reviewed', 'changed_after_review'])
+export const VCR_REVIEW_STATE_LABELS_ZH = Object.freeze({ ai_set: 'AI 设定', reviewed: '已复核', changed_after_review: '复核后有变更' })
+/** Who may countersign (§10.2). */
+export const VCR_REVIEW_KINDS = frozen(['clinical', 'statistical', 'data'])
+export const VCR_REVIEW_KIND_LABELS_ZH = Object.freeze({ clinical: '临床复核', statistical: '统计复核', data: '数据复核' })
+
+// ---------------------------------------------------------------------------
+// Use, model tier and model risk (§3.6, §8.2)
+// ---------------------------------------------------------------------------
+
+/** The four intended uses, weakest first. */
+export const VCR_INTENDED_USES = frozen(['exploratory', 'design_support', 'specified_analysis', 'submission_preparation'])
+export const VCR_INTENDED_USE_LABELS_ZH = Object.freeze({
+  exploratory: '探索', design_support: '研究设计支持', specified_analysis: '指定研究分析', submission_preparation: '申报准备',
+})
+
+/** How much evidence a model itself carries, weakest first. */
+export const VCR_MODEL_TIERS = frozen(['scenario', 'literature', 'data', 'validated'])
+export const VCR_MODEL_TIER_LABELS_ZH = Object.freeze({ scenario: '情景模型', literature: '文献模型', data: '数据模型', validated: '验证模型' })
+
+/** Model risk = the model's share of the decision × the cost of being wrong (ICH M15 / ASME V&V 40). */
+export const VCR_MODEL_RISKS = frozen(['none', 'low', 'medium', 'high'])
+export const VCR_MODEL_RISK_LABELS_ZH = Object.freeze({ none: '无（参考仿真）', low: '低', medium: '中', high: '高' })
+
+/** The highest intended use a model of each tier can carry (§8.2 table). */
+export const VCR_MODEL_TIER_USE_CEILING = Object.freeze({
+  scenario: 'exploratory',
+  literature: 'design_support',
+  data: 'specified_analysis',
+  validated: 'submission_preparation',
+})
+
+/** The evidence each model risk demands before a result may claim its use (§8.2). */
+export const VCR_MODEL_RISK_EVIDENCE = Object.freeze({
+  none: frozen(['code_verification', 'seed_reproducible']),
+  low: frozen(['code_verification', 'seed_reproducible', 'input_traceable', 'sensitivity_analysis']),
+  medium: frozen(['code_verification', 'seed_reproducible', 'input_traceable', 'sensitivity_analysis',
+    'external_validation', 'model_locked', 'model_analysis_plan']),
+  high: frozen(['code_verification', 'seed_reproducible', 'input_traceable', 'sensitivity_analysis',
+    'external_validation', 'model_locked', 'model_analysis_plan', 'prospective_validation', 'independent_review',
+    'regulatory_contact']),
+})
+
+/**
+ * The highest use a result may be labelled with, given the tiers of every
+ * model it used. The weakest model decides (§8.2); an empty list means no
+ * model was involved at all, which is `submission_preparation`-capable as far
+ * as models go (the study's own review state still applies).
+ * @param {readonly string[]} tiers
+ * @returns {string}
+ */
+export function intendedUseCeiling(tiers) {
+  let ceiling = VCR_INTENDED_USES.length - 1
+  for (const tier of tiers ?? []) {
+    const use = VCR_MODEL_TIER_USE_CEILING[/** @type {keyof typeof VCR_MODEL_TIER_USE_CEILING} */ (tier)]
+    const index = VCR_INTENDED_USES.indexOf(use)
+    if (index >= 0 && index < ceiling) ceiling = index
+  }
+  return VCR_INTENDED_USES[ceiling]
+}
+
+/**
+ * Is `use` within `ceiling`?
+ * @param {string} use @param {string} ceiling
+ */
+export function useWithin(use, ceiling) {
+  const a = VCR_INTENDED_USES.indexOf(use)
+  const b = VCR_INTENDED_USES.indexOf(ceiling)
+  return a >= 0 && b >= 0 && a <= b
+}
+
+/**
+ * Which evidence items are missing for a model risk, given what a model card
+ * declares. Never blocks: the caller labels the result down and says why.
+ * @param {string} risk @param {readonly string[]} evidence
+ */
+export function missingModelEvidence(risk, evidence) {
+  const required = VCR_MODEL_RISK_EVIDENCE[/** @type {keyof typeof VCR_MODEL_RISK_EVIDENCE} */ (risk)] ?? []
+  const held = new Set(evidence ?? [])
+  return frozen(required.filter((item) => !held.has(item)))
+}
+
+/** A model may be called 「数字孪生」 only with all four (NASEM 2023; plan §5.2). */
+export const VCR_TWIN_EVIDENCE = frozen(['individual_conditioned', 'updates_with_new_data', 'calibrated_uncertainty', 'validation_record'])
+/**
+ * `digital_twin` when all four hold, `baseline_conditioned_prediction` otherwise.
+ * The label is derived, never granted by hand (§5.2).
+ * @param {readonly string[]} evidence
+ */
+export function twinLabel(evidence) {
+  const held = new Set(evidence ?? [])
+  return VCR_TWIN_EVIDENCE.every((item) => held.has(item)) ? 'digital_twin' : 'baseline_conditioned_prediction'
+}
+export const VCR_TWIN_LABELS_ZH = Object.freeze({ digital_twin: '数字孪生', baseline_conditioned_prediction: '基线条件化预测' })
+
+// ---------------------------------------------------------------------------
+// The study: tiers, steps, workspaces (§3.2, §4, §9.4)
+// ---------------------------------------------------------------------------
+
+/** What data the study has. Every module works at T0 (§3.2). */
+export const VCR_DATA_TIERS = frozen(['T0', 'T1', 'T2', 'T3'])
+export const VCR_DATA_TIER_LABELS_ZH = Object.freeze({
+  T0: 'T0 公开资料', T1: 'T1 基线与招募资料', T2: 'T2 完整治疗与纵向结局', T3: 'T3 随机试验个体数据',
+})
+
+/** The seven steps, in order (§4). A study page's progress rail is this list. */
+export const VCR_STEPS = frozen(['definition', 'evidence', 'population', 'patients', 'comparator', 'trial', 'matching'])
+export const VCR_STEP_LABELS_ZH = Object.freeze({
+  definition: '定义', evidence: '证据', population: '人群', patients: '患者', comparator: '对照', trial: '试验', matching: '匹配',
+})
+/** A step's state, on the study record (`studies.steps`). */
+export const VCR_STEP_STATUSES = frozen(['none', 'queued', 'running', 'done', 'minimal', 'stale', 'failed'])
+export const VCR_STEP_STATUS_LABELS_ZH = Object.freeze({
+  none: '未开始', queued: '排队中', running: '进行中', done: '已完成', minimal: 'AI 最小版本', stale: '已过期', failed: '未完成',
+})
+/** What each step needs before it can run (the orchestrator's `NEEDS`). */
+export const VCR_STEP_NEEDS = Object.freeze({
+  definition: frozen([]),
+  evidence: frozen(['definition']),
+  population: frozen(['definition']),
+  patients: frozen(['population']),
+  comparator: frozen(['definition']),
+  trial: frozen(['definition']),
+  matching: frozen(['definition']),
+})
+
+/** The seven tabs of a study page, in order (§9.4). The design spec caps this at seven. */
+export const VCR_TABS = frozen(['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'])
+export const VCR_TAB_LABELS_ZH = Object.freeze({
+  overview: '总览', population: '人群', patients: '虚拟患者', comparator: '对照', trial: '试验',
+  matching: '匹配与招募', data: '数据与证据',
+})
+
+/** The four action cards on the module's home page (§9.2), and where each starts. */
+export const VCR_ACTIONS = frozen(['cohort', 'patients', 'comparator', 'trial'])
+export const VCR_ACTION_LABELS_ZH = Object.freeze({
+  cohort: '创建虚拟队列', patients: '创建虚拟患者', comparator: '构建合成对照', trial: '模拟临床试验',
+})
+
+/** A study's lifecycle on the list page. */
+export const VCR_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
+export const VCR_STUDY_STATUS_LABELS_ZH = Object.freeze({ active: '进行中', paused: '已暂停', archived: '已归档' })
+
+// ---------------------------------------------------------------------------
+// Members and access (§11.1 conclusion 4, §11.2 layer 2)
+// ---------------------------------------------------------------------------
+
+/** Study-level roles. Deliberately not an organization model (§11.1). */
+export const VCR_MEMBER_ROLES = frozen(['lead', 'clinical_reviewer', 'statistical_reviewer', 'data_manager', 'recruiter', 'site', 'viewer'])
+export const VCR_MEMBER_ROLE_LABELS_ZH = Object.freeze({
+  lead: '研究负责人', clinical_reviewer: '临床复核', statistical_reviewer: '统计复核', data_manager: '数据管理',
+  recruiter: '招募协调员', site: '中心', viewer: '只读查看者',
+})
+/** What a role may do. Checked in code, per operation (platform principle 14). */
+export const VCR_ROLE_ABILITIES = Object.freeze({
+  lead: frozen(['read', 'write', 'run', 'export', 'manage_members', 'review_any', 'contact_patients', 'read_patient_level']),
+  clinical_reviewer: frozen(['read', 'review_clinical', 'export']),
+  statistical_reviewer: frozen(['read', 'review_statistical', 'export']),
+  data_manager: frozen(['read', 'write', 'run', 'read_patient_level']),
+  recruiter: frozen(['read', 'write_referrals', 'contact_patients']),
+  site: frozen(['read_referrals', 'write_referrals']),
+  viewer: frozen(['read']),
+})
+/**
+ * @param {string} role @param {string} ability
+ */
+export function roleAllows(role, ability) {
+  return (VCR_ROLE_ABILITIES[/** @type {keyof typeof VCR_ROLE_ABILITIES} */ (role)] ?? []).includes(ability)
+}
+
+// ---------------------------------------------------------------------------
+// Populations, patients, comparators, trials (§5)
+// ---------------------------------------------------------------------------
+
+/** Where a population came from (§5.1: five starting points → four kinds). */
+export const VCR_POPULATION_KINDS = frozen(['real', 'scenario', 'literature', 'empirical_synthetic'])
+export const VCR_POPULATION_KIND_LABELS_ZH = Object.freeze({
+  real: '真实队列', scenario: '情景人群', literature: '文献人群', empirical_synthetic: '经验合成人群',
+})
+/** What a synthetic population may be used for (§5.1). It never enters a real external control. */
+export const VCR_SYNTHETIC_USES = frozen(['design', 'feasibility', 'testing', 'training', 'shared_preview'])
+export const VCR_SYNTHETIC_USE_LABELS_ZH = Object.freeze({
+  design: '设计', feasibility: '可行性', testing: '测试', training: '培训', shared_preview: '共享预览',
+})
+
+/** The three endpoint families every engine method is organized by (§5.2, §5.3). */
+export const VCR_ENDPOINT_TYPES = frozen(['continuous', 'binary', 'time_to_event'])
+export const VCR_ENDPOINT_TYPE_LABELS_ZH = Object.freeze({ continuous: '连续', binary: '二分类', time_to_event: '事件时间' })
+
+/** The five comparator routes, ordered by precedent and data demand (§5.3). */
+export const VCR_COMPARATOR_ROUTES = frozen(['prognostic_adjustment', 'external_control', 'literature_control', 'model_comparator', 'hybrid_control'])
+export const VCR_COMPARATOR_ROUTE_LABELS_ZH = Object.freeze({
+  prognostic_adjustment: '预后校正', external_control: '真实外部对照', literature_control: '文献对照',
+  model_comparator: '模型预测比较器', hybrid_control: '混合对照',
+})
+/** The data tier each route needs at minimum. */
+export const VCR_ROUTE_MIN_TIER = Object.freeze({
+  prognostic_adjustment: 'T3', external_control: 'T2', literature_control: 'T0', model_comparator: 'T0', hybrid_control: 'T0',
+})
+/** The estimand a weighted external control answers unless told otherwise (§5.3). */
+export const VCR_ESTIMANDS = frozen(['ATT', 'ATE', 'ATO'])
+export const VCR_ESTIMAND_LABELS_ZH = Object.freeze({ ATT: '对试验人群（ATT）', ATE: '对合并人群（ATE）', ATO: '对重叠人群（ATO）' })
+export const VCR_DEFAULT_ESTIMAND = 'ATT'
+
+/** The deterministic rules that make a comparison `not_estimable` (§5.3). */
+export const VCR_NOT_ESTIMABLE_RULES = frozen([
+  'entropy_balance_infeasible', 'outside_common_support', 'effective_sample_size_below_floor',
+  'standardized_difference_above_floor', 'tau_beyond_followup', 'reconstruction_failed_qc', 'map_prior_conflict',
+])
+export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
+  entropy_balance_infeasible: '熵平衡无解（试验人群的协变量均值落在对照人群范围之外）',
+  outside_common_support: '共同支持域外的比例越过界限',
+  effective_sample_size_below_floor: '加权后有效样本量低于下限',
+  standardized_difference_above_floor: '加权后关键协变量标准化差异 ≥ 0.1',
+  tau_beyond_followup: 'RMST 的 τ 超过任一组的最长随访',
+  reconstruction_failed_qc: '重建 KM 未过质控',
+  map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
+})
+
+/** The ten comparability dimensions of the FDA externally-controlled-trials draft (§5.3). */
+export const VCR_COMPARABILITY_DIMENSIONS = frozen([
+  'time_period', 'geography', 'diagnosis', 'prognostic_factors', 'treatment', 'other_treatment_related',
+  'follow_up', 'intercurrent_events', 'outcome_definition', 'missing_data',
+])
+export const VCR_COMPARABILITY_DIMENSION_LABELS_ZH = Object.freeze({
+  time_period: '时期', geography: '地域', diagnosis: '诊断', prognostic_factors: '预后因素', treatment: '治疗',
+  other_treatment_related: '其他与治疗相关的因素', follow_up: '随访', intercurrent_events: '伴随事件',
+  outcome_definition: '结局定义与评估', missing_data: '缺失数据',
+})
+/** ICH E10's four conditions for an external control to be appropriate at all. */
+export const VCR_E10_CONDITIONS = frozen(['effect_large', 'objective_endpoint', 'predictable_course', 'prognostic_factors_known'])
+export const VCR_E10_CONDITION_LABELS_ZH = Object.freeze({
+  effect_large: '效应远大于自然变异', objective_endpoint: '终点客观', predictable_course: '病程可预测',
+  prognostic_factors_known: '预后因素已知可得',
+})
+
+/** Trial designs the first version simulates (§5.4). */
+export const VCR_TRIAL_DESIGNS = frozen(['single_arm', 'single_arm_external', 'two_arm_fixed', 'group_sequential', 'simon_two_stage'])
+export const VCR_TRIAL_DESIGN_LABELS_ZH = Object.freeze({
+  single_arm: '单臂试验', single_arm_external: '单臂 + 外部对照', two_arm_fixed: '固定样本两组比较',
+  group_sequential: '成组序贯', simon_two_stage: 'Simon 两阶段',
+})
+/** Performance measures a simulation reports, all on by default (ADEMP, §5.4). */
+export const VCR_PERFORMANCE_MEASURES = frozen(['power', 'type_one_error', 'bias', 'coverage', 'expected_sample_size', 'duration_months', 'cost'])
+export const VCR_PERFORMANCE_MEASURE_LABELS_ZH = Object.freeze({
+  power: '功效', type_one_error: 'I 类错误', bias: '偏倚', coverage: '区间覆盖率',
+  expected_sample_size: '期望样本量', duration_months: '周期（月）', cost: '成本',
+})
+/** Alpha-spending functions available for a group-sequential design. */
+export const VCR_SPENDING_FUNCTIONS = frozen(['obrien_fleming', 'pocock'])
+export const VCR_SPENDING_FUNCTION_LABELS_ZH = Object.freeze({ obrien_fleming: "O'Brien-Fleming", pocock: 'Pocock' })
+
+/** Named interval kinds. A report never writes a bare 「区间」 (§8.3). */
+export const VCR_INTERVAL_KINDS = frozen(['confidence', 'credible', 'prediction', 'monte_carlo'])
+export const VCR_INTERVAL_KIND_LABELS_ZH = Object.freeze({
+  confidence: '置信区间', credible: '可信区间', prediction: '预测区间', monte_carlo: '蒙特卡洛区间',
+})
+
+// ---------------------------------------------------------------------------
+// Assumptions and evidence (§6)
+// ---------------------------------------------------------------------------
+
+/** Where an assumption's value came from (v1.0's five kinds). */
+export const VCR_ASSUMPTION_SOURCE_KINDS = frozen(['local_observation', 'external_evidence', 'expert_set', 'model_prediction', 'scenario'])
+export const VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH = Object.freeze({
+  local_observation: '本地观察', external_evidence: '外部证据', expert_set: '专家设定',
+  model_prediction: '模型预测', scenario: '情景假设',
+})
+/** How several studies became one number (§6.1). */
+export const VCR_POOLING_METHODS = frozen(['single_study', 'random_effects_dl', 'random_effects_reml', 'random_effects_hksj', 'fixed_effect'])
+export const VCR_POOLING_METHOD_LABELS_ZH = Object.freeze({
+  single_study: '单项研究直接取值', random_effects_dl: '随机效应（DL）', random_effects_reml: '随机效应（REML）',
+  random_effects_hksj: '随机效应（HKSJ）', fixed_effect: '固定效应',
+})
+/** Distribution families an assumption may carry into a simulation (§6.1). */
+export const VCR_DISTRIBUTIONS = frozen(['point', 'normal', 'lognormal', 'beta', 'gamma', 'empirical'])
+
+/** A registry record's planned vs actual, kept apart (§6.2: CT.gov ESTIMATED vs ACTUAL). */
+export const VCR_ENROLLMENT_KINDS = frozen(['estimated', 'actual'])
+
+// ---------------------------------------------------------------------------
+// Matching, referral, follow-up (§7)
+// ---------------------------------------------------------------------------
+
+/** Kleene three-valued logic, plus one deferral. `not_applicable` is a separate flag (§7.1). */
+export const VCR_CRITERION_STATES = frozen(['satisfied', 'not_satisfied', 'unknown', 'pending_recheck'])
+export const VCR_CRITERION_STATE_LABELS_ZH = Object.freeze({
+  satisfied: '满足', not_satisfied: '不满足', unknown: '未知', pending_recheck: '待复评',
+})
+/** What kind of thing a structured criterion tests (§7.1; CHIP-CTC's 44 classes fold into these). */
+export const VCR_CRITERION_TYPES = frozen([
+  'demographic', 'diagnosis', 'biomarker', 'lab', 'prior_treatment', 'time_window', 'performance_status',
+  'comorbidity', 'concomitant_medication', 'pregnancy', 'consent_capacity', 'other',
+])
+export const VCR_CRITERION_TYPE_LABELS_ZH = Object.freeze({
+  demographic: '人口学', diagnosis: '诊断', biomarker: '分子标志物', lab: '检验', prior_treatment: '既往治疗',
+  time_window: '时间窗', performance_status: '体能状态', comorbidity: '合并症', concomitant_medication: '合并用药',
+  pregnancy: '妊娠', consent_capacity: '知情能力', other: '其他',
+})
+/** A patient's overall eligibility summary, computed from the criterion states only. */
+export const VCR_ELIGIBILITY_SUMMARIES = frozen(['eligible', 'ineligible', 'insufficient_evidence', 'pending'])
+export const VCR_ELIGIBILITY_SUMMARY_LABELS_ZH = Object.freeze({
+  eligible: '符合', ineligible: '不符合', insufficient_evidence: '证据不足', pending: '待复评',
+})
+
+/** The referral ledger, in order (§7.2). */
+export const VCR_REFERRAL_STATES = frozen([
+  'candidate', 'needs_evidence', 'contactable', 'contacted', 'interested', 'referred', 'site_responded',
+  'screening', 'enrolled', 'screen_failed', 'withdrawn',
+])
+export const VCR_REFERRAL_STATE_LABELS_ZH = Object.freeze({
+  candidate: '候选', needs_evidence: '待补证', contactable: '可联系', contacted: '已联系', interested: '有意向',
+  referred: '已转诊', site_responded: '中心已响应', screening: '筛选中', enrolled: '已入组',
+  screen_failed: '筛选失败', withdrawn: '退出',
+})
+/** The states a referral may never reach without a coordinator's per-person confirmation (§10.1). */
+export const VCR_CONTACT_STATES = frozen(['contacted', 'interested', 'referred'])
+
+/** What a follow-up episode records (§7.3). */
+export const VCR_FOLLOWUP_KINDS = frozen(['routine_care', 'study_specific', 'post_exit'])
+export const VCR_FOLLOWUP_KIND_LABELS_ZH = Object.freeze({ routine_care: '常规诊疗观察', study_specific: '研究专属随访', post_exit: '出组后观察' })
+
+// ---------------------------------------------------------------------------
+// Jobs, engine, notifications (§10, §11.4)
+// ---------------------------------------------------------------------------
+
+/** Every deterministic computation the engine can be asked for. */
+export const VCR_JOB_KINDS = frozen([
+  'profile_snapshot', 'build_cohort', 'generate_population', 'literature_population', 'synthesize_population',
+  'population_quality', 'generate_patients', 'generate_patients_continuous', 'generate_patients_binary',
+  'reconstruct_km', 'pool_evidence', 'weight_comparator', 'propensity_weight_comparator', 'maic_comparator',
+  'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
+  'accrual_forecast', 'map_prior', 'match_criteria',
+])
+export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
+export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
+  queued: '排队中', running: '进行中', succeeded: '已完成', failed: '未完成', canceled: '已取消', awaiting_budget: '待确认预算',
+})
+
+/** The three places a human is required to stop (§10.1). Nothing else stops. */
+export const VCR_HUMAN_STOPS = frozen(['contact_patient', 'compute_over_budget', 'clinical_safety'])
+export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({
+  contact_patient: '联系真实患者之前', compute_over_budget: '计算超出研究预算', clinical_safety: '出现临床安全问题',
+})
+
+/** The only five notifications this module sends (§10.4). */
+export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast'])
+export const VCR_NOTIFICATION_LABELS_ZH = Object.freeze({
+  package_ready: '研究包完成', not_estimable: '结论为不可估计或假设冲突', budget_confirm: '计算预算需要确认',
+  new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测',
+})
+
+/** Why a result went stale (§6.3). Stale results are never deleted or hidden. */
+export const VCR_STALE_REASONS = frozen(['assumption_changed', 'criterion_changed', 'source_corrected', 'protocol_revised', 'method_version_changed'])
+export const VCR_STALE_REASON_LABELS_ZH = Object.freeze({
+  assumption_changed: '假设卡已变更', criterion_changed: '入排条件已变更', source_corrected: '源数据已更正',
+  protocol_revised: '方案已修订', method_version_changed: '方法版本已变更',
+})
+
+/** The objects a lineage edge can join (§3.4). */
+export const VCR_LINEAGE_NODE_KINDS = frozen([
+  'study_definition', 'assumption', 'snapshot', 'population', 'patient_set', 'comparator_design',
+  'trial_scenario', 'design_grid', 'execution', 'result', 'matching_assessment', 'protocol_version', 'criterion',
+])
+
+/** Deliverables this module exports (§8.3). */
+export const VCR_EXPORT_KINDS = frozen(['study_package', 'cde_communication_pack', 'simulation_report', 'validation_pack'])
+export const VCR_EXPORT_KIND_LABELS_ZH = Object.freeze({
+  study_package: '研究包', cde_communication_pack: 'CDE 沟通交流资料包', simulation_report: '模拟报告', validation_pack: '系统验证文档包',
+})
+
+/** The module's own capability packages (§11.2 layer 8). */
+export const VCR_CAPABILITIES = frozen(['vcr-protocol', 'vcr-evidence', 'vcr-analysis', 'vcr-matching', 'vcr-package'])
+/** Which capability a step dispatches to (the orchestrator's map). */
+export const VCR_STEP_CAPABILITIES = Object.freeze({
+  definition: 'vcr-protocol',
+  evidence: 'vcr-evidence',
+  population: 'vcr-analysis',
+  patients: 'vcr-analysis',
+  comparator: 'vcr-analysis',
+  trial: 'vcr-analysis',
+  matching: 'vcr-matching',
+})
+
+/** Data-source formats the data plane accepts in the first version (§8.1). */
+export const VCR_SOURCE_FORMATS = frozen(['csv', 'tsv', 'parquet', 'xlsx', 'json'])
+/** The three analysis tables every snapshot derives (ADaM shapes, §8.1). */
+export const VCR_ANALYSIS_TABLES = frozen(['subject', 'longitudinal', 'events'])
+export const VCR_ANALYSIS_TABLE_LABELS_ZH = Object.freeze({ subject: '受试者级表', longitudinal: '长表', events: '事件表' })
+/** Kahn 2016's data-quality categories (§8.1). */
+export const VCR_QUALITY_CATEGORIES = frozen(['conformance', 'completeness', 'plausibility', 'duplication', 'linkage'])
+export const VCR_QUALITY_CATEGORY_LABELS_ZH = Object.freeze({
+  conformance: '一致性', completeness: '完整性', plausibility: '合理性', duplication: '重复', linkage: '关联质量',
+})
+
+/** Below this cell count an aggregate handed to a model is suppressed (§8.1). */
+export const VCR_MIN_CELL_SIZE = 10
+/** Bootstrap draws for an interval that includes weight estimation (§5.3). */
+export const VCR_BOOTSTRAP_MIN = 2_000
+/** Default replicate floors (§5.4); the job's own target precision may raise them. */
+export const VCR_REPLICATES_NULL_MIN = 20_000
+export const VCR_REPLICATES_ALT_MIN = 5_000
+/** A weighted covariate above this standardized difference is not balanced (§5.3). */
+export const VCR_SMD_FLOOR = 0.1
+
+/**
+ * Is this word in this vocabulary? Used by the schema builder before splicing
+ * a literal into a CHECK, and by every per-item validator.
+ * @param {readonly string[]} vocabulary @param {unknown} value
+ */
+export function vcrKnown(vocabulary, value) {
+  return typeof value === 'string' && vocabulary.includes(value)
+}

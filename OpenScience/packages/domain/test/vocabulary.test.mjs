@@ -870,6 +870,7 @@ test("every check id a contract module raises is registered on GATE_CHECK_IDS", 
     "researchTopicContract.mjs",
     "datasetScopingContract.mjs",
     "geoContracts.mjs",
+    "vcrContracts.mjs",
     "sourceUnderstanding.mjs",
     "methodSkill.mjs",
     "methodGraph.mjs",
@@ -896,7 +897,7 @@ test("every check id a contract module raises is registered on GATE_CHECK_IDS", 
   // test exists to prevent one level down.
   assert.ok(walked >= 40, `only ${walked} check attributions found across ${modules.length} modules — the scan did not read them`);
   assert.ok(raisedBy.size >= 25, `only ${raisedBy.size} distinct check ids found — the scan did not read the modules`);
-  for (const name of ["appraisalContract.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs", "datasetScopingContract.mjs", "contractRegistry.mjs"]) {
+  for (const name of ["appraisalContract.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs", "datasetScopingContract.mjs", "vcrContracts.mjs", "contractRegistry.mjs"]) {
     assert.ok(
       [...raisedBy.values()].some((sources) => sources.includes(name)),
       `${name} contributed no check id — the scan skipped it`,

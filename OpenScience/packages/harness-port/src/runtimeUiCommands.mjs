@@ -101,12 +101,23 @@ export function capabilityOptions(capabilities, hidden = []) {
  * module hides its capabilities from 科研工具 with a display flag, and the
  * chip must still say what the conversation runs.
  * @param {any[]} capabilities @param {unknown} id
- * @param {{ title?: string, capabilities?: readonly string[] } | null} [geo] the vocabulary's GEO entry
+ * @param {{ title?: string, capabilities?: readonly string[] } | null |
+ *   readonly ({ title?: string, capabilities?: readonly string[], geo?: boolean } | null)[]} [modules]
+ *   the vocabulary's module entries (GEO's, 虚拟临研's); one entry is accepted
+ *   as itself, because that is what every caller passed before the second
+ *   module existed.
  */
-export function toolPageModel(capabilities, id, geo = null) {
+export function toolPageModel(capabilities, id, modules = null) {
   const key = String(id ?? '');
-  if (geo && typeof geo.title === 'string' && Array.isArray(geo.capabilities) && geo.capabilities.includes(key)) {
-    return { id: key, title: geo.title, category: '', summary: '', outputs: [], limits: [], materials: '', starters: [], geo: true };
+  const entries = Array.isArray(modules) ? modules : [modules];
+  for (const entry of entries) {
+    if (!entry || typeof entry.title !== 'string' || !Array.isArray(entry.capabilities)) continue;
+    if (!entry.capabilities.includes(key)) continue;
+    // `geo: true` is what draws the module's two composer controls, so it is
+    // the entry's to claim rather than this function's to assume: 虚拟临研 has
+    // no such controls and must not grow them by being a module.
+    return { id: key, title: entry.title, category: '', summary: '', outputs: [], limits: [], materials: '', starters: [],
+      geo: entry.geo === true, module: true };
   }
   const entry = (Array.isArray(capabilities) ? capabilities : []).find((candidate) => candidate && candidate.id === key && !candidate.internal);
   if (!entry) return null;
@@ -188,11 +199,16 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const { text: textStyle, textButton } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
+  /** @type {{ title: string, capabilities: readonly string[], geo?: boolean } | null} */
+  const geo = kit.vocabulary?.geo && Array.isArray(kit.vocabulary.geo.capabilities)
+    ? { ...kit.vocabulary.geo, geo: true } : null;
   /** @type {{ title: string, capabilities: readonly string[] } | null} */
-  const geo = kit.vocabulary?.geo && Array.isArray(kit.vocabulary.geo.capabilities) ? kit.vocabulary.geo : null;
-  const geoIds = geo ? geo.capabilities : [];
+  const vcr = kit.vocabulary?.vcr && Array.isArray(kit.vocabulary.vcr.capabilities) ? kit.vocabulary.vcr : null;
+  // Hidden from `/工具` for the same reason in both cases: a module's
+  // capabilities are entered from its own sidebar row, never picked here.
+  const geoIds = [...(geo ? geo.capabilities : []), ...(vcr ? vcr.capabilities : [])];
   /** @param {string | null} id */
-  const modelOf = (id) => (id ? toolPageModel(catalogue, id, geo) : null);
+  const modelOf = (id) => (id ? toolPageModel(catalogue, id, [geo, vcr]) : null);
 
   // Which tool this conversation runs. The control plane owns the answer — it
   // binds the session and tells the frame — and this holds the optimistic one

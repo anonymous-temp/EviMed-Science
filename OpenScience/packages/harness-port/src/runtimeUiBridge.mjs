@@ -428,9 +428,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * redirect it could choose. The shell maps each name to a route and ignores
    * anything else.
    */
-  const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account', 'geo'];
+  const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account', 'geo', 'virtual-research'];
   /** The tabs of a 循证 GEO project a `geo` destination may name; the project is the shell's to know. */
   const GEO_TABS = ['overview', 'evidence', 'journey', 'questions', 'diagnosis', 'sources', 'content', 'distribution', 'monitoring'];
+  /** The tabs of a 虚拟临研 study a `virtual-research` destination may name (build plan 2026-09-28 §9.4). */
+  const VCR_TABS = ['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'];
 
   /**
    * The channel the frame bodies leave through.

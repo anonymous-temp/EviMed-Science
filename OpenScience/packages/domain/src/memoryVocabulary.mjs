@@ -79,6 +79,10 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // Every 「循证 GEO」 dispatch's brief, open runtime or not (`geoRunPrompt`,
   // and the GEO dispatch site in server.mjs, which writes the same text).
   { tag: 'evimed-geo-run', role: 'injected', emitters: ['apps/server/src/geoOrchestrator.mjs', 'apps/server/src/server.mjs'] },
+  // 虚拟临研's own mark, written the same way: a brief dispatched by the
+  // module's orchestrator is never the researcher's words, and the mark is
+  // what the run ledger and the delivery import read it by.
+  { tag: 'evimed-vcr-run', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs', 'apps/server/src/server.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
   { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },

@@ -17,6 +17,7 @@ import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEnti
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
+import { VCR_CHECK_IDS, vcrCohortFindings, vcrComparatorFindings, vcrMatchingFindings, vcrSimulationReportFindings, vcrStudyPackageFindings } from './vcrContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefects, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
@@ -128,6 +129,11 @@ export const GATE_CHECK_IDS = Object.freeze([
   'geo-strategy-shape',
   'geo-article-shape',
   'geo-proposal-shape',
+  // 「虚拟临研」's contracts (`vcrContracts.mjs`), every one of them a notice:
+  // the blocking budget is spent, and the two findings anyone would reach for
+  // first describe legitimate deliveries — a study whose conclusion is
+  // 「不可估计」 and a study nobody has reviewed yet.
+  ...VCR_CHECK_IDS,
   // A report's own statistics against themselves: a p value its test
   // statistic cannot produce, an interval and a p that disagree about
   // significance, an estimate outside its own interval. Arithmetic over
@@ -745,6 +751,14 @@ const VALIDATORS = Object.freeze({
   'geo-strategy-pack': (input) => validateGeoPack(input, geoStrategyFindings),
   'geo-content-pack': (input) => validateGeoPack(input, geoContentFindings, { ownSafetyRules: true }),
   'geo-proposal-pack': (input) => validateGeoPack(input, geoProposalFindings),
+  // 「虚拟临研」: prose plus the results it renders from (plan §8.3). The
+  // number-provenance finding is decidable here because the package ships the
+  // result file the template bound to.
+  'vcr-study-package': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrStudyPackageFindings(input)),
+  'vcr-simulation-report': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrSimulationReportFindings(input)),
+  'vcr-comparator-analysis': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrComparatorFindings(input)),
+  'vcr-cohort-snapshot': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrCohortFindings(input)),
+  'vcr-matching-assessment': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrMatchingFindings(input)),
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   'episode-plan': (input) => validateJsonShaped(input, { file: 'episode-plan.json', check: checkEpisodePlan }),
   'agenda-delta': (input) => validateJsonShaped(input, { file: 'agenda-delta.json', check: checkAgendaDelta }),

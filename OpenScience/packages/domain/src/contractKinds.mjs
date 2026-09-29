@@ -40,6 +40,14 @@ export const CONTRACT_KINDS = Object.freeze([
   'geo-strategy-pack',
   'geo-content-pack',
   'geo-proposal-pack',
+  // P4 — 「虚拟临研」: the study package and the four results it renders from
+  // (build plan 2026-09-28 §11.2). Every finding of theirs is advisory: the
+  // blocking budget is spent, and 「不可估计」 is a finished delivery.
+  'vcr-study-package',
+  'vcr-simulation-report',
+  'vcr-comparator-analysis',
+  'vcr-cohort-snapshot',
+  'vcr-matching-assessment',
   // Reserved: regulated, ships only when product and compliance decide (§9.9)
   'clinical-decision-brief',
   // Autopilot contract kinds (§24.7)

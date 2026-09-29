@@ -202,6 +202,26 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_response_invalid",
   "geo_response_too_large",
   "social_posts_unconfigured",
+  // 「虚拟临研」's runtime tools (vcr_platform.py → vcrGateway.mjs) not
+  // answering, read exactly like GEO's: the module off or not open to this
+  // account, a conversation outside a study, an outage. The run records that
+  // the study's platform data was not reachable and goes on with what it has
+  // — it never writes a number the engine did not compute, and a registry it
+  // could not reach is 「不可得」, never zero.
+  "vcr_disabled",
+  "vcr_no_study",
+  "vcr_unconfigured",
+  "vcr_gateway_unreachable",
+  "vcr_gateway_unavailable",
+  "vcr_gateway_timeout",
+  "vcr_gateway_rate_limited",
+  "vcr_gateway_token_missing",
+  "vcr_gateway_token_invalid",
+  "vcr_upstream_error",
+  "vcr_response_invalid",
+  "vcr_response_too_large",
+  "engine_unavailable",
+  "registry_unavailable",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
@@ -461,6 +481,19 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
   "social_posts_limit_invalid",
+  // And 「虚拟临研」's, on the same line: a `what` outside the vocabulary, a
+  // filter or payload the gateway cannot read, a simulate action that is not
+  // start or status. A single invalid item of a write is again not one of
+  // these — `vcr_write` refuses it in `issues` and writes the rest.
+  "vcr_request_invalid",
+  "vcr_request_too_large",
+  "vcr_read_what_invalid",
+  "vcr_read_filter_invalid",
+  "vcr_write_what_invalid",
+  "vcr_write_payload_invalid",
+  "vcr_simulate_action_invalid",
+  "vcr_simulate_payload_invalid",
+  "vcr_job_not_found",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
   // argument the schema rejects. The run rewrites the call.
@@ -848,6 +881,63 @@ const capsuleTransferErrorCodes = Object.freeze([
  * (it never shows one); they are here so each is held to a Chinese sentence
  * and so the route tests can prove every code they emit is registered.
  */
+/**
+ * Codes the 「虚拟临研」 routes answer with (`vcrRoutes.mjs`, `/api/vcr/*`) and
+ * the codes its runtime channel answers with (`vcrGateway.mjs`,
+ * `/internal/vcr/v1`). Registered here for the reason GEO's are: each is held
+ * to a Chinese sentence, and the route and gateway tests can prove every code
+ * they emit is a code somebody enumerated. `vcr_job_not_found` is in both
+ * lists and the set below folds it; `registry_unavailable` is the one code
+ * that is not the module's own — it is what a trial registry that cannot be
+ * reached answers, and the run is told to carry on without it.
+ */
+export const VCR_ROUTE_ERROR_CODES = Object.freeze([
+  'vcr_not_enabled',
+  'vcr_path_invalid',
+  'vcr_payload_invalid',
+  'vcr_study_not_found',
+  'vcr_study_paused',
+  'vcr_name_invalid',
+  'vcr_tier_invalid',
+  'vcr_intended_use_invalid',
+  'vcr_status_invalid',
+  'vcr_step_invalid',
+  'vcr_tab_not_found',
+  'vcr_job_kind_invalid',
+  'vcr_job_scenario_invalid',
+  'vcr_job_not_found',
+  'vcr_budget_invalid',
+  'vcr_assumption_invalid',
+  'vcr_review_kind_invalid',
+  'vcr_decision_invalid',
+  'vcr_export_kind_invalid',
+  'vcr_export_not_found',
+  'vcr_model_invalid',
+  'vcr_member_role_invalid',
+  'vcr_referral_not_found',
+  'vcr_forbidden',
+  'vcr_unavailable',
+])
+
+export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
+  'vcr_disabled',
+  'vcr_no_study',
+  'vcr_gateway_token_missing',
+  'vcr_gateway_token_invalid',
+  'vcr_gateway_rate_limited',
+  'vcr_gateway_timeout',
+  'vcr_gateway_unavailable',
+  'vcr_request_invalid',
+  'vcr_request_too_large',
+  'vcr_read_what_invalid',
+  'vcr_read_filter_invalid',
+  'vcr_write_what_invalid',
+  'vcr_write_payload_invalid',
+  'vcr_simulate_action_invalid',
+  'vcr_simulate_payload_invalid',
+  'registry_unavailable',
+])
+
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_not_enabled',
   'geo_path_invalid',
@@ -921,6 +1011,8 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
+  ...VCR_ROUTE_ERROR_CODES,
+  ...VCR_GATEWAY_ERROR_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
 ])])
 
@@ -1245,6 +1337,16 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
     '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
   [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
+  // 「虚拟临研」, read the same way and for the same reason: a run whose study
+  // data could not be read carries on with what it has, and a person whose
+  // page action was refused tries again. The engine family is separate — a
+  // computation that could not run is not a study that could not be read, and
+  // the study's other steps are unaffected (plan §10.5).
+  [/^vcr_(?:disabled$|no_study$|gateway_|request_|read_|write_|simulate_)/,
+    '虚拟临研的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
+  [/^(?:vcr_engine_|engine_unavailable$)/, '确定性计算引擎这次不可用；这一步暂不可用，研究的其余部分照常。'],
+  [/^vcr_/, '虚拟临研这次没能完成这个操作，稍后再试。'],
+  [/^registry_unavailable$/, '试验登记库这次取不到记录；运行会如实记下，不会编造登记信息。'],
   [/^science_connector_/, '科学数据连接器这次没能给出结果。'],
   [/^mr_input_/, '孟德尔随机化的本地输入需要更正后才能继续。'],
   [/^mr_open_/, 'GWAS Catalog 的公开汇总数据这次没能用于孟德尔随机化；报告会写明缺了什么，或改用其他研究。'],
@@ -1445,6 +1547,7 @@ export function errorCodeOutcome(code) {
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
   if (GEO_ROUTE_ERROR_CODES.includes(text)) return 'upstream'
+  if (VCR_ROUTE_ERROR_CODES.includes(text) || VCR_GATEWAY_ERROR_CODES.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
   if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'
