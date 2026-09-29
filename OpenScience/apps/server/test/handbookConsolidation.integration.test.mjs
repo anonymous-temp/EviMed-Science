@@ -99,3 +99,17 @@ test("Postgres handbook metrics count the entire owner ledger beyond the recent-
   assert.equal(summary.recent.length, 6);
   assert.equal((await handbookSummary(database, "missing-owner")).applied, 0);
 });
+
+test("Postgres stale completion and its single retry survive an enqueue failure atomically", options, async () => {
+  const f = await setup();
+  const enqueue = jobs.enqueue.bind(jobs);
+  jobs.enqueue = async (...args) => { if (args[2]?.retryOf) throw new Error("Injected retry enqueue failure"); return enqueue(...args); };
+  const stale = { action: "optimize", disposition: "stale", reason: "handbook_baseline_changed", candidateDigest: f.candidate.payload.contentDigest };
+  try { await assert.rejects(f.loop.complete(f.job, f.candidate, stale), /Injected retry enqueue failure/); } finally { jobs.enqueue = enqueue; }
+  assert.equal((await jobs.get(f.owner, f.job.id)).status, "running", "a retry cannot be lost after a committed completion");
+  assert.equal((await documents.get(f.owner, "method", f.candidate.id)).payload.dispositions[f.candidate.payload.contentDigest].state, "queued");
+  await f.loop.complete(f.job, f.candidate, stale);
+  await f.loop.reconcile(f.owner);
+  const retry = await database.query("SELECT payload FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'retryOf'=$2", [f.owner,f.job.id]);
+  assert.equal(retry.rows.length, 1);
+});
