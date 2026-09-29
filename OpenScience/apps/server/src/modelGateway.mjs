@@ -422,8 +422,8 @@ function normalizedRequest(body, config) {
   return {
     ...body,
     model: config.deepseekModel,
-    thinking: { type: "enabled" },
-    reasoning_effort: config.deepseekReasoningEffort ?? "high",
+    thinking: { type: config.deepseekReasoningEffort === "off" ? "disabled" : "enabled" },
+    reasoning_effort: config.deepseekReasoningEffort === "off" ? undefined : config.deepseekReasoningEffort ?? "high",
     stream,
     ...(body.max_tokens == null && body.max_completion_tokens == null
       ? { max_completion_tokens: configuredOutputLimit } : {}),
@@ -970,7 +970,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
         caller = engineCaller(token, route, config);
       }
       const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
-      let normalized = route.normalize(body, config);
+      const requestConfig = caller.engine && caller.reasoningEffort !== undefined
+        ? { ...config, deepseekReasoningEffort: caller.reasoningEffort } : config;
+      let normalized = route.normalize(body, requestConfig);
       const scoped = caller.engine ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
       modelName = normalized.model;

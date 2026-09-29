@@ -1232,3 +1232,5 @@ export {
   nextRequestBytes,
   strictHandleInstruction,
 } from './src/compaction.mjs'
+
+export { decorateEngineToolContext, ENGINE_EXECUTION_CONTEXT } from './src/engineContext.mjs'

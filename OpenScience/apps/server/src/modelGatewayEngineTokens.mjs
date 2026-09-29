@@ -68,11 +68,11 @@ function tokenSignature(signed, secret) {
 /**
  * One engine job's model credential.
  * @param {{ secret: string, userId: string, projectId: string, kind: string, jobId: string,
- *   runId?: string | null, limits?: { dailyLimit?: number, weeklyLimit?: number, runLimit?: number } | null,
+ *   runId?: string | null, sessionId?: string, reasoningEffort?: string, limits?: { dailyLimit?: number, weeklyLimit?: number, runLimit?: number } | null,
  *   ttlSeconds: number, nowSeconds?: number, jti?: string }} input
  */
 export function issueEngineModelToken({
-  secret, userId, projectId, kind, jobId, runId = null, limits = null, ttlSeconds,
+  secret, userId, projectId, kind, jobId, runId = null, sessionId, reasoningEffort, limits = null, ttlSeconds,
   nowSeconds = Math.floor(Date.now() / 1000), jti = `emt_${randomBytes(16).toString("hex")}`,
 }) {
   const key = gatewaySecret(secret);
@@ -84,7 +84,13 @@ export function issueEngineModelToken({
     || !JOB_ID.test(String(jobId)) || (runId != null && !RUN_ID.test(String(runId)))) {
     throw new HttpError(400, "engine_model_token_scope_invalid", "The engine credential scope is invalid.");
   }
+  if ((reasoningEffort !== undefined && !["off", "low", "high", "max"].includes(reasoningEffort))
+    || (sessionId !== undefined && (typeof sessionId !== "string" || !RUN_ID.test(sessionId)))) {
+    throw new HttpError(400, "engine_model_token_scope_invalid", "The engine model policy is invalid.");
+  }
   const payload = {
+    ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
+    ...(sessionId !== undefined ? { sessionId } : {}),
     v: 1, aud: ENGINE_MODEL_AUDIENCE, userId, projectId, kind, jobId,
     ...(runId != null ? { runId } : {}),
     // A bounded run's own caps travel with its jobs; unset, the gateway
@@ -100,7 +106,7 @@ export function issueEngineModelToken({
   return { token: `${signed}.${tokenSignature(signed, key)}`, payload };
 }
 
-const allowedClaims = new Set(["v", "aud", "userId", "projectId", "kind", "jobId", "runId", "dailyLimit", "weeklyLimit", "runLimit", "iat", "exp", "jti"]);
+const allowedClaims = new Set(["v", "aud", "userId", "projectId", "kind", "jobId", "runId", "sessionId", "reasoningEffort", "dailyLimit", "weeklyLimit", "runLimit", "iat", "exp", "jti"]);
 
 /**
  * The caller an engine credential stands for, or a throw. Never a partial
@@ -132,6 +138,8 @@ export function verifyEngineModelToken(token, { secret, nowSeconds = Math.floor(
     || typeof payload.userId !== "string" || typeof payload.projectId !== "string"
     || !ENGINE_KINDS.includes(payload.kind) || typeof payload.jobId !== "string" || !JOB_ID.test(payload.jobId)
     || (payload.runId !== undefined && (typeof payload.runId !== "string" || !RUN_ID.test(payload.runId)))
+    || (payload.sessionId !== undefined && (typeof payload.sessionId !== "string" || !RUN_ID.test(payload.sessionId)))
+    || (payload.reasoningEffort !== undefined && !["off", "low", "high", "max"].includes(payload.reasoningEffort))
     || ["dailyLimit", "weeklyLimit", "runLimit"].some((field) => payload[field] !== undefined && !(Number.isFinite(payload[field]) && payload[field] > 0))
     || !Number.isSafeInteger(payload.iat) || !Number.isSafeInteger(payload.exp)
     || payload.exp <= payload.iat || payload.exp - payload.iat > MAX_TTL_SECONDS
@@ -139,6 +147,8 @@ export function verifyEngineModelToken(token, { secret, nowSeconds = Math.floor(
   const now = Math.floor(Number(nowSeconds));
   if (payload.iat > now + 30 || payload.exp <= now) throw invalid();
   return {
+    ...(payload.reasoningEffort !== undefined ? { reasoningEffort: payload.reasoningEffort } : {}),
+    ...(payload.sessionId !== undefined ? { sessionId: payload.sessionId } : {}),
     userId: payload.userId,
     projectId: payload.projectId,
     runId: payload.runId ?? null,
