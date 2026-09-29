@@ -38,8 +38,8 @@ test("consumption applies a supplement which the next authorized prepared turn c
   assert.match(context.system, /不代表已验证质量改善/);
   assert.match(await fs.readFile(path.join(project.workspaceDir, context.handbooks[0].path), "utf8"), /## Workflow/);
   const projection = { plan: { items: [{ id: "d1", capability: "geo-content", status: "accepted" }] } };
-  const run = { id: "next-run", effectiveAgentId: "geo-content", status: "succeeded", sessionId: "session", capabilityHandbooks: context.handbooks };
-  const sessions = [{ sessionId: "session", transcript: { messages: [{ parts: [{ type: "tool", status: "completed", tool: "read", input: { path: context.handbooks[0].path } }] }] } }];
+  const run = { startedAt: "2026-09-30T00:00:00Z", finishedAt: "2026-09-30T01:00:00Z", id: "next-run", effectiveAgentId: "geo-content", status: "succeeded", sessionId: "session", capabilityHandbooks: context.handbooks };
+  const sessions = [{ sessionId: "session", transcript: { messages: [{ time: Date.parse("2026-09-30T00:30:00Z"), parts: [{ type: "tool", status: "completed", tool: "read", input: { path: context.handbooks[0].path } }] }] } }];
   await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run, projection, sessions });
   await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run, projection, sessions });
   const row = await f.documents.get("alice", "method", applied.handbookId);
@@ -75,4 +75,28 @@ test("a workspace symlink cannot redirect supplement materialization", async () 
   await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
   await fs.symlink(project.metaDir, path.join(project.workspaceDir, ".evimed-handbooks"));
   await assert.rejects(prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config }));
+}));
+
+test("old-turn reads and unrelated sessions never count as this run using a supplement", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  const run = { id: "later", sessionId: "root", startedAt: "2026-09-30T01:00:00Z", finishedAt: "2026-09-30T02:00:00Z", effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items };
+  const read = (time) => ({ ...(time ? { time: Date.parse(time) } : {}), parts: [{ type: "tool", status: "completed", tool: "read", input: { path: handbooks.items[0].path } }] });
+  const sessions = [{ sessionId: "root", transcript: { messages: [read("2026-09-30T00:30:00Z"), read(null)] } },
+    { sessionId: "unrelated", transcript: { messages: [read("2026-09-30T01:30:00Z")] } }];
+  await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run, projection: {}, sessions });
+  assert.equal((await f.documents.get("alice", "method", applied.handbookId)).payload.observations[0].used, false);
+  await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run: { ...run, id: "current-read" }, projection: {},
+    sessions: [{ sessionId: "root", transcript: { messages: [read("2026-09-30T01:30:00Z")] } }] });
+  assert.equal((await f.documents.get("alice", "method", applied.handbookId)).payload.observations[1].used, true);
+}));
+
+test("concurrent terminal observations keep both runs despite a telemetry CAS conflict", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  await Promise.all(["one", "two"].map((id) => recordHandbookRunObservations({ learning: f.learning, userId: "alice", projection: {},
+    run: { id, effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items } })));
+  assert.deepEqual((await f.documents.get("alice", "method", applied.handbookId)).payload.observations.map((item) => item.runId).sort(), ["one", "two"]);
 }));
