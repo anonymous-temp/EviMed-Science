@@ -332,3 +332,12 @@ test("the event's hourly trend: the heat function at each hour over the reports 
     "under six hours of history: 「暂无走势」");
   assert.equal(frontierHeatTrend({ members: [], now: NOW }), null);
 });
+
+
+test("different publishers mentioning one organization cannot autojoin different drug events", () => {
+  const reading = frontierVectorReading([{ eventId: "different-drug", cosine: 0.98, samePublisher: false }]);
+  const decision = frontierClusterDecision({ identifier: [], strong: reading.strong, yes: [], related: [],
+    events: new Map([["different-drug", { id: "different-drug", firstAt: NOW }]]) });
+  assert.equal(decision.target, null);
+  assert.equal(reading.ask.length, 1);
+});

@@ -58,7 +58,7 @@ function stubEditor({ verdict = "no", digest = null } = {}) {
   };
 }
 
-function layer({ editor = null, budget = async () => ({ state: "ok" }), embedder = testEmbedder } = {}) {
+function layer({ editor = stubEditor({ verdict: "yes" }), budget = async () => ({ state: "ok" }), embedder = testEmbedder } = {}) {
   return new FrontierEvents({ database, editor, embedder, budget, now: () => NOW, config: {} });
 }
 
@@ -79,7 +79,7 @@ test("identifiers: a trial's later news joins its first item's event; an unrelat
   assert.equal(await metaValue(database, "content_version"), before + 1, "a join is a change the cards show");
   const members = (await database.query("SELECT item_id, role, joined_by FROM evimed_frontier.event_items WHERE event_id = $1 ORDER BY item_id", [trial.id])).rows;
   assert.deepEqual(members.map((row) => [String(row.item_id), row.role, row.joined_by]),
-    [[paper.id, "primary", "identifier"], [results.id, "report", "identifier"]]);
+    [[paper.id, "primary", "identifier"], [results.id, "report", "model"]]);
   assert.equal(trial.report_count, 2);
   assert.equal(trial.title_zh, "FLOW 试验", "the event is named by its primary source");
   assert.equal(trial.latest_zh, "FLOW results posted", "「最新进展」 is the newest report");
@@ -102,16 +102,16 @@ test("vectors: a shared drug and cosine ≥ 0.82 join; no shared entity never do
   const story = await eventOf(database, first.id);
   assert.equal((await eventOf(database, near.id)).id, story.id);
   assert.notEqual((await eventOf(database, stranger.id)).id, story.id, "similar words about another drug are another event");
-  assert.equal(editor.calls.judge.length, 0, "nothing in the band, nothing asked");
+  assert.equal(editor.calls.judge.length, 1, "high similarity still needs semantic adjudication");
 
   const band = await insertComposedItem(database, { sourceId: "yimaitong", sourceType: "media", lang: "zh", title: "司美格鲁肽肾脏获益", entityKeys: ["drug:semaglutide"],
     vector: vectorAt(0.78, 2), visibleAt: hoursAgo(7), timelineAt: hoursAgo(7) });
   await events.clusterPending();
-  assert.equal(editor.calls.judge.length, 1);
-  assert.equal(editor.calls.judge[0].candidates.length, 1, "one pair per event, and only one event is in the band");
+  assert.equal(editor.calls.judge.length, 2);
+  assert.equal(editor.calls.judge[1].candidates.length, 1, "one pair per event, and only one event is in the band");
   assert.equal((await eventOf(database, band.id)).id, story.id, "`yes` joins");
   const joinedBy = (await database.query("SELECT item_id, joined_by FROM evimed_frontier.event_items WHERE event_id = $1 ORDER BY item_id", [story.id])).rows;
-  assert.deepEqual(joinedBy.map((row) => row.joined_by), ["identifier", "vector", "model"]);
+  assert.deepEqual(joinedBy.map((row) => row.joined_by), ["identifier", "model", "model"]);
   const bilingual = await eventOf(database, first.id);
   assert.ok(bilingual.heat > 0);
 
@@ -119,7 +119,7 @@ test("vectors: a shared drug and cosine ≥ 0.82 join; no shared entity never do
   const unasked = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Another take", entityKeys: ["drug:semaglutide"],
     vector: vectorAt(0.78, 4), visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
   await throttled.clusterPending();
-  assert.equal(editor.calls.judge.length, 1, "past 80% of the budget the band is not asked");
+  assert.equal(editor.calls.judge.length, 2, "past 80% of the budget the band is not asked");
   assert.notEqual((await eventOf(database, unasked.id)).id, story.id);
   assert.equal(throttled.counters.adjudicationSkipped, 1);
 
@@ -149,7 +149,7 @@ test("an item waits for its vector (30 min) and its edit (24 h); items older tha
 });
 
 test("a bridge merges: the older event survives, the absorbed id redirects for good, members, edges and aliases move with it", options, async () => {
-  const events = layer({ editor: stubEditor() });
+  const events = layer({ editor: stubEditor({ verdict: "yes" }) });
   const oldest = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", evidenceType: "regulatory-decision", title: "FDA approves X",
     registryIds: ["NCT07000001"], visibleAt: hoursAgo(30), timelineAt: hoursAgo(30) });
   const trialPaper = await insertComposedItem(database, { sourceId: "nejm", title: "Trial of X", registryIds: ["NCT09000001"], visibleAt: hoursAgo(20), timelineAt: hoursAgo(20) });
@@ -400,7 +400,7 @@ test("the event page's facts, computed when read: the heat now, the institutions
 });
 
 test("digests: earned by the hot list or a primary with two reports, rewritten on a new primary, kept when a rewrite fails", options, async () => {
-  const editor = stubEditor();
+  const editor = stubEditor({ verdict: "yes" });
   const events = layer({ editor, embedder: null });
   const paper = await insertComposedItem(database, { sourceId: "nejm", title: "Paper", registryIds: ["NCT02"], visibleAt: hoursAgo(20), timelineAt: hoursAgo(20) });
   await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Lone report", visibleAt: hoursAgo(19), timelineAt: hoursAgo(19) });
@@ -461,12 +461,28 @@ test('shared trial without an adjudicator keeps distinct events', options, async
   assert.equal(events.counters.adjudicationSkipped, 1);
 });
 
-test('exact paper identifier joins its press coverage without a model call', options, async () => {
-  const events = layer({ editor: null, embedder: null });
-  const first = await insertComposedItem(database, { sourceId: 'nejm', title: 'Primary trial paper', doi: '10.1000/exact-paper', visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+test('exact paper and press coverage join after the judge sees work context', options, async () => {
+  const editor = stubEditor({ verdict: 'yes' });
+  const events = layer({ editor, embedder: null });
+  const first = await insertComposedItem(database, { sourceId: 'nejm', title: 'Primary trial paper', doi: '10.1000/exact-paper', registryIds: ['NCT07777777'], visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
   await events.clusterPending();
-  const second = await insertComposedItem(database, { sourceId: 'reuters', sourceType: 'media', title: 'Press coverage of the paper', doi: '10.1000/exact-paper', visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  const second = await insertComposedItem(database, { sourceId: 'reuters', sourceType: 'media', title: 'Press coverage of the paper', registryIds: ['NCT07777777'], visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
   await events.clusterPending();
   assert.equal((await eventOf(database, first.id)).id, (await eventOf(database, second.id)).id);
-  assert.equal(events.counters.adjudicated, 0);
+  assert.equal(events.counters.adjudicated, 1);
+  assert.equal(editor.calls.judge[0].candidates[0].doi, '10.1000/exact-paper');
+});
+
+
+test('failed semantic adjudication preserves separate usable events', options, async () => {
+  const editor = { available: true, judgeSameEvent: async () => { throw new Error('model unavailable'); } };
+  const events = layer({ editor, embedder: null });
+  const first = await insertComposedItem(database, { sourceId: 'ctgov', title: 'Milestone one', registryIds: ['NCT06666666'], visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await events.clusterPending();
+  const second = await insertComposedItem(database, { sourceId: 'stat', sourceType: 'media', title: 'Milestone two', registryIds: ['NCT06666666'], visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  const summary = await events.clusterPending();
+  assert.equal(summary.created, 1);
+  assert.equal(summary.skipped, 0);
+  assert.notEqual((await eventOf(database, first.id)).id, (await eventOf(database, second.id)).id);
+  assert.equal(events.counters.adjudicationFailures, 1);
 });

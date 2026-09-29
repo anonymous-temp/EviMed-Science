@@ -1,5 +1,5 @@
 {
- "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model.",
+ "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model. Three explicitly synthetic regression controls were added on 2026-09-29; their text is authored evaluation input, not an upstream publication.",
  "lane": [
   {
    "id": "food-recall-flour",
@@ -315,6 +315,88 @@
      "titleZh": "Cochrane 系统综述：米非司酮用于紧急避孕优于左炔诺孕酮",
      "summaryZh": "纳入 87 项研究、约 3.6 万名受试者，其中 79 项在中国开展。与左炔诺孕酮相比，中剂量与低剂量米非司酮均减少妊娠，但延迟月经风险升高；与 Yuzpe 方案相比妊娠减少更明显。",
      "publishedAt": "2026-09-21T00:00:00+00:00"
+    }
+   ]
+  },
+  {
+   "id": "synthetic-trial-distinct-milestones",
+   "fixtureKind": "synthetic-regression",
+   "expect": [
+    "related",
+    "no"
+   ],
+   "why": "Authored control, not a published clinical claim: one registry identifier does not equate registration and termination.",
+   "report": {
+    "sourceName": "Synthetic registry fixture",
+    "titleRaw": "Synthetic trial A terminated",
+    "identityKey": "reg:NCT09999999:terminated:2026-09-22",
+    "registryIds": [
+     "NCT09999999"
+    ],
+    "publishedAt": "2026-09-22T00:00:00Z"
+   },
+   "candidates": [
+    {
+     "sourceName": "Synthetic registry fixture",
+     "titleRaw": "Synthetic trial A first registered",
+     "identityKey": "reg:NCT09999999:registered:2020-01-01",
+     "registryIds": [
+      "NCT09999999"
+     ],
+     "publishedAt": "2020-01-01T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "synthetic-organization-different-drugs",
+   "fixtureKind": "synthetic-regression",
+   "expect": [
+    "no",
+    "related"
+   ],
+   "why": "Authored control: cross-publisher stories sharing a company concern different drugs and decisions.",
+   "report": {
+    "sourceName": "Synthetic outlet A",
+    "titleRaw": "Company Q receives approval for Drug A",
+    "summaryZh": "Synthetic fixture: the decision concerns Drug A for indication A.",
+    "publishedAt": "2026-09-22T00:00:00Z"
+   },
+   "candidates": [
+    {
+     "sourceName": "Synthetic outlet B",
+     "titleRaw": "Company Q ends the Drug B program",
+     "summaryZh": "Synthetic fixture: Drug B is a different molecule studied for indication B.",
+     "publishedAt": "2026-09-22T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "synthetic-exact-paper-press-coverage",
+   "fixtureKind": "synthetic-regression",
+   "expect": [
+    "yes"
+   ],
+   "why": "Authored positive control: the press coverage explicitly describes the identical paper and readout.",
+   "report": {
+    "sourceName": "Synthetic press outlet",
+    "titleRaw": "Trial A paper reports its primary endpoint",
+    "summaryZh": "Synthetic fixture: coverage of the exact paper 10.1000/synthetic-trial-a, published today, with no new trial milestone.",
+    "registryIds": [
+     "NCT08888888"
+    ],
+    "publishedAt": "2026-09-22T00:00:00Z"
+   },
+   "candidates": [
+    {
+     "sourceName": "Synthetic journal",
+     "titleRaw": "Primary endpoint results from Trial A",
+     "doi": "10.1000/synthetic-trial-a",
+     "identityKey": "doi:10.1000/synthetic-trial-a",
+     "registryIds": [
+      "NCT08888888"
+     ],
+     "evidenceType": "rct",
+     "publishedAt": "2026-09-22T00:00:00Z"
     }
    ]
   }
