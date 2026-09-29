@@ -56,11 +56,11 @@ export class HandbookConsolidation {
       if (applied) await this.documents.put(job.userId, "method", applied.id, applied.payload, {
         expectedRevision: applied.expectedRevision, transactionClient: client,
       });
+      if (result.disposition === "stale" && !job.payload.retryOf && current.payload.contentDigest === job.payload.candidateDigest) {
+        await this.learning.enqueueHandbook(job.userId, current, { retryOf: job.id, transactionClient: client });
+      }
     });
     if (!completed) throw new HttpError(409, "product_job_lease_lost", "The handbook job lost its lease.");
-    if (result.disposition === "stale" && !job.payload.retryOf && current.payload.contentDigest === job.payload.candidateDigest) {
-      await this.learning.enqueueHandbook(job.userId, current, { retryOf: job.id });
-    }
     return { ...result, jobCompleted: true };
   }
 
