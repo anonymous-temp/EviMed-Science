@@ -23,3 +23,21 @@ class EngineContextTests(unittest.TestCase):
         self.assertEqual(call.call_args.args, ("meta_analysis", {"action": "start", "topic": "A review"}))
         self.assertEqual(call.call_args.kwargs["execution_context"], context)
         self.assertIn("__evimed_execution_context", args)
+
+    def test_local_engine_environments_keep_the_per_call_effort(self):
+        import os
+        import tempfile
+        import meta_agent
+        import specialist_jobs
+        context = {"v": 1, "sessionId": "s-off", "callId": "call-1", "rootCallId": "call-1",
+                   "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "off"}
+        with tempfile.TemporaryDirectory() as directory:
+            token = pathlib.Path(directory) / "token"
+            token.write_text("test-only-token\n")
+            token.chmod(0o600)
+            with mock.patch.dict(os.environ, {"EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token),
+                    "EVIMED_MODEL_GATEWAY_URL": "http://gateway.invalid/v1", "EVIMED_MODEL_GATEWAY_MODEL": "deepseek-flash"}):
+                for module in (meta_agent, specialist_jobs):
+                    env = module._model_environment(context)
+                    self.assertEqual(env["LLM_REASONING_EFFORT"], "off")
+                    self.assertEqual(env["LLM_ENABLE_THINKING"], "false")

@@ -54,3 +54,58 @@ def test_meta_gateway_usage_is_not_reported_a_second_time(tmp_path, monkeypatch)
     monkeypatch.setattr(evimed_adapter.evimed_usage_report, "report", report)
     evimed_adapter._report_usage(tmp_path / "state.json", state, project, tmp_path / "log")
     report.assert_not_called()
+
+
+def test_managed_meta_llm_serializes_off_and_selected_effort(monkeypatch):
+    from new_meta.core.llm import LLMClient
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "managed-thinking")
+    client = LLMClient.__new__(LLMClient)
+    client.base_url = "http://open-science-web:8787/internal/model/v1"
+    client.enable_thinking = True
+    client.reasoning_effort = "low"
+    assert client._chat_reasoning_effort(model="deepseek-flash") == "low"
+    client.enable_thinking = False
+    assert client._chat_extra_body(model="deepseek-flash") == {"thinking": {"type": "disabled"}}
+    assert client._chat_reasoning_effort(model="deepseek-flash") is None
+
+
+def test_independently_packaged_engine_clients_share_the_same_wire_contract():
+    from new_meta.core import engine_model
+    root = Path(__file__).resolve().parents[3]
+    shared = root / "OpenScience/deploy/specialist-adapter/evimed_specialist_adapter/engine_model.py"
+    assert Path(engine_model.__file__).read_bytes() == shared.read_bytes()
+
+
+def test_meta_retry_refreshes_job_credentials_and_a_new_effort_is_a_new_execution(tmp_path, monkeypatch):
+    from test_evimed_adapter import _mark
+    client, workspace = _fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("EVIMED_ENGINE_MODEL_GATEWAY", "true")
+    monkeypatch.setenv("EVIMED_ENGINE_MODEL_TOKEN_URL", "http://gateway.invalid/token")
+    context = {"v": 1, "sessionId": "s-low", "callId": "call-1", "rootCallId": "call-1",
+               "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "low"}
+    def issue(**kwargs):
+        policy = {"reasoningEffort": kwargs["execution_context"]["reasoningEffort"], "source": "session"}
+        return {evimed_adapter.engine_model.TOKEN_ENV: TOKEN, evimed_adapter.engine_model.BASE_URL_ENV: "http://gateway.invalid/v1",
+                evimed_adapter.engine_model.POLICY_ENV: json.dumps(policy)}
+    mint = Mock(side_effect=issue)
+    monkeypatch.setattr(evimed_adapter.engine_model, "request_credential", mint)
+    launches = []
+    monkeypatch.setattr(evimed_adapter.subprocess, "Popen", lambda command, **kw: launches.append(kw) or SimpleNamespace(pid=2_000_000_001))
+    def start():
+        return client.post("/api/v1/evimed/meta-analysis", json={"action": "start", "topic": "Same research question"},
+            headers={"Authorization": "Bearer " + _token(), "X-EviMed-Execution-Context": json.dumps(context)}).json()
+    first = start()
+    state_file = workspace / "meta-analysis-runs/.jobs" / (first["data"]["jobId"] + ".json")
+    state = _mark(state_file, status="failed", error="worker interrupted")
+    project = Path(state["outputRoot"]) / "project"
+    project.mkdir()
+    (project / ".checkpoint").write_text("[]")
+    resumed = start()
+    assert resumed["data"]["resumed"] is True
+    assert mint.call_count == 2
+    assert launches[-1]["env"][evimed_adapter.engine_model.TOKEN_ENV] == TOKEN
+    _mark(state_file, status="succeeded")
+    context["reasoningEffort"] = "max"
+    next_job = start()
+    assert next_job["data"]["jobId"] != first["data"]["jobId"]
+    assert mint.call_count == 3

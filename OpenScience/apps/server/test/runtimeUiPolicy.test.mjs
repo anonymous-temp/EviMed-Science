@@ -1235,3 +1235,18 @@ test("a notice page says what stopped the conversation in the shell's own words,
   assert.ok(offPage.includes("对话暂不可用"), offPage);
   for (const page of [cappedPage, offPage]) assert.ok(!page.includes("内核"), page);
 });
+
+test('native model selection permits only the certified Flash route and closed reasoning choices', async t => {
+  const f = await fixture(t);
+  const request = selected => fetch(`${f.base}/api/session/selectModel`, { method: 'POST', headers: {
+    cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json',
+  }, body: JSON.stringify({ type: 'client-request', rpcId: 'select-effort', method: 'session/selectModel',
+    payload: { args: { request: { sessionId: 's-one', provider: 'deepseek-official', model: f.config.deepseekModel, ...selected } } } }) });
+  for (const reasoningEffort of ['off', 'low', 'high', 'max']) assert.equal((await request({ reasoningEffort })).status, 200);
+  for (const invalid of [{ model: 'deepseek-v4-pro' }, { provider: 'other-provider' }, { reasoningEffort: 'unbounded' }, { apiKey: 'not-an-allowed-setting' }]) {
+    assert.equal((await request(invalid)).status, 403);
+  }
+  assert.equal(isDeniedRuntimeUiMethod('session/modelCatalog'), false);
+  assert.equal(isDeniedRuntimeUiMethod('session/initializeDefaultModel'), true);
+  assert.equal(isDeniedRuntimeUiMethod('credentials/set'), true);
+});
