@@ -104,6 +104,14 @@ def test_failed_mr_publishes_completed_numeric_projection_through_error_contract
     assert json.loads((workspace / summary_path).read_text())["primary_estimate_available"] is True
 
 
+@pytest.mark.parametrize("code", ["analysis_failed", "no_instruments", "no_outcome_data", "insufficient_harmonised_snps", "ld_clumping_failed", "mr_analysis_incomplete"])
+def test_partial_result_keeps_the_fixed_engines_original_error_code(tmp_path, monkeypatch, code):
+    service, _, _, _ = setup_mr(tmp_path, monkeypatch)
+    actual, message = service._mr_runner_failure({"errorCode": code, "error": "PRIVATE_PROVIDER_SECRET"}, [])
+    assert actual == code
+    assert "PRIVATE_PROVIDER_SECRET" not in message
+
+
 def test_diagnostic_directory_refuses_existing_or_symlink_destination(tmp_path, monkeypatch):
     service, client, secret, workspace = setup_mr(tmp_path, monkeypatch)
     write_sources(workspace, "rs101")
