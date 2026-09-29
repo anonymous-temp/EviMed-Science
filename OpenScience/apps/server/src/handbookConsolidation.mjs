@@ -120,7 +120,7 @@ export class HandbookConsolidation {
         frontmatter: payload.frontmatter, body: payload.body, ...(payload.files ? { files: payload.files } : {}),
         dependencies: payload.dependencies, contentDigest: payload.contentDigest, display: payload.display,
         version: (baseline?.payload?.version ?? 0) + 1, verification, binding, ...(evaluation ? { evaluation } : {}),
-        source: { candidateId: candidate.id, candidateDigest: payload.contentDigest, runId: source.id, projectId: payload.provenance.sourceProjectId },
+        source: { candidateId: candidate.id, candidateDigest: payload.contentDigest, runId: source.id, projectId: payload.provenance.sourceProjectId, sessionId: source.sessionId ?? null },
         previousRevision: baseline?.revision ?? null, observations: [], createdAt: baseline?.payload?.createdAt ?? at, appliedAt: at,
       } });
     } catch (error) {

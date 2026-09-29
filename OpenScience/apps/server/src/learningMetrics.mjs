@@ -165,6 +165,7 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
  * @param {any} database @param {string} userId @param {{now?: Date}} [options]
  */
 export async function learningSummary(database, userId, { now = new Date() } = {}) {
+  const handbooks = await handbookSummary(database, userId);
   const counts = await learningLedgerCounts(database, { userId, now });
   /** @type {Record<string, number>} */
   const queued = {};
@@ -181,6 +182,7 @@ export async function learningSummary(database, userId, { now = new Date() } = {
     lessons: { byTrigger: queued, ...ended },
     results: counts.results,
     handbookCandidates: counts.handbookCandidates,
+    handbooks,
     spend24hCny: counts.spend ? Math.round((counts.spend.settled) * 1e6) / 1e6 : null,
   };
 }
@@ -205,7 +207,7 @@ export function learningMetricFamilies(enabled, ledger, counters) {
     families.push(
       { name: "open_science_learning_methods", help: "Learned methods in the account libraries, by status.", type: "gauge",
         series: METHOD_STATUSES.map((status) => ({ value: ledger.methods[status] ?? 0, labels: { status } })) },
-      { name: "open_science_learning_handbook_candidates", help: "Lessons taught by the platform reviewer alone, kept for the capability handbook and never mounted.", type: "gauge",
+      { name: "open_science_learning_handbook_candidates", help: "Lessons taught by the platform reviewer alone, awaiting or consumed by the capability handbook loop.", type: "gauge",
         series: [{ value: ledger.handbookCandidates }] },
       { name: "open_science_learning_method_uses", help: "What effective methods' current bodies have been used for: mounted with a verdict, used, in a succeeded delivery, read without one.", type: "gauge",
         series: USE_KINDS.map((kind) => ({ value: ledger.uses[kind] ?? 0, labels: { kind } })) },
@@ -223,4 +225,38 @@ export function learningMetricFamilies(enabled, ledger, counters) {
   }
   if (counters) families.push(...counters.families());
   return families;
+}
+
+/** Actual current-version use records, separate from causal quality evidence. No first-page totals.
+ * @param {any} database @param {string} userId */
+export async function handbookSummary(database, userId) {
+  const result = await database.query(`WITH owned AS MATERIALIZED (
+    SELECT id,payload,updated_at FROM evimed_product.documents
+    WHERE user_id=$1 AND kind='method' AND deleted_at IS NULL
+      AND payload->>'recordType' IN ('handbook-candidate','capability-handbook')
+  ), active AS MATERIALIZED (
+    SELECT * FROM owned WHERE payload->>'recordType'='capability-handbook' AND payload->>'status'='active'
+  ), dispositions AS (
+    SELECT coalesce(payload->'dispositions'->(payload->>'contentDigest')->>'disposition',
+      payload->'dispositions'->(payload->>'contentDigest')->>'state','queued') AS state,count(*)::integer AS n
+    FROM owned WHERE payload->>'recordType'='handbook-candidate' GROUP BY 1
+  ), observations AS (
+    SELECT observation FROM active CROSS JOIN LATERAL jsonb_array_elements(coalesce(payload->'observations','[]'::jsonb)) observation
+    WHERE observation->>'contentDigest'=payload->>'contentDigest'
+  ) SELECT jsonb_build_object(
+    'dispositions',coalesce((SELECT jsonb_object_agg(state,n) FROM dispositions),'{}'::jsonb),
+    'applied',(SELECT count(*) FROM active),
+    'unmeasured',(SELECT count(*) FROM active WHERE payload->>'verification'='unmeasured'),
+    'evaluated',(SELECT count(*) FROM active WHERE payload->>'verification'='evaluated'),
+    'verifiedImprovement',(SELECT count(*) FROM active WHERE payload->>'verification'='evaluated' AND payload #>> '{evaluation,verdict}'='better'),
+    'attached',(SELECT count(*) FROM observations WHERE observation->>'attached'='true'),
+    'used',(SELECT count(*) FROM observations WHERE observation->>'used'='true'),
+    'outcomes',coalesce((SELECT sum(jsonb_array_length(coalesce(observation->'outcomes','[]'::jsonb))) FROM observations),0),
+    'recent',coalesce((SELECT jsonb_agg(item) FROM (SELECT jsonb_build_object(
+      'id',id,'title',coalesce(payload #>> '{display,title}',payload #>> '{frontmatter,name}'),
+      'capabilityId',payload->>'capabilityId','version',payload->'version','verification',payload->>'verification',
+      'appliedAt',payload->>'appliedAt','source',payload->'source','evaluationVerdict',payload #>> '{evaluation,verdict}'
+      ) AS item FROM active ORDER BY payload->>'appliedAt' DESC,id LIMIT 6) recent),'[]'::jsonb)
+  ) AS handbook_summary`, [userId]);
+  return result.rows[0]?.handbook_summary ?? null;
 }

@@ -54,6 +54,13 @@ export interface LearningSummary {
   lessons: { byTrigger: Record<string, number>; succeeded: number; failed: number };
   results: Record<string, number>;
   handbookCandidates: number;
+  handbooks?: {
+    dispositions: Record<string, number>;
+    applied: number; unmeasured: number; evaluated: number; verifiedImprovement: number;
+    attached: number; used: number; outcomes: number;
+    recent: { id: string; title: string; capabilityId: string; version: number; verification: "unmeasured" | "evaluated";
+      appliedAt: string; evaluationVerdict?: string | null; source: { projectId: string; runId: string; sessionId?: string | null } }[];
+  } | null;
   spend24hCny: number | null;
 }
 
