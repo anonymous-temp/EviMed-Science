@@ -70,3 +70,22 @@ test("a learning pause or trial beginning after preparation prevents the queued 
   assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("A") }] }), { contexts: [] });
   assert.equal(await context.prepare(project, request("B")), null);
 }));
+
+test("concurrent replays of one native request share the same frozen route and preparation", async () => {
+  let routed = 0;
+  await fixture(async ({ context, project }) => {
+    const [a,b] = await Promise.all([context.prepare(project, request("A")), context.prepare(project, request("A"))]);
+    assert.equal(routed, 1);
+    assert.equal(a.digest,b.digest);
+  }, { route: async () => { routed += 1; await new Promise(resolve=>setTimeout(resolve,15)); return { effectiveAgentId: "geo-content", question: "A" }; } });
+});
+
+test("opaque request IDs cannot escape metadata storage and metadata symlinks are refused", async () => fixture(async ({ context, project }) => {
+  const id = "../../outside";
+  await context.prepare(project, request(id));
+  assert.ok(context.file(project,"session",id).startsWith(path.join(project.metaDir,"native-handbooks")));
+  await fs.rm(path.join(project.metaDir,"native-handbooks"), {recursive:true,force:true});
+  await fs.symlink(project.workspaceDir,path.join(project.metaDir,"native-handbooks"));
+  await assert.rejects(context.prepare(project,request("B")));
+  assert.deepEqual(await fs.readdir(project.workspaceDir),[]);
+}));
