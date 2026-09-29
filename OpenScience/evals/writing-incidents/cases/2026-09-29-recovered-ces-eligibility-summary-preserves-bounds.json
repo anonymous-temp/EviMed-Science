@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-ces-eligibility-summary-preserves-bounds",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_7f1bd855fa909e3e07059bf867fd54f1/workspace/deliverables/empa-kidney-durability/clinical-evidence-report.md",
+  "line": 113,
+  "verbatim": "- For adults with chronic kidney disease who meet the EMPA-KIDNEY eligibility criteria — an eGFR of at least 20 mL/min/1.73 m² with albuminuria, or an eGFR of 20 to 45 mL/min/1.73 m² — the trial supports expecting kidney and cardiovascular protection to continue after treatment stops, at a diminished level and mainly in the year after withdrawal [2]<!-- claim:CLM-015 --><!-- claim:CLM-016 -->. This is practice context for the population studied: the trial enrolled adults with an eGFR of at least 20 mL/min/1.73 m², the estimates come from a single randomized trial, and the post-trial period is an open observational extension in which only 74% of randomized participants took part; the results do not extend to dialysis-dependent or transplanted patients.",
+  "whyItIsWrong": "Practice summary says eGFR at least 20 with albuminuria or 20-45, omitting the <90 upper bound and >=200 albuminuria threshold specified in results line 37 / CLM-006.",
+  "caughtBy": "reviewer",
+  "note": "Keep trial eligibility boundaries in summaries; do not let prose generalization expand the trial population. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_7f1bd855fa909e3e07059bf867fd54f1",
+  "artifactSha256": "3dbb96a01f61e447d93e77a7af0340d219eca07e8d46a687d71d9986432f9e24",
+  "sourceRevision": null
+}

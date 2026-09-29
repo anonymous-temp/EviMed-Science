@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-mr-unit-assumption-32428a00",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_32428a0077937ed5c45bbff8f752b417/workspace/deliverables/mr-bmi-cad/mendelian-randomization-report.md",
+  "line": 54,
+  "verbatim": "**效应尺度**：暴露侧汇总统计以 BMI 的效应量单位表示，而 BMI 类 GWAS 通常以标准差为单位报告遗传效应。本报告按这一惯例解读合并估计——这是解读假设，运行输出并没有逐字声明单位。OR = 1.53 因此应读作「遗传预测的 BMI 每升高 1 个标准差，CAD 的比值比为 1.53」，而不是「每 1 kg/m²」。",
+  "whyItIsWrong": "Report concedes the exposure effect unit is unconfirmed yet uses per-SD in estimates and conclusions.",
+  "caughtBy": "reviewer",
+  "note": "Preserve numerical effect in source units until a source field confirms the scale; test SD, kg/m2, inverse-normalized and unknown units. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_32428a0077937ed5c45bbff8f752b417",
+  "artifactSha256": "684813a8503423b2d0f203c19876469bf0780a3be48fa2d432ba230411a13567",
+  "sourceRevision": null
+}

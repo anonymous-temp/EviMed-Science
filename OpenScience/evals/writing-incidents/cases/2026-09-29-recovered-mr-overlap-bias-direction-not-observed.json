@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-mr-overlap-bias-direction-not-observed",
+  "genre": "unsupported-inference",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_d410b7bfe89c780f38fc27bc9fcbd18f/workspace/deliverables/bmi-cad-mr/mendelian-randomization-report.md",
+  "line": 154,
+  "verbatim": "**两侧样本是否重叠无法判定**。暴露侧与结局侧所报告的队列不同，但条目记录不含个体层面的样本共享信息。运行记录中的样本重叠提示字段未触发，不过该字段只表示没有超过它自身的判定阈值，不能作为「两侧不重叠」的证据。若两侧实际共享大量参与者，合并估计会偏向无效值。真出现这方面偏倚，它更可能让本研究低估而非高估 BMI 与 CAD 的关联。这个方向判断沿用两样本估计量在样本重叠下趋向无效值的一般假设，本次没有做定量模拟来验证。",
+  "whyItIsWrong": "Unmeasured sample overlap is asserted to bias toward the null and underestimate the association; no overlap measurement or simulation supports this direction. The first run at line 142 treats direction and size as uncertain.",
+  "caughtBy": "reviewer",
+  "note": "Describe unknown overlap and conditional mechanisms; do not make a directional bias claim without necessary assumptions/evidence. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_d410b7bfe89c780f38fc27bc9fcbd18f",
+  "artifactSha256": "f2bfd00510473a5d71c3ad82e6f5842575505e8018d9b4539cb22ea2e0d7a2ab",
+  "sourceRevision": null
+}

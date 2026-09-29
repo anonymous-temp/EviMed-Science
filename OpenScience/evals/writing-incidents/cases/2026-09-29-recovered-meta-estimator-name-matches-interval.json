@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-meta-estimator-name-matches-interval",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_15e6d7d53552ed9819b508ba91aff844/workspace/deliverables/txa-tka-meta/meta-analysis-report.md",
+  "line": 58,
+  "verbatim": "主要模型为设计感知的 REML ＋ HKSJ 小样本推断。分析单位是独立随机化研究，不是单条对比。平行设计直接给出研究层效应；多臂试验与平行试验共享的对照组通过显式协方差与广义最小二乘整合，同一对照组不会被重复计成独立信息（10 项研究中 7 项为多臂、3 项为平行）。研究内的相关对比先合并为一个独立研究效应，再估计研究间方差。",
+  "whyItIsWrong": "Primary result named DESIGN_AWARE_REML_HKSJ uses an observed 1.95996398454 SE CI multiplier; separately stored HKSJ sensitivity has different limits.",
+  "caughtBy": "reviewer",
+  "note": "Align method label and interval algorithm, retaining primary and sensitivity outputs with explicit estimands; add real-run regression. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_15e6d7d53552ed9819b508ba91aff844",
+  "artifactSha256": "29c3acf6b73e927d991f0084bd1354590b0754a1b73a84aa57eda714bcd09cd1",
+  "sourceRevision": "233c033f36f15a5f85b8ca406932d329d918895d"
+}

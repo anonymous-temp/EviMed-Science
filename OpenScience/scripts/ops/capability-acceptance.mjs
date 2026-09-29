@@ -16,7 +16,7 @@
 // whose path is exactly what the ledger's `evidence` field wants.
 //
 // It does not update the ledger. An acceptance that writes its own verdict is not
-// an acceptance; a human reads the result and the package, then edits the row.
+// an acceptance; the result and package are reviewed separately before the row changes.
 //
 // Usage:
 //   OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE=<path> \
@@ -137,8 +137,8 @@ const say = (message) => process.stdout.write(`${stamp()} ${message}\n`);
  */
 function renderBrief(brief) {
   const inputs = brief?.inputs ?? {};
-  // Only the clinical-evidence family phrases its brief as a `question` with
-  // PICO fields; the other harnesses declare the capability manifest's own
+  // PICO-style briefs phrase their request as a `question` with clinical
+  // fields; the other harnesses declare the capability manifest's own
   // input names (topic, drug, exposure, section, ...). Those render as one
   // `name: value` line each, in the brief's order, so the run receives every
   // declared input and nothing the harness made up.
@@ -173,6 +173,11 @@ function renderBrief(brief) {
   if (Array.isArray(inputs.datasets) && inputs.datasets.length) {
     lines.push("\nDatasets:");
     for (const dataset of inputs.datasets) lines.push(`- ${typeof dataset === "string" ? dataset : JSON.stringify(dataset)}`);
+  }
+  for (const [key, label] of [["studies", "Supplied study reports"], ["sourceNotes", "Supplied source notes"]]) {
+    if (!Array.isArray(inputs[key]) || !inputs[key].length) continue;
+    lines.push(`\n${label}:`);
+    for (const value of inputs[key]) lines.push(`- ${typeof value === "string" ? value : JSON.stringify(value)}`);
   }
   return lines.join("\n").trim();
 }

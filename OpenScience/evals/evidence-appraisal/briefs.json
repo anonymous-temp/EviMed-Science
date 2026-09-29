@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "note": "Four briefs, each a request somebody actually brings: a stack of papers and the question 'how good are these?'. They are chosen because appraisal fails differently from synthesis — a synthesis fails by not finding something, and the gap is visible; an appraisal fails by producing a complete, well-formatted table whose judgements are wrong, and nothing about the deliverable looks unfinished. The studies arrive the way a researcher sends them, as a list of names with no identifiers, because resolving them is part of the work.",
+  "note": "Four briefs, each a request somebody actually brings: a stack of papers and the question 'how good are these?'. They are chosen because appraisal fails differently from synthesis — a synthesis fails by not finding something, and the gap is visible; an appraisal fails by producing a complete, well-formatted table whose judgements are wrong, and nothing about the deliverable looks unfinished. Study inputs preserve the names and identifiers actually supplied; missing identities remain unresolved rather than invented. Resolving the source and its study family is part of the work.",
   "briefs": [
     {
       "id": "appraisal-001-sglt2-hfpef",
@@ -46,8 +46,8 @@
     },
     {
       "id": "appraisal-002-tirzepatide-companion-papers",
-      "title": "替尔泊肽减重：三篇论文，一个试验",
-      "why": "The failure that produces the most confident wrong answer available in this capability. The set contains a primary trial report, its long-term extension and a secondary-outcome paper from the same participants. Counted as three studies they look like replication, which removes the inconsistency concern and supplies an argument for not downgrading — a body of one trial is presented as a body of three agreeing trials. Nothing in the deliverable looks wrong; the citations all resolve and the table is complete.",
+      "title": "替尔泊肽减重：关联论文、独立试验与未识别来源",
+      "why": "Companion reports from one randomized trial must not be counted as independent replication. Four identifiable reports represent two trial families, with different follow-up periods and subsets. The fifth supplied citation is deliberately unresolved: preserve that uncertainty without inventing its data or discarding the identifiable evidence.",
       "inputs": {
         "question": "在无糖尿病的肥胖成人中，替尔泊肽对体重下降的证据确定性有多高？",
         "population": "BMI ≥ 30、无 2 型糖尿病的成人",
@@ -57,30 +57,44 @@
           "停药后体重反弹"
         ],
         "studies": [
-          "SURMOUNT-1 主要结果（Jastreboff 2022, N Engl J Med）",
-          "SURMOUNT-1 的长期延续期报告（2024）",
-          "SURMOUNT-1 的体成分二次分析（2023）",
-          "SURMOUNT-4 停药后维持研究（2024, JAMA）",
-          "一项单中心真实世界回顾性队列（2024, n=98）"
+          "SURMOUNT-1 primary report (Jastreboff et al., NEJM 2022; DOI 10.1056/NEJMoa2206038; PMID 35658024)",
+          "SURMOUNT-1 extension in participants with obesity and prediabetes (NEJM online 2024, issue 2025; DOI 10.1056/NEJMoa2410819; PMID 39536238)",
+          "SURMOUNT-1 DXA body-composition substudy (Look et al., Diabetes Obes Metab 2025; DOI 10.1111/dom.16275; PMID 39996356)",
+          "SURMOUNT-4 randomized withdrawal trial (Aronne et al., JAMA online 2023, issue 2024; DOI 10.1001/jama.2023.24945; PMID 38078870)",
+          "Unresolved supplied citation: a single-centre retrospective cohort (2024, n=98), without authors, title, DOI or full text. Its identity and reported sample size are unverified."
+        ],
+        "sourceNotes": [
+          "The DXA paper has an indexed correction (DOI 10.1111/dom.70050; PMID 40832789). Check it when appraising that paper; a correction is not a new study.",
+          "The extension and DXA report involve subsets of SURMOUNT-1, not three independent randomizations. Preserve distinct analysis populations and follow-up periods."
         ]
       },
       "mustDo": [
-        "Collapse the three SURMOUNT-1 publications into one study row that names all three papers in its citation.",
-        "State the number of distinct trials and the number of publications separately, in the roll-up and in appraisal-table.md.",
-        "Appraise the n=98 retrospective cohort in its own body, or say why it belongs with the trials.",
-        "Judge imprecision on the interval and the decision at stake, not on whether the p-value crossed a threshold."
+        "Group the three SURMOUNT-1 reports under one study-family identity, while retaining their distinct populations, endpoints and follow-up periods.",
+        "Report four identifiable research reports from two verified randomized-trial families, separately from the one unresolved supplied cohort citation; do not count the correction as another study.",
+        "Retain the unresolved cohort entry with its missing identity and unavailable appraisal made explicit; appraise it only if its actual source is resolved.",
+        "Appraise evidence by outcome and design; an outcome-specific table may contain multiple rows per study family without counting those rows as independent studies.",
+        "Judge imprecision on the interval and the decision at stake, not on whether a p-value crossed a threshold."
       ],
       "mustNotDo": [
-        "Give the extension report and the secondary analysis their own study rows.",
-        "Cite agreement between the SURMOUNT-1 publications as evidence against inconsistency.",
-        "Drop the single-centre cohort from the table because it is weak — appraise it and say so.",
-        "Report a rebound estimate from SURMOUNT-4 as if it applied to the SURMOUNT-1 population without recording the indirectness."
+        "Count the extension or secondary analysis as independent randomized studies.",
+        "Cite agreement among SURMOUNT-1 reports as independent replication or automatically sum their participant counts.",
+        "Invent a risk-of-bias assessment or numerical result for the unresolved n=98 citation, or silently discard the citation.",
+        "Report SURMOUNT-4 withdrawal estimates as applying unchanged to the entire SURMOUNT-1 population without evaluating indirectness.",
+        "Grade success by a fixed number of table rows instead of correct study-family and publication accounting."
       ],
-      "gradedOn": "Whether the delivered table contains four study rows and says so, rather than six rows that resolve correctly and count one trial three times.",
+      "gradedOn": "Whether study identities, report identities, subsets and outcomes remain distinct: two verified randomized-trial families from four identifiable research reports, plus an explicitly unresolved candidate cohort. Outcome-level rows and the indexed correction do not create additional independent studies.",
       "generated": {
         "authoredAt": "2026-09-02",
-        "authoredAtSource": "first-commit"
-      }
+        "authoredAtSource": "first-commit",
+        "revisedAt": "2026-09-30",
+        "revisionReason": "Resolve real report identities and replace contradictory fixed-row counts; keep the unidentified cohort as unverified."
+      },
+      "sources": [
+        "https://www.nejm.org/doi/10.1056/NEJMoa2206038",
+        "https://www.nejm.org/doi/10.1056/NEJMoa2410819",
+        "https://pubmed.ncbi.nlm.nih.gov/39996356/",
+        "https://jamanetwork.com/journals/jama/fullarticle/2812936"
+      ]
     },
     {
       "id": "appraisal-003-suxiao-jiuxin-wan-formulary",

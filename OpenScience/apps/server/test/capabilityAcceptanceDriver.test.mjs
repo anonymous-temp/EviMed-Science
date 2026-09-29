@@ -128,3 +128,16 @@ for (const status of ["running", "succeeded"]) test(`hanging artifact reads cann
   assert.equal(record.observation.status, status === "running" ? "pending" : "terminal");
   assert.match(result.stdout, /could not read partial\/report.md|artifact capture budget/);
 }));
+
+test("PICO brief dispatch preserves supplied studies and source notes without evaluator answers", async () => fixture(async f => {
+  const catalogue = JSON.parse(await fs.readFile(new URL("../../../evals/evidence-appraisal/briefs.json", import.meta.url), "utf8"));
+  const source = catalogue.briefs.find(brief => brief.id === "appraisal-002-tirzepatide-companion-papers");
+  const brief = { ...source, id: "fixture-case", mustDo: ["EVALUATOR_ONLY_REQUIRED"], mustNotDo: ["EVALUATOR_ONLY_FORBIDDEN"], gradedOn: "EVALUATOR_ONLY_GRADE" };
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [brief] }));
+  const result = await f.run({ attach: false });
+  assert.equal(result.code, 3);
+  const prompt = f.requests.find(request => request.url === "/api/agent-runs/dispatch").body.text;
+  for (const value of [...source.inputs.studies, ...source.inputs.sourceNotes]) assert.ok(prompt.includes(value), value);
+  assert.ok(prompt.includes(source.inputs.question));
+  assert.doesNotMatch(prompt, /EVALUATOR_ONLY/);
+}));

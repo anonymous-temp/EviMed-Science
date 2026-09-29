@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-meta-retrieval-denominator-wording",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_15e6d7d53552ed9819b508ba91aff844/workspace/deliverables/txa-tka-meta/meta-analysis-report.md",
+  "line": 115,
+  "verbatim": "1. **检索覆盖不足**：1,320 条待筛记录只有 660 条进入题名/摘要筛选（50%），其余 660 条因筛选预算上限被截断；另有 66 条记录在检索阶段未取到（PubMed 命中 1,083 条、实际取回 1,000 条，差额 83 条即其中的未取回部分），这两项合计 726 条未进入题名/摘要筛选。进入全文评估的 157 篇报告里有 98 篇没有取得全文。各处未覆盖的口径不同，遗漏相关试验的风险不可忽略。",
+  "whyItIsWrong": "83 raw PubMed hits not fetched are described as part of 66 post-dedup not-retrieved records without explaining overlap/deduplication.",
+  "caughtBy": "reviewer",
+  "note": "Keep raw source retrieval and post-dedup PRISMA accounting as distinct denominators; avoid wording that implies 83 is a subset count of 66. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_15e6d7d53552ed9819b508ba91aff844",
+  "artifactSha256": "29c3acf6b73e927d991f0084bd1354590b0754a1b73a84aa57eda714bcd09cd1",
+  "sourceRevision": "233c033f36f15a5f85b8ca406932d329d918895d"
+}

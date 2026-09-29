@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-adr-unsupported-reporting-lag-explanation",
+  "genre": "unsupported-inference",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_430c49d1aa809913ab106b2e56cb0009/workspace/deliverables/adr-osimertinib-cardiotox/safety-report.md",
+  "line": 64,
+  "verbatim": "**按报告年份**：2023 年 4,274 例（53.7%）、2024 年 3,526 例（44.3%）、2025 年 157 例（2.0%）。2025 年报告数明显偏低，与数据截止时点（2026-09-29）及报告录入滞后有关，不表示 2025 年真实报告量下降 [1]。",
+  "whyItIsWrong": "The 2025 count drop is attributed to reporting lag without a preserved lag analysis.",
+  "caughtBy": "reviewer",
+  "note": "State the observed count difference; label proposed explanations as hypotheses unless tested. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_430c49d1aa809913ab106b2e56cb0009",
+  "artifactSha256": "67cede52efd54d44784cefd9f59ef035ad3fc79d231934f8cd464e6198320a3b",
+  "sourceRevision": null
+}

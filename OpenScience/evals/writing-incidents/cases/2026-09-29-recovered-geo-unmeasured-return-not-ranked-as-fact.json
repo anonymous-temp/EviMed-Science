@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-geo-unmeasured-return-not-ranked-as-fact",
+  "genre": "unsupported-inference",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_e9a3ba42cefb2937da6e48337d714881/workspace/deliverables/geo-insight/geo-insight.md",
+  "line": 113,
+  "verbatim": "**情绪曲线的两个谷底**分别是急性症状出现的阶段 2 与出血事件处理的阶段 10；**峰值**在长期维持期的阶段 8，此时患者最可能松懈，也最可能自行停药。内容排期上，阶段 8 与阶段 10 是投入产出比最高的两个位置。",
+  "whyItIsWrong": "Stages 8 and 10 are said to have highest return on investment before any AI baseline or conversion measurement.",
+  "caughtBy": "reviewer",
+  "note": "Retain the content hypothesis and evidence rationale; state that return is unmeasured. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_e9a3ba42cefb2937da6e48337d714881",
+  "artifactSha256": "21721c66b78610de1445379f258f8a2b1072570ae10db21d955c2684ce35fd60",
+  "sourceRevision": null
+}

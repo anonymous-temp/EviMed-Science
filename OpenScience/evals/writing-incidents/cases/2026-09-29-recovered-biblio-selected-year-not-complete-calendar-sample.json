@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-biblio-selected-year-not-complete-calendar-sample",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_9f9c612bac4ab90162b653703b357bfd/workspace/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+  "line": 62,
+  "verbatim": "2015—2020 年发文量在每 14—28 篇之间低位波动：2015 年 17 篇、2016 年 18 篇、2017 年 14 篇、2018 年 27 篇、2019 年 21 篇、2020 年 28 篇。2021—2023 年为温和增长，依次为 42 篇、63 篇、75 篇，但逐年增幅由 50% 降至 19%，与 2024 年之后相比属于不同的增长区间。拐点出现在 2023 年之后：2024 年 234 篇，为 2023 年的 3.1 倍；2025 年 602 篇，为 2024 年的 2.6 倍，也是全时段高峰。2026 年记录 93 条，仅覆盖 9 个月，按已覆盖月份年化约 124 条，不纳入年度对比。",
+  "whyItIsWrong": "93 records with issue year 2026 are annualized from nine months despite selection through a 2015-2025 publication-date query.",
+  "caughtBy": "reviewer",
+  "note": "Label publication-date and issue-year dimensions separately; do not annualize a selected earlier-publication subset as complete YTD output. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_9f9c612bac4ab90162b653703b357bfd",
+  "artifactSha256": "24f56a63792c56737ccc4685d90657a780490912be46dc0491685d906066c74f",
+  "sourceRevision": null
+}

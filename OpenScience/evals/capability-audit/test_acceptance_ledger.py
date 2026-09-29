@@ -369,7 +369,9 @@ class RealLedgerTests(unittest.TestCase):
         # nineteen accepted, one failed (meta-analysis), one never run. That
         # night, on the releases carrying the engine fixes, mendelian-
         # randomization and meta-analysis were accepted: every row accepted.
-        self.assertEqual(statuses.count("not-run"), 0)
+        # On 2026-09-30 statistical-analysis was added with no real delivery
+        # yet. Its offline numeric fixtures do not count as a live acceptance.
+        self.assertEqual(statuses.count("not-run"), 1)
         self.assertEqual(statuses.count("accepted"), 21)
         self.assertEqual(statuses.count("failed"), 0)
         self.assertIn("notice:", checker.coverage_notice())

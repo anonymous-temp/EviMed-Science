@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-biblio-network-scope-of-conclusion",
+  "genre": "unsupported-inference",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_9f9c612bac4ab90162b653703b357bfd/workspace/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+  "line": 162,
+  "verbatim": "把四项结果并置，可以得到一个相对稳定的描述：主题的发文规模在 2024—2025 年急剧扩张，扩张伴随二次文献占比偏高（带二次文献类型标注的记录 55.3%）与原始试验占比偏低（随机对照试验 2.6%）；参与主体极其分散（91.2% 的作者仅出现一次，作者网络分成 5 个小分量），没有形成核心作者群；概念结构高度绑定（前 50 关键词接近完全共现，模块度 0.0512），尚未分化出可命名的子领域。三者合起来指向一个参与门槛低、概念集中、结构未成形的扩张期主题——产出的增加速度超过了结构的分化速度。",
+  "whyItIsWrong": "No core author community is inferred from a 28-node selected network despite 6461 names and documented identity fragmentation.",
+  "caughtBy": "reviewer",
+  "note": "Limit claims to the selected/normalized network; keep broader community-structure interpretations as hypotheses. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_9f9c612bac4ab90162b653703b357bfd",
+  "artifactSha256": "24f56a63792c56737ccc4685d90657a780490912be46dc0491685d906066c74f",
+  "sourceRevision": null
+}
