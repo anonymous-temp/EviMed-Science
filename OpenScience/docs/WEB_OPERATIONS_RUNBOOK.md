@@ -668,3 +668,35 @@ not sufficient containment for those events.
 - After recovery, require `/api/ready`, monitoring targets, alert delivery,
   backup scheduler health, deployment smoke, and runtime stop/cleanup checks to
   pass before restoring traffic.
+
+## Optional ToolUniverse sidecar
+
+The `tooluniverse` compose profile runs a restricted ToolUniverse 1.4.1 catalogue
+(180 clinical API tools plus four compact discovery/execution tools). It has
+512 MiB RAM, no additional swap and one CPU. It uses public APIs without provider credentials; research runtimes receive only a workload-authenticated stdio
+bridge to the control plane. The bridge accepts the four MCP methods/tools and
+only the pinned clinical execution targets, and closes each private MCP session.
+
+Before enabling the profile, provision a random service token in a protected
+host file owned by root with group 10001 and mode 0440. Set
+`OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_HOST_FILE` to it; only web and sidecar mount
+that file. Set `OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL=http://tooluniverse:8080/mcp` and
+include `tooluniverse` in the existing `COMPOSE_PROFILES` list. Do not place the
+sidecar token or provider keys in a runtime profile. Do not pass NCBI or FDA API keys into this sidecar: the pinned clients can echo
+query credentials in their response URLs. Provider-authenticated retrieval stays
+on the existing control-plane connectors.
+
+Run `docker compose --profile tooluniverse exec tooluniverse python
+/opt/evimed-tooluniverse/sidecar.py check --full` after startup. It must authenticate,
+initialize MCP, observe exactly four exposed tools and verify the restricted
+184-entry catalogue. Plain GET `/mcp` may return 401/406 on a healthy server and
+is not a healthcheck. Then exercise the runtime's actual stdio bridge and one
+public-source call. Startup/discovery memory is not a load-capacity claim; keep
+resource limits and expand the catalogue only with another measured review.
+An unavailable optional service is a named recoverable source failure, not a
+reason to discard research already completed through other sources.
+
+Arbitrary-URL Europe PMC full-text tools are deliberately excluded from this
+sidecar. Use EviMed’s existing controlled full-text/source gateway instead.
+Execution accepts only declared parameters and canonical publication/trial IDs;
+caller-provided URLs cannot select a sidecar network destination.

@@ -47,7 +47,7 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
  * runtime, and a credential endpoint reachable from the internet with a token
  * the run can print is what the 2026-09-20 security review found here.
  */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo"]);
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 

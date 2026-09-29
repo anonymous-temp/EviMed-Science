@@ -1001,6 +1001,11 @@ export function loadConfig(overrides = {}) {
     });
     return loaded.error === "typesafe_api_key_file_not_regular" ? { value: "", source: "none", error: null } : loaded;
   })();
+  const toolUniverseSecret = preferredFileSecret(overrides, {
+    overrideValue: "toolUniverseApiToken", overrideFile: "toolUniverseApiTokenFile",
+    valueEnv: "OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN", fileEnv: "OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_FILE",
+    codePrefix: "tooluniverse_api_token", defaultFile: localSecretFile("tooluniverse.token"), allowGroupRead: true,
+  });
   const openVikingSecret = preferredFileSecret(overrides, {
     overrideValue: "openVikingApiKey",
     overrideFile: "openVikingApiKeyFile",
@@ -1664,10 +1669,15 @@ export function loadConfig(overrides = {}) {
         : `http://127.0.0.1:${port}/internal/model/v1`),
     // The ToolUniverse sidecar's MCP endpoint. Empty by default: a deployment
     // that does not run one emits no MCP row and is unchanged. The runtime
-    // container reaches this over the internal network; the sidecar, not the
-    // container, is what holds ToolUniverse's own credentials.
+    // control plane reaches this endpoint and holds its service credential.
+    // Runtimes receive only the workload-authenticated bridge address.
     toolUniverseMcpUrl:
       overrides.toolUniverseMcpUrl ?? process.env.OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL ?? "",
+    toolUniverseApiToken: toolUniverseSecret.value,
+    toolUniverseApiTokenError: toolUniverseSecret.error === "tooluniverse_api_token_file_not_regular" ? null : toolUniverseSecret.error,
+    toolUniverseGatewayInternalUrl: overrides.toolUniverseGatewayInternalUrl
+      ?? process.env.OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL
+      ?? (production ? "http://open-science-web:8787/internal/tooluniverse/v1/rpc" : `http://127.0.0.1:${port}/internal/tooluniverse/v1/rpc`),
     publicSourceGatewayInternalUrl:
       overrides.publicSourceGatewayInternalUrl ??
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL ??

@@ -22,7 +22,7 @@ async function fixture(t, options = {}) {
     const info = { name: "EuropePMC_search_articles", type: "EuropePMCTool", description: "Search and enrich", parameter: { properties: { query: { type: "string" }, enrich_missing_abstract: { type: "boolean" }, fulltext_terms: { type: "array" } }, required: ["query"], additionalProperties: true }, test_examples: [{ query: "test", enrich_missing_abstract: true }] };
     const result = options.info && body.method === "tools/call" ? { content: [{ type: "text", text: JSON.stringify(info) }], structuredContent: info }
       : body.method === "initialize" ? { protocolVersion: "2024-11-05" }
-      : body.method === "tools/list" ? { tools: [{ name: "list_tools" }] }
+      : body.method === "tools/list" ? { tools: ["list_tools", "grep_tools", "get_tool_info", "execute_tool"].map(name => ({ name, inputSchema: { type: "object", properties: { search_mode: { enum: ["text", "regex"] }, pattern: { type: "string" } } } })) }
       : { content: [{ type: "text", text: "public evidence" }] };
     if (options.revoke && body.method === "tools/call") active = false;
     res.writeHead(200, { "content-type": "text/event-stream", "mcp-session-id": "test-session" });
@@ -121,4 +121,13 @@ test("discovery remains bounded literal search and never runs caller regular exp
   }
   assert.equal(f.calls.length, 0);
   assert.equal((await f.request({ method: "tools/call", params: { name: "grep_tools", arguments: { pattern: "(.+)+ZZZZ$", search_mode: "text" } } })).status, 200);
+});
+
+
+test("the declared MCP grep schema offers only the deployed literal mode", async t => {
+  const f = await fixture(t);
+  const result = (await (await f.request({ method: "tools/list" })).json()).result;
+  const grep = result.tools.find(tool => tool.name === "grep_tools");
+  assert.deepEqual(grep.inputSchema.properties.search_mode.enum, ["text"]);
+  assert.equal(grep.inputSchema.properties.pattern.maxLength, 256);
 });

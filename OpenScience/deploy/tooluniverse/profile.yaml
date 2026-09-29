@@ -1,0 +1,11 @@
+name: evimed-clinical-sources
+version: "1.0"
+tools:
+  categories: [pubmed, EuropePMC, clinical_trials, fda_drug_label, compact_mode]
+  exclude_tools: [EuropePMC_get_fulltext, EuropePMC_get_fulltext_snippets, EuropePMC_get_full_text]
+  exclude_tool_types: []
+cache:
+  enabled: true
+  memory_size: 32
+  persist: false
+sources: []

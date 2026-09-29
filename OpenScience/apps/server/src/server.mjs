@@ -75,6 +75,7 @@ import {
   publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
+import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
 import { MEMORY_KIND_LABELS_ZH, migrateResearchMemory } from "./researchMemoryPersistence.mjs";
@@ -3049,6 +3050,7 @@ export function createWebApiApp(overrides = {}) {
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
     capsules: capsuleService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
+  const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
@@ -3623,7 +3625,9 @@ export function createWebApiApp(overrides = {}) {
         upstream: failure?.upstream ?? null,
       });
     };
-    const gateway = pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
+    const gateway = pathname === TOOL_UNIVERSE_GATEWAY_PATH
+      ? toolUniverseGatewayHandler
+      : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
       : isModelGatewayPath(pathname)
       ? modelGatewayHandler

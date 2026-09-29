@@ -1,3 +1,4 @@
+import path from "node:path";
 /**
  * The profile patch the control plane writes before a runtime starts.
  *
@@ -78,7 +79,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} sessionsDir            absolute path inside the container
  * @property {string} mcpServerPath          absolute path to the MCP server entrypoint
  * @property {Record<string, string>} mcpEnvironment
- * @property {string} [toolUniverseUrl]   MCP endpoint of the ToolUniverse sidecar; omitted
+ * @property {string} [toolUniverseUrl]   Control-plane ToolUniverse bridge endpoint; omitted
  *   when the deployment does not run one, and then no row is emitted at all
  * @property {string} presetSkillsDir        absolute path to the preset's shipped skill roots
  * @property {string} capabilitiesDir
@@ -448,22 +449,10 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
  */
 
 /**
- * The ToolUniverse sidecar, when the deployment runs one.
- *
- * Reached over HTTP rather than spawned, and that is the whole point: its 2,700
- * tools call their upstreams directly from their own process, which is exactly
- * what this runtime container is built not to do. Run as a sidecar it holds its
- * own credentials and its own egress, and the container keeps holding neither.
- *
- * `failOnStartupError` is false here and true for `mcp-evimed`, because the
- * severities differ: a run cannot do its work without the research tools, and
- * can without these. A sidecar that is down must degrade the run, not refuse it.
- *
- * Compact mode is the sidecar's own flag, not ours -- it exposes five discovery
- * tools instead of 2,700 and reaches the rest through `execute_tool`. Without
- * it a tool list larger than most context windows arrives before the question
- * does.
- *
+ * Optional ToolUniverse discovery through the workload-authenticated stdio
+ * bridge. The control plane owns the sidecar's service credential. The initial
+ * sidecar uses public providers without keys and exposes four compact tools.
+ * Unavailability degrades optional discovery without refusing ordinary work.
  * @param {ProfilePatchInput} input
  * @returns {string[]}
  */
@@ -472,18 +461,22 @@ function toolUniverseRows(input) {
   if (!url) return [];
   assertLiteral(url, "toolUniverseUrl");
   return [
-    "# The ToolUniverse sidecar: an HTTP MCP server that holds its own keys and",
-    "# its own egress, so this container continues to hold neither.",
+    "# Workload-authenticated bridge; the private sidecar credential stays on the control plane.",
     "- insert:",
     "    - id: mcp-tooluniverse",
     `      name: ${yamlScalar(MCP_CLIENT_PLUGIN)}`,
     "      config:",
-    "        transport: streamable-http",
+    "        transport: stdio",
     `        serverName: ${yamlScalar(TOOL_UNIVERSE_SERVER_NAME)}`,
     // A sidecar that is down degrades the run; it must not refuse it.
     "        failOnStartupError: false",
     `        toolCallTimeoutMs: ${MCP_TOOL_CALL_TIMEOUT_MS}`,
-    `        url: ${yamlScalar(url)}`,
+    "        command: python3",
+    "        args:",
+    `          - ${yamlScalar(path.posix.join(path.posix.dirname(input.mcpServerPath), "tooluniverse_bridge.py"))}`,
+    "        env:",
+    `          EVIMED_TOOLUNIVERSE_GATEWAY_URL: ${yamlScalar(url)}`,
+    `          EVIMED_WORKLOAD_TOKEN_FILE: ${yamlScalar(input.workloadTokenFile)}`,
     "",
     "",
   ];

@@ -601,3 +601,19 @@ test("only MR receives the read-only ancestry reference and its actual clumping 
     if (name !== "evimed-mr-agent") assert.ok(!service.volumes?.some((value) => value.target === target), name);
   }
 });
+
+test("ToolUniverse service authentication stays between web and the bounded sidecar", async () => {
+  const base = (await composeFiles()).find(({ name }) => name === "docker-compose.yml");
+  const services = YAML.parse(base.text).services;
+  const sidecar = services.tooluniverse;
+  const web = services["open-science-web"];
+  assert.deepEqual(sidecar.profiles, ["tooluniverse"]);
+  assert.equal(sidecar.mem_limit, "512m");
+  assert.equal(sidecar.memswap_limit, "512m");
+  assert.equal(sidecar.cpus, 1);
+  assert.deepEqual(sidecar.healthcheck.test, ["CMD", "python", "/opt/evimed-tooluniverse/sidecar.py", "check", "--full"]);
+  assert.equal(sidecar.environment.TOOLUNIVERSE_API_TOKEN_FILE, web.environment.OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_FILE);
+  const holders = Object.entries(services).filter(([, service]) => service.volumes?.some(volume => volume.target === "/run/secrets/tooluniverse-api-token")).map(([name]) => name).sort();
+  assert.deepEqual(holders, ["open-science-web", "tooluniverse"]);
+  for (const holder of holders) assert.equal(services[holder].volumes.find(volume => volume.target === "/run/secrets/tooluniverse-api-token").read_only, true);
+});

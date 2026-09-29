@@ -1919,7 +1919,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
     // Empty when no sidecar is deployed, and then no row is emitted -- a
     // deployment without one behaves exactly as it did before.
-    toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim(),
+    toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim()
+      ? (gateways ? `${String(config.runtimeGatewayPublicUrl).replace(/\/+$/, "")}/tooluniverse/v1/rpc` : String(config.toolUniverseGatewayInternalUrl ?? "")) : "",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,

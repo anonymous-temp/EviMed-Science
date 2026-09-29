@@ -2384,7 +2384,7 @@ def process_frame(raw, handler=handle_request):
         return _rpc_error(request_id, -32603, "Internal error")
 
 
-def main():
+def main(handler=handle_request):
     stream = sys.stdin.buffer
     while True:
         frame = stream.readline(MAX_FRAME_BYTES)
@@ -2399,7 +2399,7 @@ def main():
         elif not frame.strip():
             continue
         else:
-            response = process_frame(frame)
+            response = process_frame(frame, handler)
         if response is not None:
             sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
             sys.stdout.flush()

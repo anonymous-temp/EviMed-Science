@@ -45,6 +45,10 @@ export const repairableEvidencePackageErrorCodes = new Set([
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
 export const recoverableEvidenceSourceErrorCodes = new Set([
+  "tooluniverse_upstream_unavailable",
+  "tooluniverse_unavailable",
+  "tooluniverse_busy",
+  "tooluniverse_rate_limited",
   "full_text_not_available",
   "full_text_upstream_unavailable",
   // `official_page_*` is what `web_read` answered under its old name, until
@@ -967,6 +971,10 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
+  tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
+  tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
+  tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
   runtime_canceled: '运行已被取消。可以重新发起，或从某一步分叉后继续。',
   runtime_stopped: '运行进程中断，已按中断记录收尾。重试即可继续。',
