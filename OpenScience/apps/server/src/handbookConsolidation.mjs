@@ -80,12 +80,14 @@ export class HandbookConsolidation {
       return this.complete(job, candidate, { ...base, disposition: "stale", reason: "handbook_candidate_changed" });
     }
     const fail = (reason) => this.complete(job, candidate, { ...base, disposition: "failed", reason });
-    const capability = this.registry.get(payload.capabilityId);
-    if (!capability || capability.visibility === "internal" || payload.capabilityId !== job.payload.capabilityId) return fail("handbook_capability_unavailable");
     const source = await this.resolveSourceRun(job.userId, payload.provenance?.sourceProjectId, payload.provenance?.runId);
     if (!source || source.id !== payload.provenance?.runId || source.learningEvaluation
       || String(source.dispatchId ?? "").startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) return fail("handbook_source_unavailable");
-    if (source.effectiveAgentId !== capability.id) return fail("handbook_source_capability_mismatch");
+    const capability = this.registry.get(source.effectiveAgentId);
+    if (!capability || capability.visibility === "internal") return fail("handbook_capability_unavailable");
+    if ((payload.capabilityId && payload.capabilityId !== capability.id)
+      || (job.payload.capabilityId && job.payload.capabilityId !== capability.id)) return fail("handbook_source_capability_mismatch");
+    base.capabilityId = capability.id;
     if (payload.provenance?.derivedFrom !== "reviewer") return fail("handbook_source_review_unavailable");
     try {
       if (await this.learning.validateHandbook(job.userId, payload) !== payload.contentDigest) return fail("handbook_digest_invalid");
@@ -158,10 +160,15 @@ export class HandbookConsolidation {
     if (!await this.enabled(userId, null)) return { queued: 0, nextCursor: cursor };
     const page = await this.documents.list(userId, "method", { filter: { recordType: HANDBOOK_CANDIDATE_RECORD_TYPE }, limit, cursor });
     let queued = 0;
-    for (const candidate of page.items) {
+    for (let candidate of page.items) {
       if (!await this.enabled(userId, candidate.payload.provenance?.sourceProjectId ?? null)) continue;
       const outcome = candidate.payload.dispositions?.[candidate.payload.contentDigest];
       if (terminal.has(outcome?.disposition)) continue;
+      if (!candidate.payload.candidateRevision) {
+        candidate = await this.documents.put(userId, "method", candidate.id, { ...candidate.payload,
+          candidateRevision: candidate.revision + 1,
+        }, { expectedRevision: candidate.revision });
+      }
       const job = await this.learning.enqueueHandbook(userId, candidate);
       if (job?.status === "failed") {
         await this.documents.put(userId, "method", candidate.id, { ...candidate.payload, dispositions: {

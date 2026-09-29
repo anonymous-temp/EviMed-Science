@@ -343,11 +343,9 @@ export class LearningService {
    * Keep a lesson the platform's reviewer taught, outside the researcher's
    * library (`HANDBOOK_CANDIDATE_RECORD_TYPE`).
    *
-   * One record per method name, replaced in place by a later lesson of the
-   * same name: this is a staging shelf for the capability handbook, not a
-   * second method ledger, and nothing mounts, lists, exports or promotes what
-   * is on it. The same validation as a method, because the handbook loop will
-   * read it as one.
+   * One record per capability and method name. The consumer applies it to a
+   * separate supplement; personal method lists, mounts and exports never read
+   * this row. Prior digest dispositions survive later candidate revisions.
    * @param {string} userId
    * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
    */
@@ -358,7 +356,7 @@ export class LearningService {
   /** Queue exactly one application per owner, capability and reviewed content.
    * @param {string} userId @param {any} candidate @param {{retryOf?:string}} [options] */
   async enqueueHandbook(userId, candidate, { retryOf } = {}) {
-    if (!this.jobs || !candidate?.payload?.capabilityId) return null;
+    if (!this.jobs || candidate?.payload?.recordType !== HANDBOOK_CANDIDATE_RECORD_TYPE) return null;
     const { capabilityId, contentDigest, provenance } = candidate.payload;
     return this.jobs.enqueue(userId, "consolidate", {
       ...(retryOf ? { retryOf } : {}),
