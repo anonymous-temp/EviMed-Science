@@ -95,3 +95,17 @@ def test_repository_metadata_binds_source_scale_without_changing_effects():
     assert result.exposure_scale["transformation"] == "inverse_normal"
     assert result.exposure_scale["status"] == "repository_reported"
     assert result.mr_results == []
+
+
+def test_mixed_source_repository_read_retains_a_conflicting_declaration(monkeypatch):
+    import evimed_local_inputs as inputs
+    from mr_agent.source_context import declared_scale
+    from mr_agent.tools import gwas
+    source = DataSource(gwas_id="ieu-a-1", effect_scale=declared_scale({"unit": "SD", "evidence": "Provided unit"}))
+    entry = _dict_to_gwas_entry({"id": "ieu-a-1", "trait": "BMI", "unit": "kg/m2", "sample_size": 10, "population": "unknown"}).model_dump()
+    monkeypatch.setattr(gwas, "fetch_gwas_metadata", lambda identifier: entry)
+    metadata = inputs.remote_metadata({"exposure": source})
+    result = MRAnalysisResult(exposure_id="ieu-a-1", outcome_id="local.csv", outcome_source_type="local_file")
+    inputs.bind_remote_metadata([result], metadata)
+    assert result.exposure_scale["status"] == "conflicting"
+    assert {item["unit"] for item in result.exposure_scale["sources"]} == {"SD", "kg/m2"}
