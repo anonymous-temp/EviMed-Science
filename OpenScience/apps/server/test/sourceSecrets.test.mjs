@@ -14,3 +14,17 @@ test("source secret audit catches live credentials without flagging environment 
     [],
   );
 });
+
+test("a P-number in a URL path or query is a document id, not a subject label", () => {
+  const attachment = ["https://www.example.gov.cn/zwgk/", ["P", "020220719624226963916"].join(""), ".pdf"].join("");
+  assert.deepEqual(suspiciousLines(`见附件（${attachment}）\n`, "fixture.md"), []);
+  assert.deepEqual(suspiciousLines(`https://example.org/view?id=${["P", "0202207196"].join("")}\n`, "fixture.md"), []);
+  assert.deepEqual(suspiciousLines(`受试者 ${["P", "1234567"].join("")} 的记录\n`, "fixture.md"), [1]);
+  assert.deepEqual(suspiciousLines(`受试者 ${["P", "9123456"].join("")} 的记录\n`, "fixture.md"), []);
+});
+
+test("the default scan covers the workspace docs tree, which is published with the code", async () => {
+  const { auditSourceSecrets } = await import("../../../scripts/ops/audit-source-secrets.mjs");
+  const source = auditSourceSecrets.toString();
+  assert.match(source, /"\.\.\/docs"/);
+});

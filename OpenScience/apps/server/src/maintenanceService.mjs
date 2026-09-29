@@ -260,6 +260,24 @@ export class MaintenanceService {
     const lease = await activeLease(this.database);
     this.updateCache(lease);
     if (!lease) return { state: "open", lease: null };
+    const blockers = await this.#blockers();
+    const blocked = Object.values(blockers).some((value) => value > 0);
+    return { state: blocked ? "draining" : "idle", lease, blockers };
+  }
+
+  /**
+   * What is running now, whether or not a lease is held. The release switch
+   * reads it before it moves `current`: a switch reaps the runtimes runs work
+   * in, and on 2026-09-25 one took a GEO run with it mid-step. Draining would
+   * refuse every new request for as long as the longest run takes; this only
+   * lets the operator see that there is something to wait for.
+   */
+  async activity() {
+    await this.migrate(this.database);
+    return this.#blockers();
+  }
+
+  async #blockers() {
     let activity;
     let databaseActivity = null;
     let inspectionFailed = false;
@@ -279,8 +297,7 @@ export class MaintenanceService {
       ? normalizedActivity(null, this.activeMutations, databaseActivity)
       : normalizedActivity(activity, this.activeMutations, databaseActivity);
     if (inspectionFailed) blockers.unknown = 1;
-    const blocked = Object.values(blockers).some((value) => value > 0);
-    return { state: blocked ? "draining" : "idle", lease, blockers };
+    return blockers;
   }
 
   async close() {

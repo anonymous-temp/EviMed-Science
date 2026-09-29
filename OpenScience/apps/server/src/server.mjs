@@ -3581,7 +3581,11 @@ export function createWebApiApp(overrides = {}) {
         if (!maintenanceService) throw new HttpError(404, "not_found", "Route not found.");
         assertMaintenanceAccess(req, config);
         if (req.method === "GET") {
-          sendJson(res, 200, { data: await maintenanceService.status() });
+          // `?activity=1`: what is running, lease or not — read by the
+          // release switch before it moves `current` (host-release-switch.sh).
+          const withActivity = new URL(req.url ?? "/", "http://localhost").searchParams.get("activity") === "1";
+          const status = await maintenanceService.status();
+          sendJson(res, 200, { data: withActivity ? { ...status, activity: await maintenanceService.activity() } : status });
           return;
         }
         const body = assertObject(await readJson(req, config.maxJsonBytes), "maintenance request");

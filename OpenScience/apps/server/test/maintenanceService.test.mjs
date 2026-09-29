@@ -188,6 +188,23 @@ test("running jobs, tasks, background work and runtime unknowns all prevent idle
   });
 });
 
+test("activity is readable without a lease, and reading it drains nothing", async () => {
+  const activity = async () => ({
+    activeCommands: 0,
+    activeTasks: 0,
+    backgroundOperations: 0,
+    runningAgentRuns: 2,
+    runtimes: { busy: 1, idle: 3, unknown: 0 },
+  });
+  const { service } = fixture(activity);
+  await service.initialize();
+  const seen = await service.activity();
+  assert.equal(seen.runningAgentRuns, 2, "the release switch reads the runs a switch would reap");
+  assert.equal(seen.busyRuntimes, 1);
+  assert.equal((await service.status()).state, "open", "no lease was taken");
+  assert.equal(service.claimingAllowed(), true);
+});
+
 test("TaskManager keeps already queued work intact while maintenance pauses claims", async (t) => {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "maintenance-task-"));
   const metaDir = path.join(root, "meta");
