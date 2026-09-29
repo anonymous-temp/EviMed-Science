@@ -9,6 +9,8 @@ from datetime import datetime
 
 import pandas as pd
 
+from bibliometric.analysis.statistics import trend_coverage_note
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,14 +32,11 @@ _COUNTRY_ZH = {
 
 
 def describe_trend(stats: dict) -> str:
-    """Describe publication trend in words, excluding partial year."""
+    """Describe the distribution of selected records across recorded years."""
     year_df = stats.get("year_trend")
     if year_df is None or year_df.empty or len(year_df) < 2:
         return "a limited"
-    if "is_partial" in year_df.columns:
-        complete = year_df[~year_df["is_partial"]]
-    else:
-        complete = year_df
+    complete = year_df
     if complete.empty or len(complete) < 2:
         return "a limited"
     counts = complete["count"].values
@@ -79,54 +78,11 @@ def template_results_trends(stats: dict) -> str:
     year_df = stats.get("year_trend")
     if year_df is None or year_df.empty:
         return ""
-
-    complete_df = year_df[~year_df.get("is_partial", False)].copy() if "is_partial" in year_df.columns else year_df
-    counts = complete_df["count"].values
-    years = complete_df["year"].values
+    peak = year_df.loc[year_df["count"].idxmax()]
     total = int(year_df["count"].sum())
-    peak_idx = complete_df["count"].values.argmax() if len(complete_df) > 0 else 0
-    peak_year = years[peak_idx] if len(years) > 0 else "N/A"
-    peak_count = int(counts[peak_idx]) if len(counts) > 0 else 0
-
-    parts = [
-        f"The annual publication output shows a clear temporal pattern across "
-        f"the {len(year_df)}-year observation window, with a cumulative total of "
-        f"{total} articles."
-    ]
-    if len(counts) >= 3:
-        early_avg = float(counts[:len(counts)//3].mean())
-        late_avg = float(counts[-len(counts)//3:].mean())
-        if late_avg > early_avg * 1.5:
-            parts.append(
-                f"A marked acceleration is evident, with the mean annual output "
-                f"rising from {early_avg:.1f} in the early period to {late_avg:.1f} "
-                f"in the most recent complete years, suggesting intensifying research interest."
-            )
-        elif late_avg < early_avg * 0.7:
-            parts.append(
-                "Publication volume has declined in recent complete years, potentially "
-                "indicating a shift in research focus or field maturation."
-            )
-        else:
-            parts.append(
-                "The publication rate has remained relatively stable across complete years, "
-                "indicating sustained but not accelerating research activity."
-            )
-    parts.append(
-        f"The peak year was {peak_year} with {peak_count} publications, "
-        f"which may reflect heightened clinical or policy interest during that period."
-    )
-
-    partial = year_df[year_df.get("is_partial", False)] if "is_partial" in year_df.columns else pd.DataFrame()
-    if not partial.empty:
-        row = partial.iloc[0]
-        month_name = datetime.now().strftime("%B")
-        parts.append(
-            f"Note: {row['year']} data is partial (Jan–{month_name}). "
-            f"Annualized estimate: ~{int(row.get('annualized_count', row['count']))} articles."
-        )
-
-    return " ".join(parts)
+    summary = f"The selected sample contains {total} records across {len(year_df)} recorded years. "
+    summary += f"The largest observed count is {int(peak['count'])} in {peak['year']}. "
+    return summary + trend_coverage_note(stats, 'en')
 
 
 def template_results_authors(stats: dict) -> str:
@@ -514,48 +470,11 @@ def template_results_trends_zh(stats: dict) -> str:
     year_df = stats.get("year_trend")
     if year_df is None or year_df.empty:
         return ""
-
-    complete_df = year_df[~year_df["is_partial"]].copy() if "is_partial" in year_df.columns else year_df
-    counts = complete_df["count"].values
-    years = complete_df["year"].values
+    peak = year_df.loc[year_df["count"].idxmax()]
     total = int(year_df["count"].sum())
-    peak_idx = complete_df["count"].values.argmax() if len(complete_df) > 0 else 0
-    peak_year = years[peak_idx] if len(years) > 0 else "N/A"
-    peak_count = int(counts[peak_idx]) if len(counts) > 0 else 0
-
-    parts = [
-        f"在 {len(year_df)} 年的观察窗口内，年度发文量呈现出清晰的时间规律，累计发文 {total} 篇。"
-    ]
-    if len(counts) >= 3:
-        early_avg = float(counts[:len(counts)//3].mean())
-        late_avg = float(counts[-len(counts)//3:].mean())
-        if late_avg > early_avg * 1.5:
-            parts.append(
-                f"发文量呈明显加速态势，年均发文量从早期的 {early_avg:.1f} 篇增长至近期完整年份的 {late_avg:.1f} 篇，"
-                f"提示该领域研究热度持续升温。"
-            )
-        elif late_avg < early_avg * 0.7:
-            parts.append(
-                "近期完整年份发文量有所下降，可能反映研究重心转移或领域趋于成熟。"
-            )
-        else:
-            parts.append(
-                "完整年份发文量保持相对稳定，表明该领域研究活动持续但未见明显加速。"
-            )
-    parts.append(
-        f"发文高峰年份为 {peak_year} 年（{peak_count} 篇），可能与该时期临床或政策层面的高度关注有关。"
-    )
-
-    partial = year_df[year_df["is_partial"]] if "is_partial" in year_df.columns else pd.DataFrame()
-    if not partial.empty:
-        row = partial.iloc[0]
-        month_name = datetime.now().strftime("%m")
-        parts.append(
-            f"注：{row['year']} 年数据不完整（截至 {month_name} 月），"
-            f"年化估算约 {int(row.get('annualized_count', row['count']))} 篇。"
-        )
-
-    return "".join(parts)
+    summary = f"本次样本包含{total}篇文献，分布于{len(year_df)}个记录年份。"
+    summary += f"样本记录数最多的年份为{peak['year']}年（{int(peak['count'])}篇）。"
+    return summary + trend_coverage_note(stats, 'zh')
 
 
 def template_results_authors_zh(stats: dict) -> str:

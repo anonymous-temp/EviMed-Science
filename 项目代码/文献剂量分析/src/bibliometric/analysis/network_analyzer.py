@@ -56,9 +56,15 @@ def _analyze_single_network(
     edge_df: pd.DataFrame, max_nodes: int
 ) -> dict:
     """Build and analyze a single network."""
+    scope = {
+        "candidate_nodes": len(set(edge_df["source"]) | set(edge_df["target"])),
+        "max_nodes": max_nodes,
+        "selection": "top_frequency_nodes_then_remove_isolates",
+        "population": "observed_cooccurrence_candidates",
+    }
     G = _build_graph(edge_df, max_nodes)
     if G.number_of_nodes() == 0:
-        return {"graph": G, "centrality": {}, "clusters": {}}
+        return {"graph": G, "centrality": {}, "clusters": {}, "node_count": 0, "edge_count": 0, "scope": scope}
 
     centrality = _compute_centrality(G)
     clusters = _detect_communities(G)
@@ -71,6 +77,7 @@ def _analyze_single_network(
         "clusters": clusters,
         "components": components,
         "quality": quality,
+        "scope": scope,
         "node_count": G.number_of_nodes(),
         "edge_count": G.number_of_edges(),
     }
@@ -239,6 +246,7 @@ def _save_graph_json(result: dict, name: str, data_dir: Path):
         return
 
     graph_data = {
+        "scope": result.get("scope", {}),
         "nodes": [
             {
                 "id": n,

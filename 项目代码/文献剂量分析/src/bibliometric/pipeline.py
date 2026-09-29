@@ -179,7 +179,7 @@ class AnalysisPipeline:
         task = progress.add_task("Computing statistics...", total=None)
         from bibliometric.analysis.statistics import compute_statistics, save_statistics
 
-        self.stats = compute_statistics(self.articles, date_to=self.date_to)
+        self.stats = compute_statistics(self.articles, date_to=self.date_to, date_from=self.date_from)
         save_statistics(self.stats, self.output_dir)
         progress.update(task, completed=True)
 

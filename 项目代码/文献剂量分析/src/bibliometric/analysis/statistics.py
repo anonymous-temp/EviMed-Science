@@ -4,20 +4,25 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
-from datetime import datetime
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def compute_statistics(articles: list[dict], date_to: str = "") -> dict:
+def compute_statistics(articles: list[dict], date_to: str = "", *, date_from: str = "") -> dict:
     """Compute all basic statistics from normalized articles."""
     stats = {
         "total_articles": len(articles),
-        "year_trend": _year_trend(articles, date_to=date_to),
+        "year_trend": _year_trend(articles),
+        "trend_coverage": {
+            "status": "selected_records", "query_from": date_from, "query_to": date_to,
+            "query_date_field": "pdat" if date_from or date_to else "unrestricted",
+            "year_basis_counts": dict(Counter(a.get("year_basis") or "unknown" for a in articles)),
+        },
         "top_authors": _top_items(articles, "authors_normalized", 20),
         "top_institutions": _top_items(articles, "institutions", 20),
         "top_journals": _top_journal(articles, 20),
@@ -29,42 +34,38 @@ def compute_statistics(articles: list[dict], date_to: str = "") -> dict:
     return stats
 
 
-def _year_trend(articles: list[dict], date_to: str = "") -> pd.DataFrame:
-    """Count articles per year, marking the current year as partial if date_to is current year."""
-    years = [a.get("year", "") for a in articles if a.get("year")]
-    year_counts = Counter(years)
-    df = pd.DataFrame(
-        sorted(year_counts.items()),
-        columns=["year", "count"],
-    )
-    df["year"] = df["year"].astype(str)
+def _year_trend(articles: list[dict]) -> pd.DataFrame:
+    """Count observed bibliographic years without guessing calendar coverage."""
+    years = [str(a["year"]) for a in articles if a.get("year")]
+    return pd.DataFrame(sorted(Counter(years).items()), columns=["year", "count"])
 
-    # Mark current (incomplete) year
-    now = datetime.now()
-    current_year = str(now.year)
-    current_month = now.month
-    df["is_partial"] = df["year"] == current_year
-    df["annualized_count"] = df["count"]
 
-    # 数据异常检测：当前年份（不完整）的发文量异常高
-    if current_month < 12 and current_year in df["year"].values:
-        current_count = df.loc[df["year"] == current_year, "count"].iloc[0]
-        # 计算年化后的预估值
-        annualized = int(current_count * 12 / current_month)
-        df.loc[df["is_partial"], "annualized_count"] = annualized
+def trend_coverage_note(stats: dict, lang: str = "en") -> str:
+    """Describe the query and the selected sample, never a calendar census."""
+    coverage = stats.get("trend_coverage")
+    if not isinstance(coverage, dict):
+        return ("按记录年份汇总样本文献；检索日期边界和年份来源未记录，年度覆盖程度未知。"
+                if lang == "zh" else "Selected records are grouped by recorded year; query date bounds and year provenance were not recorded. Calendar coverage is unknown.")
+    start = _coverage_bound(coverage, "query_from", lang)
+    end = _coverage_bound(coverage, "query_to", lang)
+    if lang == "zh":
+        window = f"检索日期范围：{start}—{end}。"
+        return ("按记录年份汇总本次选入样本文献。" + window
+                + "记录年份可来自期刊出版年、Medline日期或索引完成年，与检索日期字段不同。"
+                + "年度覆盖程度未经确认；以上为实际记录数，不作全年外推。")
+    window = f"Query date bounds: {start} to {end}. "
+    return ("Counts describe selected records grouped by recorded year. " + window
+            + "Recorded years may use journal issue dates, Medline dates or indexing completion, distinct from the query date field. "
+            + "Calendar coverage is unverified; observed counts are not extrapolated.")
 
-        # 如果当前年份（不完整）的实际发文量已超过历史任何完整年份，标记异常
-        complete_years = df[~df["is_partial"]]
-        if not complete_years.empty:
-            max_complete = complete_years["count"].max()
-            if current_count > max_complete:
-                logger.warning(
-                    f"数据异常：{current_year}年仅{current_month}个月已有{current_count}篇文献，"
-                    f"超过历史完整年份最高值{max_complete}篇。请检查数据质量（可能存在年份标注错误）。"
-                )
-                df["data_quality_warning"] = df["year"] == current_year
 
-    return df
+def _coverage_bound(coverage: dict, key: str, lang: str) -> str:
+    value = coverage.get(key)
+    if not isinstance(value, str):
+        return "未知" if lang == "zh" else "unknown"
+    if value == "":
+        return "未限定" if lang == "zh" else "unbounded"
+    return value
 
 
 def _top_items(
@@ -125,3 +126,7 @@ def save_statistics(stats: dict, output_dir) -> None:
     year_df = stats.get("year_trend")
     if year_df is not None and not year_df.empty:
         year_df.to_csv(tables_dir / "year_trend.csv", index=False)
+        (tables_dir / "year_trend_coverage.json").write_text(
+            json.dumps(stats.get("trend_coverage", {"status": "unknown"}), indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )

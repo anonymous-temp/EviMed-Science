@@ -48,6 +48,7 @@ def _parse_single_article(el: etree._Element) -> Optional[dict]:
         "affiliations": _get_affiliations(article),
         "journal": _get_journal(article),
         "year": _get_year(article, medline),
+        "year_basis": _get_year_basis(article, medline),
         "mesh_terms": _get_mesh_terms(medline),
         "mesh_qualifiers": _get_mesh_qualifiers(medline),
         "keywords": _get_keywords(medline),
@@ -140,6 +141,18 @@ def _get_year(article: etree._Element, medline: etree._Element) -> str:
     if date_completed is not None:
         return date_completed.findtext("Year", "")
     return ""
+
+
+def _get_year_basis(article: etree._Element, medline: etree._Element) -> str:
+    pub_date = article.find("Journal/JournalIssue/PubDate")
+    if pub_date is not None:
+        if pub_date.findtext("Year", ""):
+            return "journal_issue_year"
+        if len(pub_date.findtext("MedlineDate", "")) >= 4:
+            return "journal_medline_date"
+    if medline.findtext("DateCompleted/Year", ""):
+        return "index_completion_year"
+    return "unknown"
 
 
 def _get_mesh_terms(medline: etree._Element) -> list[str]:

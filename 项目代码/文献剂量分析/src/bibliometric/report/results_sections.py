@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 from bibliometric import number_display as shown
+from bibliometric.analysis.statistics import trend_coverage_note
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +135,8 @@ def _results_overview(ctx):
     year_df = stats.get("year_trend")
     if year_df is not None and not year_df.empty:
         total = int(year_df["count"].sum())
-        # Use only complete years for peak and trend comparison
-        has_partial = "is_partial" in year_df.columns
-        complete_df = year_df[~year_df["is_partial"]] if has_partial else year_df
-        partial_df = year_df[year_df["is_partial"]] if has_partial else pd.DataFrame()
+        # These are selected records, not demonstrated complete calendar years.
+        complete_df = year_df
 
         peak_row = complete_df.loc[complete_df["count"].idxmax()] if not complete_df.empty else year_df.loc[year_df["count"].idxmax()]
         fig = _next_fig(ctx)
@@ -163,7 +162,7 @@ def _results_overview(ctx):
                 if zh:
                     trend = "上升" if change > 0.1 else ("下降" if change < -0.1 else "相对稳定")
                     lines.append(
-                        f" 近3年完整数据显示发文量总体呈{trend}趋势（{earlier} → {recent} 篇）。"
+                        f" 样本中最近三个记录年份的文献数呈{trend}趋势（{earlier} → {recent} 篇）。"
                     )
                 else:
                     trend = "increasing" if change > 0.1 else (
@@ -171,13 +170,13 @@ def _results_overview(ctx):
                     )
                     lines.append(
                         f" The overall trajectory is {trend} "
-                        f"({earlier} → {recent} articles over the most recent 3-year window of complete data)."
+                        f"({earlier} → {recent} articles across the latest three recorded years in the selected sample)."
                     )
             else:
                 if zh:
                     trend = "上升" if recent > earlier else ("下降" if recent < earlier else "相对稳定")
                     lines.append(
-                        f" 近3年完整数据显示发文量总体呈{trend}趋势（{earlier} → {recent} 篇）。"
+                        f" 样本中最近三个记录年份的文献数呈{trend}趋势（{earlier} → {recent} 篇）。"
                     )
                 else:
                     trend = "increasing" if recent > earlier else (
@@ -185,7 +184,7 @@ def _results_overview(ctx):
                     )
                     lines.append(
                         f" The overall trajectory is {trend} "
-                        f"({earlier} → {recent} articles over the most recent 3-year window of complete data)."
+                        f"({earlier} → {recent} articles across the latest three recorded years in the selected sample)."
                     )
 
         if zh:
@@ -199,23 +198,7 @@ def _results_overview(ctx):
                 f"\nFigure {fig}. Annual Publication Trend Analysis"
             )
 
-        # Partial year annotation
-        if not partial_df.empty:
-            row = partial_df.iloc[0]
-            from datetime import datetime
-            month_name = datetime.now().strftime("%B")
-            annualized = int(row.get("annualized_count", row["count"]))
-            if zh:
-                lines.append(
-                    f"\n> **注：** {row['year']}年数据不完整（截至{month_name}），"
-                    f"年化估算约{annualized}篇，趋势对比仅使用完整自然年数据。"
-                )
-            else:
-                lines.append(
-                    f"\n> **Note:** {row['year']} data is partial (Jan–{month_name}). "
-                    f"Annualized estimate: ~{annualized} articles. "
-                    f"Trend comparisons above use only complete calendar years."
-                )
+        lines.append("\n" + trend_coverage_note(stats, "zh" if zh else "en"))
 
         lines.append(_get_narrative(ctx, "results_trends"))
 
@@ -449,17 +432,28 @@ def _results_knowledge_structure(ctx):
 
         if zh:
             lines.append(
-                f"作者合作网络包含 {a_nodes} 位作者和 {a_edges} 条合作连接"
+                f"选入的作者合作图包含 {a_nodes} 个作者名称节点和 {a_edges} 条合作连接"
                 f"（密度 = {a_density:.4f}）。"
             )
         else:
             lines.append(
-                f"The author collaboration network contains "
-                f"{a_nodes} authors and {a_edges} collaborative links "
+                f"The selected author collaboration graph contains "
+                f"{a_nodes} author-name nodes and {a_edges} collaborative links "
                 f"(density = {a_density:.4f})."
             )
 
-        # Component fragmentation analysis
+        names = {name for article in ctx["articles"] for name in article.get("authors_normalized", [])}
+        scope = author_net.get("scope", {})
+        if zh:
+            lines.append(f"样本文献包含{len(names)}个不同作者名称；名称并非已核实的独立作者身份。"
+                         f"本图仅从共现候选中按频次选取至多{scope.get('max_nodes', '未记录')}个节点，再移除孤立节点。"
+                         "图中连接结构不能外推为所有作者之间存在或不存在合作核心。")
+        else:
+            lines.append(f"The selected corpus contains {len(names)} distinct author names, not verified individual identities. "
+                         f"This graph selects up to {scope.get('max_nodes', 'an unrecorded number of')} high-frequency cooccurrence nodes and removes isolates. "
+                         "Its structure does not establish the presence or absence of collaboration cores among all authors.")
+
+        # Component structure refers only to the selected graph.
         if a_components:
             largest = a_components[0].get("size", 0)
             n_components = len(a_components)
@@ -469,27 +463,24 @@ def _results_knowledge_structure(ctx):
                     lines.append(
                         f" 网络分裂为{n_components}个以上连通分量，"
                         f"最大分量仅含{largest}位作者"
-                        f"（占网络的{frag_ratio:.0%}）。这种碎片化提示各研究团队相对孤立，跨团队合作有限。"
+                        f"（占选入图的{frag_ratio:.0%}），仅描述该子图中的连接结构。"
                     )
                 else:
                     lines.append(
                         f" The network is fragmented into {n_components}+ components, "
                         f"with the largest containing only {largest} authors "
-                        f"({frag_ratio:.0%} of the network). This fragmentation suggests "
-                        f"that research groups operate in relative isolation, with limited "
-                        f"cross-team collaboration."
+                        f"({frag_ratio:.0%} of the selected graph). This describes only the selected subgraph."
                     )
             else:
                 if zh:
                     lines.append(
                         f" 最大连通分量包含{largest}位作者（{frag_ratio:.0%}），"
-                        f"表明存在较为凝聚的合作核心。"
+                        f"仅说明该子图包含相连的名称节点。"
                     )
                 else:
                     lines.append(
                         f" The largest connected component encompasses {largest} authors "
-                        f"({frag_ratio:.0%}), indicating a reasonably cohesive "
-                        f"collaboration core."
+                        f"({frag_ratio:.0%} of the selected graph), describing connected name nodes within this subgraph."
                     )
 
         # Top collaborators by degree
