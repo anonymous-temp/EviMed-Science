@@ -38,7 +38,7 @@ test("deployment derives its internal token without writing a secret to compose 
   assert.match(compose, /network_mode: none/);
   assert.match(compose, /openlist-admin-password/);
   assert.match(compose, /evimed-openlist-secrets:\/run\/openlist-secrets:ro/);
-  assert.match(bootstrap, /admin set "\$password"/);
+  assert.match(bootstrap, /admin set --data \/opt\/openlist\/data -- "\$password"/);
   assert.match(bootstrap, /admin token/);
   assert.match(bootstrap, /chown -R 1001:1001 \/opt\/openlist\/data/);
   assert.doesNotMatch(compose, /OPEN_SCIENCE_OPENLIST_TOKEN_HOST_FILE/);
