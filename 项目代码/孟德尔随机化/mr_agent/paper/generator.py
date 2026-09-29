@@ -760,7 +760,8 @@ class PaperGenerator:
                     f"{result.n_instruments}个工具变量，以IVW为主分析。\n"
                     f"结果：IVW估计为{estimate}；平均F统计量为"
                     f"{f'{result.f_statistic_mean:.3f}' if result.f_statistic_mean is not None else 'N/A'}。"
-                    f"异质性检验{heterogeneity_label}；{pleiotropy}；{presso}。\n"
+                    + (f"异质性检验{heterogeneity_label}；" if result.heterogeneity else "未完成异质性检验；")
+                    + f"{pleiotropy}；{presso}。\n"
                     f"结论：主分析提示{direction_label}向关联。"
                     "该估计必须结合工具变量假设、异质性、多效性与样本重叠不确定性解读，"
                     "不单独等同于无条件因果证明。"
@@ -774,8 +775,9 @@ class PaperGenerator:
                     f"{result.n_instruments} harmonized instruments entered an IVW primary analysis.\n"
                     f"Results: The IVW estimate was {estimate}; the mean F-statistic was "
                     f"{f'{result.f_statistic_mean:.3f}' if result.f_statistic_mean is not None else 'N/A'}. "
-                    f"Heterogeneity was {'statistically significant' if heterogeneity else 'not statistically significant'}; "
-                    f"{pleiotropy}; {presso}.\n"
+                    + (f"Heterogeneity was {'statistically significant' if heterogeneity else 'not statistically significant'}; "
+                       if result.heterogeneity else "Heterogeneity was not assessed; ")
+                    + f"{pleiotropy}; {presso}.\n"
                     f"Conclusion: The primary estimate indicated a "
                     f"{'positive' if ivw and ivw.beta > 0 else 'negative' if ivw else 'not estimable'} association. "
                     "It must be interpreted with the instrument assumptions, heterogeneity, pleiotropy, and overlap uncertainty; "
@@ -815,8 +817,8 @@ class PaperGenerator:
                     "这种方法间的一致性可作为稳健性信号，但不能修复共享偏倚或无效工具变量。"
                 )
                 paragraphs.append(
-                    f"异质性检验{heterogeneity_label}。"
-                    f"MR-Egger截距{pleiotropy_label}，"
+                    (f"异质性检验{heterogeneity_label}。" if result.heterogeneity else "未完成异质性检验。")
+                    + f"MR-Egger截距{pleiotropy_label}，"
                     "但不显著截距不排除平衡多效性。"
                     + (f"MR-PRESSO记录{result.presso_n_outliers}个候选离群值，但全局p值不可用，因此不作阴性结论。"
                        if result.presso_n_outliers is not None and result.presso_global_pval is None else "")
@@ -839,8 +841,9 @@ class PaperGenerator:
                     "Concordance is a robustness signal but cannot repair shared bias or invalid instruments."
                 )
                 paragraphs.append(
-                    f"Heterogeneity was {'statistically significant' if significant_heterogeneity else 'not statistically significant'}. "
-                    f"The MR-Egger intercept {'suggested directional pleiotropy' if directional else 'did not detect significant directional pleiotropy' if result.pleiotropy else 'was unavailable'}; "
+                    (f"Heterogeneity was {'statistically significant' if significant_heterogeneity else 'not statistically significant'}. "
+                     if result.heterogeneity else "Heterogeneity was not assessed. ")
+                    + f"The MR-Egger intercept {'suggested directional pleiotropy' if directional else 'did not detect significant directional pleiotropy' if result.pleiotropy else 'was unavailable'}; "
                     "a non-significant intercept does not exclude balanced pleiotropy. "
                     + (f"MR-PRESSO recorded {result.presso_n_outliers} candidate outliers, but its global p-value was unavailable and no negative conclusion is drawn. "
                        if result.presso_n_outliers is not None and result.presso_global_pval is None else "")

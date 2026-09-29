@@ -216,10 +216,10 @@ def run_mr_analysis(
     # read before the exit code is treated as "nothing to parse".
     result = _parse_results(exposure_id, outcome_id, output_dir, previous=previous)
     if not result.mr_results and not any(name in _output_identities(output_dir) and _output_identities(output_dir)[name] != previous.get(name) for name in ("selected-source-rows.csv", "harmonised-rows.csv")):
-        raise_for_source_failure(output_dir)
+        raise_for_source_failure(output_dir, previous=previous)
     if not success:
         result.analysis_status = "partial" if result.mr_results else "failed"
-        result.analysis_error_code = str(read_error_file(output_dir).get("code") or "analysis_failed")
+        result.analysis_error_code = str(read_error_file(output_dir, previous=previous).get("code") or "analysis_failed")
     return result
 
 
@@ -359,10 +359,10 @@ def run_mr_local(
         success = _execute_r_script(r_script, output_dir)
     result = _parse_results(exp_id, out_id, parsed_dir, previous=previous)
     if not result.mr_results and not any(name in _output_identities(parsed_dir) and _output_identities(parsed_dir)[name] != previous.get(name) for name in ("selected-source-rows.csv", "harmonised-rows.csv")):
-        raise_for_source_failure(parsed_dir)
+        raise_for_source_failure(parsed_dir, previous=previous)
     if not success:
         result.analysis_status = "partial" if result.mr_results else "failed"
-        result.analysis_error_code = str(read_error_file(parsed_dir).get("code") or "analysis_failed")
+        result.analysis_error_code = str(read_error_file(parsed_dir, previous=previous).get("code") or "analysis_failed")
     result.exposure_source_type = exposure_source.source_type
     result.outcome_source_type = outcome_source.source_type
     for label, source in (("exposure", exposure_source), ("outcome", outcome_source)):
@@ -513,9 +513,13 @@ def _parse_selection_json(result: MRAnalysisResult, output_dir: Path) -> None:
         result.instrument_selection = json.loads(selection_file.read_text(encoding="utf-8"))
 
 
-def read_error_file(output_dir: Path) -> dict:
+def read_error_file(output_dir: Path, *, previous: dict | None = None) -> dict:
     """Return the classified failure the R template wrote, if any."""
     error_file = output_dir / "mr_error.json"
+    if previous is not None:
+        current = _output_identities(output_dir)
+        if "mr_error.json" not in current or current["mr_error.json"] == previous.get("mr_error.json"):
+            return {}
     if not error_file.exists():
         return {}
     try:
@@ -526,14 +530,14 @@ def read_error_file(output_dir: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def raise_for_source_failure(output_dir: Path) -> dict:
+def raise_for_source_failure(output_dir: Path, *, previous: dict | None = None) -> dict:
     """Turn a source-level R failure into a coded exception.
 
     An analysis-level failure (too few instruments, no outcome rows) is
     returned instead: those are results, and other exposure-outcome pairs in
     the same job can still run.
     """
-    data = read_error_file(output_dir)
+    data = read_error_file(output_dir, previous=previous)
     if not data:
         return {}
     code = str(data.get("code") or "")
