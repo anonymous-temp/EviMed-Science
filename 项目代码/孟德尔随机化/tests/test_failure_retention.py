@@ -215,3 +215,24 @@ def test_public_partial_preserves_current_r_statistical_columns(directories, tmp
 def test_public_partial_rejects_invalid_closed_statistical_fields(name, body):
     with pytest.raises(ValueError):
         jobs._scientific_rows(body.encode(), name)
+
+
+def test_public_partial_error_code_cannot_publish_a_credential(directories, tmp_path):
+    stage, _, source, _ = directories
+    (stage / "analysis-data/pair/mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.4,0.1,0.001\n")
+    secret = "synthetic_private_credential_123456"
+    output = tmp_path / "public"; output.mkdir()
+    with inputs.directory_fd(output) as target:
+        artifacts, _ = jobs._publish_partial_failure(inputs, source, target, Path("output"), secret, {"LLM_API_KEY": secret})
+    assert artifacts
+    summary = (output / "partial-research.json").read_text()
+    assert secret not in summary
+    assert json.loads(summary)["original_error_code"] == "mr_analysis_failed"
+
+
+def test_unsupported_supervisor_refuses_before_starting_analysis(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs.sys, "platform", "darwin")
+    marker = tmp_path / "launched"
+    with pytest.raises(OSError):
+        jobs._run_analysis([jobs.sys.executable, "-c", f"from pathlib import Path;Path({str(marker)!r}).touch()"], None, 5)
+    assert not marker.exists()

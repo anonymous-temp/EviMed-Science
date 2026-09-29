@@ -10,6 +10,72 @@ import pytest
 
 
 @pytest.mark.skipif(not os.getenv("EVIMED_AUDIT_CONTAINER_TEST_IMAGE"), reason="explicit cached Linux image required")
+@pytest.mark.parametrize("mode", ["failed", "succeeded", "timeout", "stop_unconfirmed"])
+def test_hosted_same_uid_waits_for_descendants_before_publication(mode):
+    repo = Path(__file__).resolve().parents[3]
+    script = r'''
+import json,os,signal,sys,tempfile,time
+from pathlib import Path
+sys.path.insert(0,'/src/项目代码/孟德尔随机化')
+import evimed_local_inputs as inputs
+import evimed_mr_job as jobs
+mode=MODE
+root=Path(tempfile.mkdtemp()); workspace=root/'data/workspace';output=workspace/'output';output.mkdir(parents=True)
+runner=root/'runner.py';pidfile=root/'child.pid';leaderfile=root/'leader.pid'
+runner.write_text('import json,os,signal,subprocess,sys,time\nfrom pathlib import Path\nos.fchdir(int(sys.argv[-1]))\n'
+    +f'Path({str(leaderfile)!r}).write_text(str(os.getpid()))\n'
+    +'child=subprocess.Popen([sys.executable,"-c","import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(30)"],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n'
+    +f'Path({str(pidfile)!r}).write_text(str(child.pid))\n'
+    +'Path("analysis-data/pair").mkdir(parents=True)\nPath("analysis-data/pair/mr_results.csv").write_text("method,nsnp,b,se,pval\\nIVW,8,0.4,0.1,0.01\\n")\n'
+    +f'Path("result.json").write_text(json.dumps({{"status": {"succeeded" if mode == "succeeded" else "failed"!r}, "errorCode":"mr_interpretation_failed"}}))\n'
+    +('time.sleep(30)\n' if mode=='timeout' else 'sys.exit(0)\n' if mode=='succeeded' else 'sys.exit(1)\n'))
+request={'exposure':'BMI','outcome':'CHD'}
+job=jobs.Job(workspace,output,root/'data',request,inputs.capture_bindings(workspace,request,root/'data'),sys.executable,runner,timeout=1 if mode=='timeout' else 5)
+original_publish=jobs._publish
+def checked_publish(*args,**kwargs):
+    state=jobs._process_identity(int(pidfile.read_text()))['state']
+    assert state in {'Z','X'},'live child at artifact publication'
+    return original_publish(*args,**kwargs)
+jobs._publish=checked_publish
+if mode=='stop_unconfirmed':
+    jobs._analysis_helper=lambda *args,**kwargs: False
+    jobs._read_result=lambda *args: (_ for _ in ()).throw(AssertionError('read live stage'))
+    jobs._inventory=lambda *args: (_ for _ in ()).throw(AssertionError('inventoried live stage'))
+try:
+    outcome=jobs.execute(inputs,job,{},analysis_credentials=None)
+    if mode=='stop_unconfirmed':
+        assert outcome['result']['errorCode']=='mr_analysis_stop_failed',outcome
+        assert outcome['artifacts']==[] and outcome['cleanupError'],outcome
+        assert list(Path('/tmp').glob('evimed-mr-job-*')),'live scratch was cleaned'
+    else:
+        assert outcome['artifacts'],outcome
+        if mode!='succeeded':
+            assert outcome['partialScientificReceipt'],outcome
+            assert outcome['result']['status']=='failed',outcome
+        assert not list(Path('/tmp').glob('evimed-mr-job-*'))
+        assert not list(Path('/tmp').glob('evimed-mr-scratch-*'))
+    print('verified-same-uid-'+mode)
+finally:
+    if pidfile.exists():
+        try: os.kill(int(pidfile.read_text()),signal.SIGKILL)
+        except ProcessLookupError: pass
+'''.replace("MODE", repr(mode))
+    name = "evimed-mr-same-uid-test-" + uuid.uuid4().hex[:16]
+    try:
+        result = subprocess.run([
+            "docker", "run", "--name", name, "--rm", "--pull", "never", "--network", "none",
+            "--user", "65532:65532", "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges:true", "--tmpfs", "/tmp",
+            "--mount", f"type=bind,src={repo},dst=/src,readonly",
+            os.environ["EVIMED_AUDIT_CONTAINER_TEST_IMAGE"], "python", "-c", script,
+        ], capture_output=True, text=True, timeout=20)
+        assert result.returncode == 0, result.stderr
+        assert "verified-same-uid-" + mode in result.stdout
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=10, check=False)
+
+
+@pytest.mark.skipif(not os.getenv("EVIMED_AUDIT_CONTAINER_TEST_IMAGE"), reason="explicit cached Linux image required")
 @pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed", "preparation_failed", "succeeded_descendant", "failed_descendant", "signal_descendant", "timeout_descendant", "worker_signal_descendant", "stop_signal_descendant", "reaped_leader_descendant", "identity_check_descendant"])
 def test_analysis_owned_private_directories_preserve_outcome_and_cleanup(mode):
     repo = Path(__file__).resolve().parents[3]
