@@ -359,3 +359,63 @@ def test_known_registration_overlap_cannot_be_overridden_by_model_publication_id
     effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
     assert len(effects) == 1
     assert sum(row["in_final_primary_analysis"] for row in audit) == 1
+
+
+def test_unsupported_method_admission_keeps_available_evidence_report(tmp_path, monkeypatch):
+    import new_meta.main as cli
+    from new_meta.core.method_planning import MethodCapabilityBlockedError
+    from test_method_executor import _complex_rct_plan
+    from test_extraction_lifecycle import protocol, study
+    project = unattended(Project("unsupported specific method", output_dir=tmp_path))
+    project.save_json("protocol.json", protocol())
+    project.save_json("all_extractions.json", [study()], subdir="extraction")
+    plan = _complex_rct_plan().model_copy(update={"execution_allowed": False, "blocking_reasons": ["unsupported covariance model"]})
+    monkeypatch.setattr("new_meta.core.method_planning.admit_project_protocol", Mock(side_effect=MethodCapabilityBlockedError(plan, project)))
+    monkeypatch.setattr(cli, "create_artifact_package", lambda project: project.base_dir / "package")
+    with pytest.raises(SystemExit) as done:
+        cli._admit_cli_protocol(project, protocol())
+    assert done.value.code == 0
+    assert "unsupported covariance model" in project.get_path("draft.md", subdir="manuscript").read_text()
+
+
+@pytest.mark.parametrize("hyphen", ["\u2010", "\u2011", "\u2212"])
+@pytest.mark.parametrize("verified_first", [False, True])
+def test_trial_identity_uses_existing_source_normalization(tmp_path, monkeypatch, hyphen, verified_first):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.primary_analysis_alignment import record_checked_alignments
+    from test_primary_analysis_alignment import SOURCE, assessment_payload
+    from endpoint_binding_fixture import bind_components
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    quote = "Registration " + "ChiCTR-INR-16010287".replace("-", hyphen) + "."
+    source = SOURCE + "\n" + quote
+    for index, study in enumerate(studies):
+        assessment = assessment_payload(source_outcome=study.outcomes[0], contrast="match" if verified_first and index == 0 else "uncertain")
+        assessment["verification"]["trial_units"][0].update(registry_id="ChiCTR-INR-16010287", quote=quote)
+        assessment = bind_components(assessment, source)
+        assert record_checked_alignments(project, protocol, study, [assessment], source_text=source,
+                                         issue_histories={0: ([], True)}) == []
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert len(effects) == sum(row["in_final_primary_analysis"] for row in audit) == 1
+
+
+@pytest.mark.parametrize("source_number", ["15", "5.8", "-5"])
+def test_numeric_support_cannot_clip_a_larger_signed_or_decimal_token(tmp_path, monkeypatch, source_number):
+    from new_meta.core.agent_base import BaseAgent
+    from test_primary_analysis_alignment import SOURCE
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    source = SOURCE.replace("5/100", source_number + "/100").replace("50%", "40%")
+    project.save_json("parsed_papers.json", {sid: {"full_text": source} for sid in ("S1", "S2")}, subdir="papers")
+    choose = _model_decisions(studies)
+    def clipped(self, prompt, schema, **kwargs):
+        response = choose(self, prompt, schema, **kwargs)
+        judgment = response.rows[0]
+        judgment.numeric_quotes = {field: source for field in judgment.numeric_quotes}
+        if judgment.trial_id == "S1":
+            judgment.numeric_quotes["events_intervention"] = "5"
+        return response
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", clipped)
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert [effect.study_id for effect in effects] == ["S2"]
+    assert audit[0]["reason"] == "numeric_support_unavailable"
