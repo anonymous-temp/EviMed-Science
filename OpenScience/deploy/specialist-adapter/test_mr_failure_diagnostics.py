@@ -104,7 +104,7 @@ def test_failed_mr_publishes_completed_numeric_projection_through_error_contract
     assert json.loads((workspace / summary_path).read_text())["primary_estimate_available"] is True
 
 
-@pytest.mark.parametrize("code", ["analysis_failed", "no_instruments", "no_outcome_data", "insufficient_harmonised_snps", "ld_clumping_failed", "mr_analysis_incomplete"])
+@pytest.mark.parametrize("code", ["analysis_failed", "no_instruments", "no_outcome_data", "insufficient_harmonised_snps", "ld_clumping_failed", "mr_analysis_incomplete", "mr_no_instruments"])
 def test_partial_result_keeps_the_fixed_engines_original_error_code(tmp_path, monkeypatch, code):
     service, _, _, _ = setup_mr(tmp_path, monkeypatch)
     actual, message = service._mr_runner_failure({"errorCode": code, "error": "PRIVATE_PROVIDER_SECRET"}, [])
@@ -195,11 +195,18 @@ def test_an_open_data_refusal_holding_a_credential_is_shown_by_code_only(tmp_pat
 
 
 def test_a_code_the_adapter_does_not_forward_is_still_named(tmp_path, monkeypatch):
-    state, response, _ = run_refused(tmp_path, monkeypatch, "mr_no_instruments", "no valid instruments")
+    state, response, _ = run_refused(tmp_path, monkeypatch, "mr_unrecognized_failure", "private engine detail")
 
     assert "errorCode" not in state
     assert response["error"]["code"] == "specialist_execution_failed"
-    assert response["error"]["message"] == "The fixed MR runner failed (mr_no_instruments)."
+    assert response["error"]["message"] == "The fixed MR runner failed (mr_unrecognized_failure)."
+    assert "private engine detail" not in json.dumps(state)
+
+
+def test_known_no_instruments_code_survives_failed_job_status(tmp_path, monkeypatch):
+    state, response, _ = run_refused(tmp_path, monkeypatch, "mr_no_instruments", "no valid instruments")
+    assert state["errorCode"] == response["error"]["code"] == "mr_no_instruments"
+    assert response["error"]["message"] == "The fixed MR runner failed."
     assert "no valid instruments" not in json.dumps(state)
 
 
