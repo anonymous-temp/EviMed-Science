@@ -221,6 +221,8 @@ def test_compiled_review_preserves_uncertain_trial_and_renders_limitations(tmp_p
     assert result["engine_payload"]["n_studies"] == 4
     assert result["engine_payload"]["n_contrasts"] == 6
     assert "verifier unavailable" in delivery.manuscript and "Trial identity is uncertain" in delivery.manuscript
+    assert "verified contrasts" not in delivery.manuscript
+    assert "verified aggregate contrasts" not in delivery.manuscript
     assert project.get_path("draft.md", subdir="manuscript").exists()
     assert studies[0].outcomes[0].primary_analysis_alignment is None
     require_current_compiled_alignment(project)
