@@ -504,3 +504,25 @@ def test_a_blocked_job_is_the_answer_and_is_never_run_again(tmp_path, monkeypatc
         assert len(launched) == 1
         assert json.loads(state_file.read_text(encoding="utf-8"))["releaseStatus"] == "blocked"
 
+
+
+def test_nonzero_exit_after_readable_manuscript_delivers_partial_result(tmp_path, monkeypatch) -> None:
+    client, workspace = _fixture(tmp_path, monkeypatch)
+    _launches(monkeypatch)
+    job_id = _post(client, {"action": "start", "topic": "Partial manuscript"}).json()["data"]["jobId"]
+    state_file = workspace / "meta-analysis-runs" / ".jobs" / f"{job_id}.json"
+
+    def stopped_after_draft(command, **kwargs):
+        root = Path(command[command.index("--output-dir") + 1]) / "partial-project"
+        (root / "manuscript").mkdir(parents=True)
+        (root / "manuscript" / "draft.md").write_text("# Available evidence\n\nUncertain trial identity.\n")
+        return SimpleNamespace(returncode=75)
+
+    monkeypatch.setattr(evimed_adapter.subprocess, "run", stopped_after_draft)
+    assert evimed_adapter.run_job(str(state_file)) == 0
+    state = json.loads(state_file.read_text())
+    assert state["status"] == "succeeded" and state["deliverable"]
+    assert state["completion"] == "partial" and state["returnCode"] == 75
+    assert state["verification"] == "unverified"
+    assert "partial_process_completion" in state["warningReasons"]
+    assert any(item["path"].endswith("manuscript/draft.md") for item in state["artifacts"])
