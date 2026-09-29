@@ -55,6 +55,21 @@ def prepare(files):
     ]
 
 
+def test_optional_scale_and_variant_n_survive_descriptor_bound_preparation(files):
+    root, workspace, output, request = files
+    request["exposureSource"]["effectScale"] = {"unit": "SD", "transformation": "inverse_normal", "evidence": "Provided dictionary"}
+    request["exposureSource"]["columnMapping"]["samplesize"] = "variant_n"
+    (workspace / "data/exposure.csv").write_text("SNP,beta,se,effect_allele,other_allele,eaf,pval,variant_n\nrs1,0.2,0.01,A,G,0.2,1e-10,218359\n")
+    binding = inputs.capture_bindings(workspace, request, root)
+    prepared = inputs.prepare_sources(workspace, output, request, binding, root, token_available=False)
+    private = root / "private"; private.mkdir()
+    sources, _ = inputs.runner_sources(prepared["request"], output, private, authority=prepared)
+    assert sources["exposure"].effect_scale["status"] == "declared"
+    assert sources["exposure"].column_mapping.samplesize == "samplesize"
+    assert "218359" in (private / "exposure.csv").read_text()
+    assert prepared["request"]["exposureSource"]["effectScale"] == request["exposureSource"]["effectScale"]
+
+
 @pytest.mark.parametrize(
     "path",
     [
