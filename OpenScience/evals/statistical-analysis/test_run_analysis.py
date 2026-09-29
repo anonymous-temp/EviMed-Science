@@ -122,6 +122,16 @@ class AnalysisExecutionTests(unittest.TestCase):
         self.assertIsNone(attempt['sourcesAfter'][1])
         self.assertTrue(any(item['code'] == 'source_changed' for item in attempt['warnings']))
 
+    def test_post_execution_receipt_alias_cannot_overwrite_source(self):
+        before = (self.root / 'data.csv').read_bytes()
+        result = self.run_script("from pathlib import Path\nPath('analysis-run.json').symlink_to('data.csv')")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / 'data.csv').read_bytes(), before)
+        summary = json.loads(result.stdout)
+        ledger = json.loads((self.root / summary['receipt']).read_text())
+        self.assertEqual(ledger['executions'][0]['exitCode'], 0)
+        self.assertTrue(any(item['code'] == 'receipt_path_unsafe' for item in ledger['executions'][0]['warnings']))
+
     @unittest.skipUnless(shutil.which('Rscript'), 'Native R is unavailable')
     def test_native_r_execution_records_observed_versions(self):
         (self.root / 'analysis.R').write_text("cat('{\"analyses\":[{\"estimate\":2}]}', file='analysis-results.json')")
