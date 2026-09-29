@@ -606,6 +606,30 @@ export function onSessionStart(ctx, fn) {
   })
 }
 
+/** The native text on both session/prompt and a consumed inbox message.
+ * @param {unknown} content @returns {string} */
+export function nativeInputText(content) {
+  return Array.isArray(content) ? content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n') : ''
+}
+
+/** Only inputs the kernel removed from the inbox for THIS step, never queued
+ * follow-ups or reconstructed session history. Opaque request ids are bounded
+ * exactly as the control-plane run ledger bounds them.
+ * @param {any} payload @returns {{requestId:string,text:string}[]} */
+export function stepUserInputs(payload) {
+  const inputs = new Map()
+  const conflicts = new Set()
+  for (const message of (Array.isArray(payload?.messages) ? payload.messages : [])) {
+    const requestId = message?.source?.rpcId
+    if (message?.source?.kind !== 'user' || typeof requestId !== 'string' || !requestId || requestId.length > 512
+      || /[\u0000-\u001f\u007f]/.test(requestId) || conflicts.has(requestId)) continue
+    const text = nativeInputText(message.content)
+    if (inputs.has(requestId) && inputs.get(requestId) !== text) { inputs.delete(requestId); conflicts.add(requestId); continue }
+    inputs.set(requestId, text)
+  }
+  return [...inputs].slice(0, 16).map(([requestId, text]) => ({ requestId, text }))
+}
+
 /**
  * Per-step admission (`agent/pre-step`). Rejecting stops the step; the caller
  * is expected to have injected an explanation first, or the model learns
@@ -625,10 +649,14 @@ export function onPreStep(ctx, fn, classify) {
     try {
       const admission = await fn(toStepInfo(payload, classify(payload)), payload)
       const decision = admission.allow ? await next() : { kind: 'reject' }
-      if (decision?.kind === 'enter' && messages.length) {
-        return { ...decision, messages: [...(decision.messages ?? []), ...messages] }
+      if (decision?.kind === 'enter') {
+        const entered = messages.length ? { ...decision, messages: [...(decision.messages ?? []), ...messages] } : decision
+        if (admission.allow && admission.onEntered) {
+          try { await admission.onEntered() } catch (error) { console.error(`evimed: step-entry observation failed: ${errorMessage(error)}`) }
+        }
+        return entered
       }
-      if (decision?.kind === 'reject') for (const message of messages) agent.inject(message)
+      if (decision?.kind === 'reject' && !(admission.allow && admission.discardOnReject)) for (const message of messages) agent.inject(message)
       return decision
     } finally {
       if (previous) enteringStepContext.set(agent, previous)
