@@ -3181,7 +3181,7 @@ def _ensure_cached_model_artifacts(
         return meta_results
     try:
         known_source_preferences = project.load_json("known_source_protocol_preferences.json", subdir="extraction") or {}
-        _, model_decision, model_sensitivity = build_model_decision_and_sensitivity(
+        _, _, model_sensitivity = build_model_decision_and_sensitivity(
             study_effects=study_effects,
             protocol=protocol,
             known_source_preferences=known_source_preferences,
@@ -3196,6 +3196,22 @@ def _ensure_cached_model_artifacts(
         )
         return meta_results
 
+    primary = meta_results.primary_outcome
+    # The retained numbers came from this stored execution. A successful fit
+    # today is only a recomputed sensitivity, never provenance for that result.
+    model_decision = {
+        **meta_results.model_decision,
+        "schema_version": 1,
+        "primary_model": primary.model,
+        "primary_engine_model": primary.model,
+        "tau_estimator": primary.tau_estimator,
+        "requested_method": primary.requested_method,
+        "executed_method": primary.execution_metadata().model_dump(mode="json"),
+        "reason": "Cached primary retained with its stored execution provenance; sensitivities were recomputed separately.",
+        "k": primary.n_studies,
+        "low_k_random_fallback": primary.fallback_reason == "fewer_than_three_studies",
+    }
+    model_sensitivity["origin"] = "recomputed_from_cached_study_effects"
     project.save_json("model_decision.json", model_decision, subdir="analysis")
     project.save_json("model_sensitivity.json", model_sensitivity, subdir="analysis")
     meta_results = meta_results.model_copy(update={

@@ -14,7 +14,7 @@ from new_meta.core.claim_alignment import (
     source_backed_claims_for_alignment,
 )
 from new_meta.core.llm import parse_source_json
-from new_meta.core.pooling_method_text import describe_pooling_method
+from new_meta.core.pooling_method_text import describe_pooling_method, executed_method_from_facts
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.schemas.meta_result import MetaAnalysisResults
@@ -1497,6 +1497,12 @@ class ClaimMapMixin:
                 "ci_upper": primary.get("ci_upper"),
                 "p_value": primary.get("p_value"),
                 "model": primary.get("model"),
+                "executed_method": executed_method_from_facts(facts),
+                "tau_estimator": primary.get("tau_estimator"),
+                "tau_squared": primary.get("tau_squared"),
+                "q_statistic": primary.get("q_statistic"),
+                "prediction_lower": primary.get("prediction_lower"),
+                "prediction_upper": primary.get("prediction_upper"),
                 "i_squared": primary.get("i_squared"),
             },
             "primary_population": {
@@ -1546,6 +1552,7 @@ class ClaimMapMixin:
                 "- 除非 JSON 明确提供人工双评审信息，不要声称“两名独立评审员”或“双人独立提取”；应中性描述筛选和提取。\n"
                 "- 方法部分命名检索来源时必须使用 search.sources_text 的原文；不要自行推断或补写“未检索”其它数据库。\n"
                 "- Methods/Results 只写本研究做了什么和发现了什么；不要写 meta-analysis 教科书式常识。\n"
+                "- 协议仅说明计划；实际合并、τ²估计、区间与回退以executed_method为准，null/unknown不代表已执行。\n"
                 "- 每段最多 6 句；一段只表达一个论点。\n"
             )
         else:
@@ -1558,6 +1565,7 @@ class ClaimMapMixin:
                 "- Do not claim two independent human reviewers or dual independent extraction unless that reviewer process is explicitly supplied in the JSON; describe screening and extraction neutrally.\n"
                 "- When naming search sources in Methods, use search.sources_text exactly; do not infer or add statements that other databases were not searched unless explicitly supplied.\n"
                 "- Methods and Results must report what was done and found; do not teach generic meta-analysis principles.\n"
+                "- Protocol choices are planned methods. Describe actual pooling, tau estimation, intervals and fallbacks only from executed_method; null/unknown fields do not establish execution.\n"
                 "- Keep each paragraph to 6 sentences or fewer, with one claim per paragraph.\n"
             )
         return rules + "```json\n" + json.dumps(payload, ensure_ascii=False, indent=2) + "\n```"

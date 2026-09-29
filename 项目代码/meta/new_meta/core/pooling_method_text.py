@@ -2,6 +2,14 @@
 from new_meta.schemas.meta_result import PoolingMethod
 
 
+def executed_method_from_facts(facts: dict) -> dict | None:
+    """Find recorded execution only; a protocol preference is never an execution."""
+    for record in (facts.get("primary_effect"), facts.get("model_decision"), facts.get("synthesis_result")):
+        if isinstance(record, dict) and isinstance(record.get("executed_method"), dict) and record["executed_method"]:
+            return record["executed_method"]
+    return None
+
+
 def describe_pooling_method(method, *, zh: bool = False) -> str:
     if not method:
         return "实际合并及区间方法未记录。" if zh else "The executed pooling and interval methods were not recorded."

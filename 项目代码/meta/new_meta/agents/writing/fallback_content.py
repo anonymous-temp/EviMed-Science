@@ -1,12 +1,11 @@
 """Labels, titles, generic tables and references used by fallback reports."""
 from __future__ import annotations
 
-from new_meta.core.pooling_method_text import describe_pooling_method, primary_method_text, sensitivity_method_text
-
 from datetime import date
 import os
 import re
 
+from new_meta.core.pooling_method_text import describe_pooling_method, primary_method_text, sensitivity_method_text
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.tools.reference_manager import ReferenceManager

@@ -1,11 +1,10 @@
 """The per-section manuscript writers and the figure assembly."""
 from __future__ import annotations
 
-from new_meta.core.pooling_method_text import describe_pooling_method
-
 import json
 import re
 
+from new_meta.core.pooling_method_text import describe_pooling_method, executed_method_from_facts
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.schemas.meta_result import MetaAnalysisResults
@@ -225,12 +224,20 @@ class SectionWritersMixin:
                     "Do NOT describe any RoB tools, assessment methods, or bias evaluation procedures in the Methods."
                 )
         else:
-            # Build statistical methods text based on actual k
-            k = included
+            facts = getattr(self, "_manuscript_facts", None) or {}
+            primary = facts.get("primary_effect") or {}
+            method = executed_method_from_facts(facts)
+            k = primary.get("n_studies") or included
+            lower, upper = primary.get("prediction_lower"), primary.get("prediction_upper")
+            prediction = (f"recorded ({lower}, {upper})" if lower is not None and upper is not None else
+                          "not computed" if method and method.get("fallback_reason") == "fewer_than_three_studies" else
+                          "not recorded; do not claim it was calculated")
             stats_parts = [
-                f"Effect measure: {protocol.effect_measure}",
-                f"Model: {protocol.model_preference} effects (DerSimonian-Laird for random effects)",
-                "Heterogeneity: Cochran's Q test, I² statistic, τ², prediction interval",
+                "Protocol choices describe planned methods, not proof of execution; use the recorded execution below.",
+                f"Effect measure: {primary.get('effect_measure') or protocol.effect_measure}",
+                describe_pooling_method(method, zh=self._zh),
+                f"Prediction interval: {prediction}",
+                "Heterogeneity: report only the Q, I² and τ² values present in the fact contract",
             ]
             if k >= 3:
                 stats_parts.append("Sensitivity: Leave-one-out analysis, cumulative meta-analysis")
