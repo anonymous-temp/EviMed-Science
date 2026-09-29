@@ -42,7 +42,7 @@ function pluginContext() {
   const degraded = []
   const ctx = {
     effect: (/** @type {() => any} */ fn) => fn(),
-    on: (/** @type {string} */ event, /** @type {any} */ handler) => { const previous = hooks.get(event); hooks.set(event, previous ? (payload, next) => handler(payload, () => previous(payload, next)) : handler); return () => {} },
+    on: (/** @type {string} */ event, /** @type {any} */ handler) => { const previous = hooks.get(event); hooks.set(event, previous ? (/** @type {any} */ payload, /** @type {any} */ next) => handler(payload, () => previous(payload, next)) : handler); return () => {} },
     provide: () => {},
     get: (/** @type {string} */ key) => (key === 'evimedDiagnostics' ? { degrade: (/** @type {string} */ text) => degraded.push(text) } : undefined),
     tools: { register: () => () => {} },

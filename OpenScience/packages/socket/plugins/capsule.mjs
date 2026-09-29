@@ -192,7 +192,7 @@ export async function apply(ctx, config) {
     /** @type {Set<string>} */ const attached = new Set()
     ctx.effect(() => onPreStep(ctx, async (step, payload) => {
       if (!step.root || !payload?.agent || !step.sessionId) return { allow: true }
-      const key = requestId => JSON.stringify([step.sessionId, step.turn, requestId])
+      const key = (/** @type {string} */ requestId) => JSON.stringify([step.sessionId, step.turn, requestId])
       const inputs = await Promise.all(stepUserInputs(payload).filter(input => !attached.has(key(input.requestId)))
         .map(async input => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
       if (!inputs.length) return { allow: true }
@@ -215,7 +215,11 @@ export async function apply(ctx, config) {
       return { allow: true, discardOnReject: true, onEntered: async () => {
         if (!receipts.length) return
         for (const receipt of receipts) attached.add(key(receipt.requestId))
-        while (attached.size > 1000) attached.delete(attached.values().next().value)
+        while (attached.size > 1000) {
+          const oldest = attached.values().next().value
+          if (oldest === undefined) break
+          attached.delete(oldest)
+        }
         const acknowledged = await callControlPlane(ctx, config, 'handbook-attached', { sessionId: step.sessionId, receipts })
         if (!acknowledged.ok) ctx.get('evimedDiagnostics')?.degrade?.(`native handbook attachment not recorded: ${acknowledged.message}`)
       } }

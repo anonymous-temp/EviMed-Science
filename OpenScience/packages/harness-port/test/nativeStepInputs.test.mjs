@@ -3,6 +3,7 @@ import test from 'node:test'
 import * as port from '../index.mjs'
 const { injectContext, onPreStep, stepUserInputs } = port
 
+/** @param {string} requestId @param {string} text @param {string} [kind] */
 const message = (requestId, text, kind = 'user') => ({ role: 'user', source: { kind, rpcId: requestId }, content: [{ type: 'text', text }] })
 test('only user inputs actually removed from this step inbox expose native request identities', () => {
   assert.deepEqual(stepUserInputs({ messages: [message('A', 'Current A'), message('B', 'Steered B'), message('A', 'Current A'), message('plugin-id', 'Injected', 'plugin:evimed'), message('', 'No identity')] }),
@@ -12,11 +13,11 @@ test('only user inputs actually removed from this step inbox expose native reque
 })
 
 test('a context acknowledgement happens only for an entering decision and rejected context is never queued into a later turn', async () => {
-  let handler
+  /** @type {any} */ let handler
   let acknowledged = 0
-  const queued = []
-  const agent = { id: 'agent', session: { id: 'session' }, inject: (value) => queued.push(value) }
-  onPreStep({ on: (_event, fn) => { handler = fn; return () => {} } }, async () => {
+  /** @type {any[]} */ const queued = []
+  const agent = { id: 'agent', session: { id: 'session' }, inject: (/** @type {any} */ value) => queued.push(value) }
+  onPreStep({ on: (/** @type {string} */ _event, /** @type {any} */ fn) => { handler = fn; return () => {} } }, async () => {
     injectContext(agent, 'Current input supplement', 'evimed-capsule')
     return { allow: true, discardOnReject: true, onEntered: async () => { acknowledged += 1 } }
   }, () => ({ first: true, root: true }))
