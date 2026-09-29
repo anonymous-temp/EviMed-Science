@@ -16,7 +16,7 @@ function pageOptions(input, scope) {
   try { cursor = JSON.parse(Buffer.from(input.cursor, "base64url").toString("utf8")); } catch { throw invalid(); }
   if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)
     || Object.keys(cursor).sort().join() !== "at,id,scope,v" || cursor.v !== 1 || cursor.scope !== scope
-    || typeof cursor.id !== "string" || !cursor.id || cursor.id.length > 200 || /[\u0000-\u001f\u007f]/.test(cursor.id)
+    || typeof cursor.id !== "string" || !cursor.id || cursor.id.length > 200 || [...cursor.id].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
     || typeof cursor.at !== "string" || !/^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(cursor.at)
     || !Number.isFinite(Date.parse(cursor.at)) || new Date(cursor.at).toISOString().slice(0, 19) !== cursor.at.slice(0, 19)) throw invalid();
   return { limit, at: cursor.at, id: cursor.id, scope };
