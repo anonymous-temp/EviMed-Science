@@ -688,6 +688,7 @@ mvdat <- mv_harmonise_data(mv_exposures, mv_outcome)
 # MVMR-IVW
 mvmr_res <- mv_multiple(mvdat)
 mvmr_df <- as.data.frame(mvmr_res$result)
+mvmr_df$method <- "Multivariable IVW"
 write.csv(mvmr_df, file.path(output_dir, "mr_results.csv"), row.names=FALSE)
 
 # MVMR sensitivity via MVMR package

@@ -44,7 +44,7 @@ _CATEGORIES = {"http_error", "timeout", "connection", "response_error", "truncat
 _PLOTS = {name + suffix for name in ("forest_plot", "scatter_plot", "funnel_plot", "loo_plot") for suffix in (".pdf", ".png")}
 _NUMERIC_FILES = {"mr_results.csv", "heterogeneity.csv", "pleiotropy.csv", "f_statistics.csv", "conmix.csv", "radial.csv", "mrpresso.csv", "steiger.csv"}
 _NUMERIC_COLUMNS = {"b", "beta", "se", "pval", "nsnp", "Q", "Q_df", "Q_pval", "egger_intercept", "F_stat", "F_statistic", "F", "lo_ci", "up_ci", "or", "or_lci95", "or_uci95"}
-_METHODS = {"IVW", "Inverse variance weighted", "MR Egger", "Weighted median", "Weighted mode", "Simple mode", "Wald ratio", "Maximum likelihood", "Penalised weighted median", "MR RAPS", "Contamination mixture"}
+_METHODS = {"IVW", "Inverse variance weighted", "Multivariable IVW", "MR Egger", "Weighted median", "Weighted mode", "Simple mode", "Wald ratio", "Maximum likelihood", "Penalised weighted median", "MR RAPS", "Contamination mixture"}
 # The current R templates' public statistical fields; free-text skip/correction
 # reasons remain private. MR-PRESSO may express permutation p-values as bounds.
 _SCIENTIFIC_NUMERIC_COLUMNS = _NUMERIC_COLUMNS | {

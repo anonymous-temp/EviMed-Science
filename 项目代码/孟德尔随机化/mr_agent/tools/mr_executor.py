@@ -451,7 +451,8 @@ def _parse_results(
                 "presso": result.presso_global_pval is not None, "radial": result.radial_pval is not None, "conmix": result.conmix_pval is not None}
     for name, available in observed.items():
         result.module_status.setdefault(name, {"status": "completed" if available else "unavailable"})
-    for name, filename in (("selectedSourceRows", "selected-source-rows.csv"), ("harmonisedRows", "harmonised-rows.csv")):
+    for name, filename in (("selectedSourceRows", "selected-source-rows.csv"), ("harmonisedRows", "harmonised-rows.csv"),
+                           ("analysisError", "mr_error.json")):
         if filename not in current or (previous is not None and current[filename] == previous.get(filename)):
             result.module_status[name] = {"status": "unavailable", "reason": "not_produced_by_this_attempt"}
         else:

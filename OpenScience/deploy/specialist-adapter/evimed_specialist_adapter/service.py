@@ -1184,6 +1184,8 @@ def _mr_runner_failure(result: dict[str, Any], secrets: list[bytes]) -> tuple[st
     forward is still named in the message when it is a plain identifier.
     """
     code = result.get("errorCode")
+    if isinstance(code, str) and any(secret in code.encode("utf-8", "replace") for secret in secrets):
+        return None, _MR_RUNNER_FAILED
     if not isinstance(code, str) or not (
         _MR_RUNNER_CODE.fullmatch(code) or code in _MR_RUNNER_NAMED_CODES
     ):
