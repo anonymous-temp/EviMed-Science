@@ -78,3 +78,12 @@ test("event follows resolve old aliases and legacy drug names are updated withou
   assert.equal(drug.follow.key, "semaglutide");
   assert.equal((await service.listFollows(alice)).follows.filter((row) => row.kind === "drug").length, 1);
 });
+
+test("an event mute leaves unrelated unclustered items visible", options, async () => {
+  const eventItem = await insertItem(db, { title: "Muted trial" });
+  const otherItem = await insertItem(db, { title: "Unclustered independent report" });
+  const event = await db.query("INSERT INTO evimed_frontier.events(public_id,title_zh,lane,first_at,last_at) VALUES('eventmute1234','Trial','evidence',now(),now()) RETURNING id");
+  await db.query("UPDATE evimed_frontier.items SET event_id=$1 WHERE id=$2", [event.rows[0].id, eventItem.id]);
+  await service.createFollow(alice, { kind: "event", key: "eventmute1234", muted: true });
+  assert.deepEqual((await list(alice, {})).body.items.map((row) => row.id), [otherItem.publicId]);
+});
