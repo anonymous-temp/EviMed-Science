@@ -28,6 +28,7 @@ export const CONTRACT_KINDS = Object.freeze([
   'adr-analysis-report',
   'research-topic-report',
   'dataset-scoping-package',
+  'statistical-analysis-package',
   'research-brief',
   // P2 — planned capabilities
   'appraisal-table',
@@ -137,6 +138,7 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'adr-analysis-report': '药物安全信号分析',
   'research-topic-report': '科研选题分析',
   'dataset-scoping-package': '数据集选题包',
+  'statistical-analysis-package': '统计分析',
   'research-brief': '研究简报',
   'appraisal-table': '证据质量评价表',
   'manuscript-section': '稿件章节',

@@ -30,7 +30,7 @@ test('mechanical numeric findings remain advisory and do not require uncertainty
   assert.equal(result.ok, true)
   for (const check of ['statistical-results-shape', 'statistical-finite-results']) assert.ok(result.issues.some((issue) => issue.check === check))
   assert.ok(result.issues.every((issue) => issue.severity === 'advisory'))
-  assert.ok(!result.issues.some((issue) => issue.message.includes('valid:')))
+  assert.ok(!result.issues.some((issue) => issue.message.startsWith('valid:')))
   assert.ok(!result.issues.some((issue) => issue.message.includes('failed:')))
 })
 

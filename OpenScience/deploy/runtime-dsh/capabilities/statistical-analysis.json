@@ -1,0 +1,76 @@
+{
+  "id": "statistical-analysis",
+  "version": "1.0.0",
+  "title": "Statistical Analysis",
+  "description": "Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.",
+  "whenToUse": "Use for a requested statistical analysis of supplied data, including descriptive comparisons, regression, survival analysis and follow-up calculations. For choosing possible studies from a dataset, use dataset-research-scoping.",
+  "persona": "You are a statistical analyst. Infer the estimand and independent units, execute appropriate Python or R, explain the observed results and limitations, and retain valid work when another calculation fails.",
+  "skills": [
+    "statistical-analysis"
+  ],
+  "tools": [],
+  "produces": [
+    {
+      "contractKind": "statistical-analysis-package",
+      "outputs": [
+        {
+          "path": "statistical-report.md",
+          "required": false
+        },
+        {
+          "path": "analysis-results.json",
+          "required": false
+        },
+        {
+          "path": "analysis-run.json",
+          "required": false
+        },
+        {
+          "path": "analysis.py",
+          "required": false
+        },
+        {
+          "path": "analysis.R",
+          "required": false
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "datasetPath",
+      "analysisQuestion"
+    ],
+    "optional": [
+      "analysisPreferences",
+      "priorAnalysisPath",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "medium",
+    "unattendedInputs": []
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    5,
+    60
+  ],
+  "category": "Research Planning",
+  "dataSources": [
+    "uploaded-files"
+  ],
+  "starterPrompts": [
+    "Compare outcomes between the groups in my uploaded dataset and explain the uncertainty."
+  ]
+}

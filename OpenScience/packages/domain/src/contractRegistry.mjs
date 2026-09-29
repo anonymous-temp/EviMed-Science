@@ -15,6 +15,7 @@ import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, cli
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
+import { statisticalAnalysisFindings } from './statisticalAnalysisContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
@@ -107,6 +108,9 @@ export const GATE_CHECK_IDS = Object.freeze([
   'appraisal-table-rendered',
   // Number provenance in a dataset-scoping package: the snapshot read, and
   // every number in the prose traced to it or not.
+  'statistical-results-shape',
+  'statistical-finite-results',
+  'statistical-execution-provenance',
   'dataset-profile-parse',
   'dataset-number-provenance',
   // manuscriptContract.mjs
@@ -795,6 +799,10 @@ const VALIDATORS = Object.freeze({
   // The one kind whose prose has a deterministic snapshot of its own subject
   // shipped beside it, so "where did this number come from" is decidable here
   // and nowhere else. Advisory (principle 4).
+  'statistical-analysis-package': (input) => withFindings(
+    validateReportShaped(input, proseFilesOf(input)),
+    statisticalAnalysisFindings(input),
+  ),
   'dataset-scoping-package': (input) => withFindings(
     validateReportShaped(input, proseFilesOf(input)),
     datasetScopingFindings(input, proseFilesOf(input)),

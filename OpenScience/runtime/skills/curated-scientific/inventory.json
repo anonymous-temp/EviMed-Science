@@ -833,7 +833,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/statistical-analysis",
-      "digest": "sha256:dcac42ae8bc367e85380625909f1661c5d603b602575fb4f04ea5e1a723ef823",
+      "digest": "sha256:cd9c8ba9addb92ceeac8010ccc8307b35a0d8088ec68af2ddf32cb663aa8b8b6",
       "fills": "Assumption-aware estimation, multiplicity, missingness, and diagnostics"
     },
     {

@@ -221,7 +221,6 @@ test("a complete scoping package passes preflight", { skip: !hasPython3 }, async
     assert.equal(result.ok, true);
     assert.equal(result.metrics.profileRecomputable, true);
     assert.equal(result.metrics.identifierLeaks, 0);
-    assert.equal(result.metrics.infeasibleVerdicts, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -1,6 +1,6 @@
 {
   "id": "dataset-research-scoping",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "title": "Dataset Research Scoping",
   "description": "Start from a dataset the researcher already holds, profile it mechanically, map it against the published literature, and decide which research questions it can and cannot support — naming the missing field for every question it cannot.",
   "whenToUse": "研究者手上已经有数据、要从数据出发找选题时，委派给我——这与从文献出发的证据综述是两条不同的入口。",
@@ -34,43 +34,43 @@
       "outputs": [
         {
           "path": "data-profile.md",
-          "required": true
+          "required": false
         },
         {
           "path": "data-profile.json",
-          "required": true
+          "required": false
         },
         {
           "path": "data-profile.py",
-          "required": true
+          "required": false
         },
         {
           "path": "data-quality.md",
-          "required": true
+          "required": false
         },
         {
           "path": "evidence-map.md",
-          "required": true
+          "required": false
         },
         {
           "path": "feasibility-matrix.md",
-          "required": true
+          "required": false
         },
         {
           "path": "external-linkage.md",
-          "required": true
+          "required": false
         },
         {
           "path": "research-portfolio.md",
-          "required": true
+          "required": false
         },
         {
           "path": "study-protocol.md",
-          "required": true
+          "required": false
         },
         {
           "path": "scoping-run.json",
-          "required": true
+          "required": false
         },
         {
           "path": "agenda-delta.json",

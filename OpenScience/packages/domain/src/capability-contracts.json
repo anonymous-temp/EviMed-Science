@@ -148,6 +148,13 @@
       "contractKinds": [
         "source-understanding"
       ]
+    },
+    {
+      "id": "statistical-analysis",
+      "safetyClass": "clinical",
+      "contractKinds": [
+        "statistical-analysis-package"
+      ]
     }
   ]
 }
