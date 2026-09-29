@@ -67,7 +67,7 @@ test("the migration creates every table of the build spec and a second run chang
   const result = await migrateGeo(first);
   assert.deepEqual(result.tables, GEO_TABLES);
   const created = await inventory(first);
-  assert.equal(created.tables.length, 25, created.tables.join());
+  assert.equal(created.tables.length, 26, created.tables.join());
   assert.deepEqual([...created.tables].sort(), [...GEO_TABLES].sort());
   // The columns other packages code against, spot-checked per side.
   const has = (/** @type {string} */ table, /** @type {string} */ column) => created.columns.some((row) => row.table_name === table && row.column_name === column);
@@ -76,7 +76,7 @@ test("the migration creates every table of the build spec and a second run chang
     ["errors", "cited_source"], ["metrics", "ci_high"], ["strategy", "layout"], ["targets", "budget_cny"], ["sources", "market"],
     ["articles", "protected_sha256"], ["media", "price_history"], ["media_outcomes", "cited"], ["orders", "vendor_order_nid"],
     ["order_events", "to_state"], ["ledger", "amount_cny"], ["topups", "balance_after"], ["reconciliations", "diff"],
-    ["journeys", "data"], ["placement_plans", "data"],
+    ["journeys", "data"], ["placement_plans", "data"], ["owned_links", "url_key"], ["owned_links", "published_at"],
     // The metrics package's additions: M-11/M-12's extractions, and a cell's variant, rival and reason.
     ["facts", "red_flag_expected"], ["facts", "red_flag_hits"], ["facts", "safety_terms_hit"],
     ["metrics", "variant"], ["metrics", "rival"], ["metrics", "reason"]]) {
@@ -131,6 +131,8 @@ test("closed vocabularies are CHECKed where the spec closes them", options, asyn
     [project.id, own("e-x"), carol]);
   await refused(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, state) VALUES ($2, $3, $1, 'teleported')`, [project.id, own("o-x"), carol]);
   await refused(`INSERT INTO evimed_geo.ledger (id, kind, amount_cny) VALUES ($1, 'gift', 1)`, [own("l-x")]);
+  await refused(`INSERT INTO evimed_geo.owned_links (id, user_id, geo_project_id, url, url_key, platform, title, published_at)
+    VALUES ($2, $3, $1, 'https://x.example/a', 'x.example/a', 'myspace', 't', now())`, [project.id, own("ol-x"), carol]);
   // A round's surface defaults to the spec's web / not deep / new chat.
   const roundId = own("r-ok");
   await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind) VALUES ($2, $3, $1, 'baseline')`, [project.id, roundId, carol]);
@@ -161,6 +163,8 @@ test("deleting a project takes its content and measurements, keeps its money, an
     await database.query(`INSERT INTO evimed_geo.order_events (id, order_id, from_state, to_state) VALUES ($1, $2, 'verified', 'settled')`, [`oe-${project.id}`, `o-${project.id}`]);
     await database.query(`INSERT INTO evimed_geo.ledger (id, user_id, geo_project_id, order_id, kind, amount_cny) VALUES ($1, $2, $3, $4, 'settle', 88.5)`,
       [`l-${project.id}`, project.userId, project.id, `o-${project.id}`]);
+    await store.upsertOwnedLinks(project.userId, project.id, [{ url: "https://www.zhihu.com/question/1/answer/2", urlKey: "zhihu.com/question/1/answer/2",
+      platform: "zhihu", title: "t", publishedAt: "2026-09-20T00:00:00Z", articleId: null, groupId: null }]);
   }
   // One more answer of mine with a screenshot only it shows.
   await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, status, screenshot_sha256)
@@ -170,7 +174,7 @@ test("deleting a project takes its content and measurements, keeps its money, an
   const removed = await database.transaction((client) => deleteGeoProjectRows(client, own("dave"), "p-del"));
   assert.deepEqual(removed, { projects: 1, screenshots: [ONLY_MINE] }, "the shared screenshot is still another snapshot's");
   assert.equal(await store.getProject(own("dave"), mine.id), null);
-  for (const table of ["claims", "question_sets", "question_groups", "questions", "rounds", "snapshots", "facts"]) {
+  for (const table of ["claims", "question_sets", "question_groups", "questions", "rounds", "snapshots", "facts", "owned_links"]) {
     assert.equal(await count(table, mine.id), 0, `${table} kept a deleted project's row`);
     assert.equal(await count(table, theirs.id), 1, `${table} lost another account's row`);
   }
@@ -183,6 +187,7 @@ test("deleting a project takes its content and measurements, keeps its money, an
   assert.deepEqual(await database.transaction((client) => deleteGeoUserRows(client, own("erin"))), { projects: 1, screenshots: [SHARED] });
   assert.equal(await store.getProject(own("erin"), theirs.id), null);
   assert.equal(await count("claims", theirs.id), 0);
+  assert.equal(await count("owned_links", theirs.id), 0);
   assert.equal(await count("orders", theirs.id), 1);
 });
 

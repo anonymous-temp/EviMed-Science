@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-content",
-  "version": "sha256:c26040024758037bb5a2b0aff3a751be1df4ada0169a26082aea15bbec841641",
+  "version": "sha256:2c456d8ce54d5bb7d5b02ce2f1e534cf62a58177eecaacef423a63750e3bc380",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 30,
@@ -655,7 +655,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -675,6 +675,7 @@
               "targets",
               "articles",
               "orders",
+              "owned_links",
               "monitoring"
             ]
           },
@@ -824,7 +825,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -841,6 +842,7 @@
               "targets",
               "articles",
               "placement_plan",
+              "owned_links",
               "step"
             ]
           },

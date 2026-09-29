@@ -112,6 +112,19 @@ test("a claim is versioned by what it says; its bookkeeping changes in place", o
   assert.equal((await store.claimIds(project.id)).size, 2, "the old version stays for the articles that cite it");
 });
 
+test("claims are listed in the order they were written, to the microsecond", options, async () => {
+  // Two claims written within one millisecond, "z" first: sorted in
+  // JavaScript on times that keep milliseconds, they tied and sorted by key.
+  const project = await freshProject();
+  await write(project, "claims", { items: [
+    { claimKey: "z-first", statement: "先写的", quote: "先写的。", sourceRef: "说明书" },
+    { claimKey: "a-second", statement: "后写的", quote: "后写的。", sourceRef: "说明书" },
+  ] });
+  await database.query(`UPDATE evimed_geo.claims SET created_at = CASE claim_key WHEN 'z-first' THEN '2026-09-29T00:00:00.123100Z'::timestamptz
+    ELSE '2026-09-29T00:00:00.123400Z'::timestamptz END WHERE geo_project_id = $1`, [project.id]);
+  assert.deepEqual((await store.listClaims(project.id)).map((claim) => claim.claimKey), ["z-first", "a-second"]);
+});
+
 test("the product merges field by field, a competitor is refused alone, and a brand names a default-named project", options, async () => {
   const project = await freshProject();
   const renamed = /** @type {any[]} */ ([]);
@@ -540,4 +553,90 @@ test("a correction registered for 讲错我方 becomes their material and moves 
   assert.equal(openRow.materials.length, 1, "registering the same article again adds nothing");
   assert.deepEqual([openRow.materials[0].kind, openRow.materials[0].path, openRow.materials[0].layer], ["article", item.path, "correction"]);
   assert.deepEqual([closedRow.status, closedRow.materials], ["closed", []]);
+});
+
+// --- owned links (gap E6) ---------------------------------------------------------------
+
+/** An article of a project, as a content run registers one. @param {any} project @param {string} id @param {string | null} groupId */
+const articleOf = (project, id, groupId) => database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, title, group_id, safety, status)
+  VALUES ($1, $2, $3, '稿', $4, 'clear', 'publishable')`, [id, USER, project.id, groupId]);
+
+test("a page the brand published itself is registered item by item, and names only its own project's articles and groups", options, async () => {
+  const project = await freshProject();
+  const other = await freshProject();
+  const [group] = (await write(project, "questions", { data: { groups: [{ pool: "P1", name: "自有", questions: [{ text: "问", isMeasured: true }] }] } })).ids;
+  const [foreignGroup] = (await write(other, "questions", { data: { groups: [{ pool: "P1", name: "别人", questions: [{ text: "问", isMeasured: true }] }] } })).ids;
+  await articleOf(project, `art-own-${project.id}`, group);
+  await articleOf(other, `art-other-${other.id}`, foreignGroup);
+  const result = await write(project, "owned_links", { items: [
+    { url: "https://www.zhihu.com/question/1/answer/2", platform: "zhihu", title: "知乎回答", publishedAt: "2026-09-20", groupId: group },
+    { url: "https://baijiahao.baidu.com/s?id=17&wfr=spider&for=pc", platform: "baijiahao", title: "百家号", publishedAt: "2026-09-21T08:00:00+08:00",
+      articleId: `art-own-${project.id}` },
+    { url: "https://brand.example.com/news/1", platform: "brand_site", title: "官网新闻", publishedAt: "2026-09-22" },
+    { url: "https://mp.weixin.qq.com/s/x", platform: "wechat_mp", title: "别人的稿", publishedAt: "2026-09-22", articleId: `art-other-${other.id}` },
+    { url: "https://mp.weixin.qq.com/s/y", platform: "wechat_mp", title: "别人的群", publishedAt: "2026-09-22", groupId: foreignGroup },
+    { url: "ftp://example.com/a", platform: "zhihu", title: "t", publishedAt: "2026-09-22" },
+    { url: "https://example.com/b", platform: "tieba", title: "t", publishedAt: "2026-09-22" },
+    { url: "https://example.com/c", platform: "zhihu", publishedAt: "2026-09-22" },
+    { url: "https://example.com/d", platform: "zhihu", title: "t", publishedAt: "2099-01-01" },
+    { url: "https://baijiahao.baidu.com/s", platform: "baijiahao", title: "没有 id", publishedAt: "2026-09-22" },
+    { url: "http://zhihu.com/question/1/answer/2/", platform: "zhihu", title: "同一页", publishedAt: "2026-09-22" },
+  ] });
+  assert.equal(result.ok, true);
+  assert.equal(result.registered.length, 3);
+  const refused = result.issues.filter((/** @type {any} */ issue) => issue.code !== "notice").map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]);
+  assert.deepEqual(refused, [
+    [3, "articleId", "not_found"], [4, "groupId", "not_found"], [5, "url", "invalid"], [6, "platform", "unknown_value"], [7, "title", "missing"],
+    [8, "publishedAt", "invalid"], [9, "url", "invalid"], [10, "url", "duplicate"],
+  ]);
+  assert.deepEqual(result.issues.filter((/** @type {any} */ issue) => issue.code === "notice").map((/** @type {any} */ issue) => [issue.index, issue.field]), [[2, "groupId"]],
+    "a link without a question group is registered, and told its checks ask nothing");
+  const links = await store.ownedLinks(project.id);
+  assert.deepEqual(links.map((link) => [link.platform, link.groupId, link.articleId, link.status]).sort(), [
+    ["baijiahao", group, `art-own-${project.id}`, "active"], ["brand_site", null, null, "active"], ["zhihu", group, null, "active"],
+  ].sort(), "an article's link takes its article's question group");
+  assert.equal(links.find((link) => link.platform === "baijiahao")?.publishedAt, "2026-09-21T00:00:00.000Z");
+  assert.deepEqual(await store.ownedLinks(other.id), [], "nothing was written into the other project");
+});
+
+test("an owned link is one row per page: the same page again is an update, a retired one is kept and can come back", options, async () => {
+  const project = await freshProject();
+  const first = await write(project, "owned_links", { items: [
+    { url: "https://baijiahao.baidu.com/s?id=17", platform: "baijiahao", title: "第一篇", publishedAt: "2026-09-20" },
+    { url: "https://baijiahao.baidu.com/s?id=18", platform: "baijiahao", title: "第二篇", publishedAt: "2026-09-20" },
+  ] });
+  assert.equal(new Set(first.registered).size, 2, "two 百家号 posts are two pages, though the owner's key drops their query");
+  const again = await write(project, "owned_links", { items: [
+    { url: "http://baijiahao.baidu.com/s?wfr=spider&id=17&for=pc", platform: "baijiahao", title: "第一篇（改）", publishedAt: "2026-09-20" },
+  ] });
+  assert.deepEqual(again.registered, [first.registered[0]]);
+  const retired = await write(project, "owned_links", { items: [{ id: first.registered[1], status: "retired" }, { id: "gol_nothing", status: "retired" },
+    { status: "retired" }] });
+  assert.deepEqual(retired.retired, [first.registered[1]]);
+  assert.deepEqual(retired.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[2, "id", "missing"], [1, "id", "not_found"]]);
+  let links = await store.ownedLinks(project.id);
+  assert.deepEqual(links.map((link) => [link.title, link.status]), [["第一篇（改）", "active"], ["第二篇", "retired"]], "live first");
+  assert.ok(links[1].retiredAt);
+  await write(project, "owned_links", { items: [{ url: "https://baijiahao.baidu.com/s?id=18", platform: "baijiahao", title: "第二篇", publishedAt: "2026-09-20" }] });
+  links = await store.ownedLinks(project.id);
+  assert.deepEqual(links.map((link) => [link.status, link.retiredAt]), [["active", null], ["active", null]], "registered again, it is live again");
+  // Another project cannot retire it, by id or by address.
+  const other = await freshProject();
+  const foreign = await write(other, "owned_links", { items: [{ id: first.registered[0], status: "retired" },
+    { url: "https://baijiahao.baidu.com/s?id=17", status: "retired" }] });
+  assert.deepEqual([foreign.ok, foreign.issues.map((/** @type {any} */ issue) => issue.code)], [false, ["not_found", "not_found"]]);
+  assert.ok((await store.ownedLinks(project.id)).every((link) => link.status === "active"));
+});
+
+test("a project holds at most five hundred live owned links; a page already live is still an update", options, async () => {
+  const project = await freshProject();
+  await database.query(`INSERT INTO evimed_geo.owned_links (id, user_id, geo_project_id, url, url_key, platform, title, published_at)
+    SELECT 'gol_cap_' || $2 || '_' || n, $1, $2, 'https://brand.example.com/' || n, 'brand.example.com/' || n, 'brand_site', 't', '2026-09-20'
+    FROM generate_series(1, 500) AS n`, [USER, project.id]);
+  const result = await write(project, "owned_links", { items: [
+    { url: "https://brand.example.com/501", platform: "brand_site", title: "新的", publishedAt: "2026-09-21" },
+    { url: "https://brand.example.com/7", platform: "brand_site", title: "已有的", publishedAt: "2026-09-21" },
+  ] });
+  assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]).filter(([, code]) => code !== "notice"), [[0, "limit"]]);
+  assert.deepEqual(result.registered, [`gol_cap_${project.id}_7`]);
 });

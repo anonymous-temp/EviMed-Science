@@ -34,6 +34,7 @@
  */
 
 import { migrateGeo } from "./geoPersistence.mjs";
+import { geoOwnedLinkKey } from "./geoStore.mjs";
 import { randomId } from "./security.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
 
@@ -241,7 +242,7 @@ export class GeoMeasureStore {
   async projectContext(geoProjectId) {
     const project = await this.project(geoProjectId);
     if (!project) return null;
-    const [claims, journey, owned, published] = await Promise.all([
+    const [claims, journey, owned, published, ownedLinks] = await Promise.all([
       this.query(`SELECT DISTINCT ON (claim_key) id, claim_key, statement, quote, source_ref, source_kind, in_label
         FROM evimed_geo.claims WHERE geo_project_id = $1 AND status = 'active'
         ORDER BY claim_key, version DESC LIMIT 400`, [geoProjectId]),
@@ -249,6 +250,12 @@ export class GeoMeasureStore {
       this.query(`SELECT domain FROM evimed_geo.sources WHERE geo_project_id = $1 AND layer = 'owned'`, [geoProjectId]),
       this.query(`SELECT DISTINCT published_url FROM evimed_geo.orders WHERE geo_project_id = $1 AND published_url IS NOT NULL
         AND state IN ('published', 'verified', 'settled')`, [geoProjectId]),
+      // What the brand published itself and has not retired (gap E6). The
+      // parser and the metrics compare by `canonicalGeoUrl`, which drops the
+      // query, so a page named by its query (a 百家号 post, …/s?id=…) would
+      // stand for every page of its host there: it is left out, and its
+      // citations are matched on the page by the link's own key instead.
+      this.query(`SELECT url FROM evimed_geo.owned_links WHERE geo_project_id = $1 AND status = 'active'`, [geoProjectId]),
     ]);
     /** @type {Array<{ id: string, text: string, node: string | null }>} */
     const careFlags = [];
@@ -269,7 +276,8 @@ export class GeoMeasureStore {
       careFlags,
       owned: {
         domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
-        urls: published.rows.map((row) => String(row.published_url)).filter(Boolean),
+        urls: [...published.rows.map((row) => String(row.published_url)),
+          ...ownedLinks.rows.map((row) => String(row.url)).filter((url) => !geoOwnedLinkKey(url).named)].filter(Boolean),
       },
     };
   }
@@ -815,14 +823,20 @@ export class GeoMeasureStore {
   }
 
   /**
-   * The judged answers to one question on one engine asked after `after`, newest first.
-   * @param {string} geoProjectId @param {string} questionId @param {string} engine @param {Date} after
+   * The judged answers to an error's question on its engine asked after the
+   * error last moved, newest first. "After" is compared against the error's
+   * own column: read into JavaScript the time keeps milliseconds of a
+   * microsecond column, and an answer in the same millisecond, asked before
+   * the error moved, would have read as later and closed it.
+   * @param {string} errorId
    */
-  async laterJudgedAnswers(geoProjectId, questionId, engine, after) {
-    const result = await this.query(`SELECT s.id, s.status, s.asked_at, f.statements FROM evimed_geo.snapshots s
+  async laterJudgedAnswers(errorId) {
+    const result = await this.query(`SELECT s.id, s.status, s.asked_at, f.statements FROM evimed_geo.errors e
+        JOIN evimed_geo.snapshots s ON s.geo_project_id = e.geo_project_id AND s.question_id = e.question_id AND s.engine = e.engine
+          AND s.asked_at > e.updated_at
         JOIN evimed_geo.facts f ON f.snapshot_id = s.id
-      WHERE s.geo_project_id = $1 AND s.question_id = $2 AND s.engine = $3 AND s.asked_at > $4 AND f.judged_at IS NOT NULL
-      ORDER BY s.asked_at DESC LIMIT 20`, [geoProjectId, questionId, engine, after.toISOString()]);
+      WHERE e.id = $1 AND f.judged_at IS NOT NULL
+      ORDER BY s.asked_at DESC LIMIT 20`, [errorId]);
     return result.rows.map((row) => ({ id: String(row.id), status: String(row.status), askedAt: iso(row.asked_at), statements: list(row.statements) }));
   }
 

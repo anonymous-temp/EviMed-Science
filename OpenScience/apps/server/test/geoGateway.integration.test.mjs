@@ -7,6 +7,7 @@ import http from "node:http";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler } from "../src/geoGateway.mjs";
+import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { GEO_ANSWER_TEXT_LIMIT, GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -130,4 +131,46 @@ test("an article written through the gateway takes its gate from the platform's 
   assert.deepEqual(ledgerAsked, [[project.id, "deliverables/geo-content/qa-1.md"]]);
   const read = await call("read", { what: "articles" });
   assert.deepEqual(read.body.data.articles.map((/** @type {any} */ article) => [article.gate, article.status]), [["passed", "publishable"]]);
+});
+
+test("a page the brand published itself is registered and read back through the gateway with the engines that cite it, and counts as ours", options, async () => {
+  const service = new GeoService({ store, config });
+  const map = await call("write", { what: "questions", data: { groups: [{ pool: "P1", name: "自有群", questions: [{ text: "自有问", isMeasured: true }] }] } });
+  await database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, title, group_id, safety, status) VALUES ($1, $2, $3, '十问', $4, 'clear', 'publishable')`,
+    [`art-own-${run}`, USER, project.id, map.body.data.ids[0]]);
+  const written = await call("write", { what: "owned_links", items: [
+    { url: `https://baijiahao.baidu.com/s?id=${run}1`, platform: "baijiahao", title: "百家号十问", publishedAt: "2026-09-26", articleId: `art-own-${run}` },
+    { url: `https://www.zhihu.com/question/${run}/answer/2`, platform: "zhihu", title: "知乎回答", publishedAt: "2026-09-26", groupId: map.body.data.ids[0] },
+  ] });
+  assert.equal(written.status, 200, JSON.stringify(written.body));
+  assert.equal(written.body.data.registered.length, 2);
+  // Engines cite the 百家号 post with Baidu's own parameters, and another
+  // 百家号 post that is not ours; DeepSeek cites the 知乎 answer as a variant.
+  const cite = (/** @type {string} */ id, /** @type {string} */ engine, /** @type {string} */ askedAt, /** @type {string[]} */ urls) => database.query(`INSERT INTO
+    evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, citations) VALUES ($1, $2, $3, $4, $5, 'valid', $6::jsonb)`,
+  [id, USER, project.id, engine, askedAt, JSON.stringify(urls.map((url) => ({ url, domain: new URL(url).hostname, title: "t" })))]);
+  await cite(`s-own-a-${run}`, "doubao", "2026-09-28T01:00:00Z", [`https://baijiahao.baidu.com/s?id=${run}1&wfr=spider&for=pc`]);
+  await cite(`s-own-b-${run}`, "kimi", "2026-09-27T01:00:00Z", [`https://baijiahao.baidu.com/s?id=${run}9`]);
+  await cite(`s-own-c-${run}`, "deepseek", "2026-09-27T03:00:00Z", [`http://zhihu.com/question/${run}/answer/2/`]);
+  const read = await call("read", { what: "owned_links" });
+  assert.equal(read.status, 200);
+  const byPlatform = Object.fromEntries(read.body.data.links.map((/** @type {any} */ link) => [link.platform, link]));
+  assert.deepEqual(byPlatform.baijiahao.citedBy, [{ engine: "doubao", firstSeen: "2026-09-28T01:00:00.000Z" }], "another 百家号 post is not this one");
+  assert.deepEqual(byPlatform.zhihu.citedBy, [{ engine: "deepseek", firstSeen: "2026-09-27T03:00:00.000Z" }]);
+  assert.equal(byPlatform.baijiahao.articleId, `art-own-${run}`);
+
+  // The page lists them beside the orders, and the article they carry reads as cited.
+  const distribution = await service.distributionOf(project);
+  assert.deepEqual(distribution.ownedLinks.map((/** @type {any} */ link) => link.id).sort(), [...written.body.data.registered].sort());
+  const cited = await store.citedArticles(project.id);
+  assert.deepEqual(cited.map((row) => [row.articleId, row.engine]), [[`art-own-${run}`, "doubao"]]);
+
+  // Ours for the parser: the 知乎 answer by its address; the 百家号 post,
+  // named by its query, not — under the owner's key it would be every post.
+  const context = await new GeoMeasureStore(database).projectContext(project.id);
+  assert.ok(context?.owned.urls.includes(`https://www.zhihu.com/question/${run}/answer/2`));
+  assert.equal(context?.owned.urls.some((url) => url.includes("baijiahao")), false);
+  await call("write", { what: "owned_links", items: [{ url: `https://www.zhihu.com/question/${run}/answer/2`, status: "retired" }] });
+  const after = await new GeoMeasureStore(database).projectContext(project.id);
+  assert.equal(after?.owned.urls.some((url) => url.includes("zhihu")), false, "a retired page is no longer ours");
 });

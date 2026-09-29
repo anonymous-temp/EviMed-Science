@@ -782,9 +782,13 @@ export class ReviewService {
   async #readerFindings(review) {
     const own = (await this.database.query(`SELECT * FROM evimed_review.findings WHERE review_id=$1 ORDER BY finding_id`, [review.id])).rows;
     if (Number(review.pass) > 0) return own;
+    // "Before this review" is compared against the review's own column: read
+    // into JavaScript its time keeps milliseconds of a microsecond column, and
+    // an editor pass finished in the same millisecond read as not before it.
     const editorPass = (await this.database.query(`SELECT id, pass FROM evimed_review.reviews
-      WHERE user_id=$1 AND project_id=$2 AND socket_run_id=$3 AND deliverable_id=$4 AND status='done' AND pass > 0 AND created_at < $5
-      ORDER BY created_at DESC LIMIT 1`, [review.user_id, review.project_id, review.socket_run_id, review.deliverable_id, review.created_at])).rows[0];
+      WHERE user_id=$1 AND project_id=$2 AND socket_run_id=$3 AND deliverable_id=$4 AND status='done' AND pass > 0
+        AND created_at < (SELECT created_at FROM evimed_review.reviews WHERE id=$5)
+      ORDER BY created_at DESC LIMIT 1`, [review.user_id, review.project_id, review.socket_run_id, review.deliverable_id, review.id])).rows[0];
     if (!editorPass) return own;
     const resolved = new Set(review.deterministic?.previous?.resolved ?? []);
     const carried = (await this.database.query(`SELECT * FROM evimed_review.findings WHERE review_id=$1 AND origin='editor' ORDER BY finding_id`, [editorPass.id])).rows

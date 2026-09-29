@@ -39,6 +39,13 @@
  *   wrote them in), and the metrics package's `facts.red_flag_expected`,
  *   `red_flag_hits`, `safety_terms_hit` and `metrics.variant`, `rival`,
  *   `reason`.
+ * - **Links the brand published itself** (`owned_links`, gap E6): a 百家号
+ *   post, a 公众号 article, a 知乎 answer, a page on the brand's own site —
+ *   registered by a run through `geo_write` and checked after publication
+ *   exactly as a placement is (the same checkpoint rounds, the same citation
+ *   matching by `canonicalGeoUrl`), with no order and no money behind it.
+ *   One row per project and URL key, so registering the same page again
+ *   updates it; `retired` keeps the row and stops the checks.
  * - **The orchestrator's own bookkeeping** (`schedule_marks`, package F): one
  *   row per thing it did or decided once — a dispatched run, an enqueued
  *   round, a notice sent, an export asked for — keyed per project by a key
@@ -53,7 +60,8 @@
 import {
   GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_AUDIENCES, GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
-  GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES, GEO_POOLS,
+  GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES,
+  GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS,
   GEO_PROBE_JOB_STATUSES, GEO_PROJECT_STATUSES, GEO_QUESTION_KINDS, GEO_RECONCILIATION_STATUSES, GEO_ROUND_KINDS,
   GEO_ROUND_STATUSES, GEO_SEVERITIES, GEO_SNAPSHOT_STATUSES, GEO_SOURCE_LAYERS, GEO_TIERS, GEO_TOPUP_STATUSES,
 } from "@evimed/domain";
@@ -69,7 +77,7 @@ export const GEO_SCHEMA = "evimed_geo";
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
-  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks",
+  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links",
 ]);
 
 /**
@@ -585,6 +593,30 @@ CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_ma
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
+
+-- Links the brand published itself (gap E6). \`url_key\` is \`canonicalGeoUrl(url)\`,
+-- what an engine's citation is matched by; \`article_id\` names the project's
+-- article a link carries, and \`group_id\` the question group whose questions
+-- its post-publication checks ask (the article's, when the run names none).
+CREATE TABLE IF NOT EXISTS evimed_geo.owned_links (
+  id             text PRIMARY KEY,
+  user_id        text NOT NULL,
+  geo_project_id text NOT NULL,
+  url            text NOT NULL,
+  url_key        text NOT NULL,
+  platform       text NOT NULL CHECK (platform IN ${inList(GEO_OWNED_LINK_PLATFORMS)}),
+  title          text NOT NULL,
+  published_at   timestamptz NOT NULL,
+  article_id     text,
+  group_id       text,
+  status         text NOT NULL DEFAULT 'active' CHECK (status IN ${inList(GEO_OWNED_LINK_STATUSES)}),
+  run_id         text,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  retired_at     timestamptz,
+  UNIQUE (geo_project_id, url_key)
+);
+CREATE INDEX IF NOT EXISTS geo_owned_links_project_idx ON evimed_geo.owned_links (geo_project_id, status, published_at DESC);
 `;
 }
 

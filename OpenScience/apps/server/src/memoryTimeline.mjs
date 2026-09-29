@@ -243,11 +243,17 @@ export async function memoryTimeline({ researchMemory, agentRuns = null, feedbac
     density.set(day, bucket);
   }
 
-  const page = (cursor ? events.filter((item) => item.at < cursor) : events).slice(0, pageSize + 1);
-  const items = page.slice(0, pageSize).map((item) => ({ ...item, day: dayOf(item.at, format) }));
+  const eligible = cursor ? events.filter((item) => item.at < cursor) : events;
+  // A page never ends inside one instant. The next page is "strictly before
+  // the last time shown", so an event stamped in the same millisecond as the
+  // page's last one and cut off by the page size was on neither page. The
+  // page runs on to the end of that instant instead.
+  let end = Math.min(pageSize, eligible.length);
+  while (end < eligible.length && eligible[end].at === eligible[end - 1].at) end += 1;
+  const items = eligible.slice(0, end).map((item) => ({ ...item, day: dayOf(item.at, format) }));
   return {
     items,
-    nextBefore: page.length > pageSize ? items.at(-1)?.at ?? null : null,
+    nextBefore: end < eligible.length ? items.at(-1)?.at ?? null : null,
     density: [...density.values()].sort((left, right) => left.day.localeCompare(right.day)),
     timeZone: zone,
     missing,

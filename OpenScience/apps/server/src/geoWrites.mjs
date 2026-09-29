@@ -30,6 +30,13 @@
  *   ignored. Every article but a correction names its question group, because
  *   the control-group exclusion and the post-publication checks are keyed on
  *   it — an article without one could be placed into a control group unseen.
+ * - **A link the brand published itself is registered, never placed**
+ *   (`owned_links`, gap E6): a 百家号 post, a 公众号 article, a page on the
+ *   brand's site. No order, no money and no gate stand behind it; it is
+ *   written so that the post-publication rounds and the citation match cover
+ *   it as they cover a placement. Its article and question group must be
+ *   this project's; retiring names the link by id or address and stops its
+ *   checks without deleting its history.
  *
  * @module geoWrites
  */
@@ -37,9 +44,10 @@
 import {
   GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
   GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
-  GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS, GEO_RX_CLASSES, GEO_SOURCE_KINDS,
-  GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath,
-  geoConstant } from "@evimed/domain";
+  GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS,
+  GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
+  GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoConstant } from "@evimed/domain";
+import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
 import { HttpError } from "./security.mjs";
 
 /** @typedef {{ index?: number, group?: number, field?: string, code: string, message: string }} GeoIssue */
@@ -49,7 +57,7 @@ const DELIVERABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
 
 export const GEO_WRITE_LIMITS = Object.freeze({
   claims: 200, sources: 200, articles: 50, targets: 60, groups: 80, questionsPerGroup: 60, questions: 400, competitors: 20,
-  journeyEntries: 60, planEntries: 60, jsonBytes: 256 * 1024,
+  journeyEntries: 60, planEntries: 60, ownedLinks: 50, jsonBytes: 256 * 1024,
 });
 /** Measured questions a locked set holds: the full program, and a single step's minimal set. */
 export const GEO_MEASURED_RANGE = Object.freeze({ full: Object.freeze([40, 120]), minimal: Object.freeze([30, 120]) });
@@ -937,6 +945,70 @@ function validatedArticles(items, issues, known) {
   return articles;
 }
 
+// --- owned links ------------------------------------------------------------------------
+
+const OWNED_LINK_FIELDS = Object.freeze(["url", "platform", "title", "publishedAt", "articleId", "groupId", "id", "status", "runId"]);
+/** A publication date may be the brand's local day, which is up to a day ahead of UTC midnight. */
+const OWNED_LINK_FUTURE_MS = 24 * 3_600_000;
+
+/**
+ * Links the brand published itself: each item registers one (`url`,
+ * `platform`, `title`, `publishedAt`; `articleId` when it carries one of the
+ * project's articles, `groupId` for the questions its checks ask) or, with
+ * `status: "retired"`, retires one named by `id` or `url`.
+ * @param {unknown[]} items @param {GeoIssue[]} issues
+ * @param {{ articles: Map<string, string | null>, groupIds: Set<string> }} known @param {Date} now
+ */
+function validatedOwnedLinks(items, issues, known, now) {
+  const seen = new Set();
+  /** @type {Array<{ index: number, url: string, urlKey: string, platform: string, title: string, publishedAt: string, articleId: string | null,
+   *   groupId: string | null, runId: string | null }>} */
+  const register = [];
+  /** @type {Array<{ index: number, id: string | null, urlKey: string | null }>} */
+  const retire = [];
+  items.forEach((entry, index) => {
+    if (notAnObject(entry, index, issues)) return;
+    const read = fields(/** @type {Record<string, any>} */ (entry), issues, { index });
+    read.unknown(OWNED_LINK_FIELDS);
+    const status = read.word("status", GEO_OWNED_LINK_STATUSES, { fallback: "active" });
+    const url = read.url("url");
+    const keyed = url ? geoOwnedLinkKey(url) : null;
+    const urlKey = keyed?.key || null;
+    if (url && !urlKey) read.refuse("url", "invalid", "url must be the address of a page.");
+    if (keyed?.generic) read.refuse("url", "invalid", "This address names no single page (a 百家号 post is …/s?id=…, a 公众号 article …/s/… or …/s?__biz=…).");
+    if (urlKey && seen.has(urlKey)) read.refuse("url", "duplicate", "The same address appears twice in this write.");
+    if (status === "retired") {
+      const id = read.text("id", 80);
+      if (id && !ROW_ID.test(id)) read.refuse("id", "invalid", "id is an owned link's id (geo_read owned_links).");
+      if (!id && !url && !read.refused) read.refuse("id", "missing", "A retirement names the link by its id or its url.");
+      if (read.refused) return;
+      if (urlKey) seen.add(urlKey);
+      retire.push({ index, id: id ?? null, urlKey: urlKey ?? null });
+      return;
+    }
+    if (url === null) read.refuse("url", "missing", "url is required.");
+    const platform = read.word("platform", GEO_OWNED_LINK_PLATFORMS, { required: true });
+    const title = read.text("title", 200, { required: true });
+    const publishedAt = read.instant("publishedAt");
+    if (publishedAt === null) read.refuse("publishedAt", "missing", "publishedAt is required: the day the page went live.");
+    if (publishedAt && Date.parse(publishedAt) > now.getTime() + OWNED_LINK_FUTURE_MS) read.refuse("publishedAt", "invalid", "publishedAt is in the future.");
+    const articleId = read.text("articleId", 80);
+    if (articleId && !known.articles.has(articleId)) read.refuse("articleId", "not_found", "articleId is not an article of this project.");
+    const named = read.text("groupId", 80);
+    if (named && !known.groupIds.has(named)) read.refuse("groupId", "not_found", "groupId is not a question group of this project.");
+    const runId = read.text("runId", 120);
+    if (read.refused || !url || !urlKey || !platform || !title || !publishedAt) return;
+    const groupId = named ?? (articleId ? known.articles.get(articleId) ?? null : null);
+    if (!groupId) {
+      issues.push({ index, field: "groupId", code: "notice",
+        message: "Registered. Without a question group (groupId, or an articleId whose article names one) its citations are matched, but no post-publication round asks about it." });
+    }
+    seen.add(urlKey);
+    register.push({ index, url, urlKey, platform, title, publishedAt, articleId: articleId ?? null, groupId, runId: runId ?? null });
+  });
+  return { register, retire };
+}
+
 /** @param {Record<string, any>} data @param {GeoIssue[]} issues */
 function validatedPlacementPlan(data, issues) {
   const read = fields(data, issues, {});
@@ -1141,6 +1213,25 @@ export async function geoRuntimeWrite({ store, project, what, body, renameProjec
       }
       return done(ids, { articles: articles.map((article, index) => ({ id: ids[index], path: article.path, gate: article.gate })),
         ...(acting.length ? { errorsActing: [...new Set(acting)] } : {}) });
+    }
+    case "owned_links": {
+      const known = await store.ownedLinkContext(project.id);
+      const { register, retire } = validatedOwnedLinks(itemsOf(body, GEO_WRITE_LIMITS.ownedLinks), issues, known, new Date());
+      // A project holds at most GEO_OWNED_LINKS_MAX live links: the page and
+      // the citation match read them all. A page already live is an update.
+      let room = GEO_OWNED_LINKS_MAX - known.liveKeys.size;
+      const admitted = register.filter((link) => {
+        if (known.liveKeys.has(link.urlKey) || room-- > 0) return true;
+        issues.push({ index: link.index, field: "url", code: "limit", message: `A project holds at most ${GEO_OWNED_LINKS_MAX} live links; retire one first.` });
+        return false;
+      });
+      const registered = admitted.length ? await store.upsertOwnedLinks(userId, project.id, admitted) : [];
+      const retired = retire.length ? await store.retireOwnedLinks(project.id, retire) : [];
+      retired.forEach((id, position) => {
+        if (!id) issues.push({ index: retire[position].index, field: retire[position].id ? "id" : "url", code: "not_found", message: "No link of this project has that id or address." });
+      });
+      const retiredIds = retired.filter((id) => id !== null);
+      return done([...registered, ...retiredIds], { registered, retired: retiredIds });
     }
     case "placement_plan": {
       const plan = validatedPlacementPlan(dataOf(body), issues);

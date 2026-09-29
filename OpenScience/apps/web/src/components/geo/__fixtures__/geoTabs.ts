@@ -292,6 +292,13 @@ export const distributionFilled: GeoDistribution = {
     { id: "ord_2", articleTitle: "BMI 多少需要考虑药物减重？", media: "生命时报", domain: "lifetimes.cn", layer: "popular", state: "accepted", priceCny: 946, publishedUrl: null, checks: [], updatedAt: "2026-10-12T00:00:00Z" },
     { id: "ord_3", articleTitle: "减重针打完吃什么，胃肠更舒服", media: "家庭医生在线", domain: "familydoctor.com.cn", layer: "popular", state: "submitted", priceCny: 95, publishedUrl: null, checks: [], updatedAt: "2026-10-11T00:00:00Z" },
   ],
+  ownedLinks: [
+    { id: "gol_1", url: "https://baijiahao.baidu.com/s?id=1", platform: "baijiahao", title: "减重针常见问题 10 问", publishedAt: "2026-10-03T00:00:00Z",
+      articleId: null, groupId: "gq_1", status: "active", retiredAt: null,
+      citedBy: [{ engine: "deepseek", firstSeen: "2026-10-05T00:00:00Z" }, { engine: "kimi", firstSeen: "2026-10-08T00:00:00Z" }] },
+    { id: "gol_2", url: "https://mp.weixin.qq.com/s/abc", platform: "wechat_mp", title: "停药后体重会反弹吗？", publishedAt: "2026-09-20T00:00:00Z",
+      articleId: "art_3", groupId: "gq_2", status: "retired", retiredAt: "2026-10-10T00:00:00Z", citedBy: [] },
+  ],
 };
 
 export const monitoringFilled: GeoMonitoring = {

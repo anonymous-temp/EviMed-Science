@@ -116,6 +116,37 @@ test("a page is newest first with a cursor, and the density band counts days in 
   assert.equal(partial.items.length, 3);
 });
 
+test("a page never ends inside one instant: events stamped in the same millisecond are all on one page", async () => {
+  // Three memories written in one millisecond (one import, one transaction)
+  // and an older one. The next page is "strictly before the last time
+  // shown", so a page cut after the first of the three put the other two on
+  // neither page.
+  const records = [
+    record({ id: "rec_a", key: "a", createdAt: "2026-09-10T00:00:00.123Z" }),
+    record({ id: "rec_b", key: "b", createdAt: "2026-09-10T00:00:00.123Z" }),
+    record({ id: "rec_c", key: "c", createdAt: "2026-09-10T00:00:00.123Z" }),
+    record({ id: "rec_d", key: "d", createdAt: "2026-09-01T00:00:00Z" }),
+  ];
+  const read = { researchMemory: { configured: true, timelineRecords: async () => records }, now: () => new Date("2026-09-20T00:00:00Z") };
+  /** @type {string[]} */
+  const seen = [];
+  let before = null;
+  for (let page = 0; page < 5; page += 1) {
+    const result = await memoryTimeline(read, user, project, { limit: 1, before });
+    seen.push(...result.items.map((item) => item.id));
+    before = result.nextBefore;
+    if (!before) break;
+  }
+  assert.deepEqual(seen, ["memory:rec_c:created", "memory:rec_b:created", "memory:rec_a:created", "memory:rec_d:created"],
+    "every event exactly once, newest first");
+  const first = await memoryTimeline(read, user, project, { limit: 1 });
+  assert.equal(first.items.length, 3, "the page runs on to the end of its last instant");
+  assert.equal(first.nextBefore, "2026-09-10T00:00:00.123Z");
+  const last = await memoryTimeline(read, user, project, { limit: 3 });
+  assert.equal(last.items.length, 3);
+  assert.equal(last.nextBefore, "2026-09-10T00:00:00.123Z", "an instant that exactly fills a page still has a next page");
+});
+
 test("the memory half of a page reads the most recently changed memories of the project's view, bounded", async () => {
   // Security review 2026-09-20: every page read every memory of the account
   // whole — up to 100,000 rows of up to 100,000 characters.

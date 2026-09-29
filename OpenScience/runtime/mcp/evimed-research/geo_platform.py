@@ -10,7 +10,8 @@ Three tools a GEO capability's run uses; none is ever forced into a turn.
   ``insufficient`` (under 30 valid answers) is not a zero.
 - ``geo_write`` writes the run's products -- product identity, claims, a
   question set and its lock, journey, strategy and sources, three-tier targets,
-  registered articles, placement preferences, a step's status. The server
+  registered articles, placement preferences, links the brand published
+  itself (checked after publication as a placement is), a step's status. The server
   checks every item against closed vocabularies and refuses invalid items one
   by one; what was refused comes back in ``issues``, everything else is
   written. Measuring, placing orders and spending money are the platform's,
@@ -44,11 +45,11 @@ import public_sources
 # and holds these copies equal to the domain's.
 READ_WHATS = (
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
-    "strategy", "targets", "articles", "orders", "monitoring",
+    "strategy", "targets", "articles", "orders", "owned_links", "monitoring",
 )
 WRITE_WHATS = (
     "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
-    "articles", "placement_plan", "step",
+    "articles", "placement_plan", "owned_links", "step",
 )
 ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
 POOLS = ("P1", "P2", "P3", "P4")
@@ -81,7 +82,7 @@ def tool_definitions():
             "name": "geo_read",
             "description": (
                 "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, "
-                "answer snapshots, errors, sources, strategy, targets, articles, orders or monitoring. "
+                "answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. "
                 "Every number is a cell with numerator, denominator and status; absent or insufficient is not zero."
             ),
             "inputSchema": {
@@ -111,6 +112,8 @@ def tool_definitions():
             "description": (
                 "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, "
                 "strategy and sources, three-tier targets, articles, placement preferences, or a step's status. "
+                "owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} "
+                "or retires one {id, status: retired}. "
                 "Items are checked one by one; refused items come back in issues and the rest are written."
             ),
             "inputSchema": {

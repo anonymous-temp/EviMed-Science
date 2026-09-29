@@ -362,6 +362,36 @@ test("an S3 error notifies once, is confirmed by ten fresh asks, closes only aft
   }
 });
 
+test("an answer asked before an error moved, in the same millisecond, is not a later answer and does not close it", options, async () => {
+  await reset();
+  await seed("geo_ms");
+  const h = await harness();
+  try {
+    // The error moved at .123456; one answer without it was asked at .123100,
+    // before that, and one at .123900, after. Read into JavaScript the error's
+    // time is .123, and the earlier answer read as later and closed it.
+    await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, status, confirm,
+        created_at, updated_at)
+      VALUES ('err_ms', 'user_geo_ms', 'geo_ms', 'dosing', 'deepseek', 'geo_ms_q1', $1, 'awaiting_remeasure', '{"status":"done"}'::jsonb,
+        '2026-09-25T14:00:00Z', '2026-09-25T15:00:00.123456Z')`, [WRONG]);
+    const answer = async (/** @type {string} */ id, /** @type {string} */ askedAt) => {
+      await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, question_id, engine, asked_at, status, answer_text)
+        VALUES ($1, 'user_geo_ms', 'geo_ms', 'geo_ms_q1', 'deepseek', $2, 'valid', $3)`, [id, askedAt, A_RIGHT]);
+      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, statements, judged_at)
+        VALUES ($1, 'user_geo_ms', 'geo_ms', '[]'::jsonb, $2)`, [id, askedAt]);
+    };
+    await answer("snap_before", "2026-09-25T15:00:00.123100Z");
+    assert.equal((await tickErrors(h.deps)).closed, 0, "asked before the error moved");
+    assert.equal((await rows(`SELECT status FROM evimed_geo.errors WHERE id = 'err_ms'`))[0].status, "awaiting_remeasure");
+    await answer("snap_after", "2026-09-25T15:00:00.123900Z");
+    assert.equal((await tickErrors(h.deps)).closed, 1, "asked after it, in the same millisecond: a later answer");
+    const [closed] = await rows(`SELECT status, closed_snapshot_id FROM evimed_geo.errors WHERE id = 'err_ms'`);
+    assert.deepEqual({ ...closed }, { status: "closed", closed_snapshot_id: "snap_after" });
+  } finally {
+    await h.probe.close();
+  }
+});
+
 // ---------------------------------------------------------------- the breaker
 
 test("an engine that keeps returning a login page is paused, holds its round until a re-check fails, then the round finishes without it, and it resumes when its tab is back", options, async () => {

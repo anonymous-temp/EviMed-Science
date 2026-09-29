@@ -414,6 +414,83 @@ test("after the editor is spent, the reader still sees what its last pass left i
   assert.ok(notices.some((notice) => notice.code === "review_overclaim"), "the overclaim it left still owes an answer");
 });
 
+test("the editor pass a review carries is the one before it, even when both were made in the same millisecond", options, async () => {
+  // "Before this review" was bounded by the review's created_at read into
+  // JavaScript: .123 for a column that holds .123456, so an editor pass made
+  // at .123100 was not before it and its findings never reached the reader.
+  await fs.mkdir(path.join(workspace, "deliverables/d5"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "deliverables/d5/clinical-evidence-report.md"), REPORT);
+  await fs.writeFile(path.join(workspace, "deliverables/d5/clinical-evidence-matrix.json"), JSON.stringify(MATRIX));
+  const { review } = service({ modelAnswers: [
+    { findings: [{ location: "结论", kind: "overclaim", evidence: "该结论适用于所有成人。", fix: "限定为试验人群。" }], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] },
+  ] });
+  const identity = { userId, projectId };
+  const input = { runId: "native_same_ms", sessionId: "s-ms", deliverableId: "d5", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  const first = /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 1 })).reviewId;
+  assert.equal((await settled(review, first)).pass, 1);
+  const second = /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 2 })).reviewId;
+  assert.equal((await settled(review, second)).editor, "unchanged");
+  await database.query("UPDATE evimed_review.reviews SET created_at=$2 WHERE id=$1", [first, "2026-09-29T00:00:00.123100Z"]);
+  await database.query("UPDATE evimed_review.reviews SET created_at=$2 WHERE id=$1", [second, "2026-09-29T00:00:00.123456Z"]);
+  const [view] = await review.reviewsForRun(identity, "native_same_ms");
+  assert.deepEqual(view.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind]), [["F01", "reference_unresolvable"], ["1.F02", "overclaim"]],
+    "the latest review's own finding, and the editor pass's carried under its pass");
+});
+
+test("a finding raised again keeps its id across passes, a new one is numbered after every id used, and the reader still sees the gravest first", options, async () => {
+  // Numbered afresh on each pass, the writer's answers pointed at findings
+  // that had moved (2026-09-27 osimertinib: 「第二轮编号已重排」; 2026-09-28
+  // topic: F06–F09 answered against ids that no longer named them).
+  await fs.mkdir(path.join(workspace, "deliverables/d6"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "deliverables/d6/clinical-evidence-report.md"), REPORT);
+  await fs.writeFile(path.join(workspace, "deliverables/d6/clinical-evidence-matrix.json"), JSON.stringify(MATRIX));
+  const overclaim = { location: "结论", kind: "overclaim", evidence: "该结论适用于所有成人。", fix: "限定为试验人群。" };
+  const { review } = service({ modelAnswers: [
+    { findings: [overclaim, { location: "标题", kind: "wording", evidence: "二甲双胍与 HbA1c", fix: "写明比较。" }], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] },
+    { findings: [overclaim, { location: "结论", kind: "contradiction", evidence: "二甲双胍使 HbA1c 较安慰剂降低 1.5%", fix: "按来源改为 0.9 个百分点。" }], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] },
+  ] });
+  const identity = { userId, projectId };
+  const input = { runId: "native_stable_ids", sessionId: "s-ids", deliverableId: "d6", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  const first = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 1 })).reviewId);
+  assert.deepEqual(first.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind]), [["F01", "reference_unresolvable"], ["F02", "overclaim"], ["F03", "wording"]]);
+
+  await fs.writeFile(path.join(workspace, "deliverables/d6/clinical-evidence-report.md"), REPORT.replace("该结论适用于所有成人。", "该结论适用于所有成人。\n补充一句。"));
+  const second = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 2 })).reviewId);
+  assert.equal(second.pass, 2);
+  assert.deepEqual(second.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind]),
+    [["F01", "reference_unresolvable"], ["F04", "contradiction"], ["F02", "overclaim"]],
+    "the same two findings keep F01 and F02; the new contradiction is F04, never a reused F03; the contradiction is still read before the overclaim");
+  // An answer written against the first pass's id reaches the finding it meant.
+  const answered = await review.recordResponses(identity, { reviewId: second.reviewId, answers: [{ id: "F02", response: "fixed" }, { id: "F03", response: "fixed" }] });
+  assert.deepEqual([answered?.recorded, answered?.refused.map((/** @type {any} */ entry) => entry.id)], [1, ["F03"]], "F03 is gone from the report, so it is not this review's to answer");
+});
+
+test("the revision notes are the writer's backstage file: never read as the package, never reviewed", options, async () => {
+  // 2026-09-25 geo-content: a finding about the notes' own list forced a
+  // third submission.
+  await fs.mkdir(path.join(workspace, "deliverables/d7"), { recursive: true });
+  await fs.writeFile(path.join(workspace, "deliverables/d7/clinical-evidence-report.md"), REPORT);
+  await fs.writeFile(path.join(workspace, "deliverables/d7/clinical-evidence-matrix.json"), JSON.stringify(MATRIX));
+  await fs.writeFile(path.join(workspace, "deliverables/d7/revision-notes.md"), "# 修改说明\n\n第一轮把全部 17 条阻断码逐条对照了一遍。\n");
+  const { review, prompts } = service({
+    outputs: [{ path: "clinical-evidence-report.md" }, { path: "clinical-evidence-matrix.json" }, { path: "revision-notes.md" }],
+    modelAnswers: [{ findings: [{ location: "修改说明", kind: "structure", evidence: "第一轮把全部 17 条阻断码逐条对照了一遍。", fix: "删去。" }], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] }],
+  });
+  const identity = { userId, projectId };
+  const input = { runId: "native_notes", sessionId: "s-notes", deliverableId: "d7", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  const first = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 1 })).reviewId);
+  assert.equal(prompts.length, 1);
+  assert.doesNotMatch(prompts[0].messages[1].content, /阻断码/, "the editor is not shown the notes");
+  assert.match(prompts[0].messages[1].content, /该结论适用于所有成人/, "it is shown the report");
+  assert.equal(first.findings.some((/** @type {any} */ finding) => finding.kind === "structure"), false, "a finding resting on the notes' words is not located in the package");
+
+  // Editing only the notes is not a new package: no editor pass is spent on it.
+  await fs.appendFile(path.join(workspace, "deliverables/d7/revision-notes.md"), "第二轮：回应了审查。\n");
+  const second = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 2 })).reviewId);
+  assert.equal(second.editor, "unchanged");
+  assert.equal(prompts.length, 1);
+});
+
 test("a docker runtime's own root is not where this process reads: the package comes from the host copy", options, async () => {
   // The first live review (2026-09-23) read nothing: under docker the delivery
   // root is `/workspace`, the path inside the runtime container.
