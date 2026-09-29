@@ -147,9 +147,14 @@ async function finishRound(roundId, { finishedAt, answers = 2, metrics = true } 
   const round = (await q(`SELECT * FROM evimed_geo.rounds WHERE id = $1`, [roundId]))[0];
   await q(`UPDATE evimed_geo.rounds SET status = 'done', done = $3, sample_date = current_date, finished_at = coalesce($2::timestamptz, now()) WHERE id = $1`,
     [roundId, finishedAt ?? null, answers]);
+  // The answers were asked when the round finished, on the test's clock. With
+  // the database's now() they were asked "later" than any scenario dated
+  // before the wall clock: from 2026-09-29T00:30Z the sentinel make-up test
+  // found the baseline's answers newer than its skipped round and failed.
   for (let index = 0; index < answers; index += 1) {
     await q(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status, answer_text)
-      VALUES ($1, $2, $3, $4, 'deepseek', now(), 'valid', '回答')`, [`s-${roundId}-${index}`, round.user_id, roundId, round.geo_project_id]);
+      VALUES ($1, $2, $3, $4, 'deepseek', coalesce($5::timestamptz, now()), 'valid', '回答')`,
+    [`s-${roundId}-${index}`, round.user_id, roundId, round.geo_project_id, finishedAt ?? null]);
   }
   if (metrics) await measured(roundId);
 }
@@ -255,8 +260,11 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.equal((await statuses(project.id)).distribution, "done");
 
   // 第一次被 AI 引用: an answer cites the published article.
+  // Asked the day after the 09-26 publication, on a fixed date: "has this
+  // engine answered since" is asked across projects, so an answer stamped
+  // with the wall clock was newer than the sentinel test's 2026-09-29 rounds.
   await q(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status, citations)
-    VALUES ($1, $2, $3, $4, 'deepseek', now(), 'valid', $5::jsonb)`, [`s-cite-${project.id}`, userId, world.enqueued[0].id, project.id,
+    VALUES ($1, $2, $3, $4, 'deepseek', '2026-09-27T01:00:00Z', 'valid', $5::jsonb)`, [`s-cite-${project.id}`, userId, world.enqueued[0].id, project.id,
     JSON.stringify([{ url: "https://news.example.com/a/1.html#top", domain: "news.example.com", title: "t", inBody: true }])]);
   await world.orchestrator.advance(project.id);
   assert.deepEqual(world.citations, [{ orderId: `o-${project.id}`, engine: "deepseek" }], "the market learns which engine cited which outlet");
@@ -575,8 +583,18 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   assert.ok(sentinel);
   const [engine] = sentinel.engines;
   const [question] = (await store.questionMap(project.id, 1))[0].questions;
-  // The probe closed it with that engine paused: its asks skipped.
-  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1, finished_at = '2026-09-29T00:30:00Z' WHERE id = $1`, [sentinel.id]);
+  // The probe closed it with that engine paused: its asks skipped. "Has the
+  // engine answered since" is asked across projects, and other tests in this
+  // run leave answers stamped with the wall clock, so the round closes after
+  // every answer already on file (a fixed 00:30 made this test fail from
+  // 2026-09-29T00:30Z on, whenever it ran).
+  // Computed in SQL: a JavaScript Date keeps milliseconds, the column keeps
+  // microseconds, and a round-tripped time lands just before the answer it
+  // was taken from.
+  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1,
+      finished_at = (SELECT greatest('2026-09-29T00:30:00Z'::timestamptz, coalesce(max(asked_at), 'epoch'::timestamptz))
+        FROM evimed_geo.snapshots WHERE engine = $2)
+    WHERE id = $1`, [sentinel.id, engine]);
   await q(`INSERT INTO evimed_geo.probe_jobs (id, user_id, round_id, geo_project_id, question_id, engine, status, error_code)
     VALUES ($1, $2, $3, $4, $5, $6, 'skipped', 'engine_paused')`, [`job-${sentinel.id}`, project.userId, sentinel.id, project.id, question.id, engine]);
   const makeUps = () => world.enqueued.filter((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id && entry.ref?.retryOf);
@@ -584,8 +602,9 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   await world.orchestrator.tickSchedules();
   assert.equal(makeUps().length, 0, "not back yet: nothing is asked again");
 
-  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4, '2026-09-29T01:05:00Z',
-    'valid', '{"mode":"web"}'::jsonb)`, [`back-${project.id}`, project.userId, project.id, engine]);
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4,
+    (SELECT finished_at + interval '5 minutes' FROM evimed_geo.rounds WHERE id = $5), 'valid', '{"mode":"web"}'::jsonb)`,
+  [`back-${project.id}`, project.userId, project.id, engine, sentinel.id]);
   world.setClock("2026-09-29T01:10:00Z");
   await world.orchestrator.tickSchedules();
   const [makeUp] = makeUps();

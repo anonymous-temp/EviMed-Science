@@ -1517,8 +1517,12 @@ export class GeoOrchestrator {
       const engine = String(row.engine);
       const key = `${sentinelKey}:retry:${engine}`;
       if (await this.#mark(project.id, key)) continue;
-      const back = (await this.store.query(`SELECT 1 FROM evimed_geo.snapshots WHERE engine = $1 AND asked_at > $2
-        AND status IN ('valid', 'refusal') AND coalesce(surface ->> 'mode', 'web') <> 'inclusion' LIMIT 1`, [engine, round.finished_at])).rows.length > 0;
+      // Compared in SQL against the round's own column: read into JavaScript
+      // the time keeps milliseconds of a microsecond column, and an answer in
+      // the same millisecond read as "since".
+      const back = (await this.store.query(`SELECT 1 FROM evimed_geo.snapshots WHERE engine = $1
+        AND asked_at > (SELECT finished_at FROM evimed_geo.rounds WHERE id = $2)
+        AND status IN ('valid', 'refusal') AND coalesce(surface ->> 'mode', 'web') <> 'inclusion' LIMIT 1`, [engine, round.id])).rows.length > 0;
       if (!back) continue;
       const questionIds = (Array.isArray(row.questions) ? row.questions : []).map(String);
       if (!questionIds.length) continue;
