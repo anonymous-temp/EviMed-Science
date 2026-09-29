@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import { HttpError } from "../src/security.mjs";
 import { createToolUniverseGateway, TOOL_UNIVERSE_GATEWAY_PATH } from "../src/toolUniverseGateway.mjs";
 
 async function fixture(t, options = {}) {
@@ -8,7 +9,7 @@ async function fixture(t, options = {}) {
   let active = true;
   const project = { userId: "owner", id: "project" };
   const runtimeManager = { async assertActiveEviMedWorkloadToken(token) {
-    if (!active || token !== "workload") throw Object.assign(new Error("Invalid workload"), { status: 401, code: "evimed_workload_token_invalid" });
+    if (!active || token !== "workload") throw new HttpError(401, "evimed_workload_token_invalid", "Invalid workload");
     return { userId: project.userId, projectId: project.id };
   } };
   const store = { userById: async (id) => ({ id }), requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); return project; } };
@@ -63,4 +64,22 @@ test("redirects never receive a service credential and retired workloads receive
   assert.equal(redirected.calls.length, 1);
   const revoked = await fixture(t, { revoke: true });
   assert.equal((await revoked.request({ method: "tools/call", params: { name: "list_tools" } })).status, 401);
+});
+
+test("URL-bearing fulltext tools and hidden URL parameters cannot bypass the public-source gateway", async t => {
+  const f = await fixture(t);
+  for (const tool_name of ["EuropePMC_get_fulltext", "EuropePMC_get_fulltext_snippets", "EuropePMC_get_full_text"]) {
+    assert.equal((await f.request({ method: "tools/call", params: { name: "execute_tool", arguments: {
+      tool_name, arguments: { fulltext_xml_url: "http://169.254.169.254/latest/meta-data/", output_format: "raw" } } } })).status, 400);
+  }
+  for (const arguments_ of [{ query: "test", fulltext_xml_url: "http://open-science-web:8787/internal/" },
+    JSON.stringify({ query: "test", fulltext_xml_url: "http://127.0.0.1/" })]) {
+    assert.equal((await f.request({ method: "tools/call", params: { name: "execute_tool", arguments: {
+      tool_name: "EuropePMC_search_articles", arguments: arguments_ } } })).status, 400);
+  }
+  for (const [tool_name, arguments_] of [["EuropePMC_get_citations", { source: "../", article_id: "../../private" }],
+    ["ClinicalTrials_get_study", { nct_id: "../../admin" }], ["PubMed_get_article", { pmid: "http://127.0.0.1/" }]]) {
+    assert.equal((await f.request({ method: "tools/call", params: { name: "execute_tool", arguments: { tool_name, arguments: arguments_ } } })).status, 400);
+  }
+  assert.equal(f.calls.length, 0);
 });
