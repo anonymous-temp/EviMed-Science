@@ -4311,12 +4311,24 @@ export class RuntimeManager {
   }
 
   /**
-   * The kernel's catalogue of one session's direct children, with the address
-   * each one must be read at.
-   *
-   * @param {Record<string, any>} project @param {string} parentSessionId
-   * @returns {Promise<Record<string, any>[]>}
+   * The exact session's used and pending model policy, without activating it.
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @returns {Promise<Record<string, any> | null>}
    */
+  async sessionModelSelection(project, sessionId) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return null;
+    this.beginProxy(project);
+    try {
+      const projection = await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session/projections", { request: { sessionId: safeId(sessionId, "session id") } }, signal),
+        "runtime_history_unavailable", "Runtime model selection did not answer in time.",
+      );
+      return projection?.values?.modelSelection ?? null;
+    } finally { this.endProxy(project); }
+  }
+
+  /** @param {Record<string,any>} project @param {string} parentSessionId */
   async subagentCatalogue(project, parentSessionId) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) return [];

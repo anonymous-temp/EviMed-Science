@@ -97,7 +97,7 @@ test("a signed request from a live workload gets a credential naming the running
   assert.equal(data.runId, "run_going");
   const caller = verifyEngineModelToken(data.token, { secret: gatewaySecret });
   assert.deepEqual(caller, {
-    userId: "user-1", projectId: "project-1", runId: "run_going",
+    userId: "user-1", projectId: "project-1", runId: "run_going", reasoningEffort: "high",
     dailyLimit: undefined, weeklyLimit: undefined, runLimit: 1.5,
     engine: { kind: "bibliometric-analysis", jobId },
   });

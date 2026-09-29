@@ -84,6 +84,7 @@ import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./acc
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
+import { createEngineExecutionContextResolver } from "./engineExecutionContext.mjs";
 import { createEngineModelTokenHandler, ENGINE_MODEL_TOKEN_PATH } from "./modelGatewayEngineTokens.mjs";
 import { ALERT_RECEIVER_PATH, createAlertReceiver } from "./alertReceiver.mjs";
 import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
@@ -3004,7 +3005,9 @@ export function createWebApiApp(overrides = {}) {
   const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
   // An engine job's credential for the model gateway, asked for by its
   // adapter at admission (gap E4; OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED).
-  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun });
+  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun,
+    resolveExecutionContext: createEngineExecutionContextResolver({ config, store, agentRuns, runtimeManager }),
+  });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
   // knob is set in production, and setting the replay one makes a miss a named

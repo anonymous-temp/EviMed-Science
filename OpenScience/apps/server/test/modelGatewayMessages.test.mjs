@@ -137,8 +137,8 @@ test("the kernel's Messages request reaches DeepSeek's Messages API under the de
   assert.equal(seen.headers.authorization, undefined);
   assert.equal(seen.headers["anthropic-version"], "2023-06-01");
   assert.equal(seen.body.model, "deepseek-flash", "the certified model, whatever the request named");
-  assert.deepEqual(seen.body.thinking, { type: "enabled" });
-  assert.deepEqual(seen.body.output_config, { effort: "high" });
+  assert.deepEqual(seen.body.thinking, { type: "disabled" });
+  assert.equal(seen.body.output_config, undefined);
   assert.equal(seen.body.system, "You are an AI agent powered by DeepSeek Harness.");
   assert.deepEqual(events.map((event) => event.type), ["reserve", "settle"]);
   assert.deepEqual(events[1].input.usage, { cacheHitTokens: 880, cacheMissTokens: 120, completionTokens: 57 });

@@ -30,6 +30,7 @@
 // same spend caps as every other call. Build to delete: an engine that could
 // hold a per-call token the way the kernel does would need none of this.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { executionContext, reasoningEffort as validateReasoningEffort } from "./modelReasoningPolicy.mjs";
 import { ENGINE_KINDS } from "./engineUsage.mjs";
 import { HttpError, readBody, sendError, sendJson } from "./security.mjs";
 
@@ -160,29 +161,30 @@ export function verifyEngineModelToken(token, { secret, nowSeconds = Math.floor(
 }
 
 /**
- * @param {unknown} raw @returns {{ kind: string, jobId: string }}
+ * @param {unknown} raw @returns {{ kind: string, jobId: string, executionContext?: any }}
  */
 function parseTokenRequest(raw) {
   let request;
   try { request = JSON.parse(Buffer.from(/** @type {Buffer} */ (raw)).toString("utf8")); } catch { request = null; }
   if (!request || typeof request !== "object" || Array.isArray(request) || request.v !== 1
-    || Object.keys(request).some((field) => !["v", "kind", "jobId"].includes(field))) {
+    || Object.keys(request).some((field) => !["v", "kind", "jobId", "executionContext"].includes(field))) {
     throw new HttpError(400, "engine_model_token_request_invalid", "The request must be a version 1 JSON object naming kind and jobId.");
   }
   if (!ENGINE_KINDS.includes(request.kind)) throw new HttpError(400, "engine_model_token_request_invalid", "Unknown engine kind.");
   if (typeof request.jobId !== "string" || !JOB_ID.test(request.jobId)) {
     throw new HttpError(400, "engine_model_token_request_invalid", "Invalid job id.");
   }
-  return { kind: request.kind, jobId: request.jobId };
+  return { kind: request.kind, jobId: request.jobId, ...(request.executionContext !== undefined ? { executionContext: request.executionContext } : {}) };
 }
 
 /**
  * `POST /internal/engines/v1/model-token`, answered for a specialist adapter
  * admitting one job.
  * @param {{ config: Record<string, any>, runtimeManager: any,
- *   attributeRun?: ((owner: { userId: string, projectId: string }) => Promise<string | null>) | null }} dependencies
+ *   attributeRun?: ((owner: { userId: string, projectId: string }) => Promise<string | null>) | null,
+ *   resolveExecutionContext?: ((owner: {userId:string,projectId:string}, context:any) => Promise<any>) | null }} dependencies
  */
-export function createEngineModelTokenHandler({ config, runtimeManager, attributeRun = null }) {
+export function createEngineModelTokenHandler({ config, runtimeManager, attributeRun = null, resolveExecutionContext = null }) {
   /** @param {any} req @param {any} res @param {(failure: any) => void} [onFailure] */
   return async (req, res, onFailure) => {
     try {
@@ -222,20 +224,34 @@ export function createEngineModelTokenHandler({ config, runtimeManager, attribut
       let runId = bounded?.runId ?? null;
       /** @type {{ dailyLimit?: number, weeklyLimit?: number, runLimit?: number } | null} */
       let limits = bounded ? { dailyLimit: bounded.dailyLimit, weeklyLimit: bounded.weeklyLimit, runLimit: bounded.runLimit } : null;
-      if (!bounded && attributeRun) {
+      let policy = { reasoningEffort: validateReasoningEffort(config.deepseekReasoningEffort ?? "high"), source: "deployment-default" };
+      let sessionId;
+      if (request.executionContext !== undefined) {
+        const context = executionContext(request.executionContext, config.deepseekModel);
+        if (!resolveExecutionContext) throw new HttpError(503, "engine_model_context_unavailable", "Engine session policy resolution is unavailable.");
+        const resolved = await resolveExecutionContext({ userId: identity.userId, projectId: identity.projectId }, context);
+        if (!resolved || resolved.sessionId !== context.sessionId || !RUN_ID.test(String(resolved.runId ?? ""))
+          || (context.reasoningEffort !== undefined && resolved.reasoningEffort !== context.reasoningEffort)) {
+          throw new HttpError(409, "engine_model_policy_mismatch", "The engine policy does not match its session.");
+        }
+        sessionId = context.sessionId;
+        policy = { reasoningEffort: validateReasoningEffort(resolved.reasoningEffort), source: "session" };
+        if (!bounded) { runId = resolved.runId; limits = { runLimit: Number(config.userRunSpendLimit) || 0 }; }
+      } else if (!bounded && attributeRun) {
         runId = await attributeRun({ userId: identity.userId, projectId: identity.projectId }).catch(() => null);
         limits = runId ? { runLimit: Number(config.userRunSpendLimit) || 0 } : null;
       }
       const { token, payload } = issueEngineModelToken({
         secret: config.modelGatewaySigningSecret,
         userId: identity.userId, projectId: identity.projectId, kind: request.kind, jobId: request.jobId,
-        runId, limits, ttlSeconds: config.engineModelTokenTtlSeconds,
+        runId, sessionId, reasoningEffort: policy.reasoningEffort, limits, ttlSeconds: config.engineModelTokenTtlSeconds,
       });
       res.setHeader("cache-control", "no-store");
       sendJson(res, 200, { data: {
         token,
         baseUrl: String(config.modelGatewayInternalUrl ?? "").replace(/\/+$/, ""),
         model: config.deepseekModel,
+        modelPolicy: { ...policy, ...(sessionId ? { sessionId } : {}) },
         expiresAt: new Date(payload.exp * 1000).toISOString(),
         runId,
       } });
