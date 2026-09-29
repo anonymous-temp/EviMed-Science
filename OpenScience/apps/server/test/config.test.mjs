@@ -712,3 +712,12 @@ test("a key shared with the knowledge plugin may be group-readable; every other 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("owner-approved registration and one-credit-per-CNY defaults preserve an explicit opt-out", () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.equal(config.selfRegistrationEnabled, true);
+  assert.equal(config.evimedCreditsPerCny, 1);
+  const disabled = loadConfig({ rootDir: repoRoot, selfRegistrationEnabled: false, evimedCreditsPerCny: 0 });
+  assert.equal(disabled.selfRegistrationEnabled, false);
+  assert.equal(disabled.evimedCreditsPerCny, 0);
+});
