@@ -109,3 +109,31 @@ def test_meta_retry_refreshes_job_credentials_and_a_new_effort_is_a_new_executio
     next_job = start()
     assert next_job["data"]["jobId"] != first["data"]["jobId"]
     assert mint.call_count == 3
+
+
+def test_resume_adopts_new_gateway_policy_before_launching_legacy_checkpoint(tmp_path, monkeypatch):
+    from test_evimed_adapter import _mark
+    client, workspace = _fixture(tmp_path, monkeypatch)
+    headers = {"Authorization": "Bearer " + _token()}
+    args = {"action": "start", "topic": "Legacy interrupted review"}
+    first = client.post("/api/v1/evimed/meta-analysis", json=args, headers=headers).json()
+    state_file = workspace / "meta-analysis-runs/.jobs" / (first["data"]["jobId"] + ".json")
+    state = _mark(state_file, status="failed", error="interrupted")
+    project = Path(state["outputRoot"]) / "project"
+    project.mkdir()
+    (project / ".checkpoint").write_text("[]")
+    monkeypatch.setenv("EVIMED_ENGINE_MODEL_GATEWAY", "true")
+    monkeypatch.setenv("EVIMED_ENGINE_MODEL_TOKEN_URL", "http://gateway.invalid/token")
+    policy = {"reasoningEffort": "high", "source": "deployment-default"}
+    monkeypatch.setattr(evimed_adapter.engine_model, "request_credential", lambda **kw: {
+        evimed_adapter.engine_model.TOKEN_ENV: TOKEN, evimed_adapter.engine_model.BASE_URL_ENV: "http://gateway.invalid/v1",
+        evimed_adapter.engine_model.POLICY_ENV: json.dumps(policy)})
+    resumed = client.post("/api/v1/evimed/meta-analysis", json=args, headers=headers).json()
+    assert resumed["data"]["resumed"] is True
+    state = json.loads(state_file.read_text())
+    assert state["modelRoute"] == "gateway"
+    assert state["modelPolicy"] == policy
+    # An omitted effort is resolved at admission, not a wildcard for any old choice.
+    _mark(state_file, status="succeeded", modelPolicy={"reasoningEffort": "low", "source": "session"})
+    changed = client.post("/api/v1/evimed/meta-analysis", json=args, headers=headers).json()
+    assert changed["data"]["jobId"] != first["data"]["jobId"]
