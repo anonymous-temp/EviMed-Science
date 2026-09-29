@@ -1104,3 +1104,20 @@ test("an agenda's task types take turns by the day, so each runs within any two 
   for (let day = 1; day < types.length; day += 1) assert.notEqual(types[day], types[day - 1], `day ${day} repeats the previous type`);
   assert.deepEqual(new Set(types), new Set(agendaInput.taskTypes));
 });
+
+test("new episodes freeze prior progress and same-day retries use the exact stored prompt and budget", async () => {
+  const { service, documents, jobs } = fixture({ now: () => new Date("2026-09-06T03:00:00Z") });
+  let agenda = await service.create("user-one", agendaInput);
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  await documents.put("user-one", "episode", "yesterday", { agendaId: agenda.id, date: "2026-09-05", status: "merged", claims: [{ id: "prior", statement: "Already checked this population", tier: "gated" }] }, { expectedRevision: 0, projectId: agenda.projectId });
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.match(first.episode.payload.prompt, /Already checked this population/);
+  assert.equal(first.episode.payload.progress.episodes[0].id, "yesterday");
+  const current = await service.get("user-one", agenda.id);
+  await documents.put("user-one", "agenda", agenda.id, { ...current.payload, topics: ["changed later"], followUps: [{ digestId: "new", claimId: "q", note: "A later question", at: "2026-09-06T04:00:00Z" }] }, { expectedRevision: current.revision, projectId: agenda.projectId });
+  const replay = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(replay.episode.payload.prompt, first.episode.payload.prompt);
+  assert.deepEqual(replay.episode.payload.progress, first.episode.payload.progress);
+  assert.equal(jobs.items.at(-1).payload.prompt, first.episode.payload.prompt);
+  assert.equal((await service.get("user-one", agenda.id)).payload.followUps[0].consumedBy, undefined);
+});
