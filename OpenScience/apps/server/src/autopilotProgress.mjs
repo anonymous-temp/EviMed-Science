@@ -61,7 +61,7 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
     const artifacts = (payload.artifactRefs ?? []).filter(ref => ref.projectId === agenda.projectId && ref.runId === payload.runId && ref.sessionId === payload.sessionId && safePath(ref.path)).slice(0, 6);
     add(snapshot.episodes, { id: row.id, revision: row.revision ?? null, date: payload.date, status: payload.status,
       taskType: cut(payload.taskType, 80), claims, errorCode: cut(payload.error?.code ?? payload.deltaErrorCode, 100) || null,
-      resourceReason: cut(payload.resourceDeferral?.code, 100) || null, artifactRefs: artifacts });
+      resourceReason: cut(payload.resourceDeferrals?.episode?.code, 100) || null, artifactRefs: artifacts });
   }
   return snapshot;
 }

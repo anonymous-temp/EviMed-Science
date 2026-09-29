@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { HttpError } from "./security.mjs";
+
+export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_600_000, 21_600_000, 86_400_000]);
 
 const TERMINAL = new Set(["autopilot_job_invalid", "autopilot_stopped", "autopilot_episode_state_conflict",
   "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected"]);
@@ -83,6 +86,13 @@ export class AutopilotWorker {
         throw /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost."), { code: "product_job_lease_lost" }));
       }
     };
+    const assertDispatchAllowed = async () => {
+      const current = await this.service.checkInactivity(job.userId, job.payload?.agendaId);
+      if (!current.payload.enabled || current.payload.status !== "active") {
+        throw new HttpError(409, current.payload.status === "stopped" ? "autopilot_stopped" : "autopilot_paused", "This research agenda is no longer active.");
+      }
+      await holdsLease();
+    };
     try {
       if (job.kind === "verify") {
         // The same activity and stop-rule guard the episode itself passed, run
@@ -93,7 +103,7 @@ export class AutopilotWorker {
           return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         }
         await holdsLease();
-        const verification = await this.dispatchVerification({ ...job.payload, userId: job.userId, projectId: job.projectId });
+        const verification = await this.dispatchVerification({ ...job.payload, userId: job.userId, projectId: job.projectId, assertDispatchAllowed });
         verificationDispatched = true;
         await holdsLease();
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
@@ -130,7 +140,7 @@ export class AutopilotWorker {
       if (leaseLost || !activityLeaseRenewed) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost during the activity check."), { code: "product_job_lease_lost" })); throw error;
       }
-      dispatched = await this.dispatchEpisode({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: episode.id });
+      dispatched = await this.dispatchEpisode({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: episode.id, assertDispatchAllowed });
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost after dispatch."), { code: "product_job_lease_lost" })); throw error;
       }
@@ -141,6 +151,25 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && code === "credits_exhausted") {
+        await holdsLease();
+        const retry = job.attempts < Number(job.maxAttempts ?? 3);
+        const delayMs = AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
+        const at = new Date();
+        // The leased queue write is the durable refusal even if recording its
+        // reader-facing episode detail meets a later storage outage.
+        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Proactive research is waiting for account credits." }, { retry, delayMs: retry ? delayMs : 0 });
+        await this.service.recordResourceDeferral(job.userId, job.payload.episodeId, {
+          jobId: job.id, code, attempts: job.attempts, retrying: retry, at: at.toISOString(), retryAt: retry ? new Date(at.getTime() + delayMs).toISOString() : null,
+          ...(job.kind === "verify" ? { verificationId: job.payload.verificationId } : {}),
+        });
+        return null;
+      }
+      if (!dispatched && !verificationDispatched && ["autopilot_paused", "autopilot_stopped"].includes(code)) {
+        await holdsLease();
+        await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
+        return null;
+      }
       if (job.payload?.action === "cancel") {
         if (!leaseLost && code !== "product_job_lease_lost") {
           await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Proactive research cancellation failed." }, {

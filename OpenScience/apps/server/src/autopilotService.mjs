@@ -496,9 +496,59 @@ export class AutopilotService {
       throw new HttpError(409, agenda.payload.status === "stopped" ? "autopilot_stopped" : "autopilot_paused", "This research agenda is no longer active.");
     }
     return this.documents.put(userId, "episode", episode.id, {
-      ...episode.payload, status: "running", runId: text(input.runId, "run id", 160),
+      ...episode.payload, resourceDeferrals: { ...episode.payload.resourceDeferrals, episode: null }, status: "running", runId: text(input.runId, "run id", 160),
       sessionId: text(input.sessionId, "session id", 160), updatedAt: this.now().toISOString(),
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
+  }
+
+  /** Persist only the balance admission facts actually returned by the credit service.
+   * @param {string} userId @param {string} episodeId @param {any} input @param {{verificationId?:string}} [options] */
+  async recordBalanceCheck(userId, episodeId, input, { verificationId } = {}) {
+    const checkId = verificationId ?? "episode";
+    if (verificationId && verificationEpisodeId(verificationId) !== episodeId) throw new HttpError(400, "autopilot_payload_invalid", "The verification belongs to another episode.");
+    // Look up ownership before interpreting caller data.
+    await this.getEpisode(userId, episodeId);
+    if (typeof input.allowed !== "boolean") throw new HttpError(400, "autopilot_payload_invalid", "A balance admission needs its actual permission.");
+    const checkedAt = input.checkedAt ?? this.now().toISOString();
+    if (!Number.isFinite(Date.parse(checkedAt))) throw new HttpError(400, "autopilot_payload_invalid", "Invalid balance check time.");
+    const finite = value => typeof value === "number" && Number.isFinite(value) ? value : null;
+    const balance = finite(input.balance);
+    const receipt = { checkId, capabilityId: text(input.capabilityId, "capability id", 160), checkedAt,
+      allowed: input.allowed, reason: input.reason ? text(input.reason, "balance reason", 100)
+        : input.allowed && balance !== null ? "sufficient" : "unknown",
+      balance, estimate: input.estimate ? { low: finite(input.estimate.low), high: finite(input.estimate.high) } : null };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await this.getEpisode(userId, episodeId);
+      if (JSON.stringify(episode.payload.balanceChecks?.[checkId]) === JSON.stringify(receipt)) return receipt;
+      try {
+        await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+          balanceChecks: { ...episode.payload.balanceChecks, [checkId]: receipt }, updatedAt: this.now().toISOString(),
+        }, { expectedRevision: episode.revision, projectId: episode.projectId });
+        return receipt;
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while recording its balance check.");
+  }
+
+  /** A resource refusal is not a scientific outcome, and cannot stop an already dispatched run.
+   * @param {string} userId @param {string} episodeId @param {any} input */
+  async recordResourceDeferral(userId, episodeId, input) {
+    const checkId = input.verificationId ?? "episode";
+    if (input.verificationId && verificationEpisodeId(input.verificationId) !== episodeId) throw new HttpError(400, "autopilot_payload_invalid", "The verification belongs to another episode.");
+    const detail = { jobId: text(input.jobId, "resource job id", 160), code: text(input.code, "resource reason", 100),
+      attempts: Number(input.attempts), status: input.retrying ? "waiting" : "exhausted", at: input.at ?? this.now().toISOString(), retryAt: input.retrying ? input.retryAt : null };
+    if (!Number.isSafeInteger(detail.attempts) || detail.attempts < 1 || detail.attempts > 10 || !Number.isFinite(Date.parse(detail.at))
+      || (detail.retryAt !== null && !Number.isFinite(Date.parse(detail.retryAt)))) throw new HttpError(400, "autopilot_payload_invalid", "Invalid resource deferral.");
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await this.getEpisode(userId, episodeId);
+      if (episode.payload.status === "canceled" || (!input.verificationId && (episode.payload.runId || episode.payload.completion || episode.payload.digestId))) return episode;
+      try {
+        return await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+          resourceDeferrals: { ...episode.payload.resourceDeferrals, [checkId]: detail }, updatedAt: this.now().toISOString(),
+        }, { expectedRevision: episode.revision, projectId: episode.projectId });
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while recording its resource wait.");
   }
 
   /** @param {string} userId @param {string} episodeId @param {{code:string}} input */
