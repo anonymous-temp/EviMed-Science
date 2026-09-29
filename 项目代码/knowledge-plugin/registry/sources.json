@@ -5979,15 +5979,28 @@
    "region": "US",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.fda.gov/medical-devices/software-medical-device-samd/artificial-intelligence-enabled-medical-devices",
     "max_pages": 1,
     "allowed_hosts": [
      "www.fda.gov"
-    ]
+    ],
+    "selectors": {
+     "item": "main table[role='grid'] tbody tr",
+     "title": "td:nth-child(3)",
+     "link": "td:nth-child(2) a@href",
+     "date": "td:first-child",
+     "summary": "td:nth-child(4)"
+    },
+    "date_format": "%m/%d/%Y",
+    "link_hosts": [
+     "www.fda.gov",
+     "www.accessdata.fda.gov"
+    ],
+    "title_template": "FDA AI-enabled device: {title}"
    }
   },
   {
@@ -6006,15 +6019,22 @@
    "region": "US",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.fda.gov/vaccines-blood-biologics/news-events-biologics/whats-new-biologics",
     "max_pages": 1,
     "allowed_hosts": [
      "www.fda.gov"
-    ]
+    ],
+    "selectors": {
+     "item": "main table.table tbody tr",
+     "title": "td:nth-child(2) a",
+     "link": "td:nth-child(2) a@href",
+     "date": "td:first-child"
+    },
+    "date_format": "%m/%d/%Y"
    }
   },
   {
@@ -6115,14 +6135,29 @@
    "region": "US",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.cms.gov/newsroom",
     "max_pages": 1,
     "allowed_hosts": [
      "www.cms.gov"
+    ],
+    "selectors": {
+     "item": ".view-newsroom-articles .views-row",
+     "title": "h3",
+     "link": "a.newsroom-main-view-link@href",
+     "date": "time@datetime",
+     "summary": ".newsroom-main-view-body"
+    },
+    "selector_fallbacks": [
+     {
+      "item": ".view-newsroom-articles .views-row",
+      "title": "h3",
+      "link": "a@href",
+      "date": "time@datetime"
+     }
     ]
    }
   },
@@ -6319,7 +6354,7 @@
    "poll_floor_s": 7200,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "disabled_reason": "owner_excluded",
    "category": "regulator",
    "config": {
     "url": "https://www.cde.org.cn/zdyz/index",
@@ -6346,7 +6381,7 @@
    "poll_floor_s": 7200,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "waf_refuses_crawler_identity",
+   "disabled_reason": "owner_excluded",
    "category": "regulator",
    "config": {
     "url": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c",
@@ -6384,7 +6419,7 @@
    "poll_floor_s": 7200,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "disabled_reason": "owner_excluded",
    "category": "regulator",
    "config": {
     "url": "https://www.cde.org.cn/main/xxgk/listpage/b40868b5e21c038a6aa8b4319d21b07d",
@@ -7145,8 +7180,8 @@
    "region": "EU",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.ema.europa.eu/en/public-consultations.xml",
@@ -7172,8 +7207,8 @@
    "region": "EU",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.ema.europa.eu/en/agendas-and-minutes.xml",
@@ -7226,14 +7261,32 @@
    "region": "UK",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.nice.org.uk/news",
     "max_pages": 1,
     "allowed_hosts": [
      "www.nice.org.uk"
+    ],
+    "selectors": {
+     "item": "main article[class*='Story_'], main article[class*='NewsCard_']",
+     "title": "h3 a",
+     "link": "h3 a@href",
+     "date": "time@datetime"
+    },
+    "selector_fallbacks": [
+     {
+      "item": "article[class*='Story_'], article[class*='NewsCard_']",
+      "title": "h3 a",
+      "link": "h3 a@href",
+      "date": "time@datetime"
+     }
+    ],
+    "link_hosts": [
+     "www.nice.org.uk",
+     "indepth.nice.org.uk"
     ]
    }
   },
@@ -7307,8 +7360,8 @@
    "region": "EU",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.ecdc.europa.eu/en/taxonomy/term/1244/feed",
@@ -7605,8 +7658,8 @@
    "region": "HK",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.info.gov.hk/gia/rss/general_en.xml",
@@ -7632,14 +7685,28 @@
    "region": "TW",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "regulator",
    "config": {
     "url": "https://www.fda.gov.tw/TC/news.aspx",
     "max_pages": 1,
     "allowed_hosts": [
      "www.fda.gov.tw"
+    ],
+    "selectors": {
+     "item": "table.listTable tbody tr",
+     "title": "td:nth-child(2) a",
+     "link": "td:nth-child(2) a@href",
+     "date": "td:nth-child(3)"
+    },
+    "selector_fallbacks": [
+     {
+      "item": "#mainContent table tbody tr",
+      "title": "td:nth-child(2) a",
+      "link": "td:nth-child(2) a@href",
+      "date": "td:nth-child(3)"
+     }
     ]
    }
   },
@@ -7720,14 +7787,29 @@
    "region": "US",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "drug-safety",
    "config": {
     "url": "https://www.fda.gov/drugs/drug-safety-and-availability/drug-safety-communications",
     "max_pages": 1,
     "allowed_hosts": [
      "www.fda.gov"
+    ],
+    "selectors": {
+     "item": "main table[summary='Drug Safety Communications'] tbody tr",
+     "title": "td:nth-child(2) a",
+     "link": "td:nth-child(2) a@href",
+     "date": "td:first-child"
+    },
+    "date_format": "%m-%d-%Y",
+    "selector_fallbacks": [
+     {
+      "item": "main table tbody tr",
+      "title": "td:nth-child(2) a",
+      "link": "td:nth-child(2) a@href",
+      "date": "td:first-child"
+     }
     ]
    }
   },
@@ -8341,8 +8423,8 @@
    "region": "CH",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "drug-safety",
    "config": {
     "url": "https://fetchrss.com/feed/X-CSwP0MWGVCaCbucMe8csni.rss",
@@ -9119,7 +9201,7 @@
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "challenge_cloudflare",
+   "disabled_reason": "owner_excluded",
    "category": "industry-media",
    "config": {
     "url": "https://www.fiercepharma.com/rss/xml",
@@ -9146,7 +9228,7 @@
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
    "enabled": false,
-   "disabled_reason": "challenge_cloudflare",
+   "disabled_reason": "owner_excluded",
    "category": "industry-media",
    "config": {
     "url": "https://www.fiercebiotech.com/rss/xml",
@@ -9442,8 +9524,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "industry-media",
    "config": {
     "url": "https://drughunter.com/rss.xml",
@@ -9577,8 +9659,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "industry-media",
    "config": {
     "url": "https://www.prnewswire.com/rss/health-latest-news/health-latest-news-list.rss",
@@ -10757,8 +10839,8 @@
    "region": "INT",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "evidence",
    "config": {
     "url": "https://www.campbellcollaboration.org/feed/",
@@ -10838,15 +10920,22 @@
    "region": "UK",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "guideline",
    "config": {
     "url": "https://www.nice.org.uk/guidance/published",
     "max_pages": 1,
     "allowed_hosts": [
      "www.nice.org.uk"
-    ]
+    ],
+    "selectors": {
+     "item": "main table tbody tr",
+     "title": "td:first-child a",
+     "link": "td:first-child a@href",
+     "date": "td:nth-child(3) time@datetime",
+     "id": "td:nth-child(2)"
+    }
    }
   },
   {
@@ -10865,15 +10954,22 @@
    "region": "UK",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "guideline",
    "config": {
     "url": "https://www.nice.org.uk/guidance/inconsultation",
     "max_pages": 1,
     "allowed_hosts": [
      "www.nice.org.uk"
-    ]
+    ],
+    "selectors": {
+     "item": "main table tbody tr",
+     "title": "td:first-child a",
+     "link": "td:first-child a@href",
+     "summary": "td:nth-child(4)"
+    },
+    "summary_template": "Consultation closes: {summary}"
    }
   },
   {
@@ -10892,14 +10988,28 @@
    "region": "UK",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "selectors_missing",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "guideline",
    "config": {
     "url": "https://www.nice.org.uk/news/articles",
     "max_pages": 1,
     "allowed_hosts": [
      "www.nice.org.uk"
+    ],
+    "selectors": {
+     "item": "main article",
+     "title": "h3 a",
+     "link": "h3 a@href",
+     "date": "time@datetime"
+    },
+    "selector_fallbacks": [
+     {
+      "item": "article",
+      "title": "h3 a",
+      "link": "h3 a@href",
+      "date": "time@datetime"
+     }
     ]
    }
   },
@@ -11519,8 +11629,8 @@
    "region": "EU",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "guideline",
    "config": {
     "url": "https://easl.eu/publication-category/clinical-practice-guidelines/feed/",
@@ -12017,8 +12127,8 @@
    "region": "UK",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "methods",
    "config": {
     "url": "https://www.equator-network.org/feed/",
@@ -12125,8 +12235,8 @@
    "region": "INT",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "methods",
    "config": {
     "url": "https://discourse.datamethods.org/latest.rss",
@@ -12233,8 +12343,8 @@
    "region": "US",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "methods",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=20&sort=pub%20date&term=%22JAMA%20Guide%20to%20Statistics%20and%20Methods%22&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -12547,8 +12657,8 @@
    "region": "US",
    "poll_floor_s": 1800,
    "poll_ceiling_s": 7200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "public-health",
    "config": {
     "url": "https://tools.cdc.gov/api/v2/resources/media/285676.rss",
@@ -13299,8 +13409,8 @@
    "region": "EU",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "funding-policy",
    "config": {
     "url": "https://erc.europa.eu/rss.xml",
@@ -13461,8 +13571,8 @@
    "region": "UK",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "funding-policy",
    "config": {
     "url": "https://www.nature.com/nature.rss",
@@ -13543,8 +13653,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "funding-policy",
    "config": {
     "url": "https://undark.org/feed/",
@@ -13705,8 +13815,8 @@
    "region": "UK",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "med-news-en",
    "config": {
     "url": "https://www.news-medical.net/syndication.axd?format=rss",
@@ -13759,8 +13869,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "med-news-en",
    "config": {
     "url": "https://feeds.npr.org/1128/rss.xml",
@@ -14139,8 +14249,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "med-news-en",
    "config": {
     "url": "https://www.healthcaredive.com/feeds/news/",
@@ -14166,8 +14276,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": true,
-   "disabled_reason": null,
+   "enabled": false,
+   "disabled_reason": "owner_excluded",
    "category": "med-news-en",
    "config": {
     "url": "https://www.fiercehealthcare.com/rss/xml",
@@ -14601,8 +14711,8 @@
    "region": "US",
    "poll_floor_s": 86400,
    "poll_ceiling_s": 259200,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "conference",
    "config": {
     "url": "https://www.croiconference.org/feed/",
@@ -15171,8 +15281,8 @@
    "region": "CN",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "journal-cn",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=50&sort=pub%20date&term=%22Zhonghua%20Yi%20Xue%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -15237,8 +15347,8 @@
    "region": "CN",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "journal-cn",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=50&sort=pub%20date&term=%22Zhonghua%20Zhong%20Liu%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -15270,8 +15380,8 @@
    "region": "CN",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "journal-cn",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=50&sort=pub%20date&term=%22Zhonghua%20Xin%20Xue%20Guan%20Bing%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -15357,8 +15467,8 @@
    "region": "CN",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "journal-cn",
    "config": {
     "url": "https://www.chinagp.net/CN/rss_first_1007-9572.xml",
@@ -15411,8 +15521,8 @@
    "region": "CN",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "journal-cn",
    "config": {
     "url": "http://journal13.magtechjournal.com/yxkxy/CN/rss_first_1000-503X.xml",
@@ -15906,8 +16016,8 @@
    "region": "US",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "literature-stream",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=(%22target%20trial%20emulation%22%5Btiab%5D%20OR%20%22emulated%20target%20trial%22%5Btiab%5D%20OR%20%22target%20trial%22%5Bti%5D%20OR%20%22real-world%20evidence%22%5Btiab%5D%20OR%20%22real-world%20data%22%5Btiab%5D)&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -15939,8 +16049,8 @@
    "region": "US",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "literature-stream",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=(%22GRADE%20approach%22%5Btiab%5D%20OR%20%22Grading%20of%20Recommendations%20Assessment,%20Development%20and%20Evaluation%22%5Btiab%5D%20OR%20%22certainty%20of%20evidence%22%5Btiab%5D%20OR%20%22certainty%20of%20the%20evidence%22%5Btiab%5D)&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -16137,8 +16247,8 @@
    "region": "US",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "literature-stream",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=((%22large%20language%20model%22%5Btiab%5D%20OR%20%22large%20language%20models%22%5Btiab%5D%20OR%20%22generative%20artificial%20intelligence%22%5Btiab%5D%20OR%20ChatGPT%5Btiab%5D%20OR%20%22GPT-4%22%5Btiab%5D)%20AND%20(clinical%5Btiab%5D%20OR%20patient%5Btiab%5D%20OR%20patients%5Btiab%5D%20OR%20diagnosis%5Btiab%5D%20OR%20diagnostic%5Btiab%5D%20OR%20physicians%5Btiab%5D))&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -16269,8 +16379,8 @@
    "region": "US",
    "poll_floor_s": 10800,
    "poll_ceiling_s": 64800,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "literature-stream",
    "config": {
     "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=((bibliometric*%5Btiab%5D%20OR%20scientometric*%5Btiab%5D%20OR%20%22research%20trends%22%5Bti%5D%20OR%20%22global%20trends%22%5Bti%5D)%20AND%20(medicine%5Btiab%5D%20OR%20medical%5Btiab%5D%20OR%20clinical%5Btiab%5D%20OR%20health%5Btiab%5D%20OR%20disease%5Btiab%5D%20OR%20diseases%5Btiab%5D))&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
@@ -16676,8 +16786,8 @@
    "region": "US",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "preprint",
    "config": {
     "url": "https://connect.biorxiv.org/biorxiv_xml.php?subject=pharmacology_and_toxicology",
@@ -16707,8 +16817,8 @@
    "region": "US",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "preprint",
    "config": {
     "url": "https://connect.biorxiv.org/biorxiv_xml.php?subject=all",
@@ -16738,8 +16848,8 @@
    "region": "US",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "preprint",
    "config": {
     "url": "https://export.arxiv.org/api/query?search_query=cat:cs.CL+AND+%28abs:clinical+OR+abs:medical%29&sortBy=submittedDate&sortOrder=descending&max_results=100",
@@ -16766,8 +16876,8 @@
    "region": "US",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "preprint",
    "config": {
     "url": "https://export.arxiv.org/api/query?search_query=cat:eess.IV+AND+%28abs:medical+OR+abs:clinical+OR+abs:radiology%29&sortBy=submittedDate&sortOrder=descending&max_results=100",
@@ -16794,8 +16904,8 @@
    "region": "US",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "preprint",
    "config": {
     "url": "https://export.arxiv.org/api/query?search_query=cat:q-bio.QM&sortBy=submittedDate&sortOrder=descending&max_results=100",
@@ -16822,8 +16932,8 @@
    "region": "US",
    "poll_floor_s": 21600,
    "poll_ceiling_s": 129600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "preprint",
    "config": {
     "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22Research%20Square%22)%20AND%20FIRST_IDATE:%5B{since:%Y-%m-%d}%20TO%20{today:%Y-%m-%d}%5D&format=json&resultType=core&pageSize=100&cursorMark={cursor}",
@@ -18189,8 +18299,8 @@
    "region": "CN",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "cn-media-pharma",
    "config": {
     "url": "https://www.tmtpost.com/feed",
@@ -19313,8 +19423,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-vendor",
    "config": {
     "url": "https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml",
@@ -19449,8 +19559,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-vendor",
    "config": {
     "url": "https://www.microsoft.com/en-us/research/feed/",
@@ -19476,8 +19586,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-vendor",
    "config": {
     "url": "https://about.fb.com/news/category/technology-and-innovation/feed/",
@@ -19557,8 +19667,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-vendor",
    "config": {
     "url": "https://blogs.nvidia.com/feed/",
@@ -19612,8 +19722,8 @@
    "region": "CN",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-vendor",
    "config": {
     "url": "https://rsshub.bestblogs.dev/qwen/blog",
@@ -19831,8 +19941,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
@@ -19858,8 +19968,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://arstechnica.com/ai/feed/",
@@ -19885,8 +19995,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://www.wired.com/feed/tag/ai/latest/rss",
@@ -19912,8 +20022,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss",
@@ -19939,8 +20049,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
@@ -20020,8 +20130,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://www.understandingai.org/feed",
@@ -20047,8 +20157,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://www.aisnakeoil.com/feed",
@@ -20237,8 +20347,8 @@
    "region": "CN",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://www.geekpark.net/rss",
@@ -20264,8 +20374,8 @@
    "region": "CN",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-media",
    "config": {
     "url": "https://www.ithome.com/rss/",
@@ -20939,8 +21049,8 @@
    "region": "CN",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-medicine",
    "config": {
     "url": "https://www.xtalpi.com/category/news/feed/",
@@ -21237,8 +21347,8 @@
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-research-tools",
    "config": {
     "url": "https://www.zotero.org/blog/feed/",
@@ -21264,8 +21374,8 @@
    "region": "INT",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "launch_tier_P1",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "ai-research-tools",
    "config": {
     "url": "https://paperpal.com/blog/feed",

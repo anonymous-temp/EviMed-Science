@@ -42,12 +42,14 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
 from selectolax.parser import HTMLParser, Node
 
+from ..fetch import detect_challenge
 from ..model import FetchError, FetchResult, NormalizedEntry, ParseOutput, RequestSpec, SourceConfig, SourceState
 from .base import decode_body, plan_from_template
 from .common import (
@@ -67,6 +69,7 @@ from .common import (
 MODES = ("html", "script-cdata", "script-json")
 DEFAULT_MAX_ITEMS = 60
 DEFAULT_MIN_TITLE = 4
+MAX_SELECTOR_FALLBACKS = 3
 _CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
 _XML_SCRIPT = re.compile(r"<script[^>]*type=[\"']text/xml[\"'][^>]*>(.*?)</script>", re.S | re.I)
 
@@ -260,6 +263,26 @@ class HtmlListAdapter:
                     HTMLParser("<div></div>").css(selectors["item"])
                 except Exception as error:  # selectolax raises its own error types for a bad selector
                     problems.append(f"selectors.item does not parse: {type(error).__name__}")
+        fallbacks = config.get("selector_fallbacks", [])
+        if not isinstance(fallbacks, list) or len(fallbacks) > MAX_SELECTOR_FALLBACKS:
+            problems.append("selector_fallbacks must be a list of at most three vetted candidates")
+        elif fallbacks:
+            if mode != "html":
+                problems.append("selector recovery only supports ordinary HTML lists")
+            for candidate in fallbacks:
+                if not isinstance(candidate, dict) or any(not isinstance(candidate.get(key), str) or not candidate[key].strip() for key in ("item", "title", "link", "date")):
+                    problems.append("each selector fallback needs item, title, link and date selectors")
+                    continue
+                for spec in candidate.values():
+                    if not isinstance(spec, str):
+                        problems.append("fallback selector values must be strings")
+                        continue
+                    selector = spec.partition("@")[0].strip()
+                    if selector not in ("", "."):
+                        try:
+                            HTMLParser("<div></div>").css(selector)
+                        except Exception as error:
+                            problems.append(f"fallback selector does not parse: {type(error).__name__}")
         if not config.get("allowed_hosts"):
             problems.append("allowed_hosts missing (links outside the site must be refused)")
         return problems
@@ -273,5 +296,20 @@ class HtmlListAdapter:
         if result.status != 200:
             raise FetchError("http-error", f"html_list_http_{result.status}", status=result.status)
         text = decode_body(result)
-        entries, notes = list_entries(text, source=source, base=result.final_url or result.request.url)
+        base = result.final_url or result.request.url
+        entries, notes = list_entries(text, source=source, base=base)
+        # Recovery reads the same permitted page only. Candidates are vetted
+        # registry data; the working primary selector is never changed.
+        if not entries and (source.config.get("mode") or "html") == "html":
+            # The transport already rejects challenges. Recheck before trying
+            # recovery, without reclassifying a successfully rendered primary
+            # list merely because its markup still contains bootstrap scripts.
+            challenge = detect_challenge(result.status, result.headers.get("content-type", "text/html"), result.body, api=False)
+            if challenge:
+                raise FetchError("challenge", challenge, status=result.status)
+            for index, candidate in enumerate((source.config.get("selector_fallbacks") or [])[:MAX_SELECTOR_FALLBACKS]):
+                recovered_source = replace(source, config={**source.config, "selectors": candidate})
+                recovered, recovered_notes = list_entries(text, source=recovered_source, base=base)
+                if recovered and all(entry.published_at is not None for entry in recovered):
+                    return ParseOutput(entries=recovered, notes=[*recovered_notes, f"html_list_recovered_selector={index}"])
         return ParseOutput(entries=entries, notes=notes)

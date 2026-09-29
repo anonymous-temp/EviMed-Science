@@ -78,7 +78,7 @@ The registry is data, not code. `registry/sources.json` is generated from the pr
 1. Edit `registry/overrides.json` (keyed by source id; fields win over derived values, `config`
    merges key by key; `_why` keys are comments) — e.g. selectors for a list page, a cadence, an
    `authority`, `enabled: false`. A source that is not in the probe registry (the EviMed API scans)
-   is a whole row in `registry/extra-sources.json`. Which rows are on is a rule in the build
+   is a whole row in `registry/extra-sources.json`. Explicit `owner_excluded` rows stay disabled even when an older operator enable exists; CDE and all Fierce rows are excluded. Which rows are on is a rule in the build
    (P0 on every exit this build has; P1 list pages with selectors; the EviMed scans; relay sources
    the Tokyo node read on 2026-09-22, `registry/research/`), and an adapter that rejects a row's
    configuration keeps it off with the reason.
@@ -88,6 +88,16 @@ The registry is data, not code. `registry/sources.json` is generated from the pr
 3. `python -m knowledge_plugin check-registry` and `pytest tests/test_registry_load.py`.
    A running plugin picks the new file up within a minute (rows missing from the file are
    retired, never deleted; an operator's `operator_enabled` survives reloads).
+
+HTML lists may declare up to three `config.selector_fallbacks`, each a vetted CSS mapping with
+`item`, `title`, `link` and `date`. On a permitted page with no primary entries, the adapter tries
+these bounded candidates and accepts only dated normalized entries with allowed links. The
+primary selector is never overwritten; successful recovery is recorded as
+`html_list_recovered_selector=N`. This is deterministic recovery from captured page structures,
+not a model proposer, a login/challenge bypass or permission to enable an excluded source. The
+2026-09-29 source expansion and deferred reasons are recorded in
+`registry/research/source-expansion-2026-09-29.json`; raw protected responses and their hashes live
+in `tests/fixtures/source-expansion-20260929/probe-captures.json`.
 
 ## Tests
 

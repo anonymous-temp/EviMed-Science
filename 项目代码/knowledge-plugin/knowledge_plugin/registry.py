@@ -6,7 +6,7 @@ therefore rewrites only the registry-owned columns of a row and leaves the runti
 
 - **Retire, never delete.** A row missing from the file gets ``retired_at``; its entries still point
   at it, and ``/v1/sources?include_retired=true`` still shows it. Coming back clears the mark.
-- **The operator's switch survives a reload.** ``enabled`` is ``coalesce(operator_enabled,
+- **Owner exclusions take priority over operator enables; all other operator switches survive a reload.** ``enabled`` is ``coalesce(operator_enabled,
   registry_enabled)``: the file decides unless an operator decided (``UPDATE … SET
   operator_enabled = false``; back to the file with ``NULL``).
 
@@ -201,22 +201,23 @@ ON CONFLICT (id) DO UPDATE SET
   language = EXCLUDED.language, region = EXCLUDED.region, config = EXCLUDED.config,
   cursor = CASE WHEN s.registry_sha256 IS DISTINCT FROM EXCLUDED.registry_sha256 THEN '{}'::jsonb ELSE s.cursor END,
   registry_sha256 = EXCLUDED.registry_sha256, registry_enabled = EXCLUDED.registry_enabled,
-  enabled = coalesce(s.operator_enabled, EXCLUDED.registry_enabled),
-  disabled_reason = CASE WHEN s.operator_enabled IS NULL THEN EXCLUDED.disabled_reason
+  enabled = (EXCLUDED.disabled_reason IS DISTINCT FROM 'owner_excluded' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled)),
+  disabled_reason = CASE WHEN EXCLUDED.disabled_reason = 'owner_excluded' THEN 'owner_excluded'
+                         WHEN s.operator_enabled IS NULL THEN EXCLUDED.disabled_reason
                          WHEN s.operator_enabled THEN NULL ELSE 'operator' END,
   category = EXCLUDED.category, priority = EXCLUDED.priority,
   poll_floor_s = EXCLUDED.poll_floor_s, poll_ceiling_s = EXCLUDED.poll_ceiling_s,
   poll_interval_s = least(greatest(s.poll_interval_s, EXCLUDED.poll_floor_s), EXCLUDED.poll_ceiling_s),
-  health = CASE WHEN NOT coalesce(s.operator_enabled, EXCLUDED.registry_enabled) THEN 'disabled'
+  health = CASE WHEN NOT (EXCLUDED.disabled_reason IS DISTINCT FROM 'owner_excluded' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled)) THEN 'disabled'
                 WHEN s.health = 'disabled' THEN (CASE WHEN s.last_ok_at IS NULL THEN 'new' ELSE 'healthy' END)
                 ELSE s.health END,
-  next_poll_at = CASE WHEN s.health = 'disabled' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled)
+  next_poll_at = CASE WHEN s.health = 'disabled' AND (EXCLUDED.disabled_reason IS DISTINCT FROM 'owner_excluded' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled))
                       THEN EXCLUDED.next_poll_at ELSE s.next_poll_at END,
   retired_at = NULL, updated_at = EXCLUDED.updated_at, host = EXCLUDED.host
 WHERE s.registry_sha256 IS DISTINCT FROM EXCLUDED.registry_sha256
    OR s.host IS DISTINCT FROM EXCLUDED.host
    OR s.retired_at IS NOT NULL
-   OR s.enabled IS DISTINCT FROM coalesce(s.operator_enabled, EXCLUDED.registry_enabled)
+   OR s.enabled IS DISTINCT FROM (EXCLUDED.disabled_reason IS DISTINCT FROM 'owner_excluded' AND coalesce(s.operator_enabled, EXCLUDED.registry_enabled))
    OR s.priority IS DISTINCT FROM EXCLUDED.priority
 """
 

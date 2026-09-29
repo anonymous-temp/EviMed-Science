@@ -14,7 +14,7 @@ from knowledge_plugin.registry import load_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / 'tests/fixtures/source-expansion-20260929'
-EVIDENCE = json.loads((FIXTURES / 'provenance.json').read_text())['rows']
+EVIDENCE = json.loads((FIXTURES / 'probe-captures.json').read_text())['rows']
 READABLE_P1 = [row for row in EVIDENCE if row['group'] == 'p1' and row['outcome'] == 'ok']
 SOURCES = {row.source.id: row for row in load_registry(ROOT / 'registry/sources.json')}
 
@@ -82,3 +82,20 @@ def test_recovered_relay_selectors_match_the_actual_captured_entries(record):
     if record['id'] == 'nice-in-consultation':
         assert all(entry.published_at is None for entry in parsed.entries), 'consultation deadlines are not publication dates'
         assert all(entry.summary.startswith('Consultation closes:') for entry in parsed.entries)
+
+
+def test_probe_capture_urls_and_body_hashes_are_safe_and_complete():
+    from urllib.parse import parse_qs, urlsplit
+    assert len(EVIDENCE) == 100
+    for record in EVIDENCE:
+        for index, capture in enumerate(record['captures']):
+            parsed = urlsplit(capture['url'])
+            assert parsed.username is None and parsed.password is None
+            assert not set(parse_qs(parsed.query)) & {'api_key', 'apikey', 'token', 'password', 'access_token', 'email', 'mailto'}
+            response(record, index)
+
+
+def test_unaccepted_probes_do_not_become_enabled_by_the_expansion():
+    for record in EVIDENCE:
+        if record['outcome'] not in ('ok', 'readable') or (record['group'] == 'relay-page' and not record.get('enabledAfterProbe')):
+            assert not SOURCES[record['id']].enabled

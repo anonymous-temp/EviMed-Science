@@ -206,7 +206,9 @@
   "authority": 4
  },
  "jama-guide-statistics-methods": {
-  "source_type": "journal"
+  "source_type": "journal",
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
  },
  "nlm-pubmed-news": {
   "source_type": "regulator",
@@ -486,7 +488,9 @@
     "rss"
    ]
   },
-  "_why_config": "P2: item links carry ?rss=1"
+  "_why_config": "P2: item links carry ?rss=1",
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
  },
  "biorxiv-all-subjects": {
   "config": {
@@ -494,7 +498,9 @@
     "rss"
    ]
   },
-  "_why_config": "P2: item links carry ?rss=1"
+  "_why_config": "P2: item links carry ?rss=1",
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
  },
  "endpoints-news": {
   "egress": "browser",
@@ -580,7 +586,10 @@
   "poll_floor_s": 7200,
   "poll_ceiling_s": 21600,
   "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
-  "config": {}
+  "config": {},
+  "enabled": false,
+  "disabled_reason": "owner_excluded",
+  "_why_owner_excluded": "Permanent owner exclusion adopted 2026-09-29. Source expansion and selector recovery must not re-enable this source, regardless of readability or launch tier."
  },
  "cde-breakthrough-therapy": {
   "poll_floor_s": 7200,
@@ -601,14 +610,18 @@
   },
   "_why_config": "P2: rendered 200 (2026-09-22): the default tab is 纳入突破性治疗品种名单, 10 rows (序号, 受理号, 药品名称, 注册申请人, 申请日期, 公示日期, 公示截止日期, 罕见病). A row has no link (ondblclick opens an in-page layer through list.js, which answered 403 to this box), so the link — and the key — is the list page with ?acceptid=<受理号>&date=<公示截止日期> (link-derived): a #fragment would collapse every row into one canonical URL, and one acceptance number is listed twice (CXSL2300094 SYS6010: 2026-08-31 and 2026-09-14, one inclusion per indication). The date is 公示截止日期: a row joins the inclusion list only after its publicity closes. The 拟突破性治疗品种 tab loads on click and is not read",
   "enabled": false,
-  "disabled_reason": "waf_refuses_crawler_identity",
-  "_why_disabled": "every poll since 2026-09-25T06:03Z (15) ended 403. Not the Beijing address and not a moved page: CDE's WAF page (请不要使用非法的URL地址访问) answers the plugin's browser identity — a Chrome UA with the 'EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)' suffix — 403 in 4 of 6 spaced requests from the dev box, and the same UA without the suffix 202 (the Ruishu page a browser runs) in 6 of 6 (registry/research/probe-2026-09-28.jsonl). The Tokyo relay would not help (no browser there, and it is the header that is refused). Reading CDE again means presenting it a browser without the crawler's name, which the plugin's identity rule (browser.py, fetch.py) does not do: the owner's decision, not a registry edit. Off so it stops hitting a WAF every few hours; 药审中心 stays unread until then"
+  "disabled_reason": "owner_excluded",
+  "_why_disabled": "every poll since 2026-09-25T06:03Z (15) ended 403. Not the Beijing address and not a moved page: CDE's WAF page (请不要使用非法的URL地址访问) answers the plugin's browser identity — a Chrome UA with the 'EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)' suffix — 403 in 4 of 6 spaced requests from the dev box, and the same UA without the suffix 202 (the Ruishu page a browser runs) in 6 of 6 (registry/research/probe-2026-09-28.jsonl). The Tokyo relay would not help (no browser there, and it is the header that is refused). Reading CDE again means presenting it a browser without the crawler's name, which the plugin's identity rule (browser.py, fetch.py) does not do: the owner's decision, not a registry edit. Off so it stops hitting a WAF every few hours; 药审中心 stays unread until then",
+  "_why_owner_excluded": "Permanent owner exclusion adopted 2026-09-29. Source expansion and selector recovery must not re-enable this source, regardless of readability or launch tier."
  },
  "cde-marketed-drug-info": {
   "poll_floor_s": 7200,
   "poll_ceiling_s": 21600,
   "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
-  "config": {}
+  "config": {},
+  "enabled": false,
+  "disabled_reason": "owner_excluded",
+  "_why_owner_excluded": "Permanent owner exclusion adopted 2026-09-29. Source expansion and selector recovery must not re-enable this source, regardless of readability or launch tier."
  },
  "cmde-guidance": {
   "poll_floor_s": 7200,
@@ -854,13 +867,15 @@
  },
  "fierce-biotech": {
   "enabled": false,
-  "disabled_reason": "challenge_cloudflare",
-  "_why": "a Cloudflare managed challenge on the feed path since 2026-09-24T21:14Z (16 relay polls in a row), met from the Tokyo node, a residential line and a headless Chromium alike while the home page answers 200: no exit this build has passes it (registry/research/probe-2026-09-28.jsonl). Off so it stops polling a wall, not to lift the health rate; re-enable when the feed answers again"
+  "disabled_reason": "owner_excluded",
+  "_why": "a Cloudflare managed challenge on the feed path since 2026-09-24T21:14Z (16 relay polls in a row), met from the Tokyo node, a residential line and a headless Chromium alike while the home page answers 200: no exit this build has passes it (registry/research/probe-2026-09-28.jsonl). Off so it stops polling a wall, not to lift the health rate; re-enable when the feed answers again",
+  "_why_owner_excluded": "Permanent owner exclusion adopted 2026-09-29. Source expansion and selector recovery must not re-enable this source, regardless of readability or launch tier."
  },
  "fierce-pharma": {
   "enabled": false,
-  "disabled_reason": "challenge_cloudflare",
-  "_why": "as fierce-biotech: the feed path is behind a Cloudflare managed challenge since its last read at 2026-09-24T19:16Z (16 relay polls in a row), for every client this build has (registry/research/probe-2026-09-28.jsonl); fierce-healthcare, same publisher, still answers and stays on. Off so it stops polling a wall, not to lift the health rate"
+  "disabled_reason": "owner_excluded",
+  "_why": "as fierce-biotech: the feed path is behind a Cloudflare managed challenge since its last read at 2026-09-24T19:16Z (16 relay polls in a row), for every client this build has (registry/research/probe-2026-09-28.jsonl); fierce-healthcare, same publisher, still answers and stays on. Off so it stops polling a wall, not to lift the health rate",
+  "_why_owner_excluded": "Permanent owner exclusion adopted 2026-09-29. Source expansion and selector recovery must not re-enable this source, regardless of readability or launch tier."
  },
  "aga-clinical-guidance": {
   "enabled": false,
@@ -871,5 +886,374 @@
   "enabled": false,
   "disabled_reason": "robots_disallow",
   "_why": "the site's robots.txt disallows the feed for crawlers (every poll of 2026-09-22 ended robots_disallow); robots governs site feeds (plan 6.1)"
+ },
+ "ema-public-consultations": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "ema-committee-agendas": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "ecdc-publications": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "hk-govt-press-releases": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "drug-hunter": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "swissmedic-safety-of-medicines": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "prnewswire-health": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "campbell-collaboration": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "easl-clinical-practice-guidelines": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "equator-network": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "datamethods-forum": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "cdc-outbreaks-us": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "erc-news": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "nature-news": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "undark": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "news-medical-net": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "npr-health": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "healthcare-dive": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "zhonghua-yixue-zazhi": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "croi": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "chinagp": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "zhonghua-zhongliu-zazhi": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "zhonghua-xinxueguanbing-zazhi": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "actacams": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "pubmed-target-trial-rwe": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "pubmed-grade-certainty": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "pubmed-llm-clinical-evaluation": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "arxiv-cs-cl-clinical": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "pubmed-bibliometrics-medicine": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "research-square-preprints": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "arxiv-eess-iv-medical-imaging": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "tmtpost-health": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "anthropic-news": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "meta-newsroom-tech": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "microsoft-research-blog": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "nvidia-blog": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "qwen-blog": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "the-verge-ai": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "arxiv-qbio-qm": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "wired-ai": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "techcrunch-ai": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "ars-technica-ai": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "ieee-spectrum-ai": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "understanding-ai": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "geekpark": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "ithome": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "xtalpi": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "ai-normal-technology": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "zotero-blog": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "paperpal-blog": {
+  "enabled": true,
+  "_why_enabled_20260929": "Protected source probe returned parsed entries; captured response and replay fixture: tests/fixtures/source-expansion-20260929/probe-captures.json."
+ },
+ "fierce-healthcare": {
+  "enabled": false,
+  "disabled_reason": "owner_excluded",
+  "_why_owner_excluded": "Permanent owner exclusion adopted 2026-09-29. Source expansion and selector recovery must not re-enable this source, regardless of readability or launch tier."
+ },
+ "fda-cber-whats-new": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main table.table tbody tr",
+    "title": "td:nth-child(2) a",
+    "link": "td:nth-child(2) a@href",
+    "date": "td:first-child"
+   },
+   "date_format": "%m/%d/%Y"
+  }
+ },
+ "fda-drug-safety-communications": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main table[summary='Drug Safety Communications'] tbody tr",
+    "title": "td:nth-child(2) a",
+    "link": "td:nth-child(2) a@href",
+    "date": "td:first-child"
+   },
+   "date_format": "%m-%d-%Y",
+   "selector_fallbacks": [
+    {
+     "item": "main table tbody tr",
+     "title": "td:nth-child(2) a",
+     "link": "td:nth-child(2) a@href",
+     "date": "td:first-child"
+    }
+   ]
+  }
+ },
+ "fda-ai-enabled-device-list": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main table[role='grid'] tbody tr",
+    "title": "td:nth-child(3)",
+    "link": "td:nth-child(2) a@href",
+    "date": "td:first-child",
+    "summary": "td:nth-child(4)"
+   },
+   "date_format": "%m/%d/%Y",
+   "link_hosts": [
+    "www.fda.gov",
+    "www.accessdata.fda.gov"
+   ],
+   "title_template": "FDA AI-enabled device: {title}"
+  }
+ },
+ "cms-newsroom": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": ".view-newsroom-articles .views-row",
+    "title": "h3",
+    "link": "a.newsroom-main-view-link@href",
+    "date": "time@datetime",
+    "summary": ".newsroom-main-view-body"
+   },
+   "selector_fallbacks": [
+    {
+     "item": ".view-newsroom-articles .views-row",
+     "title": "h3",
+     "link": "a@href",
+     "date": "time@datetime"
+    }
+   ]
+  }
+ },
+ "nice-news": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main article[class*='Story_'], main article[class*='NewsCard_']",
+    "title": "h3 a",
+    "link": "h3 a@href",
+    "date": "time@datetime"
+   },
+   "selector_fallbacks": [
+    {
+     "item": "article[class*='Story_'], article[class*='NewsCard_']",
+     "title": "h3 a",
+     "link": "h3 a@href",
+     "date": "time@datetime"
+    }
+   ],
+   "link_hosts": [
+    "www.nice.org.uk",
+    "indepth.nice.org.uk"
+   ]
+  }
+ },
+ "nice-news-05": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main article",
+    "title": "h3 a",
+    "link": "h3 a@href",
+    "date": "time@datetime"
+   },
+   "selector_fallbacks": [
+    {
+     "item": "article",
+     "title": "h3 a",
+     "link": "h3 a@href",
+     "date": "time@datetime"
+    }
+   ]
+  }
+ },
+ "nice-published-guidance": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main table tbody tr",
+    "title": "td:first-child a",
+    "link": "td:first-child a@href",
+    "date": "td:nth-child(3) time@datetime",
+    "id": "td:nth-child(2)"
+   }
+  }
+ },
+ "nice-in-consultation": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "main table tbody tr",
+    "title": "td:first-child a",
+    "link": "td:first-child a@href",
+    "summary": "td:nth-child(4)"
+   },
+   "summary_template": "Consultation closes: {summary}"
+  }
+ },
+ "taiwan-fda-announcements": {
+  "enabled": true,
+  "_why_enabled_20260929": "Permitted HTTPS relay response replayed against source-specific selectors; dated entries and stable public links verified in tests/fixtures/source-expansion-20260929/probe-captures.json. Consultation deadlines remain summary text, never publication dates.",
+  "config": {
+   "selectors": {
+    "item": "table.listTable tbody tr",
+    "title": "td:nth-child(2) a",
+    "link": "td:nth-child(2) a@href",
+    "date": "td:nth-child(3)"
+   },
+   "selector_fallbacks": [
+    {
+     "item": "#mainContent table tbody tr",
+     "title": "td:nth-child(2) a",
+     "link": "td:nth-child(2) a@href",
+     "date": "td:nth-child(3)"
+    }
+   ]
+  }
  }
 }
