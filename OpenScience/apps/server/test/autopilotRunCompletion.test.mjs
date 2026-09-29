@@ -120,3 +120,11 @@ test("a proven pre-prompt pause is canceled without folding a scientific failure
   assert.equal(f.calls.filter(call => call[0] === "canceled").length, 1);
   assert.equal(f.calls.filter(call => call[0] === "release").length, 1);
 });
+
+test("an expired worker's proven unsent lease loss records facts without science outcomes or runtime cleanup", async () => {
+  const f = fixture();
+  f.run.status="failed"; f.run.dispatchStatus="rejected"; f.run.errorCode="product_job_lease_lost";
+  f.dependencies.service.recordUnsentAttempt=async(...args)=>f.calls.push(["unsent",...args]);
+  await completeOwnedAutopilotRun(f.dependencies,f.project,f.run);
+  assert.deepEqual(f.calls.map(call=>call[0]),["unsent"]);
+});

@@ -287,3 +287,21 @@ test("the dispatcher can recheck pause and lease after an awaited balance check 
   assert.equal(f.calls.some(call => call.method === "failed"), false);
   assert.equal(f.calls.find(call => call.method === "finish").args[3].reason, "agenda_inactive");
 });
+
+test("a new owner gets a distinct dispatch attempt while keeping the episode billing identity", async () => {
+  const f = fixture(); const job = await f.worker.jobs.claim(); job.attempts=2;
+  f.service.getEpisode=async()=>({id:"episode-one",projectId:"project-one",payload:{status:"running",runId:"old-run"}});
+  await f.worker.tick();
+  const dispatched = f.calls.find(call=>call.method==="dispatch").args[0];
+  assert.equal(dispatched.dispatchId,"episode-one-a2");
+  assert.equal(dispatched.episodeId,"episode-one");
+  assert.equal(dispatched.previousRunId,"old-run");
+});
+
+test("waiting for an earlier dispatch to settle spends no scientific failure or cancellation", async () => {
+  const f = fixture({dispatchError:Object.assign(new Error("Earlier dispatch pending"),{code:"autopilot_dispatch_pending"})});
+  f.service.recordResourceDeferral=async(...args)=>f.calls.push({method:"resourceDeferred",args});
+  await f.worker.tick();
+  assert.equal(f.calls.some(call=>call.method==="failed"||call.method==="cancelDispatched"),false);
+  assert.equal(f.calls.find(call=>call.method==="jobFail").args[4].retry,true);
+});

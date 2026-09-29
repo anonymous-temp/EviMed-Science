@@ -1184,3 +1184,19 @@ test("a concurrent new follow-up cannot prevent the frozen episode from consumin
   assert.doesNotMatch(next.episode.payload.prompt,/Original question/);
   assert.match(next.episode.payload.prompt,/Later question/);
 });
+
+test("a proven unsent lease loss is neutral, retryable and cannot rewind a newer run", async () => {
+  const { service } = fixture(); let agenda = await service.create("user-one",agendaInput);
+  agenda = await service.start("user-one",agenda.id,{expectedRevision:agenda.revision});
+  const {episode} = await service.schedule("user-one",agenda.id,{date:"2026-09-06"});
+  await service.markEpisodeDispatched("user-one",episode.id,{runId:"old-run",sessionId:"old-session"});
+  const run = {id:"old-run",sessionId:"old-session",dispatchId:episode.id,status:"failed",dispatchStatus:"rejected",errorCode:"product_job_lease_lost"};
+  const recovered = await service.recordUnsentAttempt("user-one",episode.id,{projectId:agenda.projectId,run});
+  assert.equal(recovered.payload.status,"queued"); assert.equal(recovered.payload.runId,null);
+  assert.equal(recovered.payload.unsentAttempts[0].runId,"old-run");
+  assert.deepEqual((await service.get("user-one",agenda.id)).payload.outcomes,[]);
+  await service.markEpisodeDispatched("user-one",episode.id,{runId:"new-run",sessionId:"new-session"});
+  await service.recordUnsentAttempt("user-one",episode.id,{projectId:agenda.projectId,run});
+  assert.equal((await service.getEpisode("user-one",episode.id)).payload.runId,"new-run");
+  await assert.rejects(service.recordUnsentAttempt("user-one",episode.id,{projectId:agenda.projectId,run:{...run,dispatchStatus:"unknown"}}), {code:"autopilot_episode_state_conflict"});
+});
