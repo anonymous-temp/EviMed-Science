@@ -150,6 +150,8 @@ import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // the two reader actions, and the composer the worker ticks.
 import { FrontierEvents } from "./frontierEvents.mjs";
 import { FrontierDaily } from "./frontierDaily.mjs";
+import { FrontierWeekly } from "./frontierWeekly.mjs";
+import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
@@ -1415,7 +1417,8 @@ export function createWebApiApp(overrides = {}) {
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles } | null} */
+   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
     const client = new KnowledgePluginClient({
@@ -1442,6 +1445,10 @@ export function createWebApiApp(overrides = {}) {
     const events = new FrontierEvents({ database: productDatabase, editor, embedder, config, budget });
     const daily = new FrontierDaily({ database: productDatabase, jobs: productJobs, notifications: notificationService, editor, events, config,
       owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
+    const weekly = new FrontierWeekly({ database: productDatabase, jobs: productJobs, owner: () => editor.owner, config,
+      workerId: randomId("frontier-weekly-") });
+    const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
+      notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
     const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
@@ -1465,8 +1472,8 @@ export function createWebApiApp(overrides = {}) {
       } : null,
       ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder,
-      dimension: config.kbEmbeddingDimension, budget, events, daily, profiles, actions });
-    const composer = new FrontierComposer({ events, daily, profiles,
+      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, profiles, actions });
+    const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     const worker = new FrontierWorker({
@@ -1481,7 +1488,7 @@ export function createWebApiApp(overrides = {}) {
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles };
+    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
@@ -2969,6 +2976,7 @@ export function createWebApiApp(overrides = {}) {
     users: store, agentRuns, runtimeManager, usageLedger, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
+    frontierDeliveryPolicy: (item) => frontier?.notifications.deliveryAllowed(item) ?? Promise.resolve(false),
     steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
