@@ -95,7 +95,7 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
   assert.ok(shellStylesheet(GEOMETRY_KERNEL_PIN).startsWith(`/* evimed-shell: selectors read against dsh-client ${GEOMETRY_KERNEL_PIN} */`));
 });
 
-test("the kernel's instruments are hidden for every account; a turn's footer keeps copy, branch and time", () => {
+test("operators can use native kernel statistics while ordinary reader chrome stays compact", () => {
   const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
   // The session statistics under the composer, by their stable data attribute.
   assert.ok(css.includes('[data-composer-stats]{display:none !important}'));
@@ -108,13 +108,14 @@ test("the kernel's instruments are hidden for every account; a turn's footer kee
   // tool-view outlet anchor (both anchors `display:contents`); a call with
   // sub-calls keeps its row.
   assert.ok(css.includes('[data-chat-flow-kind="tool-call"]:has(> [data-slot="conversation.chat.node"] > [data-chat-call-id] > [data-slot="tool.call.toolview"]:only-child:empty){display:none !important}'));
-  // None of it depends on who is looking: the rules carry no operator switch.
+  // The host supplies the existing operator flag; this is presentation only.
   const operator = fixture();
   operator.target.__EVIMED_FRAME__.operator = true;
   const kit = kitFor(operator.ctx, operator.target);
   apply(operator.ctx, {}, operator.target, undefined, kit);
   const sheet = operator.target.document.head.children.find((/** @type {any} */ node) => 'data-evimed-shell' in node.attributes);
-  assert.ok(sheet.textContent.includes('[data-composer-stats]{display:none !important}'));
+  assert.ok(!sheet.textContent.includes('[data-composer-stats]{display:none !important}'));
+  assert.ok(!sheet.textContent.includes('[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}'));
 });
 
 test('a slot the kernel refuses costs that slot, never the rest of the body', () => {
