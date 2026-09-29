@@ -36,3 +36,15 @@ def test_failed_job_with_only_bookkeeping_does_not_claim_partial_results(tmp_pat
                                  "/api/v1/evimed/bibliometric-analysis")
     assert code == 3 and status["status"] == "error"
     assert not status.get("artifacts")
+
+
+def test_invalid_result_metadata_preserves_safe_partial_outputs(tmp_path, monkeypatch):
+    module, client, secret, workspace, agent, _, _ = _setup(tmp_path, monkeypatch)
+    (agent / "evimed_runner.py").write_text(RUNNER + "(out/'result.json').write_text('{broken')\nraise SystemExit(7)\n")
+    code, job_id, status = _complete(module, client, secret, {"topic": "sepsis"}, monkeypatch,
+                                     "/api/v1/evimed/bibliometric-analysis")
+    assert code == 7 and status["status"] == "error"
+    assert any(row["path"].endswith("report.md") for row in status["artifacts"])
+    assert 'metadata' in status['summary'].lower()
+    state = json.loads((workspace / 'bibliometric-analysis-runs' / '.jobs' / f'{job_id}.json').read_text())
+    assert state['status'] == 'failed' and state['returnCode'] == 7
