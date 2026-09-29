@@ -109,6 +109,7 @@ import {
   unmetDependencies,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
+import { collectSubagentRun } from '../src/subagentRun.mjs'
 import { answerReview, reviewIssues, reviewSummary, runReview } from '../src/review.mjs'
 import { capSkillBodies } from '../src/skillBodies.mjs'
 import { proseShape } from '../src/proseShape.mjs'
@@ -436,13 +437,50 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     })
   }
 
-  /** @param {Record<string, any>} run @param {string} childSessionId */
-  const awaitOwnedSubagent = async (run, childSessionId) => {
-    try {
-      return toSubagentOutcome(run, await run.result)
-    } finally {
-      childOwners.delete(childSessionId)
-    }
+  /**
+   * A child's outcome, once it is in — and the child released after it.
+   *
+   * Released here because nothing else releases it: the run is ours from the
+   * moment `startSubagent` resolves, and a run nobody disposes keeps the
+   * child's agent, live session and scope in the kernel until this parent is
+   * torn down (see `src/subagentRun.mjs`). After the result, never before it:
+   * a release before the result cancels the child. A child this run wants
+   * stopped is stopped through its signal, and comes through here as
+   * `aborted`.
+   *
+   * A result that rejects still rejects, after the release; a release that
+   * fails is recorded and changes nothing about the outcome.
+   * @param {Record<string, any>} run @param {string} childSessionId @param {string} sessionId the parent's
+   */
+  const awaitOwnedSubagent = async (run, childSessionId, sessionId) => {
+    const collection = await collectSubagentRun(run)
+    childOwners.delete(childSessionId)
+    if (collection.releaseError) diagnostics(sessionId)?.degrade?.(`child session ${childSessionId || '(unnamed)'} not released: ${collection.releaseError}`)
+    if (!collection.ok) throw collection.error
+    return toSubagentOutcome(run, collection.settled)
+  }
+
+  /**
+   * Stop and release a child whose start succeeded but whose bookkeeping did
+   * not, so no one will follow it.
+   *
+   * The kernel handles the same moment the same way when its own catalogue
+   * append fails after a start (`SubagentRuntime.start`): the run is cancelled
+   * and disposed, and the caller gets the original error. Here the cancel goes
+   * through the delegation's own abort, like every other cancellation in this
+   * file, so the result still settles before the release. Not awaited: the
+   * caller holds the run lock, and a child that reached its submission would
+   * be waiting for that lock.
+   * @param {any} run @param {AbortController} abort @param {string} sessionId the parent's
+   * @param {unknown} error what the bookkeeping threw
+   */
+  const abandonStartedChild = (run, abort, sessionId, error) => {
+    const childSessionId = toSubagentOutcome(run, null).childSessionId
+    abort.abort(new Error(`子代理的启动记录没有写成：${errorMessage(error)}`))
+    childOwners.delete(childSessionId)
+    void awaitOwnedSubagent(run, childSessionId, sessionId).catch((failure) => {
+      diagnostics(sessionId)?.degrade?.(`stopped child session ${childSessionId || '(unnamed)'} ended in a fault: ${errorMessage(failure)}`)
+    })
   }
 
   /**
@@ -1519,43 +1557,54 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             // leaves a job that can never settle and cannot be retried.
             return refusal('subagent_start_failed', `分工没有启动：${errorMessage(error)}`)
           }
-          const runId = entry.runId
-          const sequence = [...entry.delegations.values()].filter((delegation) => delegation.deliverableId === item.id).length + 1
-          const handle = `${item.id}#${sequence}`
-          // Recorded as soon as the child has actually started, and again when
-          // it settles. The `subagents` medium had no writer at all:
-          // `projectRunState` published an empty array beside a
-          // `budget.children` that counted delegations, so the durable record
-          // said "no children" for a run that had them.
-          const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run, { handle }, runId)
-          bindChildOwner(childSessionId, entry, item)
-          entry.budget.children += 1
-          Object.assign(item, advancePlanItem(item, 'delegate'))
           /** @type {Record<string, any>} */
-          const delegation = {
-            handle,
-            runId,
-            deliverableId: item.id,
-            capability: item.capability,
-            childSessionId,
-            status: 'running',
-            startedAt: new Date().toISOString(),
-            abort,
-            reported: false,
-            retried: false,
+          let delegation
+          // From here until `followDelegation` holds the run, a throw would
+          // leave a started child that nobody follows and nobody releases —
+          // `advancePlanItem` refuses an item in a state that cannot be
+          // delegated, and it runs after the start. So a throw here stops that
+          // child before it goes on.
+          try {
+            const runId = entry.runId
+            const sequence = [...entry.delegations.values()].filter((earlier) => earlier.deliverableId === item.id).length + 1
+            const handle = `${item.id}#${sequence}`
+            // Recorded as soon as the child has actually started, and again when
+            // it settles. The `subagents` medium had no writer at all:
+            // `projectRunState` published an empty array beside a
+            // `budget.children` that counted delegations, so the durable record
+            // said "no children" for a run that had them.
+            const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run, { handle }, runId)
+            bindChildOwner(childSessionId, entry, item)
+            entry.budget.children += 1
+            Object.assign(item, advancePlanItem(item, 'delegate'))
+            delegation = {
+              handle,
+              runId,
+              deliverableId: item.id,
+              capability: item.capability,
+              childSessionId,
+              status: 'running',
+              startedAt: new Date().toISOString(),
+              abort,
+              reported: false,
+              retried: false,
+            }
+            entry.delegations.set(handle, delegation)
+            // The receipt's digests, computed beside the running child rather than
+            // in front of it. See `delegationReceipt` for why the order matters.
+            const receipt = delegationReceipt(ctx, runId, item.id, skillBodies, childSessionId)
+            delegation.settled = followDelegation(entry, delegation, run, { request, receipt, injected, signal, parentAgentId: call.agentId })
+          } catch (error) {
+            abandonStartedChild(run, abort, entry.sessionId, error)
+            throw error
           }
-          entry.delegations.set(handle, delegation)
-          // The receipt's digests, computed beside the running child rather than
-          // in front of it. See `delegationReceipt` for why the order matters.
-          const receipt = delegationReceipt(ctx, runId, item.id, skillBodies, childSessionId)
-          delegation.settled = followDelegation(entry, delegation, run, { request, receipt, injected, signal, parentAgentId: call.agentId })
           await putPlanIndex(store(), entry)
           await putRunMirror(ctx, entry, config.bundleVersion)
           // The child's own session id is in the reply the moment it exists: the
           // control plane finds delegated children in the parent's transcript by
           // this field, and while the tool waited for the child the field did not
           // exist until the child was done.
-          return { ok: true, data: { handle, deliverableId: item.id, childSessionId, status: 'started' } }
+          return { ok: true, data: { handle: delegation.handle, deliverableId: item.id, childSessionId: delegation.childSessionId, status: 'started' } }
         })
       },
     })
@@ -1582,7 +1631,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     let run = firstRun
     try {
       for (;;) {
-        const outcome = await awaitOwnedSubagent(run, delegation.childSessionId)
+        const outcome = await awaitOwnedSubagent(run, delegation.childSessionId, entry.sessionId)
         const receipt = await context.receipt
         const retry = await withRunLock(entry, () => settleRound(entry, delegation, outcome, receipt, context))
         if (!retry) return
@@ -1678,11 +1727,19 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
       return finishDelegation(entry, delegation, 'failed', { ...report, reason: `${settlement.reason} 重派没有启动：${errorMessage(error)}` })
     }
-    delegation.retried = true
-    delegation.childSessionId = recordStartedSubagent(ctx, entry, item, context.injected, retry, { retried: true, handle: delegation.handle, skillDigests, methods }, delegation.runId)
-    bindChildOwner(delegation.childSessionId, entry, item)
-    await putPlanIndex(store(), entry)
-    await putRunMirror(ctx, entry, config.bundleVersion)
+    // The retry is followed only once it is returned; a throw before that is
+    // a started child nobody would release, so it is stopped instead and the
+    // delegation fails with the error, as it did before.
+    try {
+      delegation.retried = true
+      delegation.childSessionId = recordStartedSubagent(ctx, entry, item, context.injected, retry, { retried: true, handle: delegation.handle, skillDigests, methods }, delegation.runId)
+      bindChildOwner(delegation.childSessionId, entry, item)
+      await putPlanIndex(store(), entry)
+      await putRunMirror(ctx, entry, config.bundleVersion)
+    } catch (error) {
+      abandonStartedChild(retry, delegation.abort, entry.sessionId, error)
+      throw error
+    }
     return retry
   }
 
