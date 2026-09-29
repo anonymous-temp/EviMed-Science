@@ -68,3 +68,19 @@ test('the pinned native registry dispatches concurrent decorated bodies without 
   unregister()
   dispose()
 })
+
+test('MCP reconnect releases the old definition and decorates its replacement', () => {
+  const execute = async () => ({ completed: true })
+  let current = { name: 'mcp__evimed__meta_analysis', execute }
+  const old = current
+  let changed = () => {}
+  const dispose = port.decorateEngineToolContext({ tools: { get: (/** @type {string} */ name) => name === current.name ? current : undefined },
+    on: (/** @type {string} */ _name, /** @type {() => void} */ fn) => { changed = fn; return () => {} } })
+  assert.notEqual(old.execute, execute)
+  current = { name: old.name, execute }
+  changed()
+  assert.equal(old.execute, execute, 'unregistered client closure is released')
+  assert.notEqual(current.execute, execute)
+  dispose()
+  assert.equal(current.execute, execute)
+})
