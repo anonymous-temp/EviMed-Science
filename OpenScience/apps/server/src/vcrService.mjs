@@ -35,8 +35,8 @@
  */
 
 import {
-  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_STEPS,
-  VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows,
+  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER, VCR_STEPS,
+  VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -44,12 +44,13 @@ import { VCR_DEFAULT_STUDY_NAME } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
-  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, presentTodos, useCeilingOf,
+  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, presentTodos, useCeilingOf, vcrReviewIsCurrent,
 } from "./vcrViews.mjs";
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
 import { numeric } from "./vcrViewsKit.mjs";
+import { vcrReportModel } from "./vcrRender.mjs";
 
 export { VCR_DEFAULT_STUDY_NAME };
 
@@ -58,19 +59,22 @@ export const VCR_READ_MAX_ITEMS = 50;
 
 /** What a runtime read may ask for. Closed; the MCP tool's schema copies it. */
 export const VCR_READ_WHATS = Object.freeze([
-  "study", "definition", "criteria", "assumptions", "population", "patients", "comparator", "trial",
-  "precedents", "matching", "results", "snapshot_profile", "models", "jobs", "trial_registry_record",
+  "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
+  "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
+  "trial_registry_record",
 ]);
 
 /**
  * What a runtime write may write. Definitions, conditions, assumptions,
- * designs, decisions and report text — never a result number, a count or an
- * execution record (build contract §3.2). Those come from the engine, and a
- * model that could write them could write anything.
+ * designs, decisions, evidence values, patient facts and report text — never a
+ * result number, a count or an execution record (build contract §3.2). Those
+ * come from the engine, and a model that could write them could write anything.
+ * Referrals are not here: the control plane makes them from assessments.
  */
 export const VCR_WRITE_WHATS = Object.freeze([
-  "definition", "protocol", "criteria", "assumption", "population", "patient_set", "comparator",
-  "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step",
+  "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
+  "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
+  "fact", "language_judgment", "site", "followup", "field_map",
 ]);
 
 /** @param {unknown} value */
@@ -257,11 +261,11 @@ export class VcrService {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
    *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
-   *   matchStore?: any, evidenceStore?: any }} options
+   *   matchStore?: any, evidenceStore?: any, documents?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
     access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
-    matchStore = null, evidenceStore = null }) {
+    matchStore = null, evidenceStore = null, documents = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -275,7 +279,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -411,8 +415,15 @@ export class VcrService {
   /** `PATCH /api/vcr/studies/:id`. @param {{ id: string }} user @param {string} id @param {Record<string, any>} patch */
   async updateStudy(user, id, patch) {
     const study = await this.requireStudy(user, id);
-    const updated = await this.store.updateStudy(study.id, patch, String(user.id));
+    const { action, ...fields } = patch ?? {};
+    let updated = await this.store.updateStudy(study.id, fields, String(user.id));
     if (!updated) throw failure(404, "vcr_study_not_found", "Study not found.");
+    if (action !== undefined) {
+      // A changed 起点 re-asks which steps run; a step already done stays done,
+      // it is only no longer requested of the programme.
+      const wanted = new Set(vcrRequestedSteps(action === "auto" ? undefined : action));
+      for (const step of VCR_STEPS) updated = await this.store.setStep(study.id, step, { requested: wanted.has(step) }) ?? updated;
+    }
     return updated;
   }
 
@@ -455,7 +466,7 @@ export class VcrService {
     ]);
     const headline = results.find((result) => result.kind === "trial_scenario") ?? results[0] ?? null;
     const seal = vcrSealState(study);
-    const ceiling = await this.#useCeiling(study, results);
+    const ceiling = useCeilingOf({ study, results, reviews, stale });
     return {
       id: study.id, projectId: study.projectId, name: study.name, question: study.question,
       dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status,
@@ -479,15 +490,6 @@ export class VcrService {
     };
   }
 
-  /**
-   * The highest use this study's results can be labelled with, and why — the
-   * one implementation lives with the presenter (`useCeilingOf`).
-   * @param {any} study @param {any[]} results
-   */
-  async #useCeiling(study, results) {
-    return useCeilingOf({ study, results, reviews: await this.store.reviews(study.id) });
-  }
-
   /** @param {any[]} reviews @param {any[]} results @param {any[]} stale */
   #reviewView(reviews, results, stale) {
     const staleNodes = new Set(stale.map((mark) => String(mark.node)));
@@ -498,11 +500,11 @@ export class VcrService {
         // A review countersigns one version; if any of them moved it reads
         // `changed_after_review` (AC-21). The node list is what moved, not the
         // review, which is why the state is derived and never stored.
-        state: review.nodes.some((node) => staleNodes.has(node))
+        state: !vcrReviewIsCurrent(review, { results, stale })
           ? "changed_after_review"
           : reviewStateFor({ reviewedNodes: review.nodes, currentNodes: [...new Set([...current, ...review.nodes.filter((node) => !staleNodes.has(node))])] }),
       })),
-      reviewed: reviews.length > 0,
+      reviewed: reviews.some((review) => vcrReviewIsCurrent(review, { results, stale })),
       kinds: [...new Set(reviews.map((review) => review.kind))],
     };
   }
@@ -716,8 +718,12 @@ export class VcrService {
       || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0) || a.subjectKey.localeCompare(b.subjectKey));
     const focus = listed.find((subject) => subject.subjectKey === query.candidate) ?? listed[0] ?? null;
     const selected = focus ? await matchStore.getAssessment(focus.id).catch(() => null) : null;
+    // Who moved the person's referral, to where, and when: every step of the
+    // ledger leaves its mark (plan §7.2), and the detail panel shows it.
+    const focusReferral = focus ? referrals.find((referral) => referral.subjectKey === focus.subjectKey) ?? null : null;
+    const referralEvents = focusReferral ? await matchStore.listReferralEvents(focusReferral.id).catch(() => []) : [];
     return {
-      protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, openByAssessment,
+      protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, referralEvents, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
       gapsByCriterion: new Map(gapRows.map((row) => [String(row.criterion_id), { unknown: Number(row.unknown) }])),
       pendingReview: reviewRows.map((row) => String(row.subject_key)),
@@ -802,13 +808,61 @@ export class VcrService {
     return presentPrecedents({ available: true, rows, sources: rows.length ? `${rows.length} 项试验先例` : null });
   }
 
-  // --- the runtime's read (build contract §3.2) ------------------------------------------
+  // --- the runtime's read (build contract §3.2, §4) ---------------------------------------
+
+  /**
+   * The smallest cell a model is shown: the domain's floor, raised (never
+   * lowered) by the deployment. A boundary that a configuration could loosen to
+   * two people would be a setting, not a control.
+   */
+  get minCell() {
+    const configured = Number(this.config?.vcrMinCellSize);
+    return Number.isInteger(configured) && configured > VCR_MIN_CELL_SIZE ? configured : VCR_MIN_CELL_SIZE;
+  }
+
+  /**
+   * Everything a model may read passes through here, exactly once: the domain's
+   * `suppressForModel`, over every object and array to any depth (build
+   * contract §4). A payload the boundary cannot finish — a cycle, a nesting no
+   * store produces — is refused whole rather than passed on unfinished; a
+   * boundary that stops walking and lets the rest through has a hole in it.
+   * Applying it twice would hide more than once (a hidden cell reads as zero),
+   * so a caller hands over data that has not been through it.
+   * @param {unknown} payload
+   */
+  forModel(payload) {
+    try {
+      return suppressForModel(payload, { minCell: this.minCell });
+    } catch {
+      throw failure(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
+    }
+  }
+
+  /**
+   * The render root of a report: the document a template's `{{n:…}}` references
+   * bind to, built from the study's own rows (`vcrReportModel`). Exact — the
+   * platform renders it into the package a study member reads. What a run reads
+   * of it goes through {@link forModel}.
+   * @param {any} study
+   */
+  async reportModel(study) {
+    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models] = await Promise.all([
+      this.store.latestDefinition(study.id), this.store.assumptions(study.id), this.store.results(study.id),
+      this.store.reviews(study.id), this.store.staleMarks(study.id), this.store.latestPopulation(study.id),
+      this.store.latestComparatorDesign(study.id), this.store.trialScenarios(study.id, 60), this.store.models(study.userId),
+    ]);
+    return vcrReportModel({ study, definition, assumptions, results, reviews, staleMarks: stale, population, comparator,
+      scenarios, models, seal: vcrSealState(study) });
+  }
 
   /**
    * What a run may read. **Aggregates and structure only**: no row of any
    * person ever appears here, and a cell speaking for fewer than
-   * `VCR_MIN_CELL_SIZE` people is suppressed by the data plane's own
-   * `suppressSmallCells` before it leaves (plan §8.1, AC-26).
+   * `minCell` people is suppressed by the domain's `suppressForModel` before it
+   * leaves (plan §8.1, AC-26) — for every `what`, with no exception listed. The
+   * one thing that is per person is `subject_document`, whose whole point is
+   * the person's own record, so it is judged and audited per read and answers
+   * with a pseudonymous key and nothing that names anyone.
    *
    * @param {any} study @param {string} what @param {Record<string, any>} [filter]
    */
@@ -817,8 +871,12 @@ export class VcrService {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
     this.counters.reads += 1;
+    return this.forModel(await this.#runtimeRead(study, what, filter));
+  }
+
+  /** @param {any} study @param {string} what @param {Record<string, any>} filter */
+  async #runtimeRead(study, what, filter) {
     const limit = Math.min(VCR_READ_MAX_ITEMS, Math.max(1, Number(filter.limit ?? 20)));
-    const suppress = this.packages.dataPlane?.suppressSmallCells ?? ((value) => value);
     switch (what) {
       case "study": {
         const [definition, stale, budget] = await Promise.all([
@@ -833,17 +891,37 @@ export class VcrService {
         versions: (await this.store.definitionVersions(study.id)).map((version) => ({ version: version?.version, createdAt: version?.createdAt })) };
       case "criteria": {
         const protocol = await this.store.latestProtocolVersion(study.id);
-        return { protocol, criteria: protocol ? await this.store.criteria(protocol.id) : [] };
+        // The matching store's criteria carry their applicability beside the requirement.
+        const criteria = protocol
+          ? (this.packages.matchStore ? await this.packages.matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await this.store.criteria(protocol.id))
+          : [];
+        return { protocol, criteria };
       }
       case "assumptions": {
         const assumptions = await this.store.assumptions(study.id);
         return { assumptions: assumptions.slice(0, limit), more: assumptions.length > limit };
       }
+      case "evidence": {
+        const evidence = this.packages.evidence;
+        if (!evidence?.evidenceRead) {
+          return { available: false, code: "vcr_evidence_unavailable", message: "证据参数化未接入：这一步暂不可用，其余步骤照常。" };
+        }
+        return evidence.evidenceRead(study, { ...filter, limit });
+      }
       case "population": {
         const populations = await this.store.populations(study.id, limit);
-        return { populations: await suppress(populations.map((population) => ({ ...population, counts: vcrCountBand(population.counts) }))) };
+        return { populations: populations.map((population) => ({ ...population, counts: vcrCountBand(population.counts) })) };
       }
-      case "patients": return { patientSets: (await this.store.patientSets(study.id, limit)).map((set) => ({ ...set, counts: vcrCountBand(set.counts) })) };
+      case "patients": {
+        // 「数字孪生」 is a label a model's evidence earns, and the run may not
+        // write it: it is read off the model's own evidence here, every time.
+        const [sets, models] = await Promise.all([this.store.patientSets(study.id, limit), this.store.models(study.userId)]);
+        return { patientSets: sets.map((set) => {
+          const model = models.find((row) => row.id === set.modelId || row.name === set.modelId) ?? null;
+          const held = list(model?.evidence).map(String);
+          return { ...set, counts: vcrCountBand(set.counts), twinLabel: model ? twinLabel(held) : null };
+        }) };
+      }
       case "comparator": return { designs: await this.store.comparatorDesigns(study.id, limit), routes: vcrRouteOptions(study.dataTier) };
       case "trial": return { scenarios: await this.store.trialScenarios(study.id, limit), grid: await this.store.latestDesignGrid(study.id),
         forecasts: await this.store.forecasts(study.id) };
@@ -852,6 +930,7 @@ export class VcrService {
         const stale = await this.store.staleMarks(study.id);
         return { results: results.slice(0, limit).map((result) => this.#resultView(result, stale)), more: results.length > limit };
       }
+      case "report_model": return { model: await this.reportModel(study) };
       case "jobs": return { jobs: await this.store.jobs(study.id, limit) };
       case "models": return { models: await this.store.models(study.userId), methods: await this.store.methods() };
       case "snapshot_profile": {
@@ -859,7 +938,17 @@ export class VcrService {
         if (!dataPlane?.runtimeProfile) {
           return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面未接入：这一步暂不可用，其余步骤照常。" };
         }
+        // Bound to this study and judged (and audited) there: a snapshot of
+        // another study, or one the study's owner may not read, is refused by
+        // name, never profiled.
         return dataPlane.runtimeProfile(study, filter);
+      }
+      case "subject_document": {
+        const documents = this.packages.documents;
+        if (!documents?.subjectDocuments) {
+          return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面未接入病历文档：这一步暂不可用，其余步骤照常。" };
+        }
+        return documents.subjectDocuments(study, { ...filter, limit });
       }
       case "matching": {
         const matching = this.packages.matching;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { MessageSquare, MoreHorizontal, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -30,6 +30,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { StudyTags } from "@/components/vcr/VcrMarks";
 import { VcrOffPage, VcrStudySkeleton } from "@/components/vcr/VcrStates";
 import { cpuTimeText, jobsAwaitingBudget, VcrBudgetDialog } from "@/components/vcr/VcrBudgetDialog";
+import { VcrMembersDialog } from "@/components/vcr/VcrMembersDialog";
 import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
 import { useOpenVcrConversation } from "@/components/vcr/useOpenVcrConversation";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
@@ -153,17 +154,15 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
   const [opening, setOpening] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
-  const holding = useRef(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const packageId = params.get("package");
   const Tab = TABS[tab];
-
-  /** One write at a time (CW-18): a second click while the first is in flight does nothing. */
-  const once = (work: () => Promise<unknown>) => {
-    if (holding.current) return;
-    holding.current = true;
-    void work().finally(() => { holding.current = false; });
-  };
+  // What this reader may do here, from the roles the server says they hold:
+  // the menu offers only the actions that will not be refused (the routes check
+  // for themselves, per operation — this is presentation).
+  const can = (ability: string) => study.abilities.includes(ability);
 
   const exportAs = (kind: VcrExportKind, failure: string) => {
     // A deferred export stays on the page with its sentence; the overview's
@@ -172,30 +171,45 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
   };
 
   const paused = study.status === "paused";
+  const setStatus = () => {
+    if (changingStatus) return;
+    setChangingStatus(true);
+    void patchVcrStudy(studyId, { status: paused ? "active" : "paused" })
+      .then(() => { toast.success(paused ? "已继续。" : "已暂停。"); reload(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究状态无法修改，请稍后重试。" })))
+      .finally(() => setChangingStatus(false));
+  };
   const menu: MenuEntry[] = [
-    { label: "导出研究包", disabled: running, onSelect: () => exportAs("study_package", "研究包暂时无法导出，请稍后重试。") },
-    { label: "导出 CDE 沟通交流资料包", disabled: running, onSelect: () => exportAs("cde_communication_pack", "资料包暂时无法导出，请稍后重试。") },
-    { label: "设定计算预算", onSelect: () => setBudgetOpen(true) },
-    {
-      label: paused ? "继续" : "暂停",
-      onSelect: () => once(() => patchVcrStudy(studyId, { status: paused ? "active" : "paused" })
-        .then(() => { toast.success(paused ? "已继续。" : "已暂停。"); reload(); })
-        .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究状态无法修改，请稍后重试。" })))),
-    },
-    "separator",
-    { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) },
+    ...(can("export") ? [
+      { label: "导出研究包", disabled: running, onSelect: () => exportAs("study_package", "研究包暂时无法导出，请稍后重试。") },
+      { label: "导出 CDE 沟通交流资料包", disabled: running, onSelect: () => exportAs("cde_communication_pack", "资料包暂时无法导出，请稍后重试。") },
+    ] : []),
+    // The compute budget, the study's status and its deletion are the lead's
+    // (`manage_study`): the second human stop is confirmed by the person who
+    // signs the study off, not by whoever queued the compute.
+    ...(can("manage_study") ? [{ label: "设定计算预算", onSelect: () => setBudgetOpen(true) }] : []),
+    ...(can("manage_members") ? [{ label: "成员与角色", onSelect: () => setMembersOpen(true) }] : []),
+    ...(can("manage_study") ? [
+      { label: paused ? "继续" : "暂停", disabled: changingStatus, onSelect: setStatus },
+      "separator" as const,
+      { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) },
+    ] : []),
   ];
 
-  const remove = () => once(() => {
+  const remove = () => {
+    if (deleting) return;
     setDeleting(true);
-    return deleteVcrStudy(studyId)
+    void deleteVcrStudy(studyId)
       .then(() => {
         toast.success("研究已从虚拟临研移除。");
         navigate(VCR_HOME_PATH, { replace: true });
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究无法删除，请稍后重试。" })))
-      .finally(() => { setDeleting(false); setConfirmDelete(false); });
-  });
+      .catch((error: unknown) => {
+        toast.error(webErrorMessage(error, { fallback: "研究无法删除，请稍后重试。" }));
+        setDeleting(false);
+        setConfirmDelete(false);
+      });
+  };
 
   const openStudyConversation = () => {
     if (opening) return;
@@ -216,9 +230,11 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>
-          <Menu label="更多操作" items={menu}>
-            <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
-          </Menu>
+          {menu.length > 0 && (
+            <Menu label="更多操作" items={menu}>
+              <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
+            </Menu>
+          )}
         </>
       )}
     >
@@ -250,6 +266,8 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
         </>
       )}
 
+      {membersOpen && <VcrMembersDialog studyId={studyId} onClose={() => setMembersOpen(false)} />}
+
       {budgetOpen && (
         <VcrBudgetDialog
           studyId={studyId}
@@ -264,7 +282,8 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
         <ConfirmDialog
           title={`删除“${study.name}”？`}
           body="研究会从虚拟临研移除；项目里的对话和文件仍在。"
-          confirmLabel={deleting ? "正在删除" : "删除"}
+          confirmLabel="删除"
+          busy={deleting}
           onConfirm={remove}
           onCancel={() => setConfirmDelete(false)}
         />
@@ -289,7 +308,6 @@ function JobStrip({ studyId, study, onBudget, onChanged }: {
   onChanged: () => void;
 }) {
   const [canceling, setCanceling] = useState<string | null>(null);
-  const holding = useRef(false);
   const jobs = study.jobs.filter((job) => LIVE_JOB_STATES.has(job.state));
   const waiting = jobsAwaitingBudget(study.jobs);
   const awaiting = study.budget?.awaitingBudget ?? 0;
@@ -297,13 +315,12 @@ function JobStrip({ studyId, study, onBudget, onChanged }: {
   const mayCancel = study.abilities.includes("run");
 
   const cancel = (job: VcrJob) => {
-    if (holding.current) return;
-    holding.current = true;
+    if (canceling !== null) return;
     setCanceling(job.id);
     void cancelVcrJob(studyId, job.id)
       .then(() => { toast.success("已取消。"); onChanged(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这项计算暂时无法取消，请稍后重试。" })))
-      .finally(() => { holding.current = false; setCanceling(null); });
+      .finally(() => setCanceling(null));
   };
 
   return (
@@ -314,7 +331,8 @@ function JobStrip({ studyId, study, onBudget, onChanged }: {
           <span className="min-w-0 flex-1">
             {`有 ${numberText(awaiting, 0)} 项计算等待预算确认${waiting.seconds > 0 ? ` · 需 ${cpuTimeText(waiting.seconds)} CPU 时间` : ""}`}
           </span>
-          <Button size="sm" onClick={onBudget}>确认预算</Button>
+          {/* Confirming is the lead's; anyone else sees the line and not a button that would be refused. */}
+          {study.abilities.includes("manage_study") && <Button size="sm" onClick={onBudget}>确认预算</Button>}
         </p>
       )}
       {jobs.length > 0 && (

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelVcrJob, confirmVcrBudget, contactVcrReferral, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
   getVcrPatients, getVcrPopulation, getVcrPrecedents, getVcrStudy, getVcrTrial, patchVcrStudy, readVcrCounts, readVcrValue, recordVcrDecision,
-  saveVcrAssumption, signVcrReview,
+  saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers, transitionVcrReferral,
   readVcrComparator, readVcrData, readVcrHome, readVcrMatching, readVcrModels, readVcrPatients, readVcrPopulation, readVcrStudy, readVcrTrial,
 } from "./vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
@@ -178,5 +178,41 @@ describe("the routes the client calls, and the bodies it posts", () => {
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/export`, "POST", { kind: "study_package" });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}`, "PATCH", { status: "paused" });
     expect(answer.runId).toBe("run_2");
+  });
+});
+
+describe("members and the referral ledger", () => {
+  it("reads the members as the route lists them, and drops a row with no account", async () => {
+    installVcrServer(network.productRequest, {
+      [`GET /vcr/studies/${STUDY_ID}/members`]: { members: [
+        { userId: "owner_1", owner: true, roles: ["lead"], roleLabels: ["研究负责人"], abilities: ["read"] },
+        { userId: "u_stat", owner: false, roles: ["statistical_reviewer"], roleLabels: ["统计复核"], invitedBy: "owner_1", createdAt: "2026-09-20T00:00:00Z" },
+        { owner: false, roles: [] },
+      ] },
+    });
+    const members = await getVcrMembers(STUDY_ID);
+    expect(members.map((member) => [member.userId, member.owner, member.roles])).toEqual([["owner_1", true, ["lead"]], ["u_stat", false, ["statistical_reviewer"]]]);
+    expect(readVcrMembers(null)).toEqual([]);
+    expect(readVcrMembers({ members: "nope" })).toEqual([]);
+  });
+
+  it("adds a role with { userId, role } and removes one through ?role=, encoding what it puts in the path", async () => {
+    await setVcrMembers(STUDY_ID, { userId: "u_site", role: "site", detail: { siteId: "ste_01" } });
+    await removeVcrMember(STUDY_ID, "u_stat", "statistical_reviewer");
+    await removeVcrMember(STUDY_ID, "u_stat");
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members`, "POST", { userId: "u_site", role: "site", detail: { siteId: "ste_01" } });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members/u_stat?role=statistical_reviewer`, "DELETE");
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members/u_stat`, "DELETE");
+  });
+
+  it("moves a referral through its own route, with only the keys the route lists", async () => {
+    await transitionVcrReferral(STUDY_ID, "ref_seed_1", { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/transition`, "POST",
+      { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
+  });
+
+  it("puts the composer's 起点 in the settings body, and still no budget", async () => {
+    await patchVcrStudy(STUDY_ID, { action: "trial" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}`, "PATCH", { action: "trial" });
   });
 });

@@ -251,7 +251,8 @@
     "referralId": "ref_seed_3",
     "referralState": "contacted",
     "priority": null,
-    "reviewedBy": null
+    "reviewedBy": null,
+    "trace": []
   },
   "gaps": [
     {

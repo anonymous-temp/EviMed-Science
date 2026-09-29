@@ -13,7 +13,7 @@ import { VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
   attentionOf, budgetView, conclusionOf, designsSentence, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
-  presentPrecedent, presentSummary, useCeilingOf, valueString,
+  presentPrecedent, presentSummary, useCeilingOf, valueString, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
@@ -306,6 +306,39 @@ test("a study with nothing in it gives every tab its empty state, and none of th
   assert.equal(data.headline, null);
 });
 
+// --- 匹配与招募: the referral's own trail ---------------------------------------------------------------------
+
+/** A matching bundle with one person, one referral and the moves made on it. */
+function matchingBundle(events) {
+  const criteria = [{ id: "crit_1", kind: "inclusion", ordinal: 1, sourceText: "ECOG 0–1", criterionType: "performance_status" }];
+  const subject = { id: "asm_1", subjectKey: "P-0192", summary: "insufficient_evidence", counts: { satisfied: 0, unknown: 1, pending_recheck: 0 }, priority: null, direction: "trial_to_patient", asOf: "2026-09-28T01:00:00.000Z", reviewedBy: null };
+  return {
+    study: { dataTier: "T2" }, now: NOW, roles: ["lead"],
+    match: {
+      criteria, referrals: [{ id: "ref_1", subjectKey: "P-0192", state: "needs_evidence", siteId: null }], sites: [], siteFunnel: [], followups: [],
+      tallies: { insufficient_evidence: 1 }, openByAssessment: new Map(), gapsByCriterion: new Map(), pendingReview: [], subjects: [subject],
+      protocol: null, selected: { ...subject, judgments: [] }, referralEvents: events, forecastResult: null, snapshotAt: null,
+    },
+    forecastResults: [], scenarios: [],
+  };
+}
+
+test("the selected person's referral carries every move made on it: to where, when, by whom, and what was said", () => {
+  const view = presentMatchingTab(matchingBundle([
+    { toState: "candidate", occurredAt: "2026-09-27T09:40:00.000Z", actor: "control-plane", note: "" },
+    { toState: "needs_evidence", occurredAt: "2026-09-28T06:32:00.000Z", actor: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
+  ]));
+  assert.deepEqual(view.selected.trace, [
+    { state: "candidate", at: "昨天 17:40", by: "control-plane", note: null },
+    { state: "needs_evidence", at: "今天 14:32", by: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
+  ]);
+});
+
+test("a person with no recorded moves has an empty trail, not a made-up one", () => {
+  assert.deepEqual(presentMatchingTab(matchingBundle([])).selected.trace, []);
+  assert.deepEqual(presentMatchingTab(matchingBundle(undefined)).selected.trace, []);
+});
+
 test("a route the data tier cannot reach says what tier it needs, and a route somebody judged says what it found", () => {
   const routes = presentComparatorTab(emptyBundle()).routes;
   assert.equal(routes.find((route) => route.route === "external_control").state, "not_applicable");
@@ -431,4 +464,22 @@ test("no fixture carries a database word the page has no use for, and none puts 
     }
   }
   assert.ok(scanned >= 20);
+});
+
+test("AC-21 a review of a result that has since been superseded reads changed, and no longer lifts the use ceiling", () => {
+  const study = { intendedUse: "specified_analysis" };
+  const review = { id: "rev_1", kind: "statistical", nodes: ["result:res_a@1"] };
+  // The reviewed version is the current one: the review counts.
+  assert.equal(vcrReviewIsCurrent(review, { results: [{ id: "res_a", version: 1 }] }), true);
+  assert.equal(useCeilingOf({ study, results: [{ id: "res_a", version: 1 }], reviews: [review] }).withinCeiling, true);
+  // A recompute superseded it — the stale mark has already cleared, and the
+  // current result is a new row. The review no longer countersigns anything
+  // the study holds, so the ceiling drops back and says why.
+  const after = [{ id: "res_b", version: 2 }];
+  assert.equal(vcrReviewIsCurrent(review, { results: after }), false);
+  const ceiling = useCeilingOf({ study, results: after, reviews: [review] });
+  assert.equal(ceiling.withinCeiling, false);
+  assert.deepEqual(ceiling.reasons.map((reason) => reason.code), ["review_changed"]);
+  // A node still marked stale also makes it changed, whatever the results.
+  assert.equal(vcrReviewIsCurrent({ nodes: ["assumption:dropout_rate@1"] }, { results: [], stale: [{ node: "assumption:dropout_rate@1" }] }), false);
 });

@@ -156,6 +156,16 @@ describe("a step with nothing yet", () => {
     await waitFor(() => expect(store.select).toHaveBeenCalled());
   });
 
+  // Starting a step is `run`'s: a reader who cannot start one is told what the
+  // step needs, and is not offered a button the route would refuse.
+  it("offers no 让 AI 做 to a reader who cannot run a step", () => {
+    const study = emptyStudy();
+    study.abilities = ["read", "review_clinical", "export"];
+    draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
+    expect(document.querySelector("[data-vcr-step-empty='evidence']")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 做" })).not.toBeInTheDocument();
+  });
+
   // A run that could not start now stays on the page with one sentence (CW-19).
   it("stays on the page and says the run is queued behind the previous one", async () => {
     installVcrServer(network.productRequest, { [`POST /vcr/studies/${EMPTY_STUDY_ID}/run`]: { sessionId: null, runId: null, deferred: "another_run_active" } });
@@ -186,6 +196,14 @@ describe("a step that did not finish", () => {
     expect(screen.getByText(/已算完 1,200 \/ 2,000 次重复的结果/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "从检查点续跑" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
+  });
+
+  it("offers no way to continue to a reader who cannot run a step", () => {
+    const study = ev201();
+    study.abilities = ["read"];
+    draw(<VcrStepFailed studyId={STUDY_ID} study={study} step="patients" />);
+    expect(screen.getByText("这一步未完成")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "从检查点续跑" })).not.toBeInTheDocument();
   });
 
   it("is what a step with nothing to show says when it failed, instead of the empty offer", () => {

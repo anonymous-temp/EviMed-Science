@@ -191,6 +191,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
               studyId={studyId}
               decision={data.decision}
               designs={data.designs}
+              canWrite={study.abilities.includes("write")}
               onRecorded={reload}
             />
           )
@@ -348,10 +349,12 @@ function ForecastRegistry({ forecasts }: { forecasts: readonly VcrForecast[] }) 
  * and the brand blue on the page follows the record, never this card's own
  * state. One request at a time: a decision written twice is two records.
  */
-function DecisionCard({ studyId, decision, designs, onRecorded }: {
+function DecisionCard({ studyId, decision, designs, canWrite, onRecorded }: {
   studyId: string;
   decision: TrialData["decision"];
   designs: readonly VcrDesign[];
+  /** Writing a decision is `write`'s; a reader without it sees the record and no button that would be refused. */
+  canWrite: boolean;
   onRecorded: () => void;
 }) {
   const [goal, setGoal] = useState(decision?.goal ?? "");
@@ -396,6 +399,29 @@ function DecisionCard({ studyId, decision, designs, onRecorded }: {
         setBusy(false);
       });
   };
+
+  // Without `write` the card is the record and nothing to fill in: a form whose
+  // only button would be refused is not offered.
+  if (!canWrite) {
+    if (!decision?.recordedAt) return null;
+    return (
+      <Card title="决策">
+        <dl data-vcr-decision-record="" className="divide-y divide-faint">
+          {[
+            { label: "比较目标", value: decision.goal },
+            { label: "选定方案", value: decision.chosenLabel ?? options.find((option) => option.id === decision.chosen)?.label },
+            { label: "选择理由", value: decision.rationale },
+          ].filter((row) => row.value).map((row) => (
+            <div key={row.label} className="grid grid-cols-[6rem_1fr] gap-3 py-2">
+              <dt className="text-caption text-text-3">{row.label}</dt>
+              <dd className="min-w-0 text-ui text-text">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-2 text-caption tabular-nums text-text-3">{`记录于 ${decision.recordedAt}`}</p>
+      </Card>
+    );
+  }
 
   return (
     <Card title="决策">

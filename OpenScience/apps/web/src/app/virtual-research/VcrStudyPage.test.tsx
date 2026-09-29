@@ -322,3 +322,154 @@ describe("the 「⋯」 menu", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/virtual-research$/));
   });
 });
+
+// The menu offers only what will not be refused: the study answers with the
+// abilities of the roles the reader holds, and the routes check them again.
+describe("the 「⋯」 menu follows the reader's abilities", () => {
+  const withAbilities = (abilities: string[]) => {
+    const study = fixture("ev201/study.json");
+    study.abilities = abilities;
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+  };
+  const items = async () => {
+    await heading();
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    return (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
+  };
+
+  it("offers the lead everything, the members entry included", async () => {
+    draw();
+    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包", "设定计算预算", "成员与角色", "暂停", "删除"]);
+  });
+
+  it("offers a reader who only exports the two exports and nothing that changes the study", async () => {
+    withAbilities(["read", "review_clinical", "export"]);
+    draw();
+    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包"]);
+  });
+
+  it("keeps the budget, the status, the members and the deletion from a data manager, who is not the lead", async () => {
+    withAbilities(["read", "write", "run", "manage_data", "read_patient_level"]);
+    draw();
+    await heading();
+    // Nothing in the menu is theirs: no menu at all rather than an empty one.
+    expect(screen.queryByRole("button", { name: "更多操作" })).toBeNull();
+  });
+
+  it("shows a reader who cannot confirm the budget the line that jobs wait, and no button that would be refused", async () => {
+    withAbilities(["read", "write", "run"]);
+    draw();
+    await heading();
+    const line = document.querySelector("[data-vcr-budget-wait]") as HTMLElement;
+    expect(line).toHaveTextContent("有 1 项计算等待预算确认");
+    expect(within(line).queryByRole("button", { name: "确认预算" })).toBeNull();
+  });
+});
+
+describe("the delete confirmation holds still while it works", () => {
+  it("disables both buttons and cannot be dismissed until the request settles, then closes on a refusal", async () => {
+    let refuse: (error: unknown) => void = () => undefined;
+    server = installVcrServer(network.productRequest, {
+      [`DELETE /vcr/studies/${STUDY_ID}`]: () => new Promise((_resolve, reject) => { refuse = reject; }),
+    });
+    draw();
+    await openMenu("删除");
+    const dialog = await screen.findByRole("alertdialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "删除" })).toBeDisabled());
+    expect(within(dialog).getByRole("button", { name: "删除" })).toHaveAttribute("aria-busy", "true");
+    expect(within(dialog).getByRole("button", { name: "取消" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    await act(async () => { refuse(new WebApiError("no", { status: 403, code: "vcr_forbidden" })); });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(toasts.error).toHaveBeenCalled();
+    expect(server.calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
+  });
+});
+
+describe("成员与角色", () => {
+  const members = {
+    members: [
+      { userId: "owner_1", owner: true, roles: ["lead"], roleLabels: ["研究负责人"], invitedBy: null, createdAt: null },
+      { userId: "u_stat", owner: false, roles: ["clinical_reviewer", "statistical_reviewer"], roleLabels: ["临床复核", "统计复核"], invitedBy: "owner_1", createdAt: "2026-09-20T00:00:00Z" },
+    ],
+  };
+  async function openMembers(extra: Record<string, unknown> = {}) {
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/members`]: members, ...extra });
+    draw();
+    await openMenu("成员与角色");
+    return screen.findByRole("dialog", { name: "成员与角色" });
+  }
+
+  it("lists the owner as the lead, who has no way out, and the others with a way out for each role", async () => {
+    const dialog = await openMembers();
+    const owner = await waitFor(() => {
+      const found = dialog.querySelector("[data-vcr-member='owner_1']");
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(owner).toHaveTextContent("研究负责人");
+    expect(within(owner).queryByRole("button")).toBeNull();
+    const stat = dialog.querySelector("[data-vcr-member='u_stat']") as HTMLElement;
+    expect(within(stat).getByRole("button", { name: "移除 u_stat 的“临床复核”" })).toBeInTheDocument();
+    expect(within(stat).getByRole("button", { name: "移除 u_stat 的“统计复核”" })).toBeInTheDocument();
+  });
+
+  // The route takes `{ userId, role }` and removes through `?role=`.
+  it("adds an account with exactly { userId, role }", async () => {
+    const dialog = await openMembers();
+    await within(dialog).findByText("u_stat");
+    await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), " u_recruit ");
+    await userEvent.selectOptions(within(dialog).getByLabelText("角色"), "recruiter");
+    await userEvent.click(within(dialog).getByRole("button", { name: "添加" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/members", "POST", { userId: "u_recruit", role: "recruiter" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已添加。"));
+    expect(within(dialog).getByLabelText("成员账号 ID")).toHaveValue("");
+  });
+
+  it("takes an id the route would refuse as not addable, without asking it", async () => {
+    const dialog = await openMembers();
+    await within(dialog).findByText("u_stat");
+    await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), "a b/c");
+    expect(within(dialog).getByRole("button", { name: "添加" })).toBeDisabled();
+  });
+
+  it("names the site a site member belongs to, from the study's own sites", async () => {
+    const dialog = await openMembers();
+    await within(dialog).findByText("u_stat");
+    await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), "u_site");
+    await userEvent.selectOptions(within(dialog).getByLabelText("角色"), "site");
+    const site = await within(dialog).findByLabelText("所属中心");
+    expect(within(dialog).getByRole("button", { name: "添加" })).toBeDisabled();
+    await waitFor(() => expect(within(site).getByRole("option", { name: "中心 01" })).toBeInTheDocument());
+    await userEvent.selectOptions(site, "ste_01");
+    await userEvent.click(within(dialog).getByRole("button", { name: "添加" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/members", "POST",
+      { userId: "u_site", role: "site", detail: { siteId: "ste_01" } }));
+  });
+
+  it("removes one role of one account through DELETE …/members/:userId?role=", async () => {
+    const dialog = await openMembers();
+    const stat = await waitFor(() => {
+      const found = dialog.querySelector("[data-vcr-member='u_stat']");
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    await userEvent.click(within(stat).getByRole("button", { name: "移除 u_stat 的“统计复核”" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/members/u_stat?role=statistical_reviewer", "DELETE"));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已移除。"));
+  });
+
+  it("says a refusal in the reader's words and keeps the list", async () => {
+    const dialog = await openMembers({
+      [`POST /vcr/studies/${STUDY_ID}/members`]: () => { throw new WebApiError("no", { status: 403, code: "vcr_forbidden" }); },
+    });
+    await within(dialog).findByText("u_stat");
+    await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), "u_x");
+    await userEvent.click(within(dialog).getByRole("button", { name: "添加" }));
+    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+    expect(within(dialog).getByLabelText("成员账号 ID")).toHaveValue("u_x");
+    expect(within(dialog).getByText("u_stat")).toBeInTheDocument();
+  });
+});

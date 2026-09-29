@@ -266,7 +266,8 @@
       "score": 0.8,
       "rationale": "ECOG 1，一线含铂后进展"
     },
-    "reviewedBy": null
+    "reviewedBy": null,
+    "trace": []
   },
   "gaps": [
     {

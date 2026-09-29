@@ -1665,6 +1665,8 @@ export function createWebApiApp(overrides = {}) {
     // The referral ledger's acts, the first human stop among them
     // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.
     get matching() { return vcr?.contact ?? null; },
+    // A person's re-judgment and countersignature of a matching assessment.
+    get assessments() { return vcr?.matching ?? null; },
   });
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
@@ -3276,7 +3278,9 @@ export function createWebApiApp(overrides = {}) {
       pollMs: config.vcrPollMs ?? 5_000, leaseMs: config.vcrLeaseMs ?? 900_000,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store }),
+      // `matching` is the deferral recheck loop: a washout that ends is re-judged on
+      // its own day, not when someone next opens the study.
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.

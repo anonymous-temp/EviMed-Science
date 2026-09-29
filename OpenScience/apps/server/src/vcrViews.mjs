@@ -116,13 +116,28 @@ export function jobView(job, now) {
 // --- the use ceiling ----------------------------------------------------------------------------------
 
 /**
+ * Whether a review still countersigns what the study holds now: every result it
+ * names is a current result, and nothing it names is marked stale. A review of a
+ * result that has since been superseded reads `changed_after_review` whether or
+ * not a stale mark is still open for it (AC-21).
+ * @param {Record<string, any>} review
+ * @param {{ results: readonly Record<string, any>[], stale?: readonly Record<string, any>[] }} context
+ */
+export function vcrReviewIsCurrent(review, { results, stale = [] }) {
+  const current = new Set(list(results).map((result) => `result:${object(result).id}@${object(result).version}`));
+  const staleNodes = new Set(list(stale).map((mark) => String(object(mark).node)));
+  return list(object(review).nodes).map(String)
+    .every((node) => !staleNodes.has(node) && (!node.startsWith("result:") || current.has(node)));
+}
+
+/**
  * The highest use this study's results can be labelled with, and why. The
  * weakest model decides (§8.2); an unreviewed study cannot claim
- * `specified_analysis` or above (§10.2, AC-21). The reasons are sentences a
- * reader can act on, never vocabulary ids.
- * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], reviews: readonly Record<string, any>[] }} input
+ * `specified_analysis` or above (§10.2, AC-21) — and a review whose inputs
+ * moved since it was signed no longer counts as one.
+ * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], reviews: readonly Record<string, any>[], stale?: readonly Record<string, any>[] }} input
  */
-export function useCeilingOf({ study, results, reviews }) {
+export function useCeilingOf({ study, results, reviews, stale = [] }) {
   /** @type {string[]} */
   const tiers = [];
   for (const result of results) {
@@ -132,7 +147,7 @@ export function useCeilingOf({ study, results, reviews }) {
     }
   }
   const modelCeiling = intendedUseCeiling(tiers);
-  const reviewed = reviews.length > 0;
+  const reviewed = reviews.some((review) => vcrReviewIsCurrent(review, { results, stale }));
   const reviewCeiling = reviewed ? "submission_preparation" : "design_support";
   const ceiling = useWithin(modelCeiling, reviewCeiling) ? modelCeiling : reviewCeiling;
   const word = (/** @type {string} */ use) => (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[use] ?? use;
@@ -142,7 +157,9 @@ export function useCeilingOf({ study, results, reviews }) {
     reasons.push({ code: "model_tier", detail: `所用模型的可信度层级最多支持「${word(modelCeiling)}」` });
   }
   if (!reviewed) {
-    reasons.push({ code: "not_reviewed", detail: "还没有复核签注：未复核的研究包不能标「指定研究分析」及以上" });
+    reasons.push(reviews.length
+      ? { code: "review_changed", detail: "复核之后结果或假设有了变更，需要重新复核；在此之前不能标「指定研究分析」及以上" }
+      : { code: "not_reviewed", detail: "还没有复核签注：未复核的研究包不能标「指定研究分析」及以上" });
   }
   return {
     ceiling,
@@ -445,7 +462,7 @@ export function presentStudy(bundle) {
     abilities: abilitiesOf(roles ?? []),
     budget: budgetView(budget),
     jobs: jobs.slice(0, 12).map((/** @type {any} */ job) => jobView(job, now)),
-    ceiling: useCeilingOf({ study, results, reviews }),
+    ceiling: useCeilingOf({ study, results, reviews, stale }),
     overview,
     updatedAt: zhTime(study.updatedAt, now),
     createdAt: study.createdAt,

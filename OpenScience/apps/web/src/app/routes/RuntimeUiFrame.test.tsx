@@ -38,6 +38,12 @@ vi.mock("@/lib/geoClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   listGeoProjects: geo.listGeoProjects, patchGeoProject: geo.patchGeoProject,
 }));
+// 虚拟临研's three calls: which study this project is, what it holds, and writing an option to it.
+const vcr = vi.hoisted(() => ({ getVcrHome: vi.fn(), getVcrStudy: vi.fn(), patchVcrStudy: vi.fn() }));
+vi.mock("@/lib/vcrClient", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/vcrClient")>()),
+  getVcrHome: vcr.getVcrHome, getVcrStudy: vcr.getVcrStudy, patchVcrStudy: vcr.patchVcrStudy,
+}));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
   const navigate = useNavigate();
@@ -1216,6 +1222,121 @@ describe("循证 GEO in the conversation", () => {
     const { view, frame } = await openGeoConversation();
     emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "virtual-research" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research$/));
+    view.unmount();
+  });
+});
+
+describe("虚拟临研 in the conversation", () => {
+  const requested = (...steps: string[]) => Object.fromEntries(
+    ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"].map(step => [step, { status: "none", requested: steps.includes(step) }]));
+  const lead = ["read", "write", "run", "export", "manage_members", "manage_study", "manage_data", "review_any", "contact_patients", "read_patient_level"];
+  const study = (over: Record<string, unknown> = {}) => ({
+    id: "std_1", projectId: "default", name: "EV-201", intendedUse: "exploratory", abilities: lead,
+    steps: requested("definition", "evidence", "population", "patients", "comparator", "trial", "matching"), ...over,
+  });
+
+  async function openVcrConversation(capability = "vcr-protocol", held = study(), studies = [{ id: "std_1", projectId: "default" }]) {
+    vcr.getVcrHome.mockReset(); vcr.getVcrHome.mockResolvedValue({ studies });
+    vcr.getVcrStudy.mockReset(); vcr.getVcrStudy.mockResolvedValue(held);
+    vcr.patchVcrStudy.mockReset(); vcr.patchVcrStudy.mockResolvedValue({});
+    mocks.listSessions.mockResolvedValue([{ sessionId: "session-a", mode: "specialist", agentId: capability, agentVersion: "1.0.0" }]);
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await Promise.resolve(); });
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.booted" });
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
+    const command = post.mock.calls.map(call => call[0]).find(data => data.type === "evimed.runtime-ui.navigate");
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: command.requestId, ok: true, sessionId: "session-a" });
+    const vcrPosts = () => post.mock.calls.map(call => call[0]).filter(data => data.type === "evimed.runtime-ui.vcr");
+    return { view, frame, post, vcrPosts };
+  }
+
+  it("tells the chip where the study starts, what it is for, and the six single-task starters", async () => {
+    const { view, vcrPosts } = await openVcrConversation("vcr-analysis");
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    const [options] = vcrPosts();
+    expect(options).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
+    expect(options.startOptions.map((choice: { label: string }) => choice.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
+    expect(options.useOptions.map((choice: { label: string }) => choice.label)).toEqual(["探索", "研究设计支持", "指定研究分析", "申报准备"]);
+    expect(options.starters.map((starter: { label: string }) => starter.label))
+      .toEqual(["估算样本量", "外部对照可行性", "找先例和参数", "生成合成数据", "匹配患者", "完整研究"]);
+    view.unmount();
+  });
+
+  it("reads a study that was created from one action card as starting there", async () => {
+    const { view, vcrPosts } = await openVcrConversation("vcr-protocol", study({ steps: requested("comparator") }));
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    expect(vcrPosts()[0]).toMatchObject({ start: "comparator" });
+    view.unmount();
+  });
+
+  it("writes a changed option to the study and tells the chip what the study then holds", async () => {
+    const { view, frame, vcrPosts } = await openVcrConversation();
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    vcr.getVcrStudy.mockResolvedValue(study({ steps: requested("trial") }));
+    emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 4, sessionId: "session-a", start: "trial" });
+    await waitFor(() => expect(vcr.patchVcrStudy).toHaveBeenCalledWith("std_1", { action: "trial" }));
+    await waitFor(() => expect(vcrPosts().at(-1)).toMatchObject({ start: "trial" }));
+
+    vcr.getVcrStudy.mockResolvedValue(study({ steps: requested("trial"), intendedUse: "design_support" }));
+    emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 5, sessionId: "session-a", intendedUse: "design_support" });
+    await waitFor(() => expect(vcr.patchVcrStudy).toHaveBeenLastCalledWith("std_1", { intendedUse: "design_support" }));
+    await waitFor(() => expect(vcrPosts().at(-1)).toMatchObject({ intendedUse: "design_support", start: "trial" }));
+
+    // A value that is not one of the choices is never sent.
+    vcr.patchVcrStudy.mockClear();
+    emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 6, sessionId: "session-a", start: "everything", intendedUse: "approved" });
+    await act(async () => { await Promise.resolve(); });
+    expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("puts the study's own value back in the chip when the write is refused", async () => {
+    const { view, frame, vcrPosts } = await openVcrConversation();
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    vcr.patchVcrStudy.mockRejectedValueOnce(new WebApiError("no", { status: 403, code: "vcr_forbidden" }));
+    emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 4, sessionId: "session-a", intendedUse: "submission_preparation" });
+    await waitFor(() => expect(vcrPosts().at(-1)).toMatchObject({ intendedUse: "exploratory" }));
+    // Another conversation's change is not this study's to write.
+    vcr.patchVcrStudy.mockClear();
+    emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 5, sessionId: "session-z", start: "cohort" });
+    await act(async () => { await Promise.resolve(); });
+    expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("offers a reader only the controls their roles allow, and writes nothing else", async () => {
+    const { view, frame, vcrPosts } = await openVcrConversation("vcr-protocol", study({ abilities: ["read", "write"] }));
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    expect(vcrPosts()[0]).toMatchObject({ controls: true, canSetUse: false });
+    expect(vcrPosts()[0].startOptions).toHaveLength(5);
+    emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 4, sessionId: "session-a", intendedUse: "design_support" });
+    await act(async () => { await Promise.resolve(); });
+    expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
+    view.unmount();
+
+    const viewer = await openVcrConversation("vcr-protocol", study({ abilities: ["read"] }));
+    await waitFor(() => expect(viewer.vcrPosts()).toHaveLength(1));
+    expect(viewer.vcrPosts()[0]).toMatchObject({ controls: true, canSetUse: false, startOptions: [] });
+    viewer.view.unmount();
+  });
+
+  it("gives a project that is not a study the starters alone, with nothing to write options to", async () => {
+    const { view, vcrPosts } = await openVcrConversation("vcr-protocol", study(), []);
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    expect(vcrPosts()[0]).toMatchObject({ controls: false, startOptions: [] });
+    expect(vcrPosts()[0].starters).toHaveLength(6);
+    expect(vcr.getVcrStudy).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("sends a conversation that is not a 虚拟临研 one no options, and asks the module nothing", async () => {
+    const { view, post, vcrPosts } = await openVcrConversation("adr-analysis");
+    await waitFor(() => expect(post.mock.calls.map(call => call[0]).some(data => data.type === "evimed.runtime-ui.capability")).toBe(true));
+    expect(vcrPosts()).toHaveLength(0);
+    expect(vcr.getVcrHome).not.toHaveBeenCalled();
     view.unmount();
   });
 });

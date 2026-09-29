@@ -110,10 +110,35 @@ function fixture({ who = OWNER, roles = {}, overrides = {} } = {}) {
     store: /** @type {any} */ (platformStore({ calls, who: () => current })),
     vcrStore, service, config, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push([event, status, details.code ?? null]); },
+    // The matching seam's two person-only acts, keyed to the session's account.
+    assessments: {
+      async overrideJudgment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
+        calls.push(["assessment.override", String(user.id), found.id, input.criterionId, input.state]);
+        return { assessmentId: input.assessmentId, criterionId: input.criterionId, overrideState: input.state, overriddenBy: String(user.id) };
+      },
+      async reviewAssessment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
+        calls.push(["assessment.review", String(user.id), found.id, input.assessmentId]);
+        return { id: input.assessmentId, reviewedBy: String(user.id) };
+      },
+    },
     ...overrides,
   });
   return { calls, audits, service, vcrStore, routes, as(/** @type {string} */ id) { current = id; } };
 }
+
+test("a person re-judges a criterion and countersigns an assessment as themselves; a state outside the vocabulary is refused by name", async () => {
+  const { calls, routes } = fixture();
+  const overridden = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", { state: "not_satisfied", note: "病历写明曾用过该药" }), overridden);
+  assert.equal(overridden.status, 201);
+  assert.deepEqual(calls.find((call) => call[0] === "assessment.override")?.slice(1), [OWNER, "std_1", "crt_2", "not_satisfied"]);
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", { state: "maybe" }), response()),
+    { status: 400, code: "vcr_criterion_state_invalid" });
+  const reviewed = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}), reviewed);
+  assert.equal(reviewed.status, 201);
+  assert.deepEqual(calls.find((call) => call[0] === "assessment.review")?.slice(1), [OWNER, "std_1", "asm_1"]);
+});
 
 test("a 虚拟临研 path's metric label folds every id, so a dashboard row is a route", () => {
   for (const [path, label] of [
@@ -355,7 +380,7 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
 const REQUESTS = {
   "GET /studies/:id": ["GET", "/api/vcr/studies/std_1", undefined],
   "GET /studies/:id/:tab": ["GET", "/api/vcr/studies/std_1/overview", undefined],
-  "PATCH /studies/:id name,question": ["PATCH", "/api/vcr/studies/std_1", { name: "改名" }],
+  "PATCH /studies/:id name,question,action": ["PATCH", "/api/vcr/studies/std_1", { name: "改名" }],
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
   "POST /studies/:id/run": ["POST", "/api/vcr/studies/std_1/run", { step: "definition" }],
@@ -377,7 +402,18 @@ const REQUESTS = {
   "GET /studies/:id/referrals": ["GET", "/api/vcr/studies/std_1/referrals", undefined],
   "POST /studies/:id/referrals/:referral/transition": ["POST", "/api/vcr/studies/std_1/referrals/ref_1/transition", { to: "contactable" }],
   "POST /studies/:id/referrals/:referral/contact": ["POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", {}],
+  "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_1/override", { state: "not_satisfied" }],
+  "POST /studies/:id/assessments/:assessment/review": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}],
   "POST /models (with a study)": ["POST", "/api/vcr/models", { studyId: "std_1", name: "m" }],
+  "POST /studies/:id/data/sources": ["POST", "/api/vcr/studies/std_1/data/sources", { name: "合作方基线" }],
+  "POST /studies/:id/data/sources/:source/files": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/files?name=cohort.csv", undefined],
+  "DELETE /studies/:id/data/files/:file": ["DELETE", "/api/vcr/studies/std_1/data/files/sfl_1", undefined],
+  "POST /studies/:id/data/sources/:source/fieldmap": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/fieldmap", { columns: [] }],
+  "POST /studies/:id/data/sources/:source/fieldmap/confirm": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/fieldmap/confirm", { hash: "a".repeat(64) }],
+  "POST /studies/:id/data/sources/:source/snapshots": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/snapshots", {}],
+  "POST /studies/:id/data/snapshots/:snapshot/tables": ["POST", "/api/vcr/studies/std_1/data/snapshots/snp_1/tables", {}],
+  "POST /studies/:id/data/sources/:source/grants": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/grants", { grantee: "role:viewer" }],
+  "POST /studies/:id/data/grants/:grant/revoke": ["POST", "/api/vcr/studies/std_1/data/grants/grt_1/revoke", {}],
 };
 
 /** Every hook composed and succeeding: a request that reaches one answers 2xx. */
@@ -389,6 +425,23 @@ function composedHooks() {
     exporter: { requestExport: ok },
     members: { add: ok, remove: ok, list: async () => [] },
     matching: { contactReferral: ok, transitionReferral: ok, listReferrals: async () => ({ referrals: [] }) },
+    // The data plane behind the intake routes, answering the shapes the real one does (what a route may send back is the route's to filter).
+    dataPlane: (() => {
+      const source = { id: "src_1", name: "合作方基线", ownerParty: "", allowedUses: ["vcr"], visibleWindow: {}, retention: {}, valueSource: "observed", status: "registered", fieldMapState: "none", fieldMapHash: null, createdAt: null };
+      const file = { id: "sfl_1", sourceId: "src_1", name: "cohort.csv", role: "data", format: "csv", bytes: 10, sha256: "a".repeat(64), rowCount: 2, columnCount: 2, createdAt: null, profile: {}, detail: {} };
+      const snapshot = { id: "snp_1", sourceId: "src_1", version: 1, sha256: "b".repeat(64), rowCount: 2, columnCount: 2, frozenAt: null, valueSource: "observed", fileHashes: [], sealedFields: [], sealedUntil: null, quality: {} };
+      return {
+        registerSource: async () => source,
+        storeUpload: async () => ({ created: true, file }),
+        removeUpload: async () => ({ removed: true, fileId: "sfl_1" }),
+        proposeFieldMap: async () => ({ source, hash: "a".repeat(64), entryIssues: [], mapIssues: [] }),
+        confirmFieldMap: async () => ({ source, checks: {} }),
+        freezeSnapshot: async () => ({ snapshot, tables: { registered: [], refused: [], skipped: [], subjects: 0, dropped: {} } }),
+        deriveAnalysisTables: async () => ({ registered: [], refused: [], skipped: [], subjects: 0, dropped: {} }),
+        createGrant: async () => ({ id: "grt_1" }),
+        revokeGrant: async () => ({ id: "grt_1", revokedAt: null }),
+      };
+    })(),
   };
 }
 

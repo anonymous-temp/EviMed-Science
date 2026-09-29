@@ -21,10 +21,10 @@ export const inject = ['sessions', 'conversation', 'connection', 'workspaces', '
  * `version`, `frameId`, `projectId` and `seq`):
  *
  *   shell → frame  navigate · resume · theme · run-state · evidence · kb-result · reply-check ·
- *                  search
+ *                  capability · geo · vcr · search
  *   frame → shell  booted · ready · connecting · error · ack · session ·
  *                  shell-navigate · shell-shortcut · open-artifact · kb-query ·
- *                  search-result
+ *                  bind-capability · geo-options · vcr-options · search-result
  *
  * `session` carries the lineage the shell needs to keep its ledger and its URL
  * honest: `forkedFrom` when the researcher branched a finished turn into a new
@@ -357,6 +357,37 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400) })),
       };
     },
+    /**
+     * 虚拟临研's options for the conversation on screen: where the study starts
+     * (起点) and what its results are for (预期用途), each with the choices on
+     * offer and their words, and the single-task starters. `controls` is true
+     * when the shell found the study this conversation belongs to; `canSetUse`
+     * when the reader may change its intended use (the lead's). Rebuilt from a
+     * closed shape; `clear` drops them.
+     * @param {any} data
+     */
+    vcr(data) {
+      if (data.clear === true) return { sessionId: validId(data.sessionId) ? data.sessionId : null, starters: null };
+      const key = (/** @type {unknown} */ value) => typeof value === 'string' && /^[a-z][a-z_]{0,31}$/.test(value);
+      const text = (/** @type {unknown} */ value, /** @type {number} */ max) => String(value ?? '').slice(0, max);
+      const choices = (/** @type {unknown} */ list, /** @type {number} */ limit) => (Array.isArray(list) ? list : []).slice(0, limit)
+        .filter((/** @type {any} */ choice) => choice && key(choice.id) && typeof choice.label === 'string' && choice.label)
+        .map((/** @type {any} */ choice) => ({ id: choice.id, label: text(choice.label, 16) }));
+      const startOptions = choices(data.startOptions, 8);
+      const useOptions = choices(data.useOptions, 6);
+      return {
+        sessionId: validId(data.sessionId) ? data.sessionId : null,
+        controls: data.controls === true,
+        canSetUse: data.canSetUse === true,
+        start: startOptions.some((/** @type {{ id: string }} */ choice) => choice.id === data.start) ? data.start : null,
+        startOptions,
+        intendedUse: useOptions.some((/** @type {{ id: string }} */ choice) => choice.id === data.intendedUse) ? data.intendedUse : null,
+        useOptions,
+        starters: (Array.isArray(data.starters) ? data.starters : []).slice(0, 8)
+          .filter((/** @type {any} */ starter) => starter && typeof starter.label === 'string' && starter.label && typeof starter.draft === 'string' && starter.draft)
+          .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400) })),
+      };
+    },
     /** @param {any} data */
     'kb-result'(data) {
       if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
@@ -505,10 +536,22 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       }
       return payload.coverageDays === undefined && payload.engines === undefined ? null : payload;
     },
+    /**
+     * A 虚拟临研 option the reader changed beside the chip: where the study
+     * starts, or what its results are for. The shell writes it to the study.
+     * @param {any} fields
+     */
+    'vcr-options'(fields) {
+      const key = (/** @type {unknown} */ value) => typeof value === 'string' && /^[a-z][a-z_]{0,31}$/.test(value);
+      const payload = /** @type {{ sessionId: string | null, start?: string, intendedUse?: string }} */ ({ sessionId: validId(fields.sessionId) ? fields.sessionId : null });
+      if (key(fields.start)) payload.start = fields.start;
+      if (key(fields.intendedUse)) payload.intendedUse = fields.intendedUse;
+      return payload.start === undefined && payload.intendedUse === undefined ? null : payload;
+    },
   };
   const detachHub = hub?.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
     if (!Object.hasOwn(OUTBOUND, type)) return;
-    const payload = OUTBOUND[/** @type {'open-artifact' | 'kb-query' | 'bind-capability' | 'geo-options'} */ (type)](fields ?? {});
+    const payload = OUTBOUND[/** @type {'open-artifact' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
     if (payload) post(type, payload);
   });
 

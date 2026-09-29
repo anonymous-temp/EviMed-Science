@@ -181,7 +181,7 @@ export function Sidebar() {
           * project a group, its conversations inside, any of them one click
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
-        <ProjectBrowser geo={geo} />
+        <ProjectBrowser geo={geo} vcr={vcr} />
 
         {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
           * plan §5.2). The count of data sources without a credential used to

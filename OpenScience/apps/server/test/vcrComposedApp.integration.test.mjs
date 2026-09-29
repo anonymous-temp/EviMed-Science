@@ -27,6 +27,8 @@ import { VCR_ROUTE_ABILITIES } from "../src/vcrRoutes.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+// The browser's own body builders: what the page posts is proven against the real routes, not against a copy of their allow-lists.
+import { confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery } from "../../web/src/lib/vcrIntakeBodies.ts";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -148,7 +150,7 @@ function requests(target, ids) {
   return {
     "GET /studies/:id": async () => ["GET", S, undefined],
     "GET /studies/:id/:tab": async () => ["GET", `${S}/overview`, undefined],
-    "PATCH /studies/:id name,question": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
+    "PATCH /studies/:id name,question,action": async () => ["PATCH", S, { name: "改个名字", question: "同一个问题" }],
     "PATCH /studies/:id dataTier,intendedUse,status": async () => ["PATCH", S, { status: "active" }],
     "DELETE /studies/:id": async () => ["DELETE", `/api/vcr/studies/${await ids.disposable()}`, undefined],
     "POST /studies/:id/run": async () => ["POST", `${S}/run`, { step: "definition" }],
@@ -170,7 +172,21 @@ function requests(target, ids) {
     "GET /studies/:id/referrals": async () => ["GET", `${S}/referrals`, undefined],
     "POST /studies/:id/referrals/:referral/transition": async () => ["POST", `${S}/referrals/${ids.transition}/transition`, { to: "contactable" }],
     "POST /studies/:id/referrals/:referral/contact": async () => ["POST", `${S}/referrals/${ids.contact}/contact`, { reason: "符合入选标准" }],
+    // A person's hand on an assessment: allowed roles reach the seam, which
+    // answers 404 for an assessment this study does not have.
+    "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": async () => ["POST", `${S}/assessments/asm_none/judgments/crt_none/override`, { state: "not_satisfied", note: "病历写明曾用过该药" }],
+    "POST /studies/:id/assessments/:assessment/review": async () => ["POST", `${S}/assessments/asm_none/review`, {}],
     "POST /models (with a study)": async () => { counter += 1; return ["POST", "/api/vcr/models", { studyId: target.id, name: `model-${suffix}-${counter}` }]; },
+    // Data intake: a lead and a data manager may; nobody else may, whatever else they hold.
+    "POST /studies/:id/data/sources": async () => { counter += 1; return ["POST", `${S}/data/sources`, { name: `数据源-${counter}`, ownerParty: "合作方" }]; },
+    "POST /studies/:id/data/sources/:source/files": async () => ["POST", `${S}/data/sources/src_none/files?name=cohort.csv`, undefined],
+    "DELETE /studies/:id/data/files/:file": async () => ["DELETE", `${S}/data/files/sfl_none`, undefined],
+    "POST /studies/:id/data/sources/:source/fieldmap": async () => ["POST", `${S}/data/sources/src_none/fieldmap`, { columns: [] }],
+    "POST /studies/:id/data/sources/:source/fieldmap/confirm": async () => ["POST", `${S}/data/sources/src_none/fieldmap/confirm`, { hash: "a".repeat(64) }],
+    "POST /studies/:id/data/sources/:source/snapshots": async () => ["POST", `${S}/data/sources/src_none/snapshots`, {}],
+    "POST /studies/:id/data/snapshots/:snapshot/tables": async () => ["POST", `${S}/data/snapshots/snp_none/tables`, {}],
+    "POST /studies/:id/data/sources/:source/grants": async () => ["POST", `${S}/data/sources/src_none/grants`, { grantee: "role:viewer" }],
+    "POST /studies/:id/data/grants/:grant/revoke": async () => ["POST", `${S}/data/grants/grt_none/revoke`, {}],
   };
 }
 
@@ -216,7 +232,7 @@ test("CS-45 every route, driven through the real server as the owner and as each
     }
   }
   assert.deepEqual(problems, [], problems.join("\n"));
-  assert.ok(walked.allowed >= 60 && walked.denied >= 60, `walked ${walked.allowed} allowed and ${walked.denied} refused requests; the grid was not driven`);
+  assert.ok(walked.allowed >= 70 && walked.denied >= 90, `walked ${walked.allowed} allowed and ${walked.denied} refused requests; the grid was not driven`);
   // Someone who is not in the study finds none of it.
   for (const [method, route, body] of await Promise.all(Object.values(requests(study, { contact: "ref_x", transition: "ref_x", exportId: "exp_x", disposable: async () => study.id })).map((build) => build()))) {
     const answer = await call("stranger", method, route, body);
@@ -477,6 +493,126 @@ test("CS-43 deleting a project or an account takes its patient-level files, its 
   assert.ok((await rows(`SELECT 1 FROM evimed_vcr.sources WHERE id = $1`, [`src_own_${suffix}`])).length === 1, "and so is the owner's source");
   // The audit outlives it.
   assert.ok((await rows(`SELECT 1 FROM evimed_vcr.audit WHERE user_id = $1`, [accounts.leaver])).length > 0);
+});
+
+/** One upload the way the browser sends it: the file as the raw body, its name and role in the query. @param {string} who @param {string} route @param {string | Buffer} body */
+async function uploadFile(who, route, body) {
+  const headers = { ...context.sessions[who], "content-type": "application/octet-stream" };
+  const response = await fetch(`${context.base}${route}`, { method: "POST", headers, body });
+  const text = await response.text();
+  return { status: response.status, body: text ? JSON.parse(text) : null, text };
+}
+
+test("PA-10 PB-10 CS-41 data intake through the real server: source, upload, field map, snapshot, tables, grant — as the roles that may, refused to the ones that may not, and no path in any answer", options, async () => {
+  const study = await furnishedStudy("数据接入研究");
+  const S = `/api/vcr/studies/${study.id}`;
+  const cohort = ["PATIENT_NO,ARM,AGE,OS_MONTHS,OS_DEAD"];
+  for (let n = 1; n <= 24; n += 1) cohort.push(`HZ-${9000 + n},${n <= 12 ? "TRT" : "CTL"},${40 + n},${(3.11 + n * 0.71).toFixed(2)},${n % 4 === 0 ? 0 : 1}`);
+  const csv = `${cohort.join("\n")}\n`;
+
+  // A data manager registers; a viewer, a statistician and a recruiter cannot.
+  for (const who of ["viewer", "statistician", "recruiter", "site", "clinician"]) {
+    assert.equal((await call(who, "POST", `${S}/data/sources`, { name: "越权登记" })).status, 403, `${who} may not register a source`);
+  }
+  assert.equal((await call("stranger", "POST", `${S}/data/sources`, { name: "陌生人" })).status, 404);
+  // The write is CSRF-guarded.
+  const noToken = await fetch(`${context.base}${S}/data/sources`, { method: "POST", headers: { "content-type": "application/json", cookie: context.sessions.owner.cookie }, body: JSON.stringify({ name: "x" }) });
+  assert.equal(noToken.status, 403);
+  // A body that names a field the route does not list is refused whole.
+  assert.equal((await call("owner", "POST", `${S}/data/sources`, { name: "x", location: "/etc" })).body.code, "vcr_payload_invalid");
+  assert.equal((await call("owner", "POST", `${S}/data/sources`, { name: "x", valueSource: "wishful" })).body.code, "vcr_payload_invalid");
+
+  const registered = await call("datamanager", "POST", `${S}/data/sources`, sourceBody({ name: "合作方基线", ownerParty: "合作方医院", allowedUses: ["vcr"], retention: { until: "2030-01-01" }, visibleWindow: { start: "2020-01-01" }, valueSource: "observed" }));
+  assert.equal(registered.status, 201, registered.text);
+  const sourceId = registered.body.data.source.id;
+  assert.equal(registered.body.data.source.fieldMapState, "none");
+
+  // Upload: the raw file, its name in the query. The name is display text only.
+  const uploaded = await uploadFile("datamanager", `${S}/data/sources/${sourceId}/files?${uploadQuery({ name: "队列 cohort.csv" })}`, csv);
+  assert.equal(uploaded.status, 201, uploaded.text);
+  assert.equal(uploaded.body.data.file.rowCount, 24);
+  assert.equal(uploaded.body.data.file.name, "队列 cohort.csv");
+  assert.deepEqual(uploaded.body.data.file.columns.map((/** @type {any} */ column) => column.name), ["PATIENT_NO", "ARM", "AGE", "OS_MONTHS", "OS_DEAD"]);
+  assert.equal(Object.hasOwn(uploaded.body.data.file, "location"), false, "the browser is never told where a file is");
+  assert.equal((await uploadFile("datamanager", `${S}/data/sources/${sourceId}/files?${uploadQuery({ name: "队列 cohort.csv" })}`, csv)).status, 200, "the same bytes are the same file");
+  const dictionary = await uploadFile("datamanager", `${S}/data/sources/${sourceId}/files?${uploadQuery({ name: "字典.csv", role: "dictionary" })}`, "变量名,说明\nAGE,年龄\n");
+  assert.equal(dictionary.status, 201, dictionary.text);
+  assert.equal(dictionary.body.data.file.entries, 1);
+  assert.equal((await uploadFile("datamanager", `${S}/data/sources/${sourceId}/files?name=x.parquet`, "PAR1")).body.code, "vcr_data_format_unsupported");
+  assert.equal((await uploadFile("datamanager", `${S}/data/sources/${sourceId}/files`, csv)).body.code, "vcr_data_file_name_invalid");
+  assert.equal((await uploadFile("viewer", `${S}/data/sources/${sourceId}/files?name=a.csv`, csv)).status, 403, "refused before the body is read, and the client still gets the answer");
+  assert.equal((await uploadFile("stranger", `${S}/data/sources/${sourceId}/files?name=a.csv`, csv)).status, 404);
+  assert.equal((await uploadFile("datamanager", `${S}/data/sources/src_nope/files?name=a.csv`, csv)).body.code, "vcr_source_not_found");
+
+  // Field map: proposed, then confirmed by the hash that was shown.
+  const columns = [
+    { table: "队列 cohort.csv", column: "PATIENT_NO", role: "subject_key", identifier: true },
+    { table: "队列 cohort.csv", column: "ARM", role: "arm", alias: "arm", codes: { treated: ["TRT"], control: ["CTL"] } },
+    { table: "队列 cohort.csv", column: "AGE", role: "covariate", alias: "age", unit: "year" },
+    { table: "队列 cohort.csv", column: "OS_MONTHS", role: "outcome_time", parameter: "OS" },
+    { table: "队列 cohort.csv", column: "OS_DEAD", role: "outcome_event", parameter: "OS" },
+  ];
+  const badMap = await call("datamanager", "POST", `${S}/data/sources/${sourceId}/fieldmap`, fieldMapBody([...columns, { column: "AGE", role: /** @type {any} */ ("hacker") }], "先试一试"));
+  assert.equal(badMap.status, 201);
+  assert.equal(badMap.body.data.entryIssues[0].code, "role_unknown", "an entry that fails is named; the rest is kept");
+  assert.equal((await call("datamanager", "POST", `${S}/data/sources/${sourceId}/snapshots`, {})).body.code, "vcr_field_map_unconfirmed", "a snapshot is not frozen from an unconfirmed map");
+  const proposed = await call("datamanager", "POST", `${S}/data/sources/${sourceId}/fieldmap`, fieldMapBody(columns));
+  assert.deepEqual([proposed.body.data.entryIssues, proposed.body.data.mapIssues], [[], []]);
+  assert.equal((await call("datamanager", "POST", `${S}/data/sources/${sourceId}/fieldmap/confirm`, { hash: "b".repeat(64) })).body.code, "vcr_field_map_changed");
+  assert.equal((await call("datamanager", "POST", `${S}/data/sources/${sourceId}/fieldmap/confirm`, { hash: "not-a-hash" })).body.code, "vcr_payload_invalid");
+  const confirmed = await call("datamanager", "POST", `${S}/data/sources/${sourceId}/fieldmap/confirm`, confirmFieldMapBody(proposed.body.data.hash));
+  assert.equal(confirmed.status, 200, confirmed.text);
+  assert.equal(confirmed.body.data.source.fieldMapState, "confirmed");
+
+  // Freeze: a snapshot with its tables, sealed only if the study asks for it (this one is exploratory).
+  const frozen = await call("datamanager", "POST", `${S}/data/sources/${sourceId}/snapshots`, freezeBody());
+  assert.equal(frozen.status, 201, frozen.text);
+  const snapshot = frozen.body.data.snapshot;
+  assert.equal(snapshot.version, 1);
+  assert.deepEqual(snapshot.sealedFields, []);
+  assert.deepEqual(frozen.body.data.tables.registered.map((/** @type {any} */ table) => table.shape).sort(), ["events", "subject"]);
+  assert.equal(frozen.body.data.tables.subjects, 24);
+  assert.equal(JSON.stringify(frozen.body).includes(context.plane), false);
+  // The tables can be derived again (idempotent: same bytes, same table).
+  const again = await call("datamanager", "POST", `${S}/data/snapshots/${snapshot.id}/tables`, {});
+  assert.equal(again.status, 201);
+  assert.equal(again.body.data.registered.find((/** @type {any} */ table) => table.shape === "subject").sha256, frozen.body.data.tables.registered.find((/** @type {any} */ table) => table.shape === "subject").sha256);
+
+  // The page shows all of it, to a member who may read it, and to nobody's path.
+  const page = await call("owner", "GET", `${S}/data`);
+  assert.equal(page.status, 200);
+  assert.equal(page.text.includes(context.plane), false, "no path of the server in the tab");
+  assert.equal(page.text.includes("HZ-9001"), false, "and no subject id from the partner's file");
+
+  // Grants: only the source's own account grants, and only to a member of the study.
+  const noOwner = await call("owner", "POST", `${S}/data/sources/${sourceId}/grants`, { grantee: accounts.lead, role: "lead" });
+  assert.equal(noOwner.status, 403);
+  assert.equal(noOwner.body.code, "vcr_grant_owner_only");
+  assert.equal((await call("datamanager", "POST", `${S}/data/sources/${sourceId}/grants`, { grantee: "someone-not-here" })).body.code, "vcr_grant_invalid");
+  const grant = await call("datamanager", "POST", `${S}/data/sources/${sourceId}/grants`, grantBody({ grantee: accounts.lead, role: "lead", fields: ["AGE", "ARM"], purposes: ["vcr"], windowStart: "2020-01-01", windowEnd: "2999-12-31", fieldMode: "allow" }));
+  assert.equal(grant.status, 201, grant.text);
+  const revoked = await call("datamanager", "POST", `${S}/data/grants/${grant.body.data.grant.id}/revoke`, {});
+  assert.equal(revoked.status, 200);
+  assert.ok(revoked.body.data.grant.revokedAt);
+  assert.equal((await call("datamanager", "POST", `${S}/data/grants/${grant.body.data.grant.id}/revoke`, {})).status, 200, "revoking twice is not an error");
+  assert.equal((await call("datamanager", "POST", `${S}/data/grants/grt_nope/revoke`, {})).body.code, "vcr_grant_not_found");
+
+  // A file no snapshot names can be removed; one a snapshot names cannot.
+  assert.equal((await call("datamanager", "DELETE", `${S}/data/files/${uploaded.body.data.file.id}`)).body.code, "vcr_source_file_frozen");
+  const spare = await uploadFile("datamanager", `${S}/data/sources/${sourceId}/files?name=spare.csv`, "a,b\n1,2\n");
+  assert.equal((await call("datamanager", "DELETE", `${S}/data/files/${spare.body.data.file.id}`)).status, 200);
+
+  // Another study's ids do not exist here, and here's do not exist there.
+  const other = await furnishedStudy("另一个研究");
+  assert.equal((await call("owner", "POST", `/api/vcr/studies/${other.id}/data/sources/${sourceId}/snapshots`, {})).body.code, "vcr_source_not_found");
+  assert.equal((await call("owner", "POST", `/api/vcr/studies/${other.id}/data/snapshots/${snapshot.id}/tables`, {})).body.code, "vcr_snapshot_not_found");
+  assert.equal((await call("owner", "POST", `/api/vcr/studies/${other.id}/data/grants/${grant.body.data.grant.id}/revoke`, {})).body.code, "vcr_grant_not_found");
+
+  // Every step is on the platform's audit and the module's own.
+  const trail = (await rows(`SELECT DISTINCT action FROM evimed_vcr.audit WHERE study_id = $1`, [study.id])).map((row) => row.action);
+  for (const action of ["source.register", "source.file", "fieldmap.propose", "fieldmap.confirm", "snapshot.freeze", "analysis_table.put", "grant.create", "grant.revoke", "source.file.remove"]) {
+    assert.ok(trail.includes(action), `${action} is on the module's ledger: ${trail.join(",")}`);
+  }
 });
 
 test("DL-13 DL-15 readiness names the module and its engine; the metrics carry the queue gauges beside GEO's, in the platform's prefix", options, async () => {

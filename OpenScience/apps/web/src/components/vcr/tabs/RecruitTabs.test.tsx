@@ -106,7 +106,79 @@ describe("匹配与招募 — 请求补证", () => {
     expect(screen.getByRole("button", { name: "请求补证" })).toBeDisabled();
   });
 
-  it("records the request in the study's decisions, naming the person and the rules", async () => {
+  // A person with a referral has the request made on the ledger: the referral
+  // moves to 待补证 and the move carries what was asked for.
+  it("moves the person's referral to 待补证, with what was asked for and on which rules", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    await userEvent.click(screen.getByRole("button", { name: "请求补证" }));
+    const requests = "E1 申请近 4 周头颅 MRI；E2 末次免疫治疗日期（10 月 18 日 起可复评）";
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(
+      `/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/transition`, "POST", { to: "needs_evidence", note: requests }));
+    expect(server.calls.some((call) => call.path.endsWith("/decisions"))).toBe(false);
+    expect(toasts.success).toHaveBeenCalledWith("已记录补证请求。");
+  });
+
+  it("is a second press of nothing while the first is in flight", async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    server = installVcrServer(network.productRequest, {
+      [`POST /vcr/studies/${STUDY_ID}/referrals/ref_seed_1/transition`]: () => new Promise((resolve) => { finish = resolve; }),
+    });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const ask = screen.getByRole("button", { name: "请求补证" });
+    await userEvent.click(ask);
+    await userEvent.click(ask);
+    expect(server.calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    await act(async () => { finish({ referral: { id: "ref_seed_1", state: "needs_evidence" } }); });
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已记录补证请求。"));
+  });
+
+  it("says it was asked once the referral is 待补证, and does not ask twice", async () => {
+    const payload = fixture("ev201/matching-p0192.json");
+    payload.selected.referralState = "needs_evidence";
+    payload.selected.canContact = false;
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=matching&direction=trial_to_patient&candidate=P-0192`]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    expect(await screen.findByRole("button", { name: "已请求补证" })).toBeDisabled();
+  });
+
+  it("is off for a reader who may write neither the ledger nor the record", async () => {
+    const reader = study((raw) => { raw.abilities = ["read"]; });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={reader} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    expect(screen.getByRole("button", { name: "请求补证" })).toBeDisabled();
+  });
+
+  // A coordinator (`write_referrals`) moves the ledger without the lead's `write`.
+  it("is on for a coordinator, who holds the ledger and not the study's write", async () => {
+    const coordinator = study((raw) => { raw.abilities = ["read", "write_referrals", "contact_patients"]; });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={coordinator} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    await userEvent.click(screen.getByRole("button", { name: "请求补证" }));
+    await waitFor(() => expect(server.calls.some((call) => call.path.endsWith("/referrals/ref_seed_1/transition"))).toBe(true));
+  });
+
+  // With no referral yet the request has nowhere on the ledger to go: it is
+  // the study's own decision record, as before the ledger existed.
+  it("records the request in the study's decisions when the person has no referral yet", async () => {
+    const payload = fixture("ev201/matching-p0192.json");
+    payload.selected.referralId = null;
+    payload.selected.referralState = null;
+    payload.selected.canContact = false;
+    payload.selected.candidate.referralId = null;
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=matching&direction=trial_to_patient&candidate=P-0192`]: payload });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("heading", { name: "P-0201" });
     await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
@@ -118,7 +190,6 @@ describe("匹配与招募 — 请求补证", () => {
       chosen: { kind: "evidence_request", subject: "P-0192", criteria: ["E1", "E2"] },
       rationale: requests,
     }));
-    expect(toasts.success).toHaveBeenCalledWith("已记录补证请求。");
   });
 });
 
@@ -154,13 +225,68 @@ describe("匹配与招募 — 确认后联系, the one human stop", () => {
     expect(dialog.textContent).not.toMatch(/交给协调员/);
     expect(server.calls.some((call) => call.path.includes("/contact"))).toBe(false);
     await userEvent.click(within(dialog).getByRole("button", { name: "确认联系" }));
-    expect(await within(dialog).findByRole("button", { name: "正在确认" })).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole("button", { name: "正在确认" }));
+    // The dialog holds still while the request is in flight: the confirming
+    // button is disabled and busy, and there is no way to press it again.
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "确认联系" })).toBeDisabled());
+    expect(within(dialog).getByRole("button", { name: "确认联系" })).toHaveAttribute("aria-busy", "true");
+    expect(within(dialog).getByRole("button", { name: "取消" })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "确认联系" }));
     const contacts = server.calls.filter((call) => call.method === "POST" && call.path.includes("/contact"));
     expect(contacts).toEqual([{ method: "POST", path: `/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/contact`, body: {} }]);
     await act(async () => { finish({}); });
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已记录联系确认。"));
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+});
+
+describe("匹配与招募 — a person the ledger has not taken in", () => {
+  it("says the candidate is not yet contactable, and offers no way to confirm a contact", async () => {
+    const payload = fixture("ev201/matching-p0192.json");
+    payload.selected.referralId = null;
+    payload.selected.referralState = null;
+    payload.selected.canContact = false;
+    payload.selected.candidate.referralId = null;
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=matching&direction=trial_to_patient&candidate=P-0192`]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    expect(screen.getByRole("button", { name: "确认后联系" })).toBeDisabled();
+    expect(document.querySelector("[data-vcr-not-contactable]")).toHaveTextContent("尚未生成转诊记录，暂不能联系。");
+  });
+
+  it("does not say it of a person who has a referral", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(document.querySelector("[data-vcr-not-contactable]")).toBeNull();
+  });
+});
+
+describe("匹配与招募 — the referral's own trail", () => {
+  // Every step leaves its mark (plan §7.2): who moved the referral, to where, when.
+  it("lists every move made on the person's referral, oldest first, with who and what was said", async () => {
+    const payload = fixture("ev201/matching-p0192.json");
+    payload.selected.trace = [
+      { state: "candidate", at: "9 月 27 日 17:40", by: "control-plane", note: null },
+      { state: "needs_evidence", at: "今天 14:32", by: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
+    ];
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=matching&direction=trial_to_patient&candidate=P-0192`]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const trail = await screen.findByRole("list", { name: "转诊记录" });
+    const steps = within(trail).getAllByRole("listitem");
+    expect(steps.map((step) => step.textContent)).toEqual([
+      "9 月 27 日 17:40候选control-plane",
+      "今天 14:32待补证u_coordE1 申请近 4 周头颅 MRI",
+    ]);
+  });
+
+  it("draws no trail for a person whose referral has no recorded moves", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    expect(document.querySelector("[data-vcr-referral-trace]")).toBeNull();
   });
 });
 
@@ -246,6 +372,36 @@ describe("匹配与招募 — the other three views", () => {
       return found as HTMLElement;
     });
     expect(site).toHaveTextContent("资料还没有核实过");
+  });
+
+  // UI-30: what a site still lacks, and how many contacts it has, as far as
+  // the server sends them; a column nobody has anything in is not drawn.
+  it("shows what a site lacks and how many contacts it has, only where there is something to say", async () => {
+    const payload = fixture("ev201/matching-sites.json");
+    payload.sites[0].needs = ["转诊表模板", "伦理批件"];
+    payload.sites[0].contacts = 2;
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=sites&direction=trial_to_patient`]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "中心" }));
+    const site = await waitFor(() => {
+      const found = document.querySelector("[data-vcr-site='ste_01']");
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(site).toHaveTextContent("转诊表模板");
+    expect(site).toHaveTextContent("伦理批件");
+    expect(screen.getByRole("columnheader", { name: "未满足的要求" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "联系人" })).toBeInTheDocument();
+  });
+
+  it("draws neither column when no site has anything to say in it", async () => {
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("radio", { name: "中心" }));
+    await waitFor(() => expect(document.querySelector("[data-vcr-site='ste_01']")).not.toBeNull());
+    expect(screen.queryByRole("columnheader", { name: "未满足的要求" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "联系人" })).toBeNull();
   });
 });
 

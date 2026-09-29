@@ -38,13 +38,14 @@ import { fetchWebMe, WebApiError, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
 import {
   assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, exportBody, jobBody, memberBody, reviewBody, runBody,
-  studyCreateBody, studyPatchBody,
+  studyCreateBody, studyPatchBody, transitionBody,
   type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrJobBody,
-  type VcrMemberBody, type VcrPatchBody, type VcrReviewBody,
+  type VcrMemberBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
 } from "./vcrBodies";
 
 export type {
   VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrJobBody, VcrMemberBody, VcrPatchBody, VcrReviewBody,
+  VcrTransitionBody,
 } from "./vcrBodies";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -779,6 +780,8 @@ export interface VcrMatchingTab {
     referralState?: VcrReferralState | null;
     priority?: VcrCandidate["priority"];
     reviewedBy?: string | null;
+    /** Every move on this person's referral, oldest first: to where, when, by whom (plan §7.2). */
+    trace?: Array<{ state: VcrReferralState; at: string | null; by: string | null; note: string | null }>;
   } | null;
   /** The main gaps across the undecidable ones. */
   gaps: Array<{ code: string; label: string; detail?: string | null; count: number | null }>;
@@ -1269,6 +1272,7 @@ export function readVcrMatching(raw: unknown): VcrMatchingTab {
       candidate: { ...(selected.candidate as unknown as VcrCandidate), open: arr(obj(selected.candidate).open) as unknown as VcrCandidate["open"] },
       facts: arr(selected.facts) as unknown as NonNullable<VcrMatchingTab["selected"]>["facts"],
       criteria: arr(selected.criteria) as unknown as VcrCriterionJudgement[],
+      trace: arr(selected.trace) as unknown as NonNullable<NonNullable<VcrMatchingTab["selected"]>["trace"]>,
     } : null,
     gaps: arr(value.gaps) as unknown as VcrMatchingTab["gaps"],
     pendingReview: value.pendingReview && typeof value.pendingReview === "object" ? value.pendingReview as VcrMatchingTab["pendingReview"] : null,
@@ -1457,8 +1461,44 @@ export async function getVcrPrecedents(query: { q?: string; limit?: number } = {
   return readVcrPrecedents(await productRequest<unknown>(`/vcr/precedents${suffix ? `?${suffix}` : ""}`));
 }
 
+/** One account on a study: the owner (always the lead) and everyone the lead added, with the roles each holds. */
+export interface VcrMember {
+  userId: string;
+  /** The study's owner, who is the lead by being the owner and is not a row that can be removed. */
+  owner: boolean;
+  roles: VcrMemberRole[];
+  roleLabels: string[];
+  invitedBy?: string | null;
+  createdAt?: string | null;
+}
+
+export function readVcrMembers(raw: unknown): VcrMember[] {
+  return arr(obj(raw).members).map((item) => ({
+    userId: text(item.userId) ?? "",
+    owner: item.owner === true,
+    roles: strings(item.roles) as VcrMemberRole[],
+    roleLabels: strings(item.roleLabels),
+    invitedBy: text(item.invitedBy),
+    createdAt: text(item.createdAt),
+  })).filter((member) => member.userId);
+}
+
+export async function getVcrMembers(studyId: string): Promise<VcrMember[]> {
+  return readVcrMembers(await productRequest<unknown>(`${study(studyId)}/members`));
+}
+
+/** Give an account a role. Idempotent: a role it already holds changes nothing. */
 export function setVcrMembers(studyId: string, input: VcrMemberBody) {
   return productRequest<unknown>(`${study(studyId)}/members`, "POST", memberBody(input));
+}
+
+/**
+ * Take one role away from an account. The role is named in the query, so a
+ * person who is both the site and the clinical reviewer keeps the other one;
+ * without `role` the route removes every role the account holds.
+ */
+export function removeVcrMember(studyId: string, userId: string, role?: VcrMemberRole) {
+  return productRequest<unknown>(`${study(studyId)}/members/${id(userId)}${role ? `?role=${encodeURIComponent(role)}` : ""}`, "DELETE");
 }
 
 /**
@@ -1468,6 +1508,16 @@ export function setVcrMembers(studyId: string, input: VcrMemberBody) {
  */
 export function contactVcrReferral(studyId: string, referralId: string, input: VcrContactBody = {}) {
   return productRequest<unknown>(`${study(studyId)}/referrals/${id(referralId)}/contact`, "POST", contactBody(input));
+}
+
+/**
+ * One move on the referral ledger — 「请求补证」 is `to: "needs_evidence"`. The
+ * route refuses a move into a contact state that no person has confirmed, and
+ * a site moves only its own referrals; this is not a way round either.
+ */
+export function transitionVcrReferral(studyId: string, referralId: string, input: VcrTransitionBody) {
+  return productRequest<{ referral: { id: string; state: VcrReferralState } | null; notices?: string[] }>(
+    `${study(studyId)}/referrals/${id(referralId)}/transition`, "POST", transitionBody(input));
 }
 
 /** What 「让 AI 做」 and an export answer: the conversation, and the run — or the sentence that it is queued behind another. */
@@ -1511,4 +1561,286 @@ export function useVcrFeature(): VcrFeature {
     return () => { active = false; };
   }, []);
   return feature;
+}
+
+// ---- data intake ----------------------------------------------------------------
+// The browser's side of `/api/vcr/studies/:id/data/*` (contract 2026-09-29 §6):
+// source → files → field map → snapshot → tables → grants, and the seal's two
+// timestamps. The server presents the whole block (`presentIntake`); the reader
+// is total over what it might send. Bodies are built by `vcrIntakeBodies.ts`,
+// which is exactly the routes' allow-lists.
+
+import { fetchWithWebAuth, webApiBase } from "./apiClient";
+import {
+  confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery,
+  type VcrFieldMapEntry, type VcrGrantBody, type VcrSourceBody,
+} from "./vcrIntakeBodies";
+
+export type { VcrFieldMapEntry, VcrFieldRole, VcrGrantBody, VcrSourceBody } from "./vcrIntakeBodies";
+
+export interface VcrIntakeOption { value: string; label: string }
+
+export interface VcrIntakeFile {
+  id: string;
+  name: string;
+  role: "data" | "dictionary" | "document";
+  roleLabel: string;
+  format: string;
+  size: string | null;
+  rows: number | null;
+  columnCount: number | null;
+  at: string | null;
+  /** For a data file: whether it is the newest upload of its name, the one a snapshot takes. */
+  latest: boolean | null;
+  columns: Array<{ name: string; type: string | null; filled: number | null; distinct: number | null; identifying: boolean }>;
+  entries: number | null;
+  sheets: string[];
+  sheetUsed: string | null;
+  subjectKey: string | null;
+  visibleAt: string | null;
+}
+
+export interface VcrIntakeIssue { code: string; message: string; table: string | null; column: string | null }
+
+export interface VcrIntakeGrant {
+  id: string;
+  grantee: string;
+  granteeLabel: string;
+  role: string | null;
+  fields: string[];
+  fieldMode: "allow" | "deny";
+  window: string | null;
+  purposes: string[];
+  revoked: boolean;
+  revokedAt: string | null;
+  createdAt: string | null;
+}
+
+export interface VcrIntakeSource {
+  id: string;
+  name: string;
+  ownerParty: string | null;
+  mine: boolean;
+  /** False when the viewer holds no grant on this source: its name and state are shown, its columns are not. */
+  readable: boolean;
+  canGrant: boolean;
+  status: string;
+  statusLabel: string;
+  valueSource: string;
+  valueSourceLabel: string;
+  allowedUses: string[];
+  window: string | null;
+  retention: string | null;
+  upload: { formats: string[]; maxBytes: number | null; maxText: string | null };
+  files: VcrIntakeFile[];
+  fieldMap: {
+    state: "none" | "proposed" | "confirmed";
+    stateLabel: string;
+    hash: string | null;
+    by: string | null;
+    confirmedBy: string | null;
+    confirmedAt: string | null;
+    columns: VcrFieldMapEntry[];
+    issues: VcrIntakeIssue[];
+  };
+  grants: VcrIntakeGrant[];
+}
+
+export interface VcrIntakeTable {
+  shape: string;
+  label: string;
+  rows: number | null;
+  columns: string[];
+  issues: number;
+  outcomeBearing: boolean;
+}
+
+export interface VcrIntakeSnapshot {
+  id: string;
+  sourceId: string;
+  version: number | null;
+  label: string;
+  at: string | null;
+  rows: number | null;
+  columnCount: number | null;
+  valueSource: string | null;
+  files: string[];
+  sealed: boolean;
+  sealedFields: string[];
+  sealedUntil: string | null;
+  findings: number | null;
+  /** The five quality categories with how many findings each holds. */
+  quality: Array<{ label: string; value: string; passed: boolean }>;
+  tables: VcrIntakeTable[];
+}
+
+export interface VcrIntakeSeal {
+  required: boolean;
+  /** When the analysis plan was frozen — the instant the outcome seal lifts. */
+  planFrozenAt: string | null;
+  /** When an outcome field was first read: the second timestamp the package cover prints. */
+  outcomeFirstReadAt: string | null;
+  ordered: boolean;
+  fields: string[];
+  fieldsRead: string[];
+  note: string | null;
+}
+
+export interface VcrIntake {
+  available: boolean;
+  /** Said when the plane is not there: why, and what to do. */
+  message: string | null;
+  formats: string[];
+  maxBytes: number | null;
+  canManage: boolean;
+  seal: VcrIntakeSeal | null;
+  options: { roles: VcrIntakeOption[]; timeKinds: VcrIntakeOption[]; missingReasons: VcrIntakeOption[]; valueSources: VcrIntakeOption[]; memberRoles: VcrIntakeOption[] };
+  sources: VcrIntakeSource[];
+  snapshots: VcrIntakeSnapshot[];
+}
+
+// `VcrDataTab` gains the intake block; declaration merging keeps the earlier interface as it is.
+export interface VcrDataTab {
+  intake?: VcrIntake | null;
+}
+
+function intakeOptions(raw: unknown): VcrIntakeOption[] {
+  return arr(raw).map((option) => ({ value: text(option.value) ?? "", label: text(option.label) ?? "" })).filter((option) => option.value);
+}
+
+function readIntakeFile(raw: Loose): VcrIntakeFile {
+  const role = text(raw.role);
+  return {
+    id: text(raw.id) ?? "", name: text(raw.name) ?? "", role: role === "dictionary" || role === "document" ? role : "data",
+    roleLabel: text(raw.roleLabel) ?? "", format: text(raw.format) ?? "", size: text(raw.size), rows: finite(raw.rows),
+    columnCount: finite(raw.columnCount), at: text(raw.at), latest: typeof raw.latest === "boolean" ? raw.latest : null,
+    columns: arr(raw.columns).map((column) => ({
+      name: text(column.name) ?? "", type: text(column.type), filled: finite(column.filled), distinct: finite(column.distinct), identifying: column.identifying === true,
+    })),
+    entries: finite(raw.entries), sheets: strings(raw.sheets), sheetUsed: text(raw.sheetUsed), subjectKey: text(raw.subjectKey), visibleAt: text(raw.visibleAt),
+  };
+}
+
+function readIntakeSource(raw: Loose): VcrIntakeSource {
+  const map = obj(raw.fieldMap);
+  const upload = obj(raw.upload);
+  const state = text(map.state);
+  return {
+    id: text(raw.id) ?? "", name: text(raw.name) ?? "", ownerParty: text(raw.ownerParty), mine: raw.mine === true, readable: raw.readable === true,
+    canGrant: raw.canGrant === true, status: text(raw.status) ?? "registered", statusLabel: text(raw.statusLabel) ?? "",
+    valueSource: text(raw.valueSource) ?? "observed", valueSourceLabel: text(raw.valueSourceLabel) ?? "",
+    allowedUses: strings(raw.allowedUses), window: text(raw.window), retention: text(raw.retention),
+    upload: { formats: strings(upload.formats), maxBytes: finite(upload.maxBytes), maxText: text(upload.maxText) },
+    files: arr(raw.files).map(readIntakeFile),
+    fieldMap: {
+      state: state === "proposed" || state === "confirmed" ? state : "none", stateLabel: text(map.stateLabel) ?? "", hash: text(map.hash),
+      by: text(map.by), confirmedBy: text(map.confirmedBy), confirmedAt: text(map.confirmedAt),
+      columns: arr(map.columns) as unknown as VcrFieldMapEntry[],
+      issues: arr(map.issues).map((issue) => ({ code: text(issue.code) ?? "", message: text(issue.message) ?? "", table: text(issue.table), column: text(issue.column) })),
+    },
+    grants: arr(raw.grants).map((grant) => ({
+      id: text(grant.id) ?? "", grantee: text(grant.grantee) ?? "", granteeLabel: text(grant.granteeLabel) ?? text(grant.grantee) ?? "", role: text(grant.role),
+      fields: strings(grant.fields), fieldMode: grant.fieldMode === "deny" ? "deny" : "allow", window: text(grant.window), purposes: strings(grant.purposes),
+      revoked: grant.revoked === true, revokedAt: text(grant.revokedAt), createdAt: text(grant.createdAt),
+    })),
+  };
+}
+
+/** Total over whatever the server sent: a missing block is an unavailable one, never a crash. */
+export function readVcrIntake(raw: unknown): VcrIntake {
+  const value = obj(raw);
+  const seal = obj(value.seal);
+  const options = obj(value.options);
+  return {
+    available: value.available === true,
+    message: text(value.message),
+    formats: strings(value.formats),
+    maxBytes: finite(value.maxBytes),
+    canManage: value.canManage === true,
+    seal: value.seal && typeof value.seal === "object" ? {
+      required: seal.required === true, planFrozenAt: text(seal.planFrozenAt), outcomeFirstReadAt: text(seal.outcomeFirstReadAt),
+      ordered: seal.ordered === true, fields: strings(seal.fields), fieldsRead: strings(seal.fieldsRead), note: text(seal.note),
+    } : null,
+    options: {
+      roles: intakeOptions(options.roles), timeKinds: intakeOptions(options.timeKinds), missingReasons: intakeOptions(options.missingReasons),
+      valueSources: intakeOptions(options.valueSources), memberRoles: intakeOptions(options.memberRoles),
+    },
+    sources: arr(value.sources).map(readIntakeSource),
+    snapshots: arr(value.snapshots).map((snapshot) => ({
+      id: text(snapshot.id) ?? "", sourceId: text(snapshot.sourceId) ?? "", version: finite(snapshot.version), label: text(snapshot.label) ?? "",
+      at: text(snapshot.at), rows: finite(snapshot.rows), columnCount: finite(snapshot.columnCount), valueSource: text(snapshot.valueSource),
+      files: strings(snapshot.files), sealed: snapshot.sealed === true, sealedFields: strings(snapshot.sealedFields), sealedUntil: text(snapshot.sealedUntil),
+      findings: finite(snapshot.findings),
+      quality: arr(snapshot.quality).map((entry) => ({ label: text(entry.label) ?? "", value: text(entry.value) ?? "", passed: entry.passed === true })),
+      tables: arr(snapshot.tables).map((table) => ({
+        shape: text(table.shape) ?? "", label: text(table.label) ?? "", rows: finite(table.rows), columns: strings(table.columns),
+        issues: finite(table.issues) ?? 0, outcomeBearing: table.outcomeBearing === true,
+      })),
+    })),
+  };
+}
+
+const dataRoute = (studyId: string) => `${study(studyId)}/data`;
+
+/** 登记数据源: whose data it is, what it may be used for, for how long. */
+export async function registerVcrSource(studyId: string, input: VcrSourceBody) {
+  return productRequest<{ source: { id: string; name: string } }>(`${dataRoute(studyId)}/sources`, "POST", sourceBody(input));
+}
+
+/**
+ * Upload one file into a source: the raw file as the request body, its name and
+ * role in the query — streamed by the browser, never read into a string here.
+ * A refusal is a `WebApiError` with the plane's own code (`vcr_data_file_too_large`,
+ * `vcr_data_format_unsupported`, …).
+ */
+export async function uploadVcrFile(
+  studyId: string, sourceId: string, file: Blob,
+  input: { name: string; role?: "data" | "dictionary" | "document"; subject?: string; visibleAt?: string; sheet?: string },
+) {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${root}${dataRoute(studyId)}/sources/${id(sourceId)}/files?${uploadQuery(input)}`, {
+    method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
+  });
+  const value = await response.json().catch(() => null) as { data?: { file: VcrIntakeFile; created: boolean }; error?: string; code?: string } | null;
+  if (!response.ok || !value || !("data" in value)) {
+    throw new WebApiError(value?.error ?? "The upload was refused.", { status: response.status, code: value?.code });
+  }
+  return value.data as { file: VcrIntakeFile; created: boolean };
+}
+
+export function removeVcrFile(studyId: string, fileId: string) {
+  return productRequest<{ removed: boolean }>(`${dataRoute(studyId)}/files/${id(fileId)}`, "DELETE");
+}
+
+/** Propose (or edit) the source's field map. The answer names the entries and the whole-map problems, if any. */
+export function proposeVcrFieldMap(studyId: string, sourceId: string, columns: readonly VcrFieldMapEntry[]) {
+  return productRequest<{ hash: string; entryIssues: Array<{ index?: number; field?: string; code: string; message: string }>; mapIssues: VcrIntakeIssue[] }>(
+    `${dataRoute(studyId)}/sources/${id(sourceId)}/fieldmap`, "POST", fieldMapBody(columns));
+}
+
+/** Confirm the map by the hash that was shown: a map that changed since is refused. */
+export function confirmVcrFieldMap(studyId: string, sourceId: string, hash: string) {
+  return productRequest<{ checks: Record<string, number> }>(`${dataRoute(studyId)}/sources/${id(sourceId)}/fieldmap/confirm`, "POST", confirmFieldMapBody(hash));
+}
+
+/** 冻结快照: the files' bytes, the profile, the seal (when the study asks for one) and the three analysis tables. */
+export function freezeVcrSnapshot(studyId: string, sourceId: string, input: { fileIds?: readonly string[]; asOf?: string } = {}) {
+  return productRequest<{
+    snapshot: { id: string; version: number };
+    tables: { registered: Array<{ shape: string }>; refused: Array<{ shape: string; issues: Array<{ issue: string; message: string; blocking: boolean }> }>; skipped: string[] } | null;
+  }>(`${dataRoute(studyId)}/sources/${id(sourceId)}/snapshots`, "POST", freezeBody(input));
+}
+
+/** Derive the three analysis tables again from a snapshot's confirmed map. */
+export function deriveVcrTables(studyId: string, snapshotId: string) {
+  return productRequest<{ registered: Array<{ shape: string }>; refused: Array<{ shape: string; issues: Array<{ issue: string; message: string; blocking: boolean }> }> }>(
+    `${dataRoute(studyId)}/snapshots/${id(snapshotId)}/tables`, "POST", {});
+}
+
+export function createVcrGrant(studyId: string, sourceId: string, input: VcrGrantBody) {
+  return productRequest<{ grant: { id: string } }>(`${dataRoute(studyId)}/sources/${id(sourceId)}/grants`, "POST", grantBody(input));
+}
+
+export function revokeVcrGrant(studyId: string, grantId: string) {
+  return productRequest<{ grant: { id: string; revokedAt: string | null } }>(`${dataRoute(studyId)}/grants/${id(grantId)}/revoke`, "POST", {});
 }

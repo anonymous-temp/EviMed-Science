@@ -17,6 +17,13 @@ import { Button } from "@/components/ui/Button";
  * Enter on the panel deleted what the dialog was asking about. Now Enter on
  * 取消, where focus starts, cancels, and confirming a destruction takes a
  * deliberate move to the red button.
+ *
+ * `busy` is the dialog's own answer to a double press: while the caller's
+ * request is in flight the confirming button is disabled and spinning, and the
+ * dialog cannot be dismissed (Escape, the overlay and 取消 do nothing), so a
+ * second click is impossible by construction rather than by a guard each
+ * caller has to remember. The caller closes the dialog when the request
+ * settles.
  */
 export function ConfirmDialog({
   title,
@@ -25,6 +32,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   tone = "danger",
+  busy = false,
 }: {
   title: string;
   body: string;
@@ -39,6 +47,8 @@ export function ConfirmDialog({
    * dangerous (review B, ConfirmDialog P1).
    */
   tone?: "danger" | "primary";
+  /** The confirmed action is running: the confirming button is disabled and the dialog stays open until the caller closes it. */
+  busy?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -48,12 +58,14 @@ export function ConfirmDialog({
   // parent re-render neither re-focuses nor re-arms the key listener.
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
+  const working = useRef(busy);
+  working.current = busy;
 
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") cancel.current();
+      if (e.key === "Escape" && !working.current) cancel.current();
       if (e.key === "Tab") trapTab(dialogRef.current, e);
     };
     document.addEventListener("keydown", onKey);
@@ -70,7 +82,7 @@ export function ConfirmDialog({
     <div
       className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+        if (e.target === e.currentTarget && !busy) onCancel();
       }}
       role="presentation"
     >
@@ -80,6 +92,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
+        aria-busy={busy || undefined}
         className="w-full max-w-[400px] rounded-panel border border-border bg-surface p-6 shadow-e3"
       >
         <h2 id={titleId} className="text-body font-semibold text-text">{title}</h2>
@@ -87,10 +100,10 @@ export function ConfirmDialog({
           {body}
         </p>
         <div className="mt-6 flex justify-end gap-2">
-          <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
+          <Button ref={cancelRef} variant="secondary" disabled={busy} onClick={onCancel}>
             取消
           </Button>
-          <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
+          <Button variant={tone === "danger" ? "danger" : "primary"} loading={busy} onClick={busy ? undefined : onConfirm}>
             {confirmLabel}
           </Button>
         </div>

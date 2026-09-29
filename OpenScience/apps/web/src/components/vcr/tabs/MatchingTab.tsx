@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
 import {
   contactVcrReferral,
   getVcrMatching,
   recordVcrDecision,
+  transitionVcrReferral,
   type VcrCandidate,
   type VcrCriterionJudgement,
   type VcrCriterionState,
@@ -74,6 +75,9 @@ const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
  *  - **The confirmation names the referral, not the person's key.** The route
  *    takes the referral id the server attached to the selected candidate; a
  *    subject key sent there is a 404 (review UI-2).
+ *  - **A candidate with no referral is not yet contactable.** Confirming a
+ *    contact is a move on the referral ledger, so a person the ledger has not
+ *    taken in says so instead of offering a button that would be refused.
  *  - Picking a candidate re-reads the tab for that person (`?candidate=`), and
  *    the page keeps the rest of the tab on screen while it does.
  *  - When the recruiting side is not composed on this deployment the payload
@@ -172,22 +176,29 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 }) {
   const [confirming, setConfirming] = useState<{ subject: string; referralId: string } | null>(null);
   const [busy, setBusy] = useState<"contact" | "evidence" | null>(null);
-  const holding = useRef(false);
   const selected = data.selected;
   const current = picked ?? selected?.candidate.id ?? null;
   const needs = selected ? evidenceNeeds(selected.criteria) : [];
   const referralId = selected?.referralId ?? null;
+  const referralState = selected?.referralState ?? null;
   // The one human stop (plan §10.1): the server says whether this referral is
   // at a state a coordinator may confirm, and the reader's own roles say
   // whether they are the one who may.
   const mayContact = Boolean(selected?.canContact === true && referralId && abilities.includes("contact_patients"));
+  // Asking for evidence is a move on the ledger when the person has a referral
+  // (the coordinator's, `write_referrals`), and the study's own decision
+  // record when there is none yet (`write`) — the two routes the server has.
+  const mayMoveLedger = abilities.includes("write_referrals") || abilities.includes("contact_patients");
+  const evidenceAsked = referralState === "needs_evidence";
+  const mayAskEvidence = needs.length > 0 && !evidenceAsked && (referralId
+    ? mayMoveLedger && (referralState === "candidate" || referralState === "contactable" || referralState === "contacted")
+    : abilities.includes("write"));
 
-  /** One write at a time (CW-18): a second press while the first is in flight does nothing. */
+  /** One write at a time (CW-18): every control that writes is disabled while one is in flight. */
   const once = (key: "contact" | "evidence", work: () => Promise<unknown>) => {
-    if (holding.current) return;
-    holding.current = true;
+    if (busy !== null) return;
     setBusy(key);
-    void work().finally(() => { holding.current = false; setBusy(null); });
+    void work().finally(() => setBusy(null));
   };
 
   const contact = () => {
@@ -199,19 +210,27 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
       .finally(() => setConfirming(null)));
   };
 
-  // 请求补证 is recorded as a decision: what was asked for, about whom and on
-  // which rules, in the study's own decision record.
   const requestEvidence = () => {
     if (!selected || needs.length === 0) return;
     const subject = selected.candidate.id;
     const requests = needs.map((row) => `${row.code} ${row.request ?? criterionStateLabel(row.state)}${row.requestNote ? `（${row.requestNote}）` : ""}`).join("；");
+    const failure = "补证请求暂时无法记录，请稍后重试。";
+    const done = () => { toast.success("已记录补证请求。"); onDone(); };
+    if (referralId) {
+      // The ledger: the referral moves to 待补证, with what is asked for and
+      // who asked kept on the move.
+      once("evidence", () => transitionVcrReferral(studyId, referralId, { to: "needs_evidence", note: requests.slice(0, 1_000) })
+        .then(done)
+        .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure }))));
+      return;
+    }
     once("evidence", () => recordVcrDecision(studyId, {
       question: `请求补证 ${subject}：${requests}`.slice(0, 500),
       chosen: { kind: "evidence_request", subject, criteria: needs.map((row) => row.code) },
       rationale: requests,
     })
-      .then(() => { toast.success("已记录补证请求。"); onDone(); })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "补证请求暂时无法记录，请稍后重试。" }))));
+      .then(done)
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure }))));
   };
 
   return (
@@ -341,6 +360,22 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               })}
             />
 
+            {selected.trace && selected.trace.length > 0 && (
+              // Who moved this person's referral, to where, and when: every step leaves its mark (plan §7.2).
+              <ol data-vcr-referral-trace="" aria-label="转诊记录" className="mt-4 divide-y divide-faint border-t border-border">
+                {selected.trace.map((step, index) => (
+                  <li key={`${step.state}-${index}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+                    <span className="w-28 shrink-0 text-caption tabular-nums text-text-3">{step.at ?? ""}</span>
+                    <span className="min-w-0 flex-1 text-ui text-text">
+                      {referralStateLabel(step.state)}
+                      {step.by && <span className="ml-1.5 text-caption text-text-3">{step.by}</span>}
+                    </span>
+                    {step.note && <span className="w-full text-caption text-text-3">{step.note}</span>}
+                  </li>
+                ))}
+              </ol>
+            )}
+
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3">
               {selected.verdict && (
                 <p data-vcr-eligibility="" className="flex min-w-0 flex-1 items-center gap-2 text-ui text-warn-strong">
@@ -352,10 +387,10 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               <Button
                 variant="secondary"
                 loading={busy === "evidence"}
-                disabled={needs.length === 0 || busy !== null || !abilities.includes("write")}
+                disabled={!mayAskEvidence || busy !== null}
                 onClick={requestEvidence}
               >
-                请求补证
+                {evidenceAsked ? "已请求补证" : "请求补证"}
               </Button>
               {/* The one human stop: contacting a person is outside the
                   platform and cannot be undone (plan §10.1). */}
@@ -365,6 +400,9 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               >
                 确认后联系
               </Button>
+              {!referralId && (
+                <p data-vcr-not-contactable="" className="w-full text-right text-caption text-text-3">尚未生成转诊记录，暂不能联系。</p>
+              )}
             </div>
           </Card>
         )}
@@ -374,9 +412,10 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
         <ConfirmDialog
           title={`确认联系 ${confirming.subject}？`}
           body="联系真实患者是平台之外、不可撤回的动作。确认后会记录是谁在什么时候确认的。"
-          confirmLabel={busy === "contact" ? "正在确认" : "确认联系"}
+          confirmLabel="确认联系"
+          busy={busy === "contact"}
           onConfirm={contact}
-          onCancel={() => { if (busy !== "contact") setConfirming(null); }}
+          onCancel={() => setConfirming(null)}
         />
       )}
     </>
@@ -543,6 +582,21 @@ function SitesView({ data }: { data: MatchingData }) {
           },
           { key: "capacity", header: "容量", isEmpty: (site) => !site.capacity, cell: (site) => site.capacity ?? "—" },
           { key: "competing", header: "在研竞争研究", isEmpty: (site) => !site.competing, cell: (site) => site.competing ?? "—" },
+          {
+            key: "needs",
+            header: "未满足的要求",
+            isEmpty: (site) => !site.needs || site.needs.length === 0,
+            cell: (site) => (site.needs && site.needs.length > 0
+              ? <span className="flex flex-wrap gap-1">{site.needs.map((need) => <Tag key={need} tone="warn">{need}</Tag>)}</span>
+              : <span className="text-text-3">—</span>),
+          },
+          {
+            key: "contacts",
+            header: "联系人",
+            align: "right",
+            isEmpty: (site) => !site.contacts,
+            cell: (site) => numberText(site.contacts ?? null, 0),
+          },
           { key: "referred", header: "已转诊", align: "right", cell: (site) => numberText(site.referred, 0) },
           { key: "waiting", header: "待响应", align: "right", cell: (site) => numberText(site.waiting, 0) },
           { key: "enrolled", header: "已入组", align: "right", cell: (site) => numberText(site.enrolled, 0) },

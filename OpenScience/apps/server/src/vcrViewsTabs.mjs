@@ -34,6 +34,8 @@ import {
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_POPULATION_KIND_LABELS_ZH, VCR_REFERRAL_STATES, VCR_ROUTE_MIN_TIER,
   VCR_SMD_FLOOR, VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH, VCR_TWIN_LABELS_ZH, VCR_VALUE_SOURCES, VCR_ESTIMAND_LABELS_ZH,
   VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, parseLineageNode,
+  VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
+  VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -909,6 +911,11 @@ export function presentMatchingTab(bundle, query = {}) {
       referralState: referral?.state ?? null,
       priority: chosen.priority,
       reviewedBy: selectedAssessment.reviewedBy ?? null,
+      // Every move on the person's referral, oldest first: to where, when, by
+      // whom (an account id or the control plane) and what was said with it.
+      trace: list(match.referralEvents).map((/** @type {any} */ event) => ({
+        state: event.toState, at: zhTime(event.occurredAt, now), by: text(event.actor), note: text(event.note),
+      })),
     };
   })() : null;
   const ordinalOf = (/** @type {string} */ id) => Number(criteria.find((/** @type {any} */ criterion) => criterion.id === id)?.ordinal ?? 0);
@@ -1115,18 +1122,7 @@ export function presentDataTab(bundle, query = {}) {
     const items = (evidence?.items ?? []).filter((/** @type {any} */ item) => item.precedent_id === row.id);
     return { ...presentPrecedentRow(row), usedFor: [...new Set(items.map((/** @type {any} */ item) => PARAMETER_LABELS[String(item.parameter)]).filter(Boolean))].slice(0, 3).join("、") || null };
   });
-  const snapshots = list(dataPlane?.snapshots).map((snapshot) => {
-    const entry = object(snapshot);
-    const quality = object(entry.quality);
-    return {
-      id: String(entry.id),
-      label: `快照 v${entry.version ?? "?"}`,
-      at: zhTime(entry.frozenAt, now),
-      rows: numeric(entry.rowCount),
-      quality: Object.entries(quality).filter(([, value]) => typeof value === "number" || typeof value === "string").slice(0, 8)
-        .map(([label, value]) => ({ label, value: String(value), passed: undefined })),
-    };
-  });
+  const snapshots = presentDataSnapshots(dataPlane, now);
   const aiSet = cards.filter((card) => card.value.review === "ai_set").length;
   return {
     headline: cards.length ? `${cards.length} 张假设卡${aiSet ? `，其中 ${aiSet} 张由 AI 设定、还没有复核` : ""}。` : null,
@@ -1141,6 +1137,8 @@ export function presentDataTab(bundle, query = {}) {
     precedentSources: precedents.length ? `${precedents.length} 项试验先例` : null,
     precedentNote: null,
     snapshots,
+    // The intake flow: sources, files, field maps, snapshots, tables, grants and the seal (contract §6).
+    intake: presentIntake(bundle),
     decisions: decisions.slice(0, 5).map((decision) => ({ id: decision.id, at: zhTime(decision.createdAt, now), text: decision.question })),
     // Said only when the evidence side is not composed here: an empty card list
     // must not read as 「没有证据」 when the deployment cannot look.
@@ -1200,4 +1198,194 @@ function sensitivityText(card) {
   const calibres = list(object(card.sensitivity).calibres).length;
   if (low === null && high === null && !calibres) return null;
   return [low !== null && high !== null ? `敏感性范围 ${roundTo(low, 2)}–${roundTo(high, 2)}` : null, calibres ? `另有 ${calibres} 个汇总口径作对照` : null].filter(Boolean).join("；");
+}
+
+// ---- data tab ----------------------------------------------------------------
+// The data-intake half of 「数据与证据」 (contract 2026-09-29 §6): what the
+// browser needs to walk a source from upload to grant. Nothing here is a path of
+// the server or a row of a patient — the plane's `tabFor` never sent one — and
+// every sentence the page shows about a refusal is built here or by the plane,
+// not by the component.
+
+/** Where a source stands, in words. */
+const INTAKE_STATUS_ZH = Object.freeze(/** @type {Record<string, string>} */ ({ registered: "已登记", profiled: "已上传", frozen: "已冻结", withdrawn: "已撤回" }));
+/** Where its field map stands. */
+const FIELD_MAP_STATE_ZH = Object.freeze(/** @type {Record<string, string>} */ ({ none: "尚未提出", proposed: "待确认", confirmed: "已确认" }));
+/** What an uploaded file is. */
+const FILE_ROLE_ZH = Object.freeze(/** @type {Record<string, string>} */ ({ data: "数据文件", dictionary: "数据字典", document: "患者文档" }));
+/** What a column is for — the closed list the field-map editor offers. */
+const FIELD_ROLE_OPTIONS = Object.freeze([
+  { value: "subject_key", label: "受试者编号" }, { value: "arm", label: "治疗分组" }, { value: "covariate", label: "基线协变量" },
+  { value: "outcome_time", label: "结局：时间" }, { value: "outcome_event", label: "结局：事件" }, { value: "time_zero", label: "时间零点" },
+  { value: "measurement", label: "纵向测量值" }, { value: "visit_date", label: "测量日期" }, { value: "other", label: "其他（不进入分析表）" },
+]);
+
+/** @param {number | null} bytes */
+function byteText(bytes) {
+  if (bytes === null) return null;
+  if (bytes < 1024) return `${bytes} 字节`;
+  if (bytes < 1024 * 1024) return `${roundTo(bytes / 1024, 1)} KB`;
+  return `${roundTo(bytes / (1024 * 1024), 1)} MB`;
+}
+
+/** @param {Record<string, any>} window */
+function windowText(window) {
+  const start = text(window?.start);
+  const end = text(window?.end);
+  if (!start && !end) return null;
+  return `${start ? start.slice(0, 10) : "不限"} 至 ${end ? end.slice(0, 10) : "不限"}`;
+}
+
+/**
+ * Snapshots for the evidence half of the tab: a label, a time, a row count and
+ * the five Kahn categories with how many findings each holds. The intake half
+ * carries the same snapshots with their tables and seal.
+ * @param {any} dataPlane @param {Date} now
+ */
+function presentDataSnapshots(dataPlane, now) {
+  return list(dataPlane?.snapshots).map((snapshot) => {
+    const entry = object(snapshot);
+    return {
+      id: String(entry.id),
+      label: `快照 v${entry.version ?? "?"}`,
+      at: zhTime(entry.frozenAt, now),
+      rows: numeric(entry.rowCount),
+      quality: qualityRows(entry.quality),
+    };
+  });
+}
+
+/** The five Kahn categories with how many findings each holds: 「一致性 10 项」. @param {unknown} quality */
+function qualityRows(quality) {
+  return Object.entries(object(object(quality).categories)).filter(([, count]) => typeof count === "number").map(([category, count]) => ({
+    label: (/** @type {Record<string, string>} */ (VCR_QUALITY_CATEGORY_LABELS_ZH))[category] ?? category, value: `${count} 项`, passed: count === 0,
+  }));
+}
+
+/**
+ * The seal in one sentence, in the reader's own clock. The domain's note carries
+ * the instants as ISO text for the package cover; the page says 「昨天 16:00」.
+ * @param {Record<string, any>} seal @param {Date} now
+ */
+function sealSentence(seal, now) {
+  if (seal.required !== true) return text(seal.note);
+  const planned = zhTime(seal.planFrozenAt, now);
+  const read = zhTime(seal.outcomeFirstReadAt, now);
+  if (!planned) return "分析计划尚未冻结：结局字段仍处于封存状态。";
+  return read ? `分析计划于 ${planned} 冻结，结局字段于 ${read} 首次读取。` : `分析计划于 ${planned} 冻结，结局字段尚未被读取。`;
+}
+
+/**
+ * The intake block of `GET …/data`.
+ * @param {Record<string, any>} bundle
+ */
+export function presentIntake(bundle) {
+  const { dataPlane, study, now } = bundle;
+  const seal = object(bundle.seal);
+  if (!dataPlane || dataPlane.available === false) {
+    return {
+      available: false,
+      message: text(dataPlane?.message) ?? (study.dataTier === "T0" ? "T0 档不需要患者级数据；升到 T1 及以上后在这里接入。" : "本部署未接入数据平面，暂不能接入患者级数据。"),
+      formats: [], maxBytes: null, seal: null, sources: [], snapshots: [],
+    };
+  }
+  const viewerCan = new Set(abilitiesOf(list(bundle.roles).map(String)));
+  const sources = list(dataPlane.sources).map((raw) => {
+    const source = object(raw);
+    const files = list(source.files).map((file) => object(file));
+    const latest = new Map();
+    for (const file of files) if (file.role === "data") latest.set(file.name, file.id);
+    const fieldMap = object(source.fieldMap);
+    const upload = object(source.upload);
+    return {
+      id: String(source.id),
+      name: String(source.name ?? ""),
+      ownerParty: text(source.ownerParty),
+      mine: source.mine === true,
+      readable: source.readable === true,
+      canGrant: source.mine === true,
+      status: String(source.status ?? "registered"),
+      statusLabel: INTAKE_STATUS_ZH[String(source.status)] ?? String(source.status ?? ""),
+      valueSource: String(source.valueSource ?? "observed"),
+      valueSourceLabel: (/** @type {Record<string, string>} */ (VCR_VALUE_SOURCE_LABELS_ZH))[String(source.valueSource)] ?? String(source.valueSource ?? ""),
+      allowedUses: list(source.allowedUses).map(String),
+      window: windowText(object(source.visibleWindow)),
+      retention: [text(object(source.retention).until) ? `保留至 ${String(object(source.retention).until).slice(0, 10)}` : null, text(object(source.retention).note)].filter(Boolean).join("；") || null,
+      upload: { formats: list(upload.formats).map(String), maxBytes: numeric(upload.maxBytes), maxText: byteText(numeric(upload.maxBytes)) },
+      files: files.map((file) => ({
+        id: String(file.id), name: String(file.name), role: String(file.role), roleLabel: FILE_ROLE_ZH[String(file.role)] ?? String(file.role),
+        format: String(file.format), size: byteText(numeric(file.bytes)), rows: numeric(file.rowCount), columnCount: numeric(file.columnCount),
+        at: zhTime(file.createdAt, now), latest: file.role === "data" ? latest.get(file.name) === file.id : null,
+        columns: list(file.columns).map((column) => ({
+          name: String(object(column).name), type: text(object(column).type), filled: numeric(object(column).filled),
+          distinct: numeric(object(column).distinct), identifying: object(column).identifying === true,
+        })),
+        entries: numeric(file.entries), sheets: list(file.sheets).map(String), sheetUsed: text(file.sheetUsed),
+        subjectKey: text(file.subjectKey), visibleAt: text(file.visibleAt),
+      })),
+      fieldMap: {
+        state: String(fieldMap.state ?? "none"), stateLabel: FIELD_MAP_STATE_ZH[String(fieldMap.state)] ?? "",
+        hash: text(fieldMap.hash), by: text(fieldMap.by) === "run" ? "AI 提议" : text(fieldMap.by) ? "人工填写" : null,
+        confirmedBy: text(fieldMap.confirmedBy), confirmedAt: zhTime(fieldMap.confirmedAt, now),
+        columns: list(fieldMap.columns).map((column) => ({ ...object(column), codes: object(object(column).codes) })),
+        issues: list(fieldMap.issues).map((issue) => ({
+          code: String(object(issue).code), message: String(object(issue).message ?? ""), table: text(object(issue).table), column: text(object(issue).column),
+        })),
+      },
+      grants: list(source.grants).map((raw2) => {
+        const grant = object(raw2);
+        const grantee = String(grant.grantee ?? "");
+        const role = grantee.startsWith("role:") ? (/** @type {Record<string, string>} */ (VCR_MEMBER_ROLE_LABELS_ZH))[grantee.slice(5)] : null;
+        return {
+          id: String(grant.id), grantee, granteeLabel: role ? `角色：${role}` : grantee.startsWith("study:") ? "本研究的所有成员" : grantee,
+          role: text(grant.role), fields: list(grant.fields).map(String), fieldMode: String(grant.fieldMode ?? "allow"),
+          window: windowText({ start: grant.windowStart, end: grant.windowEnd }), purposes: list(grant.purposes).map(String),
+          revoked: Boolean(grant.revokedAt), revokedAt: zhTime(grant.revokedAt, now), createdAt: zhTime(grant.createdAt, now),
+        };
+      }),
+    };
+  });
+  const snapshots = list(dataPlane.snapshots).map((raw) => {
+    const snapshot = object(raw);
+    return {
+      id: String(snapshot.id), sourceId: String(snapshot.sourceId), version: numeric(snapshot.version), label: `快照 v${snapshot.version ?? "?"}`,
+      at: zhTime(snapshot.frozenAt, now), rows: numeric(snapshot.rowCount), columnCount: numeric(snapshot.columnCount),
+      valueSource: (/** @type {Record<string, string>} */ (VCR_VALUE_SOURCE_LABELS_ZH))[String(snapshot.valueSource)] ?? null,
+      files: list(snapshot.files).map((file) => String(object(file).name)),
+      sealed: snapshot.sealed === true, sealedFields: list(snapshot.sealedFields).map(String), sealedUntil: zhTime(snapshot.sealedUntil, now),
+      findings: numeric(object(snapshot.quality).findings),
+      quality: qualityRows(snapshot.quality),
+      tables: list(snapshot.tables).map((table) => ({
+        shape: String(object(table).shape), label: (/** @type {Record<string, string>} */ (VCR_ANALYSIS_TABLE_LABELS_ZH))[String(object(table).shape)] ?? String(object(table).shape),
+        rows: numeric(object(table).rowCount), columns: list(object(table).columns).map(String), issues: numeric(object(table).issues) ?? 0,
+        outcomeBearing: object(table).outcomeBearing === true,
+      })),
+    };
+  });
+  return {
+    available: true,
+    message: null,
+    formats: sources[0]?.upload.formats ?? ["csv", "tsv", "json", "xlsx"],
+    maxBytes: sources[0]?.upload.maxBytes ?? null,
+    // What the person can do here, from the roles they hold now (the routes check for themselves).
+    canManage: viewerCan.has("manage_data"),
+    seal: {
+      required: seal.required === true,
+      planFrozenAt: zhTime(seal.planFrozenAt, now),
+      outcomeFirstReadAt: zhTime(seal.outcomeFirstReadAt, now),
+      ordered: seal.ordered === true,
+      fields: list(seal.sealedFields).map(String),
+      fieldsRead: list(seal.outcomeFieldsRead).map(String),
+      note: sealSentence(seal, now),
+    },
+    options: {
+      roles: FIELD_ROLE_OPTIONS,
+      timeKinds: VCR_TIME_KINDS.map((value) => ({ value, label: (/** @type {Record<string, string>} */ (VCR_TIME_KIND_LABELS_ZH))[value] })),
+      missingReasons: VCR_MISSING_REASONS.map((value) => ({ value, label: (/** @type {Record<string, string>} */ (VCR_MISSING_REASON_LABELS_ZH))[value] })),
+      valueSources: ["observed", "extracted", "calculated", "imputed"].map((value) => ({ value, label: (/** @type {Record<string, string>} */ (VCR_VALUE_SOURCE_LABELS_ZH))[value] })),
+      memberRoles: Object.entries(VCR_MEMBER_ROLE_LABELS_ZH).map(([value, label]) => ({ value, label })),
+    },
+    sources,
+    snapshots,
+  };
 }

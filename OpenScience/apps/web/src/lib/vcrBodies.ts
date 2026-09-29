@@ -31,13 +31,25 @@ export interface VcrCreateBody {
   action?: "cohort" | "patients" | "comparator" | "trial";
 }
 
-/** What a study's settings may change. The compute budget is not among them: it moves only through the audited confirmation. */
+/**
+ * What a study's settings may change. The compute budget is not among them: it
+ * moves only through the audited confirmation.
+ *
+ * `dataTier`, `intendedUse` and `status` are the lead's (`manage_study`);
+ * `name`, `question` and `action` are anybody's who may write.
+ */
 export interface VcrPatchBody {
   name?: string;
   question?: string;
   dataTier?: "T0" | "T1" | "T2" | "T3";
   intendedUse?: "exploratory" | "design_support" | "specified_analysis" | "submission_preparation";
   status?: "active" | "paused" | "archived";
+  /**
+   * The composer's 起点: where the study starts. `auto` asks for all seven
+   * steps, one of the four action ids for that one step (the study's
+   * `requested` flags, which is where `POST /studies` writes the same word).
+   */
+  action?: "auto" | "cohort" | "patients" | "comparator" | "trial";
 }
 
 export interface VcrJobBody {
@@ -89,11 +101,29 @@ export interface VcrDecisionBody {
 export interface VcrMemberBody {
   userId: string;
   role: VcrBodyRole;
+  /** A `site` member names the site it belongs to; the route refuses the role without it. */
+  detail?: { siteId?: string; note?: string };
 }
 
 export interface VcrContactBody {
   note?: string;
   reason?: string;
+}
+
+/**
+ * One move on the referral ledger. A move into a contact state is refused
+ * unless a person confirmed the referral first (`contactBody`'s route), so the
+ * only moves the page makes with this are the ones that are not contact:
+ * 「请求补证」 is `to: "needs_evidence"`.
+ */
+export interface VcrTransitionBody {
+  to: "candidate" | "needs_evidence" | "contactable" | "contacted" | "interested" | "referred" | "site_responded"
+    | "screening" | "enrolled" | "screen_failed" | "withdrawn";
+  note?: string;
+  siteId?: string;
+  screenFailCriterionId?: string;
+  screenFailReason?: string;
+  enrolledOn?: string;
 }
 
 /** Drop the keys nobody set, so the body is exactly what was said. */
@@ -108,7 +138,10 @@ export function studyCreateBody(input: VcrCreateBody = {}) {
 }
 
 export function studyPatchBody(input: VcrPatchBody = {}) {
-  return said({ name: input.name, question: input.question, dataTier: input.dataTier, intendedUse: input.intendedUse, status: input.status });
+  return said({
+    name: input.name, question: input.question, dataTier: input.dataTier, intendedUse: input.intendedUse, status: input.status,
+    action: input.action,
+  });
 }
 
 export function runBody(step: string) {
@@ -152,9 +185,17 @@ export function exportBody(kind: string) {
 }
 
 export function memberBody(input: VcrMemberBody) {
-  return { userId: input.userId, role: input.role };
+  const detail = input.detail ? said({ siteId: input.detail.siteId, note: input.detail.note }) : undefined;
+  return said({ userId: input.userId, role: input.role, detail: detail && Object.keys(detail).length > 0 ? detail : undefined });
 }
 
 export function contactBody(input: VcrContactBody = {}) {
   return said({ note: input.note, reason: input.reason });
+}
+
+export function transitionBody(input: VcrTransitionBody) {
+  return said({
+    to: input.to, note: input.note, siteId: input.siteId, screenFailCriterionId: input.screenFailCriterionId,
+    screenFailReason: input.screenFailReason, enrolledOn: input.enrolledOn,
+  });
 }

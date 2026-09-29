@@ -42,6 +42,14 @@
  * - **The audit line says what happened.** A write that completed, one that was
  *   refused (a 4xx: the caller's ability, a closed vocabulary, a stop that
  *   held) and one that failed are three different lines, never "completed".
+ * - **Data intake is one ability and one plane.** Every route under
+ *   `/api/vcr/studies/:id/data/*` needs `manage_data` (the lead and the data
+ *   manager) and goes to the data plane (`vcrDataPlane.mjs`), which judges again
+ *   for the same principal: the route says who may ask, the plane says whether
+ *   this ask is fine for this source. An upload is the one body that is not JSON
+ *   — the file itself, streamed to the plane under a size cap without ever being
+ *   held whole here — with its name, role and options in the query. Nothing a
+ *   route answers carries a path of the server: a location is the plane's own.
  * - **Writes arrive past the platform's CSRF check and maintenance
  *   admission** (the dispatch in `server.mjs`); the CSRF check is repeated
  *   here like every route factory does.
@@ -51,11 +59,11 @@
  */
 
 import {
-  VCR_ASSUMPTION_SOURCE_KINDS, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
-  VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_STUDY_STATUSES, VCR_TABS, VCR_VALUE_SOURCES, roleAllows,
-} from "@evimed/domain";
+  VCR_ACTIONS, VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
+  VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_STUDY_STATUSES, VCR_TABS, VCR_VALUE_SOURCES, roleAllows } from "@evimed/domain";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
+import { fileView, snapshotView, sourceView, tableView } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 
@@ -71,6 +79,8 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_study_not_found",
   "vcr_study_paused",
   "vcr_name_invalid",
+  "vcr_action_invalid",
+  "vcr_criterion_state_invalid",
   "vcr_tier_invalid",
   "vcr_intended_use_invalid",
   "vcr_status_invalid",
@@ -91,6 +101,8 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_referral_not_found",
   "vcr_forbidden",
   "vcr_unavailable",
+  "vcr_data_plane_not_configured",
+  "vcr_data_file_name_invalid",
 ]);
 
 /**
@@ -101,7 +113,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
 export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id": ["read"],
   "GET /studies/:id/:tab": ["read"],
-  "PATCH /studies/:id name,question": ["write"],
+  "PATCH /studies/:id name,question,action": ["write"],
   "PATCH /studies/:id dataTier,intendedUse,status": ["manage_study"],
   "DELETE /studies/:id": ["manage_study"],
   "POST /studies/:id/run": ["run"],
@@ -123,7 +135,18 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/referrals": ["read", "read_referrals"],
   "POST /studies/:id/referrals/:referral/transition": ["write_referrals", "contact_patients"],
   "POST /studies/:id/referrals/:referral/contact": ["contact_patients"],
+  "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["write_referrals", "review_clinical", "review_any"],
+  "POST /studies/:id/assessments/:assessment/review": ["review_clinical", "review_any"],
   "POST /models (with a study)": ["write"],
+  "POST /studies/:id/data/sources": ["manage_data"],
+  "POST /studies/:id/data/sources/:source/files": ["manage_data"],
+  "DELETE /studies/:id/data/files/:file": ["manage_data"],
+  "POST /studies/:id/data/sources/:source/fieldmap": ["manage_data"],
+  "POST /studies/:id/data/sources/:source/fieldmap/confirm": ["manage_data"],
+  "POST /studies/:id/data/sources/:source/snapshots": ["manage_data"],
+  "POST /studies/:id/data/snapshots/:snapshot/tables": ["manage_data"],
+  "POST /studies/:id/data/sources/:source/grants": ["manage_data"],
+  "POST /studies/:id/data/grants/:grant/revoke": ["manage_data"],
 });
 
 const NOT_ENABLED = () => new HttpError(404, "vcr_not_enabled", "虚拟临研 is not enabled.");
@@ -152,6 +175,14 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 2) return "/api/vcr/studies/:id";
   const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "reviews", "decisions", "export", "members", "referrals"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
+  if (parts[2] === "data" && parts.length > 3) {
+    // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
+    const kind = ["sources", "files", "snapshots", "grants"].includes(parts[3]) ? parts[3] : ":route";
+    if (parts.length === 4) return `/api/vcr/studies/:id/data/${kind}`;
+    if (parts.length === 5) return `/api/vcr/studies/:id/data/${kind}/:item`;
+    const action = ["files", "fieldmap", "snapshots", "grants", "tables", "revoke"].includes(parts[5]) ? parts[5] : ":action";
+    return `/api/vcr/studies/:id/data/${kind}/:item/${action}${parts.length > 6 ? "/:step" : ""}`;
+  }
   if (parts.length === 3) return `/api/vcr/studies/:id/${section}`;
   if (parts.length === 4) return `/api/vcr/studies/:id/${section}/:item`;
   return `/api/vcr/studies/:id/${section}/:item/${["cancel", "contact", "transition"].includes(parts[4]) ? parts[4] : ":action"}`;
@@ -202,7 +233,7 @@ function wholeNumber(value, field, max) {
  *     bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }>,
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
- *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any }} dependencies
+ *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -231,6 +262,10 @@ export function createVcrRoutes(dependencies) {
       get exporter() { return dependencies.exporter ?? dependencies.orchestrator ?? null; },
       get members() { return dependencies.members ?? null; },
       get matching() { return dependencies.matching ?? null; },
+      get assessments() { return dependencies.assessments ?? service.packages?.matching ?? null; },
+      // The data plane, reached through the service's seam (`intake`): the routes
+      // are composed before the module is, and the seam is where the plane lives.
+      get dataPlane() { return dependencies.dataPlane ?? service.packages?.dataPlane?.intake ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -391,15 +426,19 @@ export function createVcrRoutes(dependencies) {
         return reply({ ...view, sessionId, roles, abilities: [...abilities].sort() });
       }
       if (method === "PATCH") {
-        const body = await bodyOf(req, maxJsonBytes, ["name", "question", "dataTier", "intendedUse", "status"]);
+        const body = await bodyOf(req, maxJsonBytes, ["name", "question", "action", "dataTier", "intendedUse", "status"]);
         const study = await service.requireStudy(user, id);
         const changesStudy = ["dataTier", "intendedUse", "status"].some((key) => body[key] !== undefined);
         if (changesStudy) await requireAbility(study, "manage_study");
-        if (body.name !== undefined || body.question !== undefined || !changesStudy) await requireAbility(study, "write");
+        if (body.name !== undefined || body.question !== undefined || body.action !== undefined || !changesStudy) await requireAbility(study, "write");
         /** @type {Record<string, any>} */
         const patch = {};
         if (body.name !== undefined) patch.name = line(body.name, "name", NAME_MAX);
         if (body.question !== undefined) patch.question = String(body.question).slice(0, QUESTION_MAX);
+        // 起点 in the composer: which steps the programme is asked to run —
+        // `auto` is all seven, an action is the one step it names (the same
+        // mapping creation uses, `vcrRequestedSteps`).
+        if (body.action !== undefined) patch.action = body.action === "auto" ? "auto" : word(body.action, VCR_ACTIONS, "vcr_action_invalid", "action");
         if (body.dataTier !== undefined) patch.dataTier = word(body.dataTier, VCR_DATA_TIERS, "vcr_tier_invalid", "dataTier");
         if (body.intendedUse !== undefined) {
           patch.intendedUse = word(body.intendedUse, VCR_INTENDED_USES, "vcr_intended_use_invalid", "intendedUse");
@@ -424,6 +463,130 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 3 && method === "GET" && VCR_TABS.includes(section)) {
       await authorize(id, "read");
       return reply(await service.tab(user, id, section, url.searchParams));
+    }
+
+    // --- data intake: source → files → field map → snapshot → tables → grants -------------
+    if (section === "data" && parts.length > 3) {
+      /** The plane, or the named refusal a deployment without one gets. */
+      const plane = () => {
+        const found = hooks.dataPlane;
+        if (!found) throw new HttpError(503, "vcr_data_plane_not_configured", "本部署未接入数据平面，不能接入患者级数据。");
+        return found;
+      };
+      const actor = String(user.id);
+      const kind = parts[3];
+      const S = { studyId: id, actor };
+
+      if (kind === "sources" && parts.length === 4 && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["name", "ownerParty", "allowedUses", "visibleWindow", "retention", "valueSource"]);
+        await authorize(id, "manage_data");
+        const saved = await audited("vcr.data.source.register", (source) => ({ code: source.id, detail: String(body.name ?? "") }),
+          { code: id, detail: String(body.name ?? "") },
+          () => plane().registerSource({ userId: actor, studyId: id, name: body.name, ownerParty: body.ownerParty, allowedUses: body.allowedUses,
+            visibleWindow: body.visibleWindow, retention: body.retention, valueSource: body.valueSource }));
+        return reply({ source: sourceView(saved) }, 201);
+      }
+
+      if (kind === "sources" && parts.length === 6 && parts[5] === "files" && method === "POST") {
+        try {
+          await authorize(id, "manage_data");
+          const named = url.searchParams.get("name") ?? "";
+          if (!named || named.length > 200) throw new HttpError(400, "vcr_data_file_name_invalid", "name is the file's name, 1 to 200 characters.");
+          const role = url.searchParams.get("role") ?? "data";
+          const declared = Number(req.headers["content-length"]);
+          const single = (/** @type {string} */ key, /** @type {number} */ max) => {
+            const value = url.searchParams.get(key);
+            if (value != null && value.length > max) throw new HttpError(400, "vcr_payload_invalid", `${key} is at most ${max} characters.`);
+            return value;
+          };
+          const stored = await audited("vcr.data.file.upload", (result) => ({ code: String(result.file?.id ?? ""), detail: named }),
+            { code: id, detail: named },
+            () => plane().storeUpload({ ...S, sourceId: parts[4], name: named, role, stream: req,
+              declaredLength: Number.isFinite(declared) ? declared : null, subject: single("subject", 120),
+              visibleAt: single("visibleAt", 40), sheet: single("sheet", 120) }));
+          return reply({ file: fileView(stored.file), created: stored.created }, stored.created ? 201 : 200);
+        } catch (error) {
+          // A refusal before the body was read: let the client finish sending, so
+          // it reads the answer instead of a reset connection.
+          req.resume();
+          throw error;
+        }
+      }
+
+      if (kind === "files" && parts.length === 5 && method === "DELETE") {
+        await bodyOf(req, maxJsonBytes, []);
+        await authorize(id, "manage_data");
+        return reply(await audited("vcr.data.file.remove", (removed) => ({ code: String(removed.fileId), detail: id }), { code: parts[4], detail: id },
+          () => plane().removeUpload({ ...S, fileId: parts[4] })));
+      }
+
+      if (kind === "sources" && parts.length === 6 && parts[5] === "fieldmap" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["columns", "reason"]);
+        await authorize(id, "manage_data");
+        const proposed = await audited("vcr.data.fieldmap.propose", (result) => ({ code: parts[4], detail: String(result.hash).slice(0, 12) }),
+          { code: parts[4], detail: id },
+          () => plane().proposeFieldMap({ ...S, sourceId: parts[4], columns: body.columns, reason: String(body.reason ?? "").slice(0, 300) }));
+        return reply({ source: sourceView(proposed.source), hash: proposed.hash, entryIssues: proposed.entryIssues, mapIssues: proposed.mapIssues }, 201);
+      }
+
+      if (kind === "sources" && parts.length === 7 && parts[5] === "fieldmap" && parts[6] === "confirm" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["hash"]);
+        if (typeof body.hash !== "string" || !/^[a-f0-9]{64}$/.test(body.hash)) {
+          throw new HttpError(400, "vcr_payload_invalid", "hash is the field map's sha256, as it was shown.");
+        }
+        await authorize(id, "manage_data");
+        const confirmed = await audited("vcr.data.fieldmap.confirm", () => ({ code: parts[4], detail: id }), { code: parts[4], detail: id },
+          () => plane().confirmFieldMap({ ...S, sourceId: parts[4], hash: body.hash }));
+        return reply({ source: sourceView(confirmed.source), checks: confirmed.checks });
+      }
+
+      if (kind === "sources" && parts.length === 6 && parts[5] === "snapshots" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["fileIds", "asOf"]);
+        if (body.fileIds != null && (!Array.isArray(body.fileIds) || body.fileIds.length > 50 || body.fileIds.some((/** @type {unknown} */ item) => typeof item !== "string" || !ID.test(item)))) {
+          throw new HttpError(400, "vcr_payload_invalid", "fileIds is up to 50 file ids.");
+        }
+        if (body.asOf != null && (typeof body.asOf !== "string" || body.asOf.length > 40)) throw new HttpError(400, "vcr_payload_invalid", "asOf is a date.");
+        await authorize(id, "manage_data");
+        const frozen = await audited("vcr.data.snapshot.freeze", (result) => ({ code: result.snapshot.id, detail: `v${result.snapshot.version}` }),
+          { code: parts[4], detail: id },
+          () => plane().freezeSnapshot({ userId: actor, studyId: id, sourceId: parts[4], fileIds: body.fileIds ?? null, asOf: body.asOf ?? null }));
+        return reply({
+          snapshot: snapshotView(frozen.snapshot),
+          tables: frozen.tables ? {
+            registered: frozen.tables.registered.map(tableView), refused: frozen.tables.refused, skipped: frozen.tables.skipped ?? [],
+            subjects: frozen.tables.subjects ?? null, dropped: frozen.tables.dropped ?? {},
+          } : null,
+        }, 201);
+      }
+
+      if (kind === "snapshots" && parts.length === 6 && parts[5] === "tables" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        await authorize(id, "manage_data");
+        const derived = await audited("vcr.data.tables.derive", (result) => ({ code: parts[4], detail: `${result.registered.length} tables` }),
+          { code: parts[4], detail: id },
+          () => plane().deriveAnalysisTables({ userId: actor, studyId: id, snapshotId: parts[4] }));
+        return reply({ registered: derived.registered.map(tableView), refused: derived.refused, skipped: derived.skipped,
+          subjects: derived.subjects, dropped: derived.dropped }, 201);
+      }
+
+      if (kind === "sources" && parts.length === 6 && parts[5] === "grants" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["grantee", "role", "fields", "fieldMode", "windowStart", "windowEnd", "purposes"]);
+        await authorize(id, "manage_data");
+        const granted = await audited("vcr.data.grant.create", (grant) => ({ code: grant.id, detail: String(body.grantee ?? "") }),
+          { code: parts[4], detail: id },
+          () => plane().createGrant({ ...S, sourceId: parts[4], grantee: body.grantee, role: body.role, fields: body.fields, fieldMode: body.fieldMode,
+            windowStart: body.windowStart, windowEnd: body.windowEnd, purposes: body.purposes }));
+        return reply({ grant: granted }, 201);
+      }
+
+      if (kind === "grants" && parts.length === 6 && parts[5] === "revoke" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        await authorize(id, "manage_data");
+        const revoked = await audited("vcr.data.grant.revoke", (grant) => ({ code: grant.id, detail: id }), { code: parts[4], detail: id },
+          () => plane().revokeGrant({ ...S, grantId: parts[4] }));
+        return reply({ grant: revoked });
+      }
+      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
 
     // --- 「让 AI 做」 ------------------------------------------------------------
@@ -635,6 +798,33 @@ export function createVcrRoutes(dependencies) {
     }
 
     // --- the referral ledger; the first human stop is a coordinator confirming one contact --------
+    // --- a person's hand on a matching assessment ---------------------------------
+    // Both are a person's acts and never a run's: a coordinator or clinician
+    // re-judges one criterion (the platform's answer and the person's are both
+    // kept), and a reviewer countersigns an assessment (a signature, not a gate).
+    if (section === "assessments") {
+      if (parts.length === 7 && parts[4] === "judgments" && parts[6] === "override" && method === "POST") {
+        if (!ID.test(parts[3]) || !ID.test(parts[5])) throw new HttpError(400, "vcr_path_invalid", "Invalid assessment or criterion id.");
+        const { study } = await authorize(id, VCR_ROUTE_ABILITIES["POST /studies/:id/assessments/:assessment/judgments/:criterion/override"]);
+        const body = await bodyOf(req, maxJsonBytes, ["state", "note"]);
+        const state = word(body.state, VCR_CRITERION_STATES, "vcr_criterion_state_invalid", "state");
+        if (!hooks.assessments?.overrideJudgment) throw UNAVAILABLE();
+        return reply(await audited("vcr.assessment.override", () => ({ code: parts[3], detail: `${parts[5]}:${state}` }), { code: parts[3] },
+          () => hooks.assessments.overrideJudgment(user, study, {
+            assessmentId: parts[3], criterionId: parts[5], state, note: body.note === undefined ? "" : String(body.note).slice(0, 1_000),
+          })), 201);
+      }
+      if (parts.length === 5 && parts[4] === "review" && method === "POST") {
+        if (!ID.test(parts[3])) throw new HttpError(400, "vcr_path_invalid", "Invalid assessment id.");
+        await bodyOf(req, maxJsonBytes, []);
+        const { study } = await authorize(id, VCR_ROUTE_ABILITIES["POST /studies/:id/assessments/:assessment/review"]);
+        if (!hooks.assessments?.reviewAssessment) throw UNAVAILABLE();
+        return reply(await audited("vcr.assessment.review", () => ({ code: parts[3] }), { code: parts[3] },
+          () => hooks.assessments.reviewAssessment(user, study, { assessmentId: parts[3] })), 201);
+      }
+      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    }
+
     if (section === "referrals") {
       if (parts.length === 3 && method === "GET") {
         const { study } = await authorize(id, VCR_ROUTE_ABILITIES["GET /studies/:id/referrals"]);

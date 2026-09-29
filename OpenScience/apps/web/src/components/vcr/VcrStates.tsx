@@ -127,7 +127,10 @@ function VcrStepAsk({ studyId, study, step }: { studyId: string; study: VcrStudy
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4 py-12 text-center">
       <p className="max-w-measure text-ui text-text-2">{VCR_STEP_EMPTY[step]}</p>
-      <Button onClick={() => run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。")} loading={busy}>让 AI 做</Button>
+      {/* Starting a step is `run`'s: a reader who cannot start one is not offered the button. */}
+      {study.abilities.includes("run") && (
+        <Button onClick={() => run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。")} loading={busy}>让 AI 做</Button>
+      )}
     </div>
   );
 }
@@ -156,11 +159,13 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
       </h3>
       {note && <p className="mt-1 text-ui text-text-2">{note}</p>}
       {partial && <PartialResultNote done={partial.done} missing={partial.missing} className="mt-3" />}
-      <div className="mt-3">
-        <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
-          从检查点续跑
-        </Button>
-      </div>
+      {study.abilities.includes("run") && (
+        <div className="mt-3">
+          <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
+            从检查点续跑
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
