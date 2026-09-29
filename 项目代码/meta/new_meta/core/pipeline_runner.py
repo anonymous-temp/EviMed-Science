@@ -20,7 +20,12 @@ INSUFFICIENT_STUDIES_CODE = "insufficient_studies_for_synthesis"
 #: ``verified_method_inputs_required`` means no result was verified (all left
 #: out and named); interactively it stays a request to adjudicate.
 NARRATIVE_FALLBACK_CODES = frozenset({INSUFFICIENT_STUDIES_CODE})
-UNATTENDED_NARRATIVE_FALLBACK_CODES = frozenset({INSUFFICIENT_STUDIES_CODE, "verified_method_inputs_required"})
+UNATTENDED_NARRATIVE_FALLBACK_CODES = frozenset({
+    INSUFFICIENT_STUDIES_CODE, "verified_method_inputs_required", "trial_independence_required",
+    "analysis_set_adjudication_required", "transitivity_assessment_required", "method_inputs_invalid",
+    "method_execution_blocked", "primary_analysis_alignment_required", "primary_result_choice_required",
+    "primary_alignment_mismatch", "method_result_rob_required", "ipd_data_required",
+})
 
 
 def compiled_synthesis_falls_back_to_narrative(phase, *, unattended: bool) -> bool:
@@ -757,7 +762,7 @@ class PipelineRunner:
                         "trial_unit_issues": by_row[row["row_id"]], "requires_adjudication": True,
                         "in_final_primary_analysis": False,
                         "next_action": "Clarify contributing trial units and restart with an explicit independent analysis set; a within-publication choice cannot resolve overlap."})
-            primary_candidates = [item for item in primary_candidates if item[3] not in by_row]
+            primary_candidates = [item for item in primary_candidates if item[3] not in by_row and item[3] not in left_out]
 
         primary_candidates = filter_benchmark_reference_primary_candidates(
             primary_candidates,
