@@ -8,15 +8,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  VCR_ACCRUAL_PRIOR_DEFAULT, VCR_EXIT_VERBATIM_FIELDS, VCR_PARTNER_DATA_USES, VCR_RECRUIT_REFUSALS,
+  VCR_ACCRUAL_MEASURES, VCR_ACCRUAL_PRIOR_DEFAULT, VCR_EXIT_VERBATIM_FIELDS, VCR_PARTNER_DATA_USES, VCR_RECRUIT_REFUSALS,
   VCR_REFERRAL_TRANSITIONS, VCR_RISK_APPETITE_QUANTILES, VCR_SITE_VERIFICATION_STALE_DAYS,
   VCR_TRIAL_RESTRICTED_FIELDS, accrualBacktestSlices, accrualForecastScenario, accrualPosterior,
   backtestAccrualCoverage, candidateReferrals, decideContactApproval, decideReferralTransition,
-  deriveFromExit, followupFidelityFindings, isSiteScopedRole, partnerDataUseAllowed, postExitEpisode, readAccrualForecast,
+  deriveFromExit, followupFidelityFindings, isSiteScopedRole, parseProbabilityByMonth, partnerDataUseAllowed, postExitEpisode, readAccrualForecast,
   referralFunnel, requestAccrualForecast, screenFailuresByCriterion, siteProfileStatus, trialPeriodEpisode,
   wilsonInterval,
 } from "../src/vcrRecruit.mjs";
-import { VCR_CONTACT_STATES, VCR_JOB_METHODS, VCR_REFERRAL_STATES, roleAllows } from "@evimed/domain";
+import { VCR_CONTACT_STATES, VCR_JOB_METHODS, VCR_REFERRAL_STATES, roleAllows, validateEngineJob } from "@evimed/domain";
 
 const candidate = (over = {}) => ({ id: "ref-1", studyId: "std-1", subjectKey: "S1", state: "candidate", ...over });
 
@@ -262,67 +262,73 @@ test("AC-37 the Poisson–Gamma prior is updated from the site's own open months
   assert.equal(late.meanRatePerMonth, 1);
 });
 
-test("AC-37 the forecast's inputs are the activation plan, one rate prior per site and the screening loss", () => {
-  const scenario = accrualForecastScenario({
-    studyId: "std-1", target: 120, asOf: "2026-09-28T00:00:00Z", screenFailureRate: 0.3, horizonMonths: 24,
+test("AC-37 the forecast is exactly the engine's contract: one posterior per site, months from now, the target and nothing else", () => {
+  const { scenario, notes } = accrualForecastScenario({
+    target: 120, asOf: "2026-09-28T00:00:00Z", screenFailure: { failed: 6, passed: 14 }, eventTarget: 80, eventHazard: 0.05, byTimes: [6, 12, 18],
     sites: [
       { id: "ste-1", name: "A", activatedOn: "2026-05-01", capacity: { slots: 40, activationPlannedOn: "2026-04-15" } },
-      { id: "ste-2", name: "B", activatedOn: null, capacity: { slots: 20, activationPlannedOn: "2026-11-01" },
-        accrualPrior: { alpha: 1, beta: 1, screenFailureRate: 0.5 } },
+      { id: "ste-2", name: "B", activatedOn: null, capacity: { slots: 20, activationPlannedOn: "2026-11-28" },
+        accrualPrior: { alpha: 2, beta: 4 } },
+      { id: "ste-3", name: "C", capacity: {} },
     ],
     siteHistories: { "ste-1": { enrolled: 12, monthsOpen: 4 } },
   });
-  assert.equal(scenario.kind, "accrual");
-  assert.equal(scenario.target, 120);
-  assert.equal(scenario.intervalKind, "prediction");
-  assert.equal(scenario.intervalLevel, 0.8);
-  assert.equal(scenario.sites[0].alpha, 13);
-  assert.equal(scenario.sites[0].beta, 5);
-  assert.equal(scenario.sites[0].meanRatePerMonth, 2.6);
-  assert.equal(scenario.sites[0].ratePriorSource, "site_history");
-  assert.equal(scenario.sites[0].screenFailureRate, 0.3, "the study's rate unless the site has its own");
-  assert.equal(scenario.sites[1].screenFailureRate, 0.5);
-  assert.equal(scenario.sites[1].ratePriorSource, "prior_only");
-  // Planned and actual activation stay apart: the gap between them is the thing
-  // that makes a trial late.
-  assert.equal(scenario.sites[0].activationPlannedOn, "2026-04-15");
-  assert.equal(scenario.sites[0].activatedOn, "2026-05-01");
-  assert.equal(scenario.sites[1].activatedOn, null);
+  // The keys are the schema's, so the job validates against the domain's own scenario schema.
+  assert.deepEqual(Object.keys(scenario).sort(), ["byTimes", "eventHazard", "eventTarget", "screenFailure", "sites", "target"]);
+  assert.deepEqual(scenario.sites[0], { id: "ste-1", alpha: 13, beta: 5, startTime: 0, enrolled: 12, exposureTime: 4 },
+    "an open site contributes from now; its posterior is the prior plus what it enrolled and the months it was open");
+  assert.equal(scenario.sites[1].alpha, 2);
+  assert.equal(scenario.sites[1].beta, 4);
+  assert.ok(Math.abs(scenario.sites[1].startTime - 2) < 0.01, "activation planned two months ahead");
+  assert.equal(Object.hasOwn(scenario.sites[1], "enrolled"), false, "the engine takes enrolled and exposureTime together or neither");
+  assert.deepEqual(scenario.screenFailure, { alpha: 7, beta: 15 }, "Beta(failed + 1, passed + 1)");
+  assert.deepEqual(notes.defaultedSites, ["ste-3"], "a site with no prior and no history runs on the weak default, and the request says so");
+  assert.equal(notes.screenFailureUnavailable, false);
+
+  const bare = accrualForecastScenario({ target: 60, asOf: "2026-09-28T00:00:00Z", sites: [{ id: "s" }] });
+  assert.equal(Object.hasOwn(bare.scenario, "screenFailure"), false, "no screening history, no screenFailure: never Beta(1, 1) passed off as data");
+  assert.equal(bare.notes.screenFailureUnavailable, true);
+  assert.deepEqual(validateEngineJob({
+    jobId: "job_1", studyId: "std_1", kind: "accrual_forecast", method: "accrual.poisson_gamma", methodVersion: "1.0.0",
+    protocolVersion: 1, seed: 7, cpuSecondsLimit: 60, inputs: [], scenario,
+  }), []);
 });
 
 test("AC-37 the forecast is queued on the deterministic engine through the injected job port", async () => {
   /** @type {any[]} */
   const queued = [];
-  const jobs = { enqueue: async (job) => { queued.push(job); return { jobId: "job-1", state: "queued" }; } };
-  const scenario = accrualForecastScenario({ studyId: "std-1", target: 60, asOf: "2026-09-28T00:00:00Z", sites: [] });
-  const handle = await requestAccrualForecast({ jobs, studyId: "std-1", scenario, requestedBy: "u-1" });
-  assert.deepEqual(handle, { jobId: "job-1", state: "queued" });
+  const jobs = { enqueue: async (job) => { queued.push(job); return { job: { id: "job-1", state: "queued" } }; } };
+  const { scenario } = accrualForecastScenario({ target: 60, asOf: "2026-09-28T00:00:00Z", sites: [{ id: "s1" }] });
+  const handle = await requestAccrualForecast({ jobs, studyId: "std-1", userId: "u-1", scenario, requestedBy: "matching" });
+  assert.equal(handle.job.id, "job-1");
   assert.equal(queued.length, 1);
   assert.equal(queued[0].kind, "accrual_forecast");
   assert.equal(queued[0].studyId, "std-1");
+  assert.equal(queued[0].userId, "u-1", "the queue needs the account the job is for");
   assert.equal(queued[0].scenario.target, 60);
+  assert.deepEqual(queued[0].detail.keepTables, ["probability_by_month"], "the table a page draws the probability curve from is kept");
   assert.equal(VCR_JOB_METHODS.accrual_forecast, "accrual.poisson_gamma", "the engine method this kind maps to");
-  await assert.rejects(() => requestAccrualForecast({ jobs, studyId: "std-1", scenario: { kind: "design" } }), /accrual scenario/);
-  await assert.rejects(() => requestAccrualForecast({ jobs: null, studyId: "std-1", scenario }), /jobs port/);
+  await assert.rejects(() => requestAccrualForecast({ jobs, studyId: "std-1", userId: "u-1", scenario: { kind: "design" } }), /accrual scenario/);
+  await assert.rejects(() => requestAccrualForecast({ jobs: null, studyId: "std-1", userId: "u-1", scenario }), /jobs port/);
 });
 
-test("AC-37 an interval that does not name its kind is dropped rather than relabelled", () => {
+test("AC-37 the forecast reads the engine's own measures, and an interval that does not name its kind is dropped rather than relabelled", () => {
   const read = readAccrualForecast({
     status: "succeeded",
     measures: [
       { name: "last_patient_in_months", value: 18.4, interval: { kind: "prediction", low: 15.1, high: 23.9 } },
-      { name: "probability_by_2027_06", value: 0.62, interval: { kind: "monte_carlo", low: 0.60, high: 0.64 } },
       { name: "target_events_months", value: 26.0, interval: { low: 22, high: 31 } },
     ],
-    diagnostics: { quantiles: { 0.2: 15.8, 0.5: 18.4, 0.8: 21.7 } },
-  });
+    diagnostics: { quantiles: { p20: 15.8, p50: 18.4, p80: 21.7 } },
+  }, { probabilityByMonth: parseProbabilityByMonth("month,probability,mcse\n6,0.05,0.01\n12,0.4,0.01\n18,0.8,NA\n") });
   assert.equal(read.lastPatientIn.value, 18.4);
   assert.equal(read.targetEventsReached, null, "an unnamed interval is not a prediction interval");
   assert.deepEqual(read.droppedUnnamedIntervals, ["target_events_months"]);
-  assert.equal(read.probabilityByDate.length, 1);
+  assert.deepEqual(read.probabilityByMonth, [{ month: 6, probability: 0.05 }, { month: 12, probability: 0.4 }, { month: 18, probability: 0.8 }]);
   assert.deepEqual(Object.keys(read.commitments).sort(), ["aggressive", "balanced", "conservative"]);
   assert.equal(read.commitments.conservative.quantile, VCR_RISK_APPETITE_QUANTILES.conservative);
   assert.match(read.commitments.balanced.note, /不是预测更准/);
+  assert.deepEqual(VCR_ACCRUAL_MEASURES, { lastPatientIn: "last_patient_in_months", targetEvents: "target_events_months" });
 });
 
 test("AC-37 the backtest reports the measured coverage of the 80% prediction intervals, with no pass mark", () => {
@@ -358,25 +364,66 @@ test("AC-37 Wilson bounds, not a bare fraction", () => {
   assert.deepEqual(wilsonInterval(0, 0), { low: null, high: null });
 });
 
-test("AC-37 a backtest slice is only scored against enrolments that happened after the forecast was registered", () => {
+test("AC-37 a backtest slice is the months from the forecast to the day enrolment reached its target, and a target not yet reached is a miss only when the interval has already passed", () => {
   const slices = accrualBacktestSlices({
+    now: "2026-12-15T00:00:00Z",
     forecasts: [
-      { asOf: "2026-03-01T00:00:00Z", interval: { kind: "prediction", low: 2, high: 9 } },
-      { asOf: "2026-06-01T00:00:00Z", interval: { kind: "prediction", low: 1, high: 4 } },
-      { asOf: null, interval: { kind: "prediction", low: 0, high: 99 } },
+      // Made 1 March for a total of 4: the 4th enrolment is 2026-06-15, three and a half months later.
+      { asOf: "2026-03-01T00:00:00Z", target: 4, interval: { kind: "prediction", low: 2, high: 9 } },
+      // Made 1 June for 8: never reached; nine and a half months have passed, past the interval's end.
+      { asOf: "2026-06-01T00:00:00Z", target: 8, interval: { kind: "prediction", low: 1, high: 4 } },
+      // Made in November for 8: not reached, and the interval has not ended yet.
+      { asOf: "2026-11-01T00:00:00Z", target: 8, interval: { kind: "prediction", low: 1, high: 9 } },
+      { asOf: null, target: 4, interval: { kind: "prediction", low: 0, high: 99 } },
     ],
     enrollments: [
       { enrolledOn: "2026-02-10" }, { enrolledOn: "2026-03-20" }, { enrolledOn: "2026-04-05" },
-      { enrolledOn: "2026-06-15" }, { enrolledOn: "2026-07-02" }, { enrolledOn: "2026-12-01" },
+      { enrolledOn: "2026-06-15" }, { enrolledOn: "2026-07-02" },
     ],
-    horizonMonths: 6,
   });
-  assert.equal(slices.length, 2, "a forecast with no timestamp cannot be scored and is dropped");
-  assert.equal(slices[0].actual, 4, "the February enrolment predates the March forecast");
-  assert.equal(slices[1].actual, 2);
+  assert.equal(slices.length, 3, "a forecast with no timestamp cannot be scored and is dropped");
+  assert.ok(Math.abs(/** @type {number} */ (slices[0].actual) - 3.5) < 0.1, `months from the forecast to the target: ${slices[0].actual}`);
+  assert.equal(slices[1].actual, null);
+  assert.ok(/** @type {number} */ (slices[1].elapsedMonths) > 4);
+  assert.equal(slices[2].actual, null);
   const coverage = backtestAccrualCoverage({ slices });
   assert.equal(coverage.usable, 2);
-  assert.equal(coverage.covered, 2);
+  assert.equal(coverage.covered, 1, "the first slice contained its truth, the second had already missed");
+  assert.equal(coverage.censored, 1, "the third can still land inside its interval and is not scored");
+  assert.equal(coverage.rows.find((row) => row.censoredAt)?.covered, false);
+});
+
+test("C1 a subject with two assessments is one candidate, and it is the newest one", () => {
+  const candidates = candidateReferrals({ studyId: "std", assessments: [
+    { id: "mas-new", subjectKey: "S1", summary: "ineligible", asOf: "2026-09-28" },
+    { id: "mas-old", subjectKey: "S1", summary: "eligible", asOf: "2026-08-01" },
+    { id: "mas-a", subjectKey: "S2", summary: "eligible", asOf: "2026-09-28" },
+    { id: "mas-b", subjectKey: "S2", summary: "pending", asOf: "2026-09-01" },
+  ] });
+  assert.deepEqual(candidates.map((entry) => [entry.subjectKey, entry.assessmentId, entry.state]), [["S2", "mas-a", "candidate"]]);
+});
+
+test("F1 a patient who withdrew after contact still counts as contacted", () => {
+  const referrals = [
+    { id: "r1", state: "enrolled" }, { id: "r2", state: "withdrawn" }, { id: "r3", state: "withdrawn" }, { id: "r4", state: "candidate" },
+  ];
+  const progress = new Map([["r1", "enrolled"], ["r2", "contacted"], ["r3", "screening"]]);
+  const funnel = referralFunnel(referrals, progress);
+  assert.equal(funnel.reachedContact, 3);
+  assert.equal(funnel.reachedScreening, 2);
+  assert.equal(funnel.contactRate, 3 / 4);
+  assert.equal(funnel.screenRate, 2 / 3);
+  assert.equal(funnel.enrollmentRate, 1 / 2);
+  // Without the events only where they stand now is known, as it always was.
+  assert.equal(referralFunnel(referrals).reachedContact, 1);
+});
+
+test("S1 a site that never stated its slots has no capacity claim, not a capacity of zero", () => {
+  const now = Date.parse("2026-09-28T00:00:00Z");
+  const status = siteProfileStatus({ id: "s", capacity: { slots: null }, verifiedAt: "2026-09-20T00:00:00Z" }, now);
+  assert.equal(status.slotsAvailable, null);
+  assert.equal(status.capacityClaimable, false);
+  assert.equal(siteProfileStatus({ id: "s", capacity: { slots: 5, used: 2 }, verifiedAt: "2026-09-20T00:00:00Z" }, now).slotsAvailable, 3);
 });
 
 // ------------------------------------------------------------- AC-22

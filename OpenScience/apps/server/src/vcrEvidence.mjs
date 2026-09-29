@@ -12,8 +12,9 @@
  *      check each quotation against the preserved text before it is stored;
  *   3. `poolParameter`   — hand the verified values to the engine's
  *      `evidence.pool`, once per calibre;
- *   4. `assumptionFromPooling` — turn the engine's pooled value, heterogeneity
- *      and prediction interval into the distribution a simulation draws from;
+ *   4. `saveAssumptionFromPooling` — turn the engine's pooled value,
+ *      heterogeneity and prediction interval into the distribution a
+ *      simulation draws from;
  *   5. `applicability`   — say how the source population differs from this
  *      study's, and which calibre is the default.
  *
@@ -21,39 +22,53 @@
  *
  * - **Nothing here estimates anything.** The pooled value, τ², I² and the
  *   prediction interval all come back from `vcr-engine` (`evidence.pool`,
- *   cross-checked against metafor). The only arithmetic in this module is the
- *   closed-form re-parameterization of those numbers into a distribution
- *   family — proportion → Beta by moment matching, time and hazard ratio →
- *   log-normal — and `vcrEvidence.test.mjs` pins each one against a
- *   hand-worked value. If the engine cannot be reached, a card is not
- *   produced: 「引擎不可用」 is an answer, a made-up mean is not.
+ *   cross-checked against metafor). The arithmetic in this module is the
+ *   closed-form change of scale a pooling job needs to be posed on — the
+ *   analysis scale's estimate and standard error from a value and its
+ *   confidence interval — and the closed-form re-parameterization of the
+ *   engine's numbers into a distribution family (proportion → Beta by moment
+ *   matching, time and hazard ratio → log-normal); `vcrEvidence.test.mjs` pins
+ *   each against a hand-worked value. If the engine cannot be reached, a card
+ *   is not produced: 「引擎不可用」 is an answer, a made-up mean is not.
+ * - **The job is the engine's contract, not ours** (integration contract §3.1).
+ *   A pooling study is `{ studyId, estimate, se }` on the analysis scale; the
+ *   engine never receives a natural-scale value it must transform, and a scenario
+ *   key it does not read is refused. What the pool is *about* (the parameter,
+ *   the endpoint key, the calibre) travels in the job's own record, not in the
+ *   scenario.
  * - **The prediction interval is the range a simulation may use**, not the
- *   confidence interval (plan §6.1). A confidence interval says where the
- *   average of these studies lies; a simulation is asking where *the next
- *   study* lands, and with real heterogeneity the two differ by a lot. Cards
- *   are built from the prediction interval and the confidence interval is kept
- *   only for display.
+ *   confidence interval (plan §6.1). With fewer than three studies the engine
+ *   states there is none, and the card says so instead of borrowing the
+ *   confidence interval: the value becomes an expert setting, widened, labelled
+ *   「专家设定·待补证」 — the plan's own answer to evidence too thin to justify a
+ *   range (§6.2).
  * - **A quotation is checked with the platform's own comparison**
  *   (`quoteIsPresent` from `@evimed/domain/clinical-evidence`), the same one
  *   the delivery gate and the reader's ✓/⚠ use. A second implementation here
  *   would be a second verdict, and the two would disagree on the day it
  *   mattered.
- * - **A verbatim quotation is not enough: the number has to be in it.** A
+ * - **A verbatim quotation is not enough: every number has to be in it.** A
  *   quote can be genuine and still not contain the figure it is offered for —
  *   that is how an unanchored number gets into a card while every check passes.
  *   `numberIsInQuote` requires the value to appear as a complete numeric token
- *   of the quotation, so 46,969 cannot be anchored to a sentence about 24.
+ *   of the quotation, so 46,969 cannot be anchored to a sentence about 24; the
+ *   array index in a field path (`outcomeMeasures[0]`) is not a number of the
+ *   quotation, or every value of 0 and 1 would anchor itself; and a confidence
+ *   bound, a sample size and an event count are each checked the same way (E-9).
  * - **Similarity ranks candidates and nothing else** (plan §6.4). Pooling
  *   eligibility is a separate, per-item decision over declared fields:
- *   same endpoint key, an actual (not planned) figure, a verified quote. Two
- *   trials can be 0.95 similar and still not poolable because one measured
- *   investigator-assessed PFS and the other blinded review.
+ *   same endpoint key (never empty), the arm role being pooled, an actual (not
+ *   planned) figure, a verified quote. Two trials can be 0.95 similar and still
+ *   not poolable because one measured investigator-assessed PFS and the other
+ *   blinded review.
  * - **Which stratum a study belongs to is declared, not inferred from prose.**
  *   Treatment line and biomarker are read from structured fields the run
  *   wrote; an absent one is `unknown` and `unknown` never matches a target.
  *   Region comes from the registry's country list and era from its start date,
  *   which are a lookup and a subtraction — those stay in code (principle 1:
- *   regex never does language).
+ *   regex never does language). A trial is 「中国」 only when China is all it
+ *   ran in; one Chinese site among thirty countries is a multinational trial
+ *   that includes China (E-10).
  * - **Three calibres, always; the default is chosen by a stated rule.** The
  *   closest subset, everything, and the next-closest subset are each pooled.
  *   When the strata disagree — the closest subset's pooled value falls outside
@@ -62,7 +77,8 @@
  *   are sensitivity analyses; otherwise the default is the overall pool.
  *   Nothing is hidden either way (plan §6.2 step 5).
  * - **A parameter with no evidence gets a card, not a blank.** The nearest
- *   evidence widened by `EXPERT_WIDEN_FACTOR`, labelled
+ *   evidence widened by `EXPERT_WIDEN_FACTOR` (on the scale the quantity lives
+ *   on: logit for a proportion, log for a time or a ratio), labelled
  *   「专家设定·待补证」, so a simulation can run and the gap is visible.
  * - **What no registry carries is 「不可得」, never 0** — screening failure
  *   rate, per-site accrual, site activation date (plan §6.2, attachment A2).
@@ -78,12 +94,13 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_ASSUMPTION_SOURCE_KINDS, VCR_DISTRIBUTIONS, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION,
+  VCR_ASSUMPTION_KEY, VCR_ASSUMPTION_SOURCE_KINDS, VCR_DISTRIBUTIONS, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION,
   VCR_JOB_METHODS, VCR_POOLING_METHODS, VCR_VALUE_SOURCES, canonicalScenarioJson, validateEngineJob,
 } from "@evimed/domain";
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
-import { REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS } from "./trialRegistryClient.mjs";
+import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS } from "./trialRegistryClient.mjs";
+import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
 export const Z_95 = 1.959963984540054;
@@ -97,6 +114,8 @@ export const EXPERT_SET_NOTE = "专家设定·待补证";
 export const VCR_CALIBRES = Object.freeze(["closest", "overall", "next_closest"]);
 /** The stratum keys applicability is judged on (plan §6.1 「适用人群」). */
 export const VCR_STRATUM_KEYS = Object.freeze(["region", "line", "era", "biomarker"]);
+/** How wide one pooled parameter's evidence set may be. The engine takes 500; a card needs nowhere near it. */
+export const VCR_POOL_MAX_STUDIES = 200;
 
 /**
  * What kind of quantity each parameter is, which decides the distribution
@@ -125,6 +144,33 @@ export const VCR_PARAMETER_KINDS = Object.freeze({
 /** A parameter with no evidence anywhere: named, with the reason, never zeroed. */
 export const VCR_NOT_IN_REGISTRY = REGISTRY_UNAVAILABLE_PARAMETERS;
 
+/** @param {string} parameter */
+export function parameterKindOf(parameter) {
+  return VCR_PARAMETER_KINDS[/** @type {keyof typeof VCR_PARAMETER_KINDS} */ (parameter)] ?? "continuous";
+}
+
+/**
+ * The scale a parameter is pooled on unless the request names another one: the
+ * scale on which its estimates are roughly normal.
+ * @param {string} kind
+ */
+export function defaultScaleOf(kind) {
+  return kind === "proportion" ? "logit" : kind === "ratio" || kind === "time" ? "log" : "identity";
+}
+
+/** The parameters that are a contrast between two arms rather than a quantity of one. */
+const CONTRAST_PARAMETERS = Object.freeze(["hazard_ratio", "odds_ratio", "risk_ratio", "mean_difference", "risk_difference"]);
+
+/**
+ * The arm role a pool takes unless the request names one: effect ratios and
+ * differences are contrasts between arms; everything else is pooled over the
+ * control arms (the quantity a design most often needs from the literature).
+ * @param {string} parameter
+ */
+export function defaultArmRoleOf(parameter) {
+  return CONTRAST_PARAMETERS.includes(parameter) ? "contrast" : "control";
+}
+
 /**
  * A number, or null.
  *
@@ -139,6 +185,49 @@ function finite(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+// --- the normal quantile, for reading a confidence interval on its own scale -------------
+
+/** erf by its Maclaurin series: exact to double precision for the |x| a confidence level needs (|x| ≤ 3.5). @param {number} x */
+function erf(x) {
+  let term = x;
+  let sum = x;
+  for (let n = 1; n < 400; n += 1) {
+    term *= (-x * x) / n;
+    const add = term / (2 * n + 1);
+    sum += add;
+    if (Math.abs(add) <= 1e-17 * Math.abs(sum)) break;
+  }
+  return (2 / Math.sqrt(Math.PI)) * sum;
+}
+
+/**
+ * The two-sided critical value of a confidence level: `z` with
+ * `P(|Z| ≤ z) = level`. Newton's iteration on the exact CDF, so no table of
+ * constants stands between an interval and its standard error.
+ * @param {number} level the coverage, from 0.5 to 0.9999
+ */
+export function twoSidedZ(level) {
+  if (!(level >= 0.5 && level <= 0.9999)) throw new RangeError("A confidence level is from 0.5 to 0.9999.");
+  let z = Z_95;
+  for (let step = 0; step < 60; step += 1) {
+    const coverage = erf(z / Math.SQRT2);
+    const density = (2 / Math.sqrt(2 * Math.PI)) * Math.exp(-(z * z) / 2);
+    const next = z - (coverage - level) / density;
+    if (!Number.isFinite(next)) break;
+    if (Math.abs(next - z) < 1e-14) return next;
+    z = next;
+  }
+  return z;
+}
+
+/**
+ * Is this text a number of the quotation? Numeric tokens of a text, as numbers.
+ * A complete token only: 4 of 46,969 is not a match, the 1 of `PHASE1` and of
+ * `NCT0136` is not a number of the text, and `[0]` in a field path is a
+ * position, not a value.
+ */
+const NUMBER_TOKEN = /(?<![\w.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.,])[+-]?\d+(?:\.\d+)?(?![\d.])/g;
 
 /**
  * Is a field path present in the preserved text? A rendered line starts with
@@ -158,9 +247,6 @@ export function pathIsInSource(sourceText, path) {
   return false;
 }
 
-/** Numeric tokens of a text, as numbers. A complete token only: 4 of 46,969 is not a match. */
-const NUMBER_TOKEN = /(?<![\d.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\d.,])[+-]?\d+(?:\.\d+)?(?![\d.])/g;
-
 /**
  * Does the quotation actually contain the number it is offered for?
  *
@@ -168,7 +254,8 @@ const NUMBER_TOKEN = /(?<![\d.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\d.,])[+-
  * quotation reading `0.46` anchors 0.46 and 0.4600, and does not anchor 0.463.
  * Percentages are matched both ways only when the unit says so, because
  * 「12.4」 and 「0.124」 are the same rate written two ways and a card may carry
- * either.
+ * either. Array positions in a field path (`[0]`, `[12]`) are removed before the
+ * quotation is read: they are where a value sits, never a value.
  *
  * @param {string} quote @param {number} value @param {{ unit?: string }} [options]
  */
@@ -177,7 +264,8 @@ export function numberIsInQuote(quote, value, { unit = "" } = {}) {
   if (target === null) return false;
   const percent = /%|percent|百分/i.test(String(unit ?? ""));
   const candidates = percent ? [target, target * 100, target / 100] : [target];
-  for (const match of String(quote ?? "").matchAll(NUMBER_TOKEN)) {
+  const text = String(quote ?? "").replace(/\[\d+\]/g, "");
+  for (const match of text.matchAll(NUMBER_TOKEN)) {
     const token = match[0].replace(/,/g, "");
     const parsed = Number(token);
     if (!Number.isFinite(parsed)) continue;
@@ -205,6 +293,9 @@ function decimalsOf(value) {
   return (written.split(".")[1] ?? "").length;
 }
 
+/** The numeric fields of an extraction that a quotation must anchor, besides the value. */
+const COMPANION_NUMBERS = Object.freeze(["ciLow", "ciHigh", "sampleSize", "events"]);
+
 /**
  * Check one extracted value against the text it says it came from, and return
  * the row that will be stored either way.
@@ -213,6 +304,12 @@ function decimalsOf(value) {
  * reason, so the attempt stays on the record and the card-building reader
  * (`verifiedEvidenceIds`) passes it over. Nothing that fails here can reach an
  * assumption card (AC-25).
+ *
+ * Every number the item carries is checked, not only the value: a confidence
+ * bound, a sample size and an event count are anchored by the item's own
+ * quotation or by a line of their own in `locator.parts` (the registry keeps
+ * each in a field of its own, so each has its own line). A number with neither
+ * fails the item as `quote_missing_number`, with the fields named.
  *
  * @param {{ extraction: any, sourceText?: string, checkedAt?: string }} input
  */
@@ -227,6 +324,8 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   // the clinical gate draws between a `direct` claim and a `derived` one.
   const derived = ["calculated", "imputed", "predicted"].includes(String(extraction?.valueSource ?? ""));
   const inputs = [...(extraction?.locator?.inputs ?? [])].map(String).filter(Boolean);
+  /** @type {string[]} */
+  const unanchored = [];
   /** @type {string} */
   let state;
   if (!quote) state = "no_quote";
@@ -235,11 +334,28 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   else if (derived) {
     const missing = inputs.filter((path) => !pathIsInSource(sourceText, path));
     state = !inputs.length ? "derived_inputs_missing" : missing.length ? "derived_input_not_found" : "verified";
-  } else if (value !== null && !numberIsInQuote(quote, value, { unit: extraction?.unit })) state = "quote_missing_number";
-  // A value with no number carries text instead — a date, a status. It has to
-  // be in the quotation the same way a number does.
-  else if (value === null && valueText && !quoteIsPresent(quote, valueText)) state = "quote_missing_value";
-  else state = "verified";
+  } else {
+    if (value !== null && !numberIsInQuote(quote, value, { unit: extraction?.unit })) unanchored.push("value");
+    for (const field of COMPANION_NUMBERS) {
+      const number = finite(extraction?.[field]);
+      if (number === null) continue;
+      if (field === "sampleSize" || field === "events") {
+        if (!Number.isInteger(number) || number < 0) { unanchored.push(field); continue; }
+      }
+      // A confidence bound is in the value's own unit; a count is not.
+      const options = field === "ciLow" || field === "ciHigh" ? { unit: extraction?.unit } : {};
+      if (numberIsInQuote(quote, number, options)) continue;
+      const part = extraction?.locator?.parts?.[field];
+      const partQuote = String(part?.quote ?? "").trim();
+      if (partQuote && quoteIsPresent(sourceText, partQuote) && numberIsInQuote(partQuote, number, options)) continue;
+      unanchored.push(field);
+    }
+    // A value with no number carries text instead — a date, a status. It has to
+    // be in the quotation the same way a number does.
+    if (unanchored.length) state = "quote_missing_number";
+    else if (value === null && valueText && !quoteIsPresent(quote, valueText)) state = "quote_missing_value";
+    else state = "verified";
+  }
 
   const verified = state === "verified";
   return {
@@ -247,7 +363,14 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
     verified,
     item: {
       ...extraction,
+      // A refused item keeps no number at all: the bounds, the sample size and the
+      // event count travel with the value, and what could not be anchored must not
+      // be handed on (the runtime reads these rows back as they are).
       value: verified ? extraction?.value ?? null : null,
+      ciLow: verified ? extraction?.ciLow ?? null : null,
+      ciHigh: verified ? extraction?.ciHigh ?? null : null,
+      sampleSize: verified ? extraction?.sampleSize ?? null : null,
+      events: verified ? extraction?.events ?? null : null,
       valueText: verified ? String(extraction?.valueText ?? "") : "unknown",
       locator: {
         ...(extraction?.locator ?? {}),
@@ -256,7 +379,7 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
         verification: verified ? "verified"
           : ["quote_missing_number", "quote_missing_value", "derived_input_not_found", "derived_inputs_missing"].includes(state)
             ? "quote_not_found" : state,
-        ...(verified ? {} : { verificationDetail: state }),
+        ...(verified ? {} : { verificationDetail: state, ...(unanchored.length ? { unanchored } : {}) }),
         ...(derived ? { derivation: String(extraction?.valueSource ?? "calculated") } : {}),
         ...(checkedAt ? { checkedAt } : {}),
       },
@@ -302,22 +425,38 @@ export function precedentSimilarity(precedent, target) {
   return { score: Math.round(score * 1000) / 1000, parts };
 }
 
+/** How a registry spells the countries this module groups. Lowercase. */
+const CHINA_NAMES = Object.freeze(["china", "mainland china", "people's republic of china", "prc"]);
+const EAST_ASIA_NAMES = Object.freeze([
+  ...CHINA_NAMES, "japan", "korea", "republic of korea", "south korea", "taiwan", "singapore", "hong kong", "macau", "macao",
+]);
+
 /**
  * Which stratum a precedent's values belong to, on the four keys applicability
  * is judged on. `line` and `biomarker` are read from declared fields, never
  * inferred from a title; absent means `unknown`, and `unknown` never matches.
  *
- * @param {{ precedent?: any, item?: any, target?: any }} input
+ * Region is about where the trial ran *as a whole*: `china` is a trial whose
+ * every country is China; a trial that included China among others is
+ * `multinational` and says so with `includesChina`; `east_asia` is a trial run
+ * only in East Asia. One Chinese site among thirty countries is not a Chinese
+ * population (E-10).
+ *
+ * @param {{ precedent?: any, item?: any, target?: any, now?: Date }} input
  */
-export function applicabilityStratum({ precedent = {}, item = {}, target = {} }) {
-  const countries = (precedent?.sites?.countries ?? []).map((/** @type {string} */ country) => String(country).toLowerCase());
-  const region = countries.length
-    ? countries.includes("china") ? "china"
-      : countries.some((country) => ["japan", "korea", "republic of korea", "taiwan", "singapore", "hong kong"].includes(country)) ? "east_asia"
-        : countries.length > 3 ? "multinational" : "other"
-    : "unknown";
+export function applicabilityStratum({ precedent = {}, item = {}, target = {}, now = new Date() }) {
+  const countries = [...new Set((precedent?.sites?.countries ?? []).map((/** @type {string} */ country) => String(country).trim().toLowerCase()).filter(Boolean))];
+  const includesChina = countries.some((country) => CHINA_NAMES.includes(country));
+  /** @type {string} */
+  let region = "unknown";
+  if (countries.length) {
+    if (countries.every((country) => CHINA_NAMES.includes(country))) region = "china";
+    else if (countries.every((country) => EAST_ASIA_NAMES.includes(country))) region = "east_asia";
+    else if (countries.length > 3 || includesChina) region = "multinational";
+    else region = "other";
+  }
   const startYear = Number(String(precedent?.enrollment?.milestones?.start_date?.date ?? "").slice(0, 4));
-  const eraYear = Number(target?.eraYear) || new Date().getUTCFullYear();
+  const eraYear = Number(target?.eraYear) || now.getUTCFullYear();
   const eraWindow = Number(target?.eraWindowYears) || 5;
   const era = Number.isFinite(startYear) && startYear > 1900
     ? (eraYear - startYear <= eraWindow ? "recent" : "older")
@@ -327,14 +466,14 @@ export function applicabilityStratum({ precedent = {}, item = {}, target = {} })
     const asText = String(value ?? "").trim().toLowerCase();
     return asText || "unknown";
   };
-  return { region, line: declared("line"), era, biomarker: declared("biomarker") };
+  return { region, includesChina, line: declared("line"), era, biomarker: declared("biomarker") };
 }
 
 /**
  * Mismatches between a stratum and the target, on the keys the target actually
  * declares. `unknown` counts as a mismatch — a study whose treatment line
  * nobody recorded is not evidence that it matches.
- * @param {Record<string, string>} stratum @param {any} target
+ * @param {Record<string, any>} stratum @param {any} target
  */
 export function stratumMismatches(stratum, target) {
   /** @type {string[]} */
@@ -348,27 +487,34 @@ export function stratumMismatches(stratum, target) {
 }
 
 /**
- * Per-item pooling eligibility: same endpoint key, verified, an actual figure
- * rather than a sponsor's plan, and a number to pool. Every refusal names its
- * reason; nothing is dropped quietly.
+ * Per-item pooling eligibility: same endpoint key (never empty), the arm role
+ * being pooled, verified, an actual figure rather than a sponsor's plan, and a
+ * number to pool. Every refusal names its reason; nothing is dropped quietly.
+ * An item whose registry standing is not stated (`historical_baseline` absent)
+ * is not a baseline.
  *
- * @param {{ items: readonly any[], endpointKey?: string, requireHistoricalBaseline?: boolean }} input
+ * @param {{ items: readonly any[], endpointKey?: string, armRole?: string, requireHistoricalBaseline?: boolean }} input
  */
-export function poolEligibility({ items, endpointKey = "", requireHistoricalBaseline = true }) {
+export function poolEligibility({ items, endpointKey = "", armRole = "", requireHistoricalBaseline = true }) {
   /** @type {{ item: any, eligible: boolean, reasons: string[] }[]} */
   const verdicts = [];
+  const wantedKey = String(endpointKey ?? "").trim();
   for (const item of items ?? []) {
     /** @type {string[]} */
     const reasons = [];
     const verification = String(item?.locator?.verification ?? item?.verification ?? "");
     if (verification !== "verified") reasons.push("quote_not_verified");
     if (finite(item?.value) === null) reasons.push("no_value");
-    const key = String(item?.endpointKey ?? item?.detail?.endpointKey ?? item?.applicability?.endpointKey ?? "").trim();
-    if (endpointKey) {
-      if (!key) reasons.push("endpoint_key_missing");
-      else if (key !== endpointKey) reasons.push("endpoint_key_differs");
-    }
-    if (requireHistoricalBaseline && item?.historicalBaseline === false) reasons.push("estimated_not_actual");
+    const key = String(item?.endpoint_key ?? item?.endpointKey ?? item?.detail?.endpointKey ?? item?.applicability?.endpointKey ?? "").trim();
+    // Pooling needs an endpoint definition on both sides: two values that name
+    // none are not known to measure the same thing.
+    if (!wantedKey) reasons.push("endpoint_key_required");
+    else if (!key) reasons.push("endpoint_key_missing");
+    else if (key !== wantedKey) reasons.push("endpoint_key_differs");
+    const role = String(item?.arm_role ?? item?.armRole ?? "unknown");
+    if (armRole && role !== armRole) reasons.push(role === "unknown" ? "arm_role_unknown" : "arm_role_differs");
+    const baseline = item?.historical_baseline ?? item?.historicalBaseline;
+    if (requireHistoricalBaseline && baseline !== true) reasons.push(baseline === false ? "estimated_not_actual" : "baseline_standing_unknown");
     verdicts.push({ item, eligible: reasons.length === 0, reasons });
   }
   return {
@@ -376,6 +522,69 @@ export function poolEligibility({ items, endpointKey = "", requireHistoricalBase
     refused: verdicts.filter((verdict) => !verdict.eligible),
     verdicts,
   };
+}
+
+/** @param {number} p */
+const logit = (p) => Math.log(p / (1 - p));
+/** Inverse logit, used to bring a pooled logit back to the proportion scale. @param {number} value */
+const expit = (value) => 1 / (1 + Math.exp(-value));
+
+/**
+ * The value on the natural scale, as a proportion: a percentage is divided by
+ * a hundred, a number strictly between 0 and 1 is one already, anything else is
+ * not a proportion this module will guess at.
+ * @param {number | null} value @param {string} unit
+ */
+function asProportion(value, unit) {
+  if (value === null) return null;
+  const percent = /%|percent|百分/i.test(unit);
+  const p = percent ? value / 100 : value;
+  return p > 0 && p < 1 ? p : null;
+}
+
+/**
+ * The estimate and its standard error on the analysis scale, from what the
+ * registry gave: the value and its confidence interval, at the interval's own
+ * level. Exact arithmetic on the scale the engine pools on — never a natural-scale
+ * number the engine would have to transform, and never a standard error nobody
+ * can reproduce: an item whose error cannot be read off its own interval (or,
+ * for a proportion, off its own sample size) is refused with the reason.
+ *
+ * @param {any} item a stored evidence row
+ * @param {{ scale: string }} options
+ * @returns {{ ok: true, estimate: number, se: number } | { ok: false, reason: string }}
+ */
+export function analysisScaleInput(item, { scale }) {
+  const unit = String(item?.unit ?? "");
+  const value = finite(item?.value);
+  const low = finite(item?.ci_low ?? item?.ciLow);
+  const high = finite(item?.ci_high ?? item?.ciHigh);
+  const n = finite(item?.sample_size ?? item?.sampleSize);
+  const level = finite(item?.detail?.confidenceLevel ?? item?.applicability?.confidenceLevel) ?? 0.95;
+  /** @param {number | null} raw */
+  const on = (raw) => {
+    if (raw === null) return null;
+    if (scale === "identity") return raw;
+    if (scale === "log") return raw > 0 ? Math.log(raw) : null;
+    const p = asProportion(raw, unit);
+    return p === null ? null : logit(p);
+  };
+  const estimate = on(value);
+  if (estimate === null || !Number.isFinite(estimate)) return { ok: false, reason: scale === "logit" ? "proportion_not_derivable" : "value_off_scale" };
+  const lowOn = on(low);
+  const highOn = on(high);
+  if (lowOn !== null && highOn !== null && highOn > lowOn) {
+    if (!(level >= 0.5 && level <= 0.9999)) return { ok: false, reason: "confidence_level_invalid" };
+    const se = (highOn - lowOn) / (2 * twoSidedZ(level));
+    return se > 0 && Number.isFinite(se) ? { ok: true, estimate, se } : { ok: false, reason: "se_underivable" };
+  }
+  if (scale === "logit" && n !== null && n > 0) {
+    const p = /** @type {number} */ (asProportion(value, unit));
+    // The binomial variance of a logit: 1 / (n p (1 − p)).
+    const se = Math.sqrt(1 / (n * p * (1 - p)));
+    return se > 0 && Number.isFinite(se) ? { ok: true, estimate, se } : { ok: false, reason: "se_underivable" };
+  }
+  return { ok: false, reason: "se_underivable" };
 }
 
 /**
@@ -414,41 +623,45 @@ export function seedForScenario(scenario) {
 }
 
 /**
- * The `evidence.pool` job for one calibre of one parameter. Validated against
- * the engine protocol before anyone queues it: a job the engine would refuse
- * is refused here, with the field named.
+ * The `evidence.pool` job for one calibre of one parameter, in exactly the
+ * shape the domain's scenario schema and the engine read (integration contract
+ * §3.1): `studies: [{ studyId, estimate, se }]` on the analysis scale, plus
+ * `method`, `level` and `scale`. Validated against the engine protocol before
+ * anyone queues it: a job the engine would refuse is refused here, with the
+ * field named. An item whose standard error cannot be derived is left out of the
+ * job and reported with its reason (`excluded`) — never pooled with a guessed
+ * error.
  *
- * @param {{ studyId: string, parameter: string, endpointKey?: string, calibre: string,
+ * @param {{ studyId: string, parameter: string, endpointKey?: string, armRole?: string, calibre: string,
  *   items: readonly any[], scale?: string, poolingMethod?: string, cpuSecondsLimit?: number }} input
  */
-export function poolJob({ studyId, parameter, endpointKey = "", calibre, items, scale = "", poolingMethod = "random_effects_reml", cpuSecondsLimit = 120 }) {
-  const kind = VCR_PARAMETER_KINDS[/** @type {keyof typeof VCR_PARAMETER_KINDS} */ (parameter)] ?? "continuous";
+export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", calibre, items, scale = "", poolingMethod = "random_effects_reml", cpuSecondsLimit = 120 }) {
+  const kind = parameterKindOf(parameter);
   const method = VCR_JOB_METHODS.pool_evidence;
-  const chosenScale = scale || (kind === "proportion" ? "logit" : kind === "ratio" || kind === "time" ? "log" : "identity");
-  const studies = (items ?? []).map((item) => ({
-    evidenceId: String(item?.id ?? ""),
-    value: finite(item?.value),
-    ciLow: finite(item?.ci_low ?? item?.ciLow),
-    ciHigh: finite(item?.ci_high ?? item?.ciHigh),
-    sampleSize: finite(item?.sample_size ?? item?.sampleSize),
-    events: finite(item?.events),
-    arm: String(item?.arm ?? ""),
-    sourceRef: String(item?.source_ref ?? item?.sourceRef ?? ""),
-  }));
+  const chosenScale = scale || defaultScaleOf(kind);
+  /** @type {{ studyId: string, estimate: number, se: number }[]} */
+  const studies = [];
+  /** @type {{ id: string, reason: string }[]} */
+  const excluded = [];
+  /** @type {string[]} */
+  const evidenceIds = [];
+  /** @type {Array<{ kind: string, id: string }>} */
+  const inputs = [];
+  for (const item of items ?? []) {
+    const derived = analysisScaleInput(item, { scale: chosenScale });
+    const id = String(item?.id ?? "");
+    if (derived.ok !== true) { excluded.push({ id, reason: derived.reason }); continue; }
+    studies.push({ studyId: id, estimate: derived.estimate, se: derived.se });
+    evidenceIds.push(id);
+    // A caller names an input by what it is; a hash is only ever the control plane's to give.
+    inputs.push({ kind: "evidence", id });
+  }
   const scenario = {
-    parameter,
-    parameterKind: kind,
-    endpointKey,
-    calibre,
+    studies: studies.slice(0, VCR_POOL_MAX_STUDIES),
+    method: VCR_POOLING_METHODS.includes(poolingMethod) ? poolingMethod : "random_effects_reml",
+    level: 0.95,
     scale: chosenScale,
-    poolingMethod: VCR_POOLING_METHODS.includes(poolingMethod) ? poolingMethod : "random_effects_reml",
-    confidenceLevel: 0.95,
-    predictionInterval: true,
-    studies,
   };
-  const inputs = studies
-    .filter((study) => study.evidenceId)
-    .map((study) => ({ kind: "evidence", id: study.evidenceId, hash: null, value: study }));
   const job = {
     jobId: "job_pending",
     studyId,
@@ -459,56 +672,70 @@ export function poolJob({ studyId, parameter, endpointKey = "", calibre, items, 
     seed: seedForScenario(scenario),
     cpuSecondsLimit,
     scenario,
-    inputs,
+    inputs: inputs.slice(0, VCR_POOL_MAX_STUDIES),
   };
-  const issues = validateEngineJob(job);
-  return { job, issues, valid: issues.length === 0 };
+  const issues = studies.length ? validateEngineJob(job) : [{ code: "no_poolable_study", field: "scenario.studies", detail: "No item has a standard error that can be derived." }];
+  return {
+    job, issues, valid: issues.length === 0, excluded, evidenceIds,
+    // What the pool is about. It rides in the job's own record, not its scenario.
+    about: { parameter, endpointKey, armRole, calibre, scale: chosenScale, method: scenario.method },
+  };
 }
 
 /**
- * Read what `evidence.pool` answered. Tolerant about where the numbers sit
- * (a measure's own `interval`, or a second measure named `prediction`), strict
- * about them being there: a pooled value with no prediction interval is not a
- * usable answer, and says so rather than falling back to the confidence
- * interval.
+ * Read what `evidence.pool` answered — its own measure names: `pooled_estimate`
+ * (with its confidence interval), `prediction_interval` (absent below three
+ * studies, by the engine's own rule), `i_squared`, `tau_squared`, `k`. Strict
+ * about the pooled value being there; tolerant about the prediction interval
+ * being absent, because that is a finding (`predictionAvailable: false`), not a
+ * failure: a pool of two studies is a real pool with no range to draw from.
+ *
+ * The first build's names (`pooled`, `prediction`) are read too, as an alias for
+ * the fixtures written against them.
  *
  * @param {any} result
  * @returns {{ ok: boolean, reason?: string, scale?: string, poolingMethod?: string, k?: number | null,
  *   pooled?: number, confidence?: { low: number, high: number } | null,
- *   prediction?: { low: number, high: number }, i2?: number | null, tau2?: number | null }}
+ *   prediction?: { low: number, high: number } | null, predictionAvailable?: boolean, i2?: number | null, tau2?: number | null }}
  */
 export function readPoolResult(result) {
   if (!result || typeof result !== "object") return { ok: false, reason: "result_missing" };
   if (result.status && result.status !== "succeeded") return { ok: false, reason: `engine_${result.status}` };
   const measures = Array.isArray(result.measures) ? result.measures : [];
-  /** @param {string} name */
-  const measure = (name) => measures.find((entry) => String(entry?.name ?? "") === name);
-  const pooledMeasure = measure("pooled");
+  /** @param {...string} names */
+  const measure = (...names) => names.map((name) => measures.find((entry) => String(entry?.name ?? "") === name)).find(Boolean);
+  const pooledMeasure = measure("pooled_estimate", "pooled");
   const pooled = finite(pooledMeasure?.value);
   if (pooled === null) return { ok: false, reason: "pooled_value_missing" };
-  const predictionMeasure = measure("prediction") ?? measure("prediction_interval");
+  const predictionMeasure = measure("prediction_interval", "prediction");
   const predictionSource = predictionMeasure?.interval?.kind === "prediction" ? predictionMeasure.interval
     : pooledMeasure?.predictionInterval ?? (pooledMeasure?.interval?.kind === "prediction" ? pooledMeasure.interval : null);
   const low = finite(predictionSource?.low);
   const high = finite(predictionSource?.high);
-  if (low === null || high === null || !(high >= low)) return { ok: false, reason: "prediction_interval_missing" };
+  const predictionAvailable = low !== null && high !== null && high >= low;
   const confidenceSource = pooledMeasure?.interval?.kind === "confidence" ? pooledMeasure.interval : measure("confidence")?.interval ?? null;
   return {
     ok: true,
-    scale: String(result.diagnostics?.scale ?? "identity"),
-    poolingMethod: String(result.diagnostics?.poolingMethod ?? "random_effects_reml"),
+    scale: String(result.diagnostics?.scale ?? pooledMeasure?.unit ?? "identity"),
+    poolingMethod: String(result.diagnostics?.poolingMethodApplied ?? result.diagnostics?.poolingMethod ?? "random_effects_reml"),
     k: finite(measure("k")?.value ?? result.diagnostics?.k),
     pooled,
     confidence: finite(confidenceSource?.low) !== null && finite(confidenceSource?.high) !== null
       ? { low: Number(confidenceSource.low), high: Number(confidenceSource.high) } : null,
-    prediction: { low, high },
+    prediction: predictionAvailable ? { low: /** @type {number} */ (low), high: /** @type {number} */ (high) } : null,
+    predictionAvailable,
     i2: finite(measure("i_squared")?.value ?? result.diagnostics?.i2),
     tau2: finite(measure("tau_squared")?.value ?? result.diagnostics?.tau2),
   };
 }
 
-/** Inverse logit, used only to bring a pooled logit back to the proportion scale. @param {number} value */
-const expit = (value) => 1 / (1 + Math.exp(-value));
+/**
+ * A value on the analysis scale, on the natural one.
+ * @param {number} value @param {string} scale
+ */
+export function naturalOf(value, scale) {
+  return scale === "logit" ? expit(value) : scale === "log" ? Math.exp(value) : value;
+}
 
 /**
  * The distribution a simulation draws from, from the engine's pooled value and
@@ -587,7 +814,9 @@ export function chooseCalibre(pools) {
   if (!closest && !overall) return { calibre: null, reason: "no_pool_succeeded", strataDiffer: false };
   if (!overall) return { calibre: "closest", reason: "only_closest_pooled", strataDiffer: false };
   if (!closest) return { calibre: "overall", reason: "no_subset_matches_this_population", strataDiffer: false };
-  const outside = closest.pooled < overall.prediction.low || closest.pooled > overall.prediction.high;
+  const outside = overall.prediction
+    ? /** @type {number} */ (closest.pooled) < overall.prediction.low || /** @type {number} */ (closest.pooled) > overall.prediction.high
+    : false;
   const heterogeneous = (overall.i2 ?? 0) >= HETEROGENEOUS_I2;
   const strataDiffer = outside || heterogeneous;
   return {
@@ -603,22 +832,28 @@ export function chooseCalibre(pools) {
  * default calibre supplies the distribution; the other two become the
  * sensitivity analyses. `evidenceIds` are the verified rows only.
  *
+ * When the default calibre's pool has no prediction interval (fewer than three
+ * studies) there is no range to draw from and no card is made here
+ * (`reason: "prediction_interval_missing"`, with the pool as `nearest`): the
+ * caller writes the expert setting instead (`expertSetFromPool`).
+ *
  * @param {{ key: string, name: string, parameter: string, endpoint?: string, unit?: string,
  *   pools: Record<string, ReturnType<typeof readPoolResult>>, evidenceIdsByCalibre: Record<string, string[]>,
  *   applicability?: any, note?: string }} input
  */
 export function assumptionFromPooling({ key, name, parameter, endpoint = "", unit = "", pools, evidenceIdsByCalibre, applicability = {}, note = "" }) {
-  const kind = VCR_PARAMETER_KINDS[/** @type {keyof typeof VCR_PARAMETER_KINDS} */ (parameter)] ?? "continuous";
+  const kind = parameterKindOf(parameter);
   const chosen = chooseCalibre(pools);
-  if (!chosen.calibre) return { ok: false, reason: chosen.reason, card: null };
+  if (!chosen.calibre) return { ok: false, reason: chosen.reason, card: null, nearest: null };
   const pool = pools[chosen.calibre];
-  const distribution = distributionFromPooled({ kind, pooled: pool.pooled, prediction: pool.prediction, scale: pool.scale });
+  if (!pool.prediction) return { ok: false, reason: "prediction_interval_missing", card: null, nearest: { calibre: chosen.calibre, pool } };
+  const distribution = distributionFromPooled({ kind, pooled: /** @type {number} */ (pool.pooled), prediction: pool.prediction, scale: pool.scale });
   /** @type {any[]} */
   const sensitivity = [];
   for (const calibre of VCR_CALIBRES) {
     const other = pools?.[calibre];
-    if (calibre === chosen.calibre || !other?.ok) continue;
-    const otherDistribution = distributionFromPooled({ kind, pooled: other.pooled, prediction: other.prediction, scale: other.scale });
+    if (calibre === chosen.calibre || !other?.ok || !other.prediction) continue;
+    const otherDistribution = distributionFromPooled({ kind, pooled: /** @type {number} */ (other.pooled), prediction: other.prediction, scale: other.scale });
     sensitivity.push({
       calibre,
       pointValue: otherDistribution.pointValue,
@@ -630,6 +865,8 @@ export function assumptionFromPooling({ key, name, parameter, endpoint = "", uni
   }
   return {
     ok: true,
+    reason: null,
+    nearest: null,
     card: {
       key,
       name,
@@ -675,32 +912,47 @@ export function assumptionFromPooling({ key, name, parameter, endpoint = "", uni
  * A parameter no evidence reached: the nearest evidence, widened, and told
  * plainly that it is an expert setting waiting for its source (plan §6.2).
  *
+ * The spread is widened on the scale the quantity lives on: the log scale for a
+ * time or a ratio (a hazard ratio of 0.5 to 2 is symmetric about 1, not about
+ * 1.25), the logit scale for a proportion (which keeps it inside 0 to 1 without
+ * a clip that would pile mass on the bound), the natural scale otherwise. A
+ * value or a bound that is not positive on a log scale, or not inside 0 to 1 on
+ * a logit one, has no honest widening: the card carries the point and says the
+ * range is unavailable (E-13).
+ *
  * @param {{ key: string, name: string, parameter?: string, unit?: string, nearest: any,
- *   reason: string, applicability?: any }} input
+ *   reason: string, applicability?: any, basedOn?: unknown }} input
  */
-export function expertSetCard({ key, name, parameter = "", unit = "", nearest, reason, applicability = {} }) {
-  const kind = VCR_PARAMETER_KINDS[/** @type {keyof typeof VCR_PARAMETER_KINDS} */ (parameter)] ?? "continuous";
+export function expertSetCard({ key, name, parameter = "", unit = "", nearest, reason, applicability = {}, basedOn = undefined }) {
+  const kind = parameterKindOf(parameter);
   const point = finite(nearest?.pointValue ?? nearest?.value);
   const low = finite(nearest?.range?.low ?? nearest?.low);
   const high = finite(nearest?.range?.high ?? nearest?.high);
+  const scale = defaultScaleOf(kind);
+  /** @param {number} value */
+  const forward = (value) => (scale === "log" ? (value > 0 ? Math.log(value) : null)
+    : scale === "logit" ? (value > 0 && value < 1 ? logit(value) : null) : value);
+  /** @param {number} value */
+  const backward = (value) => (scale === "log" ? Math.exp(value) : scale === "logit" ? expit(value) : value);
   /** @type {any} */
   let distribution;
   if (point === null) {
     distribution = { family: "empirical", params: {}, range: null };
   } else if (low !== null && high !== null && high > low) {
-    const widen = EXPERT_WIDEN_FACTOR;
-    const centre = kind === "time" || kind === "ratio" ? Math.log(Math.max(point, Number.MIN_VALUE)) : point;
-    const halfWidth = ((kind === "time" || kind === "ratio" ? Math.log(high) - Math.log(low) : high - low) / 2) * widen;
-    const widenedLow = kind === "time" || kind === "ratio" ? Math.exp(centre - halfWidth) : centre - halfWidth;
-    const widenedHigh = kind === "time" || kind === "ratio" ? Math.exp(centre + halfWidth) : centre + halfWidth;
-    const bounded = kind === "proportion"
-      ? { low: Math.max(0, widenedLow), high: Math.min(1, widenedHigh) }
-      : { low: widenedLow, high: widenedHigh };
-    distribution = {
-      family: "empirical",
-      params: { point, support: [bounded.low, bounded.high], widenedBy: widen },
-      range: { kind: "prediction", ...bounded },
-    };
+    const centre = forward(point);
+    const lowOn = forward(low);
+    const highOn = forward(high);
+    if (centre === null || lowOn === null || highOn === null) {
+      distribution = { family: "point", params: { point }, range: null, note: "取值或区间不在这个量的合法范围内，无法加宽，只保留点值" };
+    } else {
+      const halfWidth = ((highOn - lowOn) / 2) * EXPERT_WIDEN_FACTOR;
+      const widened = { low: backward(centre - halfWidth), high: backward(centre + halfWidth) };
+      distribution = {
+        family: "empirical",
+        params: { point, support: [widened.low, widened.high], widenedBy: EXPERT_WIDEN_FACTOR },
+        range: { kind: "prediction", ...widened },
+      };
+    }
   } else {
     distribution = { family: "point", params: { point }, range: null };
   }
@@ -715,9 +967,10 @@ export function expertSetCard({ key, name, parameter = "", unit = "", nearest, r
     sourceKind: "expert_set",
     valueSource: "assumed",
     poolingMethod: null,
-    pooling: { basedOn: nearest?.source ?? nearest?.key ?? null, widenedBy: EXPERT_WIDEN_FACTOR, reason },
-    // An expert setting cites no extracted value, on purpose: it is not
-    // evidence and must not read as if it were (AC-25).
+    // What it was widened from travels in `pooling`, not in `evidenceIds`: an
+    // expert setting cites no extracted value, on purpose — it is not evidence
+    // and must not read as if it were (AC-25).
+    pooling: { basedOn: basedOn ?? nearest?.source ?? nearest?.key ?? null, widenedBy: EXPERT_WIDEN_FACTOR, reason },
     evidenceIds: [],
     applicability: { ...applicability, pending: true },
     reviewState: "ai_set",
@@ -799,6 +1052,28 @@ export function evidenceResultsJson({ cards, evidenceById = new Map(), precedent
   };
 }
 
+/** What a pooling request may name of the study it pools for: the four strata. Closed. */
+export const VCR_POOL_TARGET_KEYS = Object.freeze(["region", "line", "biomarker", "eraYear", "eraWindowYears"]);
+
+/**
+ * A pool request's `target`, as a plain object of the four strata and nothing
+ * else. Anything outside them is dropped by name: a request cannot smuggle a
+ * key into applicability.
+ * @param {unknown} raw
+ */
+export function poolTargetOf(raw) {
+  /** @type {Record<string, string | number>} */
+  const target = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const key of VCR_POOL_TARGET_KEYS) {
+      const value = /** @type {any} */ (raw)[key];
+      if (typeof value === "string" && value.trim() && value.length <= 80) target[key] = value.trim();
+      else if (Number.isFinite(value) && (key === "eraYear" || key === "eraWindowYears")) target[key] = Number(value);
+    }
+  }
+  return target;
+}
+
 /**
  * The pipeline. Everything it needs is injected: the store, the registry
  * client and the job queue (which belongs to another package and may not exist
@@ -811,6 +1086,53 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
 
   /** @param {string} message @param {Record<string, unknown>} detail */
   const note = (message, detail) => { logger?.info?.(message, detail); };
+
+  /**
+   * A registry read that did not give a record, as the answer the run reads:
+   * `available: false`, the code, and whether the record is not there at all
+   * (`registry_not_found`) or the registry could not be asked
+   * (`registry_unavailable`) — 「没有这条记录」 and 「没能问到」 are different
+   * findings (CS-27).
+   * @param {{ status?: string, reason?: string }} fetched @param {string} registryName @param {string} registryId @param {string} fetchedAt
+   */
+  const registryFailure = (fetched, registryName, registryId, fetchedAt) => {
+    const notFound = fetched?.status === REGISTRY_NOT_FOUND || fetched?.reason === REGISTRY_NOT_FOUND;
+    const reason = String(fetched?.reason ?? fetched?.status ?? "registry_record_unreadable");
+    return {
+      available: false,
+      status: notFound ? REGISTRY_NOT_FOUND : REGISTRY_UNAVAILABLE,
+      code: notFound ? REGISTRY_NOT_FOUND : REGISTRY_UNAVAILABLE,
+      reason: notFound ? REGISTRY_NOT_FOUND : reason,
+      registry: registryName,
+      registryId,
+      record: null,
+      sources: [],
+      fetchedAt,
+      issues: [{ code: notFound ? REGISTRY_NOT_FOUND : reason, severity: "advisory",
+        message: notFound ? "登记平台没有这个登记号的记录。" : `试验登记读取未成功：${reason}` }],
+    };
+  };
+
+  /**
+   * One registry record, fetched and built — or the failure to.
+   * @param {string} registryName @param {string} registryId
+   */
+  async function fetchRecord(registryName, registryId) {
+    if (!registry) return { failure: { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured" } };
+    const wanted = String(registryId ?? "").trim().toLowerCase();
+    const fetched = registryName === "chictr"
+      ? await registry.searchChictr({ query: String(registryId ?? ""), limit: 5 })
+      : await registry.record(String(registryId ?? ""));
+    // A search answers the nearest records, not the record: the one asked for is
+    // the one whose own registration number it is, and none of them being it is
+    // 「没有这条记录」, never the closest one taken instead.
+    const built = registryName === "chictr"
+      ? (fetched.items ?? []).find((/** @type {any} */ entry) => String(entry?.precedent?.registryId ?? "").trim().toLowerCase() === wanted)
+      : fetched;
+    if (fetched.status === "ok" && registryName === "chictr" && !built) return { failure: { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND } };
+    if (fetched.status !== "ok" || !built?.precedent) return { failure: fetched };
+    return { built };
+  }
 
   const pipeline = {
     get engineReady() { return typeof jobs?.enqueue === "function"; },
@@ -876,8 +1198,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * wants and this answers with structure: the precedent's fields, the
      * quotable values that survived their check, the preserved text the run
      * quotes from, and the named absences. It **never throws and never
-     * writes**: a gateway read that fails is `registry_unavailable` with a
-     * reason, and the writing path is `extractPrecedent`.
+     * writes**: a gateway read that fails is `available: false` with a code
+     * and a reason (`registry_not_found` is not `registry_unavailable`), and
+     * the writing path is `extractPrecedent`.
      *
      * `issues` are notices only (principle 4): a truncated site list, a record
      * with no results section, a value whose quotation did not check out.
@@ -886,23 +1209,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      */
     async readRegistryRecord({ userId = "", studyId = null, registry: registryName = "clinicaltrials.gov", registryId }) {
       const fetchedAt = now().toISOString();
-      const unreachable = (/** @type {string} */ reason) => ({
-        status: REGISTRY_UNAVAILABLE,
-        reason,
-        registry: registryName,
-        registryId: String(registryId ?? ""),
-        record: null,
-        sources: [],
-        fetchedAt,
-        issues: [{ code: reason, severity: "advisory", message: `试验登记读取未成功：${reason}` }],
-      });
-      if (!registry) return unreachable("registry_not_configured");
       try {
-        const fetched = registryName === "chictr"
-          ? await registry.searchChictr({ query: String(registryId ?? ""), limit: 1 })
-          : await registry.record(String(registryId ?? ""));
-        const built = registryName === "chictr" ? (fetched.items ?? [])[0] : fetched;
-        if (fetched.status !== "ok" || !built?.precedent) return unreachable(fetched.reason ?? fetched.status ?? "registry_record_unreadable");
+        const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""));
+        if (!built) return registryFailure(failure ?? {}, registryName, String(registryId ?? ""), fetchedAt);
 
         const checked = (built.extractions ?? []).map((/** @type {any} */ item) => verifyExtraction({
           extraction: item, sourceText: built.record?.text ?? "", checkedAt: fetchedAt,
@@ -920,6 +1229,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         }
         note("vcr.evidence.registry_read", { userId, studyId, registry: registryName, registryId, verified: checked.filter((/** @type {any} */ item) => item.verified).length });
         return {
+          available: true,
           status: "ok",
           registry: built.precedent.registry,
           registryId: built.precedent.registryId,
@@ -931,6 +1241,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             values: checked.map((/** @type {any} */ entry) => ({
               parameter: entry.item.parameter,
               arm: entry.item.arm,
+              armRole: entry.item.armRole ?? "unknown",
               value: entry.item.value,
               valueText: entry.item.valueText,
               unit: entry.item.unit,
@@ -958,43 +1269,53 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         // transport failure where the honest answer is 「这条记录没读到」.
         const reason = String(/** @type {any} */ (error)?.code ?? "request_failed");
         logger?.warn?.("vcr.evidence.registry_read_failed", { registryId, reason });
-        return unreachable(reason);
+        return registryFailure({ status: REGISTRY_UNAVAILABLE, reason }, registryName, String(registryId ?? ""), fetchedAt);
       }
     },
 
     /**
-     * Step 2 — one record, extracted and checked. The precedent row and every
+     * Step 2 — one record, extracted and checked. The precedent row (with the
+     * text every quotation from it is checked against later) and every
      * extracted value are written in one transaction; a value whose quotation
      * is not in the preserved text lands as `unknown` and can never be cited.
+     *
+     * `endpointKeys` maps an outcome's title to the endpoint definition the run
+     * judged it measures, and `armRoles` maps an arm's or a group's title to
+     * `control` / `treatment` (a registry's group titles rarely match its arm
+     * labels, so the role is the run's judgment and is stored as a field, which
+     * is what lets pooling be an equality).
+     *
      * @param {{ userId: string, studyId?: string | null, registry?: string, registryId: string,
-     *   applicability?: any, endpointKeys?: Record<string, string> }} input
+     *   applicability?: any, endpointKeys?: Record<string, string>, armRoles?: Record<string, string> }} input
      */
-    async extractPrecedent({ userId, studyId = null, registry: registryName = "clinicaltrials.gov", registryId, applicability = {}, endpointKeys = {} }) {
-      if (!registry) return { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured" };
-      const fetched = registryName === "chictr"
-        ? await registry.searchChictr({ query: registryId, limit: 1 })
-        : await registry.record(registryId);
-      const built = registryName === "chictr" ? (fetched.items ?? [])[0] : fetched;
-      if (fetched.status !== "ok" || !built?.precedent) {
-        return { status: fetched.status ?? REGISTRY_UNAVAILABLE, reason: fetched.reason ?? "registry_record_unreadable", registryId };
+    async extractPrecedent({ userId, studyId = null, registry: registryName = "clinicaltrials.gov", registryId, applicability = {}, endpointKeys = {}, armRoles = {} }) {
+      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""));
+      if (!built) {
+        const notFound = failure?.status === REGISTRY_NOT_FOUND;
+        return { status: notFound ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
       }
       const checkedAt = now().toISOString();
-      const verified = (built.extractions ?? []).map((/** @type {any} */ item) => verifyExtraction({
-        extraction: {
-          ...item,
-          // The endpoint key is the run's judgment about what was measured,
-          // stored as a field so the pooling check can be an equality.
-          applicability: {
-            ...applicability,
-            ...(endpointKeys[String(item?.detail?.outcome ?? "")] ? { endpointKey: endpointKeys[String(item.detail.outcome)] } : {}),
+      const verified = (built.extractions ?? []).map((/** @type {any} */ item) => {
+        const endpointKey = endpointKeys[String(item?.detail?.outcome ?? "")];
+        const role = armRoles[String(item?.arm ?? "")] ?? item?.armRole;
+        return verifyExtraction({
+          extraction: {
+            ...item,
+            armRole: EVIDENCE_ARM_ROLES.includes(String(role)) ? role : (item?.armRole ?? "unknown"),
+            // The endpoint key is the run's judgment about what was measured,
+            // stored as a field so the pooling check can be an equality.
+            ...(endpointKey ? { endpointKey } : {}),
+            applicability: { ...applicability, ...(endpointKey ? { endpointKey } : {}) },
           },
-        },
-        sourceText: built.record?.text ?? "",
-        checkedAt,
-      }));
+          sourceText: built.record?.text ?? "",
+          checkedAt,
+        });
+      });
 
       const saved = await store.transaction(async (/** @type {any} */ client) => {
-        const precedentRow = await store.savePrecedent({ userId, studyId, precedent: built.precedent, client });
+        const precedentRow = await store.savePrecedent({
+          userId, studyId, precedent: built.precedent, recordText: built.record?.text ?? "", recordHash: built.record?.hash ?? null, client,
+        });
         const appended = await store.appendEvidenceItems({
           userId, studyId, precedentId: precedentRow?.id ?? null,
           items: verified.map((/** @type {any} */ entry) => entry.item), client,
@@ -1017,38 +1338,112 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     },
 
     /**
+     * One value a run read out of a precedent's preserved text, checked in code
+     * against that text before it is stored — the run's quotation must be in the
+     * record the study holds, and every number it carries (value, bounds, sample
+     * size, events) must be in the quotation. A value that fails is stored as
+     * `unknown` with the reason and can never be cited. A precedent the study
+     * does not hold is refused: the record is fetched with the `precedent` write
+     * first, which is what preserves its text.
+     *
+     * @param {{ userId: string, studyId: string, item: Record<string, any> }} input
+     * @returns {Promise<{ status: string, id?: string, state?: string, code?: string, message?: string }>}
+     */
+    async addEvidenceItem({ userId, studyId, item }) {
+      const registryName = String(item.registry ?? "clinicaltrials.gov");
+      const registryId = String(item.registryId ?? "");
+      const precedent = await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId });
+      if (!precedent) {
+        return { status: "refused", code: "vcr_precedent_not_in_study",
+          message: `${registryId} 还不在本研究的先例里；先用 vcr_write what:"precedent" 取回这条登记记录。` };
+      }
+      const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
+      const checkedAt = now().toISOString();
+      const checked = verifyExtraction({
+        extraction: {
+          parameter: String(item.parameter), arm: item.arm ?? null,
+          armRole: EVIDENCE_ARM_ROLES.includes(String(item.armRole)) ? item.armRole : "unknown",
+          value: item.value ?? null, valueText: item.valueText ?? "", unit: item.unit ?? "",
+          ciLow: item.ciLow ?? null, ciHigh: item.ciHigh ?? null, sampleSize: item.sampleSize ?? null, events: item.events ?? null,
+          valueSource: derived ? String(item.valueSource) : "extracted",
+          quote: String(item.quote ?? ""), sourceRef: `${registryName}:${registryId}`,
+          locator: { kind: "registry_field", ...(item.locator && typeof item.locator === "object" ? {
+            path: typeof item.locator.path === "string" ? item.locator.path : undefined,
+            inputs: Array.isArray(item.locator.inputs) ? item.locator.inputs.map(String) : undefined,
+          } : {}), authoredBy: "run" },
+          endpointKey: String(item.endpointKey ?? ""),
+          enrollmentKind: item.enrollmentKind ?? null,
+          historicalBaseline: item.historicalBaseline === true,
+          applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
+          detail: { outcome: item.outcome ?? null, note: item.note ?? null },
+        },
+        sourceText: String(precedent.record_text ?? ""),
+        checkedAt,
+      });
+      const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent.id, items: [checked.item] });
+      return { status: "ok", id: appended.ids[0], state: checked.state };
+    },
+
+    /**
+     * The precedent library as a person reads it: the account's own, by title
+     * or registry id (`query`).
+     * @param {{ id: string | number }} user @param {{ q?: string, limit?: number | string }} [query]
+     */
+    async precedents(user, query = {}) {
+      const limit = Math.min(200, Math.max(1, Number.parseInt(String(query.limit ?? ""), 10) || 100));
+      return store.listPrecedents({ userId: String(user.id), search: String(query.q ?? ""), limit });
+    },
+
+    /**
      * Step 3 — pool one parameter, once per calibre. Returns the queued jobs;
      * reading them back is step 4. With no queue this answers
      * `engine_unavailable` and produces nothing.
-     * @param {{ userId: string, studyId: string, parameter: string, endpointKey?: string,
-     *   target: any, poolingMethod?: string }} input
+     *
+     * The job is built from this study's verified items only, the latest row per
+     * `(precedent, parameter, arm, endpoint key)`, on the analysis scale. An
+     * empty endpoint key is refused, and so is a pool with no arm role it can
+     * name: pooling is between values that are known to measure the same thing
+     * in the same arm (CS-26).
+     *
+     * @param {{ userId: string, studyId: string, parameter: string, endpointKey?: string, armRole?: string,
+     *   target?: any, poolingMethod?: string, calibres?: readonly string[] | null, scale?: string }} input
      */
-    async poolParameter({ userId, studyId, parameter, endpointKey = "", target, poolingMethod = "random_effects_reml" }) {
-      const rows = await store.listEvidenceItems({ userId, studyId, parameter, verifiedOnly: true });
-      const eligibility = poolEligibility({ items: rows, endpointKey });
+    async poolParameter({ userId, studyId, parameter, endpointKey = "", armRole = "", target = {}, poolingMethod = "random_effects_reml", calibres: wanted = null, scale = "" }) {
+      const role = armRole || defaultArmRoleOf(parameter);
+      if (!String(endpointKey ?? "").trim()) {
+        return { status: "refused", code: "vcr_pool_endpoint_key_required", parameter,
+          message: "合并需要写明终点口径（endpointKey）：口径不同的值不知道量的是不是同一件事。", jobs: [] };
+      }
+      const rows = await store.listEvidenceItems({ userId, studyId, parameter, verifiedOnly: true, latestOnly: true });
+      const eligibility = poolEligibility({ items: rows, endpointKey, armRole: role });
       if (!eligibility.eligible.length) {
-        return { status: "no_evidence", parameter, refused: eligibility.refused.map((entry) => ({ id: entry.item?.id, reasons: entry.reasons })), jobs: [] };
+        return { status: "no_evidence", parameter, endpointKey, armRole: role, refused: eligibility.refused.map((entry) => ({ id: entry.item?.id, reasons: entry.reasons })), jobs: [] };
       }
       if (typeof jobs?.enqueue !== "function") {
         return { status: "engine_unavailable", parameter, eligible: eligibility.eligible.length, jobs: [] };
       }
       const precedentById = new Map();
       for (const row of await store.listPrecedents({ userId, studyId, limit: 500 })) precedentById.set(row.id, row);
+      const asOf = now();
       const withStrata = eligibility.eligible.map((item) => ({
         ...item,
         precedent: precedentById.get(item.precedent_id) ?? null,
-        stratum: applicabilityStratum({ precedent: precedentById.get(item.precedent_id) ?? {}, item, target }),
+        stratum: applicabilityStratum({ precedent: precedentById.get(item.precedent_id) ?? {}, item, target, now: asOf }),
       }));
 
       /** @type {any[]} */
       const queued = [];
       /** @type {Record<string, string[]>} */
       const evidenceIdsByCalibre = {};
+      /** @type {Record<string, any[]>} */
+      const excludedByCalibre = {};
       for (const calibre of calibres({ items: withStrata, target })) {
-        const built = poolJob({ studyId, parameter, endpointKey, calibre: calibre.name, items: calibre.items, poolingMethod });
-        evidenceIdsByCalibre[calibre.name] = calibre.items.map((item) => String(item.id));
+        if (wanted && !wanted.includes(calibre.name)) continue;
+        const built = poolJob({ studyId, parameter, endpointKey, armRole: role, calibre: calibre.name, items: calibre.items, scale, poolingMethod });
+        evidenceIdsByCalibre[calibre.name] = built.evidenceIds;
+        excludedByCalibre[calibre.name] = built.excluded;
         if (!built.valid) {
-          queued.push({ calibre: calibre.name, status: "job_invalid", issues: built.issues });
+          queued.push({ calibre: calibre.name, status: "job_invalid", issues: built.issues, excluded: built.excluded });
           continue;
         }
         try {
@@ -1062,7 +1457,10 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             cpuSecondsLimit: built.job.cpuSecondsLimit,
             // The same parameter, calibre and studies asked for twice is the
             // same job; the seed already makes the answer identical.
-            idempotencyKey: `vcr-pool:${studyId}:${parameter}:${calibre.name}:${built.job.seed}`,
+            idempotencyKey: `vcr-pool:${studyId}:${parameter}:${endpointKey}:${role}:${calibre.name}:${built.job.seed}`,
+            // What the pool is about, and the name its result is filed under:
+            // three calibres are three results, not one superseding the others.
+            detail: { origin: "evidence", subjectId: `pool:${parameter}:${endpointKey}:${role}:${calibre.name}`, ...built.about },
           });
           // `vcrJobs.enqueue` answers `{ job, created }`; a bare `{ jobId }`
           // is read too so a double in a test does not have to build a row.
@@ -1073,7 +1471,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             jobId: row?.id ?? row?.jobId ?? null,
             created: enqueued?.created !== false,
             seed: built.job.seed,
-            studies: calibre.items.length,
+            studies: built.evidenceIds.length,
+            excluded: built.excluded,
           });
         } catch (error) {
           // One calibre the queue refused (over budget, a scenario it will not
@@ -1083,18 +1482,25 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             calibre: calibre.name,
             status: "enqueue_refused",
             reason: String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? "enqueue_failed"),
-            studies: calibre.items.length,
+            studies: built.evidenceIds.length,
           });
         }
       }
-      return { status: "queued", parameter, jobs: queued, evidenceIdsByCalibre, refused: eligibility.refused.map((entry) => ({ id: entry.item?.id, reasons: entry.reasons })) };
+      return {
+        status: "queued", parameter, endpointKey, armRole: role, jobs: queued, evidenceIdsByCalibre,
+        refused: eligibility.refused.map((entry) => ({ id: entry.item?.id, reasons: entry.reasons })),
+      };
     },
 
     /**
      * Step 4 and 5 — read the engine's answers back, choose the calibre, and
      * save the card. `results` is `{ calibre: engineResult }`; a calibre that
      * did not succeed is simply absent, and if none did the card is not
-     * written.
+     * written. When the default calibre's pool has no prediction interval (k < 3)
+     * the value is written as the expert setting the plan calls for — widened,
+     * labelled, its source named — never as a card that borrows the confidence
+     * interval for a prediction interval.
+     *
      * @param {{ userId: string, studyId: string, key: string, name: string, parameter: string,
      *   endpoint?: string, unit?: string, results: Record<string, any>,
      *   evidenceIdsByCalibre: Record<string, string[]>, applicability?: any, note?: string }} input
@@ -1104,10 +1510,27 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const pools = {};
       for (const [calibre, result] of Object.entries(results ?? {})) pools[calibre] = readPoolResult(result);
       const built = assumptionFromPooling({ key, name, parameter, endpoint, unit, pools, evidenceIdsByCalibre, applicability, note: cardNote });
-      if (!built.ok) return { status: "not_written", reason: built.reason, pools };
-      const row = await store.saveAssumption({ userId, studyId, card: built.card });
-      note("vcr.evidence.card", { userId, studyId, key, calibre: built.card.pooling.calibre });
-      return { status: "ok", assumption: row, card: built.card, pools };
+      if (built.ok) {
+        const row = await store.saveAssumption({ userId, studyId, card: built.card });
+        note("vcr.evidence.card", { userId, studyId, key, calibre: built.card?.pooling.calibre });
+        return { status: "ok", assumption: row, card: built.card, pools };
+      }
+      if (built.reason === "prediction_interval_missing" && built.nearest) {
+        const { calibre, pool } = built.nearest;
+        const scale = String(pool.scale ?? defaultScaleOf(parameterKindOf(parameter)));
+        const nearest = {
+          pointValue: naturalOf(/** @type {number} */ (pool.pooled), scale),
+          range: pool.confidence ? { low: naturalOf(pool.confidence.low, scale), high: naturalOf(pool.confidence.high, scale) } : null,
+        };
+        const card = expertSetCard({
+          key, name, parameter, unit, nearest, applicability: { ...applicability, calibre },
+          reason: `只有 ${pool.k ?? "少数"} 项研究，合并结果没有预测区间；取合并值并按置信区间加宽`,
+          basedOn: { evidenceIds: evidenceIdsByCalibre?.[calibre] ?? [], calibre, k: pool.k ?? null },
+        });
+        const row = await store.saveAssumption({ userId, studyId, card });
+        return { status: "expert_set", reason: built.reason, assumption: row, card, pools };
+      }
+      return { status: "not_written", reason: built.reason, pools };
     },
 
     /**
@@ -1226,6 +1649,44 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         unavailable: unavailableParameters(),
       };
     },
+
+    /**
+     * `read { what: "evidence" }`: the study's extracted values, the ids a card
+     * may cite, with each value's own words and place — a run cannot cite what it
+     * cannot name, and the platform's own record of what was quoted is exactly
+     * what it should read before it writes a card. Unverified values are listed
+     * with their state so 「查过、没通过」 is visible.
+     * @param {any} study @param {Record<string, any>} [filter]
+     */
+    async evidenceRead(study, filter = {}) {
+      const userId = String(study?.userId ?? "");
+      const studyId = String(study?.id ?? "");
+      const limit = Number.isSafeInteger(filter?.limit) ? Number(filter.limit) : 50;
+      const offset = Number.isSafeInteger(filter?.offset) ? Number(filter.offset) : 0;
+      const rows = await store.listEvidenceItems({ userId, studyId, parameter: filter?.kind ? String(filter.kind) : null, latestOnly: true, limit: 2000 });
+      const precedents = new Map((await store.listPrecedents({ userId, studyId, limit: 500 })).map((/** @type {any} */ row) => [String(row.id), row]));
+      const page = rows.slice(offset, offset + limit);
+      return {
+        items: page.map((/** @type {any} */ row) => ({
+          id: row.id, parameter: row.parameter, arm: row.arm, armRole: row.arm_role, endpointKey: row.endpoint_key,
+          value: row.value === null ? null : Number(row.value), unit: row.unit,
+          ciLow: row.ci_low === null ? null : Number(row.ci_low), ciHigh: row.ci_high === null ? null : Number(row.ci_high),
+          sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,
+          verification: row.locator?.verification ?? "no_quote", historicalBaseline: row.historical_baseline,
+          enrollmentKind: row.enrollment_kind, quote: row.quote, sourceRef: row.source_ref,
+          registry: precedents.get(String(row.precedent_id))?.registry ?? null,
+          registryId: precedents.get(String(row.precedent_id))?.registry_id ?? null,
+        })),
+        more: rows.length > offset + limit,
+      };
+    },
+
+    /**
+     * The verified evidence ids of one parameter, which an `external_evidence`
+     * card may cite.
+     * @param {{ userId: string, studyId: string, parameter: string }} input
+     */
+    verifiedEvidenceIds(input) { return store.verifiedEvidenceIds(input); },
   };
   return pipeline;
 }
@@ -1236,4 +1697,5 @@ export const VCR_EVIDENCE_WRITES = Object.freeze({
   valueSources: VCR_VALUE_SOURCES,
   distributions: VCR_DISTRIBUTIONS,
   poolingMethods: VCR_POOLING_METHODS,
+  assumptionKey: VCR_ASSUMPTION_KEY,
 });

@@ -38,8 +38,12 @@
 
 import { VCR_COUNT_KEYS, VCR_INTERVAL_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH } from "@evimed/domain";
 
-/** A number reference in a template: `{{n:<path>}}` or `{{n:<path>|<format>}}`. */
-export const VCR_NUMBER_PATTERN = /\{\{\s*n:([A-Za-z0-9_.[\]()一-鿿-]+?)\s*(?:\|\s*([a-z0-9]+)\s*)?\}\}/g;
+/**
+ * A number reference in a template: `{{n:<path>}}` or `{{n:<path>|<format>}}`.
+ * A path segment may carry arguments in parentheses — `measure(power)`,
+ * `measure(power, scenario=scn_x)` — and inside them anything but `)` `}` `|`.
+ */
+export const VCR_NUMBER_PATTERN = /\{\{\s*n:((?:[A-Za-z0-9_.[\]一-鿿-]|\([^)}|]*\))+?)\s*(?:\|\s*([a-z0-9]+)\s*)?\}\}/g;
 
 /** What a reference renders as when the study has no such result yet. */
 export const VCR_UNCOMPUTED = "未计算";
@@ -68,8 +72,19 @@ export function vcrReadPath(root, path) {
     if (!segment) return undefined;
     const selector = /^measure\((.+)\)$/.exec(segment);
     if (selector) {
-      const name = selector[1].trim();
-      const measures = Array.isArray(value) ? value : list(object(value).measures);
+      // `measure(power)` is the headline result's measure of that name;
+      // `measure(power, scenario=scn_x)` is the same measure of one trial
+      // scenario, by its id — a study has many scenarios and a report compares
+      // them, so a name alone cannot say which one is meant.
+      const [rawName, ...rawOptions] = selector[1].split(",").map((part) => part.trim());
+      const name = rawName;
+      const scenarioId = rawOptions.map((option) => /^scenario\s*=\s*(\S+)$/.exec(option)?.[1]).find(Boolean) ?? null;
+      let measures = Array.isArray(value) ? value : list(object(value).measures);
+      if (scenarioId) {
+        const scenarioResult = object(object(root).scenarioResults)[scenarioId];
+        if (!scenarioResult) return undefined;
+        measures = list(object(scenarioResult).measures);
+      }
       value = measures.find((measure) => String(object(measure).name) === name);
       continue;
     }
@@ -238,6 +253,24 @@ export function vcrReportModel(input) {
     if (!byKind[kind]) byKind[kind] = object(result);
   }
 
+  // One result per trial scenario, by the scenario's id (and by the full
+  // lineage node the job filed it under): a report compares scenarios, and
+  // `measure(power, scenario=<id>)` reads one of them.
+  /** @type {Record<string, any>} */
+  const scenarioResults = {};
+  for (const result of results) {
+    const row = object(result);
+    if (row.kind !== "trial_scenario" || !row.subjectId) continue;
+    const subject = String(row.subjectId);
+    const bare = subject.replace(/^[a-z_]+:/, "").replace(/@\d+$/, "");
+    const entry = {
+      id: row.id ?? null, conclusion: row.conclusion ?? null, counts: object(row.counts),
+      measures: list(row.measures), diagnostics: object(row.diagnostics), intendedUse: row.intendedUse ?? null,
+    };
+    scenarioResults[bare] = entry;
+    scenarioResults[subject] = entry;
+  }
+
   return {
     study: {
       id: String(study.id ?? ""), name: String(study.name ?? ""), question: String(study.question ?? ""),
@@ -277,6 +310,7 @@ export function vcrReportModel(input) {
       id: result.id ?? null, conclusion: result.conclusion ?? null, counts: object(result.counts),
       measures: list(result.measures), diagnostics: object(result.diagnostics), intendedUse: result.intendedUse ?? null,
     }])),
+    scenarioResults,
     scenarios: list(input.scenarios).map((scenario) => {
       const row = object(scenario);
       return { id: row.id ?? null, label: String(row.label ?? ""), design: row.design ?? null, version: Number(row.version ?? 1) };

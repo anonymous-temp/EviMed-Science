@@ -13,6 +13,14 @@ import {
   vcrGatewayRoutePattern, vcrRuntimeWrite,
 } from "../src/vcrGateway.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS } from "../src/vcrService.mjs";
+import { vcrReportModel } from "../src/vcrRender.mjs";
+
+/** The one saved result the fixture's study has. */
+async function vcrStoreResults() {
+  return [{ kind: "trial_scenario", id: "res_1", conclusion: "estimable",
+    counts: { realPatients: null, events: 138, effectiveSampleSize: null, generatedRecords: 2000 },
+    measures: [{ name: "power", value: 0.71, simulated: true, mcse: 0.003 }], diagnostics: {}, version: 1 }];
+}
 
 /** @param {string} url @param {unknown} body @param {Record<string, string>} [headers] */
 function request(url, body, headers = { authorization: "Bearer token" }) {
@@ -45,6 +53,7 @@ function fixture(overrides = {}) {
     allows: () => true,
     counters: { reads: 0, writes: 0, writeIssues: 0 },
     async runtimeRead(target, what, filter) { calls.push(["read", what, filter]); return { what, studyId: target.id, items: [] }; },
+    async reportModel(target) { return vcrReportModel({ study: target, results: await vcrStoreResults() }); },
     async adoptModel(_user, input) { calls.push(["adopt", input.name]); return { id: "mdl_1" }; },
   };
   const store = {
@@ -222,28 +231,40 @@ test("an assumption from the literature has to point at an extracted value with 
   const data = res.json().data;
   assert.equal(data.ok, false);
   assert.equal(data.issues[0].code, "vcr_write_value_invalid");
-  assert.match(data.issues[0].message, /AC-25/);
+  assert.match(data.issues[0].message, /evidenceIds/);
+  assert.equal(/AC-\d+|方案 §/.test(JSON.stringify(data.issues)), false, "what a run is told carries no plan or acceptance identifiers");
 });
 
-test("a comparator the run judged unusable is written as a finished result, not as a failure", async () => {
+test("a comparator is a route and an estimand; whether it is estimable is the engine's answer, never the run's", async () => {
   const { calls, handler } = fixture();
   const res = response();
   await handler(request("/internal/vcr/v1/write", {
     what: "comparator",
-    data: { route: "external_control", estimand: "ATT", conclusion: "not_estimable",
-      gapList: [{ field: "concomitant_therapy", missingFor: 0.62 }] },
+    items: [
+      { route: "external_control", estimand: "ATT" },
+      { route: "external_control", estimand: "ATT", conclusion: "not_estimable", gapList: [{ field: "concomitant_therapy", missingFor: 0.62 }] },
+    ],
   }), res);
-  assert.equal(res.json().data.ok, true);
-  assert.deepEqual(calls.find((call) => call[0] === "comparator"), ["comparator", "external_control", "not_estimable"]);
+  const data = res.json().data;
+  assert.equal(data.ok, true);
+  assert.deepEqual(calls.filter((call) => call[0] === "comparator"), [["comparator", "external_control", null]]);
+  assert.deepEqual(data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "conclusion", "vcr_write_field_forbidden"]],
+    "a conclusion is not a field of the write at all, and the gap list beside it is a result field");
 });
 
-test("a run may ask for a step and leave a note; it cannot declare one finished", async () => {
+test("a run may ask for a step and leave a note; it cannot declare one finished, and says so by being refused", async () => {
   const { calls, handler } = fixture();
-  await handler(request("/internal/vcr/v1/write", { what: "step", data: { step: "trial", requested: true, status: "done", note: "在等作业" } }), response());
-  const written = calls.find((call) => call[0] === "step");
-  assert.equal(written[1], "trial");
-  const fields = JSON.parse(written[2]);
-  assert.deepEqual(Object.keys(fields).sort(), ["note", "requested"], "status is read from the data, never written by a run");
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "step", items: [
+    { step: "trial", requested: true, note: "在等作业" },
+    { step: "trial", requested: true, status: "done" },
+  ] }), res);
+  const written = calls.filter((call) => call[0] === "step");
+  assert.equal(written.length, 1);
+  assert.equal(written[0][1], "trial");
+  assert.deepEqual(Object.keys(JSON.parse(written[0][2])).sort(), ["note", "requested"]);
+  assert.deepEqual(res.json().data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field]), [[1, "status"]],
+    "status is read from the data, and a run that sends one is told, not quietly ignored");
 });
 
 test("AC-20 a report the run writes is rendered by the platform, and its typed numbers come back as issues", async () => {
@@ -258,6 +279,9 @@ test("AC-20 a report the run writes is rendered by the platform, and its typed n
   assert.ok(calls.some((call) => call[0] === "export" && call[1] === "study_package"));
   assert.ok(calls.some((call) => call[0] === "updateExport"));
   assert.deepEqual(data.issues.map((/** @type {any} */ issue) => issue.code), ["vcr_number_typed"]);
+  const stored = calls.find((call) => call[0] === "updateExport");
+  assert.ok(stored, "the rendered report is kept on the export row");
+  assert.equal(/2\.4|71\.0%|0\.71/.test(JSON.stringify(data)), false, "what the run is told carries no rendered number");
 });
 
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {

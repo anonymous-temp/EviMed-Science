@@ -235,12 +235,23 @@ export function registryRecordHash(reduced) {
 /**
  * One extracted value, in the shape `evidence_items` stores and
  * `vcrEvidence.mjs` verifies.
- * @param {{ parameter: string, arm?: string | null, value?: number | null, valueText?: string,
+ * Every number the item carries is anchored: the value by `quote`, and each
+ * sibling number (a confidence bound, a denominator) by its own line in
+ * `parts`, because those live in fields of their own and a quotation of the
+ * value's line alone proves none of them (review E-9).
+ *
+ * @param {{ parameter: string, arm?: string | null, armRole?: string, value?: number | null, valueText?: string,
  *   unit?: string, ciLow?: number | null, ciHigh?: number | null, sampleSize?: number | null,
  *   events?: number | null, valueSource?: string, quote: string, path: string, sourceRef: string,
- *   enrollmentKind?: string | null, historicalBaseline?: boolean, inputs?: string[], detail?: Record<string, unknown> }} input
+ *   enrollmentKind?: string | null, historicalBaseline?: boolean, inputs?: string[], detail?: Record<string, unknown>,
+ *   parts?: Record<string, { path: string, raw: unknown } | null | undefined> }} input
  */
 function extraction(input) {
+  /** @type {Record<string, { path: string, quote: string }>} */
+  const parts = {};
+  for (const [field, part] of Object.entries(input.parts ?? {})) {
+    if (part?.path && part.raw !== undefined && part.raw !== null) parts[field] = { path: part.path, quote: quoteOf(part.path, part.raw) };
+  }
   return {
     parameter: input.parameter,
     arm: input.arm ?? null,
@@ -254,10 +265,12 @@ function extraction(input) {
     valueSource: input.valueSource ?? "extracted",
     quote: input.quote,
     sourceRef: input.sourceRef,
+    armRole: input.armRole ?? "unknown",
     locator: {
       kind: "registry_field",
       path: input.path,
       ...(input.inputs?.length ? { inputs: input.inputs } : {}),
+      ...(Object.keys(parts).length ? { parts } : {}),
     },
     enrollmentKind: input.enrollmentKind ?? null,
     // Only a figure the registry states as having happened may become a
@@ -269,6 +282,24 @@ function extraction(input) {
 
 /** `path: value` exactly as `renderRegistryRecordText` writes it. @param {string} path @param {unknown} value */
 const quoteOf = (path, value) => `${path}: ${String(value)}`;
+
+/**
+ * Which arm a registry group is, from the record's own arm types. A control
+ * arm and a treatment arm pool separately: 「对照组事件率」 pooled over both is
+ * a number about nobody (review CS-26). A group whose title matches no arm
+ * label, or whose arm is typed OTHER, is `unknown` and stays out of a pool
+ * that names a role.
+ * @param {string} title @param {ReadonlyArray<{ label: string, type: string }>} armGroups
+ */
+export function armRoleOf(title, armGroups) {
+  const wanted = text(title).toLowerCase();
+  const arm = armGroups.find((group) => text(group.label).toLowerCase() === wanted)
+    ?? (wanted ? armGroups.find((group) => wanted.includes(text(group.label).toLowerCase()) && text(group.label)) : undefined);
+  const type = text(arm?.type).toUpperCase();
+  if (type === "EXPERIMENTAL") return "treatment";
+  if (["ACTIVE_COMPARATOR", "PLACEBO_COMPARATOR", "SHAM_COMPARATOR", "NO_INTERVENTION"].includes(type)) return "control";
+  return "unknown";
+}
 
 /** CT.gov's `paramType` strings, mapped to the parameter names an assumption card uses. */
 const EFFECT_PARAMETERS = Object.freeze({
@@ -293,6 +324,23 @@ const OUTCOME_PARAMETERS = Object.freeze({
   GEOMETRIC_MEAN: { parameter: "geometric_mean", kind: "value" },
   LEAST_SQUARES_MEAN: { parameter: "least_squares_mean", kind: "value" },
 });
+
+/**
+ * The confidence level a registry's dispersion label states, or null when the
+ * label is not a confidence interval. CT.gov's `dispersionType` is a closed set
+ * of labels ("95% Confidence Interval", "Standard Deviation", "Full Range",
+ * "Inter-Quartile Range" …): a measurement's `lowerLimit` and `upperLimit` are a
+ * confidence interval only under the first kind. Under a range or an IQR they are
+ * the extremes or the quartiles, and reading them as a CI would give a pooling
+ * job a standard error a hundred times too large.
+ * @param {unknown} label
+ */
+export function confidenceLevelOfDispersion(label) {
+  const match = /^(\d{2}(?:\.\d+)?)\s*%\s*confidence interval$/i.exec(text(label));
+  if (!match) return null;
+  const level = Number(match[1]) / 100;
+  return level > 0.5 && level < 1 ? level : null;
+}
 
 /** Months between two ISO-ish dates (`YYYY-MM` or `YYYY-MM-DD`), or null. */
 export function monthsBetween(from, to) {
@@ -328,6 +376,11 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
   const conditions = protocol.conditionsModule ?? {};
   const sponsors = protocol.sponsorCollaboratorsModule ?? {};
   const results = reduced.resultsSection ?? {};
+  const armGroups = (Array.isArray(arms.armGroups) ? arms.armGroups : []).map((/** @type {any} */ group) => ({
+    label: text(group?.label),
+    type: text(group?.type),
+    interventions: Array.isArray(group?.interventionNames) ? group.interventionNames.map(text) : [],
+  }));
 
   const registryId = text(identification.nctId);
   const sourceRef = `ctgov:${registryId}`;
@@ -348,6 +401,7 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
     const path = "protocolSection.designModule.enrollmentInfo.count";
     extractions.push(extraction({
       parameter: enrollmentKind === "actual" ? "enrollment_actual" : "enrollment_estimated",
+      armRole: "overall",
       value: enrollmentCount,
       unit: "participants",
       quote: quoteOf(path, enrollment.count),
@@ -376,6 +430,7 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
     const path = `protocolSection.statusModule.${field}.date`;
     extractions.push(extraction({
       parameter: name,
+      armRole: "overall",
       valueText: date,
       quote: quoteOf(path, date),
       path,
@@ -391,6 +446,7 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
   if (accrual !== null) {
     extractions.push(extraction({
       parameter: "accrual_to_primary_completion_months",
+      armRole: "overall",
       value: accrual,
       unit: "months",
       valueSource: "calculated",
@@ -412,6 +468,7 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
   if (locationsTotal) {
     extractions.push(extraction({
       parameter: "site_count",
+      armRole: "overall",
       value: locationsTotal,
       unit: "sites",
       valueSource: "calculated",
@@ -443,9 +500,11 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
         const subjects = number(achievement?.numSubjects);
         if (subjects === null) continue;
         const path = `resultsSection.participantFlowModule.periods[${periodIndex}].milestones[${milestoneIndex}].achievements[${achievementIndex}].numSubjects`;
+        const flowArm = flowGroups.get(String(achievement?.groupId)) ?? String(achievement?.groupId ?? "");
         extractions.push(extraction({
           parameter,
-          arm: flowGroups.get(String(achievement?.groupId)) ?? String(achievement?.groupId ?? ""),
+          arm: flowArm,
+          armRole: armRoleOf(flowArm, armGroups),
           value: subjects,
           unit: "participants",
           quote: quoteOf(path, achievement.numSubjects),
@@ -461,9 +520,11 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
         const subjects = number(reason?.numSubjects);
         if (subjects === null) continue;
         const path = `resultsSection.participantFlowModule.periods[${periodIndex}].dropWithdraws[${dropIndex}].reasons[${reasonIndex}].numSubjects`;
+        const withdrawnArm = flowGroups.get(String(reason?.groupId)) ?? String(reason?.groupId ?? "");
         extractions.push(extraction({
           parameter: "arm_withdrawn",
-          arm: flowGroups.get(String(reason?.groupId)) ?? String(reason?.groupId ?? ""),
+          arm: withdrawnArm,
+          armRole: armRoleOf(withdrawnArm, armGroups),
           value: subjects,
           unit: "participants",
           quote: quoteOf(path, reason.numSubjects),
@@ -484,14 +545,19 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
     for (const group of Array.isArray(measure?.groups) ? measure.groups : []) {
       if (group?.id) groups.set(String(group.id), text(group.title));
     }
-    /** @type {Map<string, number>} */
+    /** @type {Map<string, { value: number, path: string, raw: unknown }>} */
     const denominators = new Map();
-    for (const denom of Array.isArray(measure?.denoms) ? measure.denoms : []) {
-      for (const count of Array.isArray(denom?.counts) ? denom.counts : []) {
+    (Array.isArray(measure?.denoms) ? measure.denoms : []).forEach((/** @type {any} */ denom, /** @type {number} */ denomIndex) => {
+      (Array.isArray(denom?.counts) ? denom.counts : []).forEach((/** @type {any} */ count, /** @type {number} */ countIndex) => {
         const value = number(count?.value);
-        if (value !== null && count?.groupId) denominators.set(String(count.groupId), value);
-      }
-    }
+        if (value !== null && count?.groupId) {
+          denominators.set(String(count.groupId), {
+            value, raw: count.value,
+            path: `resultsSection.outcomeMeasuresModule.outcomeMeasures[${measureIndex}].denoms[${denomIndex}].counts[${countIndex}].value`,
+          });
+        }
+      });
+    });
     const paramType = text(measure?.paramType).toUpperCase();
     const mapped = OUTCOME_PARAMETERS[/** @type {keyof typeof OUTCOME_PARAMETERS} */ (paramType)];
     const outcomeTitle = text(measure?.title);
@@ -503,14 +569,28 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
             const value = number(measurement?.value);
             if (value === null) return;
             const path = `resultsSection.outcomeMeasuresModule.outcomeMeasures[${measureIndex}].classes[${classIndex}].categories[${categoryIndex}].measurements[${measurementIndex}].value`;
+            const measuredArm = groups.get(String(measurement?.groupId)) ?? String(measurement?.groupId ?? "");
+            const denominator = denominators.get(String(measurement?.groupId)) ?? null;
+            const base = path.slice(0, -".value".length);
+            // The limits are a confidence interval only when the measure's own
+            // dispersion label says so; otherwise they stay in `detail`.
+            const level = confidenceLevelOfDispersion(measure?.dispersionType);
+            const lower = number(measurement?.lowerLimit);
+            const upper = number(measurement?.upperLimit);
             extractions.push(extraction({
               parameter: mapped.parameter,
-              arm: groups.get(String(measurement?.groupId)) ?? String(measurement?.groupId ?? ""),
+              arm: measuredArm,
+              armRole: armRoleOf(measuredArm, armGroups),
               value,
               unit: text(measure?.unitOfMeasure),
-              ciLow: number(measurement?.lowerLimit),
-              ciHigh: number(measurement?.upperLimit),
-              sampleSize: denominators.get(String(measurement?.groupId)) ?? null,
+              ciLow: level === null ? null : lower,
+              ciHigh: level === null ? null : upper,
+              sampleSize: denominator?.value ?? null,
+              parts: {
+                ciLow: level === null || lower === null ? null : { path: `${base}.lowerLimit`, raw: measurement.lowerLimit },
+                ciHigh: level === null || upper === null ? null : { path: `${base}.upperLimit`, raw: measurement.upperLimit },
+                sampleSize: denominator,
+              },
               quote: quoteOf(path, measurement.value),
               path,
               sourceRef,
@@ -520,6 +600,8 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
                 outcomeType: text(measure?.type),
                 timeFrame,
                 dispersion: text(measure?.dispersionType),
+                ...(level === null ? {} : { confidenceLevel: level }),
+                ...(level === null && (lower !== null || upper !== null) ? { limitsAreNotACi: { lower, upper } } : {}),
                 class: text(klass?.title),
                 category: text(category?.title),
                 groupId: text(measurement?.groupId),
@@ -534,13 +616,19 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
       const value = number(analysis?.paramValue);
       if (!effect || value === null) return;
       const path = `resultsSection.outcomeMeasuresModule.outcomeMeasures[${measureIndex}].analyses[${analysisIndex}].paramValue`;
+      const analysisBase = path.slice(0, -".paramValue".length);
       extractions.push(extraction({
         parameter: effect.parameter,
         arm: (Array.isArray(analysis?.groupIds) ? analysis.groupIds : [])
           .map((/** @type {any} */ id) => groups.get(String(id)) ?? String(id)).join(" vs ") || null,
+        armRole: "contrast",
         value,
         ciLow: number(analysis?.ciLowerLimit),
         ciHigh: number(analysis?.ciUpperLimit),
+        parts: {
+          ciLow: number(analysis?.ciLowerLimit) === null ? null : { path: `${analysisBase}.ciLowerLimit`, raw: analysis.ciLowerLimit },
+          ciHigh: number(analysis?.ciUpperLimit) === null ? null : { path: `${analysisBase}.ciUpperLimit`, raw: analysis.ciUpperLimit },
+        },
         quote: quoteOf(path, analysis.paramValue),
         path,
         sourceRef,
@@ -558,12 +646,6 @@ export function ctgovPrecedent(record, { retrievedAt = "" } = {}) {
       }));
     });
   });
-
-  const armGroups = (Array.isArray(arms.armGroups) ? arms.armGroups : []).map((/** @type {any} */ group) => ({
-    label: text(group?.label),
-    type: text(group?.type),
-    interventions: Array.isArray(group?.interventionNames) ? group.interventionNames.map(text) : [],
-  }));
 
   const precedent = {
     registry: "clinicaltrials.gov",
@@ -682,6 +764,7 @@ export function chictrPrecedent(item, { retrievedAt = "" } = {}) {
   if (sampleSize !== null) {
     extractions.push(extraction({
       parameter: "enrollment_unspecified",
+      armRole: "overall",
       value: sampleSize,
       unit: "participants",
       quote: quoteOf("sampleSize", reduced.sampleSize),
@@ -927,5 +1010,29 @@ export function createTrialRegistryClient({
         return unavailable(lastError);
       }
     },
+  };
+}
+
+/**
+ * The ChiCTR seat, over EviMed's evidence API (`POST /review/api/clinical-trial`,
+ * `registry: 0`). ChiCTR's own site answers direct requests with 405, so the
+ * only door is the platform's evidence API; the caller hands in the function
+ * that makes the call with the evidence credential (`search(body)` answers the
+ * API's `{ data: { total, list } }`), and this only names the registry and reads
+ * the answer. Without such a function the client has no ChiCTR seat and answers
+ * `registry_not_configured`, as it always did — the credential is the
+ * deployment's, not this module's.
+ *
+ * @param {{ search: (body: { query: string, count: number, registry: 0 }) => Promise<any> }} options
+ * @returns {(request: { query: string, limit: number }) => Promise<{ items: any[], total: number | null }>}
+ */
+export function createChictrAdapter({ search }) {
+  if (typeof search !== "function") throw new TypeError("The ChiCTR adapter needs the evidence API's search function.");
+  return async ({ query, limit }) => {
+    const answer = await search({ query, count: limit, registry: 0 });
+    const data = answer?.data ?? answer;
+    const items = Array.isArray(data?.list) ? data.list : Array.isArray(data?.items) ? data.items : null;
+    if (!items) throw Object.assign(new Error("The evidence API's clinical-trial answer has no list."), { code: "registry_answer_unreadable" });
+    return { items, total: Number.isFinite(Number(data?.total)) ? Number(data.total) : null };
   };
 }

@@ -14,6 +14,7 @@
     "mcp__evimed__vcr_read",
     "mcp__evimed__vcr_write",
     "mcp__evimed__vcr_simulate",
+    "mcp__evimed__evidence_pool",
     "mcp__evimed__trial_registry_record",
     "mcp__evimed__clinical_trial_search",
     "mcp__evimed__literature_search",

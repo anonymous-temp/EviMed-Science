@@ -12,9 +12,10 @@ import { VCR_ENROLLMENT_KINDS } from "@evimed/domain";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 import {
   CTGOV_SEARCH_FIELDS, REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS,
-  chictrPrecedent, createTrialRegistryClient, ctgovPrecedent, monthsBetween, reducedRegistryRecord,
-  registryRecordHash, renderRegistryRecordText,
+  armRoleOf, chictrPrecedent, confidenceLevelOfDispersion, createChictrAdapter, createTrialRegistryClient, ctgovPrecedent,
+  monthsBetween, reducedRegistryRecord, registryRecordHash, renderRegistryRecordText,
 } from "../src/trialRegistryClient.mjs";
+import { vcrChictrAdapter } from "../src/vcrComposition.mjs";
 
 
 /** The retrieval clock every fixture-built precedent carries. */
@@ -347,4 +348,65 @@ test("an adapter that throws is an unavailable registry, not a crash", async () 
   const answer = await client.searchChictr({ query: "x" });
   assert.equal(answer.status, REGISTRY_UNAVAILABLE);
   assert.equal(answer.reason, "evimed_trials_unavailable");
+});
+
+test("CS-26 a group is a control or a treatment arm by the record's own arm types, and a title that matches none is unknown", () => {
+  const arms = [{ label: "AZD9291+ placebo", type: "EXPERIMENTAL" }, { label: "Standard of Care", type: "ACTIVE_COMPARATOR" }, { label: "Other", type: "OTHER" }];
+  assert.equal(armRoleOf("AZD9291+ placebo", arms), "treatment");
+  assert.equal(armRoleOf("standard of care (global cohort)", arms), "control", "a group title that contains the arm's label is that arm");
+  assert.equal(armRoleOf("Other", arms), "unknown");
+  assert.equal(armRoleOf("Osimertinib 80 mg (Global Cohort)", arms), "unknown", "FLAURA's group titles match none of its arm labels: the run says which is which");
+  const record = ctgovPrecedent(FLAURA, { retrievedAt: AT });
+  const roles = new Map(record.extractions.filter((item) => item.parameter === "median_time").map((item) => [item.arm, item.armRole]));
+  assert.deepEqual([...roles.values()], ["unknown", "unknown"]);
+  assert.equal(record.extractions.find((item) => item.parameter === "hazard_ratio").armRole, "contrast");
+  assert.equal(record.extractions.find((item) => item.parameter === "enrollment_actual").armRole, "overall");
+});
+
+test("E-9 a confidence bound is anchored by the field it came from, and only when the measure says it is a confidence interval", () => {
+  const record = ctgovPrecedent(FLAURA, { retrievedAt: AT });
+  const median = record.extractions.find((item) => item.parameter === "median_time");
+  assert.equal(median.ciLow, 15.2);
+  assert.match(median.locator.parts.ciLow.quote, /lowerLimit: 15\.2$/);
+  assert.match(median.locator.parts.ciHigh.quote, /upperLimit: 21\.4$/);
+  assert.match(median.locator.parts.sampleSize.quote, /denoms\[0\]\.counts\[\d\]\.value: 279$/);
+  for (const part of Object.values(median.locator.parts)) assert.ok(record.record.text.includes(part.quote), `${part.path} is in the preserved text`);
+  assert.equal(confidenceLevelOfDispersion("95% Confidence Interval"), 0.95);
+  assert.equal(confidenceLevelOfDispersion("90% Confidence Interval"), 0.9);
+  for (const label of ["Full Range", "Inter-Quartile Range", "Standard Deviation", "", undefined]) assert.equal(confidenceLevelOfDispersion(label), null, String(label));
+
+  // Under an interquartile range the limits are quartiles, not a confidence interval: they stay out of the pool.
+  const iqr = JSON.parse(JSON.stringify(FLAURA));
+  for (const measure of iqr.resultsSection.outcomeMeasuresModule.outcomeMeasures) if (measure.dispersionType) measure.dispersionType = "Inter-Quartile Range";
+  const unread = ctgovPrecedent(iqr, { retrievedAt: AT }).extractions.find((item) => item.parameter === "median_time");
+  assert.equal(unread.ciLow, null);
+  assert.equal(unread.ciHigh, null);
+  assert.deepEqual(unread.detail.limitsAreNotACi, { lower: 15.2, upper: 21.4 }, "still on the record, named for what they are");
+});
+
+test("PA-41 ChiCTR is reached through the evidence API with the control plane's own credential, or not at all", async () => {
+  /** @type {any[]} */
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push({ url: String(url), init });
+    return new Response(JSON.stringify({ code: 200, data: { total: 1, list: [{ registrationNo: "ChiCTR2000030000", title: "试验", sampleSize: 96 }] } }), { status: 200 });
+  };
+  assert.equal(vcrChictrAdapter({ config: {}, fetchImpl }), null, "no credential, no seat");
+  const adapter = vcrChictrAdapter({ config: { publicSourceCredentials: { evimedEvidence: "key-not-echoed" } }, fetchImpl });
+  assert.equal(typeof adapter, "function");
+  const client = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: adapter });
+  const answer = await client.searchChictr({ query: "ChiCTR2000030000", limit: 5 });
+  assert.equal(answer.status, "ok");
+  assert.equal(answer.items[0].precedent.registryId, "ChiCTR2000030000");
+  assert.equal(seen[0].url, "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/clinical-trial");
+  assert.deepEqual(JSON.parse(seen[0].init.body), { query: "ChiCTR2000030000", count: 5, registry: 0 }, "registry 0 is ChiCTR");
+  assert.equal(seen[0].init.headers.authorization, "Bearer key-not-echoed");
+  assert.equal(client.chictrConfigured, true);
+
+  const refused = createChictrAdapter({ search: async () => { throw Object.assign(new Error("no"), { code: "http_403" }); } });
+  const failing = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: refused });
+  assert.equal((await failing.searchChictr({ query: "x" })).reason, "http_403");
+  const unreadable = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: createChictrAdapter({ search: async () => ({ data: { total: 0 } }) }) });
+  assert.equal((await unreadable.searchChictr({ query: "x" })).reason, "registry_answer_unreadable", "an answer with no list is not an empty library");
+  assert.throws(() => createChictrAdapter({ search: null }), TypeError);
 });

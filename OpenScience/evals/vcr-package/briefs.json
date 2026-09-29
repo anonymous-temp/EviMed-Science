@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "note": "Real briefs, not smoke tests: each is a package somebody would actually have to hand to a reviewer, chosen for the specific way a study package goes wrong while looking finished — a number typed from the conversation rather than rendered from a result, a stale result quietly dropped, an unreviewed package labelled as a specified analysis. mustDo / mustNotDo are the rubric; the deterministic half (the files at their names, every prose number present in results.json, the four counts apart, the two seal timestamps) is the vcr-study-package contract in @evimed/domain plus this capability's preflight.",
+  "note": "Real briefs, not smoke tests: each is a package somebody would actually have to hand to a reviewer, chosen for the specific way a study package goes wrong while looking finished — a number typed from the conversation rather than rendered from a result, a stale result quietly dropped, an unreviewed package labelled as a specified analysis. mustDo / mustNotDo are the rubric; the deterministic half (the files at their names, every prose number present in results.json, the four counts apart, the two seal timestamps) is the vcr-study-package contract in @evimed/domain, whose findings are notices and never a gate (the capability ships no preflight script of its own).",
   "briefs": [
     {
       "id": "vcr-package-001-nsclc-design-support",

@@ -51,8 +51,22 @@
  */
 
 import {
-  VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS,
+  VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
 } from "@evimed/domain";
+
+/**
+ * Why a criterion is `unknown` for a reason the evaluator itself found, on top
+ * of the domain's own reasons for a missing fact. Each one says what would have
+ * to change: a criterion written outside the grammar is the protocol step's to
+ * fix, a code the vocabulary cannot read is the field map's, a number with no
+ * unit cannot be compared to one that names a unit, and a fact with no date
+ * cannot decide a question about a window (contract §2.2).
+ */
+export const VCR_EVALUATOR_UNKNOWN_REASONS = Object.freeze([
+  "criterion_malformed", "coding_unmapped", "unit_missing", "unit_mismatch", "undated", "evaluation_error",
+]);
+/** Every reason a gap may carry. */
+const GAP_REASONS = Object.freeze([...VCR_MISSING_REASONS, ...VCR_EVALUATOR_UNKNOWN_REASONS]);
 
 /** The three truth values, plus the deferral. Spelled out so a reader of this file need not look. */
 export const SATISFIED = "satisfied";
@@ -93,16 +107,20 @@ const LAYER_BY_TYPE = Object.freeze({
 
 /**
  * `pending_recheck` is an `unknown` wearing a date. Every truth table below
- * folds it to `unknown` to decide the value and then puts the date back if the
- * value came out indeterminate — so `F ∧ P` is a definite `F` and `T ∨ P` is a
- * definite `T`, exactly as they would be with `U`.
+ * folds it to `unknown` to decide the value — so `F ∧ P` is a definite `F` and
+ * `T ∨ P` is a definite `T`, exactly as they would be with `U`. When the value
+ * comes out indeterminate the date is put back **only if every indeterminate
+ * part was a deferral**: `P ∧ U` is a plain unknown, because a document is
+ * still owed and a date does not settle that. Read as `P` it would hide the
+ * gap, and a subject would wait for a washout to end while the missing
+ * document that also blocks them went unasked.
  * @param {string} state
  */
 const truth = (state) => (state === PENDING_RECHECK ? UNKNOWN : state);
 
 /** @param {string[]} states @param {string} value */
 const restorePending = (states, value) =>
-  (value === UNKNOWN && states.includes(PENDING_RECHECK) ? PENDING_RECHECK : value);
+  (value === UNKNOWN && states.includes(PENDING_RECHECK) && !states.includes(UNKNOWN) ? PENDING_RECHECK : value);
 
 /**
  * Kleene AND: false wins, then true, then unknown.
@@ -319,6 +337,13 @@ const verdict = (state, extra = {}) =>
   ({ state, evidence: extra.evidence ?? [], missing: extra.missing ?? [], recheckAt: extra.recheckAt ?? null });
 
 /**
+ * An `unknown` that says why. Every path of the evaluator that cannot decide
+ * ends here, so the reason a coordinator reads is the reason the code had.
+ * @param {string} variable @param {string} reason @param {any[]} [evidence]
+ */
+const unknownBecause = (variable, reason, evidence = []) => verdict(UNKNOWN, { missing: [{ variable, reason }], evidence });
+
+/**
  * What a judgment cites.
  *
  * A fact read out of free text cites the sentence and the character span. A
@@ -356,22 +381,30 @@ const earliest = (dates) => {
 /**
  * Evaluate one structured requirement against the subject's admissible facts.
  *
- * The grammar is deliberately tiny and closed — `all` / `any` / `not` over
- * `present`, `absent`, `compare`, `elapsed_since` and `language`. Everything a
- * protocol says that does not fit becomes `language`, is answered by the model
- * with a located quote, and is marked as such in the judgment, so the share of
- * a study's criteria that code could not decide is a number the evaluation
- * report carries rather than a thing nobody counted.
+ * The grammar is closed (`validateRequirement` in the domain, contract §2.2) and
+ * so is what the evaluator does with anything outside it: a requirement the
+ * grammar does not admit is `unknown` with the reason `criterion_malformed` —
+ * never a guess at what it meant, never a verdict. Everything a protocol says
+ * that does not fit becomes `language`, is answered by the model with a located
+ * quote, and is marked as such in the judgment, so the share of a study's
+ * criteria that code could not decide is a number the evaluation report carries
+ * rather than a thing nobody counted.
  *
  * @param {any} node
- * @param {{ facts: readonly any[], asOf: number, documents?: any, modelJudgments?: Record<string, any>, criterionId?: string, unitConverter?: (value: number, from: string, to: string) => number|null }} context
+ * @param {{ facts: readonly any[], asOf: number, documents?: any, modelJudgments?: Record<string, any>, criterionId?: string, unitConverter?: (value: number, from: string, to: string, variable?: string) => number|null }} context
  * @returns {RequirementVerdict}
  */
 export function evaluateRequirement(node, context) {
-  if (!node || typeof node !== "object") return verdict(UNKNOWN, { missing: [{ variable: "", reason: "not_recorded" }] });
+  if (!node || typeof node !== "object") return unknownBecause("", "criterion_malformed");
+  if (validateRequirement(node).length) return unknownBecause(typeof node?.variable === "string" ? node.variable : "", "criterion_malformed");
+  return evaluateNode(node, context);
+}
+
+/** @param {any} node @param {any} context @returns {RequirementVerdict} */
+function evaluateNode(node, context) {
   switch (node.op) {
     case "all": case "any": {
-      const parts = (Array.isArray(node.operands) ? node.operands : []).map((child) => evaluateRequirement(child, context));
+      const parts = (Array.isArray(node.operands) ? node.operands : []).map((child) => evaluateNode(child, context));
       const states = parts.map((part) => part.state);
       const state = node.op === "all" ? kleeneAnd(...states) : kleeneOr(...states);
       return verdict(state, {
@@ -381,14 +414,14 @@ export function evaluateRequirement(node, context) {
       });
     }
     case "not": {
-      const inner = evaluateRequirement(node.operand ?? (Array.isArray(node.operands) ? node.operands[0] : null), context);
+      const inner = evaluateNode(node.operand, context);
       return verdict(kleeneNot(inner.state), { evidence: inner.evidence, missing: inner.missing, recheckAt: inner.recheckAt });
     }
     case "present": case "absent": return evaluatePresence(node, context);
     case "compare": return evaluateCompare(node, context);
     case "elapsed_since": return evaluateElapsed(node, context);
     case "language": return evaluateLanguage(node, context);
-    default: return verdict(UNKNOWN, { missing: [{ variable: String(node.variable ?? ""), reason: "not_recorded" }] });
+    default: return unknownBecause(String(node.variable ?? ""), "criterion_malformed");
   }
 }
 
@@ -403,14 +436,15 @@ function factsFor(context, variable) {
  * The four readings that matter, and why (C2-19): a denial is evidence the
  * window is clear; an event dated inside the window is evidence it is not; an
  * event dated outside it is evidence the window is clear; an event with no date
- * at all cannot be placed and so decides nothing. Silence is `unknown` — which
- * is what makes a missing treatment history fail a washout instead of passing
- * it (C2-16).
+ * at all cannot be placed and so decides nothing (`undated`). Silence is
+ * `unknown` — which is what makes a missing treatment history fail a washout
+ * instead of passing it (C2-16).
  * @param {any} node @param {any} context @returns {RequirementVerdict}
  */
 function evaluatePresence(node, context) {
-  const all = factsFor(context, node.variable);
-  if (!all.length) return verdict(UNKNOWN, { missing: [{ variable: String(node.variable ?? ""), reason: "not_recorded" }] });
+  const variable = String(node.variable ?? "");
+  const all = factsFor(context, variable);
+  if (!all.length) return unknownBecause(variable, "not_recorded");
   const affirmed = all.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
   const negated = all.filter((fact) => fact?.polarity === "negated");
   const placed = affirmed.map((fact) => ({ fact, inside: withinWindow(fact, node.window, context.asOf) }));
@@ -422,29 +456,104 @@ function evaluatePresence(node, context) {
   if (inside.length) {
     return verdict(wantPresent ? SATISFIED : NOT_SATISFIED, { evidence: inside.map(citation) });
   }
-  if (undated.length) {
-    return verdict(UNKNOWN, {
-      evidence: undated.map(citation),
-      missing: [{ variable: String(node.variable ?? ""), reason: "out_of_window" }],
-    });
-  }
+  if (undated.length) return unknownBecause(variable, "undated", undated.map(citation));
   if (negated.length || outside.length) {
     return verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: [...negated, ...outside].map(citation) });
   }
-  return verdict(UNKNOWN, { missing: [{ variable: String(node.variable ?? ""), reason: "not_recorded" }] });
+  return unknownBecause(variable, "not_recorded");
+}
+
+/**
+ * The small vocabularies coded values are read through. A fact holding a code
+ * the vocabulary does not contain is `unknown` (`coding_unmapped`): comparing an
+ * unread code as a string is how 「女」 fails to be 「female」 and a woman is
+ * passed over for a pregnancy exclusion that applied to her.
+ */
+export const VCR_CODE_VOCABULARIES = Object.freeze({
+  sex: Object.freeze({
+    male: Object.freeze(["male", "m", "man", "男", "男性", "1"]),
+    female: Object.freeze(["female", "f", "woman", "女", "女性", "2"]),
+  }),
+});
+/** Variables that share a vocabulary. */
+const VOCABULARY_OF = Object.freeze(/** @type {Record<string, keyof typeof VCR_CODE_VOCABULARIES>} */ ({ sex: "sex", gender: "sex" }));
+
+/** A code as a comparable token. @param {unknown} value */
+const codeToken = (value) => String(value ?? "").normalize("NFKC").trim().toLowerCase();
+
+/**
+ * A code through its variable's vocabulary: the canonical word, or `null` when
+ * the vocabulary does not contain it. A variable with no vocabulary maps to its
+ * own token.
+ * @param {string} variable @param {unknown} value @returns {string | null}
+ */
+export function codedValue(variable, value) {
+  const token = codeToken(value);
+  if (!token) return null;
+  const vocabulary = VOCABULARY_OF[variable];
+  if (!vocabulary) return token;
+  const entries = /** @type {Record<string, readonly string[]>} */ (VCR_CODE_VOCABULARIES[vocabulary]);
+  for (const [canonical, words] of Object.entries(entries)) if (words.includes(token)) return canonical;
+  return null;
+}
+
+/** A unit as a comparable token: `µmol/L`, `umol/l` and `μmol/L` are one unit. @param {unknown} unit */
+const unitToken = (unit) => String(unit ?? "").normalize("NFKC").trim().toLowerCase().replaceAll("µ", "u").replaceAll("μ", "u");
+
+/**
+ * The conversions the evaluator knows without being told: a laboratory value in
+ * the other unit a chart commonly uses. Keyed by variable, then `from`, then
+ * `to`; a factor multiplies. Anything not here converts through
+ * `context.unitConverter` or not at all — an unconverted number is `unknown`,
+ * never compared raw: creatinine 106 µmol/L is 1.2 mg/dL, and read against a
+ * 1.5 mg/dL ceiling as 106 it would exclude a patient whose kidneys are fine.
+ */
+const UNIT_FACTORS = Object.freeze(/** @type {Record<string, Record<string, Record<string, number>>>} */ ({
+  creatinine: { "umol/l": { "mg/dl": 1 / 88.4 }, "mg/dl": { "umol/l": 88.4 } },
+  bilirubin: { "umol/l": { "mg/dl": 1 / 17.1 }, "mg/dl": { "umol/l": 17.1 } },
+  glucose: { "mmol/l": { "mg/dl": 18.016 }, "mg/dl": { "mmol/l": 1 / 18.016 } },
+  hemoglobin: { "g/l": { "g/dl": 0.1 }, "g/dl": { "g/l": 10 } },
+}));
+
+/**
+ * @param {number} value @param {string} from @param {string} to @param {string} variable
+ * @param {((value: number, from: string, to: string, variable?: string) => number | null) | undefined} custom
+ * @returns {number | null}
+ */
+function convertUnit(value, from, to, variable, custom) {
+  const own = UNIT_FACTORS[variable]?.[unitToken(from)]?.[unitToken(to)];
+  if (own !== undefined) return value * own;
+  const supplied = custom ? custom(value, from, to, variable) : null;
+  return supplied !== null && supplied !== undefined && Number.isFinite(supplied) ? supplied : null;
+}
+
+/** A fact's value as a number, when it is one (a plain numeric string is one). @param {unknown} value @returns {number | null} */
+function numericValue(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && /^\s*-?\d+(?:\.\d+)?\s*$/.test(value)) return Number(value);
+  return null;
 }
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateCompare(node, context) {
-  const candidates = factsFor(context, node.variable)
-    .filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed")
-    .filter((fact) => withinWindow(fact, node.window, context.asOf) !== false);
+  const variable = String(node.variable ?? "");
+  const affirmed = factsFor(context, variable).filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
+  // A window needs a date: a fact with none is not inside it and not outside
+  // it, so it decides nothing (`undated`), however recent the chart looks.
+  const placed = affirmed.map((fact) => ({ fact, inside: withinWindow(fact, node.window, context.asOf) }));
+  const candidates = placed.filter((item) => item.inside === true).map((item) => item.fact);
   if (!candidates.length) {
-    return verdict(UNKNOWN, { missing: [{ variable: String(node.variable ?? ""), reason: "not_measured" }] });
+    const undated = placed.filter((item) => item.inside === null).map((item) => item.fact);
+    return undated.length ? unknownBecause(variable, "undated", undated.map(citation)) : unknownBecause(variable, "not_measured");
   }
   const aggregate = String(node.aggregate ?? "latest");
-  const ordered = [...candidates].sort((a, b) => (instant(b?.occurredAt) ?? 0) - (instant(a?.occurredAt) ?? 0));
-  const chosen = aggregate === "latest" ? [ordered[0]] : ordered;
+  const dated = candidates.filter((fact) => instant(fact?.occurredAt) !== null);
+  const ordered = [...dated].sort((a, b) => (instant(b?.occurredAt) ?? 0) - (instant(a?.occurredAt) ?? 0));
+  if (aggregate === "latest" && !ordered.length && candidates.length > 1) {
+    // Several values and none of them dated: which is the latest cannot be said.
+    return unknownBecause(variable, "undated", candidates.map(citation));
+  }
+  const chosen = aggregate === "latest" ? [ordered[0] ?? candidates[0]] : (ordered.length === candidates.length ? ordered : candidates);
 
   /** @type {string[]} */
   const states = [];
@@ -465,31 +574,51 @@ function evaluateCompare(node, context) {
 /**
  * One fact against one threshold.
  *
- * A unit we cannot convert is `unknown`, never a comparison on the raw number:
- * creatinine 106 µmol/L is 1.2 mg/dL, and reading the first against a 1.5 mg/dL
- * ceiling would exclude a patient whose kidneys are fine.
+ * A unit we cannot convert is `unknown`, never a comparison on the raw number,
+ * and a fact with no unit against a criterion that names one is `unknown` too
+ * (`unit_missing`): 106 with nothing beside it could be either creatinine unit.
  * @param {any} node @param {any} fact @param {any} context @returns {{ state: string, missing: { variable: string, reason: string }[] }}
  */
 function compareFact(node, fact, context) {
   const variable = String(node.variable ?? "");
   const comparator = String(node.comparator ?? "eq");
-  if (comparator === "in" || comparator === "not_in") {
-    const set = (Array.isArray(node.value) ? node.value : [node.value]).map((item) => String(item));
-    const hit = set.includes(String(fact?.value));
-    return { state: (comparator === "in") === hit ? SATISFIED : NOT_SATISFIED, missing: [] };
+  /** @param {string} reason */
+  const cannot = (reason) => ({ state: UNKNOWN, missing: [{ variable, reason }] });
+  const raw = fact?.value;
+  if (raw === null || raw === undefined || raw === "") return cannot("not_measured");
+
+  if (comparator === "in" || comparator === "not_in" || comparator === "eq" || comparator === "ne") {
+    const wanted = comparator === "in" || comparator === "not_in" ? (Array.isArray(node.value) ? node.value : [node.value]) : [node.value];
+    // A number is compared as a number (2, 2.0 and "2" are one), a code as its
+    // token through the variable's vocabulary.
+    const number = numericValue(raw);
+    let hit;
+    if (VOCABULARY_OF[variable]) {
+      const have = codedValue(variable, raw);
+      if (have === null) return cannot("coding_unmapped");
+      const want = wanted.map((item) => codedValue(variable, item));
+      if (want.some((item) => item === null)) return cannot("coding_unmapped");
+      hit = want.includes(have);
+    } else if (number !== null && wanted.every((item) => numericValue(item) !== null)) {
+      hit = wanted.some((item) => numericValue(item) === number);
+    } else {
+      hit = wanted.map(codeToken).includes(codeToken(raw));
+    }
+    const positive = comparator === "in" || comparator === "eq";
+    return { state: positive === hit ? SATISFIED : NOT_SATISFIED, missing: [] };
   }
-  let value = fact?.value;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return { state: UNKNOWN, missing: [{ variable, reason: "not_measured" }] };
-  }
+
+  let value = numericValue(raw);
+  if (value === null) return cannot("not_measured");
   const want = String(node.unit ?? "");
   const have = String(fact?.unit ?? "");
-  if (want && have && want !== have) {
-    const converted = context.unitConverter ? context.unitConverter(value, have, want) : null;
-    if (converted === null || converted === undefined || !Number.isFinite(converted)) {
-      return { state: UNKNOWN, missing: [{ variable, reason: "not_measured" }] };
+  if (want) {
+    if (!have) return cannot("unit_missing");
+    if (unitToken(want) !== unitToken(have)) {
+      const converted = convertUnit(value, have, want, variable, context.unitConverter);
+      if (converted === null) return cannot("unit_mismatch");
+      value = converted;
     }
-    value = converted;
   }
   const bound = Number(node.value);
   const high = Number(node.highValue ?? node.value);
@@ -497,9 +626,7 @@ function compareFact(node, fact, context) {
     : comparator === "lte" ? value <= bound
       : comparator === "gt" ? value > bound
         : comparator === "gte" ? value >= bound
-          : comparator === "ne" ? value !== bound
-            : comparator === "between" ? value >= bound && value <= high
-              : value === bound;
+          : value >= bound && value <= high;
   return { state: passes ? SATISFIED : NOT_SATISFIED, missing: [] };
 }
 
@@ -507,34 +634,37 @@ function compareFact(node, fact, context) {
  * `elapsed_since` — the washout shape, and the only place a deferral is born
  * from arithmetic rather than declared by hand.
  *
- * No treatment recorded at all is `unknown` (C2-16). A last dose too recent is
- * not `not_satisfied` but `pending_recheck` dated at the day the washout ends,
- * because the answer is known to change on a known date and the ledger should
- * say so rather than make the coordinator re-derive it.
+ * No treatment recorded at all is `unknown` (C2-16); a treatment recorded with no
+ * date is `undated`. A last dose too recent is not `not_satisfied` but
+ * `pending_recheck` dated at the day the washout ends, because the answer is
+ * known to change on a known date and the ledger should say so rather than make
+ * the coordinator re-derive it.
  * @param {any} node @param {any} context @returns {RequirementVerdict}
  */
 function evaluateElapsed(node, context) {
   const variable = String(node.variable ?? "");
-  const dated = factsFor(context, variable)
-    .filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed")
-    .filter((fact) => instant(fact?.occurredAt) !== null);
-  const denied = factsFor(context, variable).some((fact) => fact?.polarity === "negated");
+  const everything = factsFor(context, variable);
+  const affirmed = everything.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
+  // What happened after the assessment date is not yet a fact of it.
+  const dated = affirmed.filter((fact) => instant(fact?.occurredAt) !== null && /** @type {number} */ (instant(fact.occurredAt)) <= context.asOf);
+  const denied = everything.filter((fact) => fact?.polarity === "negated");
   if (!dated.length) {
     // 「从未接受过」 is a complete answer to 「距上次治疗已满 N 天」.
-    if (denied && node.deniedSatisfies !== false) {
-      return verdict(SATISFIED, { evidence: factsFor(context, variable).filter((fact) => fact?.polarity === "negated").map(citation) });
-    }
-    return verdict(UNKNOWN, { missing: [{ variable, reason: "not_recorded" }] });
+    if (denied.length && node.deniedSatisfies !== false) return verdict(SATISFIED, { evidence: denied.map(citation) });
+    const undated = affirmed.filter((fact) => instant(fact?.occurredAt) === null);
+    if (undated.length) return unknownBecause(variable, "undated", undated.map(citation));
+    return unknownBecause(variable, "not_recorded");
   }
-  const latest = dated.sort((a, b) => (instant(b.occurredAt) ?? 0) - (instant(a.occurredAt) ?? 0))[0];
-  const at = instant(latest.occurredAt);
+  const latest = [...dated].sort((a, b) => (instant(b.occurredAt) ?? 0) - (instant(a.occurredAt) ?? 0))[0];
+  const at = /** @type {number} */ (instant(latest.occurredAt));
   const needed = Number(node.days ?? 0);
   const elapsed = daysBetween(at, context.asOf);
   const strict = String(node.comparator ?? "gte") === "gt";
   if (strict ? elapsed > needed : elapsed >= needed) return verdict(SATISFIED, { evidence: [citation(latest)] });
   return verdict(PENDING_RECHECK, {
     evidence: [citation(latest)],
-    recheckAt: new Date(at + needed * DAY_MS).toISOString(),
+    // Strictly more than N days is true one moment after N days have passed.
+    recheckAt: new Date(at + needed * DAY_MS + (strict ? 1_000 : 0)).toISOString(),
   });
 }
 
@@ -546,10 +676,8 @@ function evaluateElapsed(node, context) {
 function evaluateLanguage(node, context) {
   const key = String(node.key ?? context.criterionId ?? "");
   const judgment = (context.modelJudgments ?? {})[key];
-  if (!judgment || ![SATISFIED, NOT_SATISFIED, UNKNOWN].includes(String(judgment.state))) {
-    return verdict(UNKNOWN, { missing: [{ variable: key, reason: "not_recorded" }] });
-  }
-  if (judgment.state === UNKNOWN) return verdict(UNKNOWN, { missing: [{ variable: key, reason: "not_recorded" }] });
+  if (!judgment || ![SATISFIED, NOT_SATISFIED, UNKNOWN].includes(String(judgment.state))) return unknownBecause(key, "not_recorded");
+  if (judgment.state === UNKNOWN) return unknownBecause(key, "not_recorded");
   const anchored = (Array.isArray(judgment.evidence) ? judgment.evidence : []).filter((item) => {
     const probe = {
       id: item?.factId ?? key, variable: key, polarity: "affirmed", extractedBy: "model",
@@ -557,16 +685,25 @@ function evaluateLanguage(node, context) {
     };
     return verifyFactEvidence(probe, { documents: context.documents, asOf: context.asOf }).ok;
   });
-  if (!anchored.length) return verdict(UNKNOWN, { missing: [{ variable: key, reason: "not_recorded" }] });
+  if (!anchored.length) return unknownBecause(key, "not_recorded");
   return verdict(String(judgment.state), {
     evidence: anchored.map((item) => ({
       factId: String(item?.factId ?? ""),
       variable: key,
       quote: String(item?.quote ?? ""),
+      quoteKind: "verbatim",
       locator: { documentId: String(item?.documentId ?? ""), start: item?.start ?? null, end: item?.end ?? null },
       occurredAt: null, visibleAt: item?.visibleAt ?? null, polarity: "affirmed",
     })),
   });
+}
+
+/** The keys of the language nodes of a requirement: how the model's answers are found. @param {any} node @returns {string[]} */
+export function languageKeysOf(node, fallback = "") {
+  if (!node || typeof node !== "object") return [];
+  if (node.op === "language") return [String(node.key ?? fallback)].filter(Boolean);
+  const children = Array.isArray(node.operands) ? node.operands : node.operand ? [node.operand] : [];
+  return children.flatMap((child) => languageKeysOf(child, fallback));
 }
 
 /** Does this requirement tree need the model to answer any part of it? */
@@ -605,29 +742,44 @@ export function requiresLanguageJudgment(node) {
  * `unknown`, because `unknown` means "go find a document" and nobody should be
  * sent to look for a pregnancy test on a man.
  *
+ * One criterion that cannot be evaluated never stops the others: an error inside
+ * it is that criterion's `unknown` (`evaluation_error`) and the subject's other
+ * criteria are judged as they would have been.
+ *
  * @param {any} criterion
  * @param {any} context
  * @returns {CriterionJudgment}
  */
 export function evaluateCriterion(criterion, context) {
   const local = { ...context, criterionId: String(criterion?.id ?? "") };
-  const applicability = criterion?.applicability
-    ? evaluateRequirement(criterion.applicability, local)
-    : verdict(SATISFIED);
-  const result = evaluateRequirement(criterion?.requirement, local);
   const criterionType = VCR_CRITERION_TYPES.includes(criterion?.criterionType) ? criterion.criterionType : "other";
-  return {
-    criterionId: String(criterion?.id ?? ""),
-    kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
-    criterionType,
-    state: VCR_CRITERION_STATES.includes(result.state) ? result.state : UNKNOWN,
-    applicable: applicability.state !== NOT_SATISFIED,
-    applicabilityState: applicability.state,
-    decidedBy: requiresLanguageJudgment(criterion?.requirement) ? "model" : "code",
-    evidence: result.evidence,
-    recheckAt: result.recheckAt,
-    missing: result.missing,
-  };
+  try {
+    const applicability = criterion?.applicability
+      ? evaluateRequirement(criterion.applicability, local)
+      : verdict(SATISFIED);
+    const result = evaluateRequirement(criterion?.requirement, local);
+    return {
+      criterionId: String(criterion?.id ?? ""),
+      kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
+      criterionType,
+      state: VCR_CRITERION_STATES.includes(result.state) ? result.state : UNKNOWN,
+      applicable: applicability.state !== NOT_SATISFIED,
+      applicabilityState: applicability.state,
+      decidedBy: requiresLanguageJudgment(criterion?.requirement) ? "model" : "code",
+      evidence: result.evidence,
+      recheckAt: result.recheckAt,
+      // A malformed applicability is a gap on this criterion too: it applies
+      // (it is not known not to), and the protocol step owes a fix.
+      missing: applicability.state === UNKNOWN && applicability.missing.some((item) => item.reason === "criterion_malformed")
+        ? [...result.missing, ...applicability.missing] : result.missing,
+    };
+  } catch {
+    return {
+      criterionId: String(criterion?.id ?? ""), kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterionType,
+      state: UNKNOWN, applicable: true, applicabilityState: UNKNOWN, decidedBy: "code", evidence: [], recheckAt: null,
+      missing: [{ variable: "", reason: "evaluation_error" }],
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -692,7 +844,7 @@ export function evidenceGaps(judgments) {
   for (const judgment of judgments ?? []) {
     if (!judgment?.applicable) continue;
     for (const item of judgment.missing ?? []) {
-      const reason = VCR_MISSING_REASONS.includes(item?.reason) ? item.reason : "not_recorded";
+      const reason = GAP_REASONS.includes(item?.reason) ? item.reason : "not_recorded";
       const key = `${item?.variable ?? ""}\u0000${reason}`;
       const entry = gaps.get(key) ?? { variable: String(item?.variable ?? ""), reason, criterionIds: [] };
       entry.criterionIds.push(judgment.criterionId);
@@ -757,6 +909,23 @@ export function separateLedgers(input) {
 // ---------------------------------------------------------------------------
 // One assessment
 // ---------------------------------------------------------------------------
+
+/**
+ * The instant an assessment is made as of, as a valid ISO string — the one form
+ * that is hashed, stored and replayed (review CS-34). A value that is not a
+ * date is refused with a code, never read as "now": an evaluation that quietly
+ * took the wall clock would give a different verdict on each run of the same
+ * frozen job.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function frozenAsOf(value) {
+  const at = typeof value === "string" && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/.test(value) ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(at)) {
+    throw Object.assign(new TypeError("asOf is an ISO date or instant, for example 2026-09-28 or 2026-09-28T08:00:00Z."), { code: "vcr_asof_invalid" });
+  }
+  return new Date(at).toISOString();
+}
 
 /**
  * Assess one subject against one protocol version, as of one instant.

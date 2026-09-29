@@ -210,11 +210,26 @@ export function decideContactApproval({ referralId, approvedBy, role }) {
  * Turn assessments into candidate referrals.
  *
  * Candidates only. Nothing here may put a subject into a contact state — the
- * whole route from 「候选」 to 「已联系」 runs through a person.
+ * whole route from 「候选」 to 「已联系」 runs through a person. Only each
+ * subject's **newest** assessment counts (by the instant it was made as of): an
+ * older 「符合」 that a later 「不符合」 replaced is not a candidate, and a subject
+ * with two assessments is one candidate, not two.
  * @param {{ studyId: string, assessments: readonly any[], includeInsufficient?: boolean }} input
  */
 export function candidateReferrals({ studyId, assessments, includeInsufficient = true }) {
-  return (assessments ?? [])
+  /** @type {Map<string, any>} */
+  const newest = new Map();
+  for (const assessment of assessments ?? []) {
+    const key = String(assessment?.subjectKey ?? "");
+    if (!key) continue;
+    const held = newest.get(key);
+    const at = Date.parse(String(assessment?.asOf ?? "")) || 0;
+    const heldAt = held ? Date.parse(String(held.asOf ?? "")) || 0 : -1;
+    const created = Date.parse(String(assessment?.createdAt ?? "")) || 0;
+    const heldCreated = held ? Date.parse(String(held.createdAt ?? "")) || 0 : -1;
+    if (!held || at > heldAt || (at === heldAt && created > heldCreated)) newest.set(key, assessment);
+  }
+  return [...newest.values()]
     .filter((assessment) => assessment?.summary === "eligible"
       || assessment?.summary === "pending"
       || (includeInsufficient && assessment?.summary === "insufficient_evidence"))
@@ -231,26 +246,46 @@ export function candidateReferrals({ studyId, assessments, includeInsufficient =
  * The funnel, with its denominators shown. Inato-style dashboards publish
  * 「已预筛 / 已入组」 with no denominator anywhere; every number here can be
  * divided by the one above it.
- * @param {readonly any[]} referrals
+ *
+ * With `progress` (the furthest state each referral ever reached, from its
+ * events) a patient who withdrew after being contacted still counts as
+ * contacted: counting only where they stand now would take every withdrawal out
+ * of the steps it had passed and make the contact rate and the screening rate
+ * look better than they were.
+ * @param {readonly any[]} referrals @param {Map<string, string> | Record<string, string> | null} [progress]
  */
-export function referralFunnel(referrals) {
+export function referralFunnel(referrals, progress = null) {
   /** @type {Record<string, number>} */
   const counts = {};
   for (const state of VCR_REFERRAL_STATES) counts[state] = 0;
+  /** @param {any} referral */
+  const reachedOf = (referral) => {
+    const found = progress instanceof Map ? progress.get(String(referral?.id)) : progress?.[String(referral?.id)];
+    return found ?? String(referral?.state ?? "");
+  };
+  const order = VCR_REFERRAL_STATES.filter((state) => state !== "withdrawn" && state !== "screen_failed");
+  /** @param {any} referral @param {string} step */
+  const passed = (referral, step) => {
+    const state = String(referral?.state ?? "");
+    const reached = state === "screen_failed" ? "screening" : reachedOf(referral);
+    return order.indexOf(reached) >= order.indexOf(step) && order.indexOf(reached) >= 0;
+  };
   for (const referral of referrals ?? []) {
     const state = String(referral?.state ?? "");
     if (state in counts) counts[state] += 1;
   }
   const total = (referrals ?? []).length;
-  const reached = counts.contacted + counts.interested + counts.referred + counts.site_responded
-    + counts.screening + counts.enrolled + counts.screen_failed;
-  const screened = counts.screening + counts.enrolled + counts.screen_failed;
+  const reached = (referrals ?? []).filter((referral) => passed(referral, "contacted")).length;
+  const screened = (referrals ?? []).filter((referral) => passed(referral, "screening")).length;
+  const enrolled = counts.enrolled;
   return {
     counts,
     total,
+    reachedContact: reached,
+    reachedScreening: screened,
     contactRate: total ? reached / total : null,
     screenRate: reached ? screened / reached : null,
-    enrollmentRate: screened ? counts.enrolled / screened : null,
+    enrollmentRate: screened ? enrolled / screened : null,
     screenFailureRate: screened ? counts.screen_failed / screened : null,
   };
 }
@@ -311,7 +346,10 @@ export function siteProfileStatus(site, now = Date.now()) {
   const at = new Date(now).getTime();
   const verifiedAt = site?.verifiedAt ? new Date(site.verifiedAt).getTime() : null;
   const ageDays = verifiedAt === null ? null : (at - verifiedAt) / 86_400_000;
-  const slots = Number(site?.capacity?.slots);
+  // A capacity nobody stated is no capacity: `Number(null)` is 0, and a site with
+  // no slots recorded would then read as a site with none left.
+  const stated = site?.capacity?.slots;
+  const slots = stated === null || stated === undefined || stated === "" ? Number.NaN : Number(stated);
   const used = Number(site?.capacity?.used ?? 0);
   const available = Number.isFinite(slots) ? Math.max(0, slots - (Number.isFinite(used) ? used : 0)) : null;
   return {
@@ -361,93 +399,132 @@ export function accrualPosterior(history, prior = VCR_ACCRUAL_PRIOR_DEFAULT) {
   return { alpha, beta, meanRatePerMonth: alpha / beta, source: monthsOpen > 0 ? "site_history" : "prior_only" };
 }
 
+/** Days in a month, for the one place a date becomes a month count. */
+const DAYS_PER_MONTH = 30.4375;
+
 /**
- * Assemble the inputs of an accrual forecast: the activation plan, one rate
- * prior per site, and the screening loss between a referral and an enrolment.
+ * Whole months, fractional, from one instant to another; never negative.
+ * @param {number} from @param {number} to
+ */
+const monthsBetweenInstants = (from, to) => Math.max(0, (to - from) / (DAYS_PER_MONTH * 86_400_000));
+
+/**
+ * Assemble an accrual forecast in exactly the shape the engine reads (integration
+ * contract §3.3): `sites: [{ id, alpha, beta, startTime, enrolled?,
+ * exposureTime? }]` — one **posterior** per site, in months from `asOf` —, the
+ * enrolment `target`, and, when the study states them, `eventTarget` with
+ * `eventHazard`, a `screenFailure` Beta and the `byTimes` a page wants a
+ * probability for. Nothing else: an unknown key is refused by the schema, and a
+ * key the engine does not read is a silent parameter change.
  *
- * Screen failure enters as a thinning of the Poisson process, which is why it
- * belongs in the inputs rather than being applied to the answer: a 30% screen
- * failure rate does not move the last-patient-in date by 30%.
+ * What the study cannot supply is named, never zeroed (plan §6.2): a site with
+ * no rate prior of its own and no history runs on the weak default and is
+ * listed in `notes.defaultedSites`; a study with no screening history sends no
+ * `screenFailure` and says so in `notes.screenFailureUnavailable`.
  *
- * @param {{ studyId: string, sites: readonly any[], target: number, asOf: string|number|Date,
- *   screenFailureRate?: number, horizonMonths?: number, siteHistories?: Record<string, any> }} input
+ * @param {{ sites: readonly any[], target: number, asOf: string|number|Date,
+ *   eventTarget?: number | null, eventHazard?: number | null, byTimes?: readonly number[] | null,
+ *   screenFailure?: { failed: number, passed: number } | null, siteHistories?: Record<string, any> }} input
+ * @returns {{ scenario: Record<string, any>, notes: { defaultedSites: string[], notOpenYet: string[], screenFailureUnavailable: boolean } }}
  */
 export function accrualForecastScenario(input) {
-  const asOf = new Date(input?.asOf ?? Date.now()).toISOString();
-  const globalScreenFailure = Number.isFinite(Number(input?.screenFailureRate)) ? Number(input.screenFailureRate) : 0;
+  const asOfMs = new Date(input?.asOf ?? Date.now()).getTime();
+  /** @type {string[]} */
+  const defaulted = [];
+  /** @type {string[]} */
+  const notOpen = [];
   const sites = (input?.sites ?? []).map((site) => {
     const history = (input?.siteHistories ?? {})[site?.id] ?? site?.accrualPrior?.history ?? null;
-    const posterior = accrualPosterior(history ?? {}, site?.accrualPrior ?? VCR_ACCRUAL_PRIOR_DEFAULT);
-    const screenFailureRate = Number.isFinite(Number(site?.accrualPrior?.screenFailureRate))
-      ? Number(site.accrualPrior.screenFailureRate)
-      : globalScreenFailure;
+    const own = site?.accrualPrior;
+    const hasOwnPrior = Number.isFinite(Number(own?.alpha)) && Number.isFinite(Number(own?.beta)) && Number(own.alpha) > 0 && Number(own.beta) > 0;
+    const posterior = accrualPosterior(history ?? {}, hasOwnPrior ? own : VCR_ACCRUAL_PRIOR_DEFAULT);
+    if (!hasOwnPrior && !(Number(history?.monthsOpen) > 0)) defaulted.push(String(site?.id ?? ""));
+    // Months until it opens: nothing before its activation date, and a site
+    // already open contributes from now (the process is memoryless).
+    const opens = site?.activatedOn ?? site?.capacity?.activationPlannedOn ?? null;
+    const opensMs = opens ? Date.parse(String(opens)) : Number.NaN;
+    const startTime = Number.isFinite(opensMs) ? monthsBetweenInstants(asOfMs, opensMs) : 0;
+    if (!Number.isFinite(opensMs)) notOpen.push(String(site?.id ?? ""));
+    const enrolled = Number(history?.enrolled);
+    const exposure = Number(history?.monthsOpen);
     return {
-      siteId: String(site?.id ?? ""),
-      name: String(site?.name ?? ""),
-      // Planned until it actually opens; the two are different columns because
-      // the gap between them is the single largest driver of a late trial.
-      activationPlannedOn: site?.capacity?.activationPlannedOn ?? null,
-      activatedOn: site?.activatedOn ?? null,
+      id: String(site?.id ?? "").slice(0, 80),
       alpha: posterior.alpha,
       beta: posterior.beta,
-      meanRatePerMonth: posterior.meanRatePerMonth,
-      ratePriorSource: posterior.source,
-      screenFailureRate,
-      capacity: Number.isFinite(Number(site?.capacity?.slots)) ? Number(site.capacity.slots) : null,
+      startTime: Math.round(startTime * 1000) / 1000,
+      // The engine takes both or neither.
+      ...(Number.isFinite(enrolled) && enrolled >= 0 && Number.isFinite(exposure) && exposure >= 0
+        ? { enrolled: Math.round(enrolled), exposureTime: exposure } : {}),
     };
   });
-  return {
-    kind: "accrual",
-    asOf,
-    target: Number(input?.target ?? 0),
-    horizonMonths: Number(input?.horizonMonths ?? 36),
-    screenFailureRate: globalScreenFailure,
+  const failed = Number(input?.screenFailure?.failed);
+  const passed = Number(input?.screenFailure?.passed);
+  const hasScreening = Number.isFinite(failed) && Number.isFinite(passed) && failed >= 0 && passed >= 0 && failed + passed > 0;
+  /** @type {Record<string, any>} */
+  const scenario = {
     sites,
-    quantiles: [0.05, 0.1, 0.2, 0.5, 0.8, 0.9, 0.95],
-    intervalKind: "prediction",
-    intervalLevel: 0.8,
+    target: Math.round(Number(input?.target ?? 0)),
+    ...(input?.eventTarget != null ? { eventTarget: Math.round(Number(input.eventTarget)), eventHazard: Number(input?.eventHazard) } : {}),
+    // Beta(failures + 1, passes + 1): the uniform prior updated by what the
+    // ledger recorded. No screening history, no key — never Beta(1, 1) passed off as data.
+    ...(hasScreening ? { screenFailure: { alpha: failed + 1, beta: passed + 1 } } : {}),
+    ...(input?.byTimes?.length ? { byTimes: [...input.byTimes] } : {}),
   };
+  return { scenario, notes: { defaultedSites: defaulted, notOpenYet: notOpen, screenFailureUnavailable: !hasScreening } };
 }
 
 /**
- * Hand the assembled scenario to the deterministic engine through D's job port.
+ * Hand the assembled scenario to the deterministic engine through the job queue.
  *
  * Dependency-injected on purpose: this module never imports the orchestrator,
- * and a test runs the whole path against a stub.
- * @param {{ jobs: VcrJobsPort, studyId: string, scenario: any, requestedBy?: string, seed?: number,
- *   cpuSecondsLimit?: number, inputs?: readonly any[] }} input
+ * and a test runs the whole path against a stub. The table the forecast's
+ * probabilities are in is asked to be kept (`keepTables`), because it is what a
+ * page draws the 「某日前完成的概率」 curve from.
+ * @param {{ jobs: VcrJobsPort, studyId: string, userId: string, scenario: any, requestedBy?: string, seed?: number | null,
+ *   cpuSecondsLimit?: number, inputs?: readonly any[], idempotencyKey?: string | null }} input
  */
-export async function requestAccrualForecast({ jobs, studyId, scenario, requestedBy = "", seed = 20260928, cpuSecondsLimit = 120, inputs = [] }) {
+export async function requestAccrualForecast({ jobs, studyId, userId, scenario, requestedBy = "", seed = null, cpuSecondsLimit = 120, inputs = [], idempotencyKey = null }) {
   if (!jobs || typeof jobs.enqueue !== "function") throw new TypeError("requestAccrualForecast needs the jobs port.");
-  if (!scenario || scenario.kind !== "accrual") throw new TypeError("requestAccrualForecast needs an accrual scenario.");
-  return jobs.enqueue({ kind: "accrual_forecast", studyId, scenario, seed, cpuSecondsLimit, requestedBy, inputs: [...inputs] });
+  if (!scenario || !Array.isArray(scenario.sites)) throw new TypeError("requestAccrualForecast needs an accrual scenario (a `sites` list).");
+  return jobs.enqueue({
+    studyId, userId, kind: "accrual_forecast", scenario, seed, cpuSecondsLimit, inputs: [...inputs], idempotencyKey,
+    detail: { origin: requestedBy || "platform", keepTables: ["probability_by_month"] },
+  });
 }
 
+/** The measure names the engine writes and this module reads — exactly these. */
+export const VCR_ACCRUAL_MEASURES = Object.freeze({ lastPatientIn: "last_patient_in_months", targetEvents: "target_events_months" });
+
 /**
- * Read the engine's answer back.
+ * Read the engine's answer back: `last_patient_in_months` and, when an event
+ * target was given, `target_events_months`, each with its own interval and, for
+ * a simulated one, its Monte-Carlo error. `probability_by_month` is a table
+ * (`probabilityByMonth` — rows of `{ month, probability }`, given by the caller
+ * that has read the stored file).
  *
  * Every interval must name its kind: a forecast's spread is a **prediction**
  * interval, not a confidence interval, and writing 「区间」 alone is how a
  * vendor's 「80% 以上置信度」 gets born. An unnamed interval is dropped and
  * reported as such rather than relabelled.
  * @param {any} result an engine result (`validateEngineResult` shape)
+ * @param {{ probabilityByMonth?: readonly { month: number, probability: number }[] | null }} [tables]
  */
-export function readAccrualForecast(result) {
+export function readAccrualForecast(result, { probabilityByMonth = null } = {}) {
   const measures = Array.isArray(result?.measures) ? result.measures : [];
   /** @type {string[]} */
   const dropped = [];
   const named = measures.filter((measure) => {
     const kind = measure?.interval?.kind;
-    if (kind === "prediction" || kind === "monte_carlo") return true;
+    if (kind === "prediction") return true;
     dropped.push(String(measure?.name ?? ""));
     return false;
   });
-  const by = (name) => named.find((measure) => String(measure?.name ?? "") === name) ?? null;
+  const by = (/** @type {string} */ name) => named.find((measure) => String(measure?.name ?? "") === name) ?? null;
   return {
     status: String(result?.status ?? ""),
-    lastPatientIn: by("last_patient_in_months"),
-    targetEventsReached: by("target_events_months"),
-    probabilityByDate: named.filter((measure) => String(measure?.name ?? "").startsWith("probability_by_")),
+    lastPatientIn: by(VCR_ACCRUAL_MEASURES.lastPatientIn),
+    targetEventsReached: by(VCR_ACCRUAL_MEASURES.targetEvents),
+    probabilityByMonth: probabilityByMonth ? [...probabilityByMonth] : null,
     quantiles: result?.diagnostics?.quantiles ?? null,
     droppedUnnamedIntervals: dropped,
     // The commitment is a choice of quantile, stated as such wherever it is shown.
@@ -455,6 +532,20 @@ export function readAccrualForecast(result) {
       appetite, { quantile, note: "承诺的是这一分位数，不是预测更准" },
     ])),
   };
+}
+
+/**
+ * The stored `probability_by_month` file (`month,probability,mcse`), as rows.
+ * @param {string} csv
+ */
+export function parseProbabilityByMonth(csv) {
+  const lines = String(csv ?? "").trim().split(/\r?\n/);
+  const header = (lines.shift() ?? "").split(",").map((cell) => cell.replaceAll('"', "").trim());
+  const month = header.indexOf("month");
+  const probability = header.indexOf("probability");
+  if (month < 0 || probability < 0) return [];
+  return lines.map((line) => line.split(",")).map((cells) => ({ month: Number(cells[month]), probability: Number(cells[probability]) }))
+    .filter((row) => Number.isFinite(row.month) && Number.isFinite(row.probability));
 }
 
 /**
@@ -475,11 +566,17 @@ export function wilsonInterval(successes, trials, z = 1.959963984540054) {
  * Backtest the forecast on time slices (AC-37).
  *
  * Each slice is a forecast made with only what was known at its `asOf`, and the
- * enrolment that actually happened afterwards. What is reported is the share of
- * 80% prediction intervals that contained the truth — which is a statement
- * about the forecast's calibration and is the only honest answer to 「准不准」.
- * There is no pass mark: a coverage of 0.62 on 13 slices is a fact about the
- * data, and the Wilson interval beside it says how little 13 slices settle.
+ * time the last patient actually came in, measured from that instant. What is
+ * reported is the share of 80% prediction intervals that contained the truth —
+ * a statement about the forecast's calibration and the only honest answer to
+ * 「准不准」. There is no pass mark: a coverage of 0.62 on 13 slices is a fact
+ * about the data, and the Wilson interval beside it says how little 13 slices
+ * settle.
+ *
+ * A slice whose target has not been reached yet is not thrown away when it can
+ * already be scored: a target still unmet after the interval's upper end is a
+ * miss (the truth is later than `high`). One that could still land inside is
+ * `censored` and counted apart, never scored as a hit.
  *
  * @param {{ slices: readonly any[], level?: number }} input
  */
@@ -489,15 +586,26 @@ export function backtestAccrualCoverage({ slices, level = 0.8 }) {
   let covered = 0;
   let usable = 0;
   let unusable = 0;
+  let censored = 0;
   for (const slice of slices ?? []) {
     const low = Number(slice?.interval?.low);
     const high = Number(slice?.interval?.high);
-    const actual = Number(slice?.actual);
     const kind = slice?.interval?.kind;
-    if (!Number.isFinite(low) || !Number.isFinite(high) || !Number.isFinite(actual)
-      || (kind && kind !== "prediction" && kind !== "monte_carlo")) {
+    if (!Number.isFinite(low) || !Number.isFinite(high) || (kind && kind !== "prediction")) {
       unusable += 1;
       rows.push({ asOf: slice?.asOf ?? null, usable: false, reason: kind && kind !== "prediction" ? "interval_not_prediction" : "incomplete" });
+      continue;
+    }
+    const actual = Number(slice?.actual);
+    if (slice?.actual == null || !Number.isFinite(actual)) {
+      const stillOpenAt = Number(slice?.elapsedMonths);
+      if (Number.isFinite(stillOpenAt) && stillOpenAt > high) {
+        usable += 1;
+        rows.push({ asOf: slice?.asOf ?? null, usable: true, low, high, actual: null, covered: false, censoredAt: stillOpenAt });
+      } else {
+        censored += 1;
+        rows.push({ asOf: slice?.asOf ?? null, usable: false, reason: "not_reached_yet" });
+      }
       continue;
     }
     usable += 1;
@@ -511,40 +619,57 @@ export function backtestAccrualCoverage({ slices, level = 0.8 }) {
     slices: (slices ?? []).length,
     usable,
     unusable,
+    censored,
     covered,
     coverage,
     coverageInterval: wilsonInterval(covered, usable),
     // Named so a reader knows which way it misses: below nominal means the
     // forecast is over-confident, above means it is wider than it needs to be.
     calibration: coverage === null ? null : coverage < level ? "over_confident" : coverage > level ? "conservative" : "nominal",
+    rows,
     note: "报告的是 80% 预测区间的实际覆盖率，不是「准确度」；没有通过门槛。",
   };
 }
 
 /**
- * Slice a study's own history into backtest inputs: for each cut-off, the
- * forecast that existed then and the enrolment that followed.
- * @param {{ forecasts: readonly any[], enrollments: readonly any[], horizonMonths?: number }} input
+ * Slice a study's own history into backtest inputs: for each registered
+ * forecast, the enrolment that followed. The forecast is `{ asOf, target,
+ * interval }` — `last_patient_in_months` with its prediction interval, the
+ * enrolment target it was made for and the instant it was registered — and the
+ * enrolments are the ledger's dated ones. The truth of a slice is the number of
+ * months from the forecast's instant until enrolment reached the target; a
+ * target the ledger has not reached is `actual: null`, with how long it has been
+ * open (`elapsedMonths`), which is what `backtestAccrualCoverage` needs to call a
+ * miss or a censoring.
+ *
+ * @param {{ forecasts: readonly any[], enrollments: readonly any[], now?: string | number | Date }} input
  */
-export function accrualBacktestSlices({ forecasts, enrollments, horizonMonths = 6 }) {
-  const events = (enrollments ?? [])
-    .map((event) => ({ ...event, at: new Date(event?.enrolledOn ?? event?.at ?? 0).getTime() }))
-    .filter((event) => Number.isFinite(event.at))
-    .sort((a, b) => a.at - b.at);
+export function accrualBacktestSlices({ forecasts, enrollments, now = Date.now() }) {
+  const nowMs = new Date(now).getTime();
+  const dates = (enrollments ?? [])
+    .map((event) => new Date(event?.enrolledOn ?? event?.at ?? 0).getTime())
+    .filter((at) => Number.isFinite(at) && at > 0)
+    .sort((a, b) => a - b);
   return (forecasts ?? []).map((forecast) => {
     const madeAt = new Date(forecast?.asOf ?? forecast?.createdAt ?? 0).getTime();
-    const until = madeAt + horizonMonths * 30.4375 * 86_400_000;
-    const actual = events.filter((event) => event.at > madeAt && event.at <= until).length;
+    const target = Number(forecast?.target);
+    const registered = Number.isFinite(madeAt) && madeAt > 0;
+    // The target is a total: what had already enrolled by then counts towards it.
+    const reachedAt = registered && Number.isFinite(target) && target >= 1 && dates.length >= target ? dates[target - 1] : null;
+    const reachedAfter = reachedAt !== null && reachedAt > madeAt;
     return {
       asOf: forecast?.asOf ?? forecast?.createdAt ?? null,
-      horizonMonths,
       interval: forecast?.interval ?? null,
-      actual,
+      target: Number.isFinite(target) ? target : null,
+      actual: reachedAfter ? monthsBetweenInstants(madeAt, /** @type {number} */ (reachedAt)) : null,
+      elapsedMonths: registered ? monthsBetweenInstants(madeAt, nowMs) : null,
       // The prediction was registered before the enrolments it is scored on;
       // a slice whose forecast has no timestamp is dropped, not assumed.
-      registeredBeforeOutcome: Number.isFinite(madeAt) && madeAt > 0,
+      registeredBeforeOutcome: registered,
     };
-  }).filter((slice) => slice.registeredBeforeOutcome);
+  }).filter((slice) => slice.registeredBeforeOutcome && slice.target !== null
+    // A target reached before the forecast was made is not a forecast about anything.
+    && !(slice.actual === null && slice.interval == null));
 }
 
 // ---------------------------------------------------------------------------

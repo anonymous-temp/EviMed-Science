@@ -16,7 +16,7 @@ import {
   SATISFIED, NOT_SATISFIED, UNKNOWN, PENDING_RECHECK, VCR_MATCHING_STATES,
   admissibleFacts, applicabilityConfusion, assessSubject, blockingExclusionUnknowns,
   criterionConfusion, criterionFunnel, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
-  evaluateRequirement, evidenceGaps, factsVisibleAt, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
+  evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation, separateLedgers,
   summarizeEligibility, verifyFactEvidence, windowStart, withinWindow,
@@ -310,17 +310,130 @@ test("AC-14 a washout that ends on a known date is deferred, not satisfied early
 });
 
 test("a unit nobody can convert is unknown, never a comparison on the raw number", () => {
+  // Albumin has no built-in conversion: 42 g/L against a g/dL ceiling is not 42.
+  const source = chart("白蛋白 42 g/L。");
+  const fact = source.fact("白蛋白 42 g/L", { variable: "albumin", value: 42, unit: "g/L", surface: "白蛋白" });
+  const node = { op: "compare", variable: "albumin", comparator: "gte", value: 3.5, unit: "g/dL" };
+  const refused = evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) });
+  assert.equal(refused.state, UNKNOWN);
+  assert.deepEqual(refused.missing, [{ variable: "albumin", reason: "unit_mismatch" }]);
+  const converter = (value, from, to) => (from === "g/L" && to === "g/dL" ? value / 10 : null);
+  assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF), unitConverter: converter }).state, SATISFIED);
+});
+
+test("creatinine in µmol/L is read as mg/dL by the built-in conversion, and never as the raw 106", () => {
   const source = chart("血肌酐 106 umol/L。");
   const fact = source.fact("血肌酐 106 umol/L", { variable: "creatinine", value: 106, unit: "umol/L", surface: "血肌酐" });
   const node = { op: "compare", variable: "creatinine", comparator: "lte", value: 1.5, unit: "mg/dL" };
-  assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) }).state, UNKNOWN);
-  const converter = (value, from, to) => (from === "umol/L" && to === "mg/dL" ? value / 88.4 : null);
-  assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF), unitConverter: converter }).state, SATISFIED);
+  assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  const high = source.fact("血肌酐 106 umol/L", { variable: "creatinine", value: 190, unit: "µmol/L", surface: "血肌酐" });
+  assert.equal(evaluateRequirement(node, { facts: [{ ...high, source: fact.source, value: 190 }], asOf: Date.parse(AS_OF) }).state, NOT_SATISFIED);
+});
+
+test("CS-33 a fact with no unit against a criterion that names one is unknown (unit_missing)", () => {
+  const fact = { id: "f", variable: "creatinine", value: 1.2, extractedBy: "snapshot" };
+  const node = { op: "compare", variable: "creatinine", comparator: "lte", value: 1.5, unit: "mg/dL" };
+  const judged = evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) });
+  assert.equal(judged.state, UNKNOWN);
+  assert.deepEqual(judged.missing, [{ variable: "creatinine", reason: "unit_missing" }]);
+  // A criterion that names none compares the number as it stands.
+  assert.equal(evaluateRequirement({ ...node, unit: undefined }, { facts: [fact], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+});
+
+test("CS-33 a requirement outside the grammar is unknown (criterion_malformed), never a guess", () => {
+  const facts = [{ id: "f", variable: "ecog", value: 1, extractedBy: "snapshot" }];
+  for (const node of [
+    { field: "ecog", op: "<=", value: 1 },
+    { op: "compare", variable: "ecog", comparator: "lte", value: "1天" },
+    { op: "compare", variable: "ECOG", comparator: "lte", value: 1 },
+    { op: "elapsed_since", variable: "docetaxel", days: "28天" },
+    { op: "language", key: "crt-x" },
+    null, "ecog <= 1", { free_text: "ECOG 0–1" },
+  ]) {
+    const judged = evaluateRequirement(node, { facts, asOf: Date.parse(AS_OF) });
+    assert.equal(judged.state, UNKNOWN, JSON.stringify(node));
+    assert.equal(judged.missing[0].reason, "criterion_malformed", JSON.stringify(node));
+  }
+  // One malformed criterion does not stop the others.
+  const assessment = assessSubject({
+    subjectKey: "S", asOf: AS_OF, facts,
+    criteria: [
+      { id: "c1", kind: "inclusion", criterionType: "performance_status", requirement: { op: "elapsed_since", variable: "x", days: "28天" } },
+      { id: "c2", kind: "inclusion", criterionType: "performance_status", requirement: { op: "compare", variable: "ecog", comparator: "lte", value: 1 } },
+    ],
+  });
+  assert.deepEqual(assessment.judgments.map((judgment) => judgment.state), [UNKNOWN, SATISFIED]);
+  assert.equal(assessment.summary, "insufficient_evidence");
+});
+
+test("CS-33 coded values go through a small vocabulary or are unknown (coding_unmapped)", () => {
+  const node = { op: "compare", variable: "sex", comparator: "in", value: ["female"] };
+  for (const code of ["female", "女", "F", "女性", "2"]) {
+    const fact = { id: "s", variable: "sex", value: code, extractedBy: "snapshot" };
+    assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) }).state, SATISFIED, code);
+  }
+  for (const code of ["男", "M", "male"]) {
+    const fact = { id: "s", variable: "sex", value: code, extractedBy: "snapshot" };
+    assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) }).state, NOT_SATISFIED, code);
+  }
+  const unread = evaluateRequirement(node, { facts: [{ id: "s", variable: "sex", value: "X", extractedBy: "snapshot" }], asOf: Date.parse(AS_OF) });
+  assert.equal(unread.state, UNKNOWN);
+  assert.equal(unread.missing[0].reason, "coding_unmapped");
+  // A woman coded 「女」 gets the pregnancy criterion applied — the failure this pins.
+  const pregnancy = { id: "p", kind: "exclusion", criterionType: "pregnancy", requirement: { op: "absent", variable: "pregnancy" }, applicability: node };
+  const woman = assessSubject({ subjectKey: "W", asOf: AS_OF, criteria: [pregnancy], facts: [{ id: "s", variable: "sex", value: "女", extractedBy: "snapshot" }] });
+  assert.equal(woman.judgments[0].applicable, true);
+  assert.equal(woman.summary, "insufficient_evidence");
+  const man = assessSubject({ subjectKey: "M", asOf: AS_OF, criteria: [pregnancy], facts: [{ id: "s", variable: "sex", value: "男", extractedBy: "snapshot" }] });
+  assert.equal(man.judgments[0].applicable, false);
+  // A non-vocabulary code is compared as its token, numbers as numbers.
+  const stage = { op: "compare", variable: "stage", comparator: "in", value: ["IIIB", "IV"] };
+  assert.equal(evaluateRequirement(stage, { facts: [{ id: "g", variable: "stage", value: "iiib", extractedBy: "snapshot" }], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  assert.equal(evaluateRequirement({ op: "compare", variable: "ecog", comparator: "in", value: [0, 1] }, { facts: [{ id: "e", variable: "ecog", value: "1", extractedBy: "snapshot" }], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  assert.equal(evaluateRequirement({ op: "compare", variable: "ecog", comparator: "in", value: [0, 1] }, { facts: [{ id: "e", variable: "ecog", value: 2, extractedBy: "snapshot" }], asOf: Date.parse(AS_OF) }).state, NOT_SATISFIED);
+});
+
+test("CS-33 an undated fact never decides a windowed comparison (undated)", () => {
+  const undated = { id: "f", variable: "creatinine", value: 1.2, unit: "mg/dL", extractedBy: "snapshot" };
+  const windowed = { op: "compare", variable: "creatinine", comparator: "lte", value: 1.5, unit: "mg/dL", window: { months: 3 } };
+  const judged = evaluateRequirement(windowed, { facts: [undated], asOf: Date.parse(AS_OF) });
+  assert.equal(judged.state, UNKNOWN);
+  assert.equal(judged.missing[0].reason, "undated");
+  // Without a window the same fact decides.
+  assert.equal(evaluateRequirement({ ...windowed, window: undefined }, { facts: [undated], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  // A dated fact inside the window decides even beside an undated one.
+  const dated = { ...undated, id: "g", occurredAt: "2026-09-20T00:00:00Z" };
+  assert.equal(evaluateRequirement(windowed, { facts: [undated, dated], asOf: Date.parse(AS_OF) }).state, SATISFIED);
+  // A treatment recorded with no date is undated, not silence.
+  const treated = evaluateRequirement({ op: "elapsed_since", variable: "docetaxel", days: 28 }, { facts: [{ id: "d", variable: "docetaxel", extractedBy: "snapshot" }], asOf: Date.parse(AS_OF) });
+  assert.equal(treated.missing[0].reason, "undated");
+});
+
+test("M-9 an unknown next to a deferral keeps the gap: the AND is unknown, not pending", () => {
+  assert.equal(kleeneAnd(UNKNOWN, PENDING_RECHECK), UNKNOWN);
+  assert.equal(kleeneAnd(PENDING_RECHECK, UNKNOWN), UNKNOWN);
+  assert.equal(kleeneOr(UNKNOWN, PENDING_RECHECK), UNKNOWN);
+  assert.equal(kleeneAnd(PENDING_RECHECK, PENDING_RECHECK), PENDING_RECHECK);
+  const compound = { id: "crt-x", kind: "exclusion", criterionType: "prior_treatment", requirement: { op: "all", operands: [
+    { op: "elapsed_since", variable: "docetaxel", days: 28 }, { op: "absent", variable: "pregnancy" }] } };
+  const facts = [{ id: "d", variable: "docetaxel", occurredAt: "2026-09-20T00:00:00Z", extractedBy: "snapshot" }];
+  const judged = assessSubject({ subjectKey: "S", asOf: "2026-09-28T00:00:00Z", criteria: [compound], facts });
+  assert.equal(judged.judgments[0].state, UNKNOWN);
+  assert.deepEqual(judged.blockingExclusionUnknowns, ["crt-x"], "the pregnancy test is still owed");
+  assert.equal(judged.summary, "insufficient_evidence");
+});
+
+test("CS-34 asOf is a valid ISO date or instant, refused by code otherwise", () => {
+  assert.equal(frozenAsOf("2026-09-28"), "2026-09-28T00:00:00.000Z");
+  assert.equal(frozenAsOf("2026-09-28T08:00:00+08:00"), "2026-09-28T00:00:00.000Z");
+  for (const bad of ["28/09/2026", "", null, undefined, 20260928, "2026-13-45", "yesterday"]) {
+    assert.throws(() => frozenAsOf(bad), (error) => /** @type {any} */ (error).code === "vcr_asof_invalid", String(bad));
+  }
 });
 
 test("a criterion only language can decide is answered by the model, and only with an anchored quote", () => {
   const source = chart("患者本人可理解研究内容并签署知情同意。");
-  const node = { op: "language", key: "crt-consent" };
+  const node = { op: "language", key: "crt-consent", text: "受试者能够理解研究内容并签署知情同意书" };
   assert.equal(requiresLanguageJudgment(node), true);
   assert.equal(requiresLanguageJudgment({ op: "all", operands: [node] }), true);
   assert.equal(requiresLanguageJudgment({ op: "present", variable: "x" }), false);
@@ -625,8 +738,8 @@ test("the skill says the two things a run must not get wrong, and names its requ
   assert.match(authored, /你只抽证据，判定由代码做/);
   assert.match(authored, /联系患者之前必须有人确认/);
   assert.match(authored, /逐人确认，不是批量确认/);
-  assert.match(authored, /「未知」 is never 「不满足」/u);
-  assert.match(authored, /任何一条|If any exclusion criterion is 未知/u);
+  assert.match(authored, /「未知」永远不是「不满足」/u);
+  assert.match(authored, /只要有一条适用的排除标准是「未知」，这个人就不能是「符合」/u);
   for (const name of ["matching-assessment.md", "matching.json"]) assert.ok(authored.includes(name), name);
 });
 

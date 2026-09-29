@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:86a5af63091aaa49891c0f924c68e6ee1831e9b41cde208da1d039a968be510f",
+  "version": "sha256:ab3832b2236df73dafa00dec791fdf0021fd33fd875dff7988eb6abe1780fb6e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 23,
+    "nodes": 24,
     "edges": 0,
     "byVia": {
       "schema": 0,
@@ -856,7 +856,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, population and patient sets, comparator designs, trial scenarios, saved results, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people.",
+      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -867,13 +867,16 @@
               "definition",
               "criteria",
               "assumptions",
+              "evidence",
               "population",
               "patients",
               "comparator",
               "trial",
               "precedents",
               "matching",
+              "subject_document",
               "results",
+              "report_model",
               "snapshot_profile",
               "models",
               "jobs",
@@ -907,7 +910,19 @@
                 "maxLength": 160,
                 "pattern": "^[A-Za-z0-9_.:@-]+$"
               },
+              "sourceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
               "subjectKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "documentId": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 160,
@@ -952,9 +967,107 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__vcr_simulate",
+      "source": "mcp",
+      "description": "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method and is refused by name (the field's path) when it carries a key the engine does not read, lacks a required one, or asks for a design or endpoint the method does not implement. Shapes: design_analytic {design{kind,informationRates?,spending?,allocation?}, endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?}; design_simulation {design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, analysis{method,alpha,sided,tau?}, accrual?, performance?, targetMcse?}; design_grid the same plus designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, truth?, analysis}; generate_population {n, population{variables[{name,family,...}],correlation?,constraints?,missing?}}; literature_population {n, baselineTable[{variable,mean,sd|proportion|proportions}]}; generate_patients{,_binary,_continuous} {design{nTreat,nControl?}, endpoint, truth, accrual?}; reconstruct_km {curve[{time,surv}], riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, treatmentArm?}; rmst {tau, ...}; weight_comparator {covariates[], estimand, endpoint, tau?, ...}; map_prior {historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells the null case truth.null (boolean); dropout is accrual.dropoutAnnual; alpha is the total, sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, synthesize_population, weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are built by the platform (evidence_pool; the protocol's criteria). The vcr-analysis skill has the full shapes with examples.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "status",
+              "cancel"
+            ],
+            "default": "start"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "profile_snapshot",
+              "build_cohort",
+              "generate_population",
+              "literature_population",
+              "synthesize_population",
+              "population_quality",
+              "generate_patients",
+              "generate_patients_continuous",
+              "generate_patients_binary",
+              "reconstruct_km",
+              "pool_evidence",
+              "weight_comparator",
+              "propensity_weight_comparator",
+              "maic_comparator",
+              "evalue",
+              "rmst",
+              "design_analytic",
+              "design_simulation",
+              "design_grid",
+              "assurance",
+              "procova",
+              "accrual_forecast",
+              "map_prior",
+              "match_criteria"
+            ]
+          },
+          "scenario": {
+            "type": "object"
+          },
+          "inputs": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object"
+            }
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "replicates": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000
+          },
+          "cpuSecondsLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "subjectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards, population, patient-set, comparator and trial designs, a design grid, a decision record, a registered forecast, a fitted literature model, or the report text. Numbers are not writable: results, counts, measures and execution records come from the engine. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -965,6 +1078,8 @@
               "protocol",
               "criteria",
               "assumption",
+              "evidence_item",
+              "precedent",
               "population",
               "patient_set",
               "comparator",
@@ -974,7 +1089,13 @@
               "report",
               "model",
               "forecast",
-              "step"
+              "step",
+              "plan",
+              "fact",
+              "language_judgment",
+              "site",
+              "followup",
+              "field_map"
             ]
           },
           "items": {

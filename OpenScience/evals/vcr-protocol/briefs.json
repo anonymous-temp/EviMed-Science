@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "note": "Real briefs, not smoke tests: each is a request somebody would actually bring to 「虚拟临研」's first step, chosen for the specific way a research definition goes wrong while looking finished — an estimand with no intercurrent-event strategy, an eligibility criterion rewritten wider than the protocol says, an 'unknown' folded into 'does not qualify'. mustDo / mustNotDo are the rubric; the deterministic half (three files at their names, every criterion with its source sentence and locator, the four counts stated apart) is the vcr-study-package contract in @evimed/domain plus this capability's preflight.",
+  "note": "Real briefs, not smoke tests: each is a request somebody would actually bring to 「虚拟临研」's first step, chosen for the specific way a research definition goes wrong while looking finished — an estimand with no intercurrent-event strategy, an eligibility criterion rewritten wider than the protocol says, an 'unknown' folded into 'does not qualify'. mustDo / mustNotDo are the rubric; the deterministic half (three files at their names, every criterion with its source sentence and locator, the four counts stated apart) is the vcr-study-package contract in @evimed/domain, whose findings are notices and never a gate (the capability ships no preflight script of its own).",
   "briefs": [
     {
       "id": "vcr-protocol-001-nsclc-single-arm",

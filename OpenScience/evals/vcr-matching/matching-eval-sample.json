@@ -88,6 +88,7 @@
       "sourceText": "能够理解研究内容并签署知情同意书",
       "requirement": {
         "op": "language",
+        "text": "受试者能够理解研究内容并签署知情同意书",
         "key": "crt-consent"
       }
     }

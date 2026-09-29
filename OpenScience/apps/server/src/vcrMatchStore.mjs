@@ -31,9 +31,16 @@
  * @module vcrMatchStore
  */
 
+import { createHash, randomUUID } from "node:crypto";
+
+import { VCR_CRITERION_STATES, VCR_REFERRAL_STATES } from "@evimed/domain";
+
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+
+/** A fact's id: `fac_` and the tail of a uuid, like every id of the module (the base's table has no row for it). */
+const factId = () => `fac_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
 
 /** The states a referral is created in. Anything else has to be reached by a transition a person made. */
 const VCR_REFERRAL_ENTRY_STATES = Object.freeze(["candidate", "needs_evidence"]);
@@ -41,7 +48,13 @@ const VCR_REFERRAL_ENTRY_STATES = Object.freeze(["candidate", "needs_evidence"])
 /** The states before contact, the only ones a per-person confirmation may be recorded in. */
 const VCR_REFERRAL_APPROVABLE_STATES = Object.freeze(["candidate", "needs_evidence", "contactable"]);
 
-/** @param {any} row */
+/**
+ * A criterion as the evaluator reads it: the requirement and, beside it, the
+ * applicability — a criterion that does not apply is not an unknown (plan §7.1),
+ * so it is a field of its own, in its own column, and never a key inside the
+ * requirement (which the domain's grammar would refuse on the way back in).
+ * @param {any} row
+ */
 const criterionOf = (row) => (row ? {
   id: row.id,
   studyId: row.study_id,
@@ -50,7 +63,7 @@ const criterionOf = (row) => (row ? {
   kind: row.kind,
   criterionType: row.criterion_type,
   requirement: row.requirement ?? {},
-  applicability: row.requirement?.applicability ?? null,
+  applicability: row.applicability ?? null,
   sourceText: row.source_text ?? "",
   sourceLocator: row.source_locator ?? {},
   evidenceNeeded: row.evidence_needed ?? [],
@@ -88,6 +101,24 @@ const judgmentOf = (row) => (row ? {
   overriddenBy: row.overridden_by ?? null,
   overrideState: row.override_state ?? null,
   overrideNote: row.override_note ?? null,
+} : null);
+
+/** @param {any} row */
+const factOf = (row) => (row ? {
+  id: row.id,
+  studyId: row.study_id,
+  subjectKey: row.subject_key,
+  variable: row.variable,
+  value: row.value ?? null,
+  unit: row.unit ?? null,
+  polarity: row.polarity,
+  occurredAt: row.occurred_at ? new Date(row.occurred_at).toISOString() : null,
+  recordedAt: row.recorded_at ? new Date(row.recorded_at).toISOString() : null,
+  visibleAt: row.visible_at ? new Date(row.visible_at).toISOString() : null,
+  surface: row.surface ?? "",
+  dateSurface: row.date_surface ?? null,
+  source: row.source ?? null,
+  extractedBy: row.extracted_by,
 } : null);
 
 /** @param {any} row */
@@ -142,6 +173,44 @@ export class VcrMatchStore extends VcrStoreBase {
   // ------------------------------------------------------------- criteria
 
   /**
+   * A protocol version and its criteria in one transaction: a version whose
+   * criteria half-landed would make an assessment name a protocol that never
+   * fully existed. The version number is allocated under a lock on the study, so
+   * two writers never collide on it.
+   * @param {{ studyId: string, userId: string, title?: string, sourceRef?: string | null, usdm?: Record<string, any>, criteria: readonly any[] }} input
+   */
+  async saveProtocolVersion({ studyId, userId, title = "", sourceRef = null, usdm = {}, criteria }) {
+    return this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`vcr-protocol:${studyId}`]);
+      const version = await this.nextVersion(client, "protocol_versions", "study_id = $1", [studyId]);
+      const id = vcrId("protocol");
+      const row = (await client.query(
+        `INSERT INTO ${VCR_SCHEMA}.protocol_versions (id, study_id, user_id, version, title, source_ref, usdm)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) RETURNING *`,
+        [id, studyId, userId, version, String(title ?? ""), sourceRef, JSON.stringify(usdm ?? {})])).rows[0];
+      const saved = [];
+      for (const [index, criterion] of (criteria ?? []).entries()) {
+        saved.push(criterionOf((await client.query(
+          `INSERT INTO ${VCR_SCHEMA}.criteria
+             (id, study_id, protocol_version_id, user_id, ordinal, kind, criterion_type,
+              requirement, applicability, source_text, source_locator, evidence_needed, review_state)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb, $12::jsonb, $13) RETURNING *`,
+          [vcrId("criterion"), studyId, id, userId, index + 1, criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
+            criterion?.criterionType ?? "other", JSON.stringify(criterion?.requirement ?? {}),
+            criterion?.applicability ? JSON.stringify(criterion.applicability) : null, String(criterion?.sourceText ?? ""),
+            JSON.stringify(criterion?.sourceLocator ?? {}), JSON.stringify(criterion?.evidenceNeeded ?? []),
+            criterion?.reviewState ?? "ai_set"])).rows[0]));
+      }
+      await this.audit({
+        client, studyId, userId, actor: "control-plane", action: "vcr.protocol.save", object: id,
+        detail: { version, criteria: saved.length },
+      });
+      return { id, studyId, version, title: String(row.title ?? ""), sourceRef: row.source_ref ?? null, usdm: row.usdm ?? {},
+        frozenAt: row.frozen_at ?? null, createdAt: row.created_at, criteria: saved };
+    });
+  }
+
+  /**
    * Write the structured criteria of one protocol version. Idempotent on
    * `(protocol_version_id, ordinal)`: re-running the structuring step on the
    * same version replaces line 7 rather than adding a second one.
@@ -149,6 +218,9 @@ export class VcrMatchStore extends VcrStoreBase {
    */
   async saveCriteria({ studyId, protocolVersionId, userId, criteria }) {
     return this.transaction(async (client) => {
+      const owned = await client.query(
+        `SELECT 1 FROM ${VCR_SCHEMA}.protocol_versions WHERE id = $1 AND study_id = $2`, [protocolVersionId, studyId]);
+      if (!owned.rowCount) throw new HttpError(404, "vcr_protocol_version_not_found", "This protocol version is not this study's.");
       /** @type {any[]} */
       const saved = [];
       for (const [index, criterion] of (criteria ?? []).entries()) {
@@ -156,19 +228,19 @@ export class VcrMatchStore extends VcrStoreBase {
         const result = await client.query(
           `INSERT INTO ${VCR_SCHEMA}.criteria
              (id, study_id, protocol_version_id, user_id, ordinal, kind, criterion_type,
-              requirement, source_text, source_locator, evidence_needed, review_state)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, $12)
+              requirement, applicability, source_text, source_locator, evidence_needed, review_state)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb, $12::jsonb, $13)
            ON CONFLICT (protocol_version_id, ordinal) DO UPDATE SET
              kind = EXCLUDED.kind, criterion_type = EXCLUDED.criterion_type,
-             requirement = EXCLUDED.requirement, source_text = EXCLUDED.source_text,
+             requirement = EXCLUDED.requirement, applicability = EXCLUDED.applicability, source_text = EXCLUDED.source_text,
              source_locator = EXCLUDED.source_locator, evidence_needed = EXCLUDED.evidence_needed,
              review_state = EXCLUDED.review_state
            RETURNING *`,
           [criterion?.id ?? vcrId("criterion"), studyId, protocolVersionId, userId, ordinal,
             criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterion?.criterionType ?? "other",
-            JSON.stringify(criterion?.requirement ?? {}), String(criterion?.sourceText ?? ""),
-            JSON.stringify(criterion?.sourceLocator ?? {}), JSON.stringify(criterion?.evidenceNeeded ?? []),
-            criterion?.reviewState ?? "ai_set"],
+            JSON.stringify(criterion?.requirement ?? {}), criterion?.applicability ? JSON.stringify(criterion.applicability) : null,
+            String(criterion?.sourceText ?? ""), JSON.stringify(criterion?.sourceLocator ?? {}),
+            JSON.stringify(criterion?.evidenceNeeded ?? []), criterion?.reviewState ?? "ai_set"],
         );
         saved.push(criterionOf(result.rows[0]));
       }
@@ -180,19 +252,43 @@ export class VcrMatchStore extends VcrStoreBase {
     });
   }
 
-  /** @param {{ studyId: string, protocolVersionId?: string|null }} input */
-  async listCriteria({ studyId, protocolVersionId = null }) {
+  /**
+   * The criteria of one protocol version — the **latest** when none is named. A
+   * study has many versions and a criterion list that mixed them would evaluate
+   * a patient against the old line 3 and the new one at once; `allVersions`
+   * says the mixture is what is wanted.
+   * @param {{ studyId: string, protocolVersionId?: string|null, allVersions?: boolean }} input
+   */
+  async listCriteria({ studyId, protocolVersionId = null, allVersions = false }) {
+    if (allVersions) {
+      return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id = $1 ORDER BY protocol_version_id, ordinal`, [studyId])).map(criterionOf);
+    }
     const rows = protocolVersionId
       ? await this.rows(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id = $1 AND protocol_version_id = $2 ORDER BY ordinal`,
         [studyId, protocolVersionId])
-      : await this.rows(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id = $1 ORDER BY protocol_version_id, ordinal`, [studyId]);
+      : await this.rows(`SELECT c.* FROM ${VCR_SCHEMA}.criteria c
+          WHERE c.study_id = $1 AND c.protocol_version_id = (SELECT id FROM ${VCR_SCHEMA}.protocol_versions
+            WHERE study_id = $1 ORDER BY version DESC LIMIT 1) ORDER BY c.ordinal`, [studyId]);
     return rows.map(criterionOf);
+  }
+
+  /** The newest protocol version of a study. @param {string} studyId */
+  async latestProtocol(studyId) {
+    const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.protocol_versions WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]);
+    return row ? { id: row.id, studyId: row.study_id, version: Number(row.version), title: row.title ?? "", sourceRef: row.source_ref ?? null } : null;
   }
 
   // ---------------------------------------------------------- assessments
 
   /**
    * Persist one assessment and all of its judgments in one transaction.
+   *
+   * Re-saving the assessment of the same subject at the same instant replaces
+   * what the platform computed and **keeps what a person did**: a coordinator's
+   * override of a criterion survives (the pair — the platform's answer and the
+   * human's — is the evaluation case, plan §7.5), a criterion dropped from the
+   * protocol takes its judgment with it, and the countersignature stays only if
+   * the summary it signed is still the summary.
    * @param {{ assessment: any, userId: string }} input
    */
   async saveAssessment({ assessment, userId }) {
@@ -203,6 +299,10 @@ export class VcrMatchStore extends VcrStoreBase {
            (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb)
          ON CONFLICT (study_id, protocol_version_id, subject_key, as_of) DO UPDATE SET
+           reviewed_by = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
+             THEN ${VCR_SCHEMA}.matching_assessments.reviewed_by END,
+           reviewed_at = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
+             THEN ${VCR_SCHEMA}.matching_assessments.reviewed_at END,
            summary = EXCLUDED.summary, counts = EXCLUDED.counts,
            priority = EXCLUDED.priority, evidence_gaps = EXCLUDED.evidence_gaps
          RETURNING *`,
@@ -213,14 +313,18 @@ export class VcrMatchStore extends VcrStoreBase {
           JSON.stringify(assessment.evidenceGaps ?? [])],
       );
       const row = saved.rows[0];
-      // Replace, never merge: a criterion dropped from the protocol must not
-      // survive as a judgment nobody can trace to a line of the protocol.
-      await client.query(`DELETE FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1`, [row.id]);
+      const kept = (assessment.judgments ?? []).map((/** @type {any} */ judgment) => String(judgment.criterionId));
+      await client.query(
+        `DELETE FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1 AND NOT (criterion_id = ANY($2::text[]))`,
+        [row.id, kept]);
       for (const judgment of assessment.judgments ?? []) {
         await client.query(
           `INSERT INTO ${VCR_SCHEMA}.criterion_judgments
              (id, assessment_id, criterion_id, user_id, state, applicable, decided_by, evidence, recheck_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+           ON CONFLICT (assessment_id, criterion_id) DO UPDATE SET
+             state = EXCLUDED.state, applicable = EXCLUDED.applicable, decided_by = EXCLUDED.decided_by,
+             evidence = EXCLUDED.evidence, recheck_at = EXCLUDED.recheck_at`,
           [vcrId("judgment"), row.id, judgment.criterionId, userId, judgment.state,
             judgment.applicable !== false, judgment.decidedBy ?? "code",
             JSON.stringify(judgment.evidence ?? []), judgment.recheckAt ?? null],
@@ -234,22 +338,38 @@ export class VcrMatchStore extends VcrStoreBase {
     });
   }
 
-  /** @param {string} id */
-  async getAssessment(id) {
-    const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.matching_assessments WHERE id = $1`, [id]);
+  /**
+   * One assessment with its judgments. With a `studyId` an assessment of another
+   * study is not found, whoever asks.
+   * @param {string} id @param {string | null} [studyId]
+   */
+  async getAssessment(id, studyId = null) {
+    const row = await this.one(
+      `SELECT * FROM ${VCR_SCHEMA}.matching_assessments WHERE id = $1 AND ($2::text IS NULL OR study_id = $2)`, [id, studyId]);
     if (!row) return null;
     const judgments = await this.rows(
       `SELECT * FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1 ORDER BY created_at, id`, [id]);
     return { ...assessmentOf(row), judgments: judgments.map(judgmentOf) };
   }
 
-  /** @param {{ studyId: string, summary?: string|null, subjectKey?: string|null, limit?: number }} input */
-  async listAssessments({ studyId, summary = null, subjectKey = null, limit = 200 }) {
-    const rows = await this.rows(
-      `SELECT * FROM ${VCR_SCHEMA}.matching_assessments
-        WHERE study_id = $1 AND ($2::text IS NULL OR summary = $2) AND ($3::text IS NULL OR subject_key = $3)
-        ORDER BY created_at DESC LIMIT $4`,
-      [studyId, summary, subjectKey, Math.max(1, Math.min(1000, Number(limit) || 200))]);
+  /**
+   * Assessments, newest first. `latestOnly` keeps one per subject — the newest
+   * by the instant it was made as of — which is what a page, a referral and a
+   * funnel are about; without it every assessment ever made is listed.
+   * @param {{ studyId: string, summary?: string|null, subjectKey?: string|null, limit?: number, offset?: number, latestOnly?: boolean }} input
+   */
+  async listAssessments({ studyId, summary = null, subjectKey = null, limit = 200, offset = 0, latestOnly = false }) {
+    const values = [studyId, summary, subjectKey, Math.max(1, Math.min(1000, Number(limit) || 200)), Math.max(0, Number(offset) || 0)];
+    const rows = latestOnly
+      ? await this.rows(
+        `SELECT * FROM (SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
+            WHERE study_id = $1 AND ($3::text IS NULL OR subject_key = $3)
+            ORDER BY subject_key, as_of DESC, created_at DESC) latest
+          WHERE ($2::text IS NULL OR summary = $2) ORDER BY as_of DESC, subject_key LIMIT $4 OFFSET $5`, values)
+      : await this.rows(
+        `SELECT * FROM ${VCR_SCHEMA}.matching_assessments
+          WHERE study_id = $1 AND ($2::text IS NULL OR summary = $2) AND ($3::text IS NULL OR subject_key = $3)
+          ORDER BY created_at DESC LIMIT $4 OFFSET $5`, values);
     return rows.map(assessmentOf);
   }
 
@@ -262,19 +382,104 @@ export class VcrMatchStore extends VcrStoreBase {
   }
 
   /**
-   * A coordinator's re-judgment of one criterion.
+   * How many subjects each summary holds, over **every** subject of the study
+   * (the newest assessment of each), never over a page of them: a tally of the
+   * first hundred reports a smaller cohort than there is.
+   * @param {string} studyId
+   */
+  async assessmentTallies(studyId) {
+    const rows = await this.rows(
+      `SELECT summary, count(*)::int AS total FROM (SELECT DISTINCT ON (subject_key) summary FROM ${VCR_SCHEMA}.matching_assessments
+         WHERE study_id = $1 ORDER BY subject_key, as_of DESC, created_at DESC) latest GROUP BY summary`, [studyId]);
+    /** @type {Record<string, number>} */
+    const tallies = {};
+    for (const row of rows) tallies[String(row.summary)] = Number(row.total);
+    return tallies;
+  }
+
+  /**
+   * Every subject's pseudonymous key with its newest summary — a page's worth,
+   * ordered by key. @param {string} studyId
+   */
+  async subjectSummaries(studyId) {
+    const rows = await this.rows(
+      `SELECT DISTINCT ON (subject_key) subject_key, summary FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1
+        ORDER BY subject_key, as_of DESC, created_at DESC LIMIT 5000`, [studyId]);
+    return rows.map((row) => ({ subjectKey: String(row.subject_key), summary: String(row.summary) }));
+  }
+
+  /**
+   * What the study's subjects are missing, counted: for each (variable, reason)
+   * how many subjects' newest assessment lists it — the aggregate of the gaps, not
+   * the gaps of any one person. @param {string} studyId
+   */
+  async evidenceGapCounts(studyId) {
+    const rows = await this.rows(
+      `WITH latest AS (SELECT DISTINCT ON (subject_key) id, evidence_gaps FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1
+          ORDER BY subject_key, as_of DESC, created_at DESC)
+       SELECT g->>'variable' AS variable, g->>'reason' AS reason, count(*)::int AS n
+         FROM latest, jsonb_array_elements(latest.evidence_gaps) g GROUP BY 1, 2 ORDER BY n DESC, 1 LIMIT 100`, [studyId]);
+    return rows.map((row) => ({ variable: String(row.variable ?? ""), reason: String(row.reason ?? ""), n: Number(row.n) }));
+  }
+
+  /**
+   * The criterion funnel over every subject's newest assessment: for each
+   * criterion, how many subjects it left satisfied, ruled out, unknown or
+   * deferred, and for how many it was the **only** line ruling them out — the
+   * single figure that says which line costs the trial its patients (plan §7.4).
+   * Computed in the database over the complete data, so a limit is never what the
+   * answer depends on.
+   * @param {string} studyId @param {string | null} [protocolVersionId]
+   */
+  async criterionFunnelRows(studyId, protocolVersionId = null) {
+    const rows = await this.rows(
+      `WITH latest AS (
+         SELECT DISTINCT ON (subject_key) id FROM ${VCR_SCHEMA}.matching_assessments
+          WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id = $2)
+          ORDER BY subject_key, as_of DESC, created_at DESC),
+       failing AS (
+         SELECT assessment_id, count(*) AS n FROM ${VCR_SCHEMA}.criterion_judgments
+          WHERE applicable AND state = 'not_satisfied' AND assessment_id IN (SELECT id FROM latest) GROUP BY assessment_id)
+       SELECT c.id AS criterion_id, c.ordinal, c.kind, c.criterion_type,
+              count(*) FILTER (WHERE NOT j.applicable)::int AS not_applicable,
+              count(*) FILTER (WHERE j.applicable AND j.state = 'satisfied')::int AS satisfied,
+              count(*) FILTER (WHERE j.applicable AND j.state = 'not_satisfied')::int AS not_satisfied,
+              count(*) FILTER (WHERE j.applicable AND j.state = 'unknown')::int AS unknown,
+              count(*) FILTER (WHERE j.applicable AND j.state = 'pending_recheck')::int AS pending_recheck,
+              count(*) FILTER (WHERE j.applicable AND j.state = 'not_satisfied' AND f.n = 1)::int AS sole_reason
+         FROM ${VCR_SCHEMA}.criterion_judgments j
+         JOIN ${VCR_SCHEMA}.criteria c ON c.id = j.criterion_id AND c.study_id = $1
+         LEFT JOIN failing f ON f.assessment_id = j.assessment_id
+        WHERE j.assessment_id IN (SELECT id FROM latest)
+        GROUP BY c.id, c.ordinal, c.kind, c.criterion_type
+        ORDER BY sole_reason DESC, not_satisfied DESC, c.ordinal`, [studyId, protocolVersionId]);
+    return rows.map((row) => ({
+      criterionId: String(row.criterion_id), ordinal: Number(row.ordinal), kind: String(row.kind), criterionType: String(row.criterion_type),
+      satisfied: Number(row.satisfied), not_satisfied: Number(row.not_satisfied), unknown: Number(row.unknown),
+      pending_recheck: Number(row.pending_recheck), notApplicable: Number(row.not_applicable), soleReason: Number(row.sole_reason),
+    }));
+  }
+
+  /**
+   * A coordinator's re-judgment of one criterion, of one assessment of this
+   * study (an assessment of another study is not found).
    *
    * It does not overwrite the state: the platform's answer and the human's
    * answer are both kept, because the pair is the evaluation case (plan §7.5).
-   * @param {{ assessmentId: string, criterionId: string, state: string, by: string, note?: string, userId: string, studyId?: string }} input
+   * @param {{ assessmentId: string, criterionId: string, state: string, by: string, note?: string, userId: string, studyId: string }} input
    */
-  async overrideJudgment({ assessmentId, criterionId, state, by, note = "", userId, studyId = null }) {
+  async overrideJudgment({ assessmentId, criterionId, state, by, note = "", userId, studyId }) {
+    if (!studyId) throw new TypeError("A judgment is overridden inside its study: studyId is required.");
+    if (!VCR_CRITERION_STATES.includes(String(state))) {
+      throw new HttpError(400, "vcr_write_value_invalid", `state must be one of: ${VCR_CRITERION_STATES.join(", ")}.`);
+    }
     return this.transaction(async (client) => {
       const result = await client.query(
-        `UPDATE ${VCR_SCHEMA}.criterion_judgments
+        `UPDATE ${VCR_SCHEMA}.criterion_judgments j
             SET override_state = $3, overridden_by = $4, override_note = $5
-          WHERE assessment_id = $1 AND criterion_id = $2 RETURNING *`,
-        [assessmentId, criterionId, state, by, note]);
+           FROM ${VCR_SCHEMA}.matching_assessments a
+          WHERE j.assessment_id = $1 AND j.criterion_id = $2 AND a.id = j.assessment_id AND a.study_id = $6 RETURNING j.*`,
+        [assessmentId, criterionId, state, by, note, studyId]);
       if (!result.rowCount) return null;
       await this.audit({
         client, studyId, userId, actor: by, action: "vcr.judgment.override",
@@ -284,12 +489,16 @@ export class VcrMatchStore extends VcrStoreBase {
     });
   }
 
-  /** Countersign an assessment (plan §10.2: a signature, not a gate). */
-  async reviewAssessment({ id, reviewedBy, userId, studyId = null }) {
+  /**
+   * Countersign an assessment of this study (plan §10.2: a signature, not a gate).
+   * @param {{ id: string, reviewedBy: string, userId: string, studyId: string }} input
+   */
+  async reviewAssessment({ id, reviewedBy, userId, studyId }) {
+    if (!studyId) throw new TypeError("An assessment is reviewed inside its study: studyId is required.");
     return this.transaction(async (client) => {
       const result = await client.query(
-        `UPDATE ${VCR_SCHEMA}.matching_assessments SET reviewed_by = $2, reviewed_at = now() WHERE id = $1 RETURNING *`,
-        [id, reviewedBy]);
+        `UPDATE ${VCR_SCHEMA}.matching_assessments SET reviewed_by = $2, reviewed_at = now() WHERE id = $1 AND study_id = $3 RETURNING *`,
+        [id, reviewedBy, studyId]);
       if (!result.rowCount) return null;
       await this.audit({ client, studyId, userId, actor: reviewedBy, action: "vcr.assessment.review", object: id });
       return assessmentOf(result.rows[0]);
@@ -312,6 +521,122 @@ export class VcrMatchStore extends VcrStoreBase {
       criterionType: row.criterion_type ?? "other",
       criterionKind: row.criterion_kind ?? "inclusion",
     }));
+  }
+
+  /**
+   * The judgments whose deferral date has come, across the study's newest
+   * assessments: what the recheck loop re-evaluates.
+   * @param {{ studyId?: string | null, now?: Date, limit?: number }} [input]
+   */
+  async dueRecheckSubjects({ studyId = null, now = new Date(), limit = 200 } = {}) {
+    const rows = await this.rows(
+      `SELECT DISTINCT a.study_id, a.subject_key, min(j.recheck_at) AS due
+         FROM ${VCR_SCHEMA}.criterion_judgments j
+         JOIN ${VCR_SCHEMA}.matching_assessments a ON a.id = j.assessment_id
+         JOIN ${VCR_SCHEMA}.studies s ON s.id = a.study_id AND s.deleted_at IS NULL AND s.status = 'active'
+        WHERE j.state = 'pending_recheck' AND j.recheck_at IS NOT NULL AND j.recheck_at <= $2
+          AND ($1::text IS NULL OR a.study_id = $1)
+          AND a.id = (SELECT id FROM ${VCR_SCHEMA}.matching_assessments l WHERE l.study_id = a.study_id AND l.subject_key = a.subject_key
+                       ORDER BY l.as_of DESC, l.created_at DESC LIMIT 1)
+        GROUP BY a.study_id, a.subject_key ORDER BY due LIMIT $3`,
+      [studyId, now.toISOString(), Math.max(1, Math.min(1000, limit))]);
+    return rows.map((row) => ({ studyId: String(row.study_id), subjectKey: String(row.subject_key), due: row.due }));
+  }
+
+  // ---------------------------------------------------------------- facts
+
+  /**
+   * One located fact of one patient. The fact key is the sha256 of what makes it
+   * *that* fact — the subject, the variable, the polarity, the value and the
+   * span it was read from — so a run that writes the same reading twice writes it
+   * once; the first `visible_at` stands.
+   * @param {{ studyId: string, userId: string, fact: any }} input
+   */
+  async saveFact({ studyId, userId, fact }) {
+    const key = createHash("sha256").update(JSON.stringify([
+      fact.subjectKey, fact.variable, fact.polarity, fact.value ?? null, fact.unit ?? null,
+      fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null,
+    ])).digest("hex");
+    return this.transaction(async (client) => {
+      const inserted = await client.query(
+        `INSERT INTO ${VCR_SCHEMA}.matching_facts
+           (id, study_id, user_id, subject_key, fact_key, variable, value, unit, polarity, occurred_at, recorded_at, visible_at,
+            surface, date_surface, source, extracted_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16)
+         ON CONFLICT (study_id, fact_key) DO UPDATE SET fact_key = EXCLUDED.fact_key RETURNING *, (xmax = 0) AS inserted`,
+        [factId(), studyId, userId, fact.subjectKey, key, fact.variable, JSON.stringify(fact.value ?? null), fact.unit ?? null,
+          fact.polarity ?? "affirmed", fact.occurredAt ?? null, fact.recordedAt ?? null, fact.visibleAt,
+          String(fact.surface ?? ""), fact.dateSurface ?? null, fact.source ? JSON.stringify(fact.source) : null, fact.extractedBy ?? "model"]);
+      const row = inserted.rows[0];
+      if (row.inserted) {
+        await this.audit({ client, studyId, userId, actor: "runtime", action: "vcr.fact.save", object: row.id,
+          detail: { subjectKey: fact.subjectKey, variable: fact.variable } });
+      }
+      return factOf(row);
+    });
+  }
+
+  /**
+   * The facts of a study: every subject's, or one subject's. The evaluator asks
+   * with the instant it replays and `visibleBy` keeps out what the platform could
+   * not yet see — a fact recorded on Tuesday about Monday was not knowable on
+   * Monday (AC-15).
+   * @param {{ studyId: string, subjectKey?: string | null, visibleBy?: string | null }} input
+   */
+  async listFacts({ studyId, subjectKey = null, visibleBy = null }) {
+    const rows = await this.rows(
+      `SELECT * FROM ${VCR_SCHEMA}.matching_facts
+        WHERE study_id = $1 AND ($2::text IS NULL OR subject_key = $2) AND ($3::timestamptz IS NULL OR visible_at <= $3)
+        ORDER BY subject_key, visible_at, id`, [studyId, subjectKey, visibleBy]);
+    return rows.map(factOf);
+  }
+
+  /** The subjects that have facts, with how many. @param {string} studyId */
+  async factSubjects(studyId) {
+    const rows = await this.rows(
+      `SELECT subject_key, count(*)::int AS facts FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 GROUP BY subject_key ORDER BY subject_key`, [studyId]);
+    return rows.map((row) => ({ subjectKey: String(row.subject_key), facts: Number(row.facts) }));
+  }
+
+  /**
+   * The answer to a language-only criterion, with its anchored quotes. Each
+   * answer is its own row; the newest per (subject, criterion key) is the one
+   * evaluated.
+   * @param {{ studyId: string, userId: string, subjectKey: string, criterionKey: string, state: string, evidence: readonly any[] }} input
+   */
+  async saveLanguageJudgment({ studyId, userId, subjectKey, criterionKey, state, evidence }) {
+    return this.transaction(async (client) => {
+      const visibleAt = (evidence ?? []).map((/** @type {any} */ item) => Date.parse(item?.visibleAt ?? "")).filter(Number.isFinite);
+      const result = await client.query(
+        `INSERT INTO ${VCR_SCHEMA}.language_judgments (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8) RETURNING *`,
+        [vcrId("judgment"), studyId, userId, subjectKey, criterionKey, state, JSON.stringify(evidence ?? []),
+          new Date(visibleAt.length ? Math.max(...visibleAt) : Date.now()).toISOString()]);
+      await this.audit({ client, studyId, userId, actor: "runtime", action: "vcr.language_judgment.save", object: result.rows[0].id,
+        detail: { subjectKey, criterionKey, state } });
+      return { id: String(result.rows[0].id), subjectKey, criterionKey, state };
+    });
+  }
+
+  /**
+   * The newest answer per (subject, criterion key), visible by `visibleBy`.
+   * @param {{ studyId: string, visibleBy?: string | null }} input
+   * @returns {Promise<Map<string, Record<string, any>>>} subjectKey → { criterionKey → { state, evidence } }
+   */
+  async latestLanguageJudgments({ studyId, visibleBy = null }) {
+    const rows = await this.rows(
+      `SELECT DISTINCT ON (subject_key, criterion_key) subject_key, criterion_key, state, evidence
+         FROM ${VCR_SCHEMA}.language_judgments
+        WHERE study_id = $1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
+        ORDER BY subject_key, criterion_key, created_at DESC, id DESC`, [studyId, visibleBy]);
+    /** @type {Map<string, Record<string, any>>} */
+    const bySubject = new Map();
+    for (const row of rows) {
+      const entry = bySubject.get(String(row.subject_key)) ?? {};
+      entry[String(row.criterion_key)] = { state: row.state, evidence: row.evidence ?? [] };
+      bySubject.set(String(row.subject_key), entry);
+    }
+    return bySubject;
   }
 
   // --------------------------------------------------------------- sites
@@ -364,9 +689,9 @@ export class VcrMatchStore extends VcrStoreBase {
     return rows.map(siteOf);
   }
 
-  /** @param {string} id */
-  async getSite(id) {
-    return siteOf(await this.one(`SELECT * FROM ${VCR_SCHEMA}.sites WHERE id = $1`, [id]));
+  /** @param {string} id @param {string | null} [studyId] with one, a site of another study is not found */
+  async getSite(id, studyId = null) {
+    return siteOf(await this.one(`SELECT * FROM ${VCR_SCHEMA}.sites WHERE id = $1 AND ($2::text IS NULL OR study_id = $2)`, [id, studyId]));
   }
 
   // ----------------------------------------------------------- referrals
@@ -422,9 +747,29 @@ export class VcrMatchStore extends VcrStoreBase {
     });
   }
 
-  /** @param {string} id */
-  async getReferral(id) {
-    return referralOf(await this.one(`SELECT * FROM ${VCR_SCHEMA}.referrals WHERE id = $1`, [id]));
+  /** @param {string} id @param {string | null} [studyId] with one, a referral of another study is not found */
+  async getReferral(id, studyId = null) {
+    return referralOf(await this.one(`SELECT * FROM ${VCR_SCHEMA}.referrals WHERE id = $1 AND ($2::text IS NULL OR study_id = $2)`, [id, studyId]));
+  }
+
+  /**
+   * How far each referral of a study ever got, from its events: a patient who
+   * was contacted and then withdrew is a patient who was contacted, and the
+   * funnel that counted only where they stand now would lose every one of them
+   * from the steps they passed (plan §7.2: every number has its denominator).
+   * @param {string} studyId
+   * @returns {Promise<Map<string, string>>} referral id → the furthest state it reached, `withdrawn` and `screen_failed` aside
+   */
+  async referralProgress(studyId) {
+    const order = VCR_REFERRAL_STATES.filter((state) => state !== "withdrawn" && state !== "screen_failed");
+    const rows = await this.rows(
+      `SELECT e.referral_id, max(array_position($2::text[], e.to_state)) AS reached
+         FROM ${VCR_SCHEMA}.referral_events e JOIN ${VCR_SCHEMA}.referrals r ON r.id = e.referral_id
+        WHERE r.study_id = $1 GROUP BY e.referral_id`, [studyId, order]);
+    /** @type {Map<string, string>} */
+    const progress = new Map();
+    for (const row of rows) if (row.reached != null) progress.set(String(row.referral_id), order[Number(row.reached) - 1]);
+    return progress;
   }
 
   /** @param {{ studyId: string, state?: string|null, siteId?: string|null, limit?: number }} input */

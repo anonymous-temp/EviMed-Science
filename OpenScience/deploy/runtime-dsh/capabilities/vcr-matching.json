@@ -12,6 +12,7 @@
   "tools": [
     "mcp__evimed__vcr_read",
     "mcp__evimed__vcr_write",
+    "mcp__evimed__vcr_simulate",
     "mcp__evimed__locate_quote",
     "mcp__evimed__clinical_trial_search",
     "mcp__evimed__term_normalize",
