@@ -196,6 +196,10 @@ test("a bridge merges: the older event survives, the absorbed id redirects for g
 
 test("a daily column joins one event and links the others; a second work is asked about, not joined", options, async () => {
   const editor = stubEditor({ verdict: "no" });
+  editor.judgeSameEvent = async input => {
+    editor.calls.judge.push(input);
+    return { verdicts: input.candidates.map(() => input.report.titleRaw.startsWith("Pharmalittle:") ? "yes" : "no"), error: null, attempts: 1 };
+  };
   const events = layer({ editor });
   const capital = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", title: "Novo capital markets day",
     registryIds: ["NCT08000001"], entityKeys: ["drug:semaglutide"], vector: vectorAt(1), visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
@@ -213,6 +217,8 @@ test("a daily column joins one event and links the others; a second work is aske
     vector: vectorAt(0.9, 1), visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
   const summary = await events.clusterPending();
   assert.equal(summary.merged, 0, "a report never folds two events into one");
+  const columnJudgment = editor.calls.judge.find(input => input.report.titleRaw.startsWith("Pharmalittle:"));
+  assert.equal(columnJudgment?.candidates.length, 2, "both mentioned events require a semantic verdict");
   assert.equal(String((await eventOf(database, column.id)).id), String(capitalEvent.id), "it joins the oldest it matched");
   assert.equal(String((await eventOf(database, adhd.id)).id), String(adhdEvent.id), "the other event stands");
   const edges = (await database.query(`SELECT count(*)::integer AS n FROM evimed_frontier.event_links
@@ -330,7 +336,12 @@ test("a snapshot records the heat of what could be listed; the list reads its tr
 });
 
 test("the week's and the month's rankings: institutions in the window, first-hand material, the best rank reached; time on the list", options, async () => {
-  const at = (hours) => new FrontierEvents({ database, editor: null, embedder: null, now: () => new Date(NOW.getTime() - hours * 3_600_000),
+  const editor = stubEditor();
+  editor.judgeSameEvent = async input => ({
+    verdicts: input.candidates.map(candidate => /^NCT-[A-F] /.test(input.report.titleRaw)
+      && candidate.titleRaw.split(" ")[0] === input.report.titleRaw.split(" ")[0] ? "yes" : "no"), error: null, attempts: 1,
+  });
+  const at = (hours) => new FrontierEvents({ database, editor, embedder: null, now: () => new Date(NOW.getTime() - hours * 3_600_000),
     budget: async () => ({ state: "ok" }), config: {} });
   const story = async (key, reports, hoursBack = 0) => {
     let first = null;
