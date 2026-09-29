@@ -72,3 +72,59 @@ their own: geo-001 lost 20 of 70 attempts to a busy probe and vendor timeouts,
 and geo-003's brand really is nearly absent from two of its three questions.
 Do not hand-write a ledger — a hand-written ledger tests the writing, and the
 measurement is the half that goes wrong.
+
+## Independent pharmacist calibration
+
+`calibration/dataset-template.json` is empty on purpose. Copy it with
+`rubric.json` into a private annotation directory and fill the schema-defined
+units, pseudonymous raters and independent ratings. Freeze each answer, its
+Unicode codepoint spans, source files and SHA-256 hashes before labeling.
+Use the same `groupId` for an answer/project cluster and keep that cluster in
+one data split. Record blinding and the actual qualification basis; a model
+rating cannot become a pharmacist reference. Keep initial/repeat rounds and
+later supplied consensus references separately, with their originating rating
+IDs and a prespecified `analysis.referenceRule`. Never overwrite the labels.
+
+```bash
+python3 -m venv /tmp/evimed-geo-calibration
+/tmp/evimed-geo-calibration/bin/pip install -r evals/geo-content/calibration/requirements.txt
+/tmp/evimed-geo-calibration/bin/python evals/geo-content/calibration/agreement.py \
+  /private/calibration/dataset.json --split held_out --output /private/calibration/report.json
+```
+
+The loader verifies schema, source/rubric/answer digests, statement offsets,
+rating uniqueness, reference provenance and group split separation. Files must
+remain inside the annotation directory; symlinks are refused. Outputs use
+exclusive creation. The empty template produces `awaiting_independent_labels`
+and no agreement results. `severity_basis` stays `initial`; this offline report
+never changes live delivery behavior or declares clinical validation.
+
+The report separates nominal verdict agreement from S0–S4 severity agreement
+(linear weighted Cohen kappa, with quadratic weighting as a sensitivity), and
+uses genuine ordinal Krippendorff alpha for incomplete multi-rater data.
+Singleton units supply no alpha coincidences. Correct/unverifiable ratings and
+missing severity remain missing, never S0. Disputed/unresolved references stay
+out of model comparisons. Serious-error sensitivity requires reference S3/S4
+and a model wrong/S3/S4 label; missing model ratings and wrong verdicts with missing severity have separate
+counts and are excluded from its assessed denominator. Missed unit IDs remain available
+for follow-up. None of these measures makes the supplied reference infallible.
+
+Intervals resample `groupId` clusters (999 seeded draws by default), report
+undefined draws, and remain unavailable with fewer than two clusters or more
+than 20% undefined resamples. Small samples and nonrandom missingness limit
+these descriptive intervals. The default split is `held_out`; explicitly use
+`--split codebook_pilot` for calibration rounds, never describe them as untouched
+validation. `--split all` is an explicit pooled descriptive analysis.
+
+Algorithm checks use synthetic fixtures and independent pinned implementations
+in `calibration/tests/requirements.txt`, including the maintainer's documented
+missing-data example. These test labels are not an empirical pharmacist corpus.
+Run `python -m unittest discover -s evals/geo-content/calibration/tests` after
+installing those test dependencies.
+
+Primary method references: [Cohen kappa API](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html),
+[Krippendorff's computation note](https://www.asc.upenn.edu/sites/default/files/2021-03/Computing%20Krippendorff%27s%20Alpha-Reliability.pdf),
+[ordinal reference implementation](https://github.com/pln-fing-udelar/fast-krippendorff),
+and [NCC MERP outcome index](https://www.nccmerp.org/types-medication-errors).
+The last classifies actual medication-error outcomes. The platform's prospective
+information-harm S0–S4 rubric is a local adaptation, not its official conversion.
