@@ -436,3 +436,37 @@ test("digests: earned by the hot list or a primary with two reports, rewritten o
   assert.equal(event.digest_revision, 2);
   assert.equal(editor.calls.digest[1].previousDigest, "综述第 1 版", "the previous version goes with the rewrite, so contradictions are marked");
 });
+
+test('same NCT at different milestones is adjudicated with dates and remains related', options, async () => {
+  const editor = stubEditor({ verdict: 'related' });
+  const events = layer({ editor, embedder: null });
+  const registered = await insertComposedItem(database, { sourceId: 'ctgov', title: 'Trial registered', identityKey: 'reg:NCT01234567:registered:2020-01-01', registryIds: ['NCT01234567'], visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
+  await events.clusterPending();
+  const results = await insertComposedItem(database, { sourceId: 'ctgov', title: 'Trial terminated', identityKey: 'reg:NCT01234567:terminated:2026-09-22', registryIds: ['NCT01234567'], visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  await events.clusterPending();
+  assert.notEqual((await eventOf(database, registered.id)).id, (await eventOf(database, results.id)).id);
+  assert.equal(editor.calls.judge.length, 1);
+  assert.equal(editor.calls.judge[0].report.identityKey, 'reg:NCT01234567:terminated:2026-09-22');
+  assert.equal(editor.calls.judge[0].candidates[0].identityKey, 'reg:NCT01234567:registered:2020-01-01');
+  assert.equal(events.counters.relatedLinks, 1);
+});
+
+test('shared trial without an adjudicator keeps distinct events', options, async () => {
+  const events = layer({ editor: null, embedder: null });
+  const first = await insertComposedItem(database, { sourceId: 'ctgov', title: 'Registry update', registryIds: ['NCT09999999'], visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await events.clusterPending();
+  const second = await insertComposedItem(database, { sourceId: 'stat', sourceType: 'media', title: 'Trial delayed', registryIds: ['NCT09999999'], visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  await events.clusterPending();
+  assert.notEqual((await eventOf(database, first.id)).id, (await eventOf(database, second.id)).id);
+  assert.equal(events.counters.adjudicationSkipped, 1);
+});
+
+test('exact paper identifier joins its press coverage without a model call', options, async () => {
+  const events = layer({ editor: null, embedder: null });
+  const first = await insertComposedItem(database, { sourceId: 'nejm', title: 'Primary trial paper', doi: '10.1000/exact-paper', visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await events.clusterPending();
+  const second = await insertComposedItem(database, { sourceId: 'reuters', sourceType: 'media', title: 'Press coverage of the paper', doi: '10.1000/exact-paper', visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  await events.clusterPending();
+  assert.equal((await eventOf(database, first.id)).id, (await eventOf(database, second.id)).id);
+  assert.equal(events.counters.adjudicated, 0);
+});
