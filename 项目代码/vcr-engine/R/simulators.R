@@ -95,7 +95,7 @@ vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1) {
 #' uses, with the prognostic score in place of `x`.
 vcr_analyse_ancova <- function(data, alpha = 0.025, sided = 1, covariates = "x") {
   sided <- vcr_check_sided(sided)
-  form <- as.formula(paste("y ~ arm +", paste(covariates, collapse = " + ")))
+  form <- vcr_model_formula("y", covariates, fixed = "arm")
   fit <- stats::lm(form, data = data)
   co <- summary(fit)$coefficients
   est <- co["arm", "Estimate"]; se <- co["arm", "Std. Error"]
@@ -175,7 +175,7 @@ vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1) {
 
 vcr_analyse_logistic <- function(data, alpha = 0.025, sided = 1, covariates = character()) {
   sided <- vcr_check_sided(sided)
-  form <- as.formula(paste("y ~ arm", if (length(covariates)) paste("+", paste(covariates, collapse = " + ")) else ""))
+  form <- vcr_model_formula("y", covariates, fixed = "arm")
   fit <- suppressWarnings(stats::glm(form, data = data, family = stats::binomial()))
   co <- summary(fit)$coefficients
   est <- co["arm", "Estimate"]; se <- co["arm", "Std. Error"]

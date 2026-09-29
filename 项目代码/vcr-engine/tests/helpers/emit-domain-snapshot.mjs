@@ -31,6 +31,8 @@ const snapshot = {
   jobMethods: { ...job.VCR_JOB_METHODS },
   patientLevelJobKinds: [...job.VCR_PATIENT_LEVEL_JOB_KINDS],
   observedOnlyMethods: [...job.VCR_OBSERVED_ONLY_METHODS],
+  engineTableInputKeys: [...job.VCR_ENGINE_TABLE_INPUT_KEYS],
+  engineLineageInputKeys: [...job.VCR_ENGINE_LINEAGE_INPUT_KEYS],
   individualInputSources: Object.fromEntries(Object.entries(job.VCR_INDIVIDUAL_INPUT_SOURCES).map(([method, sources]) => [method, [...sources]])),
   jobFields: [...job.VCR_JOB_FIELDS],
   maxReplicates: job.VCR_MAX_REPLICATES,

@@ -175,7 +175,7 @@ vcr_stc <- function(y, arm, X, targets, family = stats::gaussian()) {
   Xc <- sweep(X, 2, targets[colnames(X)], "-")
   df <- as.data.frame(Xc)
   df$..y.. <- y; df$..arm.. <- arm
-  form <- stats::as.formula(paste("..y.. ~ ..arm.. +", paste(colnames(Xc), collapse = " + ")))
+  form <- vcr_model_formula("..y..", colnames(Xc), fixed = "..arm..")
   fit <- suppressWarnings(stats::glm(form, data = df, family = family))
   co <- summary(fit)$coefficients
   list(estimate = co["..arm..", "Estimate"], se = co["..arm..", "Std. Error"],

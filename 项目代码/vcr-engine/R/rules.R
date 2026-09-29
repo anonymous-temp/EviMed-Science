@@ -281,3 +281,33 @@ vcr_named_rules <- function(items, columns, field, allow_empty = TRUE) {
   }
   list(rules = out, issues = issues)
 }
+
+# --- formulas from column names, never from text ----------------------------------------------
+#
+# A column name comes from a file somebody uploaded, so it is data, never code.
+# `as.formula(paste(...))` and `reformulate()` both *parse* the names they are
+# given, and a header written `bmi+system('...')` was executed that way (merge
+# verification, 2026-09-29). Every model formula over data columns is built here
+# as a call object whose terms are `as.name()` symbols: a symbol names a column,
+# whatever characters it holds, and nothing is ever parsed.
+
+#' The sum of terms `a + b + c` as a call, each a symbol naming one column.
+.vcr_term_sum <- function(terms) {
+  if (!length(terms)) return(NULL)
+  Reduce(function(acc, term) call("+", acc, as.name(term)), terms[-1L], as.name(terms[[1L]]))
+}
+
+#' `response ~ fixed + terms`, or `response ~ (terms)^2` with `pairwise = TRUE`.
+#' `fixed` names model terms the engine chose (an arm column, say); `terms` are
+#' data column names. Both become symbols; the environment is empty of
+#' anything but base arithmetic.
+vcr_model_formula <- function(response, terms = character(), fixed = character(), pairwise = FALSE) {
+  terms <- as.character(terms); fixed <- as.character(fixed)
+  data_part <- .vcr_term_sum(terms)
+  if (pairwise && !is.null(data_part)) data_part <- call("^", call("(", data_part), 2)
+  rhs <- .vcr_term_sum(fixed)
+  rhs <- if (is.null(rhs)) data_part else if (is.null(data_part)) rhs else call("+", rhs, data_part)
+  if (is.null(rhs)) rhs <- 1
+  f <- call("~", as.name(response), rhs)
+  stats::as.formula(f, env = new.env(parent = baseenv()))
+}

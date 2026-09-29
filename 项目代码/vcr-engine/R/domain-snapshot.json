@@ -274,6 +274,20 @@
     "comparator.maic",
     "comparator.rmst"
   ],
+  "engineTableInputKeys": [
+    "kind",
+    "id",
+    "shape",
+    "location",
+    "hash",
+    "valueSource"
+  ],
+  "engineLineageInputKeys": [
+    "kind",
+    "id",
+    "hash",
+    "value"
+  ],
   "individualInputSources": {
     "population.synthpop": [
       "observed",

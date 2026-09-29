@@ -14,8 +14,8 @@ vcr_case("C2-15", c("AC-04", "AC-20"), function() {
   train <- mk(300L); holdout <- mk(300L); ideal <- mk(300L)
   in_tr <- vcr_test_input(train, "train_c215@1", source = "observed")
   in_ho <- vcr_test_input(holdout, "hold_c215@1", source = "observed")
-  in_id <- vcr_test_input(ideal, "ideal_c215@1", source = "synthetic", kind = "population")
-  in_cp <- vcr_test_input(train, "copy_c215@1", source = "synthetic", kind = "population")
+  in_id <- vcr_test_input(ideal, "ideal_c215@1", source = "synthetic", kind = "snapshot_file")
+  in_cp <- vcr_test_input(train, "copy_c215@1", source = "synthetic", kind = "snapshot_file")
   run <- function(syn, dir) vcr_test_run(vcr_test_job("population.quality",
     list(trainingInputId = "train_c215@1", syntheticInputId = syn, holdoutInputId = "hold_c215@1",
          criteria = list(list(name = "older", rule = list(op = "compare", column = "x1", comparator = "gte", value = 60)),

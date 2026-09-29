@@ -225,6 +225,19 @@ export const VCR_VERSIONED_INPUT_KINDS = frozen(['assumption', 'study_definition
 export const VCR_ENGINE_TABLE_INPUT_KINDS = frozen(['analysis_table', 'snapshot_file'])
 /** The kind a caller uses for patient-level data. */
 export const VCR_CALLER_SNAPSHOT_KIND = 'snapshot'
+/**
+ * The keys an input may carry, and nothing else (merge review, 2026-09-29): a
+ * caller names an object and its version and never where it lives; the engine
+ * receives a table's location, hash, shape and value source only from the
+ * control plane, and a lineage input's hash at most. An extra key is refused by
+ * name on both sides — R's `$` matches a key by its prefix, so a `locationX`
+ * that got through would have been read as `location`. A lineage input may
+ * carry its frozen `value` (the assumption's point and distribution); a
+ * snapshot input carries nothing but its kind and id.
+ */
+export const VCR_CALLER_INPUT_KEYS = frozen(['kind', 'id', 'value'])
+export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource'])
+export const VCR_ENGINE_LINEAGE_INPUT_KEYS = frozen(['kind', 'id', 'hash', 'value'])
 
 /**
  * Is this a data-plane-relative path the engine may open? Relative, no `..`, no
@@ -409,12 +422,10 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
     else if (VCR_VERSIONED_INPUT_KINDS.includes(input.kind) && !VERSION.test(input.id)) {
       bad('input_version_missing', `${at}.id`, 'A lineage input names a version: `<id>@<n>`.')
     }
-    if (input.kind === VCR_CALLER_SNAPSHOT_KIND) {
-      for (const key of Object.keys(input)) {
-        if (key !== 'kind' && key !== 'id' && key !== 'hash' && key !== 'location' && key !== 'shape' && key !== 'valueSource') {
-          bad('input_field_unknown', `${at}.${key}`, 'A snapshot input is { kind, id } and nothing else.')
-        }
-      }
+    for (const key of Object.keys(input)) {
+      if (['location', 'shape', 'valueSource', 'hash'].includes(key)) continue
+      if (VCR_CALLER_INPUT_KEYS.includes(key) && !(key === 'value' && input.kind === VCR_CALLER_SNAPSHOT_KIND)) continue
+      bad('input_field_unknown', `${at}.${key}`, 'A caller input is { kind, id } (and a lineage input its frozen value), nothing else.')
     }
   })
   return frozen(issues)
@@ -496,6 +507,12 @@ export function validateEngineJob(job) {
       if (!INPUT_ID.test(input.id)) bad('input_id_invalid', `${at}.id`, 'An input carries the id of the object version it froze (`asm_1@3`).')
       else if (VCR_VERSIONED_INPUT_KINDS.includes(input.kind) && !VERSION.test(input.id)) {
         bad('input_version_missing', `${at}.id`, 'A lineage input names a version: `<id>@<n>`.')
+      }
+      const allowedKeys = VCR_ENGINE_TABLE_INPUT_KINDS.includes(input.kind) ? VCR_ENGINE_TABLE_INPUT_KEYS : VCR_ENGINE_LINEAGE_INPUT_KEYS
+      for (const key of Object.keys(input)) {
+        if (!allowedKeys.includes(key) && !(input.kind === VCR_CALLER_SNAPSHOT_KIND && VCR_ENGINE_TABLE_INPUT_KEYS.includes(key))) {
+          bad('input_field_unknown', `${at}.${key}`, `A ${VCR_ENGINE_TABLE_INPUT_KINDS.includes(input.kind) ? 'table' : 'lineage'} input carries only ${allowedKeys.join(', ')}.`)
+        }
       }
       const hasHash = input.hash !== undefined && input.hash !== null
       if (hasHash && !SHA256.test(input.hash)) bad('input_hash_invalid', `${at}.hash`, 'An input hash is a lowercase sha256 hex digest.')

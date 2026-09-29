@@ -145,7 +145,7 @@ vcr_utility_propensity <- function(real, synth, formula = NULL, folds = 5L) {
   combined <- combined[stats::complete.cases(combined), , drop = FALSE]
   N <- nrow(combined)
   cshare <- mean(combined$..syn..)
-  form <- formula %||% stats::as.formula(paste("..syn.. ~ (", paste(vars, collapse = " + "), ")^2"))
+  form <- formula %||% vcr_model_formula("..syn..", vars, pairwise = TRUE)
   fit <- suppressWarnings(stats::glm(form, data = combined, family = stats::binomial()))
   p <- as.vector(stats::fitted(fit))
   pmse <- mean((p - cshare)^2)
@@ -322,7 +322,7 @@ vcr_tstr <- function(train, synth, holdout, outcome) {
   binary <- all(stats::na.omit(train[[outcome]]) %in% c(0, 1))
   vars <- setdiff(Reduce(intersect, list(names(train), names(synth), names(holdout))), outcome)
   if (!length(vars)) return(list(available = FALSE, reason = "no_predictors"))
-  f <- stats::reformulate(vars, response = outcome)
+  f <- vcr_model_formula(outcome, vars)
   fam <- if (binary) stats::binomial() else stats::gaussian()
   score <- function(dat) {
     fit <- tryCatch(suppressWarnings(stats::glm(f, data = dat, family = fam)), error = function(e) NULL)
@@ -342,7 +342,7 @@ vcr_tstr <- function(train, synth, holdout, outcome) {
 #' a `column`; `kind = "glm"` names an `outcome`, the `predictors`, a `target`
 #' predictor whose coefficient is reported, and a `family` (gaussian or
 #' binomial). Column names must be plain identifiers; the formula is built from
-#' them with `reformulate`, never parsed from text.
+#' them with `vcr_model_formula` (symbols, never parsed text).
 vcr_analysis_from_spec <- function(spec) {
   ident <- function(x) is.character(x) && length(x) >= 1L && all(grepl(.VCR_ROW_COL_RE, x))
   kind <- as.character(spec$kind %||% "")
@@ -361,7 +361,7 @@ vcr_analysis_from_spec <- function(spec) {
       vcr_abort("scenario_value_invalid", "scenario.analyses", "A glm analysis names an outcome, its predictors, a target predictor and a family (gaussian or binomial).")
     }
     return(function(d) {
-      fit <- suppressWarnings(stats::glm(stats::reformulate(preds, response = outcome), data = d,
+      fit <- suppressWarnings(stats::glm(vcr_model_formula(outcome, preds), data = d,
                                          family = if (fam == "binomial") stats::binomial() else stats::gaussian()))
       co <- summary(fit)$coefficients
       nm <- if (target %in% rownames(co)) target else rownames(co)[grep(paste0("^", target), rownames(co))[1]]

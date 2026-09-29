@@ -432,3 +432,21 @@ test("every issue code the protocol validators can emit is a registered code wit
   assert.deepEqual(unlisted, [], `registered elsewhere but not in VCR_PROTOCOL_ISSUE_CODES: ${unlisted.join(", ")}`);
   assert.equal(VCR_ENGINE_PROTOCOL_VERSION, 1);
 });
+
+test("no input carries a key its kind does not allow — a prefix of a reserved key is refused, not read as it", () => {
+  // R's `$` matches a list key by its prefix: an `assumption` input carrying
+  // `locationX`, `hashX` and `valueSourceX` was read by the engine as a table
+  // (merge verification, 2026-09-29). Both validators refuse any key outside
+  // the allow-list, by name.
+  const smuggled = { kind: "assumption", id: "asm_1@1", locationX: "studies/std_1/sources/src_1/f.csv", hashX: "a".repeat(64), valueSourceX: "observed" };
+  assert.deepEqual(keys(validateCallerInputs([smuggled])).sort(),
+    ["input_field_unknown@inputs[0].hashX", "input_field_unknown@inputs[0].locationX", "input_field_unknown@inputs[0].valueSourceX"]);
+  const job = clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "profile.snapshot").job);
+  job.inputs.push(smuggled);
+  assert.deepEqual(keys(validateEngineJob(job)).filter((key) => key.startsWith("input_field_unknown")).sort(),
+    ["input_field_unknown@inputs[1].hashX", "input_field_unknown@inputs[1].locationX", "input_field_unknown@inputs[1].valueSourceX"]);
+  // A snapshot a caller names is { kind, id } and nothing else, not even a value.
+  assert.deepEqual(keys(validateCallerInputs([{ kind: "snapshot", id: "snp_1", value: 1 }])), ["input_field_unknown@inputs[0].value"]);
+  // A lineage input may carry its frozen value; a table input its location, hash, shape and source.
+  assert.deepEqual(validateCallerInputs([{ kind: "assumption", id: "dropout_rate@2", value: { pointValue: 0.1 } }]), []);
+});

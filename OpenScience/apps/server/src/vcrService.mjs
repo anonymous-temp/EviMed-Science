@@ -71,6 +71,29 @@ export const VCR_READ_WHATS = Object.freeze([
  * come from the engine, and a model that could write them could write anything.
  * Referrals are not here: the control plane makes them from assessments.
  */
+/**
+ * What a run is never told: where a file lives in the data plane or the engine's
+ * work volume, and the hashes of the inputs a job opened. A run names data by
+ * snapshot and result ids; a location or an input hash in its hands is an
+ * address to guess at and an oracle to confirm a guess (merge verification,
+ * 2026-09-29). Removed by key at any depth before the small-cell boundary.
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+export function stripPlaneAddresses(value, seen = new WeakSet()) {
+  if (!value || typeof value !== "object") return value;
+  if (seen.has(value)) return value;
+  seen.add(value);
+  if (Array.isArray(value)) return value.map((item) => stripPlaneAddresses(item, seen));
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === "location" || key === "inputHashes" || key === "outputHash" || key === "signature") continue;
+    out[key] = stripPlaneAddresses(item, seen);
+  }
+  return out;
+}
+
 export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
@@ -832,7 +855,7 @@ export class VcrService {
    */
   forModel(payload) {
     try {
-      return suppressForModel(payload, { minCell: this.minCell });
+      return suppressForModel(stripPlaneAddresses(payload), { minCell: this.minCell });
     } catch {
       throw failure(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
     }

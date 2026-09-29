@@ -215,3 +215,12 @@ test("the answer to a simulate status passes the boundary too: a run does not re
   assert.deepEqual(small, []);
   assert.equal(result.diagnostics.arms.find((arm) => arm.arm === "试验").n, null);
 });
+
+test("a run is never told where a file lives or which inputs a job hashed", async () => {
+  const { stripPlaneAddresses } = await import("../src/vcrService.mjs");
+  const answer = { result: { tables: [{ name: "population", location: "derived/std_1/job_1/population.csv", sha256: "a".repeat(64) }],
+    manifest: { inputHashes: [{ id: "snp_1:subject", hash: "b".repeat(64) }], outputHash: "c".repeat(64), signature: "d".repeat(64), packageLockHash: "e".repeat(64) } } };
+  const told = /** @type {any} */ (stripPlaneAddresses(answer));
+  assert.deepEqual(told.result.tables, [{ name: "population", sha256: "a".repeat(64) }]);
+  assert.deepEqual(told.result.manifest, { packageLockHash: "e".repeat(64) });
+});

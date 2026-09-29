@@ -100,7 +100,7 @@ vcr_case("N28c", c("AC-11", "AC-09", "AC-02"), function() {
   set.seed(2929L, kind = VCR_RNG_KIND)
   n <- 6000L
   pop <- data.frame(x = stats::rnorm(n))
-  in_pop <- vcr_test_input(pop, "pop_n28c@1", source = "synthetic", kind = "population")
+  in_pop <- vcr_test_input(pop, "pop_n28c@1", source = "synthetic", kind = "snapshot_file")
   dir <- tempfile("n28c"); dir.create(dir)
   run <- function(method, sc, tag) vcr_test_run(vcr_test_job(method, sc, list(in_pop), seed = 2929L, job_id = paste0("job_n28c_", tag)), output_dir = dir)
   design <- list(nTreat = n / 2, nControl = n / 2)

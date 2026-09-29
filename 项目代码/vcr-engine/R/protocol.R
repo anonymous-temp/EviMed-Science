@@ -826,6 +826,14 @@ vcr_validate_job <- function(job) {
       else if (.vcrp_chr(ikind) && ikind %in% d$versionedInputKinds && !vcr_pattern_match(.vcrp_pat("version"), input[["id"]])) {
         bad("input_version_missing", .vcrp_at(at, "id"), "A lineage input names a version.")
       }
+      # Only the keys the domain allows, by kind: R's `$` matches by prefix, so an
+      # extra `locationX` must never reach a reader as `location`.
+      allowed_keys <- if (.vcrp_chr(ikind) && ikind %in% d$engineTableInputKinds) unlist(d$engineTableInputKeys)
+                      else unlist(d$engineLineageInputKeys)
+      if (identical(ikind, d$callerSnapshotKind)) allowed_keys <- unique(c(allowed_keys, unlist(d$engineTableInputKeys)))
+      for (key in names(input)) {
+        if (!(key %in% allowed_keys)) bad("input_field_unknown", .vcrp_at(at, key), "This input carries a key it may not.")
+      }
       has_hash <- !is.null(input[["hash"]])
       if (has_hash && !vcr_pattern_match(.vcrp_pat("sha256"), input[["hash"]])) bad("input_hash_invalid", .vcrp_at(at, "hash"), "An input hash is a lowercase sha256 hex digest.")
       has_source <- !is.null(input[["valueSource"]])

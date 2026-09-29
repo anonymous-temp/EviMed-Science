@@ -188,9 +188,9 @@ vcr_resolve_location <- function(location, field = "inputs") {
 #' `vcrSource` (the input's value source), `vcrShape` and `vcrInputId`.
 vcr_read_table_input <- function(input) {
   if (!is.list(input)) vcr_abort("input_location_invalid", "inputs", "An input is an object.")
-  field <- sprintf("inputs[%s]", .vcr_json_string(as.character(input$id %||% "")))
-  res <- vcr_resolve_location(input$location, field)
-  hash <- input$hash
+  field <- sprintf("inputs[%s]", .vcr_json_string(as.character(input[["id"]] %||% "")))
+  res <- vcr_resolve_location(input[["location"]], field)
+  hash <- input[["hash"]]
   if (!(is.character(hash) && length(hash) == 1L && grepl("^[a-f0-9]{64}$", hash))) {
     vcr_abort("input_hash_missing", field, "A patient-level input carries the sha256 the control plane froze.")
   }
@@ -224,11 +224,11 @@ vcr_read_table_input <- function(input) {
   }, error = function(e) "failed")
   if (is.null(df)) vcr_abort("input_format_unsupported", field, "An input is a csv, tsv, json or parquet table.")
   if (!is.data.frame(df)) vcr_abort("input_parse_failed", field, "The file could not be read as a table.")
-  shape <- .VCR_SHAPE_ALIASES[as.character(input$shape %||% "")]
-  attr(df, "vcrSource") <- as.character(input$valueSource %||% "")
+  shape <- .VCR_SHAPE_ALIASES[as.character(input[["shape"]] %||% "")]
+  attr(df, "vcrSource") <- as.character(input[["valueSource"]] %||% "")
   attr(df, "vcrShape") <- if (length(shape) && !is.na(shape)) unname(shape) else NA_character_
-  attr(df, "vcrInputId") <- as.character(input$id %||% "")
-  attr(df, "vcrKind") <- as.character(input$kind %||% "")
+  attr(df, "vcrInputId") <- as.character(input[["id"]] %||% "")
+  attr(df, "vcrKind") <- as.character(input[["kind"]] %||% "")
   df
 }
 
@@ -246,16 +246,19 @@ vcr_read_parquet <- function(path) {
 
 #' Every input of a job that names a file, by kind.
 vcr_table_inputs <- function(job) {
-  Filter(function(i) is.list(i) && !is.null(i$location), job$inputs %||% list())
+  # A table is an input of a table kind, by exact key — never "anything with a
+  # location-ish key": R's `$` would have matched `locationX` as `location`.
+  Filter(function(i) is.list(i) && is.character(i[["kind"]]) && length(i[["kind"]]) == 1L &&
+           i[["kind"]] %in% c("analysis_table", "snapshot_file") && !is.null(i[["location"]]), job[["inputs"]] %||% list())
 }
 
 vcr_input_by_kind <- function(job, kind) {
-  for (input in job$inputs) if (identical(input$kind, kind)) return(input)
+  for (input in job[["inputs"]]) if (identical(input[["kind"]], kind)) return(input)
   NULL
 }
 
 vcr_input_by_id <- function(job, id) {
-  for (input in job$inputs) if (identical(input$id, id)) return(input)
+  for (input in job[["inputs"]]) if (identical(input[["id"]], id)) return(input)
   NULL
 }
 

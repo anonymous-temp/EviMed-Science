@@ -37,7 +37,11 @@ vcr_case <- function(id, ac, fn) {
   out <- tryCatch(fn(), error = function(e) list(pass = FALSE, detail = paste("error:", conditionMessage(e))))
   secs <- as.numeric(difftime(Sys.time(), started, units = "secs"))
   pass <- isTRUE(out$pass)
-  detail <- out$detail %||% "(no detail)"
+  detail <- out$detail
+  # A detail built from a missing value is `character(0)`, which printed nothing
+  # at all — a failing case must always say something.
+  if (!length(detail) || !nzchar(detail[[1]])) detail <- "(no detail: the case produced none — a value it reports is missing)"
+  detail <- detail[[1]]
   line <- sprintf("%-6s %s %s | %s  [%.1fs]", id, if (pass) "PASS" else "FAIL",
                   paste(ac, collapse = ","), detail, secs)
   cat(line, "\n", sep = "")
@@ -181,7 +185,9 @@ vcr_test_table <- function(result, name, dir) {
 #' job, the way the control plane hands one step's output to the next.
 vcr_test_chain_input <- function(result, name, dir, id, shape = NULL, source = "synthetic") {
   df <- vcr_test_table(result, name, dir)
-  vcr_test_input(df, id, shape = shape, source = source, kind = if (is.null(shape)) "population" else NULL)
+  # A table one job hands the next is a derived `snapshot_file`, as the control
+  # plane files it — never a lineage input carrying a location.
+  vcr_test_input(df, id, shape = shape, source = source, kind = if (is.null(shape)) "snapshot_file" else NULL)
 }
 
 #' Which methods went through `vcr_run_job` in this process: the coverage case
@@ -263,7 +269,7 @@ vcr_test_handler_jobs <- function() {
   in_subj <- vcr_test_input(subj, "snp_e05:subject", "subject")
   in_event <- vcr_test_input(ev, "snp_e05:event", "event")
   in_file <- vcr_test_input(subj, "snp_e05:1")
-  in_syn <- vcr_test_input(subj[, c("age", "male", "y")], "pop_e05@1", source = "synthetic", kind = "population")
+  in_syn <- vcr_test_input(subj[, c("age", "male", "y")], "pop_e05@1", source = "synthetic", kind = "snapshot_file")
   sites <- lapply(1:8, function(i) list(id = sprintf("s%d", i), alpha = 2, beta = 2.5, startTime = 0))
   curve_arm <- function(med) {
     t <- seq(0, 24, by = 0.5); tr <- c(0, 6, 12, 18, 24)
