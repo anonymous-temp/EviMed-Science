@@ -18,7 +18,7 @@ export function createEngineExecutionContextResolver({ config, store, agentRuns,
     if (!runId && runtimeManager.subagentCatalogue) {
       for (const run of active) {
         const children = await runtimeManager.subagentCatalogue(project, run.sessionId);
-        if (children.some(child => child.sessionId === context.sessionId)) { runId = run.id; break; }
+        if (children.some(child => child.id === context.sessionId)) { runId = run.id; break; }
       }
     }
     if (!runId) throw new HttpError(403, "engine_model_session_unowned", "The engine session does not belong to an active project run.");
