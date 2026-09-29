@@ -86,6 +86,8 @@ if (args.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 // reports failure for a run that was still going.
 const timeoutMs = Number(args["timeout-ms"] ?? 7_200_000);
 const pollMs = Number(args["poll-ms"] ?? 15_000);
+// Downloading partial results is best effort, with one budget for the whole capture.
+const artifactTimeoutMs = Number(args["artifact-timeout-ms"] ?? 30_000);
 
 /** @type {Record<string, string>} */
 let auth = {};
@@ -178,8 +180,9 @@ function renderBrief(brief) {
 async function main() {
   if (!capabilityId) throw new Error("--capability is required");
   if (!briefId) throw new Error("--brief is required");
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1) {
-    throw new Error("--timeout-ms must be nonnegative and --poll-ms must be positive integers");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1
+    || !Number.isSafeInteger(artifactTimeoutMs) || artifactTimeoutMs < 0) {
+    throw new Error("Timeout budgets must be nonnegative and --poll-ms must be a positive integer");
   }
 
   const ledger = JSON.parse(await readFile(path.join(repoRoot, "evals", "acceptance-ledger.json"), "utf8"));
@@ -446,8 +449,12 @@ async function main() {
   // worth keeping; which is which is already recorded above.
   const wanted = [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])];
   let saved = 0;
+  const captureDeadline = Date.now() + artifactTimeoutMs;
   for (const relative of wanted.slice(0, 40)) {
-    const read = await pollApi("/api/commands/read_artifact", { method: "POST", body: JSON.stringify({ path: relative }) });
+    const remaining = captureDeadline - Date.now();
+    if (remaining <= 0) { say("artifact capture budget exhausted; the observation and files already saved are preserved"); break; }
+    const read = await pollApi("/api/commands/read_artifact", { method: "POST", body: JSON.stringify({ path: relative }),
+      signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, remaining))) });
     if (read.status !== 200 || read.body?.data?.encoding !== "utf8") { say(`could not read ${relative} (${read.status})`); continue; }
     const target = path.join(outDir, "deliverable", relative.replace(/^(\.\.\/)+/, ""));
     await mkdir(path.dirname(target), { recursive: true });
