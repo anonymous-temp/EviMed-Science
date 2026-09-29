@@ -73,7 +73,9 @@ test("URL-bearing fulltext tools and hidden URL parameters cannot bypass the pub
       tool_name, arguments: { fulltext_xml_url: "http://169.254.169.254/latest/meta-data/", output_format: "raw" } } } })).status, 400);
   }
   for (const arguments_ of [{ query: "test", fulltext_xml_url: "http://open-science-web:8787/internal/" },
-    JSON.stringify({ query: "test", fulltext_xml_url: "http://127.0.0.1/" })]) {
+    JSON.stringify({ query: "test", fulltext_xml_url: "http://127.0.0.1/" }),
+    { query: "test", enrich_missing_abstract: true }, { query: "test", extract_terms_from_fulltext: ["dose"] },
+    { query: "test", fulltext_terms: ["dose"] }]) {
     assert.equal((await f.request({ method: "tools/call", params: { name: "execute_tool", arguments: {
       tool_name: "EuropePMC_search_articles", arguments: arguments_ } } })).status, 400);
   }

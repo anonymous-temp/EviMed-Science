@@ -20,10 +20,18 @@ class SidecarTests(unittest.TestCase):
             file.write_text("x" * 64 + "\nspoof")
             with self.assertRaises(ValueError):
                 sidecar.read_token(file)
+            file.write_text("x" * 64 + " " * 500)
+            with self.assertRaises(ValueError):
+                sidecar.read_token(file)
             file.unlink()
             file.symlink_to(FILE)
             with self.assertRaises(OSError):
                 sidecar.read_token(file)
+
+    def test_selected_sources_never_inherit_provider_credentials(self):
+        with patch.dict(sidecar.os.environ, {"NCBI_API_KEY": "fake-provider-key", "FDA_API_KEY": "fake-fda-key", "OPENFDA_API_KEY": "fake-openfda-key"}):
+            sidecar.remove_provider_credentials()
+            self.assertTrue(all(name not in sidecar.os.environ for name in sidecar.KEYLESS_PROVIDER_ENV))
 
     def test_protocol_parser_requires_matching_json_rpc_reply(self):
         reply = {"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}
@@ -38,10 +46,11 @@ class SidecarTests(unittest.TestCase):
     def test_readiness_checks_protocol_and_actual_restricted_catalogue(self):
         replies = [({"protocolVersion": "2024-11-05"}, "session"), (None, None),
                    ({"tools": [{"name": name} for name in sidecar.MCP_TOOLS]}, None),
-                   ({"content": [{"type": "text", "text": json.dumps(sidecar.CATALOGUE)}]}, None)]
+                   ({"content": [{"type": "text", "text": json.dumps(sidecar.CATALOGUE)}]}, None), (None, None)]
         with patch.object(sidecar, "request", side_effect=replies) as send:
-            self.assertEqual(sidecar.check("test-token", full=True), {"ready": True, "tools": 4, "catalogue": 187})
-            self.assertEqual(send.call_count, 4)
+            self.assertEqual(sidecar.check("test-token", full=True), {"ready": True, "tools": 4, "catalogue": 184})
+            self.assertEqual(send.call_count, 5)
+            self.assertEqual(send.call_args.kwargs, {"method": "DELETE"})
         wrong = [*replies[:3], ({"content": [{"type": "text", "text": json.dumps({**sidecar.CATALOGUE, "total_tools": 2602})}]}, None)]
         with patch.object(sidecar, "request", side_effect=wrong), self.assertRaises(ValueError):
             sidecar.check("test-token", full=True)
