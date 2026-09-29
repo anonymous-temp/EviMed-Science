@@ -266,29 +266,64 @@ vcr_weight_diagnostics <- function(w, treat) {
        effectiveSampleSize = vcr_ess(wc))
 }
 
+#' The bootstrap draws a job actually runs: what the scenario asked for, raised
+#' to the domain's floor. The floor is not the scenario's to lower: a job that
+#' said 20 draws used to get 20 draws and a 95% interval from twenty points
+#' (EB-5). The number used is echoed in the result.
+vcr_bootstrap_replicates <- function(requested = NULL) {
+  floor_ <- as.integer(vcr_limit("bootstrapMin", 2000L))
+  as.integer(max(floor_, requested %||% floor_))
+}
+
 #' Whole-pipeline non-parametric bootstrap: `estimate_fn(data_index)` must
-#' re-estimate the weights from the resampled rows. Returns the percentile
-#' interval and the share of resamples where the weighting had no solution,
-#' which downgrades the conclusion to `limited` above 1% (plan 5.3).
+#' re-estimate the weights from the resampled rows. `estimate_fn` returns one
+#' number or a vector of numbers (a primary estimate and its secondaries share
+#' the same resamples). Returns the percentile interval(s) and the share of
+#' resamples where the weighting had no solution, which downgrades the
+#' conclusion to `limited` above 1% (plan 5.3).
+#'
+#' The draws run in batches so a cancel or a spent CPU budget stops the loop
+#' between batches with what has finished (`interrupted` says which).
 vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
                                    seed = 1L, strata = NULL, cores = 1L,
-                                   level = 0.95) {
+                                   level = 0.95, batch_size = 200L) {
   bank <- vcr_stream_bank(seed)
-  streams <- bank$take(replicates)
-  out <- vcr_map_streams(streams, function(i) {
-    idx <- if (is.null(strata)) sample.int(n_rows, n_rows, replace = TRUE)
-           else unlist(lapply(split(seq_len(n_rows), strata), function(g) sample(g, length(g), replace = TRUE)), use.names = FALSE)
-    tryCatch(estimate_fn(idx), error = function(e) NA_real_)
-  }, cores = cores)
-  est <- vapply(out, function(x) as.numeric(x)[1], numeric(1))
-  ok <- is.finite(est)
+  rows <- list(); done <- 0L; interrupted <- NULL
+  while (done < replicates) {
+    reason <- vcr_interrupt()
+    if (!is.null(reason)) { interrupted <- reason; break }
+    take <- min(batch_size, replicates - done)
+    streams <- bank$take(take)
+    out <- vcr_map_streams(streams, function(i) {
+      idx <- if (is.null(strata)) sample.int(n_rows, n_rows, replace = TRUE)
+             else unlist(lapply(split(seq_len(n_rows), strata), function(g) g[sample.int(length(g), length(g), replace = TRUE)]), use.names = FALSE)
+      tryCatch(as.numeric(estimate_fn(idx)), error = function(e) NA_real_)
+    }, cores = cores, indices = done + seq_len(take))
+    rows <- c(rows, out)
+    done <- done + take
+  }
+  width <- max(vapply(rows, length, integer(1)), 1L)
+  est <- do.call(rbind, lapply(rows, function(r) if (length(r) == width) r else rep(NA_real_, width)))
+  if (is.null(est)) est <- matrix(NA_real_, 0L, width)
   a <- (1 - level) / 2
+  # Each component has its own finite draws: a secondary ratio that is
+  # undefined in a resample (a zero cell) does not discard the primary estimate
+  # of that resample. The failure share is the primary's.
+  ints <- t(vapply(seq_len(width), function(j) {
+    col <- est[is.finite(est[, j]), j]
+    if (length(col) < 2L) return(c(NA_real_, NA_real_))
+    as.numeric(stats::quantile(col, c(a, 1 - a), names = FALSE, type = 7))
+  }, numeric(2)))
+  prim <- is.finite(est[, 1])
   list(
-    estimates = est,
-    failureShare = 1 - mean(ok),
-    se = stats::sd(est[ok]),
-    interval = as.numeric(stats::quantile(est[ok], c(a, 1 - a), names = FALSE, type = 7)),
-    replicates = replicates
+    estimates = est[, 1],
+    estimatesMatrix = est,
+    failureShare = if (nrow(est)) 1 - mean(prim) else 1,
+    se = stats::sd(est[prim, 1]),
+    interval = ints[1, ],
+    intervals = ints,
+    componentFailureShare = if (nrow(est)) 1 - colMeans(is.finite(est)) else rep(1, width),
+    replicates = done, requested = replicates, interrupted = interrupted
   )
 }
 
@@ -297,19 +332,22 @@ vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
 #' reader is given should be the earliest thing that went wrong, not the last
 #' check that happened to run.
 vcr_not_estimable_weighting <- function(balance = NULL, ess = NULL, ess_floor = NULL,
-                                        support = NULL, support_ceiling = 0.1,
+                                        support = NULL, support_ceiling = NULL,
                                         smd_floor = NULL, ebal = NULL) {
+  # Every threshold is the domain's; a caller may only pass a *stricter* one.
+  ess_floor <- max(ess_floor %||% 0, vcr_limit("essFloor", 10))
+  support_ceiling <- min(support_ceiling %||% Inf, vcr_limit("supportCeiling", 0.1))
   if (!is.null(ebal) && !is.null(ebal$rule)) return(list(rule = ebal$rule, detail = ebal$detail))
   if (!is.null(support) && !is.null(support$outsideShare) && support$outsideShare > support_ceiling) {
     return(list(rule = "outside_common_support",
                 detail = sprintf("%.1f%% of the trial population falls outside the control score range (ceiling %.1f%%)",
                                  100 * support$outsideShare, 100 * support_ceiling)))
   }
-  if (!is.null(ess) && !is.null(ess_floor) && ess < ess_floor) {
+  if (!is.null(ess) && ess < ess_floor) {
     return(list(rule = "effective_sample_size_below_floor",
                 detail = sprintf("weighted effective sample size %.1f is below the floor %.1f", ess, ess_floor)))
   }
-  floor_ <- smd_floor %||% vcr_domain()$limits$smdFloor
+  floor_ <- min(smd_floor %||% Inf, vcr_limit("smdFloor", 0.1))
   if (!is.null(balance)) {
     worst <- max(abs(balance$smdAdjusted))
     if (is.finite(worst) && worst >= floor_) {

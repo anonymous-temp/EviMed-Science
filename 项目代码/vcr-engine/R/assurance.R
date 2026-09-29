@@ -51,27 +51,58 @@ vcr_assurance <- function(power_fn, prior, nodes = 64L) {
 #'
 #' With effect ~ N(m, s^2) and a z-test, assurance has a closed form:
 #' P(Z > z_alpha) with Z ~ N(m/se, 1 + s^2/se^2), so
-#' assurance = Phi((m/se - z_alpha) / sqrt(1 + s^2/se^2)).
+#' assurance = Phi((m/se - z_alpha) / sqrt(1 + s^2/se^2)); a two-sided test
+#' adds the other tail. `alpha` is the total.
 vcr_assurance_means <- function(prior_mean, prior_sd, sd, n_treat, n_control,
-                                alpha = 0.025) {
+                                alpha = 0.025, sided = 1) {
+  sided <- vcr_check_sided(sided)
   se <- sd * sqrt(1 / n_treat + 1 / n_control)
-  za <- stats::qnorm(1 - alpha)
-  closed <- stats::pnorm((prior_mean / se - za) / sqrt(1 + (prior_sd / se)^2))
-  numeric_ <- vcr_assurance(function(d) stats::pnorm(d / se - za),
-                            list(kind = "normal", mean = prior_mean, sd = prior_sd))
+  za <- stats::qnorm(1 - alpha / sided)
+  tail_up <- function(m, s) stats::pnorm((m / se - za) / sqrt(1 + (s / se)^2))
+  closed <- tail_up(prior_mean, prior_sd) + if (sided == 2) tail_up(-prior_mean, prior_sd) else 0
+  power_fn <- function(d) stats::pnorm(d / se - za) + if (sided == 2) stats::pnorm(-d / se - za) else 0
+  numeric_ <- vcr_assurance(power_fn, list(kind = "normal", mean = prior_mean, sd = prior_sd))
   list(assurance = closed, assuranceQuadrature = numeric_$assurance,
-       power = stats::pnorm(prior_mean / se - za), se = se)
+       power = power_fn(prior_mean), se = se)
 }
 
 #' Assurance for a time-to-event design, integrating Schoenfeld power over a
 #' normal prior on log(HR).
 vcr_assurance_loghr <- function(prior_mean_loghr, prior_sd, events,
-                                alpha = 0.025, allocation = 0.5) {
-  za <- stats::qnorm(1 - alpha)
+                                alpha = 0.025, allocation = 0.5, sided = 1) {
+  sided <- vcr_check_sided(sided)
+  za <- stats::qnorm(1 - alpha / sided)
   sinfo <- sqrt(events * allocation * (1 - allocation))
-  power_fn <- function(loghr) stats::pnorm(-loghr * sinfo - za)
+  power_fn <- function(loghr) stats::pnorm(-loghr * sinfo - za) + if (sided == 2) stats::pnorm(loghr * sinfo - za) else 0
   out <- vcr_assurance(power_fn, list(kind = "normal", mean = prior_mean_loghr, sd = prior_sd))
   out$power <- power_fn(prior_mean_loghr)
   out$events <- events
   out
 }
+
+#' Assurance for a binary endpoint: the power of the two-proportion test,
+#' averaged over a normal design prior on the risk difference (the treatment
+#' rate is `p_control + RD`, clamped to the open unit interval, and the prior
+#' mass that falls outside is reported). The first version sent binary
+#' endpoints through the continuous z-test with SD 1, so a 200-per-arm trial
+#' with a control rate of 0.3 was scored as if a risk difference were measured
+#' in standard deviations (CE-17).
+#'
+#' Integration is by the quantile function on a fine midpoint grid, which needs
+#' nothing of the prior but its quantiles and is deterministic.
+vcr_assurance_binary <- function(p_control, prior, n_treat, n_control, alpha = 0.025, sided = 1, nodes = 4000L) {
+  sided <- vcr_check_sided(sided)
+  u <- (seq_len(nodes) - 0.5) / nodes
+  eps <- 1e-9
+  rd <- stats::qnorm(u, prior$mean, prior$sd)
+  p1 <- p_control + rd
+  outside <- mean(p1 <= 0 | p1 >= 1)
+  p1 <- pmin(pmax(p1, eps), 1 - eps)
+  pw <- vapply(p1, function(x) vcr_power_proportions(p_control, x, n_treat, n_control, alpha, sided), numeric(1))
+  centre <- min(max(p_control + prior$mean, eps), 1 - eps)
+  list(assurance = mean(pw),
+       power = vcr_power_proportions(p_control, centre, n_treat, n_control, alpha, sided),
+       priorMassOutsideUnitInterval = outside)
+}
+
+`%||%` <- function(a, b) if (is.null(a)) b else a

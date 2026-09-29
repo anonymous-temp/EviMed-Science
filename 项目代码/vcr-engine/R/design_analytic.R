@@ -178,8 +178,10 @@ vcr_event_probability <- function(event_rate, accrual_duration, followup_duratio
   lam / s * (1 - (exp(-s * F) - exp(-s * Tt)) / (s * A))
 }
 
-#' Sample size for a two-sample comparison of means (pooled variance, normal
-#' approximation, then one Satterthwaite-free t-correction round).
+#' Sample size for a two-sample comparison of means: pooled variance, normal
+#' approximation. The t-test the simulator applies needs a few more subjects
+#' (the exact t power at this N is slightly below the target), and that gap is
+#' shown by the `analyticCheck` against `vcr_power_means`, not hidden here.
 vcr_n_means <- function(delta, sd = 1, alpha = 0.025, power = 0.9,
                         allocation = 0.5, sided = 1) {
   za <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
@@ -217,32 +219,63 @@ vcr_power_proportions <- function(p_control, p_treat, n_treat, n_control,
   pbar <- (n_treat * p_treat + n_control * p_control) / (n_treat + n_control)
   se0 <- sqrt(pbar * (1 - pbar) * (1 / n_treat + 1 / n_control))
   se1 <- sqrt(p_treat * (1 - p_treat) / n_treat + p_control * (1 - p_control) / n_control)
-  pnorm((abs(p_treat - p_control) - za * se0) / se1)
+  d <- p_treat - p_control
+  # Signed: a one-sided test rejects only when the treated arm is better, so a
+  # treatment that is worse has power near zero, not the power of the same
+  # benefit (the absolute value belongs to the two-sided test, whose second
+  # tail is added here). An assurance over a design prior that reaches negative
+  # risk differences depends on this.
+  up <- pnorm((d - za * se0) / se1)
+  if (sided == 2) up + pnorm((-d - za * se0) / se1) else up
 }
 
 #' Simon's two-stage designs (optimal and minimax), exact binomial.
+#'
+#' Both are searched over the *same* grid: every total n from 2 to `n_max`,
+#' every first-stage size, every stopping value. The first version broke out of
+#' the loop at the first n that had any feasible design, so "optimal" was only
+#' searched among designs of minimax size and came out equal to the minimax
+#' design (CE-11; Simon 1989 gives 1/10, 5/29, EN0 15.0 for p0 = 0.1, p1 = 0.3
+#' where the old code returned the minimax design 1/15, 5/25).
+#'
+#' Hidden knowledge: the double sum P(reject) = sum_{x1 > r1} P(X1 = x1) *
+#' P(X2 > r - x1) is evaluated as a suffix sum over x1 for every r at once, so
+#' the whole grid to n = 100 costs a few seconds rather than minutes.
 vcr_simon_two_stage <- function(p0, p1, alpha = 0.05, beta = 0.2, n_max = 100) {
   best_opt <- NULL; best_min <- NULL
-  for (n in 1:n_max) {
+  for (n in 2:n_max) {
     for (n1 in 1:(n - 1)) {
+      n2 <- n - n1
+      x1 <- 0:n1
+      d0 <- dbinom(x1, n1, p0); d1 <- dbinom(x1, n1, p1)
+      r_all <- 0:(n - 1)
+      # upper-tail P(X2 > k) at k = r - x1, for every (x1, r)
+      tail_at <- function(p) {
+        k <- outer(x1, r_all, function(a, b) b - a)
+        out <- matrix(1, nrow = length(x1), ncol = length(r_all))
+        inside <- k >= 0 & k < n2
+        out[inside] <- stats::pbinom(k[inside], n2, p, lower.tail = FALSE)
+        out[k >= n2] <- 0
+        out
+      }
+      suffix <- function(A) apply(A[nrow(A):1, , drop = FALSE], 2, cumsum)[nrow(A):1, , drop = FALSE]
+      S0 <- suffix(d0 * tail_at(p0))            # rows x1 = 0..n1, columns r = 0..n-1
+      S1 <- suffix(d1 * tail_at(p1))
       for (r1 in 0:(n1 - 1)) {
+        # P(reject) for stopping value r1 is the suffix sum from x1 = r1 + 1
+        typ1 <- S0[r1 + 2L, ]; pow <- S1[r1 + 2L, ]
+        ok <- which(r_all >= r1 & typ1 <= alpha + 1e-12 & pow >= 1 - beta - 1e-12)
+        if (!length(ok)) next
         pet0 <- pbinom(r1, n1, p0)
-        # early stop under H1 must not be too likely; enumerate r
-        for (r in r1:(n - 1)) {
-          # P(reject H0) = P(X1 > r1 and X1 + X2 > r)
-          pow <- .vcr_simon_prob(p1, n1, n, r1, r)
-          typ1 <- .vcr_simon_prob(p0, n1, n, r1, r)
-          if (typ1 <= alpha && pow >= 1 - beta) {
-            en0 <- n1 + (1 - pet0) * (n - n1)
-            cand <- list(n1 = n1, r1 = r1, n = n, r = r, EN0 = en0, PET0 = pet0,
-                         alpha = typ1, power = pow)
-            if (is.null(best_opt) || en0 < best_opt$EN0) best_opt <- cand
-            if (is.null(best_min) || n < best_min$n || (n == best_min$n && en0 < best_min$EN0)) best_min <- cand
-          }
+        en0 <- n1 + (1 - pet0) * (n - n1)
+        for (j in ok) {
+          cand <- list(n1 = n1, r1 = r1, n = n, r = r_all[j], EN0 = en0, PET0 = pet0,
+                       alpha = typ1[j], power = pow[j])
+          if (is.null(best_opt) || en0 < best_opt$EN0 - 1e-12) best_opt <- cand
+          if (is.null(best_min) || n < best_min$n || (n == best_min$n && en0 < best_min$EN0 - 1e-12)) best_min <- cand
         }
       }
     }
-    if (!is.null(best_min) && best_min$n <= n) break
   }
   list(optimal = best_opt, minimax = best_min)
 }
@@ -257,7 +290,7 @@ vcr_simon_two_stage <- function(p0, p1, alpha = 0.05, beta = 0.2, n_max = 100) {
   total
 }
 
-# --- exact asymptotic log-rank power ---------------------------------------
+# --- asymptotic log-rank power (a design's patients, not its events) --------
 
 #' Expected proportion still under observation `t` after entry, for uniform
 #' accrual over [0, A] analysed at A + F, with an exponential dropout hazard.
@@ -268,29 +301,46 @@ vcr_at_risk_fraction <- function(t, accrual_duration, followup_duration, dropout
   admin * exp(-dropout_rate * t)
 }
 
-#' Power of the log-rank test from its exact asymptotic mean and variance.
+#' Power of the log-rank test from the mean of its score, integrated over
+#' follow-up.
 #'
-#' Hidden knowledge: Schoenfeld's `(z_a + z_b)^2 / (p(1-p) log(HR)^2)` is a
-#' *local* approximation -- it assumes the at-risk split stays at the
-#' randomization ratio, which stops being true as soon as the hazard ratio is
-#' away from 1. On the engine's own reference designs it over-states power by
-#' one to four percentage points: at HR 0.7 with 409 events it predicts 0.9503
-#' where the simulation gives 0.9394, and the gap is a *systematic* 3 Monte-
-#' Carlo standard errors at the plan's own replicate floor. AC-29 is therefore
-#' not passable for the time-to-event family with Schoenfeld as the reference,
-#' and the fix belongs in the reference, not in the tolerance.
-#'
-#' The exact version integrates the score's mean and variance over follow-up:
+#' The reference the simulation is checked against (AC-29). Schoenfeld's
+#' `(z_a + z_b)^2 / (p(1-p) log(HR)^2)` needs a number of EVENTS and assumes the
+#' at-risk split stays at the randomization ratio; this integral takes the
+#' at-risk process from the design itself (accrual, follow-up, dropout, the two
+#' survival curves), so it gives power for a stated number of patients:
 #'   pi_k(t) = n_k S_k(t) G(t)          expected at risk in arm k
 #'   phi(t)  = pi_1 / (pi_1 + pi_0)
 #'   E[U]    = integral phi (1-phi) (pi_0 + pi_1) lambda_0 (theta - 1) dt
 #'   V       = integral phi (1-phi) (pi_0 + pi_1) lambda_0 (phi theta + 1 - phi) dt
-#' and power = Phi(E[U]/sqrt(V) - z_alpha). The two reduce to Schoenfeld's
-#' formula as theta -> 1, which is the check `tests/numeric/E07` reports.
+#' and power = Phi(|E[U]| / sqrt(V) - z_{1-alpha}), which reduces to Schoenfeld's
+#' formula as theta -> 1.
+#'
+#' How accurate it is, measured (independent simulation with `survival::survdiff`,
+#' 12,000 replicates, one-sided 0.025; the simulator is written separately from
+#' the engine's): HR 0.7 300/300 -> reference 0.9497, simulation 0.9531; HR 0.534
+#' 120/60 -> 0.9625 vs 0.9631; HR 0.5 60/60 -> 0.9069 vs 0.9033; HR 0.6 100/100
+#' -> 0.7599 vs 0.7588; HR 0.6 140/70 -> 0.7544 vs 0.7412; HR 0.4 40/40 -> 0.9296
+#' vs 0.9302. It is a first-order approximation: it treats the score's variance
+#' as the null variance V, which is exact only for local alternatives, and it is
+#' good to about a percentage point at the effect sizes a trial is designed for.
+#' Two alternatives were tried and rejected on the same simulations. Taking the
+#' martingale variance of the score under the alternative, Var(U), for the
+#' spread of Z (the second version of this function) is biased LOW by one to
+#' 2.6 points at strong effects (HR 0.534, 120/60: 0.9370 vs 0.9631), because it
+#' leaves out the negative covariance between the score and its own at-risk
+#' compensator; and Schoenfeld with the event share of each arm is close but is
+#' 0.5 to 0.8 points off in both directions. `schoenfeldPower` keeps the second
+#' beside the result, so the size of the approximation is visible rather than
+#' argued about.
+#'
+#' `alpha` is the total: a two-sided test spends `alpha / 2` per tail and both
+#' tails count towards power.
 vcr_logrank_power <- function(hazard_ratio, control_dist, n_treat, n_control,
                               accrual_duration = 0, followup_duration = Inf,
                               dropout_rate = 0, alpha = 0.025, max_followup = Inf,
-                              nodes = 4001L) {
+                              nodes = 4001L, sided = 1) {
+  sided <- vcr_check_sided(sided)
   theta <- hazard_ratio
   Tt <- min(if (is.finite(followup_duration)) accrual_duration + followup_duration else Inf, max_followup)
   if (!is.finite(Tt)) Tt <- 60 * vcr_dist_median(control_dist)
@@ -308,14 +358,20 @@ vcr_logrank_power <- function(hazard_ratio, control_dist, n_treat, n_control,
   common <- phi * (1 - phi) * tot * h0
   drift <- sum(w * common * (theta - 1))
   variance <- sum(w * common * (phi * theta + 1 - phi))
-  events <- sum(w * (p1 * theta * h0 + p0 * h0))
-  z <- if (variance > 0) drift / sqrt(variance) else 0
-  list(power = stats::pnorm(-z - stats::qnorm(1 - alpha)),
-       expectedEvents = events, drift = -z, variance = variance,
-       schoenfeldPower = {
-         alloc <- n_treat / (n_treat + n_control)
-         stats::pnorm(-log(theta) * sqrt(events * alloc * (1 - alloc)) - stats::qnorm(1 - alpha))
-       })
+  d1 <- sum(w * p1 * theta * h0)
+  d0 <- sum(w * p0 * h0)
+  events <- d1 + d0
+  crit <- stats::qnorm(1 - alpha / sided)
+  # U is negative under benefit (theta < 1): the test rejects on Z < -crit.
+  mean_z <- if (variance > 0) drift / sqrt(variance) else 0
+  power <- stats::pnorm(-crit - mean_z)
+  if (sided == 2) power <- power + stats::pnorm(-crit + mean_z)
+  schoenfeld <- if (events > 0) {
+    ncp <- abs(log(theta)) * sqrt(d1 * d0 / events)
+    stats::pnorm(ncp - crit) + if (sided == 2) stats::pnorm(-ncp - crit) else 0
+  } else 0
+  list(power = power, expectedEvents = events, expectedEventsTreat = d1, expectedEventsControl = d0,
+       drift = -mean_z, variance = variance, schoenfeldPower = schoenfeld)
 }
 
 vcr_dist_hazard <- function(dist, t) {

@@ -58,23 +58,46 @@ vcr_procova_ratio <- function(rho, lambda = 1, gamma = 1,
        lambda = lambda, gamma = gamma)
 }
 
+#' Total sample size for a two-arm mean comparison when the two arms have
+#' their own residual SDs (after covariate adjustment) and the allocation is
+#' `allocation` to treatment:
+#'   N = (z_a + z_b)^2 (s1^2 / p + s0^2 / (1 - p)) / delta^2.
+#' With s1 = s0 and p = 1/2 this is `vcr_n_means`.
+vcr_n_means_hetero <- function(delta, sd1, sd0, alpha = 0.025, power = 0.9, allocation = 0.5, sided = 1) {
+  za <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
+  zb <- qnorm(power)
+  (za + zb)^2 * (sd1^2 / allocation + sd0^2 / (1 - allocation)) / delta^2
+}
+
 #' The three paths the design page shows side by side.
+#'
+#' Hidden knowledge: the EMA's `gamma` inflates the *control arm's* SD in the
+#' sample-size calculation, so it belongs in the base variance, not only in a
+#' ratio. The first version multiplied a base size computed with the plain SD
+#' by a ratio in which gamma cancelled at rho = 0 (a score with no correlation
+#' asked for exactly the unadjusted size whatever gamma said), which is the
+#' opposite of what a conservatism parameter is for (CE-19). Each path is now
+#' sized directly from the residual SDs it implies:
+#'   unadjusted         (sd, sd)
+#'   ordinary           (sd sqrt(1 - rho_ord^2), same)
+#'   prognostic         (sd sqrt(1 - (lambda rho)^2), gamma sd sqrt(1 - (lambda rho)^2))
+#'   undiscounted       (sd sqrt(1 - rho^2), same)
 vcr_procova_paths <- function(delta, sd = 1, alpha = 0.025, power = 0.9,
                               rho_prognostic, rho_ordinary = 0,
-                              lambda = 1, gamma = 1, allocation = 0.5) {
-  base <- vcr_n_means(delta, sd, alpha, power, allocation)
-  ord <- vcr_procova_ratio(rho_ordinary, lambda = 1, gamma = 1, sigma0 = sd, allocation = allocation)
-  pro <- vcr_procova_ratio(rho_prognostic, lambda = lambda, gamma = gamma, sigma0 = sd, allocation = allocation)
-  mk <- function(name, ratio) list(
-    path = name, varianceRatio = ratio,
-    total = base$total * ratio, treat = base$treat * ratio, control = base$control * ratio
+                              lambda = 1, gamma = 1, allocation = 0.5, sided = 1) {
+  n_of <- function(rho1, rho0, g = 1) {
+    vcr_n_means_hetero(delta, sd * sqrt(1 - rho1^2), g * sd * sqrt(1 - rho0^2), alpha, power, allocation, sided)
+  }
+  base <- n_of(0, 0)
+  mk <- function(name, total) list(
+    path = name, varianceRatio = total / base,
+    total = total, treat = total * allocation, control = total * (1 - allocation)
   )
   list(
-    unadjusted = mk("unadjusted", 1),
-    ordinaryCovariates = mk("ordinary_covariates", ord$varianceRatio),
-    prognosticScore = mk("prognostic_score", pro$varianceRatio),
-    undiscountedPrognosticScore = mk("prognostic_score_undiscounted",
-      vcr_procova_ratio(rho_prognostic, 1, 1, sd, allocation = allocation)$varianceRatio),
+    unadjusted = mk("unadjusted", base),
+    ordinaryCovariates = mk("ordinary_covariates", n_of(rho_ordinary, rho_ordinary)),
+    prognosticScore = mk("prognostic_score", n_of(lambda * rho_prognostic, lambda * rho_prognostic, gamma)),
+    undiscountedPrognosticScore = mk("prognostic_score_undiscounted", n_of(rho_prognostic, rho_prognostic)),
     lambda = lambda, gamma = gamma
   )
 }
@@ -82,13 +105,11 @@ vcr_procova_paths <- function(delta, sd = 1, alpha = 0.025, power = 0.9,
 #' rho sensitivity curve: the page's default view (EMA SAWP advice).
 vcr_procova_sensitivity <- function(delta, sd = 1, alpha = 0.025, power = 0.9,
                                     rho_grid = seq(0, 0.9, by = 0.05),
-                                    lambda = 1, gamma = 1, allocation = 0.5) {
-  base <- vcr_n_means(delta, sd, alpha, power, allocation)$total
-  data.frame(
-    rho = rho_grid,
-    varianceRatio = vapply(rho_grid, function(r)
-      vcr_procova_ratio(r, lambda, gamma, sd, allocation = allocation)$varianceRatio, numeric(1)),
-    totalSampleSize = vapply(rho_grid, function(r)
-      base * vcr_procova_ratio(r, lambda, gamma, sd, allocation = allocation)$varianceRatio, numeric(1))
-  )
+                                    lambda = 1, gamma = 1, allocation = 0.5, sided = 1) {
+  total <- vapply(rho_grid, function(r) {
+    vcr_n_means_hetero(delta, sd * sqrt(1 - (lambda * r)^2), gamma * sd * sqrt(1 - (lambda * r)^2),
+                       alpha, power, allocation, sided)
+  }, numeric(1))
+  base <- vcr_n_means_hetero(delta, sd, sd, alpha, power, allocation, sided)
+  data.frame(rho = rho_grid, varianceRatio = total / base, totalSampleSize = total)
 }

@@ -85,14 +85,17 @@ vcr_map_prior <- function(y, se, tau_prior = list(kind = "half_normal", scale = 
   )
 }
 
-#' Approximate a MAP predictive by a two-component normal mixture matched on
-#' the first four central moments of the quadrature mixture.
+#' Approximate a MAP predictive by a normal mixture of at most two components.
 #'
-#' Hidden knowledge: a single normal understates the tail that carries the
-#' conflict behaviour, and more than two components is not identifiable from
-#' the handful of historical studies a real project has. RBesT's
-#' `automixfit` picks the component count by AIC on MCMC draws; with a
-#' quadrature mixture we can match moments exactly instead of fitting.
+#' With `components = 1` the MAP is one normal matched on its mean and variance.
+#' With two, the quadrature mixture over tau is *split at the posterior median
+#' of tau*, and each half is collapsed to one normal matched on that half's own
+#' mean and variance: the narrow component is the low-heterogeneity regime and
+#' the wide one the rest. (An earlier docstring promised a match on the first
+#' four moments; nothing does that.) A single normal understates the tail that
+#' carries the conflict behaviour, and more than two components is not
+#' identifiable from the handful of historical studies a real project has, so
+#' `components` is 1 or 2 and anything else is refused by the caller.
 vcr_map_normal_mixture <- function(map, components = 2L) {
   comp <- map$components
   if (components <= 1L) {
@@ -230,6 +233,99 @@ vcr_logit_mixture_to_beta <- function(mixture) {
   }))
   rownames(out) <- NULL
   out
+}
+
+#' Expected local-information-ratio ESS of a normal mixture prior on the
+#' analysis scale (Neuenschwander et al. 2020; RBesT `ess(method = "elir")`).
+#'
+#' Hidden knowledge: for a mixture the local prior information is
+#' -d^2/dtheta^2 log p(theta) = E_w[1/s_k^2] - Var_w[(theta - m_k)/s_k^2],
+#' with w the component weights *at theta*. The ELIR is its average under the
+#' prior, in units of one subject's information (`unit_variance`). It is
+#' reported next to the moment ESS and never instead of it: for the same prior
+#' the two can differ by a factor of ten (68 vs 96 on RBesT's own example), and
+#' a bare "prior ESS" would not say which one it is.
+vcr_prior_ess_elir <- function(mixture, unit_variance = 1, nodes = 20001L) {
+  w <- mixture$weight / sum(mixture$weight); m <- mixture$mean; s <- mixture$sd
+  lo <- min(m - 10 * s); hi <- max(m + 10 * s)
+  x <- seq(lo, hi, length.out = nodes)
+  h <- x[2] - x[1]
+  lw <- vapply(seq_along(w), function(k) log(w[k]) + stats::dnorm(x, m[k], s[k], log = TRUE), numeric(nodes))
+  lmix <- apply(lw, 1, function(r) { mx <- max(r); mx + log(sum(exp(r - mx))) })
+  post <- exp(lw - lmix)                                   # w_k(theta), nodes x K
+  g <- vapply(seq_along(w), function(k) -(x - m[k]) / s[k]^2, numeric(nodes))
+  mean_g <- rowSums(post * g)
+  var_g <- rowSums(post * g^2) - mean_g^2
+  info <- rowSums(post * rep(1 / s^2, each = nodes)) - var_g
+  dens <- exp(lmix)
+  simpson <- .vcr_simpson_weights(nodes) * h
+  unit_variance * sum(simpson * dens * info)
+}
+
+#' Posterior mean and variance of a normal-mixture prior after a vector of
+#' normal observations with a common standard error (vectorised over `y`).
+.vcr_mixture_posterior_moments <- function(prior, y, se) {
+  K <- nrow(prior); v <- se^2; n <- length(y)
+  pv <- 1 / (1 / prior$sd^2 + 1 / v)
+  pm <- vapply(seq_len(K), function(k) pv[k] * (prior$mean[k] / prior$sd[k]^2 + y / v), numeric(n))
+  lw <- vapply(seq_len(K), function(k) log(prior$weight[k]) + stats::dnorm(y, prior$mean[k], sqrt(prior$sd[k]^2 + v), log = TRUE), numeric(n))
+  if (n == 1L) { pm <- matrix(pm, nrow = 1L); lw <- matrix(lw, nrow = 1L) }
+  lw <- lw - apply(lw, 1, max)
+  w <- exp(lw); w <- w / rowSums(w)
+  mu <- rowSums(w * pm)
+  list(mean = mu, variance = rowSums(w * (matrix(pv, n, K, byrow = TRUE) + pm^2)) - mu^2)
+}
+
+#' Operating characteristics of a borrowing design over a grid of control-rate
+#' drift (plan 5.3 hybrid control: "在真实对照率偏离历史的一组情景上仿真 I 类错误和功效").
+#'
+#' The decision is the posterior-probability rule of a hybrid design: the
+#' control-arm parameter has the (robust) MAP prior updated by the observed
+#' control estimate, the treatment arm is flat, and the treatment is declared
+#' better when P(theta_t - theta_c > 0 | data) > 1 - alpha. Everything is on the
+#' analysis scale with normal sampling (`unit_variance` / n per arm), the same
+#' scale the MAP lives on, so a binary endpoint runs on the logit and a
+#' "drift" is a shift of the true control logit away from the historical mean.
+#' One replicate stream per replicate makes the grid common-random-numbers, and
+#' every cell carries its Monte-Carlo standard error.
+vcr_hybrid_operating_characteristics <- function(map_mixture, unit_variance, n_control, n_treatment,
+                                                 drifts, effect, robust_weights = c(0.2, 0.5),
+                                                 alpha = 0.025, replicates = 5000L, seed = 1L,
+                                                 cores = 1L, vague_sd = NULL) {
+  base_mean <- sum(map_mixture$weight * map_mixture$mean)
+  sd_c <- sqrt(unit_variance / n_control); sd_t <- sqrt(unit_variance / n_treatment)
+  crit <- stats::qnorm(1 - alpha)
+  priors <- c(list(none = NULL), stats::setNames(lapply(robust_weights, function(w)
+    vcr_robustify(map_mixture, w, unit_information_sd = vague_sd %||% sqrt(unit_variance))),
+    paste0("robust_", robust_weights)))
+  bank <- vcr_stream_bank(seed)
+  streams <- bank$take(replicates)
+  # standard normal draws per replicate: the same draws serve every drift and
+  # every prior, which is what makes the cells comparable
+  z <- vcr_map_streams(streams, function(i) stats::rnorm(4L), cores = cores)
+  Z <- do.call(rbind, z)
+  rows <- list()
+  for (d in drifts) for (eff in c(0, effect)) {
+    theta_c <- base_mean + d; theta_t <- theta_c + eff
+    yc <- theta_c + sd_c * Z[, 1]; yt <- theta_t + sd_t * Z[, 2]
+    for (nm in names(priors)) {
+      pr <- priors[[nm]]
+      if (is.null(pr)) {
+        mu_c <- yc; v_c <- rep(sd_c^2, length(yc))            # no borrowing: the control arm's own data
+      } else {
+        pm <- .vcr_mixture_posterior_moments(pr, yc, sd_c)
+        mu_c <- pm$mean; v_c <- pm$variance
+      }
+      zstat <- (yt - mu_c) / sqrt(sd_t^2 + v_c)
+      rej <- as.numeric(zstat > crit)
+      p_hat <- mean(rej)
+      rows[[length(rows) + 1L]] <- data.frame(
+        drift = d, prior = nm, scenario = if (eff == 0) "null" else "alternative",
+        rejection = p_hat, mcse = sqrt(p_hat * (1 - p_hat) / length(rej)), replicates = length(rej),
+        stringsAsFactors = FALSE)
+    }
+  }
+  do.call(rbind, rows)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

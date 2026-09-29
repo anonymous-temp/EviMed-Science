@@ -25,7 +25,29 @@
 #   0.1/12. Getting this wrong inflates events by a few percent, which is
 #   invisible in a single run and shows up as a persistent disagreement with
 #   the analytic event count.
+# - **Entry time is independent of arm, and every uniform is always drawn.**
+#   The first version sorted the entry times and assigned them in arm order, so
+#   the treated arm was enrolled first and had the longest follow-up: hazard
+#   ratio 0.7 looked stronger than it was and power came out 3-4 points high
+#   (CE-1). Entry, event and dropout each take one uniform per subject in a
+#   fixed order whatever the scenario says, so switching dropout on or moving
+#   an accrual profile changes those subjects' times and nobody else's
+#   (common random numbers, plan 5.2). The binary outcome is a threshold on a
+#   uniform for the same reason: `rbinom` maps the uniform through
+#   min(p, 1 - p) and a coupling that flips at 0.5 is no coupling.
+# - **`alpha` is the total, and a two-sided analysis spends alpha / 2 per
+#   tail everywhere**: the decision, the interval and the analytic reference.
+#   The first version used `alpha` per tail in the interval, so a two-sided
+#   0.05 analysis reported a 90% interval and called its coverage nominal.
 # ---------------------------------------------------------------------------
+
+#' The sidedness every path shares. Anything but 1 or 2 is refused by name
+#' rather than read as "not 1, so two".
+vcr_check_sided <- function(sided) {
+  s <- vcr_scalar(sided, 1)
+  if (!(s %in% c(1, 2))) vcr_abort("scenario_value_invalid", "scenario.analysis.sided", "The analysis is one-sided (1) or two-sided (2).")
+  as.integer(s)
+}
 
 # --- continuous ------------------------------------------------------------
 
@@ -33,20 +55,28 @@
 #' the baseline covariate X and Y under the control arm, which fixes b1 given
 #' the residual sd: b1 = rho * sd_y / sd_x with sd_y^2 = b1^2 sd_x^2 + sigma^2.
 #' Solving gives b1 = rho * sigma / (sd_x * sqrt(1 - rho^2)).
+#'
+#' `z` fixes the arm vector (a stored population has its own members), and
+#' `lp` is an extra per-subject additive term (covariate effects read from that
+#' population); both are optional and change nothing about the draw count.
 vcr_sim_continuous <- function(n_treat, n_control, delta, sd = 1, rho = 0,
-                               baseline_sd = 1, baseline_mean = 0, b0 = 0) {
-  n <- n_treat + n_control
-  z <- c(rep(1L, n_treat), rep(0L, n_control))
+                               baseline_sd = 1, baseline_mean = 0, b0 = 0,
+                               z = NULL, lp = NULL) {
+  if (is.null(z)) z <- c(rep(1L, n_treat), rep(0L, n_control))
+  n <- length(z)
   x <- rnorm(n, baseline_mean, baseline_sd)
+  e <- rnorm(n, 0, 1)
   b1 <- if (abs(rho) < .Machine$double.eps) 0 else rho * sd / (baseline_sd * sqrt(1 - rho^2))
-  y <- b0 + b1 * (x - baseline_mean) + delta * z + rnorm(n, 0, sd)
+  y <- b0 + b1 * (x - baseline_mean) + delta * z + sd * e + (lp %||% 0)
   data.frame(arm = z, x = x, y = y)
 }
 
 #' Two-sample t test on the mean difference (Welch off by design: the
 #' reference DGM is homoscedastic and the analytic power formula this is
-#' checked against is the pooled one).
+#' checked against is the pooled one). `alpha` is the total; the interval and
+#' the decision spend `alpha / sided` per tail.
 vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1) {
+  sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
   n1 <- length(y1); n0 <- length(y0)
   est <- mean(y1) - mean(y0)
@@ -55,15 +85,16 @@ vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1) {
   tstat <- est / se
   df <- n1 + n0 - 2
   p <- if (sided == 1) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
-  crit <- qt(1 - alpha, df)
+  crit <- qt(1 - alpha / sided, df)
   c(estimate = est, se = se, statistic = tstat, p = p,
-    reject = as.numeric(if (sided == 1) tstat > crit else abs(tstat) > qt(1 - alpha / 2, df)),
-    ci_low = est - qt(1 - alpha, df) * se, ci_high = est + qt(1 - alpha, df) * se)
+    reject = as.numeric(if (sided == 1) tstat > crit else abs(tstat) > crit),
+    ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
 #' ANCOVA adjusting for the baseline covariate. This is the estimator PROCOVA
 #' uses, with the prognostic score in place of `x`.
 vcr_analyse_ancova <- function(data, alpha = 0.025, sided = 1, covariates = "x") {
+  sided <- vcr_check_sided(sided)
   form <- as.formula(paste("y ~ arm +", paste(covariates, collapse = " + ")))
   fit <- stats::lm(form, data = data)
   co <- summary(fit)$coefficients
@@ -71,9 +102,10 @@ vcr_analyse_ancova <- function(data, alpha = 0.025, sided = 1, covariates = "x")
   df <- fit$df.residual
   tstat <- est / se
   p <- if (sided == 1) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
+  crit <- qt(1 - alpha / sided, df)
   c(estimate = est, se = se, statistic = tstat, p = p,
-    reject = as.numeric(if (sided == 1) tstat > qt(1 - alpha, df) else abs(tstat) > qt(1 - alpha / 2, df)),
-    ci_low = est - qt(1 - alpha, df) * se, ci_high = est + qt(1 - alpha, df) * se)
+    reject = as.numeric(if (sided == 1) tstat > crit else abs(tstat) > crit),
+    ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
 # --- binary ----------------------------------------------------------------
@@ -81,27 +113,51 @@ vcr_analyse_ancova <- function(data, alpha = 0.025, sided = 1, covariates = "x")
 #' Control rate p0; the treatment rate is either given directly, or derived
 #' from a risk difference or an odds ratio. A logit covariate effect is
 #' available so the DGM can be made non-collapsible on purpose.
+#'
+#' The outcome is a threshold on one uniform per subject, so a scenario with a
+#' different rate flips exactly the subjects whose uniform lies between the two
+#' rates and no one else (common random numbers across scenarios).
 vcr_sim_binary <- function(n_treat, n_control, p_control, p_treat = NULL,
                            risk_difference = NULL, odds_ratio = NULL,
-                           covariate_logit = 0) {
+                           covariate_logit = 0, z = NULL, lp = NULL) {
+  p1 <- vcr_binary_treatment_rate(p_control, p_treat, risk_difference, odds_ratio)
+  if (is.null(z)) z <- c(rep(1L, n_treat), rep(0L, n_control))
+  n <- length(z)
+  x <- rnorm(n)
+  u <- runif(n)
+  eta <- stats::qlogis(ifelse(z == 1L, p1, p_control)) + covariate_logit * x + (lp %||% 0)
+  y <- as.integer(u < stats::plogis(eta))
+  data.frame(arm = z, x = x, y = y)
+}
+
+#' The treatment-arm rate a binary scenario states. Exactly one of a rate, a
+#' risk difference or an odds ratio must be present: a scenario that names none
+#' is refused rather than read as "no effect", because a typo in the field name
+#' would otherwise turn a power calculation into a type-I error calculation
+#' without a word (EA-11).
+vcr_binary_treatment_rate <- function(p_control, p_treat = NULL, risk_difference = NULL, odds_ratio = NULL) {
+  if (is.null(p_control) || !is.finite(p_control) || p_control <= 0 || p_control >= 1) {
+    vcr_abort("scenario_value_invalid", "scenario.truth.controlRate", "A binary scenario states a control rate strictly between 0 and 1.")
+  }
+  given <- c(!is.null(p_treat), !is.null(risk_difference), !is.null(odds_ratio))
+  if (sum(given) != 1L) {
+    vcr_abort("scenario_field_missing", "scenario.truth",
+              "A binary scenario states exactly one of treatmentRate, riskDifference or oddsRatio.")
+  }
   p1 <- if (!is.null(p_treat)) p_treat
         else if (!is.null(risk_difference)) p_control + risk_difference
-        else if (!is.null(odds_ratio)) {
-          o <- odds_ratio * p_control / (1 - p_control); o / (1 + o)
-        } else p_control
-  if (p1 < 0 || p1 > 1) stop("vcr_sim_binary: implied treatment rate outside [0, 1]")
-  n <- n_treat + n_control
-  z <- c(rep(1L, n_treat), rep(0L, n_control))
-  x <- rnorm(n)
-  lp <- stats::qlogis(ifelse(z == 1L, p1, p_control)) + covariate_logit * x
-  y <- rbinom(n, 1L, stats::plogis(lp))
-  data.frame(arm = z, x = x, y = y)
+        else { o <- odds_ratio * p_control / (1 - p_control); o / (1 + o) }
+  if (!is.finite(p1) || p1 < 0 || p1 > 1) {
+    vcr_abort("scenario_value_invalid", "scenario.truth", "The treatment-arm rate this scenario implies is outside [0, 1].")
+  }
+  p1
 }
 
 #' Risk difference with a Wald interval on the unpooled variance, and the
 #' pooled-variance score test for the hypothesis (the test the two-proportion
 #' sample-size formula is derived from).
 vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1) {
+  sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
   n1 <- length(y1); n0 <- length(y0)
   p1 <- mean(y1); p0 <- mean(y0)
@@ -111,23 +167,24 @@ vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1) {
   se0 <- sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n0))
   z <- if (se0 > 0) est / se0 else 0
   p <- if (sided == 1) pnorm(z, lower.tail = FALSE) else 2 * pnorm(-abs(z))
-  crit <- if (sided == 1) qnorm(1 - alpha) else qnorm(1 - alpha / 2)
+  crit <- qnorm(1 - alpha / sided)
   c(estimate = est, se = se, statistic = z, p = p,
     reject = as.numeric(if (sided == 1) z > crit else abs(z) > crit),
-    ci_low = est - qnorm(1 - alpha) * se, ci_high = est + qnorm(1 - alpha) * se)
+    ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
 vcr_analyse_logistic <- function(data, alpha = 0.025, sided = 1, covariates = character()) {
+  sided <- vcr_check_sided(sided)
   form <- as.formula(paste("y ~ arm", if (length(covariates)) paste("+", paste(covariates, collapse = " + ")) else ""))
   fit <- suppressWarnings(stats::glm(form, data = data, family = stats::binomial()))
   co <- summary(fit)$coefficients
   est <- co["arm", "Estimate"]; se <- co["arm", "Std. Error"]
   z <- est / se
   p <- if (sided == 1) pnorm(z, lower.tail = FALSE) else 2 * pnorm(-abs(z))
-  crit <- if (sided == 1) qnorm(1 - alpha) else qnorm(1 - alpha / 2)
+  crit <- qnorm(1 - alpha / sided)
   c(estimate = est, se = se, statistic = z, p = p,
     reject = as.numeric(if (sided == 1) z > crit else abs(z) > crit),
-    ci_low = est - qnorm(1 - alpha) * se, ci_high = est + qnorm(1 - alpha) * se)
+    ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
 # --- time to event ---------------------------------------------------------
@@ -136,7 +193,7 @@ vcr_analyse_logistic <- function(data, alpha = 0.025, sided = 1, covariates = ch
 #' by a proportional-hazards multiplier.
 #'
 #' `dist`: "exponential" (rate), "weibull" (shape, scale), "piecewise"
-#' (breaks, rates — rates[i] applies on [breaks[i-1], breaks[i]), the last rate
+#' (breaks, rates -- rates[i] applies on [breaks[i-1], breaks[i]), the last rate
 #' runs to infinity).
 vcr_inverse_cumhaz <- function(H, dist) {
   kind <- dist$kind %||% "exponential"
@@ -147,8 +204,8 @@ vcr_inverse_cumhaz <- function(H, dist) {
     return(dist$scale * (H)^(1 / dist$shape))
   }
   if (identical(kind, "piecewise")) {
-    breaks <- c(0, dist$breaks, Inf)
-    rates <- dist$rates
+    breaks <- c(0, vcr_num(dist$breaks), Inf)
+    rates <- vcr_num(dist$rates)
     widths <- diff(breaks)
     widths[length(widths)] <- Inf
     cum <- c(0, cumsum(rates[-length(rates)] * widths[-length(widths)]))
@@ -164,61 +221,95 @@ vcr_inverse_cumhaz <- function(H, dist) {
 
 vcr_dist_exponential_from_median <- function(median) list(kind = "exponential", rate = log(2) / median)
 
+#' The dropout hazard a scenario's annual proportion means: a "10% annual
+#' dropout" is S(12 months) = 0.9, so hazard = -log(0.9) / 12 per month.
+vcr_dropout_hazard <- function(dropout_annual, period = 12) {
+  p <- dropout_annual %||% 0
+  if (!is.finite(p) || p < 0 || p >= 1) {
+    vcr_abort("scenario_value_invalid", "scenario.accrual.dropoutAnnual", "The annual dropout is a proportion in [0, 1).")
+  }
+  if (p == 0) 0 else -log(1 - p) / period
+}
+
 #' One two-arm time-to-event trial.
 #'
 #' `accrual`: list(kind = "uniform", duration = A) or
-#'            list(kind = "piecewise", breaks = , rates = ) — rates are
+#'            list(kind = "piecewise", breaks = , rates = ) -- rates are
 #'            subjects per time unit, and the number accrued is fixed at n so
 #'            the piecewise rates only shape the entry times.
-#' `followup`: minimum follow-up F after the last entry; administrative
+#' `followup`: minimum follow-up F after the accrual period; administrative
 #'             censoring is at calendar time A + F.
 #' `dropoutAnnual`: proportion still in follow-up lost per `dropoutPeriod`
 #'             (default 12 time units): hazard = -log(1 - p) / period.
+#' `lp`: an extra per-subject log-hazard-ratio term (covariate effects).
 vcr_sim_tte <- function(n_treat, n_control, control_dist, hazard_ratio,
                         accrual = list(kind = "uniform", duration = 0),
                         followup = Inf, dropout_annual = 0, dropout_period = 12,
-                        max_followup = Inf) {
-  n <- n_treat + n_control
-  z <- c(rep(1L, n_treat), rep(0L, n_control))
-  u <- runif(n)
-  hr <- ifelse(z == 1L, hazard_ratio, 1)
+                        max_followup = Inf, z = NULL, lp = NULL) {
+  if (is.null(z)) z <- c(rep(1L, n_treat), rep(0L, n_control))
+  n <- length(z)
+  # Three uniforms per subject, always, in this order (common random numbers).
+  u_event <- runif(n)
+  u_drop <- runif(n)
+  u_entry <- runif(n)
+  hr <- ifelse(z == 1L, hazard_ratio, 1) * exp(lp %||% 0)
   # inversion: S(t) = exp(-hr * H0(t)) = u  =>  H0(t) = -log(u) / hr
-  t_event <- vcr_inverse_cumhaz(-log(u) / hr, control_dist)
-  drop_h <- if (dropout_annual > 0) -log(1 - dropout_annual) / dropout_period else 0
-  t_drop <- if (drop_h > 0) rexp(n, drop_h) else rep(Inf, n)
-  entry <- vcr_accrual_times(n, accrual)
-  admin_end <- if (is.finite(followup)) max(entry) + followup else Inf
+  t_event <- vcr_inverse_cumhaz(-log(u_event) / hr, control_dist)
+  drop_h <- vcr_dropout_hazard(dropout_annual, dropout_period)
+  t_drop <- if (drop_h > 0) -log(u_drop) / drop_h else rep(Inf, n)
+  entry <- .vcr_accrual_from_u(u_entry, accrual)
+  end <- .vcr_accrual_end(entry, accrual)
+  admin_end <- if (is.finite(followup)) end + followup else Inf
   t_admin <- pmin(admin_end - entry, max_followup)
   obs <- pmin(t_event, t_drop, t_admin)
   data.frame(arm = z, time = obs, status = as.integer(t_event <= pmin(t_drop, t_admin)), entry = entry)
 }
 
-#' Entry times for `n` subjects. Uniform accrual is the reference; piecewise
-#' accrual draws from the rate profile, normalized to admit exactly n.
-vcr_accrual_times <- function(n, accrual) {
+#' Entry times from n uniforms by inversion. Not sorted: sorting and then
+#' assigning in arm order is what made the treated arm enter first (CE-1).
+.vcr_accrual_from_u <- function(u, accrual) {
   kind <- accrual$kind %||% "uniform"
+  n <- length(u)
   if (identical(kind, "uniform")) {
-    dur <- accrual$duration %||% 0
+    dur <- vcr_scalar(accrual$duration, 0)
     if (dur <= 0) return(rep(0, n))
-    return(sort(runif(n, 0, dur)))
+    return(u * dur)
   }
   if (identical(kind, "piecewise")) {
-    breaks <- c(0, accrual$breaks)
-    rates <- accrual$rates
-    widths <- diff(c(breaks, breaks[length(breaks)] + (accrual$tail %||% 1e6)))
+    breaks <- c(0, vcr_num(accrual$breaks))
+    rates <- vcr_num(accrual$rates)
+    widths <- diff(c(breaks, breaks[length(breaks)] + (vcr_scalar(accrual$tail, 1e6))))
     mass <- rates * widths
     p <- mass / sum(mass)
-    bin <- sample.int(length(p), n, replace = TRUE, prob = p)
-    return(sort(breaks[bin] + runif(n) * widths[bin]))
+    cum <- c(0, cumsum(p))
+    bin <- pmin(findInterval(u, cum, rightmost.closed = TRUE), length(p))
+    bin <- pmax(bin, 1L)
+    frac <- (u - cum[bin]) / p[bin]
+    return(breaks[bin] + frac * widths[bin])
   }
-  stop("vcr_accrual_times: unknown accrual kind ", kind)
+  stop("accrual: unknown accrual kind ", kind)
 }
+
+#' The calendar time accrual ends. Uniform accrual over [0, A] ends at A (the
+#' analytic reference is written against A + F, not against the random last
+#' entry); a piecewise profile ends at its last entry.
+.vcr_accrual_end <- function(entry, accrual) {
+  kind <- accrual$kind %||% "uniform"
+  if (identical(kind, "uniform")) return(max(vcr_scalar(accrual$duration, 0), 0))
+  max(entry)
+}
+
+#' Entry times for `n` subjects, in arrival order, independent of anything
+#' else (uniform accrual is the reference; piecewise draws from the rate
+#' profile, normalized to admit exactly n).
+vcr_accrual_times <- function(n, accrual) .vcr_accrual_from_u(runif(n), accrual)
 
 #' Log-rank test and the Cox score-based hazard ratio. Implemented directly so
 #' the engine does not depend on `survival`'s tie handling changing under it;
 #' `tests/numeric/N02` cross-checks the operating characteristics against the
 #' analytic Schoenfeld number.
 vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
+  sided <- vcr_check_sided(sided)
   ord <- order(data$time, -data$status)
   time <- data$time[ord]; status <- data$status[ord]; arm <- data$arm[ord]
   n <- length(time)
@@ -247,11 +338,11 @@ vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
   loghr <- if (V > 0) (O1 - E1) / V else 0
   se <- if (V > 0) 1 / sqrt(V) else Inf
   p <- if (sided == 1) pnorm(z, lower.tail = TRUE) else 2 * pnorm(-abs(z))
-  crit <- if (sided == 1) qnorm(alpha) else qnorm(alpha / 2)
+  crit <- qnorm(1 - alpha / sided)
   c(estimate = loghr, se = se, statistic = z, p = p,
-    reject = as.numeric(if (sided == 1) z < crit else abs(z) > abs(crit)),
-    events = O1 + (sum(status) - O1), events_treat = O1,
-    ci_low = loghr - qnorm(1 - alpha) * se, ci_high = loghr + qnorm(1 - alpha) * se)
+    reject = as.numeric(if (sided == 1) z < -crit else abs(z) > crit),
+    events = sum(status), events_treat = O1,
+    ci_low = loghr - crit * se, ci_high = loghr + crit * se)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

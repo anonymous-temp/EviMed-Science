@@ -266,4 +266,32 @@ vcr_digitize_km <- function(km, times, noise = 0) {
   data.frame(time = times, surv = cummin(s))
 }
 
+#' Cox log hazard ratio for one binary covariate (treatment vs control), by
+#' Newton-Raphson on the Breslow partial likelihood. Written here so the
+#' reconstruction's hazard-ratio check does not need the `survival` package at
+#' run time; `tests/numeric/N16` cross-checks it against `coxph(ties = "breslow")`.
+vcr_cox_loghr <- function(time, status, arm, maxit = 50L, tol = 1e-10) {
+  ord <- order(time)
+  time <- time[ord]; status <- status[ord]; x <- as.numeric(arm[ord])
+  ut <- unique(time[status == 1L])
+  beta <- 0
+  for (it in seq_len(maxit)) {
+    U <- 0; I <- 0
+    for (t in ut) {
+      risk <- time >= t
+      e <- exp(beta * x[risk])
+      s0 <- sum(e); s1 <- sum(e * x[risk])
+      ev <- time == t & status == 1L
+      d <- sum(ev)
+      U <- U + sum(x[ev]) - d * s1 / s0
+      I <- I + d * (s1 / s0) * (1 - s1 / s0)
+    }
+    if (!is.finite(I) || I <= 0) return(NA_real_)
+    step <- U / I
+    beta <- beta + step
+    if (abs(step) < tol) break
+  }
+  beta
+}
+
 `%||%` <- function(a, b) if (is.null(a)) b else a

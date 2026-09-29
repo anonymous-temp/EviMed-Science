@@ -72,14 +72,20 @@ vcr_with_stream <- function(stream, fn, i) {
   fn(i)
 }
 
-#' How many cores to actually use. Honours the job's own ceiling and the
-#' container's; 1 is always legal and must give the same numbers.
+#' How many cores to actually use. `VCR_ENGINE_CORES` is the ceiling the
+#' container was given and a job's own `cores` can only LOWER it (a job that asks
+#' for 64 on a 2-core allowance runs on 2); with no request the ceiling is what
+#' is used, and with neither one core. The machine's physical cores cap both.
+#' 1 is always legal and must give the same numbers.
 vcr_cores <- function(requested = NULL) {
   env <- suppressWarnings(as.integer(Sys.getenv("VCR_ENGINE_CORES", "")))
-  n <- if (!is.null(requested) && is.finite(requested)) as.integer(requested)
-       else if (!is.na(env) && env >= 1L) env
-       else 1L
-  max(1L, min(n, parallel::detectCores(logical = FALSE) %||% 1L))
+  ceiling_ <- if (!is.na(env) && env >= 1L) env else NA_integer_
+  ask <- if (length(requested) == 1L && is.finite(suppressWarnings(as.numeric(requested))) && requested >= 1) as.integer(requested) else NA_integer_
+  n <- if (!is.na(ask)) ask else if (!is.na(ceiling_)) ceiling_ else 1L
+  if (!is.na(ceiling_)) n <- min(n, ceiling_)
+  phys <- suppressWarnings(parallel::detectCores(logical = FALSE))
+  if (is.finite(phys) && phys >= 1L) n <- min(n, as.integer(phys))
+  max(1L, as.integer(n))
 }
 
 #' Map over replicate indices with their streams, in index order.

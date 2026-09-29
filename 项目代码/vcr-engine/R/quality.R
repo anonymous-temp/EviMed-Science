@@ -26,6 +26,18 @@
 # - **Gower distances are standardized on the *training* range**, and the same
 #   ranges are used for the holdout baseline. Standardizing each set on its own
 #   range is the quiet way to make the baseline incomparable.
+# - **The baseline must be the same size as what it is compared with.** "Is the
+#   synthetic record closer to a training record than to a holdout record?" has
+#   the answer "yes, more often" for a generator that memorized nothing at all,
+#   as soon as the training set is larger than the holdout: a bigger reference
+#   set is simply nearer. With a perfect generator, 400 training and 100 holdout
+#   records gave a nearest-neighbour share of 0.63, red on the product's own
+#   band (CE-30). The distance-to-record metrics therefore compare equal-sized
+#   reference sets (the larger one subsampled), and the full-size figures are
+#   reported beside them.
+# - **Criteria, constraints and declared analyses are data, never code**
+#   (rules.R). A criterion is `{ name, rule }`; an analysis is `{ name, kind,
+#   ... }` naming columns; neither is parsed as an expression.
 # ---------------------------------------------------------------------------
 
 #' The product's default report bands. Only S_pMSE's come from the literature.
@@ -207,7 +219,12 @@ vcr_gower_nearest <- function(x, reference, ranges = NULL, k = 2L) {
 
 #' The disclosure axis. Requires a holdout; without one it returns the reason
 #' rather than a number (attachment C2: no baseline, no meaning).
-vcr_disclosure_report <- function(train, synth, holdout = NULL) {
+#'
+#' Reference sets are size-matched (see the header note): the larger of the
+#' training and holdout sets is subsampled to the size of the smaller for the
+#' replication, distance and nearest-neighbour comparisons. The subsample is
+#' drawn from the caller's RNG stream, so a seeded job repeats it.
+vcr_disclosure_report <- function(train, synth, holdout = NULL, subsamples = 3L) {
   if (is.null(holdout) || !nrow(holdout)) {
     return(list(available = FALSE,
                 reason = "no_holdout_reserved",
@@ -215,19 +232,33 @@ vcr_disclosure_report <- function(train, synth, holdout = NULL) {
   }
   vars <- Reduce(intersect, list(names(train), names(synth), names(holdout)))
   key <- function(df) do.call(paste, c(lapply(df[vars], as.character), sep = "\u001f"))
-  ktrain <- key(train); ksyn <- key(synth); khold <- key(holdout)
-  repl_train <- mean(ksyn %in% ktrain)
-  repl_hold <- mean(ksyn %in% khold)
-
+  m <- min(nrow(train), nrow(holdout))
+  ksyn <- key(synth)
   ranges <- lapply(train[vars][vapply(train[vars], is.numeric, logical(1))],
                    function(v) diff(range(v, na.rm = TRUE)))
-  to_train <- vcr_gower_nearest(synth[vars], train[vars], ranges)
-  to_hold <- vcr_gower_nearest(synth[vars], holdout[vars], ranges)
-  nn_in_train <- mean(to_train$dcr < to_hold$dcr) + 0.5 * mean(to_train$dcr == to_hold$dcr)
+  # The size-matched comparison, averaged over a few independent subsamples of
+  # the larger set (one subsample is noisy; three are enough to steady it).
+  one <- function() {
+    tr_ref <- if (nrow(train) > m) train[sample.int(nrow(train), m), , drop = FALSE] else train
+    ho_ref <- if (nrow(holdout) > m) holdout[sample.int(nrow(holdout), m), , drop = FALSE] else holdout
+    to_train <- vcr_gower_nearest(synth[vars], tr_ref[vars], ranges)
+    to_hold <- vcr_gower_nearest(synth[vars], ho_ref[vars], ranges)
+    c(replTrain = mean(ksyn %in% key(tr_ref)), replHold = mean(ksyn %in% key(ho_ref)),
+      nn = mean(to_train$dcr < to_hold$dcr) + 0.5 * mean(to_train$dcr == to_hold$dcr),
+      dcrTrain = as.numeric(stats::quantile(to_train$dcr, 0.05, names = FALSE)),
+      dcrHold = as.numeric(stats::quantile(to_hold$dcr, 0.05, names = FALSE)),
+      nndrTrain = as.numeric(stats::quantile(to_train$nndr, 0.05, names = FALSE)),
+      nndrHold = as.numeric(stats::quantile(to_hold$nndr, 0.05, names = FALSE)))
+  }
+  k <- if (nrow(train) == nrow(holdout)) 1L else as.integer(subsamples)
+  agg <- colMeans(do.call(rbind, lapply(seq_len(k), function(i) one())))
+  repl_train <- agg[["replTrain"]]; repl_hold <- agg[["replHold"]]
+  repl_train_full <- mean(ksyn %in% key(train))
 
   # Distance-based membership inference: a training record should sit closer
   # to the synthetic data than a holdout record does, if the generator
-  # memorized. Score = -DCR, so higher means "more likely a member".
+  # memorized. Score = -DCR, so higher means "more likely a member". AUC does
+  # not depend on the two sets' sizes, so the full sets are used.
   m_train <- vcr_gower_nearest(train[vars], synth[vars], ranges)
   m_hold <- vcr_gower_nearest(holdout[vars], synth[vars], ranges)
   score <- c(-m_train$dcr, -m_hold$dcr)
@@ -237,27 +268,122 @@ vcr_disclosure_report <- function(train, synth, holdout = NULL) {
   tpr_at_1 <- mean(score[label == 1L] > thresh)
 
   list(available = TRUE,
+       sizeCorrected = nrow(train) != nrow(holdout), referenceSize = m, referenceSubsamples = k,
        exactReplicationRate = repl_train,
        exactReplicationRateHoldout = repl_hold,
+       exactReplicationRateFullTraining = repl_train_full,
        replicationRatio = if (repl_hold > 0) repl_train / repl_hold else if (repl_train > 0) Inf else 1,
-       dcrPercentile5 = as.numeric(stats::quantile(to_train$dcr, 0.05, names = FALSE)),
-       dcrPercentile5Holdout = as.numeric(stats::quantile(to_hold$dcr, 0.05, names = FALSE)),
-       nndrPercentile5 = as.numeric(stats::quantile(to_train$nndr, 0.05, names = FALSE)),
-       nearestNeighbourInTrainShare = nn_in_train,
+       dcrPercentile5 = agg[["dcrTrain"]],
+       dcrPercentile5Holdout = agg[["dcrHold"]],
+       nndrPercentile5 = agg[["nndrTrain"]],
+       nndrPercentile5Holdout = agg[["nndrHold"]],
+       nearestNeighbourInTrainShare = agg[["nn"]],
        membershipAuc = auc, membershipTprAtFpr1 = tpr_at_1,
        note = "Measured attacks and their values. This is not a statement that the data are anonymous.")
 }
 
+#' Rare combinations: of the two-way category combinations a real table has at
+#' least `min_count` times, how many the synthetic table never produces, and
+#' how many combinations the synthetic table produces that the real one never
+#' has (plan 5.1 fidelity: rare combinations).
+vcr_rare_combinations <- function(real, synth, min_count = 5L, max_levels = 10L, max_pairs = 20L) {
+  vars <- intersect(names(real), names(synth))
+  cats <- vars[vapply(vars, function(v) .vcr_is_categorical(real[[v]], max_levels), logical(1))]
+  if (length(cats) < 2L) return(list(available = FALSE, reason = "fewer_than_two_categorical_columns"))
+  pairs <- utils::combn(cats, 2L, simplify = FALSE)
+  pairs <- pairs[seq_len(min(length(pairs), max_pairs))]
+  rows <- lapply(pairs, function(pr) {
+    kr <- paste(as.character(real[[pr[1]]]), as.character(real[[pr[2]]]), sep = "\u001f")
+    ks <- paste(as.character(synth[[pr[1]]]), as.character(synth[[pr[2]]]), sep = "\u001f")
+    tr <- table(kr); common <- names(tr)[tr >= min_count]
+    data.frame(pair = paste(pr, collapse = " x "),
+               realCombinations = length(common),
+               missingInSynthetic = if (length(common)) mean(!(common %in% ks)) else NA_real_,
+               syntheticCombinations = length(unique(ks)),
+               absentFromReal = mean(!(unique(ks) %in% names(tr))),
+               stringsAsFactors = FALSE)
+  })
+  tab <- do.call(rbind, rows)
+  list(available = TRUE, minCount = min_count, pairs = tab,
+       worstMissingInSynthetic = suppressWarnings(max(tab$missingInSynthetic, na.rm = TRUE)),
+       worstAbsentFromReal = suppressWarnings(max(tab$absentFromReal, na.rm = TRUE)))
+}
+
+#' Train-on-synthetic, test-on-real (and the train-on-real baseline): a
+#' generalised linear model of `outcome` on every other column is fitted on the
+#' synthetic table and scored on the holdout, next to the same model fitted on
+#' the training table. `ratio` is TSTR / TRTR for AUC (binary outcome) or
+#' TRTR / TSTR for the RMSE (continuous), so 1 means the synthetic table taught
+#' the model as much as the real one did.
+vcr_tstr <- function(train, synth, holdout, outcome) {
+  if (!(outcome %in% names(train) && outcome %in% names(synth) && outcome %in% names(holdout))) {
+    return(list(available = FALSE, reason = "outcome_not_in_all_tables"))
+  }
+  binary <- all(stats::na.omit(train[[outcome]]) %in% c(0, 1))
+  vars <- setdiff(Reduce(intersect, list(names(train), names(synth), names(holdout))), outcome)
+  if (!length(vars)) return(list(available = FALSE, reason = "no_predictors"))
+  f <- stats::reformulate(vars, response = outcome)
+  fam <- if (binary) stats::binomial() else stats::gaussian()
+  score <- function(dat) {
+    fit <- tryCatch(suppressWarnings(stats::glm(f, data = dat, family = fam)), error = function(e) NULL)
+    if (is.null(fit)) return(NA_real_)
+    pred <- tryCatch(suppressWarnings(as.numeric(stats::predict(fit, newdata = holdout, type = "response"))), error = function(e) rep(NA_real_, nrow(holdout)))
+    ok <- is.finite(pred) & !is.na(holdout[[outcome]])
+    if (!any(ok)) return(NA_real_)
+    if (binary) .vcr_auc(pred[ok], holdout[[outcome]][ok]) else sqrt(mean((pred[ok] - holdout[[outcome]][ok])^2))
+  }
+  s <- score(synth); r <- score(train)
+  list(available = TRUE, outcome = outcome, metric = if (binary) "auc" else "rmse",
+       trainOnSynthetic = s, trainOnReal = r,
+       ratio = if (is.finite(s) && is.finite(r) && r > 0 && s > 0) (if (binary) s / r else r / s) else NA_real_)
+}
+
+#' A declared analysis (JSON), as a function of a table. `kind = "mean"` names
+#' a `column`; `kind = "glm"` names an `outcome`, the `predictors`, a `target`
+#' predictor whose coefficient is reported, and a `family` (gaussian or
+#' binomial). Column names must be plain identifiers; the formula is built from
+#' them with `reformulate`, never parsed from text.
+vcr_analysis_from_spec <- function(spec) {
+  ident <- function(x) is.character(x) && length(x) >= 1L && all(grepl(.VCR_ROW_COL_RE, x))
+  kind <- as.character(spec$kind %||% "")
+  if (identical(kind, "mean")) {
+    col <- as.character(spec$column %||% "")
+    if (!ident(col)) vcr_abort("scenario_value_invalid", "scenario.analyses", "A mean analysis names one column.")
+    return(function(d) {
+      x <- stats::na.omit(as.numeric(d[[col]])); se <- stats::sd(x) / sqrt(length(x))
+      list(estimate = mean(x), interval = mean(x) + c(-1, 1) * 1.96 * se)
+    })
+  }
+  if (identical(kind, "glm")) {
+    outcome <- as.character(spec$outcome %||% ""); preds <- vcr_chr(spec$predictors)
+    target <- as.character(spec$target %||% preds[1]); fam <- as.character(spec$family %||% "gaussian")
+    if (!ident(outcome) || !ident(preds) || !(target %in% preds) || !(fam %in% c("gaussian", "binomial"))) {
+      vcr_abort("scenario_value_invalid", "scenario.analyses", "A glm analysis names an outcome, its predictors, a target predictor and a family (gaussian or binomial).")
+    }
+    return(function(d) {
+      fit <- suppressWarnings(stats::glm(stats::reformulate(preds, response = outcome), data = d,
+                                         family = if (fam == "binomial") stats::binomial() else stats::gaussian()))
+      co <- summary(fit)$coefficients
+      nm <- if (target %in% rownames(co)) target else rownames(co)[grep(paste0("^", target), rownames(co))[1]]
+      est <- co[nm, "Estimate"]; se <- co[nm, "Std. Error"]
+      list(estimate = est, interval = est + c(-1, 1) * 1.96 * se)
+    })
+  }
+  vcr_abort("scenario_value_invalid", "scenario.analyses", "An analysis is kind 'mean' or 'glm'.")
+}
+
 #' The whole suite. `analyses` is a list of declared estimands, each a
-#' function(data) -> list(estimate, interval), for the specific-utility axis.
+#' function(data) -> list(estimate, interval), for the specific-utility axis
+#' (see `vcr_analysis_from_spec` for the JSON form the jobs use).
 vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                                analyses = list(), criteria = NULL,
-                               generator = list()) {
+                               generator = list(), tstr_outcome = NULL) {
   bands <- vcr_quality_bands()
   uni <- vcr_fidelity_univariate(train, synth)
   pair <- vcr_fidelity_pairwise(train, synth)
-  prop <- tryCatch(vcr_utility_propensity(train, synth), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_, error = conditionMessage(e)))
+  prop <- tryCatch(vcr_utility_propensity(train, synth), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_, error = "propensity model could not be fitted"))
   viol <- vcr_constraint_violations(synth, constraints)
+  rare <- vcr_rare_combinations(train, synth)
 
   specific <- lapply(names(analyses), function(nm) {
     f <- analyses[[nm]]
@@ -268,18 +394,23 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
   names(specific) <- names(analyses)
 
   feasibility <- NULL
-  if (!is.null(criteria)) {
-    pr <- vapply(criteria, function(c_) mean(eval(parse(text = c_$expression), envir = train), na.rm = TRUE), numeric(1))
-    ps <- vapply(criteria, function(c_) mean(eval(parse(text = c_$expression), envir = synth), na.rm = TRUE), numeric(1))
-    joint_r <- mean(Reduce(`&`, lapply(criteria, function(c_) eval(parse(text = c_$expression), envir = train))), na.rm = TRUE)
-    joint_s <- mean(Reduce(`&`, lapply(criteria, function(c_) eval(parse(text = c_$expression), envir = synth))), na.rm = TRUE)
-    feasibility <- list(perCriterion = data.frame(criterion = vapply(criteria, function(c_) c_$name, character(1)),
+  if (!is.null(criteria) && length(criteria)) {
+    crit <- vcr_named_rules(criteria, intersect(names(train), names(synth)), "criteria")
+    if (length(crit$issues)) vcr_abort_issue(crit$issues[[1]])
+    ev <- function(d) lapply(crit$rules, function(c_) vcr_eval_row_rule(c_$rule, d))
+    er <- ev(train); es <- ev(synth)
+    pr <- vapply(er, function(v) mean(v, na.rm = TRUE), numeric(1))
+    ps <- vapply(es, function(v) mean(v, na.rm = TRUE), numeric(1))
+    joint_r <- mean(Reduce(`&`, er), na.rm = TRUE)
+    joint_s <- mean(Reduce(`&`, es), na.rm = TRUE)
+    feasibility <- list(perCriterion = data.frame(criterion = vapply(crit$rules, function(c_) c_$name, character(1)),
                                                   realPassRate = pr, syntheticPassRate = ps),
                         jointPassRateReal = joint_r, jointPassRateSynthetic = joint_s,
-                        jointPassRateRelativeDifference = if (joint_r > 0) abs(joint_s - joint_r) / joint_r else NA_real_)
+                        jointPassRateRelativeDifference = if (is.finite(joint_r) && joint_r > 0) abs(joint_s - joint_r) / joint_r else NA_real_)
   }
 
   disclosure <- vcr_disclosure_report(train, synth, holdout)
+  tstr <- if (!is.null(tstr_outcome) && !is.null(holdout) && nrow(holdout)) vcr_tstr(train, synth, holdout, tstr_outcome) else NULL
 
   bandsOut <- list(
     worstKsD = vcr_band(max(uni$value[uni$statistic == "ks_d"], -Inf), bands$ksD),
@@ -294,15 +425,16 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
     bandsOut$nearestNeighbourInTrainShare <- vcr_band(disclosure$nearestNeighbourInTrainShare, bands$nearestNeighbourInTrainShare)
     bandsOut$membershipAuc <- vcr_band(disclosure$membershipAuc, bands$membershipAuc)
   }
+  if (!is.null(tstr) && isTRUE(tstr$available)) bandsOut$tstrRatio <- vcr_band(tstr$ratio, bands$tstrRatio)
   if (!is.null(feasibility)) {
     bandsOut$jointPassRate <- vcr_band(feasibility$jointPassRateRelativeDifference, bands$jointPassRateRelativeDifference)
   }
 
   list(
-    fidelity = list(univariate = uni, pairwise = pair, global = prop),
+    fidelity = list(univariate = uni, pairwise = pair, global = prop, rareCombinations = rare),
     constraints = viol,
     constraintsPass = all(viol$violations == 0),
-    utility = list(specific = specific, feasibility = feasibility),
+    utility = list(specific = specific, feasibility = feasibility, tstr = tstr),
     disclosure = disclosure,
     bands = bandsOut,
     bandSources = lapply(bands, function(b) b$source),

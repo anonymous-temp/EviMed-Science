@@ -36,6 +36,13 @@ vcr_pool <- function(yi, vi, method = "random_effects_dl", level = 0.95,
   k <- length(yi)
   if (k != length(vi)) stop("vcr_pool: yi and vi must have the same length")
   if (k < 1L) stop("vcr_pool: nothing to pool")
+  if (any(!is.finite(vi)) || any(vi <= 0)) stop("vcr_pool: every study needs a finite positive variance")
+  # One study is taken directly whatever was asked: DL and REML divide by a
+  # heterogeneity denominator that is exactly zero (or noise) with k = 1, and
+  # HKSJ has no degrees of freedom (EB-17). The method actually applied is
+  # recorded so the page can say so.
+  requested <- method
+  if (k == 1L) method <- "single_study"
   wf <- 1 / vi
   theta_fe <- sum(wf * yi) / sum(wf)
   Q <- sum(wf * (yi - theta_fe)^2)
@@ -95,7 +102,7 @@ vcr_pool <- function(yi, vi, method = "random_effects_dl", level = 0.95,
   list(estimate = theta, se = se, interval = ci, predictionInterval = pi,
        tau2 = tau2, tau = sqrt(tau2), Q = Q, df = df,
        pQ = if (df > 0) stats::pchisq(Q, df, lower.tail = FALSE) else NA_real_,
-       i2 = i2, h2 = h2, k = k, method = method, level = level,
+       i2 = i2, h2 = h2, k = k, method = method, methodRequested = requested, level = level,
        predictionSd = pise, predictionDf = if (k >= 3L) k - 2L else NA_integer_,
        weights = w / sum(w))
 }

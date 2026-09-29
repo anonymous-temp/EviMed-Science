@@ -93,6 +93,8 @@ vcr_case("E04", c("AC-08", "AC-09"), function() {
   ok_counts <- length(vcr_validate_counts(vcr_counts(realPatients = 400, events = 138,
                                                      effectiveSampleSize = 98.4, generatedRecords = 0))) == 0L
   ess_too_big <- vcr_validate_counts(list(realPatients = 50, effectiveSampleSize = 90, generatedRecords = 10))
+  # ...whether or not any record was generated (the guard used to need one).
+  ess_no_generated <- vcr_validate_counts(list(realPatients = 50, effectiveSampleSize = 90, generatedRecords = 0))
   negative <- vcr_validate_counts(list(realPatients = -1))
   unknown_ok <- length(vcr_validate_counts(vcr_counts(realPatients = NULL))) == 0L
   # And the keys are exactly the domain's.
@@ -101,200 +103,191 @@ vcr_case("E04", c("AC-08", "AC-09"), function() {
   keys_ok <- identical(keys, c(d$countKeys, d$optionalCountKeys))
   ok <- ok_counts && length(ess_too_big) == 1L &&
     identical(ess_too_big[[1]]$code, "ess_above_real") &&
+    length(ess_no_generated) == 1L && identical(ess_no_generated[[1]]$code, "ess_above_real") &&
     length(negative) == 1L && unknown_ok && keys_ok
   list(pass = ok,
-       detail = sprintf("valid counts accepted; ESS 90 on 50 real patients -> %s; realPatients -1 -> %s; NULL accepted as 'not knowable'; keys %s match the domain",
-                        ess_too_big[[1]]$code, negative[[1]]$code, paste(keys, collapse = "/")))
+       detail = sprintf("valid counts accepted; ESS 90 on 50 real patients -> %s (also with 0 generated records: %s); realPatients -1 -> %s; NULL accepted as 'not knowable'; keys %s match the domain",
+                        ess_too_big[[1]]$code, if (length(ess_no_generated)) ess_no_generated[[1]]$code else "MISSED",
+                        negative[[1]]$code, paste(keys, collapse = "/")))
 })
 
-vcr_case("E05", c("AC-04"), function() {
-  # Health, and: every handler's result validates against the protocol.
+vcr_case("E05", c("AC-04", "AC-28"), function() {
+  # Health, and: every one of the 24 handlers answers a real job through
+  # `vcr_run_job` with a protocol-valid result -- the echo of what was asked, a
+  # named conclusion, a value source on every measure, an output hash the
+  # control plane can recompute and no absolute path in a table row.
   h <- vcr_engine_health()
-  jobs <- list(
-    list(kind = "design_analytic", method = "design.analytic",
-         scenario = list(design = list(kind = "two_arm_fixed"), endpoint = list(type = "time_to_event"),
-                         truth = list(hazardRatio = 0.7, controlMedian = 12),
-                         accrual = list(duration = 12, followup = 24), analysis = list(alpha = 0.025, power = 0.9))),
-    list(kind = "design_analytic", method = "design.analytic",
-         scenario = list(design = list(kind = "group_sequential", informationRates = c(0.5, 1), spending = "pocock"),
-                         endpoint = list(type = "binary"), truth = list(controlRate = 0.3, treatmentRate = 0.45),
-                         analysis = list(alpha = 0.025, power = 0.9))),
-    list(kind = "assurance", method = "design.assurance",
-         scenario = list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"),
-                         truth = list(sd = 1), designPrior = list(mean = 0.3, sd = 0.15),
-                         analysis = list(alpha = 0.025))),
-    list(kind = "design_analytic", method = "design.procova",
-         scenario = list(design = list(allocation = 0.5), truth = list(effect = 0.3, sd = 1),
-                         analysis = list(alpha = 0.025, power = 0.9),
-                         prognostic = list(rho = 0.6, lambda = 0.9))),
-    list(kind = "accrual_forecast", method = "accrual.poisson_gamma",
-         scenario = list(sites = 10L, alpha = 2, beta = 2.5, target = 100L, byTimes = c(10, 20))),
-    list(kind = "map_prior", method = "comparator.map_prior",
-         scenario = list(historical = list(events = c(14, 18, 9, 22, 11), n = c(100, 120, 80, 150, 90)),
-                         robustWeight = 0.2)),
-    list(kind = "match_criteria", method = "matching.evaluate",
-         scenario = list(criteria = list(
-           list(id = "inc1", kind = "inclusion", type = "diagnosis", state = "satisfied"),
-           list(id = "inc2", kind = "inclusion", type = "lab", state = "unknown"),
-           list(id = "exc1", kind = "exclusion", type = "pregnancy", state = "not_satisfied", notApplicable = TRUE)))),
-    list(kind = "generate_patients", method = "patients.binary",
-         scenario = list(design = list(nTreat = 50, nControl = 50), endpoint = list(type = "binary"),
-                         truth = list(controlRate = 0.3, treatmentRate = 0.45)))
-  )
-  # `match_criteria` is one of the patient-level job kinds, so it must name the
-  # snapshot it was granted even when the scenario carries the criteria inline.
-  snap <- tempfile(fileext = ".csv")
-  utils::write.csv(data.frame(subject = 1L, age = 61), snap, row.names = FALSE)
-  snap_input <- list(kind = "snapshot", id = "snp_e05", hash = vcr_file_sha256(snap), location = snap)
-  out <- lapply(seq_along(jobs), function(i) {
-    inputs <- if (jobs[[i]]$kind %in% vcr_domain()$patientLevelJobKinds) list(snap_input)
-              else list(list(kind = "assumption", id = "asm_e05@1"))
-    j <- utils::modifyList(list(jobId = sprintf("job_e05_%d", i), studyId = "std_e05",
-                                methodVersion = "1.0.0", protocolVersion = 1L, seed = 5L,
-                                cpuSecondsLimit = 120, inputs = inputs),
-                           jobs[[i]])
+  cases <- vcr_test_handler_jobs()
+  d <- vcr_domain()
+  out <- lapply(seq_along(cases), function(i) {
+    cs <- cases[[i]]
+    job <- vcr_test_job(cs[[1]], cs[[2]], cs[[3]], seed = 5L, replicates = if (length(cs) >= 4L) cs[[4]] else NULL, job_id = sprintf("job_e05_%02d", i))
     dir <- tempfile("e05"); dir.create(dir)
-    r <- vcr_run_job(j, output_dir = dir)
+    r <- vcr_test_run(job, output_dir = dir)
+    want_hash <- vcr_scenario_hash(vcr_test_json(job)$scenario)
+    echo_ok <- identical(r$jobId, job$jobId) && identical(r$method, job$method) && identical(r$methodVersion, d$methods[[job$method]]$version) &&
+      identical(r$scenarioHash, want_hash) && identical(as.integer(r$seed), job$seed)
+    sources_ok <- all(vapply(r$measures, function(m) isTRUE(m$source %in% d$valueSources), logical(1)))
+    hash_ok <- is.character(r$manifest$outputHash) && identical(r$manifest$outputHash, vcr_output_hash(r))
+    paths_ok <- all(vapply(r$tables, function(t) !grepl("^/", t$location) && !grepl("\\.\\.", t$location), logical(1)))
+    conclusion_ok <- isTRUE(r$conclusion %in% c("estimable", "limited"))
     unlink(dir, recursive = TRUE)
-    list(method = j$method, status = r$status, issues = length(vcr_validate_result(r)),
-         measures = length(r$measures))
+    list(method = job$method, status = r$status, issues = length(vcr_validate_result(r)), measures = length(r$measures),
+         ok = identical(r$status, "succeeded") && length(vcr_validate_result(r)) == 0L && length(r$measures) > 0L &&
+           echo_ok && sources_ok && hash_ok && paths_ok && conclusion_ok,
+         why = paste(c(if (!echo_ok) "echo", if (!sources_ok) "source", if (!hash_ok) "outputHash", if (!paths_ok) "path", if (!conclusion_ok) "conclusion",
+                       vcr_test_issue_codes(r)), collapse = "+"))
   })
-  unlink(snap)
-  bad <- Filter(function(o) !identical(o$status, "succeeded") || o$issues > 0L || o$measures == 0L, out)
-  ok <- isTRUE(h$ok) && length(bad) == 0L
+  bad <- Filter(function(o) !o$ok, out)
+  ok <- isTRUE(h$ok) && length(bad) == 0L && length(out) == length(d$methods)
   list(pass = ok,
-       detail = sprintf("health ok=%s, %d methods, lock %s; %d/%d handler results succeeded and validate%s",
-                        h$ok, length(h$methods), substr(h$packageLockHash, 1, 12),
-                        length(out) - length(bad), length(out),
-                        if (length(bad)) paste0("; failing: ", paste(vapply(bad, function(b) b$method, character(1)), collapse = ",")) else ""))
+       detail = sprintf("health ok=%s, %d methods, lock %s; %d/%d handler results succeed, validate, echo the job, carry a source on every measure and a recomputable output hash%s",
+                        h$ok, length(h$methods), substr(h$packageLockHash, 1, 12), length(out) - length(bad), length(out),
+                        if (length(bad)) paste0("; failing: ", paste(vapply(bad, function(b) sprintf("%s(%s)", b$method, b$why), character(1)), collapse = ", ")) else ""))
 })
 
 vcr_case("E06", c("AC-26", "AC-04"), function() {
-  # The engine reads only what the job names, and refuses a snapshot whose
-  # bytes changed after the job was frozen.
+  # The engine reads only what the job names, under the data root, and refuses
+  # a table whose bytes changed after the job was frozen.
   set.seed(6L, kind = VCR_RNG_KIND)
-  df <- data.frame(arm = rep(0:1, each = 60), x1 = stats::rnorm(120), y = stats::rnorm(120))
-  path <- tempfile(fileext = ".csv"); utils::write.csv(df, path, row.names = FALSE)
-  frozen <- vcr_file_sha256(path)
-  mk <- function(hash) list(jobId = "job_e06", studyId = "std_e06", kind = "weight_comparator",
-                            method = "comparator.entropy_balance", methodVersion = "1.0.0",
-                            protocolVersion = 1L, seed = 6L, cpuSecondsLimit = 120,
-                            inputs = list(list(kind = "snapshot", id = "snp_e06", hash = hash, location = path)),
-                            scenario = list(covariates = "x1", outcomeColumn = "y", treatmentColumn = "arm",
-                                            bootstrapReplicates = 50L))
-  good <- vcr_run_job(mk(frozen))
-  df$y[1] <- df$y[1] + 1                       # somebody rewrote the snapshot
+  df <- data.frame(USUBJID = sprintf("S%03d", 1:120), arm = rep(0:1, each = 60), x1 = stats::rnorm(120), y = stats::rnorm(120))
+  input <- vcr_test_input(df, "snp_e06:subject", "subject")
+  mk <- function(inp) vcr_test_job("comparator.entropy_balance",
+    list(covariates = list("x1"), outcomeColumn = "y", treatmentColumn = "arm", endpoint = list(type = "continuous")),
+    list(inp), seed = 6L, job_id = "job_e06")
+  good <- vcr_test_run(mk(input))
+  path <- file.path(vcr_test_data_root(), input$location)
+  df$y[1] <- df$y[1] + 1                       # somebody rewrote the file after the job was frozen
   utils::write.csv(df, path, row.names = FALSE)
-  tampered <- vcr_run_job(mk(frozen))
-  # Built by hand, not with `modifyList`: modifyList recurses into `inputs`
-  # and merges the replacement element into the existing one, so the snapshot
-  # survived and the job failed for the wrong reason.
-  bare <- mk(frozen)
-  bare$inputs <- list(list(kind = "assumption", id = "asm_x@1"))
-  no_snapshot <- vcr_run_job(bare)
-  unlink(path)
-  codes <- vapply(no_snapshot$diagnostics$issues, function(i) i$code, character(1))
-  ok <- identical(good$status, "succeeded") && identical(tampered$status, "failed") &&
-    identical(no_snapshot$status, "failed") && "snapshot_required" %in% codes
+  tampered <- vcr_test_run(mk(input))
+  # A patient-level job that names no table at all is refused before it runs.
+  bare <- mk(input); bare$inputs <- list(list(kind = "assumption", id = "asm_x@1"))
+  no_table <- vcr_test_run(bare)
+  # A synthetic table is not an external control.
+  syn_input <- vcr_test_input(df, "snp_e06:syn", "subject", source = "synthetic")
+  synthetic <- vcr_test_run(mk(syn_input))
+  codes <- list(tampered = vcr_test_issue_codes(tampered), bare = vcr_test_issue_codes(no_table), syn = vcr_test_issue_codes(synthetic))
+  ok <- identical(good$status, "succeeded") && identical(tampered$status, "failed") && "input_hash_mismatch" %in% codes$tampered &&
+    identical(no_table$status, "failed") && "patient_input_required" %in% codes$bare &&
+    identical(synthetic$status, "failed") && "input_source_not_individual" %in% codes$syn &&
+    length(tampered$measures) == 0L
   list(pass = ok,
-       detail = sprintf("frozen hash accepted (status %s); one byte changed -> status %s (%s); patient-level job with no snapshot named -> %s",
-                        good$status, tampered$status,
-                        substr(tampered$diagnostics$issues[[1]]$detail, 1, 60),
-                        paste(codes, collapse = ",")))
+       detail = sprintf("frozen hash accepted (status %s); one byte changed -> status %s (%s); patient-level job with no table -> %s; synthetic table as external control -> %s",
+                        good$status, tampered$status, paste(codes$tampered, collapse = ","), paste(codes$bare, collapse = ","), paste(codes$syn, collapse = ",")))
 })
 
 vcr_case("E07", c("AC-29"), function() {
   # Analytic first, simulation as the check, on all three endpoint families at
-  # once: every difference must be inside 3 Monte-Carlo standard errors.
+  # once: every difference must be inside 3 Monte-Carlo standard errors. The
+  # time-to-event row used to be excused (0.015 absolute, and "within a factor
+  # of three of rpact's own gap"): that excuse was covering a real defect, the
+  # treated arm entering the trial first, which handed it the longest follow-up
+  # and made the simulated power 3-4 points high (CE-1). With entry times drawn
+  # independently of arm, and the analytic reference using the variance of the
+  # score under the alternative, the strict rule holds.
   scenarios <- list(
     continuous = list(design = list(kind = "two_arm_fixed", nTreat = 180, nControl = 180),
                       endpoint = list(type = "continuous"), truth = list(effect = 0.3, sd = 1),
                       analysis = list(method = "ttest", alpha = 0.025, sided = 1),
-                      performance = c("power")),
+                      performance = list("power")),
     binary = list(design = list(kind = "two_arm_fixed", nTreat = 300, nControl = 300),
                   endpoint = list(type = "binary"), truth = list(controlRate = 0.30, treatmentRate = 0.42),
                   analysis = list(method = "risk_difference", alpha = 0.025, sided = 1),
-                  performance = c("power")),
+                  performance = list("power")),
     time_to_event = list(design = list(kind = "two_arm_fixed", nTreat = 300, nControl = 300),
                          endpoint = list(type = "time_to_event"),
                          truth = list(controlMedian = 12, hazardRatio = 0.7),
                          analysis = list(method = "logrank", alpha = 0.025, sided = 1),
                          accrual = list(kind = "uniform", duration = 12, followup = 18),
-                         performance = c("power")))
-  # Replicates are not passed: the plan's own floor for an alternative
-  # scenario (5,000) is what AC-29 is written against.
-  #
-  # Hidden knowledge -- and a correction to AC-29, argued in the report.
-  # AC-29's "within 3 MCSE" is scale-free only when the analytic value is
-  # exact. For the continuous and binary families it is (the t and normal
-  # references are exact for their data-generating mechanisms) and the rule
-  # holds. For time to event there is no exact closed form: the reference is
-  # the asymptotic normal approximation to the log-rank statistic, and its own
-  # error at these sample sizes is about one percentage point of power --
-  # larger than 3 MCSE at 5,000 replicates, and larger still at 20,000.
-  #
-  # That the residual belongs to the approximation and not to this engine is
-  # not asserted, it is measured: the same case runs rpact's *own* analytic
-  # and rpact's *own* simulator on the identical design, and rpact disagrees
-  # with itself by the same order. (Our log-rank equals `survival::survdiff`
-  # to six decimals and our generator's medians match `simsurv`; both were
-  # checked separately.) So the time-to-event tolerance here is 3 MCSE or
-  # 0.015 absolute, plus the requirement that our gap be within a factor of
-  # three of rpact's gap on the same design.
+                         performance = list("power")))
+  # The plan's own floor for an alternative scenario (5,000 replicates) is what
+  # AC-29 is written against; the jobs run through the JSON path the service uses.
   rows <- lapply(names(scenarios), function(nm) {
-    r <- vcr_run_simulation(scenarios[[nm]], seed = 707L, cores = VCR_TEST_CORES)
-    check <- vcr_analytic_check(scenarios[[nm]], r$measures)
+    r <- vcr_test_run(vcr_test_job("design.simulate", scenarios[[nm]], seed = 707L, cores = VCR_TEST_CORES))
+    check <- r$diagnostics$analyticCheck
     list(name = nm, analytic = check$value, simulated = check$simulated,
          ratio = check$differenceInMcse, absolute = abs(check$difference),
          replicates = r$diagnostics$replicatesCompleted,
-         ok = isTRUE(check$withinThreeMcse))
+         ok = identical(r$status, "succeeded") && isTRUE(check$withinThreeMcse))
   })
   names(rows) <- names(scenarios)
-  # rpact against itself, same design, same replicate count.
-  suppressMessages(library(rpact))
-  events <- 409
-  rp_a <- as.numeric(rpact::getPowerSurvival(
-    sided = 1, alpha = 0.025, hazardRatio = 0.7, lambda2 = log(2) / 12,
-    accrualTime = c(0, 12), accrualIntensity = 50, maxNumberOfSubjects = 600,
-    maxNumberOfEvents = events, directionUpper = FALSE)$overallReject)
-  rp_s <- as.numeric(rpact::getSimulationSurvival(
-    sided = 1, alpha = 0.025, hazardRatio = 0.7, lambda2 = log(2) / 12,
-    accrualTime = c(0, 12), accrualIntensity = 50, plannedEvents = events,
-    maxNumberOfSubjects = 600, maxNumberOfIterations = 5000L, seed = 707,
-    directionUpper = FALSE)$overallReject)
-  rp_gap <- abs(rp_a - rp_s)
-  tte <- rows$time_to_event
-  tte_ok <- tte$ok || (tte$absolute <= 0.015 && tte$absolute <= 3 * rp_gap)
-  ok <- rows$continuous$ok && rows$binary$ok && tte_ok
+  ok <- all(vapply(rows, function(r) r$ok, logical(1)))
   list(pass = ok,
-       detail = sprintf("%s; rpact against itself on the same design: analytic %.4f vs its own simulator %.4f (gap %.4f) -- ours %.4f",
-                        paste(vapply(rows, function(r)
-                          sprintf("%s analytic %.4f vs simulated %.4f (|d| %.4f = %.2f MCSE, %d reps)",
-                                  r$name, r$analytic, r$simulated, r$absolute, r$ratio, r$replicates),
-                          character(1)), collapse = "; "),
-                        rp_a, rp_s, rp_gap, tte$absolute))
+       detail = paste(vapply(rows, function(r)
+         sprintf("%s analytic %.4f vs simulated %.4f (|d| %.4f = %.2f MCSE, %d reps)",
+                 r$name, r$analytic, r$simulated, r$absolute, r$ratio, r$replicates),
+         character(1)), collapse = "; "))
+})
+
+vcr_case("E07b", c("AC-29", "AC-10"), function() {
+  # A null scenario that arrives through JSON has effect 0L and hazardRatio 1L
+  # (integers), and `identical(0L, 0)` is FALSE: the analytic cross-check used to
+  # vanish for every null scenario the service ran (EB-18). Each family, through
+  # the JSON path, must carry an analytic check whose value is the nominal alpha
+  # and whose difference from the simulated type-I error is inside 3 MCSE.
+  scenarios <- list(
+    continuous = list(design = list(kind = "two_arm_fixed", nTreat = 100, nControl = 100), endpoint = list(type = "continuous"),
+                      truth = list(effect = 0L, sd = 1), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("type_one_error")),
+    time_to_event = list(design = list(kind = "two_arm_fixed", nTreat = 100, nControl = 100), endpoint = list(type = "time_to_event"),
+                         truth = list(controlMedian = 12, hazardRatio = 1L), analysis = list(method = "logrank", alpha = 0.025, sided = 1),
+                         accrual = list(kind = "uniform", duration = 6, followup = 12), performance = list("type_one_error")))
+  rows <- lapply(names(scenarios), function(nm) {
+    r <- vcr_test_run(vcr_test_job("design.simulate", scenarios[[nm]], seed = 717L, replicates = 20000L, cores = VCR_TEST_CORES))
+    chk <- r$diagnostics$analyticCheck
+    list(name = nm, class = class(vcr_test_json(vcr_test_job("design.simulate", scenarios[[nm]]))$scenario$truth[[if (nm == "continuous") "effect" else "hazardRatio"]]),
+         has = !is.null(chk), name_ok = identical(chk$name, "type_one_error"), value = chk$value, ratio = chk$differenceInMcse,
+         ok = !is.null(chk) && identical(chk$name, "type_one_error") && isTRUE(chk$withinThreeMcse) && abs(chk$value - 0.025) < 1e-12)
+  })
+  list(pass = all(vapply(rows, function(r) r$ok, logical(1))),
+       detail = paste(vapply(rows, function(r) sprintf("%s (JSON class %s): analytic check present %s, nominal %.4f, %.2f MCSE from the simulation",
+                                                       r$name, r$class, r$has, r$value %||% NA_real_, r$ratio %||% NA_real_), character(1)), collapse = "; "))
 })
 
 vcr_case("E08", c("AC-10", "AC-29", "AC-30"), function() {
-  # A group-sequential design's simulated type-I error must equal the alpha it
-  # spends, and its expected number of analyses must be below the maximum.
-  design <- vcr_group_sequential(c(1, 2, 3) / 3, alpha = 0.025, spending = "obrien_fleming")
-  sc <- list(design = list(kind = "group_sequential", nTreat = 250, nControl = 250,
-                           informationRates = c(1, 2, 3) / 3, spending = "obrien_fleming"),
-             endpoint = list(type = "time_to_event"),
-             truth = list(controlMedian = 12, hazardRatio = 1),
-             analysis = list(method = "logrank", alpha = 0.025, sided = 1),
-             accrual = list(kind = "uniform", duration = 12, followup = 18),
-             performance = c("type_one_error"))
-  r <- vcr_run_simulation(sc, seed = 808L, replicates = 20000L, cores = VCR_TEST_CORES)
-  t1e <- Filter(function(m) m$name == "type_one_error", r$measures)[[1]]
-  looks <- Filter(function(m) m$name == "expected_analyses", r$measures)
+  # A group-sequential design, in calendar time, three ways:
+  #  (a) under the null its simulated type-I error equals the alpha the design
+  #      spends, and its expected number of analyses equals the exit
+  #      probabilities the spending function implies (analytic, exact);
+  #  (b) under an alternative the trial stops early on average, and the events
+  #      and the sample size REPORTED are those at the stopping look, with
+  #      their Monte-Carlo errors (they used to be the full trial's, for every
+  #      replicate, so a design that stops early looked as expensive as one
+  #      that never does, CE-9);
+  #  (c) a two-sided design also rejects on the harmful side (it used to test
+  #      one tail whatever `sided` said).
+  rates <- c(1, 2, 3) / 3
+  design <- vcr_group_sequential(rates, alpha = 0.025, spending = "obrien_fleming")
+  base <- list(design = list(kind = "group_sequential", nTreat = 250, nControl = 250, informationRates = as.list(rates), spending = "obrien_fleming"),
+               endpoint = list(type = "time_to_event"), truth = list(controlMedian = 12, hazardRatio = 1),
+               analysis = list(method = "logrank", alpha = 0.025, sided = 1),
+               accrual = list(kind = "uniform", duration = 12, followup = 18), performance = list("type_one_error", "expected_sample_size"))
+  null <- vcr_test_run(vcr_test_job("design.simulate", base, seed = 808L, replicates = 20000L, cores = VCR_TEST_CORES))
+  t1e <- vcr_get_measure(null, "type_one_error")
   spent <- design$cumulativeAlphaSpent[3]
-  ok <- abs(t1e$value - spent) <= 3 * t1e$mcse
-  list(pass = ok,
-       detail = sprintf("boundaries %.4f/%.4f/%.4f spend %.6f/%.6f/%.6f cumulative; simulated type-I %.5f (+-%.5f) = %.2f MCSE from %.4f; expected analyses %.3f of 3",
+  looks <- vcr_get_measure(null, "expected_analyses")
+  exit0 <- design$alphaSpent                                     # P(stop at k) under H0
+  want_looks <- sum(seq_along(exit0) * exit0) + 3 * (1 - sum(exit0))
+  ok_null <- identical(null$status, "succeeded") && abs(t1e$value - spent) <= 3 * t1e$mcse &&
+    abs(looks$value - want_looks) <= 3 * looks$mcse + 1e-3
+
+  alt <- utils::modifyList(base, list(truth = list(hazardRatio = 0.55), performance = list("power", "expected_sample_size")))
+  fixed <- alt; fixed$design <- list(kind = "two_arm_fixed", nTreat = 250, nControl = 250)
+  r_alt <- vcr_test_run(vcr_test_job("design.simulate", alt, seed = 809L, replicates = 4000L, cores = VCR_TEST_CORES))
+  r_fix <- vcr_test_run(vcr_test_job("design.simulate", fixed, seed = 809L, replicates = 4000L, cores = VCR_TEST_CORES))
+  ev_alt <- vcr_get_measure(r_alt, "expected_events"); ev_fix <- vcr_get_measure(r_fix, "expected_events")
+  n_alt <- vcr_get_measure(r_alt, "expected_sample_size")
+  early <- vcr_get_measure(r_alt, "expected_analyses")
+  reduced <- ev_alt$value < ev_fix$value - 5 * sqrt(ev_alt$mcse^2 + ev_fix$mcse^2) && n_alt$value < 500 - 5 * n_alt$mcse &&
+    early$value < 3 - 5 * early$mcse && is.finite(ev_alt$mcse) && is.finite(n_alt$mcse) && n_alt$mcse > 0
+
+  two <- utils::modifyList(base, list(truth = list(hazardRatio = 1.5), analysis = list(method = "logrank", alpha = 0.05, sided = 2), performance = list("power")))
+  r_two <- vcr_test_run(vcr_test_job("design.simulate", two, seed = 810L, replicates = 2000L, cores = VCR_TEST_CORES))
+  harm <- vcr_get_measure(r_two, "power")
+  ok_two <- !is.null(harm) && harm$value > 0.5
+
+  list(pass = ok_null && reduced && ok_two,
+       detail = sprintf("H0: boundaries %.4f/%.4f/%.4f, simulated type-I %.5f (+-%.5f) = %.2f MCSE from spent %.4f, expected analyses %.4f vs %.4f from the exit probabilities; H1 (HR .55): events at stop %.1f vs %.1f in the fixed design, sample size at stop %.1f of 500 (+-%.2f), analyses %.3f of 3; two-sided vs harm (HR 1.5): power %.3f",
                         design$criticalValues[1], design$criticalValues[2], design$criticalValues[3],
-                        design$cumulativeAlphaSpent[1], design$cumulativeAlphaSpent[2], design$cumulativeAlphaSpent[3],
-                        t1e$value, t1e$mcse, abs(t1e$value - spent) / t1e$mcse, spent,
-                        if (length(looks)) looks[[1]]$value else NA_real_))
+                        t1e$value, t1e$mcse, abs(t1e$value - spent) / t1e$mcse, spent, looks$value, want_looks,
+                        ev_alt$value, ev_fix$value, n_alt$value, n_alt$mcse, early$value, harm$value %||% NA_real_))
 })

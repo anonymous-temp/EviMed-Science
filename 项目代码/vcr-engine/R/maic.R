@@ -52,31 +52,61 @@ vcr_maic_weights <- function(X, targets, tol = 1e-12, maxit = 200L) {
        targets = as.numeric(targets))
 }
 
+#' Bootstrap the IPD part of a MAIC estimate with the weights re-estimated in
+#' every resample, and add the aggregate trial's own error on top. The
+#' fixed-weight sandwich variance treats the weights as known, which they are
+#' not (they were fitted to the same rows): on a 200-patient unanchored
+#' comparison whose true SD is 0.078 it reports 0.19 -- the weights make the
+#' weighted x-mean exactly the target, which removes most of the outcome's
+#' variation, and a formula that does not know that cannot be right in either
+#' direction (EB-21).
+.vcr_maic_bootstrap <- function(estimate_fn, n, strata, bootstrap, agd_se) {
+  b <- vcr_bootstrap_pipeline(n, estimate_fn, replicates = bootstrap$replicates, seed = bootstrap$seed,
+                              strata = strata, cores = bootstrap$cores %||% 1L)
+  se <- sqrt(b$se^2 + agd_se^2)
+  list(se = se, bootstrap = b)
+}
+
 #' Anchored MAIC: both trials share a common comparator C.
 #'
 #' `ipd` has columns `arm` (1 = active in the IPD trial, 0 = common
 #' comparator) and `y`; `agd` gives the aggregate trial's own contrast
 #' (`estimate`, `se`) of its active arm against the same comparator.
 #' The indirect estimate is (IPD contrast, reweighted) minus (AgD contrast).
+#' With `bootstrap = list(replicates, seed, cores)` the interval comes from the
+#' whole-pipeline bootstrap; without it the (fixed-weight) sandwich is used and
+#' the result is marked as such.
 vcr_maic_anchored <- function(ipd, X, targets, agd_estimate, agd_se,
-                              link = c("identity", "log", "logit"), tol = 1e-12) {
+                              link = c("identity", "log", "logit"), tol = 1e-12, bootstrap = NULL) {
   link <- match.arg(link)
   w <- vcr_maic_weights(X, targets, tol = tol)
   if (is.null(w$weights)) return(c(w, list(estimate = NULL)))
   contrast <- vcr_weighted_contrast(ipd$y, ipd$arm, w$weights, link)
   est <- contrast$estimate - agd_estimate
   se <- sqrt(contrast$se^2 + agd_se^2)
+  boot <- NULL
+  if (!is.null(bootstrap)) {
+    fn <- function(idx) {
+      wb <- vcr_maic_weights(X[idx, , drop = FALSE], targets, tol = tol)
+      if (is.null(wb$weights)) return(NA_real_)
+      vcr_weighted_contrast(ipd$y[idx], ipd$arm[idx], wb$weights, link)$estimate
+    }
+    r <- .vcr_maic_bootstrap(fn, nrow(X), ipd$arm, bootstrap, agd_se)
+    se <- r$se; boot <- r$bootstrap
+  }
   list(estimate = est, se = se, link = link,
        ipdContrast = contrast, agdContrast = list(estimate = agd_estimate, se = agd_se),
        effectiveSampleSize = w$effectiveSampleSize, weights = w$weights,
        anchored = TRUE, targetPopulation = "aggregate_data_trial",
+       varianceBasis = if (is.null(boot)) "fixed_weight_sandwich" else "bootstrap_weights_reestimated",
+       bootstrap = boot,
        interval = c(est - qnorm(0.975) * se, est + qnorm(0.975) * se))
 }
 
 #' Unanchored MAIC: no common comparator, so every prognostic factor *and*
 #' every effect modifier must be matched. Always capped at `limited`.
 vcr_maic_unanchored <- function(ipd_y, X, targets, agd_outcome, agd_se,
-                                link = c("identity", "log", "logit"), tol = 1e-12) {
+                                link = c("identity", "log", "logit"), tol = 1e-12, bootstrap = NULL) {
   link <- match.arg(link)
   w <- vcr_maic_weights(X, targets, tol = tol)
   if (is.null(w$weights)) return(c(w, list(estimate = NULL)))
@@ -88,10 +118,22 @@ vcr_maic_unanchored <- function(ipd_y, X, targets, agd_outcome, agd_se,
                logit = function(p) 1 / (p * (1 - p)))
   est <- g(mu) - agd_outcome
   se <- sqrt(var_mu * gp(mu)^2 + agd_se^2)
+  boot <- NULL
+  if (!is.null(bootstrap)) {
+    fn <- function(idx) {
+      wb <- vcr_maic_weights(X[idx, , drop = FALSE], targets, tol = tol)
+      if (is.null(wb$weights)) return(NA_real_)
+      g(stats::weighted.mean(ipd_y[idx], wb$weights))
+    }
+    r <- .vcr_maic_bootstrap(fn, nrow(X), NULL, bootstrap, agd_se)
+    se <- r$se; boot <- r$bootstrap
+  }
   list(estimate = est, se = se, link = link,
        effectiveSampleSize = w$effectiveSampleSize, weights = w$weights,
        anchored = FALSE, targetPopulation = "aggregate_data_trial",
        conclusionCeiling = "limited",
+       varianceBasis = if (is.null(boot)) "fixed_weight_sandwich" else "bootstrap_weights_reestimated",
+       bootstrap = boot,
        interval = c(est - qnorm(0.975) * se, est + qnorm(0.975) * se))
 }
 
