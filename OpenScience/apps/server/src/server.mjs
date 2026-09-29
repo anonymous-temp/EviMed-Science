@@ -31,7 +31,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -7173,6 +7173,7 @@ async function readinessAuth(config, store) {
   if (config.production && config.bootstrapPasswordSource === "environment") {
     throw readinessFailure("bootstrap_password_environment_forbidden");
   }
+  const bootstrapUser = await store.bootstrapUserState();
   if (config.production && config.bootstrapPassword) {
     if (config.bootstrapPassword !== config.bootstrapPassword.trim() || /[\r\n\0]/.test(config.bootstrapPassword)) {
       throw readinessFailure("bootstrap_password_invalid");
@@ -7180,14 +7181,9 @@ async function readinessAuth(config, store) {
     if (/^(?:replace(?:-with)?|change-?me|example|placeholder|test)(?:[-_ ]|$)/i.test(config.bootstrapPassword)) {
       throw readinessFailure("bootstrap_password_placeholder");
     }
-    // Six, not sixteen. Lowered on 2026-09-04 at the operator's instruction,
-    // knowing what it allows: this deployment answers on a bare public IP with
-    // a valid certificate, so the bootstrap account is reachable by anything
-    // that scans the address space, and six bytes is inside every dictionary.
-    // The floor is kept rather than removed because an empty or one-character
-    // password is a different thing from a short one somebody chose.
-    if (Buffer.byteLength(config.bootstrapPassword, "utf8") < 6) {
-      throw readinessFailure("bootstrap_password_too_short", { minimumBytes: 6 });
+    // New credentials share the same floor; existing accounts need no password reset.
+    if (bootstrapUser !== "present" && !meetsPasswordMinimum(config.bootstrapPassword)) {
+      throw readinessFailure("bootstrap_password_too_short", { minimumCharacters: MIN_PASSWORD_LENGTH });
     }
   }
   const users = await store.loginUserCount();
@@ -7200,7 +7196,6 @@ async function readinessAuth(config, store) {
   // seeding should have created it and did not, which is a fault; "deleted"
   // means an operator removed it on purpose, which is not — but both have to be
   // visible, because either way the configured administrator does not exist.
-  const bootstrapUser = await store.bootstrapUserState();
   if (bootstrapUser === "absent") throw readinessFailure("bootstrap_user_missing", { bootstrapUser });
   return { mode: "local", sessionTtlMs, bootstrapPasswordSource: config.bootstrapPasswordSource, bootstrapUser, ...withEvimed };
 }

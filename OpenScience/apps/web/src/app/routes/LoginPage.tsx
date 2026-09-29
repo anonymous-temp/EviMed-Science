@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { MIN_PASSWORD_LENGTH } from "@evimed/domain";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { EviMedMark } from "@/components/brand/EviMedMark";
@@ -162,7 +163,7 @@ function signInMessage(error: unknown): string {
 function registrationMessage(error: unknown): string {
   const code = error instanceof WebApiError ? error.code : "";
   if (code === "user_exists") return "这个账号已经有人用了，换一个试试。";
-  if (code === "weak_password") return "密码至少 8 位。";
+  if (code === "weak_password") return `密码至少 ${MIN_PASSWORD_LENGTH} 位。`;
   if (code === "invalid_username" || code === "invalid_field") return "账号只能用字母、数字、连字符和下划线。";
   if (code === "self_registration_disabled") return "这个部署暂不开放注册。";
   if (code === "auth_rate_limited") return "尝试太频繁了，请稍后再试。";

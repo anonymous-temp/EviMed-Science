@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
+import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "@evimed/domain";
 import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION } from "./controlPlaneDatabase.mjs";
 import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
 import {
@@ -490,8 +491,8 @@ export class InMemoryStore {
 
   async createUser(username, password, name = username) {
     const id = safeId(username, "username");
-    if (typeof password !== "string" || password.length < 8) {
-      throw new HttpError(400, "weak_password", "Password must be at least 8 characters.");
+    if (!meetsPasswordMinimum(password)) {
+      throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }
     if (this.users.has(id)) throw new HttpError(409, "user_exists", "User already exists.");
     this.deletedUsers.delete(id);
@@ -919,8 +920,8 @@ function assertPasswordChange(user, currentPassword, nextPassword) {
   if (typeof currentPassword !== "string" || !verifyPassword(currentPassword, user.passwordHash)) {
     throw new HttpError(401, "invalid_credentials", "Invalid username or password.");
   }
-  if (typeof nextPassword !== "string" || nextPassword.length < 8) {
-    throw new HttpError(400, "weak_password", "Password must be at least 8 characters.");
+  if (!meetsPasswordMinimum(nextPassword)) {
+    throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
   }
 }
 
@@ -1003,6 +1004,9 @@ export class PostgresStore extends InMemoryStore {
     const bootstrapMissing = Boolean(bootstrapId)
       && !result.rows.some((row) => row.id === bootstrapId);
     if (bootstrapMissing && this.config.bootstrapPassword) {
+      if (!meetsPasswordMinimum(this.config.bootstrapPassword)) {
+        throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      }
       await this.database.transaction(async (client) => {
         await lockUserIdentity(client, bootstrapId);
         await client.query(
@@ -1181,8 +1185,8 @@ export class PostgresStore extends InMemoryStore {
 
   async createUser(username, password, name = username) {
     const id = safeId(username, "username");
-    if (typeof password !== "string" || password.length < 8) {
-      throw new HttpError(400, "weak_password", "Password must be at least 8 characters.");
+    if (!meetsPasswordMinimum(password)) {
+      throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }
     const displayName = typeof name === "string" && name.trim() ? name.trim() : id;
     try {

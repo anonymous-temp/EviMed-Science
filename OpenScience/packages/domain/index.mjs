@@ -26,6 +26,8 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.mjs'
+
 
 // toolNames — 22 exports
 export {

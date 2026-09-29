@@ -4,6 +4,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "../../packages/domain/src/accountPolicy.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const checkOnly = process.argv.includes("--check");
@@ -43,8 +44,8 @@ function validateValue(value) {
     throw failure("local_auth_secret_placeholder", "Bootstrap password must not use a placeholder value.");
   }
   const bytes = Buffer.byteLength(value, "utf8");
-  if (bytes < 6 || bytes > 8192) {
-    throw failure("local_auth_secret_size", "Bootstrap password must contain between 6 and 8192 UTF-8 bytes.");
+  if (!meetsPasswordMinimum(value) || bytes > 8192) {
+    throw failure("local_auth_secret_size", `Bootstrap password must contain at least ${MIN_PASSWORD_LENGTH} characters and at most 8192 UTF-8 bytes.`);
   }
 }
 

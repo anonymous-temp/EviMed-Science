@@ -82,7 +82,7 @@ describe("账户", () => {
     const form = screen.getByRole("form", { name: "修改密码" });
     await user.type(within(form).getByLabelText("当前密码"), "old-password-1");
     await user.type(within(form).getByLabelText("新密码"), "short");
-    expect(within(form).getAllByText("至少 8 位").length).toBeGreaterThan(0);
+    expect(within(form).getAllByText("至少 6 位").length).toBeGreaterThan(0);
     await user.clear(within(form).getByLabelText("新密码"));
     await user.type(within(form).getByLabelText("新密码"), "new123");
     await user.type(within(form).getByLabelText("再输一次新密码"), "new123");
