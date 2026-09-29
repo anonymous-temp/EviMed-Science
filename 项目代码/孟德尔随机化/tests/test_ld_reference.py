@@ -89,3 +89,43 @@ def test_changed_panel_is_not_hidden_by_validation_cache(tmp_path):
     assert ld.load_reference(choice, root, binary)[0] is not None
     (root / "EUR.bed").write_bytes(b"changed")
     assert ld.load_reference(choice, root, binary)[0] is None
+
+
+def test_a_panel_changed_while_reading_binary_version_is_refused(tmp_path, monkeypatch):
+    root, binary, _ = panel(tmp_path)
+    run = ld.subprocess.run
+
+    def mutate_after_version(*args, **kwargs):
+        result = run(*args, **kwargs)
+        (root / "EUR.bed").write_bytes(bytes.fromhex("6c1b01") + b"\xff" * 3)
+        return result
+
+    monkeypatch.setattr(ld.subprocess, "run", mutate_after_version)
+    reference, reason = ld.load_reference(ld.resolve_population({}, ["EUR"]), root, binary)
+    assert reference is None and reason == "ld_reference_changed"
+
+
+def test_manifest_receipt_hashes_original_crlf_bytes_and_root_build_provenance(tmp_path):
+    root, binary, manifest = panel(tmp_path)
+    manifest.update(genomeBuild="declared-test-build", genomeBuildVerification="synthetic fixture")
+    blob = json.dumps(manifest, indent=2).replace("\n", "\r\n").encode()
+    (root / "manifest.json").write_bytes(blob)
+    reference, reason = ld.load_reference(ld.resolve_population({}, ["EUR"]), root, binary)
+    assert reason is None
+    assert reference.record()["manifestSha256"] == hashlib.sha256(blob).hexdigest()
+    assert reference.record()["genomeBuild"] == "declared-test-build"
+
+
+def test_malformed_manifest_and_cyclic_directory_are_named_fallbacks(tmp_path):
+    root, binary, _ = panel(tmp_path)
+    (root / "manifest.json").write_text("[]")
+    assert ld.load_reference(ld.resolve_population({}, ["EUR"]), root, binary)[0] is None
+    cycle = tmp_path / "cycle"
+    cycle.symlink_to(cycle)
+    assert ld.load_reference(ld.resolve_population({}, ["EUR"]), cycle, binary)[0] is None
+
+
+def test_version_output_has_a_bound(tmp_path):
+    root, binary, _ = panel(tmp_path)
+    binary.write_text("#!/bin/sh\nprintf 'PLINK v1.90\\n'\ni=0; while [ $i -lt 1000 ]; do printf 'xxxxxxxxxx'; i=$((i+1)); done\n")
+    assert ld.load_reference(ld.resolve_population({}, ["EUR"]), root, binary)[0] is None
